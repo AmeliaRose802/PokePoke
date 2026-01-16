@@ -26,9 +26,9 @@ if ($LASTEXITCODE -ne 0) {
     $repoRoot = $PSScriptRoot | Split-Path -Parent
 }
 
-# Find Python files
+# Find Python files - exclude worktrees directory
 $pythonFiles = Get-ChildItem -Path $repoRoot -Filter "*.py" -Recurse |
-    Where-Object { $_.FullName -notmatch '\\(venv|.venv|\.tox|__pycache__|dist|build|.eggs)\\' } |
+    Where-Object { $_.FullName -notmatch '\\(worktrees|venv|.venv|\.tox|__pycache__|dist|build|.eggs)\\' } |
     Select-Object -ExpandProperty FullName
 
 if ($pythonFiles.Count -eq 0) {

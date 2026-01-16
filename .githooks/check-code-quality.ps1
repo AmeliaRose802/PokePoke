@@ -52,8 +52,8 @@ if ($stagedFiles.Count -eq 0) {
 
 Write-Host "🔍 Running mypy type checking on $($stagedFiles.Count) file(s)..." -ForegroundColor Cyan
 
-# Run mypy on staged files - each file separately
-$mypyOutput = python -m mypy @stagedFiles --strict --show-error-codes --pretty 2>&1 | Out-String
+# Run mypy on src/pokepoke package (not individual files) to handle imports properly
+python -m mypy src/pokepoke --strict --show-error-codes --pretty
 
 $mypyFailed = $LASTEXITCODE -ne 0
 
@@ -61,27 +61,11 @@ if ($mypyFailed) {
     Write-Host ""
     Write-Host "❌ MYPY TYPE ERRORS FOUND" -ForegroundColor Red
     Write-Host ""
-    
-    # Parse and display errors
-    $lines = $mypyOutput -split "`n"
-    foreach ($line in $lines) {
-        if ($line -match 'error:') {
-            Write-Host $line -ForegroundColor Red
-        }
-        elseif ($line -match 'note:') {
-            Write-Host $line -ForegroundColor Yellow
-        }
-        elseif ($line.Trim()) {
-            Write-Host $line -ForegroundColor Gray
-        }
-    }
-    
-    Write-Host ""
     Write-Host "Fix type checking errors before committing." -ForegroundColor Yellow
     Write-Host "Tips:" -ForegroundColor Cyan
     Write-Host "  • Add type annotations to function parameters and returns" -ForegroundColor Cyan
     Write-Host "  • Use 'from typing import ...' for complex types" -ForegroundColor Cyan
-    Write-Host "  • Run 'python -m mypy <file>' locally to test" -ForegroundColor Cyan
+    Write-Host "  • Run 'python -m mypy src/pokepoke' locally to test" -ForegroundColor Cyan
     exit 1
 }
 

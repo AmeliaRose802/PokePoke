@@ -6,3 +6,34 @@ coverage/
 .env
 .vscode/settings.json
 worktrees/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing / Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.json
+htmlcov/
+.tox/
+.nox/

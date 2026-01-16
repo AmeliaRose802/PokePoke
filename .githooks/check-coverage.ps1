@@ -51,12 +51,12 @@ function Invoke-TestsWithCoverage {
     try {
         Write-Host "🧪 Running tests with coverage..." -ForegroundColor Cyan
         
-        # Run pytest with coverage
-        $testOutput = python -m pytest --cov=src/pokepoke --cov-report=json --cov-report=term 2>&1 | Out-String
+        # Run pytest with coverage - only JSON report to avoid terminal output hang
+        python -m pytest --cov=src/pokepoke --cov-report=json -q
+        $exitCode = $LASTEXITCODE
         
-        if ($LASTEXITCODE -ne 0) {
+        if ($exitCode -ne 0) {
             Write-Host "❌ Tests failed" -ForegroundColor Red
-            Write-Host $testOutput
             return $false
         }
         
