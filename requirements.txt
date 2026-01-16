@@ -1,0 +1,3 @@
+# PokePoke Dependencies
+# No external dependencies required - uses stdlib only!
+# Python 3.8+ required for dataclasses and typing features
