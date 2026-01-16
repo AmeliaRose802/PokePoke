@@ -1,0 +1,19 @@
+# CODEOWNERS - Require admin review for critical quality gate files
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Quality gates and pre-commit hooks - REQUIRE ADMIN APPROVAL
+# ALL quality gate scripts are in .githooks to make them less visible to agents
+/.githooks/                             @ameliapayne
+/.githooks/**                           @ameliapayne
+
+# Git hooks configuration
+/.git/hooks/                            @ameliapayne
+
+# This file itself requires admin approval
+/.github/CODEOWNERS                     @ameliapayne
+
+# Copilot instructions (agents might try to modify bypass warnings)
+/.github/copilot-instructions.md        @ameliapayne
+
+# Azure Pipeline configuration (CI/CD enforcement)
+/azure-pipelines.yml                    @ameliapayne

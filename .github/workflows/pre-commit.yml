@@ -1,0 +1,90 @@
+name: Pre-commit Checks
+
+on:
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Restore dependencies
+      run: dotnet restore IcmMcpServer.sln
+
+    - name: Check formatting
+      run: |
+        dotnet format IcmMcpServer.sln --verify-no-changes --verbosity diagnostic
+      continue-on-error: true
+      id: format-check
+
+    - name: Comment on formatting issues
+      if: steps.format-check.outcome == 'failure' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '⚠️ Code formatting issues detected. Please run `dotnet format` locally and commit the changes.'
+          })
+
+    - name: Build solution
+      run: dotnet build IcmMcpServer.sln --configuration Debug --no-restore
+
+    - name: Check file length (500 line limit)
+      shell: pwsh
+      run: |
+        $maxLines = 500
+        $violations = @()
+        
+        Get-ChildItem -Recurse -Include *.cs -Exclude *.Designer.cs,*.g.cs | ForEach-Object {
+          $lineCount = (Get-Content $_.FullName).Count
+          if ($lineCount -gt $maxLines) {
+            $violations += "$($_.FullName): $lineCount lines (max: $maxLines)"
+          }
+        }
+        
+        if ($violations.Count -gt 0) {
+          Write-Host "❌ File length violations found:"
+          $violations | ForEach-Object { Write-Host "  $_" }
+          exit 1
+        } else {
+          Write-Host "✓ All files under $maxLines line limit"
+        }
+
+    - name: Run quick tests
+      run: |
+        dotnet test IcmMcpServer.sln \
+          --configuration Debug \
+          --no-build \
+          --filter "Category!=Integration&Category!=Live" \
+          --logger "console;verbosity=minimal" \
+          -- RunConfiguration.MaxCpuCount=1
+
+    - name: Check for test failures
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '❌ Pre-commit checks failed. Please review the errors and fix them before merging.'
+          })

@@ -1,0 +1,90 @@
+name: Test Suite
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Run nightly at 2 AM UTC
+    - cron: '0 2 * * *'
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  test-all:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        category: [Unit, Integration]
+        
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Restore dependencies
+      run: dotnet restore IcmMcpServer.sln
+
+    - name: Build solution
+      run: dotnet build IcmMcpServer.sln --configuration Release --no-restore
+
+    - name: Run unit tests
+      if: matrix.category == 'Unit'
+      run: |
+        dotnet test IcmMcpServer.sln \
+          --configuration Release \
+          --no-build \
+          --filter "Category!=Integration&Category!=Live" \
+          --logger "trx;LogFileName=unit-test-results.trx" \
+          --verbosity normal
+
+    - name: Run integration tests
+      if: matrix.category == 'Integration'
+      continue-on-error: true
+      run: |
+        dotnet test IcmMcpServer.sln \
+          --configuration Release \
+          --no-build \
+          --filter "Category=Integration|Category=Live" \
+          --logger "trx;LogFileName=integration-test-results.trx" \
+          --verbosity normal
+      env:
+        # Integration tests may require credentials
+        # Add secrets as needed: AZURE_TENANT_ID, etc.
+        CI: true
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-${{ matrix.category }}
+        path: ./TestResults/**/*.trx
+        retention-days: 30
+
+  test-report:
+    needs: test-all
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Download test results
+      uses: actions/download-artifact@v4
+      with:
+        pattern: test-results-*
+        merge-multiple: true
+        path: ./TestResults
+
+    - name: Publish test report
+      uses: dorny/test-reporter@v1
+      if: always()
+      with:
+        name: Test Report
+        path: ./TestResults/**/*.trx
+        reporter: dotnet-trx
+        fail-on-error: false

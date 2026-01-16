@@ -1,0 +1,121 @@
+name: Publish Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.0.0)'
+        required: true
+        type: string
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Determine version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" == "release" ]; then
+          VERSION="${{ github.event.release.tag_name }}"
+        else
+          VERSION="${{ github.event.inputs.version }}"
+        fi
+        # Remove 'v' prefix if present
+        VERSION="${VERSION#v}"
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Building version: $VERSION"
+
+    - name: Restore dependencies
+      run: dotnet restore IcmMcpServer.sln
+
+    - name: Build solution
+      run: |
+        dotnet build IcmMcpServer.sln \
+          --configuration Release \
+          --no-restore \
+          /p:Version=${{ steps.version.outputs.version }}
+
+    - name: Run tests
+      run: |
+        dotnet test IcmMcpServer.sln \
+          --configuration Release \
+          --no-build \
+          --filter "Category!=Integration&Category!=Live" \
+          --verbosity normal
+
+    - name: Publish application
+      run: |
+        dotnet publish src/IcmMcpServer/IcmMcpServer.csproj \
+          --configuration Release \
+          --output ./publish/IcmMcpServer \
+          --no-build \
+          /p:Version=${{ steps.version.outputs.version }}
+
+    - name: Create release archive
+      run: |
+        cd publish
+        tar -czf ../IcmMcpServer-v${{ steps.version.outputs.version }}-linux-x64.tar.gz IcmMcpServer/
+        cd ..
+        
+    - name: Upload release artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-artifacts
+        path: |
+          IcmMcpServer-v${{ steps.version.outputs.version }}-linux-x64.tar.gz
+        retention-days: 90
+
+    - name: Attach artifacts to release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          IcmMcpServer-v${{ steps.version.outputs.version }}-linux-x64.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Create deployment package
+      run: |
+        mkdir -p deployment
+        cp -r publish/IcmMcpServer deployment/
+        cp README.md deployment/
+        echo "Version: ${{ steps.version.outputs.version }}" > deployment/VERSION.txt
+        echo "Built: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> deployment/VERSION.txt
+        tar -czf deployment-package.tar.gz -C deployment .
+
+    - name: Upload deployment package
+      uses: actions/upload-artifact@v4
+      with:
+        name: deployment-package
+        path: deployment-package.tar.gz
+        retention-days: 90
+
+    - name: Summary
+      run: |
+        echo "### 🚀 Release Build Complete" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Version:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Configuration:** Release" >> $GITHUB_STEP_SUMMARY
+        echo "**Platform:** linux-x64" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "📦 Artifacts:" >> $GITHUB_STEP_SUMMARY
+        echo "- IcmMcpServer-v${{ steps.version.outputs.version }}-linux-x64.tar.gz" >> $GITHUB_STEP_SUMMARY
+        echo "- deployment-package.tar.gz" >> $GITHUB_STEP_SUMMARY

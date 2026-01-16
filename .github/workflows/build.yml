@@ -1,0 +1,120 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Restore dependencies
+      run: dotnet restore IcmMcpServer.sln
+
+    - name: Build solution
+      run: dotnet build IcmMcpServer.sln --configuration Release --no-restore
+
+    - name: Run unit tests with coverage
+      run: |
+        dotnet test IcmMcpServer.sln \
+          --configuration Release \
+          --no-build \
+          --filter "Category!=Integration&Category!=Live" \
+          --collect:"XPlat Code Coverage" \
+          --results-directory ./TestResults \
+          --logger "trx;LogFileName=test-results.trx" \
+          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+
+    - name: Install ReportGenerator
+      run: dotnet tool install --global dotnet-reportgenerator-globaltool
+
+    - name: Generate coverage report
+      run: |
+        reportgenerator \
+          -reports:./TestResults/**/coverage.opencover.xml \
+          -targetdir:./CoverageReport \
+          -reporttypes:"Html;Cobertura;TextSummary" \
+          -assemblyfilters:"+IcmMcpServer*"
+
+    - name: Display coverage summary
+      run: cat ./CoverageReport/Summary.txt
+
+    - name: Check coverage threshold
+      shell: pwsh
+      run: |
+        $coverageFile = Get-ChildItem -Path ./TestResults -Recurse -Filter "coverage.opencover.xml" | Select-Object -First 1
+        if (-not $coverageFile) {
+          Write-Error "Coverage file not found"
+          exit 1
+        }
+        
+        [xml]$coverage = Get-Content $coverageFile.FullName
+        $summary = $coverage.CoverageSession.Summary
+        
+        $lineCoverage = [math]::Round(($summary.sequenceCoverage -as [double]) * 100, 2)
+        $branchCoverage = [math]::Round(($summary.branchCoverage -as [double]) * 100, 2)
+        
+        Write-Host "Line Coverage: $lineCoverage%"
+        Write-Host "Branch Coverage: $branchCoverage%"
+        
+        $threshold = 80.0
+        
+        if ($lineCoverage -lt $threshold) {
+          Write-Error "Line coverage ($lineCoverage%) is below threshold ($threshold%)"
+          exit 1
+        }
+        
+        Write-Host "✓ Coverage check passed (threshold: $threshold%)"
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: ./CoverageReport
+        retention-days: 30
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: ./TestResults/**/*.trx
+        retention-days: 30
+
+    - name: Upload coverage to artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-opencover
+        path: ./TestResults/**/coverage.opencover.xml
+        retention-days: 30
+
+    - name: Comment PR with coverage
+      if: github.event_name == 'pull_request'
+      uses: 5monkeys/cobertura-action@master
+      with:
+        path: ./CoverageReport/Cobertura.xml
+        minimum_coverage: 80
+        fail_below_threshold: true
+        show_line: true
+        show_branch: true
+        show_missing: true
+        link_missing_lines: true
