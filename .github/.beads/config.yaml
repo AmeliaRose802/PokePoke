@@ -1,0 +1,15 @@
+# Beads Configuration
+# See https://github.com/steveyegge/beads/blob/main/docs/WORKTREES.md
+#
+# Note: Most configuration is managed via 'bd config' commands or 'bd migrate'
+# The actual sync.branch configuration is stored in metadata.json, not here.
+# This file is kept for documentation purposes and future YAML-based config.
+#
+# Configured settings (managed by bd migrate sync):
+# - sync.branch: beads-sync (enables worktree support)
+# - Daemon mode enabled across all worktrees
+# - Auto-sync to beads-sync branch
+#
+# See current config with: bd info --json
+
+sync-branch: "beads-sync"

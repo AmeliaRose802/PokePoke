@@ -12,18 +12,21 @@ export async function getReadyWorkItems(): Promise<BeadsWorkItem[]> {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    let stdout = '';
-    let stderr = '';
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
 
     process.stdout.on('data', (data: Buffer) => {
-      stdout += data.toString();
+      stdoutChunks.push(data);
     });
 
     process.stderr.on('data', (data: Buffer) => {
-      stderr += data.toString();
+      stderrChunks.push(data);
     });
 
     process.on('close', (code) => {
+      const stdout = Buffer.concat(stdoutChunks).toString();
+      const stderr = Buffer.concat(stderrChunks).toString();
+
       if (code !== 0) {
         reject(new Error(`bd ready failed with code ${code}: ${stderr}`));
         return;
@@ -31,18 +34,37 @@ export async function getReadyWorkItems(): Promise<BeadsWorkItem[]> {
 
       try {
         // Parse JSON output from bd ready
-        const lines = stdout.split('\n').filter((line) => line.trim());
-        const jsonLine = lines.find((line) => line.trim().startsWith('['));
+        // Filter out warning/note lines
+        const filteredLines = stdout.split('\n').filter((line) => {
+          const trimmed = line.trim();
+          return (
+            trimmed &&
+            !trimmed.startsWith('Note:') &&
+            !trimmed.startsWith('Warning:') &&
+            !trimmed.startsWith('Hint:')
+          );
+        });
 
-        if (!jsonLine) {
+        // Find the start of JSON array and collect all JSON lines
+        const jsonStartIndex = filteredLines.findIndex((line) => line.trim().startsWith('['));
+        
+        if (jsonStartIndex === -1) {
           resolve([]);
           return;
         }
 
-        const items = JSON.parse(jsonLine) as BeadsWorkItem[];
+        // Join all lines from JSON start onwards
+        const jsonText = filteredLines.slice(jsonStartIndex).join('\n');
+
+        if (jsonText.trim() === '[]') {
+          resolve([]);
+          return;
+        }
+
+        const items = JSON.parse(jsonText) as BeadsWorkItem[];
         resolve(items);
       } catch (error) {
-        reject(new Error(`Failed to parse bd ready output: ${String(error)}`));
+        reject(new Error(`Failed to parse bd ready output: ${String(error)}\nOutput: ${stdout}`));
       }
     });
 
