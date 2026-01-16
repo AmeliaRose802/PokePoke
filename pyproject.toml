@@ -1,0 +1,41 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+# Exclude patterns
+norecursedirs = [
+    ".git",
+    ".tox",
+    "dist",
+    "build",
+    "*.egg",
+    "venv",
+    ".venv",
+    "__pycache__",
+    "worktrees"
+]
+
+# Coverage settings
+[tool.coverage.run]
+source = ["src/pokepoke"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/venv/*",
+    "*/.venv/*",
+    "*/worktrees/*"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod"
+]

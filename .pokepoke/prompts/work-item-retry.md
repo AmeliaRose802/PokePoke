@@ -1,0 +1,42 @@
+You are working on a beads work item. Please complete the following task:
+
+**Work Item ID:** {{id}}
+**Title:** {{title}}
+**Description:**
+{{description}}
+
+**Priority:** {{priority}}
+**Type:** {{issue_type}}{{#labels}}
+**Labels:** {{labels}}{{/labels}}{{#retry_context}}
+
+⚠️ **RETRY ATTEMPT {{attempt}}/{{max_retries}}**
+
+The previous attempt failed validation with these errors:
+{{errors}}
+
+Please fix these issues and try again. Focus on:
+1. Resolving the validation errors listed above
+2. Ensuring all tests pass
+3. Meeting code quality standards
+4. Following project conventions
+{{/retry_context}}
+
+**Requirements:**
+1. Follow coding standards and project conventions
+2. Add appropriate tests with 80%+ coverage
+3. Update documentation if needed
+4. Ensure all quality gates pass (linting, type checking, etc.)
+5. Commit changes with descriptive conventional commit messages
+6. DO NOT bypass pre-commit hooks with --no-verify
+7. DO NOT modify quality gate scripts in .githooks/
+
+**Project Context:**
+- This is an autonomous workflow orchestrator (PokePoke)
+- Uses beads for issue tracking, TypeScript/Node.js stack
+- Quality gates are strictly enforced via pre-commit hooks
+- All changes must pass tests, coverage, and quality checks
+
+Work independently and complete the task. When finished, report:
+✅ What was implemented
+✅ Test coverage added
+✅ Any blockers or dependencies discovered

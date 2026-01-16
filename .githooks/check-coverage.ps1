@@ -5,21 +5,18 @@
     Pre-commit coverage checker for Python projects
     
 .DESCRIPTION
-    Runs pytest with coverage and verifies that modified Python files have 80%+ coverage.
+    Wrapper that calls the Python coverage checker script.
     This script is designed to be called from a git pre-commit hook.
-    
-.PARAMETER MinCoverage
-    Minimum coverage percentage required (default: 80)
     
 .EXAMPLE
     .\.githooks\check-coverage.ps1
 #>
 
-param(
-    [int]$MinCoverage = 80
-)
-
 $ErrorActionPreference = "Stop"
+
+# Call the Python coverage checker
+& python "$PSScriptRoot\check-coverage.py"
+exit $LASTEXITCODE
 
 # Get list of staged Python files (excluding test files)
 function Get-StagedPythonFiles {
@@ -51,8 +48,9 @@ function Invoke-TestsWithCoverage {
     try {
         Write-Host "🧪 Running tests with coverage..." -ForegroundColor Cyan
         
-        # Run pytest with coverage - only JSON report to avoid terminal output hang
-        python -m pytest --cov=src/pokepoke --cov-report=json -q
+        # Run pytest with coverage - output streams directly, no buffering
+        # & operator runs synchronously and waits for completion
+        & python -m pytest --cov=src/pokepoke --cov-report=json -q --tb=line --timeout=30
         $exitCode = $LASTEXITCODE
         
         if ($exitCode -ne 0) {

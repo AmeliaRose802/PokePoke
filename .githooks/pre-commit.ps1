@@ -103,8 +103,7 @@ $staticChecks = @(
 # Checks that need build artifacts or must run in sequence
 $buildDependentChecks = @(
     @{ Name = "Build"; Script = "check-build.ps1" }
-    # DISABLED: Test Coverage check causes PowerShell hanging issues
-    # @{ Name = "Test Coverage"; Script = "check-coverage.ps1" }
+    @{ Name = "Test Coverage"; Script = "check-coverage.ps1" }
 )
 
 # Start static checks in parallel
@@ -133,30 +132,22 @@ foreach ($check in $staticChecks) {
 
 # Run build-dependent checks sequentially
 foreach ($check in $buildDependentChecks) {
-    Write-Host "  • $($check.Name)... " -NoNewline -ForegroundColor Gray
+    Write-Host "  • $($check.Name)... " -ForegroundColor Gray
     
     try {
         $checkScript = Join-Path $hooksDir $check.Script
-        $output = & $checkScript *>&1 | Out-String
+        # Stream output directly without buffering
+        & $checkScript
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "✓" -ForegroundColor Green
             $passed += $check.Name
         }
         else {
-            Write-Host "✗" -ForegroundColor Red
             $failed += $check.Name
             $allPassed = $false
-            # Show output only for failed checks
-            if ($output.Trim()) {
-                Write-Host ""
-                Write-Host $output.Trim()
-                Write-Host ""
-            }
         }
     }
     catch {
-        Write-Host "✗" -ForegroundColor Red
-        Write-Host "    Error: $_" -ForegroundColor Red
+        Write-Host "Error: $_" -ForegroundColor Red
         $failed += $check.Name
         $allPassed = $false
     }
