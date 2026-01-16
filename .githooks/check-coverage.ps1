@@ -2,17 +2,17 @@
 
 <#
 .SYNOPSIS
-    Pre-commit coverage checker for C# projects
+    Pre-commit coverage checker for TypeScript/Node.js projects
     
 .DESCRIPTION
-    Runs tests and verifies that modified C# files have 80%+ coverage.
+    Runs Jest tests with coverage and verifies that modified TypeScript files have 80%+ coverage.
     This script is designed to be called from a git pre-commit hook.
     
 .PARAMETER MinCoverage
     Minimum coverage percentage required (default: 80)
     
 .EXAMPLE
-    .\scripts\check-coverage.ps1
+    .\.githooks\check-coverage.ps1
 #>
 
 param(
@@ -21,16 +21,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# Determine test results directory (agent-specific for parallel execution)
-$agentId = if ($env:AGENT_NAME) { $env:AGENT_NAME } elseif ($env:TEST_SESSION_ID) { $env:TEST_SESSION_ID } else { "" }
-if ($agentId) {
-    $TestResultsDir = "./TestResults/$agentId"
-} else {
-    $TestResultsDir = "./TestResults"
-}
-
-# Get list of staged C# files (excluding test files)
-function Get-StagedCSharpFiles {
+# Get list of staged TypeScript files (excluding test files)
+function Get-StagedTypeScriptFiles {
     try {
         $output = git diff --cached --name-only --diff-filter=ACM 2>$null
         if ($LASTEXITCODE -ne 0) {
@@ -39,15 +31,11 @@ function Get-StagedCSharpFiles {
         }
         
         return $output -split "`n" |
-            Where-Object { $_ -match '\.cs$' } |
+            Where-Object { $_ -match '\.ts$' } |
             Where-Object { $_ -match '^src/' } |
-            Where-Object { $_ -notmatch '\.Test\.cs$' } |
-            Where-Object { $_ -notmatch '/Tests/' } |
-            Where-Object { $_ -notmatch 'icm_queue_tool/' } |
-            Where-Object { $_ -notmatch '/Models/' } |
-            Where-Object { $_ -notmatch 'Program\.cs$' } |
-            Where-Object { $_ -notmatch 'Tool\.cs$' } |
-            Where-Object { $_ -notmatch 'NamespaceDoc\.cs$' } |
+            Where-Object { $_ -notmatch '\.spec\.ts$' } |
+            Where-Object { $_ -notmatch '\.test\.ts$' } |
+            Where-Object { $_ -notmatch '/tests/' } |
             ForEach-Object { $_.Trim() } |
             Where-Object { $_ -ne '' }
     }
@@ -60,9 +48,10 @@ function Get-StagedCSharpFiles {
 # Run tests with coverage
 function Invoke-TestsWithCoverage {
     try {
-        # Run dotnet test with coverage (--no-build since build already done by check-build-and-warnings.ps1)
-        # Exclude slow integration tests (LiveKustoTests and CliIntegrationTests)
-        $testOutput = dotnet test IcmMcpServer.sln --no-build --filter "FullyQualifiedName!~LiveKustoTests&FullyQualifiedName!~CliIntegrationTests" --collect:"XPlat Code Coverage" --results-directory:"$TestResultsDir" --logger:"console;verbosity=minimal" 2>&1
+        Write-Host "🧪 Running tests with coverage..." -ForegroundColor Cyan
+        
+        # Run Jest with coverage
+        $testOutput = npm run test:coverage 2>&1 | Out-String
         
         if ($LASTEXITCODE -ne 0) {
             Write-Host "❌ Tests failed" -ForegroundColor Red
@@ -86,56 +75,53 @@ function Test-Coverage {
         return $true
     }
     
-    # Find the most recent coverage file in agent-specific directory
-    $coverageFiles = Get-ChildItem -Path "$TestResultsDir" -Recurse -Filter "coverage.cobertura.xml" -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending
+    # Find Jest coverage summary
+    $coverageDir = "coverage"
+    $coverageSummary = Join-Path $coverageDir "coverage-summary.json"
     
-    if ($coverageFiles.Count -eq 0) {
-        Write-Host "⚠️  No coverage file found in $TestResultsDir" -ForegroundColor Yellow
-        return $true
+    if (-not (Test-Path $coverageSummary)) {
+        Write-Host "⚠️  No coverage summary found at $coverageSummary" -ForegroundColor Yellow
+        Write-Host "Run 'npm run test:coverage' to generate coverage data" -ForegroundColor Yellow
+        return $false
     }
     
-    $coverageFile = $coverageFiles[0].FullName
-    
-    # Parse coverage XML
-    [xml]$coverage = Get-Content $coverageFile
+    # Parse coverage JSON
+    $coverage = Get-Content $coverageSummary -Raw | ConvertFrom-Json
     
     $failedFiles = @()
     $passedCount = 0
     
     foreach ($file in $Files) {
-        # Convert path to match coverage report format
+        # Jest uses absolute paths in coverage, convert to match
+        $repoRoot = git rev-parse --show-toplevel 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            $repoRoot = $PWD.Path
+        }
+        
+        # Normalize path separators
         $normalizedPath = $file -replace '/', '\'
-        $fileName = Split-Path $normalizedPath -Leaf
+        $fullPath = Join-Path $repoRoot $normalizedPath
         
-        # Find matching class in coverage report
-        $classes = $coverage.coverage.packages.package.classes.class |
-            Where-Object { $_.filename -like "*$fileName" } |
-            Where-Object { $_.name -notlike "*<>c*" } |  # Exclude compiler-generated closures
-            Where-Object { $_.name -notlike "*<*>d__*" }  # Exclude compiler-generated async state machines
+        # Try to find coverage data for this file
+        $fileData = $null
+        foreach ($key in $coverage.PSObject.Properties.Name) {
+            if ($key -like "*$normalizedPath" -or $key -eq $fullPath) {
+                $fileData = $coverage.$key
+                break
+            }
+        }
         
-        if ($classes.Count -eq 0) {
+        if (-not $fileData) {
             Write-Host "  ⚠️  $file - No coverage data found (may need tests)" -ForegroundColor Yellow
             $failedFiles += $file
             continue
         }
         
-        $hasFailure = $false
-        $fileFailures = @()
+        # Check line coverage
+        $lineCoverage = $fileData.lines.pct
         
-        foreach ($class in $classes) {
-            $lineRate = [double]$class.'line-rate' * 100
-            $className = $class.name
-            
-            if ($lineRate -lt $MinCoverage) {
-                $fileFailures += "     ❌ [$className] Coverage: $([math]::Round($lineRate, 1))% (minimum: $MinCoverage%)"
-                $hasFailure = $true
-            }
-        }
-        
-        if ($hasFailure) {
-            Write-Host "  📁 $file" -ForegroundColor Cyan
-            $fileFailures | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+        if ($lineCoverage -lt $MinCoverage) {
+            Write-Host "  ❌ $file - Coverage: $lineCoverage% (minimum: $MinCoverage%)" -ForegroundColor Red
             $failedFiles += $file
         }
         else {
@@ -144,20 +130,26 @@ function Test-Coverage {
     }
     
     if ($failedFiles.Count -gt 0) {
+        Write-Host ""
         Write-Host "❌ $($failedFiles.Count) file(s) below $MinCoverage% coverage" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Add tests to increase coverage for these files." -ForegroundColor Yellow
         return $false
     }
     
-    Write-Host "PASS: Coverage $MinCoverage%+ ($passedCount files)" -ForegroundColor Green
+    Write-Host "✅ Coverage $MinCoverage%+ ($passedCount files)" -ForegroundColor Green
     return $true
 }
 
 # Main execution
-$stagedFiles = Get-StagedCSharpFiles
+$stagedFiles = Get-StagedTypeScriptFiles
 
 if ($stagedFiles.Count -eq 0) {
+    Write-Host "No TypeScript source files staged for commit" -ForegroundColor Gray
     exit 0
 }
+
+Write-Host "Checking coverage for $($stagedFiles.Count) staged file(s)..." -ForegroundColor Cyan
 
 # Run tests
 if (-not (Invoke-TestsWithCoverage)) {

@@ -59,11 +59,9 @@ $violations = @()
 $scriptsToCheck = @(
     "check-coverage.ps1",
     "check-code-quality.ps1",
-    "check-compile-warnings.ps1",
     "check-file-length.ps1",
     "check-skipped-tests.ps1",
-    "check-build.ps1",
-    "check-mcp-health.ps1"
+    "check-build.ps1"
     # NOTE: pre-commit.ps1 and verify-integrity.ps1 are excluded as they
     # legitimately contain these patterns for detection purposes
 )

@@ -2,16 +2,15 @@
 
 <#
 .SYNOPSIS
-    Git pre-commit hook for ICM Queue C# project
+    Git pre-commit hook for PokePoke TypeScript/Node.js project
     
 .DESCRIPTION
     Runs the following checks before allowing a commit:
     1. Integrity check (verifies quality scripts haven't been tampered with)
-    2. Build & warnings check (fails if build fails or warnings found)
-    3. MCP server health check (fails if server won't start)
-    4. Code quality check (fails if quality issues found)
-    5. Skipped tests check (fails if skipped tests found)
-    6. Test coverage check (fails if modified files < 80% coverage)
+    2. Build check (TypeScript compilation with tsc)
+    3. Code quality check (ESLint)
+    4. Skipped tests check (no skipped Jest tests)
+    5. Test coverage check (modified files must have 80%+ coverage)
 
 .NOTES
     ⚠️  CRITICAL: This file is protected by CODEOWNERS
@@ -45,7 +44,7 @@ $bypassPatterns = @(
 )
 
 $integrityViolations = @()
-$scriptsToCheck = @("check-coverage.ps1", "check-code-quality.ps1", "check-compile-warnings.ps1", "check-file-length.ps1")
+$scriptsToCheck = @("check-coverage.ps1", "check-code-quality.ps1", "check-file-length.ps1")
 
 foreach ($script in $scriptsToCheck) {
     $scriptPath = Join-Path $hooksDir $script
@@ -103,8 +102,7 @@ $staticChecks = @(
 
 # Checks that need build artifacts or must run in sequence
 $buildDependentChecks = @(
-    @{ Name = "Build & Warnings"; Script = "check-build-and-warnings.ps1" }
-    @{ Name = "MCP Health"; Script = "check-mcp-health.ps1" }
+    @{ Name = "Build"; Script = "check-build.ps1" }
     @{ Name = "Test Coverage"; Script = "check-coverage.ps1" }
 )
 

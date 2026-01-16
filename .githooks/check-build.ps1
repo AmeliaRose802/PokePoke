@@ -2,14 +2,20 @@
 
 <#
 .SYNOPSIS
-    Check if the project builds successfully
+    TypeScript build checker for Node.js projects
     
 .DESCRIPTION
-    Attempts to build the solution and fails if the build fails.
-    This ensures that commits only include code that compiles successfully.
+    Performs TypeScript compilation check using tsc:
+    - Verifies all TypeScript files compile without errors
+    - Checks for type errors
+    - Validates tsconfig.json settings
+    
+.NOTES
+    ⚠️  CRITICAL: This file is protected by CODEOWNERS
+    Any modifications require @ameliapayne approval
 
 .EXAMPLE
-    .\scripts\check-build.ps1
+    .\.githooks\check-build.ps1
 #>
 
 $ErrorActionPreference = "Stop"
@@ -20,37 +26,39 @@ if ($LASTEXITCODE -ne 0) {
     $repoRoot = $PSScriptRoot | Split-Path -Parent
 }
 
-$solutionFile = Join-Path $repoRoot "IcmMcpServer.sln"
+$tsconfigFile = Join-Path $repoRoot "tsconfig.json"
 
-if (-not (Test-Path $solutionFile)) {
-    Write-Host "❌ Solution file not found: $solutionFile" -ForegroundColor Red
+if (-not (Test-Path $tsconfigFile)) {
+    Write-Host "❌ tsconfig.json not found: $tsconfigFile" -ForegroundColor Red
     exit 1
 }
 
-Write-Host "🔨 Building solution..." -ForegroundColor Cyan
+Write-Host "🔨 Building TypeScript project..." -ForegroundColor Cyan
 
-# Build the solution
-$buildOutput = dotnet build "$solutionFile" --no-incremental 2>&1
+# Build with TypeScript compiler
+$buildOutput = npm run build 2>&1 | Out-String
 
-if ($LASTEXITCODE -ne 0) {
+$buildFailed = $LASTEXITCODE -ne 0
+
+if ($buildFailed) {
     Write-Host ""
     Write-Host "❌ BUILD FAILED" -ForegroundColor Red
     Write-Host ""
-    Write-Host "Build output:" -ForegroundColor Yellow
-    Write-Host $buildOutput
+    
+    # Parse and highlight errors
+    $lines = $buildOutput -split "`n"
+    foreach ($line in $lines) {
+        if ($line -match 'error TS\d+:') {
+            Write-Host "  $($line.Trim())" -ForegroundColor Red
+        }
+        elseif ($line -match '^\s+\d+') {
+            # Line number indicator
+            Write-Host "  $($line.Trim())" -ForegroundColor Yellow
+        }
+    }
+    
     Write-Host ""
-    Write-Host "Fix the build errors before committing." -ForegroundColor Yellow
-    exit 1
-}
-
-# Check for build errors in output (extra safety)
-$errorLines = $buildOutput | Select-String -Pattern "error CS\d+:"
-if ($errorLines) {
-    Write-Host ""
-    Write-Host "❌ BUILD ERRORS DETECTED" -ForegroundColor Red
-    Write-Host ""
-    $errorLines | ForEach-Object { Write-Host $_.Line -ForegroundColor Red }
-    Write-Host ""
+    Write-Host "Fix the TypeScript compilation errors before committing." -ForegroundColor Yellow
     exit 1
 }
 
