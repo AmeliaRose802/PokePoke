@@ -6,6 +6,7 @@ from typing import Optional, List, Dict, Any
 from pathlib import Path
 
 from .types import BeadsWorkItem, CopilotResult
+from .worktree import WorktreeManager
 
 
 class CopilotInvoker:
@@ -16,7 +17,9 @@ class CopilotInvoker:
         model: str = "claude-sonnet-4.5",
         timeout_seconds: int = 300,
         max_retries: int = 3,
-        validation_hook: Optional[callable] = None
+        validation_hook: Optional[callable] = None,
+        use_worktrees: bool = True,
+        source_branch: str = "master"
     ):
         """Initialize the Copilot invoker.
         
@@ -25,11 +28,17 @@ class CopilotInvoker:
             timeout_seconds: Timeout for each Copilot invocation
             max_retries: Maximum retry attempts on validation failure
             validation_hook: Optional validation function(work_item, output) -> (success, errors)
+            use_worktrees: Whether to use git worktrees for isolation (default: True)
+            source_branch: Source branch for worktree creation (default: master)
         """
         self.model = model
         self.timeout = timeout_seconds
         self.max_retries = max_retries
         self.validation_hook = validation_hook
+        self.use_worktrees = use_worktrees
+        self.source_branch = source_branch
+        self.worktree_manager = WorktreeManager() if use_worktrees else None
+        self._current_worktree_path: Optional[Path] = None
     
     def build_prompt(
         self,
@@ -120,82 +129,123 @@ Work independently and complete the task. When finished, report:
         Returns:
             CopilotResult with success status and output/errors
         """
-        # Default deny list for safety
-        default_deny = [
-            "shell(rm -rf /)",
-            "shell(Remove-Item -Recurse -Force C:\\)",
-            "shell(format)",
-        ]
-        deny_tools = (deny_tools or []) + default_deny
-        
-        attempt = 1
-        previous_errors = None
-        
-        while attempt <= self.max_retries:
+        # Create worktree for isolated execution
+        if self.use_worktrees and self.worktree_manager:
             print(f"\n{'='*80}")
-            print(f"🚀 Invoking Copilot CLI (Attempt {attempt}/{self.max_retries})")
-            print(f"   Work Item: {work_item.id}")
-            print(f"   Title: {work_item.title}")
-            print(f"   Model: {self.model}")
+            print(f"🌳 Creating git worktree for {work_item.id}")
             print(f"{'='*80}\n")
             
-            # Build prompt with retry context if applicable
-            final_prompt = prompt or self.build_prompt(
-                work_item,
-                attempt=attempt,
-                previous_errors=previous_errors
+            success, message, worktree_path = self.worktree_manager.create_worktree(
+                work_item.id,
+                source_branch=self.source_branch
             )
             
-            # Invoke Copilot CLI
-            result = self._run_copilot(
-                final_prompt,
-                allow_tools=allow_tools,
-                deny_tools=deny_tools,
-                allow_all_tools=allow_all_tools
-            )
+            if not success:
+                return CopilotResult(
+                    work_item_id=work_item.id,
+                    success=False,
+                    error=f"Failed to create worktree: {message}"
+                )
             
-            # Check if invocation itself failed
-            if not result.success:
-                print(f"❌ Copilot CLI invocation failed: {result.error}")
-                return result
-            
-            # Run validation if hook provided
-            if self.validation_hook:
-                print("\n🔍 Running validation checks...")
-                validation_success, validation_errors = self.validation_hook(work_item, result.output)
-                
-                if validation_success:
-                    print("✅ All validation checks passed!")
-                    return result
-                else:
-                    print(f"❌ Validation failed with {len(validation_errors)} error(s)")
-                    for error in validation_errors:
-                        print(f"   - {error}")
-                    
-                    # Prepare for retry
-                    previous_errors = validation_errors
-                    attempt += 1
-                    
-                    if attempt > self.max_retries:
-                        return CopilotResult(
-                            work_item_id=work_item.id,
-                            success=False,
-                            error=f"Max retries ({self.max_retries}) exceeded. Last errors: {validation_errors}",
-                            output=result.output,
-                            validation_errors=validation_errors
-                        )
-                    
-                    print(f"\n🔄 Retrying with corrective feedback...\n")
-            else:
-                # No validation hook, consider it successful
-                return result
+            self._current_worktree_path = worktree_path
+            print(f"✓ Worktree created at {worktree_path}\n")
         
-        # Should never reach here, but handle it
-        return CopilotResult(
-            work_item_id=work_item.id,
-            success=False,
-            error="Unexpected retry loop exit"
-        )
+        try:
+            # Default deny list for safety
+            default_deny = [
+                "shell(rm -rf /)",
+                "shell(Remove-Item -Recurse -Force C:\\)",
+                "shell(format)",
+            ]
+            deny_tools = (deny_tools or []) + default_deny
+            
+            attempt = 1
+            previous_errors = None
+            
+            while attempt <= self.max_retries:
+                print(f"\n{'='*80}")
+                print(f"🚀 Invoking Copilot CLI (Attempt {attempt}/{self.max_retries})")
+                print(f"   Work Item: {work_item.id}")
+                print(f"   Title: {work_item.title}")
+                print(f"   Model: {self.model}")
+                print(f"{'='*80}\n")
+                
+                # Build prompt with retry context if applicable
+                final_prompt = prompt or self.build_prompt(
+                    work_item,
+                    attempt=attempt,
+                    previous_errors=previous_errors
+                )
+                
+                # Invoke Copilot CLI
+                result = self._run_copilot(
+                    final_prompt,
+                    allow_tools=allow_tools,
+                    deny_tools=deny_tools,
+                    allow_all_tools=allow_all_tools
+                )
+                
+                # Check if invocation itself failed
+                if not result.success:
+                    print(f"❌ Copilot CLI invocation failed: {result.error}")
+                    return result
+                
+                # Run validation if hook provided
+                if self.validation_hook:
+                    print("\n🔍 Running validation checks...")
+                    validation_success, validation_errors = self.validation_hook(work_item, result.output)
+                    
+                    if validation_success:
+                        print("✅ All validation checks passed!")
+                        return result
+                    else:
+                        print(f"❌ Validation failed with {len(validation_errors)} error(s)")
+                        for error in validation_errors:
+                            print(f"   - {error}")
+                        
+                        # Prepare for retry
+                        previous_errors = validation_errors
+                        attempt += 1
+                        
+                        if attempt > self.max_retries:
+                            result = CopilotResult(
+                                work_item_id=work_item.id,
+                                success=False,
+                                error=f"Max retries ({self.max_retries}) exceeded. Last errors: {validation_errors}",
+                                output=result.output,
+                                validation_errors=validation_errors
+                            )
+                            return result
+                        
+                        print(f"\n🔄 Retrying with corrective feedback...\n")
+                else:
+                    # No validation hook, consider it successful
+                    return result
+            
+            # Should never reach here, but handle it
+            return CopilotResult(
+                work_item_id=work_item.id,
+                success=False,
+                error="Unexpected retry loop exit"
+            )
+        finally:
+            # Clean up worktree
+            if self.use_worktrees and self.worktree_manager and self._current_worktree_path:
+                print(f"\n{'='*80}")
+                print(f"🧹 Cleaning up worktree for {work_item.id}")
+                print(f"{'='*80}\n")
+                
+                success, message = self.worktree_manager.cleanup_worktree(
+                    work_item.id,
+                    force=False
+                )
+                
+                if success:
+                    print(f"✓ {message}\n")
+                else:
+                    print(f"⚠️  {message}\n")
+                
+                self._current_worktree_path = None
     
     def _run_copilot(
         self,
@@ -217,6 +267,14 @@ Work independently and complete the task. When finished, report:
         """
         try:
             import sys
+            import os
+            
+            # Change to worktree directory if using worktrees
+            original_cwd = None
+            if self._current_worktree_path:
+                original_cwd = os.getcwd()
+                os.chdir(self._current_worktree_path)
+                print(f"📂 Working in: {self._current_worktree_path}\n")
             
             # Build command using PowerShell on Windows for proper escaping
             if sys.platform == "win32":
@@ -383,6 +441,10 @@ Work independently and complete the task. When finished, report:
                 success=False,
                 error=f"Failed to invoke Copilot CLI: {e}"
             )
+        finally:
+            # Restore original working directory if we changed it
+            if original_cwd:
+                os.chdir(original_cwd)
 
 
 def create_validation_hook() -> callable:
