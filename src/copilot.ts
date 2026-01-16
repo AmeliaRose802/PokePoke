@@ -4,24 +4,29 @@ import type { BeadsWorkItem, CopilotResult } from './types.js';
 /**
  * Invoke GitHub Copilot CLI with a work item
  * @param workItem - The beads work item to process
+ * @param prompt - Optional pre-built prompt (if not provided, will build one)
  * @returns Promise resolving to the result of the Copilot CLI invocation
  */
-export async function invokeCopilotCLI(workItem: BeadsWorkItem): Promise<CopilotResult> {
+export async function invokeCopilotCLI(
+  workItem: BeadsWorkItem,
+  prompt?: string
+): Promise<CopilotResult> {
   return new Promise((resolve) => {
-    const prompt = buildPrompt(workItem);
+    const finalPrompt = prompt || buildPrompt(workItem);
 
     console.info(`\n📋 Invoking Copilot CLI for work item: ${workItem.id}`);
     console.info(`   Title: ${workItem.title}\n`);
 
+    // Escape the prompt for shell execution
+    const escapedPrompt = finalPrompt.replace(/"/g, '""').replace(/\$/g, '`$');
+    
     // Use 'copilot -p' with --allow-all-tools for non-interactive mode
-    const process = spawn(
-      'copilot',
-      ['-p', prompt, '--allow-all-tools', '--no-color'],
-      {
-        shell: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }
-    );
+    // Command as single string to avoid DEP0190 warning
+    const command = `copilot -p "${escapedPrompt}" --allow-all-tools --no-color`;
+    const process = spawn(command, {
+      shell: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
@@ -73,7 +78,7 @@ export async function invokeCopilotCLI(workItem: BeadsWorkItem): Promise<Copilot
  * @param workItem - The beads work item
  * @returns Formatted prompt string
  */
-function buildPrompt(workItem: BeadsWorkItem): string {
+export function buildPrompt(workItem: BeadsWorkItem): string {
   return `You are working on a beads work item. Please complete the following task:
 
 **Work Item ID:** ${workItem.id}
