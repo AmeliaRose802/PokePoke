@@ -52,9 +52,8 @@ if ($stagedFiles.Count -eq 0) {
 
 Write-Host "🔍 Running mypy type checking on $($stagedFiles.Count) file(s)..." -ForegroundColor Cyan
 
-# Run mypy on staged files
-$filesArg = $stagedFiles -join ' '
-$mypyOutput = python -m mypy $filesArg --strict --show-error-codes --pretty 2>&1 | Out-String
+# Run mypy on staged files - each file separately
+$mypyOutput = python -m mypy @stagedFiles --strict --show-error-codes --pretty 2>&1 | Out-String
 
 $mypyFailed = $LASTEXITCODE -ne 0
 

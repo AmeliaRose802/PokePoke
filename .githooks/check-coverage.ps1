@@ -32,7 +32,7 @@ function Get-StagedPythonFiles {
         
         return $output -split "`n" |
             Where-Object { $_ -match '\.py$' } |
-            Where-Object { $_ -match '^(pokepoke|src)/' } |
+            Where-Object { $_ -match '^src/pokepoke/' } |
             Where-Object { $_ -notmatch 'test_.*\.py$' } |
             Where-Object { $_ -notmatch '_test\.py$' } |
             Where-Object { $_ -notmatch '/tests/' } |
@@ -52,7 +52,7 @@ function Invoke-TestsWithCoverage {
         Write-Host "🧪 Running tests with coverage..." -ForegroundColor Cyan
         
         # Run pytest with coverage
-        $testOutput = python -m pytest --cov=pokepoke --cov-report=json --cov-report=term 2>&1 | Out-String
+        $testOutput = python -m pytest --cov=src/pokepoke --cov-report=json --cov-report=term 2>&1 | Out-String
         
         if ($LASTEXITCODE -ne 0) {
             Write-Host "❌ Tests failed" -ForegroundColor Red
