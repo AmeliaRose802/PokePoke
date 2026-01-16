@@ -2,14 +2,14 @@
 
 <#
 .SYNOPSIS
-    Code quality checker using ESLint for TypeScript/Node.js projects
+    Code quality checker using mypy for Python type checking
     
 .DESCRIPTION
-    Checks staged TypeScript files for:
-    - Code style violations (naming, formatting)
-    - TypeScript best practices
-    - Potential bugs
-    - Unused variables/imports
+    Checks staged Python files for:
+    - Type annotation completeness
+    - Type checking violations
+    - Type hints best practices
+    - Missing type annotations
     
     This script is designed to be called from a git pre-commit hook.
     
@@ -22,8 +22,8 @@ param()
 
 $ErrorActionPreference = "Stop"
 
-# Get list of staged TypeScript files
-function Get-StagedTypeScriptFiles {
+# Get list of staged Python files
+function Get-StagedPythonFiles {
     try {
         $output = git diff --cached --name-only --diff-filter=ACM 2>$null
         if ($LASTEXITCODE -ne 0) {
@@ -31,8 +31,8 @@ function Get-StagedTypeScriptFiles {
         }
         
         return $output -split "`n" |
-            Where-Object { $_ -match '\.ts$' } |
-            Where-Object { $_ -match '^(src|tests)/' } |
+            Where-Object { $_ -match '\.py$' } |
+            Where-Object { $_ -notmatch '(venv|.venv|__pycache__|dist|build)' } |
             ForEach-Object { $_.Trim() } |
             Where-Object { $_ -ne '' }
     }
@@ -43,33 +43,33 @@ function Get-StagedTypeScriptFiles {
 }
 
 # Main execution
-$stagedFiles = Get-StagedTypeScriptFiles
+$stagedFiles = Get-StagedPythonFiles
 
 if ($stagedFiles.Count -eq 0) {
-    Write-Host "No TypeScript files staged for commit" -ForegroundColor Gray
+    Write-Host "No Python files staged for commit" -ForegroundColor Gray
     exit 0
 }
 
-Write-Host "🔍 Running ESLint on $($stagedFiles.Count) file(s)..." -ForegroundColor Cyan
+Write-Host "🔍 Running mypy type checking on $($stagedFiles.Count) file(s)..." -ForegroundColor Cyan
 
-# Run ESLint on staged files
+# Run mypy on staged files
 $filesArg = $stagedFiles -join ' '
-$lintOutput = npm run lint -- $filesArg 2>&1 | Out-String
+$mypyOutput = python -m mypy $filesArg --strict --show-error-codes --pretty 2>&1 | Out-String
 
-$lintFailed = $LASTEXITCODE -ne 0
+$mypyFailed = $LASTEXITCODE -ne 0
 
-if ($lintFailed) {
+if ($mypyFailed) {
     Write-Host ""
-    Write-Host "❌ ESLINT ERRORS FOUND" -ForegroundColor Red
+    Write-Host "❌ MYPY TYPE ERRORS FOUND" -ForegroundColor Red
     Write-Host ""
     
     # Parse and display errors
-    $lines = $lintOutput -split "`n"
+    $lines = $mypyOutput -split "`n"
     foreach ($line in $lines) {
-        if ($line -match 'error' -or $line -match '✖') {
+        if ($line -match 'error:') {
             Write-Host $line -ForegroundColor Red
         }
-        elseif ($line -match 'warning' -or $line -match '⚠') {
+        elseif ($line -match 'note:') {
             Write-Host $line -ForegroundColor Yellow
         }
         elseif ($line.Trim()) {
@@ -78,10 +78,13 @@ if ($lintFailed) {
     }
     
     Write-Host ""
-    Write-Host "Fix ESLint errors before committing." -ForegroundColor Yellow
-    Write-Host "Tip: Run 'npm run lint -- --fix' to auto-fix some issues" -ForegroundColor Cyan
+    Write-Host "Fix type checking errors before committing." -ForegroundColor Yellow
+    Write-Host "Tips:" -ForegroundColor Cyan
+    Write-Host "  • Add type annotations to function parameters and returns" -ForegroundColor Cyan
+    Write-Host "  • Use 'from typing import ...' for complex types" -ForegroundColor Cyan
+    Write-Host "  • Run 'python -m mypy <file>' locally to test" -ForegroundColor Cyan
     exit 1
 }
 
-Write-Host "✅ ESLint passed" -ForegroundColor Green
+Write-Host "✅ Type checking passed" -ForegroundColor Green
 exit 0

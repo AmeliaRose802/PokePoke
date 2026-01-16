@@ -2,13 +2,13 @@
 
 <#
 .SYNOPSIS
-    TypeScript build checker for Node.js projects
+    Python syntax checker for Python projects
     
 .DESCRIPTION
-    Performs TypeScript compilation check using tsc:
-    - Verifies all TypeScript files compile without errors
-    - Checks for type errors
-    - Validates tsconfig.json settings
+    Performs Python syntax validation:
+    - Verifies all Python files have valid syntax
+    - Checks for compilation errors
+    - Validates Python code can be parsed
     
 .NOTES
     ⚠️  CRITICAL: This file is protected by CODEOWNERS
@@ -26,41 +26,47 @@ if ($LASTEXITCODE -ne 0) {
     $repoRoot = $PSScriptRoot | Split-Path -Parent
 }
 
-$tsconfigFile = Join-Path $repoRoot "tsconfig.json"
+# Find Python files
+$pythonFiles = Get-ChildItem -Path $repoRoot -Filter "*.py" -Recurse |
+    Where-Object { $_.FullName -notmatch '\\(venv|.venv|\.tox|__pycache__|dist|build|.eggs)\\' } |
+    Select-Object -ExpandProperty FullName
 
-if (-not (Test-Path $tsconfigFile)) {
-    Write-Host "❌ tsconfig.json not found: $tsconfigFile" -ForegroundColor Red
-    exit 1
+if ($pythonFiles.Count -eq 0) {
+    Write-Host "⚠️  No Python files found" -ForegroundColor Yellow
+    exit 0
 }
 
-Write-Host "🔨 Building TypeScript project..." -ForegroundColor Cyan
+Write-Host "🔨 Checking Python syntax for $($pythonFiles.Count) files..." -ForegroundColor Cyan
 
-# Build with TypeScript compiler
-$buildOutput = npm run build 2>&1 | Out-String
+$errors = @()
 
-$buildFailed = $LASTEXITCODE -ne 0
-
-if ($buildFailed) {
-    Write-Host ""
-    Write-Host "❌ BUILD FAILED" -ForegroundColor Red
-    Write-Host ""
+foreach ($file in $pythonFiles) {
+    # Check syntax using Python's compile
+    $result = python -m py_compile "$file" 2>&1
     
-    # Parse and highlight errors
-    $lines = $buildOutput -split "`n"
-    foreach ($line in $lines) {
-        if ($line -match 'error TS\d+:') {
-            Write-Host "  $($line.Trim())" -ForegroundColor Red
-        }
-        elseif ($line -match '^\s+\d+') {
-            # Line number indicator
-            Write-Host "  $($line.Trim())" -ForegroundColor Yellow
+    if ($LASTEXITCODE -ne 0) {
+        $errors += @{
+            File = $file
+            Error = $result | Out-String
         }
     }
-    
+}
+
+if ($errors.Count -gt 0) {
     Write-Host ""
-    Write-Host "Fix the TypeScript compilation errors before committing." -ForegroundColor Yellow
+    Write-Host "❌ SYNTAX ERRORS FOUND" -ForegroundColor Red
+    Write-Host ""
+    
+    foreach ($error in $errors) {
+        $relativePath = $error.File.Replace($repoRoot, "").TrimStart("\\", "/")
+        Write-Host "  $relativePath" -ForegroundColor Red
+        Write-Host "    $($error.Error.Trim())" -ForegroundColor Yellow
+        Write-Host ""
+    }
+    
+    Write-Host "Fix the Python syntax errors before committing." -ForegroundColor Yellow
     exit 1
 }
 
-Write-Host "✅ Build successful" -ForegroundColor Green
+Write-Host "✅ All Python files have valid syntax" -ForegroundColor Green
 exit 0

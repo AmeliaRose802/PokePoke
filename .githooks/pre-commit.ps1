@@ -2,14 +2,14 @@
 
 <#
 .SYNOPSIS
-    Git pre-commit hook for PokePoke TypeScript/Node.js project
+    Git pre-commit hook for PokePoke Python project
     
 .DESCRIPTION
     Runs the following checks before allowing a commit:
     1. Integrity check (verifies quality scripts haven't been tampered with)
-    2. Build check (TypeScript compilation with tsc)
-    3. Code quality check (ESLint)
-    4. Skipped tests check (no skipped Jest tests)
+    2. Build check (Python syntax validation)
+    3. Code quality check (mypy type checking)
+    4. Skipped tests check (no skipped pytest tests)
     5. Test coverage check (modified files must have 80%+ coverage)
 
 .NOTES

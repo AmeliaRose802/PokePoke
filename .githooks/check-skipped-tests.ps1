@@ -2,16 +2,16 @@
 
 <#
 .SYNOPSIS
-    Check for skipped tests in Jest test files
+    Check for skipped tests in pytest test files
     
 .DESCRIPTION
     Searches for skipped tests and fails if any tests are skipped.
     This enforces a policy of no skipped tests in the codebase.
     
     Tests can be skipped using:
-    - describe.skip()
-    - it.skip() / test.skip()
-    - xit() / xtest() / xdescribe()
+    - @pytest.mark.skip
+    - @pytest.mark.skipif
+    - pytest.skip() calls
     
 .EXAMPLE
     .\.githooks\check-skipped-tests.ps1
@@ -23,12 +23,10 @@ $ErrorActionPreference = "Stop"
 try {
     # Search test files for skip patterns
     $testFiles = @()
-    $testFiles += Get-ChildItem -Path "tests" -Filter "*.spec.ts" -Recurse -ErrorAction SilentlyContinue
-    $testFiles += Get-ChildItem -Path "tests" -Filter "*.test.ts" -Recurse -ErrorAction SilentlyContinue
-    $testFiles += Get-ChildItem -Path "src" -Filter "*.spec.ts" -Recurse -ErrorAction SilentlyContinue
-    $testFiles += Get-ChildItem -Path "src" -Filter "*.test.ts" -Recurse -ErrorAction SilentlyContinue
+    $testFiles += Get-ChildItem -Path "." -Filter "test_*.py" -Recurse -ErrorAction SilentlyContinue
+    $testFiles += Get-ChildItem -Path "." -Filter "*_test.py" -Recurse -ErrorAction SilentlyContinue
     
-    $testFiles = $testFiles | Where-Object { $_.FullName -notmatch '\\(node_modules|dist|coverage)\\' }
+    $testFiles = $testFiles | Where-Object { $_.FullName -notmatch '\\(venv|.venv|__pycache__|dist|build)\\' }
     
     $skippedTests = @()
     
@@ -39,10 +37,11 @@ try {
         for ($i = 0; $i -lt $lines.Count; $i++) {
             $line = $lines[$i]
             
-            # Check for .skip() patterns
-            if ($line -match '\b(describe|it|test)\.skip\s*\(') {
+            # Check for @pytest.mark.skip decorator
+            if ($line -match '@pytest\.mark\.skip') {
                 $testName = "Unknown"
-                if ($line -match '\.skip\s*\(\s*[''"]([^''"]+)[''"]') {
+                # Look ahead for the test function name
+                if ($i + 1 -lt $lines.Count -and $lines[$i + 1] -match 'def\s+(test_\w+)') {
                     $testName = $matches[1]
                 }
                 
@@ -50,22 +49,33 @@ try {
                     File = $file.Name
                     Line = $i + 1
                     Method = $testName
-                    Type = ".skip()"
+                    Type = "@pytest.mark.skip"
                 }
             }
             
-            # Check for x-prefixed patterns (xit, xtest, xdescribe)
-            if ($line -match '\b(xit|xtest|xdescribe)\s*\(') {
+            # Check for @pytest.mark.skipif decorator
+            if ($line -match '@pytest\.mark\.skipif') {
                 $testName = "Unknown"
-                if ($line -match '\b(xit|xtest|xdescribe)\s*\(\s*[''"]([^''"]+)[''"]') {
-                    $testName = $matches[2]
+                # Look ahead for the test function name
+                if ($i + 1 -lt $lines.Count -and $lines[$i + 1] -match 'def\s+(test_\w+)') {
+                    $testName = $matches[1]
                 }
                 
                 $skippedTests += @{
                     File = $file.Name
                     Line = $i + 1
                     Method = $testName
-                    Type = $matches[1]
+                    Type = "@pytest.mark.skipif"
+                }
+            }
+            
+            # Check for pytest.skip() calls
+            if ($line -match 'pytest\.skip\s*\(') {
+                $skippedTests += @{
+                    File = $file.Name
+                    Line = $i + 1
+                    Method = "Inline skip"
+                    Type = "pytest.skip()"
                 }
             }
         }
@@ -78,7 +88,7 @@ try {
             Write-Host "  $($test.File):$($test.Line) - $($test.Method) ($($test.Type))" -ForegroundColor Red
         }
         Write-Host ""
-        Write-Host "Fix: Remove .skip() or x-prefix from tests" -ForegroundColor Yellow
+        Write-Host "Fix: Remove @pytest.mark.skip, @pytest.mark.skipif decorators or pytest.skip() calls" -ForegroundColor Yellow
         exit 1
     }
     else {
