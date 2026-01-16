@@ -54,12 +54,15 @@ def get_issue_dependencies(issue_id: str) -> Optional[IssueWithDependencies]:
     Returns:
         Issue with dependencies, or None if not found.
     """
-    result = subprocess.run(
-        ['bd', 'show', issue_id, '--json'],
-        capture_output=True,
-        text=True,
-        check=True
-    )
+    try:
+        result = subprocess.run(
+            ['bd', 'show', issue_id, '--json'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+    except subprocess.CalledProcessError:
+        return None
     
     # Filter out warning/note lines
     filtered_lines = [
