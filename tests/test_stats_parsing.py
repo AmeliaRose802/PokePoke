@@ -1,7 +1,7 @@
 """Tests for agent statistics parsing."""
 
 import pytest
-from pokepoke.orchestrator import parse_agent_stats
+from pokepoke.stats import parse_agent_stats
 from pokepoke.types import AgentStats
 
 

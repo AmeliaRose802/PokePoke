@@ -3,7 +3,7 @@
 import pytest
 from io import StringIO
 import sys
-from pokepoke.orchestrator import print_stats
+from pokepoke.stats import print_stats
 from pokepoke.types import AgentStats
 
 
