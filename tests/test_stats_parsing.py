@@ -138,3 +138,29 @@ def test_parse_agent_stats_with_invalid_format():
     assert stats.wall_duration == 15.0
     assert stats.input_tokens == 5000
     assert stats.lines_added == 0  # Failed to parse, defaults to 0
+
+
+def test_parse_agent_stats_with_exception_handling(capsys, monkeypatch):
+    """Test that exceptions during parsing are caught and logged."""
+    # Create output that will trigger an exception during parsing
+    output = "Total duration (wall): 10.0s"
+    
+    # Mock float() to raise ValueError
+    original_float = float
+    call_count = [0]
+    
+    def mock_float(value):
+        call_count[0] += 1
+        if call_count[0] == 1:  # First call to float() in parse
+            raise ValueError("Mock parsing error")
+        return original_float(value)
+    
+    monkeypatch.setattr('builtins.float', mock_float)
+    
+    # Should return None and print warning
+    stats = parse_agent_stats(output)
+    
+    assert stats is None
+    captured = capsys.readouterr()
+    assert "Warning: Failed to parse agent stats" in captured.out
+    assert "Mock parsing error" in captured.out

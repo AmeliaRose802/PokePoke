@@ -167,3 +167,91 @@ def test_print_stats_with_large_numbers(capsys):
     assert "987,654" in output   # output tokens
     assert "5,678" in output      # lines added
     assert "1,234" in output      # lines removed
+
+
+def test_print_stats_with_beads_statistics(capsys):
+    """Test beads statistics display."""
+    from pokepoke.types import BeadsStats
+    
+    stats = SessionStats(
+        agent_stats=AgentStats(wall_duration=10.0),
+        starting_beads_stats=BeadsStats(
+            total_issues=100,
+            open_issues=50,
+            in_progress_issues=10,
+            closed_issues=40,
+            ready_issues=20
+        ),
+        ending_beads_stats=BeadsStats(
+            total_issues=102,
+            open_issues=48,
+            in_progress_issues=12,
+            closed_issues=42,
+            ready_issues=18
+        )
+    )
+    
+    print_stats(items_completed=2, total_requests=3, elapsed_seconds=120.0, session_stats=stats)
+    
+    captured = capsys.readouterr()
+    output = captured.out
+    
+    # Check beads statistics section
+    assert "📋 Beads Database Statistics" in output
+    assert "Start → End (Change)" in output
+    assert "100 →   102 (+2)" in output  # total issues
+    assert "50 →    48 (-2)" in output   # open issues
+    assert "10 →    12 (+2)" in output   # in progress
+    assert "40 →    42 (+2)" in output   # closed issues
+    assert "20 →    18 (-2)" in output   # ready issues
+
+
+def test_print_stats_with_agent_run_counts(capsys):
+    """Test display of different agent run counts."""
+    stats = SessionStats(
+        agent_stats=AgentStats(wall_duration=10.0),
+        work_agent_runs=5,
+        cleanup_agent_runs=2,
+        tech_debt_agent_runs=1,
+        janitor_agent_runs=3,
+        backlog_cleanup_agent_runs=1
+    )
+    
+    print_stats(items_completed=5, total_requests=10, elapsed_seconds=300.0, session_stats=stats)
+    
+    captured = capsys.readouterr()
+    output = captured.out
+    
+    # Check agent run counts section
+    assert "🤖 Agent Run Counts" in output
+    assert "Work agents:         5" in output
+    assert "Cleanup agents:      2" in output
+    assert "Tech Debt agents:    1" in output
+    assert "Janitor agents:      3" in output
+    assert "Backlog agents:      1" in output
+
+
+def test_print_stats_with_only_work_agent_runs(capsys):
+    """Test that only work agent runs are shown when other counts are zero."""
+    stats = SessionStats(
+        agent_stats=AgentStats(wall_duration=10.0),
+        work_agent_runs=3,
+        cleanup_agent_runs=0,
+        tech_debt_agent_runs=0,
+        janitor_agent_runs=0,
+        backlog_cleanup_agent_runs=0
+    )
+    
+    print_stats(items_completed=3, total_requests=5, elapsed_seconds=180.0, session_stats=stats)
+    
+    captured = capsys.readouterr()
+    output = captured.out
+    
+    # Check work agents shown
+    assert "Work agents:         3" in output
+    
+    # Check other agents NOT shown (zero counts)
+    assert "Cleanup agents:" not in output
+    assert "Tech Debt agents:" not in output
+    assert "Janitor agents:" not in output
+    assert "Backlog agents:" not in output
