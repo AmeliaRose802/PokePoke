@@ -213,6 +213,7 @@ def invoke_copilot_cli(
     final_prompt = prompt or build_prompt_from_template(work_item)
     max_timeout = timeout or 7200.0  # Default 2 hours
     start_time = time.time()
+    actual_attempt_count = 0  # Track actual copilot invocations
     
     print(f"\n[WORK_ITEM] Invoking Copilot CLI for work item: {work_item.id}")
     print(f"   Title: {work_item.title}")
@@ -234,6 +235,8 @@ def invoke_copilot_cli(
             print()
     
         try:
+            # Increment actual attempt counter when we invoke copilot
+            actual_attempt_count += 1
             # Write prompt to temp file and create a PowerShell script to invoke copilot
             # This completely avoids all escaping/parsing issues
             import tempfile
@@ -298,6 +301,7 @@ def invoke_copilot_cli(
                     raise  # Re-raise to handle in outer try/except
                 
                 # Capture any stderr
+                stderr_text = ''
                 if process.stderr:
                     stderr_text = process.stderr.read()
                     if stderr_text:
@@ -305,7 +309,9 @@ def invoke_copilot_cli(
                         stderr_lines.append(stderr_text)
                 
                 stdout_text = ''.join(stdout_lines)
-                stderr_text = ''.join(stderr_lines)
+                # Use collected stderr from either streaming or final read
+                if stderr_lines:
+                    stderr_text = ''.join(stderr_lines)
                 
             finally:
                 # Clean up temp files
@@ -324,7 +330,7 @@ def invoke_copilot_cli(
                     work_item_id=work_item.id,
                     success=True,
                     output=stdout_text,
-                    attempt_count=attempt + 1
+                    attempt_count=actual_attempt_count
                 )
             
             # Check if error is retryable
@@ -342,7 +348,7 @@ def invoke_copilot_cli(
                     work_item_id=work_item.id,
                     success=False,
                     error=f"Copilot CLI exited with code {process.returncode}: {stderr_text or 'Unknown error'}",
-                    attempt_count=attempt + 1,
+                    attempt_count=actual_attempt_count,
                     is_rate_limited=is_rate_limit
                 )
             
@@ -355,7 +361,7 @@ def invoke_copilot_cli(
                 work_item_id=work_item.id,
                 success=False,
                 error=f"Copilot CLI timed out after {elapsed:.0f}s (max: {max_timeout:.0f}s)",
-                attempt_count=attempt + 1
+                attempt_count=actual_attempt_count
             )
             
         except Exception as e:
@@ -364,7 +370,7 @@ def invoke_copilot_cli(
                 work_item_id=work_item.id,
                 success=False,
                 error=f"Failed to invoke Copilot CLI: {e}",
-                attempt_count=attempt + 1
+                attempt_count=actual_attempt_count
             )
     
     # Should not reach here, but just in case
@@ -372,6 +378,6 @@ def invoke_copilot_cli(
         work_item_id=work_item.id,
         success=False,
         error="Exhausted all retry attempts",
-        attempt_count=config.max_retries + 1
+        attempt_count=actual_attempt_count
         )
 

@@ -197,10 +197,11 @@ class TestInvokeCopilotWithRetry:
         assert result.attempt_count == 1
         assert result.is_rate_limited is False
     
-    @pytest.mark.xfail(reason="Test needs investigation - mock not working as expected")
     def test_rate_limit_retry_success(self, work_item, mock_process):
         """Should retry on rate limit and eventually succeed."""
-        # First call: rate limited, second call: success
+        # First call: git command (from get_allowed_directories)
+        # Second call: copilot rate limited
+        # Third call: copilot success
         call_count = 0
         
         def side_effect(*args, **kwargs):
@@ -213,9 +214,15 @@ class TestInvokeCopilotWithRetry:
             process.wait = MagicMock()
             
             if call_count == 1:
+                # Git command - return success
+                process.returncode = 0
+                process.stderr.read.return_value = ""
+            elif call_count == 2:
+                # First copilot invocation - rate limited
                 process.returncode = 1
                 process.stderr.read.return_value = "HTTP 429: Rate Limit Exceeded"
             else:
+                # Second copilot invocation - success
                 process.returncode = 0
                 process.stderr.read.return_value = ""
             
@@ -226,12 +233,14 @@ class TestInvokeCopilotWithRetry:
                 result = invoke_copilot_cli(work_item, retry_config=RetryConfig(max_retries=3))
         
         assert result.success is True
-        assert call_count == 2  # Verify it actually retried
-        assert result.attempt_count == 2
+        assert call_count == 3  # Git + 2 copilot invocations
+        assert result.attempt_count == 2  # 2 copilot invocations
     
-    @pytest.mark.xfail(reason="Test needs investigation - mock not working as expected")
     def test_transient_error_retry_success(self, work_item):
         """Should retry on transient errors and eventually succeed."""
+        # First call: git command (from get_allowed_directories)
+        # Second call: copilot transient error
+        # Third call: copilot success
         call_count = 0
         
         def side_effect(*args, **kwargs):
@@ -244,9 +253,15 @@ class TestInvokeCopilotWithRetry:
             process.wait = MagicMock()
             
             if call_count == 1:
+                # Git command - return success
+                process.returncode = 0
+                process.stderr.read.return_value = ""
+            elif call_count == 2:
+                # First copilot invocation - transient error
                 process.returncode = 1
                 process.stderr.read.return_value = "Connection timeout"
             else:
+                # Second copilot invocation - success
                 process.returncode = 0
                 process.stderr.read.return_value = ""
             
@@ -257,8 +272,8 @@ class TestInvokeCopilotWithRetry:
                 result = invoke_copilot_cli(work_item, retry_config=RetryConfig(max_retries=3))
         
         assert result.success is True
-        assert call_count == 2  # Verify it actually retried
-        assert result.attempt_count == 2
+        assert call_count == 3  # Git + 2 copilot invocations
+        assert result.attempt_count == 2  # 2 copilot invocations
     
     def test_permanent_error_no_retry(self, work_item):
         """Should not retry on permanent errors."""

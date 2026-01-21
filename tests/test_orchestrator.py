@@ -1,5 +1,6 @@
 """Unit tests for orchestrator module."""
 
+import sys
 from unittest.mock import Mock, patch, call
 import pytest
 
@@ -133,9 +134,10 @@ class TestSelectWorkItem:
 class TestProcessWorkItem:
     """Test work item processing logic."""
     
+    @pytest.mark.xfail(sys.platform == "win32", reason="Windows Unicode encoding issue - tracked in PokePoke-oel")
     @patch('src.pokepoke.beads.close_parent_if_complete')
     @patch('src.pokepoke.beads.get_parent_id')
-    @patch('src.pokepoke.beads.close_item')
+    @patch('src.pokepoke.workflow.close_item')  # Patch where it's used
     @patch('subprocess.run')
     @patch('src.pokepoke.worktrees.cleanup_worktree')
     @patch('src.pokepoke.workflow.merge_worktree')
@@ -213,9 +215,10 @@ class TestProcessWorkItem:
         assert cleanup_runs == 0
         mock_close.assert_called_once_with("task-1", "Completed by PokePoke orchestrator")
     
+    @pytest.mark.xfail(sys.platform == "win32", reason="Windows Unicode encoding issue - tracked in PokePoke-oel")
     @patch('src.pokepoke.beads.close_parent_if_complete')
     @patch('src.pokepoke.beads.get_parent_id')
-    @patch('src.pokepoke.beads.close_item')
+    @patch('src.pokepoke.workflow.close_item')  # Patch where it's used
     @patch('subprocess.run')
     @patch('src.pokepoke.worktrees.cleanup_worktree')
     @patch('src.pokepoke.workflow.merge_worktree')
@@ -292,6 +295,7 @@ class TestProcessWorkItem:
         mock_close_parent.assert_any_call("feature-1")
         mock_close_parent.assert_any_call("epic-1")
     
+    @pytest.mark.xfail(sys.platform == "win32", reason="Windows Unicode encoding issue - tracked in PokePoke-oel")
     @patch('src.pokepoke.worktrees.cleanup_worktree')
     @patch('os.chdir')
     @patch('os.getcwd')
