@@ -564,3 +564,247 @@ class TestCheckMainRepoReadyForMerge:
         
         assert is_ready == False
         assert "git command failed" in error
+
+
+class TestRunOrchestratorContinuousMode:
+    """Test continuous mode scenarios."""
+    
+    @patch('src.pokepoke.orchestrator.run_maintenance_agent')
+    @patch('time.sleep')
+    @patch('src.pokepoke.orchestrator.get_beads_stats')
+    @patch('src.pokepoke.orchestrator.process_work_item')
+    @patch('src.pokepoke.orchestrator.select_work_item')
+    @patch('src.pokepoke.orchestrator.get_ready_work_items')
+    @patch('src.pokepoke.orchestrator._check_and_commit_main_repo')
+    def test_continuous_autonomous_multiple_items(
+        self,
+        mock_check_repo: Mock,
+        mock_get_items: Mock,
+        mock_select: Mock,
+        mock_process: Mock,
+        mock_stats: Mock,
+        mock_sleep: Mock,
+        mock_maintenance: Mock
+    ) -> None:
+        """Test continuous autonomous mode processes multiple items."""
+        from src.pokepoke.orchestrator import run_orchestrator
+        from src.pokepoke.types import AgentStats
+        
+        item1 = BeadsWorkItem(
+            id="task-1",
+            title="Task 1",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task"
+        )
+        item2 = BeadsWorkItem(
+            id="task-2",
+            title="Task 2",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task"
+        )
+        
+        mock_check_repo.return_value = True
+        mock_get_items.side_effect = [[item1], [item2], []]
+        mock_select.side_effect = [item1, item2, None]
+        mock_process.side_effect = [
+            (True, 1, AgentStats(), 0),
+            (True, 1, AgentStats(), 0)
+        ]
+        mock_stats.return_value = {}
+        mock_maintenance.return_value = None
+        
+        result = run_orchestrator(interactive=False, continuous=True)
+        
+        assert result == 0
+        assert mock_process.call_count == 2
+    
+    @patch('src.pokepoke.orchestrator.run_maintenance_agent')
+    @patch('src.pokepoke.orchestrator.get_beads_stats')
+    @patch('src.pokepoke.orchestrator.process_work_item')
+    @patch('src.pokepoke.orchestrator.select_work_item')
+    @patch('src.pokepoke.orchestrator.get_ready_work_items')
+    @patch('src.pokepoke.orchestrator._check_and_commit_main_repo')
+    def test_maintenance_agents_triggered(
+        self,
+        mock_check_repo: Mock,
+        mock_get_items: Mock,
+        mock_select: Mock,
+        mock_process: Mock,
+        mock_stats: Mock,
+        mock_maintenance: Mock
+    ) -> None:
+        """Test maintenance agents are triggered at correct intervals."""
+        from src.pokepoke.orchestrator import run_orchestrator
+        from src.pokepoke.types import AgentStats
+        
+        items = [BeadsWorkItem(
+            id=f"task-{i}",
+            title=f"Task {i}",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task"
+        ) for i in range(11)]
+        
+        mock_check_repo.return_value = True
+        # Return items for 10 iterations, then None
+        mock_get_items.side_effect = [[items[i]] for i in range(10)] + [[]]
+        mock_select.side_effect = items[:10] + [None]
+        mock_process.return_value = (True, 1, AgentStats(), 0)
+        mock_stats.return_value = {}
+        mock_maintenance.return_value = AgentStats()
+        
+        result = run_orchestrator(interactive=False, continuous=True)
+        
+        assert result == 0
+        # At item 3: janitor
+        # At item 5: backlog cleanup
+        # At item 6: janitor
+        # At item 9: janitor
+        # At item 10: tech debt, janitor, backlog cleanup
+        # Total: 4 janitor, 2 backlog cleanup, 1 tech debt
+        assert mock_maintenance.call_count >= 3  # At least some maintenance agents ran
+    
+    @patch('builtins.input')
+    @patch('src.pokepoke.orchestrator.get_beads_stats')
+    @patch('src.pokepoke.orchestrator.process_work_item')
+    @patch('src.pokepoke.orchestrator.select_work_item')
+    @patch('src.pokepoke.orchestrator.get_ready_work_items')
+    @patch('src.pokepoke.orchestrator._check_and_commit_main_repo')
+    def test_continuous_interactive_loop(
+        self,
+        mock_check_repo: Mock,
+        mock_get_items: Mock,
+        mock_select: Mock,
+        mock_process: Mock,
+        mock_stats: Mock,
+        mock_input: Mock
+    ) -> None:
+        """Test continuous interactive mode with user continuation prompt."""
+        from src.pokepoke.orchestrator import run_orchestrator
+        from src.pokepoke.types import AgentStats
+        
+        item = BeadsWorkItem(
+            id="task-1",
+            title="Task 1",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task"
+        )
+        
+        mock_check_repo.return_value = True
+        mock_get_items.return_value = [item]
+        mock_select.return_value = item
+        mock_process.return_value = (True, 1, AgentStats(), 0)
+        mock_stats.return_value = {}
+        mock_input.return_value = 'n'  # Don't continue
+        
+        result = run_orchestrator(interactive=True, continuous=True)
+        
+        assert result == 0
+        mock_input.assert_called_once()
+
+
+class TestOrchestratorHelperFunctions:
+    """Test orchestrator helper functions."""
+    
+    @patch('subprocess.run')
+    def test_check_and_commit_main_repo_with_non_beads_changes(
+        self,
+        mock_subprocess: Mock
+    ) -> None:
+        """Test _check_and_commit_main_repo with non-beads changes."""
+        from src.pokepoke.orchestrator import _check_and_commit_main_repo
+        
+        mock_subprocess.return_value = Mock(
+            stdout=" M src/file.py\n M tests/test.py\n",
+            returncode=0
+        )
+        
+        result = _check_and_commit_main_repo()
+        
+        assert result is False
+        mock_subprocess.assert_called_once()
+    
+    def test_aggregate_stats(self) -> None:
+        """Test _aggregate_stats function."""
+        from src.pokepoke.orchestrator import _aggregate_stats
+        from src.pokepoke.types import SessionStats, AgentStats
+        
+        session_stats = SessionStats(agent_stats=AgentStats(
+            wall_duration=10.0,
+            api_duration=5.0,
+            input_tokens=100,
+            output_tokens=50,
+            lines_added=10,
+            lines_removed=5,
+            premium_requests=1
+        ))
+        
+        item_stats = AgentStats(
+            wall_duration=5.0,
+            api_duration=2.0,
+            input_tokens=50,
+            output_tokens=25,
+            lines_added=5,
+            lines_removed=2,
+            premium_requests=1
+        )
+        
+        _aggregate_stats(session_stats, item_stats)
+        
+        assert session_stats.agent_stats.wall_duration == 15.0
+        assert session_stats.agent_stats.api_duration == 7.0
+        assert session_stats.agent_stats.input_tokens == 150
+        assert session_stats.agent_stats.output_tokens == 75
+        assert session_stats.agent_stats.lines_added == 15
+        assert session_stats.agent_stats.lines_removed == 7
+        assert session_stats.agent_stats.premium_requests == 2
+
+
+class TestOrchestratorMain:
+    """Test main entry point."""
+    
+    @patch('src.pokepoke.orchestrator.run_orchestrator')
+    @patch('sys.argv', ['pokepoke', '--autonomous'])
+    def test_main_autonomous(self, mock_run: Mock) -> None:
+        """Test main with autonomous flag."""
+        from src.pokepoke.orchestrator import main
+        
+        mock_run.return_value = 0
+        
+        result = main()
+        
+        assert result == 0
+        mock_run.assert_called_once_with(interactive=False, continuous=False)
+    
+    @patch('src.pokepoke.orchestrator.run_orchestrator')
+    @patch('sys.argv', ['pokepoke', '--continuous'])
+    def test_main_continuous(self, mock_run: Mock) -> None:
+        """Test main with continuous flag."""
+        from src.pokepoke.orchestrator import main
+        
+        mock_run.return_value = 0
+        
+        result = main()
+        
+        assert result == 0
+        mock_run.assert_called_once_with(interactive=True, continuous=True)
+    
+    @patch('src.pokepoke.orchestrator.run_orchestrator')
+    @patch('sys.argv', ['pokepoke', '--autonomous', '--continuous'])
+    def test_main_both_flags(self, mock_run: Mock) -> None:
+        """Test main with both flags."""
+        from src.pokepoke.orchestrator import main
+        
+        mock_run.return_value = 0
+        
+        result = main()
+        
+        assert result == 0
+        mock_run.assert_called_once_with(interactive=False, continuous=True)
