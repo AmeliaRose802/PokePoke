@@ -274,7 +274,40 @@ def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkIte
         if not is_ready:
             print(f"\n⚠️  Cannot merge: {error_msg}")
             print(f"   Worktree preserved at worktrees/task-{agent_id} for manual intervention")
-            print(f"   To merge later: cd worktrees/task-{agent_id} && git push && cd ../.. && git merge task/{agent_id}")
+            
+            # Create delegation issue for cleanup
+            from pokepoke.beads_management import create_cleanup_delegation_issue
+            
+            description = f"""Failed to merge worktree for {agent_name} agent (ID: {agent_id})
+
+**Error:** {error_msg}
+
+**Worktree Location:** `worktrees/task-{agent_id}`
+
+**Required Actions:**
+1. Check git status in main repository: `git status`
+2. Check git status in worktree: `cd worktrees/task-{agent_id} && git status`
+3. Resolve any uncommitted changes or conflicts
+4. Manually merge the worktree:
+   ```bash
+   cd worktrees/task-{agent_id}
+   git push
+   cd ../..
+   git merge task/{agent_id}
+   ```
+5. Clean up the worktree: `git worktree remove worktrees/task-{agent_id}`
+
+**Agent:** {agent_name}
+"""
+            
+            create_cleanup_delegation_issue(
+                title=f"Resolve merge conflict for {agent_name} agent worktree",
+                description=description,
+                labels=['git', 'worktree', 'merge-conflict', 'agent'],
+                priority=1  # High priority
+            )
+            
+            print(f"   📋 Created delegation issue for cleanup")
             return None
         
         print(f"\n🔀 Merging worktree for {agent_id}...")
@@ -283,7 +316,45 @@ def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkIte
         if not merge_success:
             print(f"\n❌ Worktree merge failed!")
             print(f"   Worktree preserved at worktrees/task-{agent_id} for manual intervention")
-            print(f"   Check 'git status' in main repo and worktree, resolve conflicts, then merge manually")
+            
+            # Create delegation issue for merge failure
+            from pokepoke.beads_management import create_cleanup_delegation_issue
+            
+            description = f"""Failed to merge worktree for {agent_name} agent (ID: {agent_id})
+
+**Issue:** Git merge command failed (likely merge conflicts)
+
+**Worktree Location:** `worktrees/task-{agent_id}`
+
+**Required Actions:**
+1. Check merge conflicts:
+   ```bash
+   cd worktrees/task-{agent_id}
+   git status
+   ```
+2. Resolve conflicts manually:
+   - Edit conflicted files
+   - Mark as resolved: `git add <file>`
+   - Complete merge: `git commit`
+3. Push resolved changes: `git push`
+4. Switch to main repo and merge:
+   ```bash
+   cd ../..
+   git merge task/{agent_id}
+   ```
+5. Clean up worktree: `git worktree remove worktrees/task-{agent_id}`
+
+**Agent:** {agent_name}
+"""
+            
+            create_cleanup_delegation_issue(
+                title=f"Resolve merge conflict for {agent_name} agent worktree",
+                description=description,
+                labels=['git', 'worktree', 'merge-conflict', 'agent'],
+                priority=1  # High priority
+            )
+            
+            print(f"   📋 Created delegation issue for cleanup")
             return None
         
         print("   Merged and cleaned up worktree")

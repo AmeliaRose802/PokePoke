@@ -744,23 +744,34 @@ class TestRunOrchestratorContinuousMode:
 class TestOrchestratorHelperFunctions:
     """Test orchestrator helper functions."""
     
+    @patch('src.pokepoke.orchestrator.create_cleanup_delegation_issue')
     @patch('subprocess.run')
     def test_check_and_commit_main_repo_with_non_beads_changes(
         self,
-        mock_subprocess: Mock
+        mock_subprocess: Mock,
+        mock_create_issue: Mock
     ) -> None:
-        """Test _check_and_commit_main_repo with non-beads changes."""
+        """Test _check_and_commit_main_repo with non-beads changes - should delegate."""
         from src.pokepoke.orchestrator import _check_and_commit_main_repo
         
         mock_subprocess.return_value = Mock(
             stdout=" M src/file.py\n M tests/test.py\n",
             returncode=0
         )
+        mock_create_issue.return_value = "issue-123"
         
         result = _check_and_commit_main_repo()
         
         assert result is False
-        mock_subprocess.assert_called_once()
+        # Should call subprocess for git status
+        assert mock_subprocess.call_count >= 1
+        mock_create_issue.assert_called_once()
+        
+        # Verify delegation issue was created with correct details
+        call_args = mock_create_issue.call_args
+        assert "uncommitted changes" in call_args.kwargs['title'].lower()
+        assert "src/file.py" in call_args.kwargs['description']
+        assert call_args.kwargs['priority'] == 0  # Critical
     
     def test_aggregate_stats(self) -> None:
         """Test _aggregate_stats function."""

@@ -2,27 +2,27 @@
 
 <#
 .SYNOPSIS
-    Pre-commit file length checker for C# projects
+    Pre-commit file length checker for Python projects
     
 .DESCRIPTION
-    Verifies that C# files don't exceed the maximum line limit.
+    Verifies that Python files don't exceed the maximum line limit.
     This script is designed to be called from a git pre-commit hook.
     
 .PARAMETER MaxLines
-    Maximum lines allowed per file (default: 500)
+    Maximum lines allowed per file (default: 400)
     
 .EXAMPLE
     .\scripts\check-file-length.ps1
 #>
 
 param(
-    [int]$MaxLines = [int]($env:MAX_LINES ?? 500)
+    [int]$MaxLines = [int]($env:MAX_LINES ?? 400)
 )
 
 $ErrorActionPreference = "Stop"
 
-# Get list of staged C# files
-function Get-StagedCSharpFiles {
+# Get list of staged Python files
+function Get-StagedPythonFiles {
     try {
         $output = git diff --cached --name-only --diff-filter=ACM 2>$null
         if ($LASTEXITCODE -ne 0) {
@@ -32,12 +32,12 @@ function Get-StagedCSharpFiles {
         
         return $output -split "`n" |
             Where-Object { $_ -ne '' } |
-            Where-Object { $_ -match '\.cs$' } |
+            Where-Object { $_ -match '\.py$' } |
             Where-Object { $_ -notmatch 'node_modules/' } |
             Where-Object { $_ -notmatch '^tests/' } |
-            Where-Object { $_ -notmatch '\.Test\.cs$' } |
+            Where-Object { $_ -notmatch 'test_.*\.py$' } |
             Where-Object { $_ -notmatch '/[Tt]ests?/' } |
-            Where-Object { $_ -notmatch 'icm_queue_tool/' } |
+            Where-Object { $_ -notmatch '__pycache__/' } |
             ForEach-Object { $_.Trim() }
     }
     catch {
@@ -104,7 +104,7 @@ function Test-FileLengths {
 }
 
 # Main execution
-$stagedFiles = Get-StagedCSharpFiles
+$stagedFiles = Get-StagedPythonFiles
 
 if ($stagedFiles.Count -eq 0) {
     exit 0

@@ -11,7 +11,7 @@ from src.pokepoke.beads import create_issue
 class TestCreateIssue:
     """Test create_issue function."""
     
-    @patch('src.pokepoke.beads.subprocess.run')
+    @patch('src.pokepoke.beads_management.subprocess.run')
     def test_create_issue_basic(self, mock_run: Mock) -> None:
         """Test creating a basic issue."""
         mock_run.return_value = Mock(
@@ -28,7 +28,7 @@ class TestCreateIssue:
         assert 'create' in call_args
         assert 'New Task' in call_args
     
-    @patch('src.pokepoke.beads.subprocess.run')
+    @patch('src.pokepoke.beads_management.subprocess.run')
     def test_create_issue_with_description(self, mock_run: Mock) -> None:
         """Test creating issue with description."""
         mock_run.return_value = Mock(
@@ -47,7 +47,7 @@ class TestCreateIssue:
         assert '-d' in call_args
         assert 'Detailed description' in call_args
     
-    @patch('src.pokepoke.beads.subprocess.run')
+    @patch('src.pokepoke.beads_management.subprocess.run')
     def test_create_issue_with_parent(self, mock_run: Mock) -> None:
         """Test creating issue with parent dependency."""
         mock_run.return_value = Mock(
@@ -66,7 +66,7 @@ class TestCreateIssue:
         assert '--deps' in call_args
         assert 'parent:feature-1' in call_args
     
-    @patch('src.pokepoke.beads.subprocess.run')
+    @patch('src.pokepoke.beads_management.subprocess.run')
     def test_create_issue_with_labels(self, mock_run: Mock) -> None:
         """Test creating issue with labels."""
         # Mock two calls: create and label add
@@ -93,7 +93,7 @@ class TestCreateIssue:
         assert 'bug' in label_call
         assert 'urgent' in label_call
     
-    @patch('src.pokepoke.beads.subprocess.run')
+    @patch('src.pokepoke.beads_management.subprocess.run')
     def test_create_issue_subprocess_error(self, mock_run: Mock) -> None:
         """Test create_issue handles subprocess errors gracefully."""
         mock_run.side_effect = subprocess.CalledProcessError(1, 'bd')
@@ -102,7 +102,7 @@ class TestCreateIssue:
         
         assert issue_id is None
     
-    @patch('src.pokepoke.beads.subprocess.run')
+    @patch('src.pokepoke.beads_management.subprocess.run')
     def test_create_issue_json_parse_error(self, mock_run: Mock) -> None:
         """Test create_issue handles JSON parse errors gracefully."""
         mock_run.return_value = Mock(
@@ -114,7 +114,7 @@ class TestCreateIssue:
         
         assert issue_id is None
     
-    @patch('src.pokepoke.beads.subprocess.run')
+    @patch('src.pokepoke.beads_management.subprocess.run')
     def test_create_issue_array_response(self, mock_run: Mock) -> None:
         """Test create_issue handles array response."""
         mock_run.return_value = Mock(
@@ -126,7 +126,7 @@ class TestCreateIssue:
         
         assert issue_id == "task-111"
     
-    @patch('src.pokepoke.beads.subprocess.run')
+    @patch('src.pokepoke.beads_management.subprocess.run')
     def test_create_issue_empty_response(self, mock_run: Mock) -> None:
         """Test create_issue handles empty response."""
         mock_run.return_value = Mock(

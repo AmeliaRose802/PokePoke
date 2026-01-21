@@ -12,7 +12,7 @@ from src.pokepoke.types import BeadsWorkItem
 class TestBeadsIntegration:
     """Test beads integration functions."""
     
-    @patch('src.pokepoke.beads.subprocess.run')
+    @patch('src.pokepoke.beads_query.subprocess.run')
     def test_get_ready_work_items_empty(self, mock_run: Mock) -> None:
         """Test getting ready work items when none available."""
         mock_run.return_value = Mock(
@@ -30,7 +30,7 @@ class TestBeadsIntegration:
             check=True
         )
     
-    @patch('src.pokepoke.beads.subprocess.run')
+    @patch('src.pokepoke.beads_query.subprocess.run')
     def test_get_ready_work_items_with_items(self, mock_run: Mock) -> None:
         """Test getting ready work items with results."""
         mock_data = [
@@ -55,7 +55,7 @@ class TestBeadsIntegration:
         assert items[0].title == "Test task"
         assert items[0].priority == 1
     
-    @patch('src.pokepoke.beads.subprocess.run')
+    @patch('src.pokepoke.beads_query.subprocess.run')
     def test_get_ready_work_items_filters_warnings(self, mock_run: Mock) -> None:
         """Test that warning/note lines are filtered out."""
         mock_data = [{"id": "test-123", "title": "Test", "issue_type": "task", "status": "open", "priority": 1, "description": ""}]
@@ -70,7 +70,7 @@ class TestBeadsIntegration:
         assert len(items) == 1
         assert items[0].id == "test-123"
     
-    @patch('src.pokepoke.beads.subprocess.run')
+    @patch('src.pokepoke.beads_query.subprocess.run')
     def test_get_issue_dependencies_found(self, mock_run: Mock) -> None:
         """Test getting issue dependencies when issue exists."""
         mock_data = [{
@@ -115,7 +115,7 @@ class TestBeadsIntegration:
         assert len(result.dependents) == 1
         assert result.dependents[0].id == "subtask-1"
     
-    @patch('src.pokepoke.beads.subprocess.run')
+    @patch('src.pokepoke.beads_query.subprocess.run')
     def test_get_issue_dependencies_not_found(self, mock_run: Mock) -> None:
         """Test getting dependencies for non-existent issue."""
         mock_run.side_effect = subprocess.CalledProcessError(1, 'bd', stderr="not found")
@@ -125,7 +125,7 @@ class TestBeadsIntegration:
         # Should return None when issue not found
         assert result is None
     
-    @patch('src.pokepoke.beads.subprocess.run')
+    @patch('src.pokepoke.beads_query.subprocess.run')
     def test_get_issue_dependencies_empty_result(self, mock_run: Mock) -> None:
         """Test getting dependencies when issue returns empty array."""
         mock_run.return_value = Mock(
@@ -137,7 +137,7 @@ class TestBeadsIntegration:
         
         assert result is None
     
-    @patch('src.pokepoke.beads.subprocess.run')
+    @patch('src.pokepoke.beads_query.subprocess.run')
     def test_get_issue_dependencies_no_json_start(self, mock_run: Mock) -> None:
         """Test getting dependencies when no JSON array found."""
         mock_run.return_value = Mock(
@@ -205,7 +205,7 @@ class TestFilterWorkItems:
         assert len(filtered) == 1
         assert filtered[0].id == "feature-1"
     
-    @patch('src.pokepoke.beads.has_feature_parent')
+    @patch('src.pokepoke.beads_management.has_feature_parent')
     def test_filter_work_items_excludes_tasks_with_feature_parent(
         self, 
         mock_has_feature_parent: Mock
@@ -229,7 +229,7 @@ class TestFilterWorkItems:
         
         assert len(filtered) == 0
     
-    @patch('src.pokepoke.beads.has_feature_parent')
+    @patch('src.pokepoke.beads_management.has_feature_parent')
     def test_filter_work_items_includes_standalone_tasks(
         self, 
         mock_has_feature_parent: Mock
@@ -254,7 +254,7 @@ class TestFilterWorkItems:
         assert len(filtered) == 1
         assert filtered[0].id == "task-1"
     
-    @patch('src.pokepoke.beads.get_issue_dependencies')
+    @patch('src.pokepoke.beads_hierarchy.get_issue_dependencies')
     def test_has_feature_parent_true(self, mock_get_issue: Mock) -> None:
         """Test has_feature_parent returns True when parent is feature."""
         from src.pokepoke.beads import has_feature_parent
@@ -283,7 +283,7 @@ class TestFilterWorkItems:
         
         assert result is True
     
-    @patch('src.pokepoke.beads.get_issue_dependencies')
+    @patch('src.pokepoke.beads_hierarchy.get_issue_dependencies')
     def test_has_feature_parent_false_no_dependencies(self, mock_get_issue: Mock) -> None:
         """Test has_feature_parent returns False when no dependencies."""
         from src.pokepoke.beads import has_feature_parent

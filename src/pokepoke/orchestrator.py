@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 from pokepoke.beads import get_ready_work_items, get_beads_stats
+from pokepoke.beads_management import create_cleanup_delegation_issue
 from pokepoke.types import AgentStats, SessionStats
 from pokepoke.stats import print_stats
 from pokepoke.workflow import select_work_item, process_work_item
@@ -134,8 +135,42 @@ def _check_and_commit_main_repo() -> bool:
             if len(non_beads_changes) > 10:
                 print(f"   ... and {len(non_beads_changes) - 10} more")
             
-            print("\n❌ Please commit or stash these changes before running PokePoke.")
-            print("   Worktree operations require a clean working directory.")
+            # Create delegation issue for cleanup
+            changes_list = '\n'.join(f"  - {line}" for line in non_beads_changes[:20])
+            if len(non_beads_changes) > 20:
+                changes_list += f"\n  ... and {len(non_beads_changes) - 20} more"
+            
+            description = f"""Main repository has uncommitted changes that need to be resolved:
+
+{changes_list}
+
+**Required Actions:**
+1. Review uncommitted changes with `git status`
+2. Either commit changes if they are valid work, or stash/discard if not
+3. Ensure main repository is clean before PokePoke continues
+4. If there are worktree directories uncommitted, investigate why merge failed
+
+**Commands to run:**
+```bash
+git status
+# Then either:
+git add . && git commit -m "description"
+# Or:
+git stash
+```
+
+Once resolved, this issue can be closed and PokePoke will continue.
+"""
+            
+            create_cleanup_delegation_issue(
+                title="Clean up uncommitted changes in main repository",
+                description=description,
+                labels=['git', 'cleanup'],
+                priority=0  # Critical - blocks all work
+            )
+            
+            print("\n📋 Created delegation issue for cleanup")
+            print("   An agent will handle this automatically")
             return False
         elif '.beads/' in uncommitted:
             print("🔧 Committing beads database changes...")

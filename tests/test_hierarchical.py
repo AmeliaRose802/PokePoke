@@ -20,7 +20,7 @@ from src.pokepoke.types import BeadsWorkItem, IssueWithDependencies, Dependency
 class TestHierarchicalWorkAssignment:
     """Test hierarchical work assignment functions."""
     
-    @patch('src.pokepoke.beads.get_issue_dependencies')
+    @patch('src.pokepoke.beads_hierarchy.get_issue_dependencies')
     def test_get_children_no_dependents(self, mock_get_issue: Mock) -> None:
         """Test getting children when issue has no dependents."""
         mock_get_issue.return_value = IssueWithDependencies(
@@ -37,7 +37,7 @@ class TestHierarchicalWorkAssignment:
         
         assert children == []
     
-    @patch('src.pokepoke.beads.get_issue_dependencies')
+    @patch('src.pokepoke.beads_hierarchy.get_issue_dependencies')
     def test_get_children_with_parent_dependents(self, mock_get_issue: Mock) -> None:
         """Test getting children with parent-type dependents."""
         # Mock parent issue
@@ -78,7 +78,7 @@ class TestHierarchicalWorkAssignment:
         assert children[0].title == "Task 1"
         assert children[0].issue_type == "task"
     
-    @patch('src.pokepoke.beads.get_children')
+    @patch('src.pokepoke.beads_hierarchy.get_children')
     def test_get_next_child_task_no_children(self, mock_get_children: Mock) -> None:
         """Test getting next child when there are no children."""
         mock_get_children.return_value = []
@@ -87,7 +87,7 @@ class TestHierarchicalWorkAssignment:
         
         assert next_child is None
     
-    @patch('src.pokepoke.beads.get_children')
+    @patch('src.pokepoke.beads_hierarchy.get_children')
     def test_get_next_child_task_all_complete(self, mock_get_children: Mock) -> None:
         """Test getting next child when all children are complete."""
         mock_get_children.return_value = [
@@ -105,7 +105,7 @@ class TestHierarchicalWorkAssignment:
         
         assert next_child is None
     
-    @patch('src.pokepoke.beads.get_children')
+    @patch('src.pokepoke.beads_hierarchy.get_children')
     def test_get_next_child_task_returns_highest_priority(self, mock_get_children: Mock) -> None:
         """Test that next child returns highest priority open task."""
         mock_get_children.return_value = [
@@ -141,7 +141,7 @@ class TestHierarchicalWorkAssignment:
         assert next_child.id == "task-2"
         assert next_child.priority == 1
     
-    @patch('src.pokepoke.beads.get_children')
+    @patch('src.pokepoke.beads_hierarchy.get_children')
     def test_all_children_complete_no_children(self, mock_get_children: Mock) -> None:
         """Test that no children means all complete (trivially true)."""
         mock_get_children.return_value = []
@@ -150,7 +150,7 @@ class TestHierarchicalWorkAssignment:
         
         assert result is True
     
-    @patch('src.pokepoke.beads.get_children')
+    @patch('src.pokepoke.beads_hierarchy.get_children')
     def test_all_children_complete_with_open_children(self, mock_get_children: Mock) -> None:
         """Test that open children means not all complete."""
         mock_get_children.return_value = [
@@ -176,7 +176,7 @@ class TestHierarchicalWorkAssignment:
         
         assert result is False
     
-    @patch('src.pokepoke.beads.get_children')
+    @patch('src.pokepoke.beads_hierarchy.get_children')
     def test_all_children_complete_all_done(self, mock_get_children: Mock) -> None:
         """Test that all done children returns True."""
         mock_get_children.return_value = [
@@ -210,8 +210,8 @@ class TestHierarchicalWorkAssignment:
         
         assert result is True
     
-    @patch('src.pokepoke.beads.subprocess.run')
-    @patch('src.pokepoke.beads.all_children_complete')
+    @patch('src.pokepoke.beads_hierarchy.subprocess.run')
+    @patch('src.pokepoke.beads_hierarchy.all_children_complete')
     def test_close_parent_if_complete_not_complete(
         self, 
         mock_all_complete: Mock, 
@@ -225,8 +225,8 @@ class TestHierarchicalWorkAssignment:
         assert result is False
         mock_run.assert_not_called()
     
-    @patch('src.pokepoke.beads.subprocess.run')
-    @patch('src.pokepoke.beads.all_children_complete')
+    @patch('src.pokepoke.beads_hierarchy.subprocess.run')
+    @patch('src.pokepoke.beads_hierarchy.all_children_complete')
     def test_close_parent_if_complete_success(
         self, 
         mock_all_complete: Mock, 
@@ -240,13 +240,13 @@ class TestHierarchicalWorkAssignment:
         
         assert result is True
         mock_run.assert_called_once_with(
-            ['bd', 'close', 'epic-1', '-m', 'All child items completed'],
+            ['bd', 'close', 'epic-1', '-r', 'All child items completed'],
             capture_output=True,
             text=True,
             check=True
         )
     
-    @patch('src.pokepoke.beads.subprocess.run')
+    @patch('src.pokepoke.beads_hierarchy.subprocess.run')
     def test_close_item_success(self, mock_run: Mock) -> None:
         """Test closing an item successfully."""
         mock_run.return_value = Mock(returncode=0)
@@ -261,7 +261,7 @@ class TestHierarchicalWorkAssignment:
             check=True
         )
     
-    @patch('src.pokepoke.beads.subprocess.run')
+    @patch('src.pokepoke.beads_hierarchy.subprocess.run')
     def test_close_item_failure(self, mock_run: Mock) -> None:
         """Test handling close item failure."""
         mock_run.side_effect = subprocess.CalledProcessError(
@@ -272,7 +272,7 @@ class TestHierarchicalWorkAssignment:
         
         assert result is False
     
-    @patch('src.pokepoke.beads.get_issue_dependencies')
+    @patch('src.pokepoke.beads_hierarchy.get_issue_dependencies')
     def test_get_parent_id_no_dependencies(self, mock_get_issue: Mock) -> None:
         """Test getting parent ID when no dependencies exist."""
         mock_get_issue.return_value = IssueWithDependencies(
@@ -289,7 +289,7 @@ class TestHierarchicalWorkAssignment:
         
         assert parent_id is None
     
-    @patch('src.pokepoke.beads.get_issue_dependencies')
+    @patch('src.pokepoke.beads_hierarchy.get_issue_dependencies')
     def test_get_parent_id_with_parent(self, mock_get_issue: Mock) -> None:
         """Test getting parent ID when parent dependency exists."""
         mock_get_issue.return_value = IssueWithDependencies(
@@ -315,8 +315,8 @@ class TestHierarchicalWorkAssignment:
         
         assert parent_id == "feature-1"
     
-    @patch('src.pokepoke.beads.get_next_child_task')
-    @patch('src.pokepoke.beads.close_parent_if_complete')
+    @patch('src.pokepoke.beads_management.get_next_child_task')
+    @patch('src.pokepoke.beads_management.close_parent_if_complete')
     def test_select_next_hierarchical_item_epic_with_children(
         self, 
         mock_close_parent: Mock,
@@ -348,8 +348,8 @@ class TestHierarchicalWorkAssignment:
         assert selected.id == "task-1"
         mock_close_parent.assert_not_called()
     
-    @patch('src.pokepoke.beads.get_next_child_task')
-    @patch('src.pokepoke.beads.close_parent_if_complete')
+    @patch('src.pokepoke.beads_management.get_next_child_task')
+    @patch('src.pokepoke.beads_management.close_parent_if_complete')
     def test_select_next_hierarchical_item_epic_all_children_complete(
         self, 
         mock_close_parent: Mock,
@@ -384,7 +384,7 @@ class TestHierarchicalWorkAssignment:
         assert selected.id == "task-1"
         mock_close_parent.assert_called_once_with("epic-1")
     
-    @patch('src.pokepoke.beads.get_next_child_task')
+    @patch('src.pokepoke.beads_management.get_next_child_task')
     def test_select_next_hierarchical_item_standalone_task(
         self, 
         mock_get_next_child: Mock
