@@ -5,7 +5,7 @@ import time
 from unittest.mock import patch, MagicMock, Mock
 from pokepoke.types import BeadsWorkItem, CopilotResult
 from pokepoke.copilot import invoke_copilot_cli
-from pokepoke.orchestrator import process_work_item
+from pokepoke.workflow import process_work_item
 
 
 @pytest.fixture
@@ -100,15 +100,15 @@ def test_process_work_item_timeout_restart(sample_work_item):
     """Test that process_work_item restarts on timeout."""
     
     # Mock all the dependencies
-    with patch('pokepoke.orchestrator.create_worktree', return_value='/tmp/worktree'):
+    with patch('pokepoke.workflow.create_worktree', return_value='/tmp/worktree'):
         with patch('os.chdir'):
             with patch('os.getcwd', return_value='/original'):
-                with patch('pokepoke.orchestrator.has_uncommitted_changes', return_value=False):
+                with patch('pokepoke.agent_runner.has_uncommitted_changes', return_value=False):
                     with patch('subprocess.run') as mock_subprocess:
-                        with patch('pokepoke.orchestrator.merge_worktree', return_value=True):
-                            with patch('pokepoke.orchestrator.cleanup_worktree'):
-                                with patch('pokepoke.orchestrator.close_item', return_value=True):
-                                    with patch('pokepoke.orchestrator.get_parent_id', return_value=None):
+                        with patch('pokepoke.workflow.merge_worktree', return_value=True):
+                            with patch('pokepoke.worktrees.cleanup_worktree'):
+                                with patch('pokepoke.beads.close_item', return_value=True):
+                                    with patch('pokepoke.beads.get_parent_id', return_value=None):
                                         # Mock subprocess: return 1 commit for commit count, empty for git status
                                         def subprocess_side_effect(*args, **kwargs):
                                             cmd = args[0] if args else kwargs.get('args', [])
@@ -131,12 +131,12 @@ def test_process_work_item_timeout_restart(sample_work_item):
                                             )
                                         
                                         # Use very short timeout for testing
-                                        with patch('pokepoke.orchestrator.invoke_copilot_cli', side_effect=mock_invoke):
-                                            from pokepoke.orchestrator import process_work_item
+                                        with patch('pokepoke.workflow.invoke_copilot_cli', side_effect=mock_invoke):
+                                            from pokepoke.workflow import process_work_item
                                             result = process_work_item(sample_work_item, interactive=False, timeout_hours=0.001)
                                             
-                                            # Should succeed and return 3-tuple
-                                            success, request_count, stats = result
+                                            # Should succeed and return 4-tuple
+                                            success, request_count, stats, cleanup_runs = result
                                             assert success == True
                                             assert request_count == 1
 
@@ -214,18 +214,18 @@ def test_minimum_timeout_enforced(sample_work_item):
 
 def test_process_work_item_with_timeout_parameter(sample_work_item):
     """Test that process_work_item accepts and uses timeout parameter."""
-    from pokepoke.orchestrator import process_work_item
+    from pokepoke.workflow import process_work_item
     
-    with patch('pokepoke.orchestrator.create_worktree', return_value='/tmp/worktree'):
+    with patch('pokepoke.workflow.create_worktree', return_value='/tmp/worktree'):
         with patch('os.chdir'):
             with patch('os.getcwd', return_value='/original'):
-                with patch('pokepoke.orchestrator.invoke_copilot_cli') as mock_invoke:
-                    with patch('pokepoke.orchestrator.has_uncommitted_changes', return_value=False):
+                with patch('pokepoke.workflow.invoke_copilot_cli') as mock_invoke:
+                    with patch('pokepoke.agent_runner.has_uncommitted_changes', return_value=False):
                         with patch('subprocess.run') as mock_subprocess:
-                            with patch('pokepoke.orchestrator.merge_worktree', return_value=True):
-                                with patch('pokepoke.orchestrator.cleanup_worktree'):
-                                    with patch('pokepoke.orchestrator.close_item', return_value=True):
-                                        with patch('pokepoke.orchestrator.get_parent_id', return_value=None):
+                            with patch('pokepoke.workflow.merge_worktree', return_value=True):
+                                with patch('pokepoke.worktrees.cleanup_worktree'):
+                                    with patch('pokepoke.beads.close_item', return_value=True):
+                                        with patch('pokepoke.beads.get_parent_id', return_value=None):
                                             # Mock subprocess: return 1 commit for commit count, empty for git status
                                             def subprocess_side_effect(*args, **kwargs):
                                                 cmd = args[0] if args else kwargs.get('args', [])
@@ -248,7 +248,7 @@ def test_process_work_item_with_timeout_parameter(sample_work_item):
                                             # Extract kwargs from first call to invoke_copilot_cli
                                             first_call_kwargs = mock_invoke.call_args[1]
                                             
-                                            success, request_count, stats = result
+                                            success, request_count, stats, cleanup_runs = result
                                             assert success == True
                                             assert request_count == 1
                                         # Stats should be None since "Success" doesn't contain any parseable stats
