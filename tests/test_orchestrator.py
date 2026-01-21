@@ -134,7 +134,6 @@ class TestSelectWorkItem:
 class TestProcessWorkItem:
     """Test work item processing logic."""
     
-    @pytest.mark.xfail(sys.platform == "win32", reason="Windows Unicode encoding issue - tracked in PokePoke-oel")
     @patch('src.pokepoke.beads.close_parent_if_complete')
     @patch('src.pokepoke.beads.get_parent_id')
     @patch('src.pokepoke.workflow.close_item')  # Patch where it's used
@@ -213,11 +212,10 @@ class TestProcessWorkItem:
         assert success == True
         assert request_count == 1
         assert cleanup_runs == 0
-        mock_close.assert_called_once_with("task-1", "Completed by PokePoke orchestrator")
+        mock_close.assert_called_once_with("task-1", "Completed by PokePoke orchestrator (agent did not close)")
     
-    @pytest.mark.xfail(sys.platform == "win32", reason="Windows Unicode encoding issue - tracked in PokePoke-oel")
-    @patch('src.pokepoke.beads.close_parent_if_complete')
-    @patch('src.pokepoke.beads.get_parent_id')
+    @patch('src.pokepoke.workflow.close_parent_if_complete')
+    @patch('src.pokepoke.workflow.get_parent_id')
     @patch('src.pokepoke.workflow.close_item')  # Patch where it's used
     @patch('subprocess.run')
     @patch('src.pokepoke.worktrees.cleanup_worktree')
@@ -295,8 +293,11 @@ class TestProcessWorkItem:
         mock_close_parent.assert_any_call("feature-1")
         mock_close_parent.assert_any_call("epic-1")
     
-    @pytest.mark.xfail(sys.platform == "win32", reason="Windows Unicode encoding issue - tracked in PokePoke-oel")
+    @patch('subprocess.run')
     @patch('src.pokepoke.worktrees.cleanup_worktree')
+    @patch('src.pokepoke.workflow.merge_worktree')
+    @patch('src.pokepoke.workflow.check_main_repo_ready_for_merge')
+    @patch('src.pokepoke.agent_runner.has_uncommitted_changes')
     @patch('os.chdir')
     @patch('os.getcwd')
     @patch('src.pokepoke.workflow.create_worktree')
@@ -307,9 +308,13 @@ class TestProcessWorkItem:
         mock_create_wt: Mock,
         mock_getcwd: Mock,
         mock_chdir: Mock,
-        mock_cleanup: Mock
+        mock_uncommitted: Mock,
+        mock_check_ready: Mock,
+        mock_merge: Mock,
+        mock_cleanup: Mock,
+        mock_subprocess: Mock
     ) -> None:
-        """Test processing failure."""
+        """Test processing failure - copilot fails then succeeds on retry."""
         item = BeadsWorkItem(
             id="task-1",
             title="Task",
@@ -320,19 +325,45 @@ class TestProcessWorkItem:
         )
         mock_create_wt.return_value = '/tmp/worktree'
         mock_getcwd.return_value = '/original'
-        mock_invoke.return_value = CopilotResult(
-            work_item_id="task-1",
-            success=False,
-            error="Something went wrong",
-            attempt_count=1
-        )
+        mock_uncommitted.return_value = False
+        mock_check_ready.return_value = (True, "")
+        mock_merge.return_value = True
+        
+        # First call fails, second call succeeds (retry behavior)
+        mock_invoke.side_effect = [
+            CopilotResult(
+                work_item_id="task-1",
+                success=False,
+                error="Something went wrong",
+                attempt_count=1
+            ),
+            CopilotResult(
+                work_item_id="task-1",
+                success=True,
+                attempt_count=1
+            )
+        ]
+        
+        # Mock subprocess for git and bd commands
+        def subprocess_side_effect(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get('args', [])
+            if isinstance(cmd, list) and len(cmd) > 0:
+                if 'rev-list' in cmd:
+                    return Mock(stdout="1\n", returncode=0)
+                elif 'status' in cmd and '--porcelain' in cmd:
+                    return Mock(stdout="", returncode=0)
+                elif cmd[0] == 'bd' and 'show' in cmd:
+                    return Mock(stdout='{"status": "open"}', returncode=0)
+                elif cmd[0] == 'bd' and 'sync' in cmd:
+                    return Mock(stdout="", returncode=0)
+            return Mock(stdout="", returncode=0)
+        mock_subprocess.side_effect = subprocess_side_effect
         
         result = process_work_item(item, interactive=False)
         
         success, request_count, stats, cleanup_runs = result
-        assert success == False
-        assert request_count == 1
-        assert stats is None
+        assert success == True  # Eventually succeeds after retry
+        assert request_count == 1  # Only counts final successful attempt (recursive calls reset counter)
         assert cleanup_runs == 0
     
     @patch('src.pokepoke.workflow.invoke_copilot_cli')

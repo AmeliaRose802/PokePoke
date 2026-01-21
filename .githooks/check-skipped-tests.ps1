@@ -2,20 +2,21 @@
 
 <#
 .SYNOPSIS
-    Check for skipped tests in pytest test files
+    Check for skipped or xfailed tests in pytest test files
     
 .DESCRIPTION
-    Searches for skipped tests and fails if any tests are skipped.
-    This enforces a policy of no skipped tests in the codebase.
+    Searches for skipped or xfailed tests and fails if any are found.
+    This enforces a policy of no skipped or expected failures in the codebase.
     
-    Tests can be skipped using:
+    Tests can be skipped/xfailed using:
     - @pytest.mark.skip
     - @pytest.mark.skipif
+    - @pytest.mark.xfail (also blocked)
     - pytest.skip() calls
     
 .EXAMPLE
     .\.githooks\check-skipped-tests.ps1
-    Checks for any skipped tests
+    Checks for any skipped or xfailed tests
 #>
 
 $ErrorActionPreference = "Stop"
@@ -69,6 +70,26 @@ try {
                 }
             }
             
+            # Check for @pytest.mark.xfail decorator (also forbidden)
+            if ($line -match '@pytest\.mark\.xfail') {
+                $testName = "Unknown"
+                # Look ahead for the test function name
+                # May need to look ahead multiple lines if xfail has arguments
+                for ($j = $i + 1; $j -lt [Math]::Min($i + 5, $lines.Count); $j++) {
+                    if ($lines[$j] -match 'def\s+(test_\w+)') {
+                        $testName = $matches[1]
+                        break
+                    }
+                }
+                
+                $skippedTests += @{
+                    File = $file.Name
+                    Line = $i + 1
+                    Method = $testName
+                    Type = "@pytest.mark.xfail"
+                }
+            }
+            
             # Check for pytest.skip() calls
             if ($line -match 'pytest\.skip\s*\(') {
                 $skippedTests += @{
@@ -82,17 +103,18 @@ try {
     }
     
     if ($skippedTests.Count -gt 0) {
-        Write-Host "❌ $($skippedTests.Count) skipped test(s) found" -ForegroundColor Red
+        Write-Host "❌ $($skippedTests.Count) skipped/xfailed test(s) found" -ForegroundColor Red
         Write-Host ""
         foreach ($test in $skippedTests) {
             Write-Host "  $($test.File):$($test.Line) - $($test.Method) ($($test.Type))" -ForegroundColor Red
         }
         Write-Host ""
-        Write-Host "Fix: Remove @pytest.mark.skip, @pytest.mark.skipif decorators or pytest.skip() calls" -ForegroundColor Yellow
+        Write-Host "Fix: Remove @pytest.mark.skip, @pytest.mark.skipif, @pytest.mark.xfail decorators or pytest.skip() calls" -ForegroundColor Yellow
+        Write-Host "     Tests must pass or be fixed - no exceptions allowed" -ForegroundColor Yellow
         exit 1
     }
     else {
-        Write-Host "✅ No skipped tests" -ForegroundColor Green
+        Write-Host "✅ No skipped or xfailed tests" -ForegroundColor Green
         exit 0
     }
 }
