@@ -1,20 +1,5 @@
 Your job is to address a specific beads item on your subtree then commit making sure all validation passes. 
 
-**[WARNING] CRITICAL: DIRECTORY ACCESS RESTRICTIONS**
-
-YOU MUST NEVER ATTEMPT TO ACCESS ANY DIRECTORY OUTSIDE THE ALLOWED DIRECTORIES! YOU WILL GET STUCK AND DIE!!!
-
-**Allowed Directories (you can ONLY access these):**
-{{#allowed_directories}}
-- `{{.}}`
-{{/allowed_directories}}
-
-**DO NOT access:**
-- Parent directories outside the repo
-- System directories (C:\Windows, /etc, /usr, etc.)
-- User home directories
-- Any path not explicitly listed above
-
 You are working on item: {{item_id}}
 
 **Title:** {{title}}
@@ -28,7 +13,6 @@ You are working on item: {{item_id}}
 **Labels:** {{labels}}
 {{/labels}}
 
-You should only complete the work and commit. Closing the beads item will be handled by the orchestrator.
 
 **Additional Context:**
 Use these beads commands to get more information if needed:
@@ -39,4 +23,4 @@ Use these beads commands to get more information if needed:
 **Success Criteria:**
 - Provided item is fully implemented
 - All pre-commit validation passes successfully
-- All changes are committed
+- All changes are committed and the worktree has been merged
