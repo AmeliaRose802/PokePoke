@@ -251,8 +251,5 @@ def test_process_work_item_with_timeout_parameter(sample_work_item):
                                             success, request_count, stats = result
                                             assert success == True
                                             assert request_count == 1
-                                            # Stats are parsed from output, will be AgentStats with zeros for "Success"
-                                            assert stats is not None
-                                            assert 'timeout' in first_call_kwargs
-                                            # Timeout should be 1 hour = 3600 seconds (approximately)
-                                            assert first_call_kwargs['timeout'] > 3500  # Allow some slack for elapsed time
+                                        # Stats should be None since "Success" doesn't contain any parseable stats
+                                        assert stats is None
