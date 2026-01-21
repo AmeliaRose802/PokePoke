@@ -699,6 +699,42 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False) -> int:
     
     try:
         while True:
+            # CRITICAL: Check main repo for uncommitted changes BEFORE processing any work items
+            print("\n🔍 Checking main repository status...")
+            status_result = subprocess.run(
+                ["git", "status", "--porcelain"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            uncommitted = status_result.stdout.strip()
+            if uncommitted:
+                # Check if it's just beads files
+                lines = uncommitted.split('\n')
+                non_beads_changes = [line for line in lines if line and '.beads/' not in line]
+                
+                if non_beads_changes:
+                    print(f"\n⚠️  Main repository has uncommitted changes:")
+                    for line in non_beads_changes[:10]:
+                        print(f"   {line}")
+                    if len(non_beads_changes) > 10:
+                        print(f"   ... and {len(non_beads_changes) - 10} more")
+                    
+                    print("\n❌ Please commit or stash these changes before running PokePoke.")
+                    print("   Worktree operations require a clean working directory.")
+                    return 1
+                elif '.beads/' in uncommitted:
+                    # Just beads changes - commit them automatically
+                    print("🔧 Committing beads database changes...")
+                    subprocess.run(["git", "add", ".beads/"], check=True)
+                    subprocess.run(
+                        ["git", "commit", "-m", "chore: auto-commit beads changes"],
+                        check=True,
+                        capture_output=True
+                    )
+                    print("✅ Beads changes committed")
+            
             print("\nFetching ready work from beads...")
             ready_items = get_ready_work_items()
             

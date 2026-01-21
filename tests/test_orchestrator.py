@@ -332,6 +332,7 @@ class TestProcessWorkItem:
 class TestRunOrchestrator:
     """Test orchestrator main loop."""
     
+    @patch('subprocess.run')  # Mock git status check
     @patch('src.pokepoke.orchestrator.process_work_item')
     @patch('src.pokepoke.orchestrator.select_work_item')
     @patch('src.pokepoke.orchestrator.get_ready_work_items')
@@ -339,9 +340,13 @@ class TestRunOrchestrator:
         self,
         mock_get_items: Mock,
         mock_select: Mock,
-        mock_process: Mock
+        mock_process: Mock,
+        mock_subprocess_run: Mock
     ) -> None:
         """Test orchestrator with no ready items."""
+        # Mock git status to return clean repo
+        mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
+        
         mock_get_items.return_value = []
         mock_select.return_value = None
         
@@ -350,6 +355,7 @@ class TestRunOrchestrator:
         assert result == 0
         mock_process.assert_not_called()
     
+    @patch('subprocess.run')  # Mock git status check
     @patch('src.pokepoke.orchestrator.process_work_item')
     @patch('src.pokepoke.orchestrator.select_work_item')
     @patch('src.pokepoke.orchestrator.get_ready_work_items')
@@ -357,9 +363,13 @@ class TestRunOrchestrator:
         self,
         mock_get_items: Mock,
         mock_select: Mock,
-        mock_process: Mock
+        mock_process: Mock,
+        mock_subprocess_run: Mock
     ) -> None:
         """Test single-shot mode with successful processing."""
+        # Mock git status to return clean repo
+        mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
+        
         item = BeadsWorkItem(
             id="task-1",
             title="Task",
@@ -377,6 +387,7 @@ class TestRunOrchestrator:
         assert result == 0
         mock_process.assert_called_once()
     
+    @patch('subprocess.run')  # Mock git status check
     @patch('src.pokepoke.orchestrator.process_work_item')
     @patch('src.pokepoke.orchestrator.select_work_item')
     @patch('src.pokepoke.orchestrator.get_ready_work_items')
@@ -384,9 +395,13 @@ class TestRunOrchestrator:
         self,
         mock_get_items: Mock,
         mock_select: Mock,
-        mock_process: Mock
+        mock_process: Mock,
+        mock_subprocess_run: Mock
     ) -> None:
         """Test single-shot mode with processing failure."""
+        # Mock git status to return clean repo
+        mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
+        
         item = BeadsWorkItem(
             id="task-1",
             title="Task",
@@ -403,6 +418,7 @@ class TestRunOrchestrator:
         
         assert result == 1
     
+    @patch('subprocess.run')  # Mock git status check
     @patch('builtins.input')
     @patch('src.pokepoke.orchestrator.process_work_item')
     @patch('src.pokepoke.orchestrator.select_work_item')
@@ -412,9 +428,13 @@ class TestRunOrchestrator:
         mock_get_items: Mock,
         mock_select: Mock,
         mock_process: Mock,
-        mock_input: Mock
+        mock_input: Mock,
+        mock_subprocess_run: Mock
     ) -> None:
         """Test continuous interactive mode with user quit."""
+        # Mock git status to return clean repo
+        mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
+        
         item = BeadsWorkItem(
             id="task-1",
             title="Task",
@@ -433,6 +453,7 @@ class TestRunOrchestrator:
         assert result == 0
         mock_process.assert_called_once()
     
+    @patch('subprocess.run')  # Mock git status check
     @patch('src.pokepoke.orchestrator.process_work_item')
     @patch('src.pokepoke.orchestrator.select_work_item')
     @patch('src.pokepoke.orchestrator.get_ready_work_items')
@@ -440,9 +461,13 @@ class TestRunOrchestrator:
         self,
         mock_get_items: Mock,
         mock_select: Mock,
-        mock_process: Mock
+        mock_process: Mock,
+        mock_subprocess_run: Mock
     ) -> None:
         """Test orchestrator handles exceptions."""
+        # Mock git status to return clean repo initially
+        mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
+        
         mock_get_items.side_effect = Exception("Database error")
         
         result = run_orchestrator(interactive=False, continuous=False)
