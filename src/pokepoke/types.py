@@ -9,10 +9,10 @@ class BeadsWorkItem:
     """Represents a beads work item from bd ready --json."""
     id: str
     title: str
-    description: str
     status: str
     priority: int
     issue_type: str
+    description: Optional[str] = None
     owner: Optional[str] = None
     created_at: Optional[str] = None
     created_by: Optional[str] = None
@@ -20,6 +20,7 @@ class BeadsWorkItem:
     labels: Optional[List[str]] = None
     dependency_count: Optional[int] = None
     dependent_count: Optional[int] = None
+    notes: Optional[str] = None
 
 
 @dataclass
@@ -37,6 +38,7 @@ class Dependency:
     created_by: Optional[str] = None
     updated_at: Optional[str] = None
     labels: Optional[List[str]] = None
+    notes: Optional[str] = None
 
 
 @dataclass
@@ -44,10 +46,10 @@ class IssueWithDependencies:
     """Represents an issue with full dependency information from bd show --json."""
     id: str
     title: str
-    description: str
     status: str
     priority: int
     issue_type: str
+    description: Optional[str] = None
     dependencies: Optional[List[Dependency]] = None
     dependents: Optional[List[Dependency]] = None
     owner: Optional[str] = None
@@ -55,6 +57,29 @@ class IssueWithDependencies:
     created_by: Optional[str] = None
     updated_at: Optional[str] = None
     labels: Optional[List[str]] = None
+    notes: Optional[str] = None
+
+
+@dataclass
+class RetryConfig:
+    """Configuration for retry logic with exponential backoff."""
+    max_retries: int = 3
+    initial_delay: float = 1.0  # seconds
+    max_delay: float = 60.0  # seconds
+    backoff_factor: float = 2.0
+    jitter: bool = True  # Add random jitter to prevent thundering herd
+
+
+@dataclass
+class AgentStats:
+    """Statistics from agent execution."""
+    wall_duration: float = 0.0  # seconds
+    api_duration: float = 0.0  # seconds
+    input_tokens: int = 0
+    output_tokens: int = 0
+    lines_added: int = 0
+    lines_removed: int = 0
+    premium_requests: int = 0
 
 
 @dataclass
@@ -66,3 +91,5 @@ class CopilotResult:
     error: Optional[str] = None
     validation_errors: Optional[List[str]] = None
     attempt_count: int = 1
+    is_rate_limited: bool = False  # True if error was due to rate limiting
+    stats: Optional[AgentStats] = None

@@ -1,3 +1,5 @@
+The previous agent failed to commit all files. Please get all files committed and all pre-commit validations passing. Do not leave anything uncompleted. 
+
 You are working on a beads work item. Please complete the following task:
 
 **Work Item ID:** {{id}}
@@ -9,7 +11,7 @@ You are working on a beads work item. Please complete the following task:
 **Type:** {{issue_type}}{{#labels}}
 **Labels:** {{labels}}{{/labels}}{{#retry_context}}
 
-⚠️ **RETRY ATTEMPT {{attempt}}/{{max_retries}}**
+[WARNING] **RETRY ATTEMPT {{attempt}}/{{max_retries}}**
 
 The previous attempt failed validation with these errors:
 {{errors}}
@@ -37,6 +39,7 @@ Please fix these issues and try again. Focus on:
 - All changes must pass tests, coverage, and quality checks
 
 Work independently and complete the task. When finished, report:
-✅ What was implemented
-✅ Test coverage added
-✅ Any blockers or dependencies discovered
+[OK] What was implemented
+[OK] Test coverage added
+[OK] Any blockers or dependencies discovered
+

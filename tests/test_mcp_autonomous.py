@@ -8,8 +8,10 @@ Copilot CLI with the -p (programmatic) flag for autonomous operation.
 import json
 import subprocess
 from pathlib import Path
+import pytest
 
 
+@pytest.mark.timeout(180)  # 3 minute timeout to prevent hanging
 def test_mcp_server_in_autonomous_mode():
     """
     Test if MCP servers are accessible in Copilot CLI autonomous mode.

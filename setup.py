@@ -8,7 +8,8 @@ setup(
     description="Autonomous Beads + Copilot CLI Orchestrator",
     author="Amelia Payne",
     python_requires=">=3.8",
-    packages=find_packages(),
+    packages=find_packages(where="src"),
+    package_dir={"": "src"},
     entry_points={
         "console_scripts": [
             "pokepoke=pokepoke.orchestrator:main",

@@ -201,7 +201,7 @@ def invoke_copilot_cli(
     
     Args:
         work_item: The beads work item to process.
-        prompt: Optional pre-built prompt (if not provided, will build one).
+        prompt: Optional pre-built prompt (if not provided, will build one from template).
         retry_config: Retry configuration (uses defaults if not provided).
         timeout: Maximum execution time in seconds (default: 7200 = 2 hours).
         deny_write: If True, deny file write tools (for beads-only agents).
@@ -210,13 +210,17 @@ def invoke_copilot_cli(
         Result of the Copilot CLI invocation.
     """
     config = retry_config or RetryConfig()
-    final_prompt = prompt or build_prompt(work_item)
+    final_prompt = prompt or build_prompt_from_template(work_item)
     max_timeout = timeout or 7200.0  # Default 2 hours
     start_time = time.time()
     
-    print(f"\n📋 Invoking Copilot CLI for work item: {work_item.id}")
+    print(f"\n[WORK_ITEM] Invoking Copilot CLI for work item: {work_item.id}")
     print(f"   Title: {work_item.title}")
-    print(f"   ⏱️  Max timeout: {max_timeout/60:.1f} minutes\n")
+    print(f"   [TIMEOUT]  Max timeout: {max_timeout/60:.1f} minutes\n")
+    print("=" * 60)
+    print("\n[DEBUG] DEBUG: Full Prompt Being Sent to Copilot CLI:")
+    print("=" * 60)
+    print(final_prompt)
     print("=" * 60)
     print()
     
@@ -224,7 +228,7 @@ def invoke_copilot_cli(
         if attempt > 0:
             # Calculate and apply backoff delay
             delay = calculate_backoff_delay(attempt - 1, config)
-            print(f"\n⏳ Retry attempt {attempt}/{config.max_retries}")
+            print(f"\n[RETRY] Retry attempt {attempt}/{config.max_retries}")
             print(f"   Waiting {delay:.1f}s before retry...")
             time.sleep(delay)
             print()
@@ -288,7 +292,7 @@ def invoke_copilot_cli(
                 try:
                     process.wait(timeout=remaining_timeout)
                 except subprocess.TimeoutExpired:
-                    print(f"\n⏱️  Process timeout after {remaining_timeout:.0f}s - terminating...")
+                    print(f"\n[TIMEOUT]  Process timeout after {remaining_timeout:.0f}s - terminating...")
                     process.kill()
                     process.wait()  # Clean up zombie process
                     raise  # Re-raise to handle in outer try/except
@@ -328,9 +332,9 @@ def invoke_copilot_cli(
             is_transient = is_transient_error(stderr_text, process.returncode)
             
             if is_rate_limit:
-                print(f"\n🚦 Rate limit detected (HTTP 429 or similar)")
+                print(f"\n[RATE_LIMIT] Rate limit detected (HTTP 429 or similar)")
             elif is_transient:
-                print(f"\n⚠️  Transient error detected")
+                print(f"\n[WARNING]  Transient error detected")
             
             # If not retryable or out of retries, return failure
             if not (is_rate_limit or is_transient) or attempt >= config.max_retries:
@@ -370,3 +374,4 @@ def invoke_copilot_cli(
         error="Exhausted all retry attempts",
         attempt_count=config.max_retries + 1
         )
+
