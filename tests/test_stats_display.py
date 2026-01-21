@@ -4,19 +4,21 @@ import pytest
 from io import StringIO
 import sys
 from pokepoke.stats import print_stats
-from pokepoke.types import AgentStats
+from pokepoke.types import AgentStats, SessionStats
 
 
 def test_print_stats_with_full_stats(capsys):
     """Test print_stats displays all statistics when available."""
-    stats = AgentStats(
-        wall_duration=120.5,
-        api_duration=90.2,
-        input_tokens=15000,
-        output_tokens=8000,
-        lines_added=150,
-        lines_removed=45,
-        premium_requests=3
+    stats = SessionStats(
+        agent_stats=AgentStats(
+            wall_duration=120.5,
+            api_duration=90.2,
+            input_tokens=15000,
+            output_tokens=8000,
+            lines_added=150,
+            lines_removed=45,
+            premium_requests=3
+        )
     )
     
     print_stats(items_completed=2, total_requests=5, elapsed_seconds=125.0, session_stats=stats)
@@ -43,11 +45,13 @@ def test_print_stats_with_full_stats(capsys):
 
 def test_print_stats_with_partial_stats(capsys):
     """Test print_stats only displays non-zero statistics."""
-    stats = AgentStats(
-        wall_duration=60.0,
-        input_tokens=5000,
-        output_tokens=2000,
-        # All other fields are 0
+    stats = SessionStats(
+        agent_stats=AgentStats(
+            wall_duration=60.0,
+            input_tokens=5000,
+            output_tokens=2000,
+            # All other fields are 0
+        )
     )
     
     print_stats(items_completed=1, total_requests=2, elapsed_seconds=65.0, session_stats=stats)
@@ -68,7 +72,7 @@ def test_print_stats_with_partial_stats(capsys):
 
 def test_print_stats_with_no_stats(capsys):
     """Test print_stats shows warning when no stats available."""
-    stats = AgentStats()  # All zeros
+    stats = SessionStats(agent_stats=AgentStats())  # All zeros
     
     print_stats(items_completed=1, total_requests=1, elapsed_seconds=30.0, session_stats=stats)
     
@@ -118,7 +122,7 @@ def test_print_stats_time_formatting(capsys):
 
 def test_print_stats_average_time(capsys):
     """Test that average time per item is calculated and displayed."""
-    stats = AgentStats(wall_duration=100.0)
+    stats = SessionStats(agent_stats=AgentStats(wall_duration=100.0))
     
     print_stats(items_completed=4, total_requests=8, elapsed_seconds=240.0, session_stats=stats)
     
@@ -131,7 +135,7 @@ def test_print_stats_average_time(capsys):
 
 def test_print_stats_zero_items_no_average(capsys):
     """Test that average is not shown when zero items completed."""
-    stats = AgentStats(wall_duration=10.0)
+    stats = SessionStats(agent_stats=AgentStats(wall_duration=10.0))
     
     print_stats(items_completed=0, total_requests=0, elapsed_seconds=10.0, session_stats=stats)
     
@@ -144,11 +148,13 @@ def test_print_stats_zero_items_no_average(capsys):
 
 def test_print_stats_with_large_numbers(capsys):
     """Test that large numbers are formatted with commas."""
-    stats = AgentStats(
-        input_tokens=1234567,
-        output_tokens=987654,
-        lines_added=5678,
-        lines_removed=1234
+    stats = SessionStats(
+        agent_stats=AgentStats(
+            input_tokens=1234567,
+            output_tokens=987654,
+            lines_added=5678,
+            lines_removed=1234
+        )
     )
     
     print_stats(items_completed=1, total_requests=1, elapsed_seconds=60.0, session_stats=stats)

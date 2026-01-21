@@ -83,6 +83,29 @@ class AgentStats:
 
 
 @dataclass
+class BeadsStats:
+    """Statistics from beads database."""
+    total_issues: int = 0
+    open_issues: int = 0
+    in_progress_issues: int = 0
+    closed_issues: int = 0
+    ready_issues: int = 0
+
+
+@dataclass
+class SessionStats:
+    """Combined session statistics including agent stats and run counts."""
+    agent_stats: AgentStats
+    work_agent_runs: int = 0
+    tech_debt_agent_runs: int = 0
+    janitor_agent_runs: int = 0
+    backlog_cleanup_agent_runs: int = 0
+    cleanup_agent_runs: int = 0
+    starting_beads_stats: Optional[BeadsStats] = None
+    ending_beads_stats: Optional[BeadsStats] = None
+
+
+@dataclass
 class CopilotResult:
     """Result from invoking Copilot CLI."""
     work_item_id: str

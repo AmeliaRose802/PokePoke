@@ -4,7 +4,7 @@ import json
 import subprocess
 from typing import List, Optional, Dict, Set
 
-from .types import BeadsWorkItem, IssueWithDependencies, Dependency
+from .types import BeadsWorkItem, IssueWithDependencies, Dependency, BeadsStats
 
 
 def get_ready_work_items() -> List[BeadsWorkItem]:
@@ -489,3 +489,32 @@ def select_next_hierarchical_item(items: List[BeadsWorkItem]) -> Optional[BeadsW
         return item
     
     return None
+
+
+def get_beads_stats() -> Optional[BeadsStats]:
+    """Get current beads database statistics.
+    
+    Returns:
+        BeadsStats object with current counts, or None if command fails.
+    """
+    try:
+        result = subprocess.run(
+            ['bd', 'stats', '--json'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        
+        data = json.loads(result.stdout)
+        summary = data.get('summary', {})
+        
+        return BeadsStats(
+            total_issues=summary.get('total_issues', 0),
+            open_issues=summary.get('open_issues', 0),
+            in_progress_issues=summary.get('in_progress_issues', 0),
+            closed_issues=summary.get('closed_issues', 0),
+            ready_issues=summary.get('ready_issues', 0)
+        )
+    except Exception as e:
+        print(f"⚠️  Warning: Failed to get beads stats: {e}")
+        return None

@@ -44,6 +44,7 @@ class TestOrchestratorCleanupDetection:
         """Test that beads-only changes are auto-committed."""
         # Mock git status showing only beads changes, then clean
         mock_subprocess.side_effect = [
+            Mock(stdout='{"summary": {"total_issues": 10}}', returncode=0),  # bd stats for starting beads stats
             Mock(stdout=" M .beads/issues.jsonl", returncode=0),  # First status check
             Mock(stdout="", returncode=0),  # git add
             Mock(stdout="", returncode=0),  # git commit
@@ -54,8 +55,8 @@ class TestOrchestratorCleanupDetection:
         
         result = run_orchestrator(interactive=False, continuous=False)
         
-        # Verify we auto-committed beads changes
-        assert mock_subprocess.call_count >= 3
+        # Verify we auto-committed beads changes (4 calls: bd stats, git status, git add, git commit)
+        assert mock_subprocess.call_count >= 4
         # Check that git add and commit were called
         add_calls = [
             call for call in mock_subprocess.call_args_list
