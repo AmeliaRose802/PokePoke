@@ -371,6 +371,85 @@ def get_parent_id(child_id: str) -> Optional[str]:
     return None
 
 
+def create_issue(
+    title: str,
+    issue_type: str = "task",
+    priority: int = 1,
+    description: str = "",
+    labels: Optional[List[str]] = None,
+    parent_id: Optional[str] = None
+) -> Optional[str]:
+    """Create a new beads issue.
+    
+    Args:
+        title: Issue title
+        issue_type: Type of issue (task, bug, feature, epic, chore)
+        priority: Priority (0=critical, 1=high, 2=medium, 3=low, 4=backlog)
+        description: Issue description
+        labels: List of labels to add
+        parent_id: Parent issue ID for dependencies
+        
+    Returns:
+        Created issue ID, or None if creation failed
+    """
+    try:
+        cmd = ['bd', 'create', title, '-t', issue_type, '-p', str(priority)]
+        
+        if description:
+            cmd.extend(['-d', description])
+        
+        if parent_id:
+            cmd.extend(['--deps', f'parent:{parent_id}'])
+        
+        cmd.append('--json')
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        
+        # Parse JSON output to get issue ID
+        filtered_lines = [
+            line for line in result.stdout.split('\n')
+            if line.strip() 
+            and not line.strip().startswith(('Note:', 'Warning:', 'Hint:', 'Created'))
+        ]
+        
+        # Find JSON object start
+        json_start = next(
+            (i for i, line in enumerate(filtered_lines) if line.strip().startswith('{') or line.strip().startswith('[')),
+            None
+        )
+        
+        if json_start is not None:
+            json_text = '\n'.join(filtered_lines[json_start:])
+            data = json.loads(json_text)
+            
+            # Handle both array and single object responses
+            if isinstance(data, list):
+                issue_id = data[0].get('id') if data else None
+            else:
+                issue_id = data.get('id')
+            
+            # Add labels if provided
+            if labels and issue_id:
+                subprocess.run(
+                    ['bd', 'label', 'add', issue_id] + labels + ['--json'],
+                    capture_output=True,
+                    text=True
+                )
+            
+            return issue_id
+        
+        return None
+        
+    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError) as e:
+        print(f"⚠️  Failed to create issue: {e}")
+        return None
+
+
 def select_next_hierarchical_item(items: List[BeadsWorkItem]) -> Optional[BeadsWorkItem]:
     """Select next work item using hierarchical assignment strategy.
     
