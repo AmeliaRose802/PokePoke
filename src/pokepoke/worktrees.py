@@ -163,8 +163,25 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
         ).stdout.strip()
         
         if main_status:
-            print("⚠️  Main repo has uncommitted changes:")
-            print(main_status)
+            # Filter out harmless changes: untracked files, .beads/, and worktrees/
+            lines = main_status.split('\n')
+            problematic_changes = [
+                line for line in lines
+                if line
+                and not line.startswith('??')  # Ignore untracked files
+                and '.beads/' not in line      # Ignore beads database
+                and 'worktrees/' not in line   # Ignore worktree directory changes
+            ]
+            
+            if problematic_changes:
+                print("⚠️  Main repo has uncommitted changes:")
+                for line in problematic_changes[:10]:
+                    print(f"   {line}")
+                if len(problematic_changes) > 10:
+                    print(f"   ... and {len(problematic_changes) - 10} more")
+                print("❌ Cannot merge: main repo has uncommitted non-beads changes")
+                return False
+            
             # Commit beads changes if present
             if ".beads/" in main_status:
                 print("🔧 Committing beads database changes...")
@@ -175,9 +192,6 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
                     encoding='utf-8'
                 )
                 print("✅ Beads changes committed")
-            else:
-                print("❌ Cannot merge: main repo has uncommitted non-beads changes")
-                return False
         
         # Switch to target branch
         subprocess.run(
