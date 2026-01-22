@@ -350,7 +350,11 @@ def _close_work_item_and_parents(item: BeadsWorkItem) -> None:
             text=True,
             check=True
         )
-        item_data = json.loads(check_result.stdout)
+        # bd show --json returns a list, not a dict - get first element
+        items_data = json.loads(check_result.stdout)
+        if not items_data:
+            raise ValueError(f"No data returned for item {item.id}")
+        item_data = items_data[0]
         
         if item_data.get("status") in ["closed", "completed"]:
             print(f"   ✅ Agent successfully closed the item")

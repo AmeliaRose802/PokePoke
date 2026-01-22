@@ -607,7 +607,7 @@ class TestCloseWorkItemAndParents:
         )
         
         mock_run.return_value = Mock(
-            stdout='{"status": "closed"}',
+            stdout='[{"id": "task-1", "title": "Test", "status": "closed", "priority": 1, "issue_type": "task"}]',
             returncode=0
         )
         

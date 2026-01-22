@@ -196,8 +196,8 @@ class TestProcessWorkItem:
                 return Mock(stdout="", returncode=0)  # Clean repo
             elif cmd[0] == 'bd':
                 if 'show' in cmd:
-                    # Return open status so close_item will be called
-                    return Mock(stdout='{"status": "open"}', returncode=0)
+                    # Return open status so close_item will be called (as JSON array)
+                    return Mock(stdout='[{"id": "task-1", "title": "Test", "status": "open", "priority": 1, "issue_type": "task"}]', returncode=0)
                 elif 'sync' in cmd:
                     return Mock(stdout="", stderr="", returncode=0)
             elif 'checkout' in cmd or 'pull' in cmd or 'merge' in cmd or 'push' in cmd:
@@ -272,8 +272,8 @@ class TestProcessWorkItem:
                 return Mock(stdout="", returncode=0)  # Clean repo
             elif cmd[0] == 'bd':
                 if 'show' in cmd:
-                    # Return open status so close_item will be called
-                    return Mock(stdout='{"status": "open"}', returncode=0)
+                    # Return open status so close_item will be called (as JSON array)
+                    return Mock(stdout='[{"id": "task-1", "title": "Test", "status": "open", "priority": 1, "issue_type": "task"}]', returncode=0)
                 elif 'sync' in cmd:
                     return Mock(stdout="", stderr="", returncode=0)
             elif 'checkout' in cmd or 'pull' in cmd or 'merge' in cmd or 'push' in cmd:
@@ -353,7 +353,7 @@ class TestProcessWorkItem:
                 elif 'status' in cmd and '--porcelain' in cmd:
                     return Mock(stdout="", returncode=0)
                 elif cmd[0] == 'bd' and 'show' in cmd:
-                    return Mock(stdout='{"status": "open"}', returncode=0)
+                    return Mock(stdout='[{"id": "task-1", "title": "Test", "status": "open", "priority": 1, "issue_type": "task"}]', returncode=0)
                 elif cmd[0] == 'bd' and 'sync' in cmd:
                     return Mock(stdout="", returncode=0)
             return Mock(stdout="", returncode=0)
