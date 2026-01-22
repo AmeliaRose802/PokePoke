@@ -11,6 +11,27 @@ from pokepoke.stats import parse_agent_stats
 from pokepoke.worktrees import create_worktree, merge_worktree, cleanup_worktree
 
 
+def get_pokepoke_prompts_dir() -> Path:
+    """Get the prompts directory from the PokePoke installation.
+    
+    Returns:
+        Path to the prompts directory in the PokePoke package
+    """
+    # Prompts are relative to this file's location in the PokePoke package
+    # This file is at: PokePoke/src/pokepoke/agent_runner.py
+    # Prompts are at: PokePoke/.pokepoke/prompts/
+    pokepoke_root = Path(__file__).parent.parent.parent
+    prompts_dir = pokepoke_root / ".pokepoke" / "prompts"
+    
+    if not prompts_dir.exists():
+        raise FileNotFoundError(
+            f"PokePoke prompts directory not found at {prompts_dir}. "
+            f"Make sure you have the .pokepoke/prompts/ directory in your PokePoke installation."
+        )
+    
+    return prompts_dir
+
+
 def has_uncommitted_changes() -> bool:
     """Check if there are any uncommitted changes in the current directory.
     
@@ -74,7 +95,13 @@ def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path) -> tuple[bool, Op
     Returns:
         Tuple of (success, stats)
     """
-    cleanup_prompt_path = repo_root / ".pokepoke" / "prompts" / "cleanup.md"
+    try:
+        prompts_dir = get_pokepoke_prompts_dir()
+        cleanup_prompt_path = prompts_dir / "cleanup.md"
+    except FileNotFoundError as e:
+        print(f"❌ {e}")
+        return False, None
+    
     if not cleanup_prompt_path.exists():
         print(f"❌ Cleanup prompt not found at {cleanup_prompt_path}")
         return False, None
@@ -190,10 +217,13 @@ def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional
     print(f"🔧 Running {agent_name} Agent")
     print(f"{'='*60}")
     
-    if repo_root is None:
-        repo_root = Path.cwd()
+    try:
+        prompts_dir = get_pokepoke_prompts_dir()
+        prompt_path = prompts_dir / prompt_file
+    except FileNotFoundError as e:
+        print(f"❌ {e}")
+        return None
     
-    prompt_path = repo_root / ".pokepoke" / "prompts" / prompt_file
     if not prompt_path.exists():
         print(f"❌ Prompt not found at {prompt_path}")
         return None
@@ -216,6 +246,10 @@ def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional
         return _run_beads_only_agent(agent_name, agent_item, agent_prompt)
     
     # Code-modifying agents need worktree isolation
+    # Ensure repo_root has a value
+    if repo_root is None:
+        repo_root = Path.cwd()
+    
     return _run_worktree_agent(agent_name, agent_id, agent_item, agent_prompt, repo_root)
 
 
