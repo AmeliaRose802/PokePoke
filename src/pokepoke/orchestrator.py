@@ -126,8 +126,15 @@ def _check_and_commit_main_repo() -> bool:
     uncommitted = status_result.stdout.strip()
     if uncommitted:
         lines = uncommitted.split('\n')
-        # Exclude .beads/ and worktrees/ from uncommitted changes check
-        non_beads_changes = [line for line in lines if line and '.beads/' not in line and 'worktrees/' not in line]
+        # Exclude .beads/, worktrees/, and untracked files (??) from uncommitted changes check
+        # Only care about modified/deleted tracked files (M, D, A, R, C)
+        non_beads_changes = [
+            line for line in lines 
+            if line 
+            and not line.startswith('??')  # Ignore untracked files
+            and '.beads/' not in line 
+            and 'worktrees/' not in line
+        ]
         
         if non_beads_changes:
             print("\n⚠️  Main repository has uncommitted changes:")
