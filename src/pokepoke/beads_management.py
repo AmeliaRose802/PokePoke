@@ -1,11 +1,60 @@
 """Beads item management - create, close, filter work items."""
 
 import json
+import os
 import subprocess
 from typing import List, Optional
 
 from .types import BeadsWorkItem
 from .beads_hierarchy import has_feature_parent, get_next_child_task, close_parent_if_complete
+
+
+def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool:
+    """Assign a work item to an agent and sync to prevent parallel conflicts.
+    
+    This should be called BEFORE creating a worktree to ensure other parallel
+    agents see the assignment and don't pick the same item.
+    
+    Args:
+        item_id: The item ID to assign.
+        agent_name: Agent name to assign to (defaults to $AGENT_NAME env var or 'agent').
+        
+    Returns:
+        True if successful, False otherwise.
+    """
+    if agent_name is None:
+        agent_name = os.environ.get('AGENT_NAME', 'agent')
+    
+    try:
+        # Update item to in_progress and assign to agent
+        subprocess.run(
+            ['bd', 'update', item_id, '--status', 'in_progress', '-a', agent_name, '--json'],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            check=True
+        )
+        print(f"✅ Assigned {item_id} to {agent_name} and marked in_progress")
+        
+        # Sync to push assignment to other agents
+        sync_result = subprocess.run(
+            ['bd', 'sync'],
+            capture_output=True,
+            text=True,
+            encoding='utf-8'
+        )
+        
+        if sync_result.returncode == 0:
+            print(f"✅ Synced assignment - other agents will see {item_id} is claimed")
+        else:
+            print(f"⚠️  bd sync returned non-zero: {sync_result.returncode}")
+            print(f"   Assignment may not be immediately visible to other agents")
+        
+        return True
+        
+    except subprocess.CalledProcessError as e:
+        print(f"⚠️  Failed to assign {item_id}: {e.stderr}")
+        return False
 
 
 def close_item(item_id: str, message: str = "Completed") -> bool:

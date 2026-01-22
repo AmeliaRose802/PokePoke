@@ -28,7 +28,8 @@ from .beads_management import (
     create_issue,
     filter_work_items,
     get_first_ready_work_item,
-    select_next_hierarchical_item
+    select_next_hierarchical_item,
+    assign_and_sync_item
 )
 
 __all__ = [
@@ -51,4 +52,5 @@ __all__ = [
     'filter_work_items',
     'get_first_ready_work_item',
     'select_next_hierarchical_item',
+    'assign_and_sync_item',
 ]

@@ -791,12 +791,14 @@ class TestProcessWorkItem:
         mock_setup.assert_not_called()
     
     @patch('src.pokepoke.workflow._setup_worktree')
+    @patch('src.pokepoke.workflow.assign_and_sync_item')
     @patch('builtins.input')
     @patch('time.time')
     def test_worktree_setup_fails(
         self,
         mock_time: Mock,
         mock_input: Mock,
+        mock_assign: Mock,
         mock_setup: Mock
     ) -> None:
         """Test when worktree setup fails."""
@@ -810,6 +812,7 @@ class TestProcessWorkItem:
         )
         
         mock_input.return_value = 'y'
+        mock_assign.return_value = True
         mock_setup.return_value = None
         
         success, count, stats, cleanup_runs = process_work_item(
@@ -828,12 +831,14 @@ class TestProcessWorkItem:
     @patch('src.pokepoke.workflow.invoke_copilot_cli')
     @patch('src.pokepoke.workflow.has_uncommitted_changes')
     @patch('src.pokepoke.workflow._setup_worktree')
+    @patch('src.pokepoke.workflow.assign_and_sync_item')
     @patch('builtins.input')
     @patch('time.time')
     def test_no_changes_made(
         self,
         mock_time: Mock,
         mock_input: Mock,
+        mock_assign: Mock,
         mock_setup: Mock,
         mock_uncommitted: Mock,
         mock_invoke: Mock,
@@ -854,6 +859,7 @@ class TestProcessWorkItem:
         
         mock_time.return_value = 0
         mock_input.return_value = 'y'
+        mock_assign.return_value = True
         mock_setup.return_value = Path("/fake/worktree")
         mock_getcwd.return_value = "/original"
         mock_uncommitted.return_value = False
@@ -882,12 +888,14 @@ class TestProcessWorkItem:
     @patch('src.pokepoke.workflow.invoke_copilot_cli')
     @patch('src.pokepoke.workflow.has_uncommitted_changes')
     @patch('src.pokepoke.workflow._setup_worktree')
+    @patch('src.pokepoke.workflow.assign_and_sync_item')
     @patch('builtins.input')
     @patch('time.time')
     def test_copilot_failure(
         self,
         mock_time: Mock,
         mock_input: Mock,
+        mock_assign: Mock,
         mock_setup: Mock,
         mock_uncommitted: Mock,
         mock_invoke: Mock,
@@ -908,6 +916,7 @@ class TestProcessWorkItem:
         
         mock_time.return_value = 0
         mock_input.return_value = 'y'
+        mock_assign.return_value = True
         mock_setup.return_value = Path("/fake/worktree")
         mock_getcwd.return_value = "/original"
         mock_uncommitted.return_value = True

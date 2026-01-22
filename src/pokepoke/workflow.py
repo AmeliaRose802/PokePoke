@@ -11,7 +11,8 @@ from pokepoke.beads import (
     select_next_hierarchical_item,
     close_item,
     get_parent_id,
-    close_parent_if_complete
+    close_parent_if_complete,
+    assign_and_sync_item
 )
 from pokepoke.copilot import invoke_copilot_cli
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
@@ -110,6 +111,12 @@ def process_work_item(item: BeadsWorkItem, interactive: bool, timeout_hours: flo
         if confirm and confirm != 'y':
             print("⏭️  Skipped.")
             return False, 0, None, 0
+    
+    # Assign and sync BEFORE creating worktree to prevent parallel conflicts
+    print(f"\n🔒 Claiming work item on main branch...")
+    if not assign_and_sync_item(item.id):
+        print(f"❌ Failed to assign work item {item.id}")
+        return False, 0, None, 0
     
     pokepoke_root = Path(r"C:\Users\ameliapayne\PokePoke")
     worktree_path = _setup_worktree(item)
