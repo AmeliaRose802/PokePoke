@@ -1,3 +1,5 @@
+The previous agent failed to commit all files. Please get all files committed and all pre-commit validations passing. Do not leave anything uncompleted. 
+
 You are working on a beads work item. Please complete the following task:
 
 **Work Item ID:** {{id}}
@@ -9,7 +11,7 @@ You are working on a beads work item. Please complete the following task:
 **Type:** {{issue_type}}{{#labels}}
 **Labels:** {{labels}}{{/labels}}{{#retry_context}}
 
-⚠️ **RETRY ATTEMPT {{attempt}}/{{max_retries}}**
+[WARNING] **RETRY ATTEMPT {{attempt}}/{{max_retries}}**
 
 The previous attempt failed validation with these errors:
 {{errors}}
@@ -27,16 +29,23 @@ Please fix these issues and try again. Focus on:
 3. Update documentation if needed
 4. Ensure all quality gates pass (linting, type checking, etc.)
 5. Commit changes with descriptive conventional commit messages
-6. DO NOT bypass pre-commit hooks with --no-verify
-7. DO NOT modify quality gate scripts in .githooks/
+6. **Merge your worktree** - Push commits with `git push`, return to main repo, and merge
+7. **Close the beads item** - Run `bd close {{id}} --reason "<completion reason>"`
+8. DO NOT bypass pre-commit hooks with --no-verify
+9. DO NOT modify quality gate scripts in .githooks/
 
 **Project Context:**
 - This is an autonomous workflow orchestrator (PokePoke)
 - Uses beads for issue tracking, TypeScript/Node.js stack
 - Quality gates are strictly enforced via pre-commit hooks
 - All changes must pass tests, coverage, and quality checks
+- The orchestrator will verify closure and handle it if you miss this step
 
-Work independently and complete the task. When finished, report:
-✅ What was implemented
-✅ Test coverage added
-✅ Any blockers or dependencies discovered
+Work independently and complete the task. When finished:
+1. Merge your worktree back to main branch
+2. Close the beads item with an appropriate reason
+3. Report:
+   [OK] What was implemented
+   [OK] Test coverage added
+   [OK] Any blockers or dependencies discovered
+

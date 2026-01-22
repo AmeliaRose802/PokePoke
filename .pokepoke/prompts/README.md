@@ -88,17 +88,17 @@ prompt = service.load_and_render("work-item", {
 ## Template Guidelines
 
 **DO:**
-- ✅ Use descriptive variable names
-- ✅ Document required vs optional variables
-- ✅ Include context and requirements in prompts
-- ✅ Test templates with real data
-- ✅ Keep templates focused and single-purpose
+- [OK] Use descriptive variable names
+- [OK] Document required vs optional variables
+- [OK] Include context and requirements in prompts
+- [OK] Test templates with real data
+- [OK] Keep templates focused and single-purpose
 
 **DON'T:**
-- ❌ Hardcode prompts in Python code
-- ❌ Use complex logic in templates (keep it simple)
-- ❌ Forget to handle missing/optional variables
-- ❌ Mix multiple concerns in one template
+- [FAIL] Hardcode prompts in Python code
+- [FAIL] Use complex logic in templates (keep it simple)
+- [FAIL] Forget to handle missing/optional variables
+- [FAIL] Mix multiple concerns in one template
 
 ## Testing
 
@@ -141,3 +141,4 @@ def build_prompt(work_item):
 - [`pokepoke/prompts.py`](../pokepoke/prompts.py) - Prompt loading service implementation
 - [`tests/test_prompts.py`](../tests/test_prompts.py) - Prompt system tests
 - [`.github/prompts/`](../.github/prompts/) - Additional agent prompts
+

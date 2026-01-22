@@ -187,3 +187,50 @@ def test_render_retry_template_no_retry():
     assert "First Try" in result
     # Retry section should not appear
     assert "RETRY ATTEMPT" not in result
+
+
+def test_render_array_iteration():
+    """Test rendering template with array iteration."""
+    service = PromptService()
+    template = "Allowed:\n{{#items}}- {{.}}\n{{/items}}"
+    
+    result = service.render_prompt(template, {
+        "items": ["path1", "path2", "path3"]
+    })
+    
+    assert "- path1" in result
+    assert "- path2" in result
+    assert "- path3" in result
+    assert result == "Allowed:\n- path1\n- path2\n- path3\n"
+
+
+def test_render_array_empty():
+    """Test rendering template with empty array."""
+    service = PromptService()
+    template = "Start{{#items}}\n- {{.}}{{/items}}\nEnd"
+    
+    result = service.render_prompt(template, {
+        "items": []
+    })
+    
+    assert result == "Start\nEnd"
+
+
+def test_render_beads_item_with_labels():
+    """Test rendering beads-item template with labels."""
+    service = PromptService()
+    
+    result = service.load_and_render("beads-item", {
+        "item_id": "PokePoke-123",
+        "title": "Fix bug",
+        "description": "Fix the authentication bug",
+        "issue_type": "bug",
+        "priority": 1,
+        "labels": "security, backend"
+    })
+    
+    assert "PokePoke-123" in result
+    assert "Fix bug" in result
+    assert "Fix the authentication bug" in result
+    assert "security, backend" in result
+    assert "All pre-commit validation passes successfully" in result

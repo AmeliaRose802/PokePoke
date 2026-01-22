@@ -14,5 +14,7 @@ Please implement this task according to the project guidelines and best practice
 2. Add appropriate tests
 3. Update documentation if needed
 4. Commit your changes with a descriptive message
+5. When done and all validation passes, merge and close your worktree
 
 Work independently and let me know when complete.
+

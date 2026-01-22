@@ -61,6 +61,7 @@ class PromptService:
         Supports Mustache-like syntax:
         - {{variable}} - Simple substitution
         - {{#section}}...{{/section}} - Conditional sections (if variable is truthy)
+        - {{#array}}...{{/array}} - Array iteration ({{.}} for current item)
         
         Args:
             template: Raw template content
@@ -71,19 +72,31 @@ class PromptService:
         """
         result = template
         
-        # Handle conditional sections first: {{#key}}...{{/key}}
+        # Handle conditional sections and array iteration: {{#key}}...{{/key}}
         def replace_section(match: re.Match[str]) -> str:
             section_name = match.group(1)
             section_content = match.group(2)
             
             # Check if variable exists and is truthy
             if section_name in variables and variables[section_name]:
-                # Render the section content with variables
-                return self._substitute_variables(section_content, variables)
+                value = variables[section_name]
+                
+                # If value is a list/tuple, iterate over it
+                if isinstance(value, (list, tuple)):
+                    rendered_parts = []
+                    for item in value:
+                        # For array iteration, {{.}} refers to current item
+                        item_vars = variables.copy()
+                        item_vars['.'] = item
+                        rendered_parts.append(self._substitute_variables(section_content, item_vars))
+                    return ''.join(rendered_parts)
+                else:
+                    # For conditional sections, just render once
+                    return self._substitute_variables(section_content, variables)
             else:
                 return ""
         
-        # Process conditional sections
+        # Process conditional sections and array iterations
         result = re.sub(
             r'\{\{#(\w+)\}\}(.*?)\{\{/\1\}\}',
             replace_section,
@@ -110,7 +123,7 @@ class PromptService:
             var_name = match.group(1)
             return str(variables.get(var_name, f"{{{{missing:{var_name}}}}}"))
         
-        return re.sub(r'\{\{(\w+)\}\}', replace_var, text)
+        return re.sub(r'\{\{(\w+|\.)\}\}', replace_var, text)
     
     def load_and_render(self, template_name: str, variables: Dict[str, Any]) -> str:
         """Load and render a template in one call.
