@@ -33,6 +33,7 @@ class TestVerifyMainRepoClean:
             ["git", "status", "--porcelain"],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         )
     
@@ -113,11 +114,12 @@ class TestHandleBeadsAutoCommit:
         handle_beads_auto_commit()
         
         assert mock_run.call_count == 2
-        mock_run.assert_any_call(["git", "add", ".beads/"], check=True)
+        mock_run.assert_any_call(["git", "add", ".beads/"], check=True, encoding='utf-8')
         mock_run.assert_any_call(
             ["git", "commit", "-m", "chore: sync beads before worktree merge"],
             check=True,
-            capture_output=True
+            capture_output=True,
+            encoding='utf-8'
         )
     
     @patch('src.pokepoke.git_operations.subprocess.run')
@@ -239,6 +241,7 @@ class TestHasUncommittedChanges:
             ["git", "status", "--porcelain"],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         )
     
@@ -293,12 +296,14 @@ class TestCommitAllChanges:
             ["git", "add", "-A"],
             check=True,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8'
         )
         mock_run.assert_any_call(
             ["git", "commit", "-m", "Test commit"],
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8'
         )
     
     @patch('src.pokepoke.git_operations.subprocess.run')

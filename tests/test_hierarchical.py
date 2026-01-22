@@ -243,6 +243,7 @@ class TestHierarchicalWorkAssignment:
             ['bd', 'close', 'epic-1', '-r', 'All child items completed'],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         )
     
@@ -258,6 +259,7 @@ class TestHierarchicalWorkAssignment:
             ['bd', 'close', 'task-1', '--reason', 'Test completion'],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         )
     

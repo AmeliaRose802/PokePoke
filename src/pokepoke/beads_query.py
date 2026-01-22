@@ -17,8 +17,12 @@ def get_ready_work_items() -> List[BeadsWorkItem]:
         ['bd', 'ready', '--json'],
         capture_output=True,
         text=True,
+        encoding='utf-8',
         check=True
     )
+    
+    if not result.stdout:
+        return []
     
     # Filter out warning/note lines
     filtered_lines = [
@@ -70,9 +74,13 @@ def get_issue_dependencies(issue_id: str) -> Optional[IssueWithDependencies]:
             ['bd', 'show', issue_id, '--json'],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         )
     except subprocess.CalledProcessError:
+        return None
+    
+    if not result.stdout:
         return None
     
     # Filter out warning/note lines
@@ -141,6 +149,7 @@ def get_beads_stats() -> Optional[BeadsStats]:
             ['bd', 'stats', '--json'],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         )
         

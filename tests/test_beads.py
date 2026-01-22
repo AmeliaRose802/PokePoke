@@ -27,6 +27,7 @@ class TestBeadsIntegration:
             ['bd', 'ready', '--json'],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         )
     

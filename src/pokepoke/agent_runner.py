@@ -12,11 +12,7 @@ from pokepoke.worktrees import create_worktree, merge_worktree, cleanup_worktree
 
 
 def get_pokepoke_prompts_dir() -> Path:
-    """Get the prompts directory from the PokePoke installation.
-    
-    Returns:
-        Path to the prompts directory in the PokePoke package
-    """
+    """Get the prompts directory from the PokePoke installation."""
     # Prompts are relative to this file's location in the PokePoke package
     # This file is at: PokePoke/src/pokepoke/agent_runner.py
     # Prompts are at: PokePoke/.pokepoke/prompts/
@@ -33,16 +29,13 @@ def get_pokepoke_prompts_dir() -> Path:
 
 
 def has_uncommitted_changes() -> bool:
-    """Check if there are any uncommitted changes in the current directory.
-    
-    Returns:
-        True if there are uncommitted changes, False otherwise
-    """
+    """Check if there are uncommitted changes in the current directory."""
     try:
         result = subprocess.run(
             ["git", "status", "--porcelain"],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         )
         return bool(result.stdout.strip())
@@ -51,26 +44,21 @@ def has_uncommitted_changes() -> bool:
 
 
 def commit_all_changes(message: str = "Auto-commit by PokePoke") -> tuple[bool, str]:
-    """Commit all changes, triggering pre-commit hooks for validation.
-    
-    Args:
-        message: Commit message
-        
-    Returns:
-        Tuple of (success: bool, error_message: str)
-    """
+    """Commit all changes, triggering pre-commit hooks for validation."""
     try:
         subprocess.run(
             ["git", "add", "-A"],
             check=True,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8'
         )
         
         result = subprocess.run(
             ["git", "commit", "-m", message],
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8'
         )
         
         if result.returncode == 0:
@@ -86,15 +74,7 @@ def commit_all_changes(message: str = "Auto-commit by PokePoke") -> tuple[bool, 
 
 
 def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path) -> tuple[bool, Optional[AgentStats]]:
-    """Invoke cleanup agent to commit uncommitted changes.
-    
-    Args:
-        item: The work item being processed
-        repo_root: Path to the main repository root
-        
-    Returns:
-        Tuple of (success, stats)
-    """
+    """Invoke cleanup agent to commit uncommitted changes."""
     try:
         prompts_dir = get_pokepoke_prompts_dir()
         cleanup_prompt_path = prompts_dir / "cleanup.md"
@@ -106,7 +86,7 @@ def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path) -> tuple[bool, Op
         print(f"❌ Cleanup prompt not found at {cleanup_prompt_path}")
         return False, None
     
-    cleanup_prompt_template = cleanup_prompt_path.read_text()
+    cleanup_prompt_template = cleanup_prompt_path.read_text(encoding='utf-8')
     
     work_item_context = f"""
 # Work Item Being Cleaned Up
@@ -143,12 +123,7 @@ def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path) -> tuple[bool, Op
 
 
 def aggregate_cleanup_stats(result_stats: Optional[AgentStats], cleanup_stats: Optional[AgentStats]) -> None:
-    """Aggregate cleanup agent stats into result stats.
-    
-    Args:
-        result_stats: Main agent stats to update (modified in place)
-        cleanup_stats: Cleanup agent stats to add
-    """
+    """Aggregate cleanup agent stats into result stats."""
     if cleanup_stats and result_stats:
         result_stats.wall_duration += cleanup_stats.wall_duration
         result_stats.api_duration += cleanup_stats.api_duration
@@ -160,16 +135,7 @@ def aggregate_cleanup_stats(result_stats: Optional[AgentStats], cleanup_stats: O
 
 
 def run_cleanup_loop(item: BeadsWorkItem, result: CopilotResult, repo_root: Path) -> tuple[bool, int]:
-    """Run cleanup loop to commit changes and fix validation failures.
-    
-    Args:
-        item: Work item being processed
-        result: Result from Copilot CLI invocation
-        repo_root: Path to main repository root
-        
-    Returns:
-        Tuple of (success: bool, cleanup_agent_runs: int)
-    """
+    """Run cleanup loop to commit changes and fix validation failures."""
     cleanup_agent_runs = 0
     cleanup_attempt = 0
     

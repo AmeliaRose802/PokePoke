@@ -38,6 +38,7 @@ class TestGetMainRepoRoot:
                 ['git', 'rev-parse', '--git-common-dir'],
                 capture_output=True,
                 text=True,
+                encoding='utf-8',
                 check=True
             )
     
@@ -85,6 +86,7 @@ class TestIsWorktreeClean:
                 ['git', '-C', str(worktree_path), 'status', '--porcelain'],
                 capture_output=True,
                 text=True,
+                encoding='utf-8',
                 check=True
             )
     
@@ -134,6 +136,7 @@ class TestVerifyBranchPushed:
                 ['git', 'ls-remote', '--heads', 'origin', 'main'],
                 capture_output=True,
                 text=True,
+                encoding='utf-8',
                 check=True
             )
     
@@ -292,7 +295,8 @@ class TestIsWorktreeMerged:
                 ['git', 'branch', '--merged', 'ameliapayne/dev'],
                 check=True,
                 capture_output=True,
-                text=True
+                text=True,
+                encoding='utf-8'
             )
     
     def test_is_worktree_merged_false(self):
@@ -322,7 +326,8 @@ class TestIsWorktreeMerged:
                 ['git', 'branch', '--merged', 'develop'],
                 check=True,
                 capture_output=True,
-                text=True
+                text=True,
+                encoding='utf-8'
             )
     
     def test_is_worktree_merged_subprocess_error(self):
@@ -722,7 +727,8 @@ class TestListWorktrees:
                 ['git', 'worktree', 'list', '--porcelain'],
                 check=True,
                 capture_output=True,
-                text=True
+                text=True,
+                encoding='utf-8'
             )
     
     def test_list_worktrees_empty(self):

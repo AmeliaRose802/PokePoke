@@ -36,6 +36,7 @@ class TestHasUncommittedChanges:
             ["git", "status", "--porcelain"],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         )
     

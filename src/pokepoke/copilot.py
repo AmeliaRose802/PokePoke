@@ -30,6 +30,7 @@ def get_allowed_directories() -> list[str]:
             ["git", "rev-parse", "--git-common-dir"],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         )
         git_common_dir = result.stdout.strip()

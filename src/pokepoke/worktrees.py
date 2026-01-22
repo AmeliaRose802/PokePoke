@@ -5,22 +5,14 @@ from pathlib import Path
 
 
 def get_main_repo_root() -> Path:
-    """Get the main repository root directory (not a worktree).
-    
-    This finds the main .git directory even when called from a worktree.
-    
-    Returns:
-        Path to the main repository root
-        
-    Raises:
-        RuntimeError: If not in a git repository
-    """
+    """Get the main repository root directory (not a worktree)."""
     try:
         # Get the common git directory (points to main repo's .git)
         result = subprocess.run(
             ["git", "rev-parse", "--git-common-dir"],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         )
         git_common_dir = Path(result.stdout.strip())
@@ -36,19 +28,13 @@ def get_main_repo_root() -> Path:
 
 
 def is_worktree_clean(worktree_path: Path) -> bool:
-    """Check if a worktree has no uncommitted changes.
-    
-    Args:
-        worktree_path: Path to the worktree directory
-        
-    Returns:
-        True if worktree is clean (no uncommitted changes), False otherwise
-    """
+    """Check if a worktree has no uncommitted changes."""
     try:
         result = subprocess.run(
             ["git", "-C", str(worktree_path), "status", "--porcelain"],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         )
         # Empty output means clean status
@@ -58,19 +44,13 @@ def is_worktree_clean(worktree_path: Path) -> bool:
 
 
 def verify_branch_pushed(branch_name: str) -> bool:
-    """Verify that a branch exists on the remote.
-    
-    Args:
-        branch_name: Name of the branch to check
-        
-    Returns:
-        True if branch exists on remote, False otherwise
-    """
+    """Verify that a branch exists on the remote."""
     try:
         result = subprocess.run(
             ["git", "ls-remote", "--heads", "origin", branch_name],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         )
         # Non-empty output means branch exists on remote
@@ -80,20 +60,7 @@ def verify_branch_pushed(branch_name: str) -> bool:
 
 
 def create_worktree(item_id: str, base_branch: str = "ameliapayne/dev") -> Path:
-    """Create a git worktree for a work item.
-    
-    If the worktree already exists, returns the existing path instead of failing.
-    
-    Args:
-        item_id: The beads work item ID (e.g., 'incredible_icm-42')
-        base_branch: The branch to create the worktree from (default: 'ameliapayne/dev')
-        
-    Returns:
-        Path to the created or existing worktree directory
-        
-    Raises:
-        subprocess.CalledProcessError: If worktree creation fails for reasons other than already existing
-    """
+    """Create a git worktree for a work item. Returns existing path if already exists."""
     # Worktree path: ./worktrees/task-{id}
     worktree_path = Path("worktrees") / f"task-{item_id}"
     
@@ -118,7 +85,8 @@ def create_worktree(item_id: str, base_branch: str = "ameliapayne/dev") -> Path:
             ["git", "worktree", "add", str(worktree_path), "-b", branch_name, base_branch],
             check=True,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8'
         )
     except subprocess.CalledProcessError as e:
         # Check if error is because branch already exists
@@ -136,15 +104,7 @@ def create_worktree(item_id: str, base_branch: str = "ameliapayne/dev") -> Path:
 
 
 def is_worktree_merged(item_id: str, target_branch: str = "ameliapayne/dev") -> bool:
-    """Check if a worktree's branch has been merged into the target branch.
-    
-    Args:
-        item_id: The beads work item ID
-        target_branch: The branch to check merge status against (default: 'ameliapayne/dev')
-        
-    Returns:
-        True if the branch is merged, False otherwise
-    """
+    """Check if a worktree's branch has been merged into the target branch."""
     branch_name = f"task/{item_id}"
     
     try:
@@ -153,7 +113,8 @@ def is_worktree_merged(item_id: str, target_branch: str = "ameliapayne/dev") -> 
             ["git", "branch", "--merged", target_branch],
             check=True,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8'
         )
         
         # Check if our branch is in the list
@@ -165,16 +126,7 @@ def is_worktree_merged(item_id: str, target_branch: str = "ameliapayne/dev") -> 
 
 
 def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup: bool = True) -> bool:
-    """Merge a worktree's branch into the target branch and optionally clean up.
-    
-    Args:
-        item_id: The beads work item ID
-        target_branch: The branch to merge into (default: 'ameliapayne/dev')
-        cleanup: If True, remove worktree and delete branch after merge (default: True)
-        
-    Returns:
-        True if merge succeeded, False otherwise
-    """
+    """Merge a worktree's branch into the target branch and optionally clean up."""
     branch_name = f"task/{item_id}"
     worktree_path = Path("worktrees") / f"task-{item_id}"
     
@@ -192,6 +144,7 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
             ["bd", "sync"],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             timeout=30
         )
         if bd_sync_result.returncode != 0:
@@ -205,6 +158,7 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
             ["git", "status", "--porcelain"],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         ).stdout.strip()
         
@@ -214,10 +168,11 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
             # Commit beads changes if present
             if ".beads/" in main_status:
                 print("🔧 Committing beads database changes...")
-                subprocess.run(["git", "add", ".beads/"], check=True)
+                subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8')
                 subprocess.run(
                     ["git", "commit", "-m", f"chore: sync beads before merge of {branch_name}"],
-                    check=True
+                    check=True,
+                    encoding='utf-8'
                 )
                 print("✅ Beads changes committed")
             else:
@@ -229,7 +184,8 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
             ["git", "checkout", target_branch],
             check=True,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8'
         )
         
         # Pull latest changes
@@ -237,7 +193,8 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
             ["git", "pull", "--rebase"],
             check=True,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8'
         )
         
         # Merge the work branch
@@ -245,7 +202,8 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
             ["git", "merge", "--no-ff", branch_name, "-m", f"Merge {branch_name}"],
             check=True,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8'
         )
         print(f"✅ Merged {branch_name} into {target_branch}")
         
@@ -254,6 +212,7 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
             ["git", "branch", "--show-current"],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         ).stdout.strip()
         
@@ -266,6 +225,7 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
             ["git", "status", "--porcelain"],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         )
         
@@ -280,7 +240,8 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
             ["git", "push"],
             check=True,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8'
         )
         print(f"✅ Pushed {target_branch} to remote")
         
@@ -298,7 +259,8 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
                     ["git", "worktree", "remove", str(worktree_path)],
                     check=True,
                     capture_output=True,
-                    text=True
+                    text=True,
+                    encoding='utf-8'
                 )
                 print(f"✅ Removed worktree at {worktree_path}")
             
@@ -307,7 +269,8 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
                 ["git", "branch", "-d", branch_name],
                 check=True,
                 capture_output=True,
-                text=True
+                text=True,
+                encoding='utf-8'
             )
             print(f"✅ Deleted branch {branch_name}")
         
@@ -320,15 +283,7 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
 
 
 def cleanup_worktree(item_id: str, force: bool = False) -> bool:
-    """Remove a worktree and its associated branch.
-    
-    Args:
-        item_id: The beads work item ID
-        force: If True, force removal even if branch has unmerged changes
-        
-    Returns:
-        True if cleanup succeeded, False otherwise
-    """
+    """Remove a worktree and its associated branch."""
     branch_name = f"task/{item_id}"
     worktree_path = Path("worktrees") / f"task-{item_id}"
     
@@ -343,7 +298,8 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
                 cmd,
                 check=True,
                 capture_output=True,
-                text=True
+                text=True,
+                encoding='utf-8'
             )
         
         # Delete branch
@@ -352,7 +308,8 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
             ["git", "branch", delete_flag, branch_name],
             check=True,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8'
         )
         
         return True
@@ -363,17 +320,14 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
 
 
 def list_worktrees() -> list[dict[str, str]]:
-    """List all active worktrees.
-    
-    Returns:
-        List of dictionaries with worktree information (path, branch, commit)
-    """
+    """List all active worktrees."""
     try:
         result = subprocess.run(
             ["git", "worktree", "list", "--porcelain"],
             check=True,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8'
         )
         
         worktrees = []

@@ -18,6 +18,7 @@ def verify_main_repo_clean() -> Tuple[bool, str, list[str]]:
             ["git", "status", "--porcelain"],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         )
         
@@ -41,11 +42,12 @@ def handle_beads_auto_commit() -> None:
     """
     try:
         print("🔧 Committing beads database changes in main repo...")
-        subprocess.run(["git", "add", ".beads/"], check=True)
+        subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8')
         subprocess.run(
             ["git", "commit", "-m", "chore: sync beads before worktree merge"],
             check=True,
-            capture_output=True
+            capture_output=True,
+            encoding='utf-8'
         )
         print("✅ Beads changes committed")
     except subprocess.CalledProcessError as e:
@@ -85,6 +87,7 @@ def has_uncommitted_changes() -> bool:
             ["git", "status", "--porcelain"],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         )
         # If output is non-empty, there are uncommitted changes
@@ -108,14 +111,16 @@ def commit_all_changes(message: str = "Auto-commit by PokePoke") -> Tuple[bool, 
             ["git", "add", "-A"],
             check=True,
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8'
         )
         
         # Try to commit (this will trigger pre-commit hooks)
         result = subprocess.run(
             ["git", "commit", "-m", message],
             capture_output=True,
-            text=True
+            text=True,
+            encoding='utf-8'
         )
         
         if result.returncode == 0:

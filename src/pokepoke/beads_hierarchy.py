@@ -119,6 +119,7 @@ def close_parent_if_complete(parent_id: str) -> bool:
             ['bd', 'close', parent_id, '-r', 'All child items completed'],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         )
         print(f"✅ Auto-closed parent {parent_id} - all children complete")

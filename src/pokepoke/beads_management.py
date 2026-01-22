@@ -23,6 +23,7 @@ def close_item(item_id: str, message: str = "Completed") -> bool:
             ['bd', 'close', item_id, '--reason', message],
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         )
         print(f"✅ Closed {item_id}")
@@ -68,8 +69,12 @@ def create_issue(
             cmd,
             capture_output=True,
             text=True,
+            encoding='utf-8',
             check=True
         )
+        
+        if not result.stdout:
+            return None
         
         # Parse JSON output to get issue ID
         filtered_lines = [
@@ -99,7 +104,8 @@ def create_issue(
                 subprocess.run(
                     ['bd', 'label', 'add', issue_id] + labels + ['--json'],
                     capture_output=True,
-                    text=True
+                    text=True,
+                    encoding='utf-8'
                 )
             
             return issue_id
