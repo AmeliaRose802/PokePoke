@@ -126,22 +126,25 @@ def _check_and_commit_main_repo() -> bool:
     uncommitted = status_result.stdout.strip()
     if uncommitted:
         lines = uncommitted.split('\n')
-        # Exclude .beads/, worktrees/, and untracked files (??) from uncommitted changes check
-        # Only care about modified/deleted tracked files (M, D, A, R, C)
-        non_beads_changes = [
-            line for line in lines 
-            if line 
-            and not line.startswith('??')  # Ignore untracked files
-            and '.beads/' not in line 
+        # Categorize changes for proper handling
+        beads_changes = [line for line in lines if line and '.beads/' in line]
+        worktree_changes = [line for line in lines if line and 'worktrees/' in line and not line.startswith('??')]
+        untracked_files = [line for line in lines if line and line.startswith('??')]
+        other_changes = [
+            line for line in lines
+            if line
+            and '.beads/' not in line
             and 'worktrees/' not in line
+            and not line.startswith('??')
         ]
         
-        if non_beads_changes:
+        # Handle problematic changes that need agent intervention
+        if other_changes:
             print("\n⚠️  Main repository has uncommitted changes:")
-            for line in non_beads_changes[:10]:
+            for line in other_changes[:10]:
                 print(f"   {line}")
-            if len(non_beads_changes) > 10:
-                print(f"   ... and {len(non_beads_changes) - 10} more")
+            if len(other_changes) > 10:
+                print(f"   ... and {len(other_changes) - 10} more")
             
             # Immediately run cleanup agent instead of delegating
             print("\n🤖 Launching cleanup agent to resolve uncommitted changes...")
@@ -170,7 +173,9 @@ def _check_and_commit_main_repo() -> bool:
                 print("❌ Cleanup agent failed to resolve uncommitted changes")
                 print("   Please manually resolve and try again")
                 return False
-        elif '.beads/' in uncommitted:
+        
+        # Auto-resolve beads changes
+        if beads_changes:
             print("🔧 Committing beads database changes...")
             subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8')
             
@@ -191,6 +196,18 @@ def _check_and_commit_main_repo() -> bool:
                 print("✅ Beads changes committed")
             else:
                 print("ℹ️  No beads changes to commit")
+        
+        # Auto-resolve worktree cleanup deletions
+        if worktree_changes:
+            print("🧹 Committing worktree cleanup changes...")
+            subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8')
+            subprocess.run(
+                ["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
+                check=True,
+                capture_output=True,
+                encoding='utf-8'
+            )
+            print("✅ Worktree cleanup committed")
     
     return True
 

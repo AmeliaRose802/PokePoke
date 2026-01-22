@@ -163,27 +163,31 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
         ).stdout.strip()
         
         if main_status:
-            # Filter out harmless changes: untracked files, .beads/, and worktrees/
+            # Categorize changes for proper handling
             lines = main_status.split('\n')
-            problematic_changes = [
+            beads_changes = [line for line in lines if line and '.beads/' in line]
+            worktree_changes = [line for line in lines if line and 'worktrees/' in line and not line.startswith('??')]
+            untracked_files = [line for line in lines if line and line.startswith('??')]
+            other_changes = [
                 line for line in lines
                 if line
-                and not line.startswith('??')  # Ignore untracked files
-                and '.beads/' not in line      # Ignore beads database
-                and 'worktrees/' not in line   # Ignore worktree directory changes
+                and '.beads/' not in line
+                and 'worktrees/' not in line
+                and not line.startswith('??')
             ]
             
-            if problematic_changes:
+            # Block merge if there are problematic changes
+            if other_changes:
                 print("⚠️  Main repo has uncommitted changes:")
-                for line in problematic_changes[:10]:
+                for line in other_changes[:10]:
                     print(f"   {line}")
-                if len(problematic_changes) > 10:
-                    print(f"   ... and {len(problematic_changes) - 10} more")
+                if len(other_changes) > 10:
+                    print(f"   ... and {len(other_changes) - 10} more")
                 print("❌ Cannot merge: main repo has uncommitted non-beads changes")
                 return False
             
-            # Commit beads changes if present
-            if ".beads/" in main_status:
+            # Auto-resolve beads changes
+            if beads_changes:
                 print("🔧 Committing beads database changes...")
                 subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8')
                 subprocess.run(
@@ -192,6 +196,17 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
                     encoding='utf-8'
                 )
                 print("✅ Beads changes committed")
+            
+            # Auto-resolve worktree cleanup deletions
+            if worktree_changes:
+                print("🧹 Committing worktree cleanup changes...")
+                subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8')
+                subprocess.run(
+                    ["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
+                    check=True,
+                    encoding='utf-8'
+                )
+                print("✅ Worktree cleanup committed")
         
         # Switch to target branch
         subprocess.run(
