@@ -653,6 +653,7 @@ class TestRunOrchestratorContinuousMode:
         assert result == 0
         assert mock_process.call_count == 2
     
+    @patch('time.sleep')  # Mock sleep to avoid delays
     @patch('src.pokepoke.orchestrator.run_maintenance_agent')
     @patch('src.pokepoke.orchestrator.get_beads_stats')
     @patch('src.pokepoke.orchestrator.process_work_item')
@@ -666,7 +667,8 @@ class TestRunOrchestratorContinuousMode:
         mock_select: Mock,
         mock_process: Mock,
         mock_stats: Mock,
-        mock_maintenance: Mock
+        mock_maintenance: Mock,
+        mock_sleep: Mock
     ) -> None:
         """Test maintenance agents are triggered at correct intervals."""
         from src.pokepoke.orchestrator import run_orchestrator

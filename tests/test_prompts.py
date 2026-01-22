@@ -216,8 +216,8 @@ def test_render_array_empty():
     assert result == "Start\nEnd"
 
 
-def test_render_beads_item_with_directories():
-    """Test rendering beads-item template with allowed directories."""
+def test_render_beads_item_with_labels():
+    """Test rendering beads-item template with labels."""
     service = PromptService()
     
     result = service.load_and_render("beads-item", {
@@ -226,16 +226,11 @@ def test_render_beads_item_with_directories():
         "description": "Fix the authentication bug",
         "issue_type": "bug",
         "priority": 1,
-        "labels": "security, backend",
-        "allowed_directories": [
-            "C:\\Users\\ameliapayne\\PokePoke\\worktrees\\PokePoke-123",
-            "C:\\Users\\ameliapayne\\PokePoke"
-        ]
+        "labels": "security, backend"
     })
     
     assert "PokePoke-123" in result
     assert "Fix bug" in result
     assert "Fix the authentication bug" in result
-    assert "C:\\Users\\ameliapayne\\PokePoke\\worktrees\\PokePoke-123" in result
-    assert "C:\\Users\\ameliapayne\\PokePoke" in result
-    assert "YOU MUST NEVER ATTEMPT TO ACCESS ANY DIRECTORY OUTSIDE" in result
+    assert "security, backend" in result
+    assert "All pre-commit validation passes successfully" in result

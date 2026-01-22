@@ -80,14 +80,14 @@ def verify_branch_pushed(branch_name: str) -> bool:
         return False
 
 
-def create_worktree(item_id: str, base_branch: str = "master") -> Path:
+def create_worktree(item_id: str, base_branch: str = "ameliapayne/dev") -> Path:
     """Create a git worktree for a work item.
     
     If the worktree already exists, returns the existing path instead of failing.
     
     Args:
         item_id: The beads work item ID (e.g., 'incredible_icm-42')
-        base_branch: The branch to create the worktree from (default: 'master')
+        base_branch: The branch to create the worktree from (default: 'ameliapayne/dev')
         
     Returns:
         Path to the created or existing worktree directory
@@ -136,12 +136,12 @@ def create_worktree(item_id: str, base_branch: str = "master") -> Path:
     return worktree_path
 
 
-def is_worktree_merged(item_id: str, target_branch: str = "master") -> bool:
+def is_worktree_merged(item_id: str, target_branch: str = "ameliapayne/dev") -> bool:
     """Check if a worktree's branch has been merged into the target branch.
     
     Args:
         item_id: The beads work item ID
-        target_branch: The branch to check merge status against (default: 'master')
+        target_branch: The branch to check merge status against (default: 'ameliapayne/dev')
         
     Returns:
         True if the branch is merged, False otherwise
@@ -165,12 +165,12 @@ def is_worktree_merged(item_id: str, target_branch: str = "master") -> bool:
         return False
 
 
-def merge_worktree(item_id: str, target_branch: str = "master", cleanup: bool = True) -> bool:
+def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup: bool = True) -> bool:
     """Merge a worktree's branch into the target branch and optionally clean up.
     
     Args:
         item_id: The beads work item ID
-        target_branch: The branch to merge into (default: 'master')
+        target_branch: The branch to merge into (default: 'ameliapayne/dev')
         cleanup: If True, remove worktree and delete branch after merge (default: True)
         
     Returns:

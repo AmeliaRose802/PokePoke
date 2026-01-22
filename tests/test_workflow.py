@@ -15,7 +15,7 @@ from src.pokepoke.workflow import (
     _run_cleanup_with_timeout,
     _finalize_work_item,
     _check_and_merge_worktree,
-    _merge_worktree_to_master,
+    _merge_worktree_to_dev,
     _close_work_item_and_parents,
     _check_parent_hierarchy
 )
@@ -429,7 +429,7 @@ class TestRunCleanupWithTimeout:
 class TestCheckAndMergeWorktree:
     """Test _check_and_merge_worktree function."""
     
-    @patch('src.pokepoke.workflow._merge_worktree_to_master')
+    @patch('src.pokepoke.workflow._merge_worktree_to_dev')
     @patch('src.pokepoke.workflow.cleanup_worktree')
     @patch('os.chdir')
     @patch('subprocess.run')
@@ -459,7 +459,7 @@ class TestCheckAndMergeWorktree:
         mock_cleanup.assert_called_once_with("task-1", force=True)
         mock_merge.assert_not_called()
     
-    @patch('src.pokepoke.workflow._merge_worktree_to_master')
+    @patch('src.pokepoke.workflow._merge_worktree_to_dev')
     @patch('os.chdir')
     @patch('subprocess.run')
     def test_has_commits_to_merge(
@@ -487,7 +487,7 @@ class TestCheckAndMergeWorktree:
         assert result is True
         mock_merge.assert_called_once_with(item)
     
-    @patch('src.pokepoke.workflow._merge_worktree_to_master')
+    @patch('src.pokepoke.workflow._merge_worktree_to_dev')
     @patch('os.chdir')
     @patch('subprocess.run')
     def test_commit_count_check_fails(
@@ -517,8 +517,8 @@ class TestCheckAndMergeWorktree:
         mock_merge.assert_called_once_with(item)
 
 
-class TestMergeWorktreeToMaster:
-    """Test _merge_worktree_to_master function."""
+class TestMergeWorktreeToDev:
+    """Test _merge_worktree_to_dev function."""
     
     @patch('src.pokepoke.workflow.merge_worktree')
     @patch('src.pokepoke.workflow.check_main_repo_ready_for_merge')
@@ -540,7 +540,7 @@ class TestMergeWorktreeToMaster:
         mock_check.return_value = (True, "")
         mock_merge.return_value = True
         
-        result = _merge_worktree_to_master(item)
+        result = _merge_worktree_to_dev(item)
         
         assert result is True
         mock_merge.assert_called_once_with("task-1", cleanup=True)
@@ -559,7 +559,7 @@ class TestMergeWorktreeToMaster:
         
         mock_check.return_value = (False, "Uncommitted changes")
         
-        result = _merge_worktree_to_master(item)
+        result = _merge_worktree_to_dev(item)
         
         assert result is False
     
@@ -579,7 +579,7 @@ class TestMergeWorktreeToMaster:
         mock_check.return_value = (True, "")
         mock_merge.return_value = False
         
-        result = _merge_worktree_to_master(item)
+        result = _merge_worktree_to_dev(item)
         
         assert result is False
 

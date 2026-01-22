@@ -234,17 +234,17 @@ def _check_and_merge_worktree(item: BeadsWorkItem, worktree_path: Path) -> bool:
             cleanup_worktree(item.id, force=True)
             return True
         
-        return _merge_worktree_to_master(item)
+        return _merge_worktree_to_dev(item)
         
     except Exception as e:
         os.chdir(original_dir)
         print(f"\n⚠️  Could not check commit count: {e}")
         print(f"   Attempting merge anyway...")
-        return _merge_worktree_to_master(item)
+        return _merge_worktree_to_dev(item)
 
 
-def _merge_worktree_to_master(item: BeadsWorkItem) -> bool:
-    """Merge worktree to master branch."""
+def _merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
+    """Merge worktree to ameliapayne/dev branch."""
     print(f"\n🔍 Checking if main repo is ready for merge...")
     is_ready, error_msg = check_main_repo_ready_for_merge()
     

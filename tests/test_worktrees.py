@@ -180,7 +180,7 @@ class TestCreateWorktree:
             assert mock_run.call_count == 1
             call_args = mock_run.call_args[0][0]
             assert call_args[0:3] == ['git', 'worktree', 'add']
-            assert call_args[4:7] == ['-b', 'task/incredible_icm-42', 'master']
+            assert call_args[4:7] == ['-b', 'task/incredible_icm-42', 'ameliapayne/dev']
     
     def test_create_worktree_with_custom_base_branch(self):
         """Test worktree creation with custom base branch."""
@@ -289,7 +289,7 @@ class TestIsWorktreeMerged:
             
             assert result is True
             mock_run.assert_called_once_with(
-                ['git', 'branch', '--merged', 'master'],
+                ['git', 'branch', '--merged', 'ameliapayne/dev'],
                 check=True,
                 capture_output=True,
                 text=True
@@ -363,7 +363,7 @@ class TestMergeWorktree:
                 cmd = args[0]
                 # Handle each command type
                 if 'branch' in cmd and '--show-current' in cmd:
-                    return Mock(stdout='master\n', returncode=0)
+                    return Mock(stdout='ameliapayne/dev\n', returncode=0)
                 elif 'status' in cmd and '--porcelain' in cmd:
                     return Mock(stdout='', returncode=0)
                 else:
@@ -378,7 +378,7 @@ class TestMergeWorktree:
             # Verify key commands were called
             calls = [str(call) for call in mock_run.call_args_list]
             assert any('bd' in call and 'sync' in call for call in calls)
-            assert any('checkout' in call and 'master' in call for call in calls)
+            assert any('checkout' in call and 'ameliapayne/dev' in call for call in calls)
             assert any('merge' in call for call in calls)
             assert any('push' in call for call in calls)
             assert any('worktree' in call and 'remove' in call for call in calls)
@@ -394,7 +394,7 @@ class TestMergeWorktree:
             def run_side_effect(*args, **kwargs):
                 cmd = args[0]
                 if 'branch' in cmd and '--show-current' in cmd:
-                    return Mock(stdout='master\n', returncode=0)
+                    return Mock(stdout='ameliapayne/dev\n', returncode=0)
                 elif 'status' in cmd and '--porcelain' in cmd:
                     return Mock(stdout='', returncode=0)
                 else:
@@ -425,7 +425,7 @@ class TestMergeWorktree:
                 if 'bd' in cmd and 'sync' in cmd:
                     return Mock(stdout='', stderr='error', returncode=1)
                 elif 'branch' in cmd and '--show-current' in cmd:
-                    return Mock(stdout='master\n', returncode=0)
+                    return Mock(stdout='ameliapayne/dev\n', returncode=0)
                 elif 'status' in cmd and '--porcelain' in cmd:
                     return Mock(stdout='', returncode=0)
                 else:
@@ -459,7 +459,7 @@ class TestMergeWorktree:
                     call_count[0] += 1
                     return Mock(stdout='', returncode=0)
                 elif 'branch' in cmd and '--show-current' in cmd:
-                    return Mock(stdout='master\n', returncode=0)
+                    return Mock(stdout='ameliapayne/dev\n', returncode=0)
                 else:
                     call_count[0] += 1
                     return Mock(stdout='', stderr='', returncode=0)
@@ -517,7 +517,7 @@ class TestMergeWorktree:
             result = merge_worktree('incredible_icm-42')
             
             assert result is False
-            assert any('Post-merge validation failed: Not on master' in str(call) 
+            assert any('Post-merge validation failed: Not on ameliapayne/dev' in str(call) 
                       for call in mock_print.call_args_list)
     
     def test_merge_worktree_dirty_after_merge(self):
@@ -563,7 +563,7 @@ class TestMergeWorktree:
             def run_side_effect(*args, **kwargs):
                 cmd = args[0]
                 if 'branch' in cmd and '--show-current' in cmd:
-                    return Mock(stdout='master\n', returncode=0)
+                    return Mock(stdout='ameliapayne/dev\n', returncode=0)
                 elif 'status' in cmd and '--porcelain' in cmd:
                     return Mock(stdout='', returncode=0)
                 else:
@@ -695,7 +695,7 @@ class TestListWorktrees:
                 stdout=(
                     'worktree /home/user/repo\n'
                     'HEAD abc123\n'
-                    'branch refs/heads/master\n'
+                    'branch refs/heads/ameliapayne/dev\n'
                     '\n'
                     'worktree /home/user/repo/worktrees/task-42\n'
                     'HEAD def456\n'
@@ -710,7 +710,7 @@ class TestListWorktrees:
             assert result[0] == {
                 'path': '/home/user/repo',
                 'commit': 'abc123',
-                'branch': 'refs/heads/master'
+                'branch': 'refs/heads/ameliapayne/dev'
             }
             assert result[1] == {
                 'path': '/home/user/repo/worktrees/task-42',
