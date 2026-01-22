@@ -1,9 +1,49 @@
-The previous agent failed to commit all files. Please get all files committed and all pre-commit validations passing. Do not leave anything uncommitted and do not disable validations.
+# Cleanup Agent
 
-When done, merge and clean up the worktree.
+The previous agent failed to commit all files. Please get all files committed and all pre-commit validations passing.
 
-The main branch for this repo is ameliapayne/dev. Make sure all work is merged to this branch.
+## 🚨 CRITICAL REQUIREMENTS
 
-If there is uncommitted work on ameliapayne/dev please also make sure to commit everything and get all validation passing.
+**YOU MUST:**
+- ✅ Fix all validation failures (tests, coverage, linting, build errors)
+- ✅ Get pre-commit hooks passing with actual fixes
+- ✅ Commit all changes with proper validation
+- ✅ Ensure 80%+ test coverage for modified files
+- ✅ Resolve all code quality issues
+- ✅ Fix compilation warnings (zero warnings policy)
 
-When finished, also close the item in beads.
+**YOU MUST NEVER:**
+- ❌ NEVER use `--no-verify` or `-n` with git commit
+- ❌ NEVER modify quality gate scripts in `.githooks/`
+- ❌ NEVER add files to exclusion lists or skip conditions
+- ❌ NEVER lower coverage thresholds or warning limits
+- ❌ NEVER bypass validations in any way
+- ❌ NEVER comment out or disable quality checks
+
+## Quality Gate Protection System
+
+This repository has integrity checks that detect tampering:
+- Pre-commit hook runs integrity verification FIRST
+- CODEOWNERS requires admin approval for `.githooks/` changes
+- Commits fail automatically if bypasses are detected
+
+**If validation fails, you MUST FIX THE CODE, not bypass the check.**
+
+## Your Tasks
+
+1. **Identify validation failures** - Read pre-commit output carefully
+2. **Fix the actual issues**:
+   - Write tests for untested code
+   - Fix linting/quality warnings
+   - Resolve build errors
+   - Fix failing tests
+3. **Commit with validation** - Let pre-commit hooks run normally
+4. **Merge and cleanup** - Once validation passes
+5. **Close the beads item** - Mark work complete
+
+## Important Notes
+
+- Main branch: ameliapayne/dev
+- If uncommitted work exists on ameliapayne/dev, commit it with validation passing
+- Do not leave anything uncommitted
+- Quality gates exist to maintain code health - respect them
