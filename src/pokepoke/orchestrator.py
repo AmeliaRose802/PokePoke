@@ -165,12 +165,22 @@ def _check_and_commit_main_repo() -> bool:
         elif '.beads/' in uncommitted:
             print("🔧 Committing beads database changes...")
             subprocess.run(["git", "add", ".beads/"], check=True)
-            subprocess.run(
-                ["git", "commit", "-m", "chore: auto-commit beads changes"],
-                check=True,
+            
+            # Check if there are actually staged changes to commit
+            result = subprocess.run(
+                ["git", "diff", "--cached", "--quiet"],
                 capture_output=True
             )
-            print("✅ Beads changes committed")
+            
+            if result.returncode != 0:  # Non-zero means there are staged changes
+                subprocess.run(
+                    ["git", "commit", "-m", "chore: auto-commit beads changes"],
+                    check=True,
+                    capture_output=True
+                )
+                print("✅ Beads changes committed")
+            else:
+                print("ℹ️  No beads changes to commit")
     
     return True
 

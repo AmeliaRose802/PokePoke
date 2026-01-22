@@ -55,6 +55,7 @@ class TestOrchestratorCleanupDetection:
             Mock(stdout='{"summary": {"total_issues": 10}}', returncode=0),  # bd stats for starting beads stats
             Mock(stdout=" M .beads/issues.jsonl", returncode=0),  # First status check
             Mock(stdout="", returncode=0),  # git add
+            Mock(stdout="", returncode=1),  # git diff --cached --quiet (returncode 1 = changes exist)
             Mock(stdout="", returncode=0),  # git commit
         ]
         
@@ -63,8 +64,8 @@ class TestOrchestratorCleanupDetection:
         
         result = run_orchestrator(interactive=False, continuous=False)
         
-        # Verify we auto-committed beads changes (4 calls: bd stats, git status, git add, git commit)
-        assert mock_subprocess.call_count >= 4
+        # Verify we auto-committed beads changes (5 calls: bd stats, git status, git add, git diff, git commit)
+        assert mock_subprocess.call_count >= 5
         # Check that git add and commit were called
         add_calls = [
             call for call in mock_subprocess.call_args_list
