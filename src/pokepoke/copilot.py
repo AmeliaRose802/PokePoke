@@ -338,9 +338,9 @@ def invoke_copilot_cli(
             is_transient = is_transient_error(stderr_text, process.returncode)
             
             if is_rate_limit:
-                print(f"\n[RATE_LIMIT] Rate limit detected (HTTP 429 or similar)")
+                print("\n[RATE_LIMIT] Rate limit detected (HTTP 429 or similar)")
             elif is_transient:
-                print(f"\n[WARNING]  Transient error detected")
+                print("\n[WARNING]  Transient error detected")
             
             # If not retryable or out of retries, return failure
             if not (is_rate_limit or is_transient) or attempt >= config.max_retries:

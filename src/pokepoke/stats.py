@@ -3,7 +3,7 @@
 import re
 from typing import Optional
 
-from pokepoke.types import AgentStats, SessionStats, BeadsStats
+from pokepoke.types import AgentStats, SessionStats
 
 
 def parse_agent_stats(output: str) -> Optional[AgentStats]:
@@ -98,7 +98,7 @@ def print_stats(items_completed: int, total_requests: int, elapsed_seconds: floa
         print("\n" + "=" * 60)
         print("📋 Beads Database Statistics")
         print("=" * 60)
-        print(f"                      Start → End (Change)")
+        print("                      Start → End (Change)")
         print(f"📝 Total issues:      {start.total_issues:5} → {end.total_issues:5} ({end.total_issues - start.total_issues:+d})")
         print(f"🔓 Open issues:       {start.open_issues:5} → {end.open_issues:5} ({end.open_issues - start.open_issues:+d})")
         print(f"🏃 In progress:       {start.in_progress_issues:5} → {end.in_progress_issues:5} ({end.in_progress_issues - start.in_progress_issues:+d})")

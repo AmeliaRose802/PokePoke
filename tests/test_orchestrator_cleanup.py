@@ -12,26 +12,34 @@ from src.pokepoke.types import BeadsWorkItem
 class TestOrchestratorCleanupDetection:
     """Test orchestrator's main repo cleanup detection."""
     
+    @patch('pokepoke.agent_runner.invoke_cleanup_agent')
     @patch('src.pokepoke.orchestrator.get_ready_work_items')
     @patch('subprocess.run')
-    def test_detects_uncommitted_changes_and_aborts(
+    def test_detects_uncommitted_changes_and_invokes_cleanup(
         self,
         mock_subprocess: Mock,
-        mock_get_items: Mock
+        mock_get_items: Mock,
+        mock_cleanup: Mock
     ) -> None:
-        """Test that uncommitted non-beads changes cause abort."""
+        """Test that uncommitted non-beads changes invoke cleanup agent."""
         # Mock git status showing uncommitted files
         mock_subprocess.return_value = Mock(
             stdout=" M src/pokepoke/orchestrator.py\n M src/pokepoke/beads.py",
             returncode=0
         )
         
+        # Mock cleanup agent failure (so orchestrator won't proceed)
+        mock_cleanup.return_value = (False, None)
+        
         result = run_orchestrator(interactive=False, continuous=False)
         
-        # Verify orchestrator returned error code
+        # Verify orchestrator returned error code when cleanup fails
         assert result == 1
         
-        # Verify get_ready_work_items was never called
+        # Verify cleanup agent was invoked
+        mock_cleanup.assert_called_once()
+        
+        # Verify get_ready_work_items was never called (since cleanup failed)
         mock_get_items.assert_not_called()
     
     @patch('src.pokepoke.orchestrator.get_ready_work_items')

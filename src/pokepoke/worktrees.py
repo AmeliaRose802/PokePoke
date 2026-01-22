@@ -2,7 +2,6 @@
 
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 
 def get_main_repo_root() -> Path:
@@ -181,7 +180,7 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
     
     # PRE-MERGE VALIDATION: Verify worktree is clean
     if not is_worktree_clean(worktree_path):
-        print(f"❌ Pre-merge validation failed: Worktree has uncommitted changes")
+        print("❌ Pre-merge validation failed: Worktree has uncommitted changes")
         return False
     
     print("✅ Pre-merge validation passed: Worktree is clean")
@@ -210,7 +209,7 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
         ).stdout.strip()
         
         if main_status:
-            print(f"⚠️  Main repo has uncommitted changes:")
+            print("⚠️  Main repo has uncommitted changes:")
             print(main_status)
             # Commit beads changes if present
             if ".beads/" in main_status:

@@ -746,34 +746,44 @@ class TestRunOrchestratorContinuousMode:
 class TestOrchestratorHelperFunctions:
     """Test orchestrator helper functions."""
     
-    @patch('src.pokepoke.orchestrator.create_cleanup_delegation_issue')
+    @patch('pokepoke.agent_runner.invoke_cleanup_agent')
     @patch('subprocess.run')
     def test_check_and_commit_main_repo_with_non_beads_changes(
         self,
         mock_subprocess: Mock,
-        mock_create_issue: Mock
+        mock_cleanup: Mock
     ) -> None:
-        """Test _check_and_commit_main_repo with non-beads changes - should delegate."""
+        """Test _check_and_commit_main_repo with non-beads changes - should invoke cleanup agent."""
         from src.pokepoke.orchestrator import _check_and_commit_main_repo
+        from src.pokepoke.types import AgentStats
         
         mock_subprocess.return_value = Mock(
             stdout=" M src/file.py\n M tests/test.py\n",
             returncode=0
         )
-        mock_create_issue.return_value = "issue-123"
+        # Mock cleanup agent to return success
+        mock_cleanup.return_value = (True, AgentStats(
+            wall_duration=1.0,
+            api_duration=1.0,
+            input_tokens=100,
+            output_tokens=50,
+            lines_added=5,
+            lines_removed=3,
+            premium_requests=1
+        ))
         
         result = _check_and_commit_main_repo()
         
-        assert result is False
+        assert result is True  # Should return True after successful cleanup
         # Should call subprocess for git status
         assert mock_subprocess.call_count >= 1
-        mock_create_issue.assert_called_once()
+        mock_cleanup.assert_called_once()
         
-        # Verify delegation issue was created with correct details
-        call_args = mock_create_issue.call_args
-        assert "uncommitted changes" in call_args.kwargs['title'].lower()
-        assert "src/file.py" in call_args.kwargs['description']
-        assert call_args.kwargs['priority'] == 0  # Critical
+        # Verify cleanup agent was called with correct work item
+        call_args = mock_cleanup.call_args
+        work_item = call_args[0][0]  # First positional argument
+        assert work_item.id == "cleanup-main-repo"
+        assert "uncommitted changes" in work_item.title.lower()
     
     def test_aggregate_stats(self) -> None:
         """Test _aggregate_stats function."""

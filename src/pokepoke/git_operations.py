@@ -1,8 +1,7 @@
 """Git Operations - Utilities for git status checks, commits, and repository management."""
 
 import subprocess
-from pathlib import Path
-from typing import Optional, Tuple
+from typing import Tuple
 
 
 def verify_main_repo_clean() -> Tuple[bool, str, list[str]]:
@@ -25,7 +24,8 @@ def verify_main_repo_clean() -> Tuple[bool, str, list[str]]:
         uncommitted = status_result.stdout.strip()
         if uncommitted:
             lines = uncommitted.split('\n')
-            non_beads_changes = [line for line in lines if line and '.beads/' not in line]
+            # Exclude .beads/ and worktrees/ from uncommitted changes check
+            non_beads_changes = [line for line in lines if line and '.beads/' not in line and 'worktrees/' not in line]
             return len(non_beads_changes) == 0, uncommitted, non_beads_changes
         
         return True, "", []

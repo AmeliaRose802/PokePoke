@@ -146,7 +146,7 @@ def create_cleanup_delegation_issue(
     
     if issue_id:
         print(f"\n📋 Created delegation issue: {issue_id}")
-        print(f"   An agent will handle this cleanup automatically")
+        print("   An agent will handle this cleanup automatically")
     
     return issue_id
 

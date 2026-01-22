@@ -7,7 +7,6 @@ import time
 from pathlib import Path
 
 from pokepoke.beads import get_ready_work_items, get_beads_stats
-from pokepoke.beads_management import create_cleanup_delegation_issue
 from pokepoke.types import AgentStats, SessionStats
 from pokepoke.stats import print_stats
 from pokepoke.workflow import select_work_item, process_work_item
@@ -126,52 +125,43 @@ def _check_and_commit_main_repo() -> bool:
     uncommitted = status_result.stdout.strip()
     if uncommitted:
         lines = uncommitted.split('\n')
-        non_beads_changes = [line for line in lines if line and '.beads/' not in line]
+        # Exclude .beads/ and worktrees/ from uncommitted changes check
+        non_beads_changes = [line for line in lines if line and '.beads/' not in line and 'worktrees/' not in line]
         
         if non_beads_changes:
-            print(f"\n⚠️  Main repository has uncommitted changes:")
+            print("\n⚠️  Main repository has uncommitted changes:")
             for line in non_beads_changes[:10]:
                 print(f"   {line}")
             if len(non_beads_changes) > 10:
                 print(f"   ... and {len(non_beads_changes) - 10} more")
             
-            # Create delegation issue for cleanup
-            changes_list = '\n'.join(f"  - {line}" for line in non_beads_changes[:20])
-            if len(non_beads_changes) > 20:
-                changes_list += f"\n  ... and {len(non_beads_changes) - 20} more"
+            # Immediately run cleanup agent instead of delegating
+            print("\n🤖 Launching cleanup agent to resolve uncommitted changes...")
             
-            description = f"""Main repository has uncommitted changes that need to be resolved:
-
-{changes_list}
-
-**Required Actions:**
-1. Review uncommitted changes with `git status`
-2. Either commit changes if they are valid work, or stash/discard if not
-3. Ensure main repository is clean before PokePoke continues
-4. If there are worktree directories uncommitted, investigate why merge failed
-
-**Commands to run:**
-```bash
-git status
-# Then either:
-git add . && git commit -m "description"
-# Or:
-git stash
-```
-
-Once resolved, this issue can be closed and PokePoke will continue.
-"""
+            from pokepoke.agent_runner import invoke_cleanup_agent
+            from pokepoke.types import BeadsWorkItem
             
-            create_cleanup_delegation_issue(
+            # Create a temporary work item for the cleanup agent
+            cleanup_item = BeadsWorkItem(
+                id="cleanup-main-repo",
                 title="Clean up uncommitted changes in main repository",
-                description=description,
-                labels=['git', 'cleanup'],
-                priority=0  # Critical - blocks all work
+                description="Auto-generated cleanup task for uncommitted changes",
+                issue_type="task",
+                priority=0,
+                status="in_progress",
+                labels=["cleanup", "auto-generated"]
             )
             
-            print("\n📋 Created delegation issue for cleanup")
-            print("   An agent will handle this automatically")
-            return False
+            repo_root = Path.cwd()
+            cleanup_success, cleanup_stats = invoke_cleanup_agent(cleanup_item, repo_root)
+            
+            if cleanup_success:
+                print("✅ Cleanup agent successfully resolved uncommitted changes")
+                return True  # Continue processing
+            else:
+                print("❌ Cleanup agent failed to resolve uncommitted changes")
+                print("   Please manually resolve and try again")
+                return False
         elif '.beads/' in uncommitted:
             print("🔧 Committing beads database changes...")
             subprocess.run(["git", "add", ".beads/"], check=True)

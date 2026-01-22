@@ -3,7 +3,7 @@
 import subprocess
 from typing import List, Optional
 
-from .types import BeadsWorkItem, IssueWithDependencies
+from .types import BeadsWorkItem
 from .beads_query import get_issue_dependencies
 
 
