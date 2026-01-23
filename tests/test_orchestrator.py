@@ -145,7 +145,7 @@ class TestProcessWorkItem:
     @patch('os.chdir')
     @patch('os.getcwd')
     @patch('src.pokepoke.workflow.create_worktree')
-    @patch('src.pokepoke.workflow.invoke_copilot_cli')
+    @patch('src.pokepoke.workflow.invoke_copilot')
     @patch('builtins.input')
     def test_process_work_item_success_no_parent(
         self,
@@ -225,7 +225,7 @@ class TestProcessWorkItem:
     @patch('os.chdir')
     @patch('os.getcwd')
     @patch('src.pokepoke.workflow.create_worktree')
-    @patch('src.pokepoke.workflow.invoke_copilot_cli')
+    @patch('src.pokepoke.workflow.invoke_copilot')
     def test_process_work_item_success_with_parent(
         self,
         mock_invoke: Mock,
@@ -301,7 +301,7 @@ class TestProcessWorkItem:
     @patch('os.chdir')
     @patch('os.getcwd')
     @patch('src.pokepoke.workflow.create_worktree')
-    @patch('src.pokepoke.workflow.invoke_copilot_cli')
+    @patch('src.pokepoke.workflow.invoke_copilot')
     def test_process_work_item_failure(
         self,
         mock_invoke: Mock,
@@ -366,7 +366,7 @@ class TestProcessWorkItem:
         assert request_count == 1  # Only counts final successful attempt (recursive calls reset counter)
         assert cleanup_runs == 0
     
-    @patch('src.pokepoke.workflow.invoke_copilot_cli')
+    @patch('src.pokepoke.workflow.invoke_copilot')
     @patch('builtins.input')
     def test_process_work_item_interactive_skip(
         self,
@@ -421,6 +421,7 @@ class TestRunOrchestrator:
         mock_process.assert_not_called()
     
     @patch('subprocess.run')  # Mock git status check
+    @patch('src.pokepoke.orchestrator.run_maintenance_agent')  # Mock maintenance
     @patch('src.pokepoke.orchestrator.process_work_item')
     @patch('src.pokepoke.orchestrator.select_work_item')
     @patch('src.pokepoke.orchestrator.get_ready_work_items')
@@ -429,11 +430,15 @@ class TestRunOrchestrator:
         mock_get_items: Mock,
         mock_select: Mock,
         mock_process: Mock,
+        mock_maintenance: Mock,
         mock_subprocess_run: Mock
     ) -> None:
         """Test single-shot mode with successful processing."""
         # Mock git status to return clean repo
         mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
+        
+        # Mock maintenance agent to return stats
+        mock_maintenance.return_value = None
         
         item = BeadsWorkItem(
             id="task-1",
@@ -485,6 +490,7 @@ class TestRunOrchestrator:
     
     @patch('subprocess.run')  # Mock git status check
     @patch('builtins.input')
+    @patch('src.pokepoke.orchestrator.run_maintenance_agent')  # Mock maintenance
     @patch('src.pokepoke.orchestrator.process_work_item')
     @patch('src.pokepoke.orchestrator.select_work_item')
     @patch('src.pokepoke.orchestrator.get_ready_work_items')
@@ -493,12 +499,16 @@ class TestRunOrchestrator:
         mock_get_items: Mock,
         mock_select: Mock,
         mock_process: Mock,
+        mock_maintenance: Mock,
         mock_input: Mock,
         mock_subprocess_run: Mock
     ) -> None:
         """Test continuous interactive mode with user quit."""
         # Mock git status to return clean repo
         mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
+        
+        # Mock maintenance agent
+        mock_maintenance.return_value = None
         
         item = BeadsWorkItem(
             id="task-1",
@@ -756,6 +766,9 @@ class TestOrchestratorHelperFunctions:
         """Test _check_and_commit_main_repo with non-beads changes - should invoke cleanup agent."""
         from src.pokepoke.orchestrator import _check_and_commit_main_repo
         from src.pokepoke.types import AgentStats
+        from src.pokepoke.logging_utils import RunLogger
+        from pathlib import Path
+        import tempfile
         
         mock_subprocess.return_value = Mock(
             stdout=" M src/file.py\n M tests/test.py\n",
@@ -772,18 +785,23 @@ class TestOrchestratorHelperFunctions:
             premium_requests=1
         ))
         
-        result = _check_and_commit_main_repo()
-        
-        assert result is True  # Should return True after successful cleanup
-        # Should call subprocess for git status
-        assert mock_subprocess.call_count >= 1
-        mock_cleanup.assert_called_once()
-        
-        # Verify cleanup agent was called with correct work item
-        call_args = mock_cleanup.call_args
-        work_item = call_args[0][0]  # First positional argument
-        assert work_item.id == "cleanup-main-repo"
-        assert "uncommitted changes" in work_item.title.lower()
+        # Create a temporary logger
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_logger = RunLogger(base_dir=tmpdir)
+            repo_path = Path.cwd()
+            
+            result = _check_and_commit_main_repo(repo_path, run_logger)
+            
+            assert result is True  # Should return True after successful cleanup
+            # Should call subprocess for git status
+            assert mock_subprocess.call_count >= 1
+            mock_cleanup.assert_called_once()
+            
+            # Verify cleanup agent was called with correct work item
+            call_args = mock_cleanup.call_args
+            work_item = call_args[0][0]  # First positional argument
+            assert work_item.id == "cleanup-main-repo"
+            assert "uncommitted changes" in work_item.title.lower()
     
     def test_aggregate_stats(self) -> None:
         """Test _aggregate_stats function."""

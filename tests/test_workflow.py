@@ -747,11 +747,12 @@ class TestCheckParentHierarchy:
 class TestProcessWorkItem:
     """Test process_work_item function."""
     
+    @patch('src.pokepoke.workflow.run_beta_tester')  # Mock beta tester
     @patch('src.pokepoke.workflow._finalize_work_item')
     @patch('os.chdir')
     @patch('os.getcwd')
     @patch('src.pokepoke.workflow._run_cleanup_with_timeout')
-    @patch('src.pokepoke.workflow.invoke_copilot_cli')
+    @patch('src.pokepoke.workflow.invoke_copilot')
     @patch('src.pokepoke.workflow.has_uncommitted_changes')
     @patch('src.pokepoke.workflow._setup_worktree')
     @patch('builtins.input')
@@ -766,7 +767,8 @@ class TestProcessWorkItem:
         mock_cleanup_timeout: Mock,
         mock_getcwd: Mock,
         mock_chdir: Mock,
-        mock_finalize: Mock
+        mock_finalize: Mock,
+        mock_beta: Mock
     ) -> None:
         """Test skipping item in interactive mode."""
         item = BeadsWorkItem(
@@ -779,6 +781,7 @@ class TestProcessWorkItem:
         )
         
         mock_input.return_value = 'n'
+        mock_beta.return_value = None  # Beta tester returns None
         
         success, count, stats, cleanup_runs = process_work_item(
             item, interactive=True
@@ -824,11 +827,12 @@ class TestProcessWorkItem:
         assert stats is None
         assert cleanup_runs == 0
     
+    @patch('src.pokepoke.workflow.run_beta_tester')  # Mock beta tester
     @patch('src.pokepoke.workflow._finalize_work_item')
     @patch('os.chdir')
     @patch('os.getcwd')
     @patch('src.pokepoke.workflow._run_cleanup_with_timeout')
-    @patch('src.pokepoke.workflow.invoke_copilot_cli')
+    @patch('src.pokepoke.workflow.invoke_copilot')
     @patch('src.pokepoke.workflow.has_uncommitted_changes')
     @patch('src.pokepoke.workflow._setup_worktree')
     @patch('src.pokepoke.workflow.assign_and_sync_item')
@@ -845,7 +849,8 @@ class TestProcessWorkItem:
         mock_cleanup_timeout: Mock,
         mock_getcwd: Mock,
         mock_chdir: Mock,
-        mock_finalize: Mock
+        mock_finalize: Mock,
+        mock_beta: Mock
     ) -> None:
         """Test when Copilot makes no changes."""
         item = BeadsWorkItem(
@@ -871,6 +876,7 @@ class TestProcessWorkItem:
         )
         mock_cleanup_timeout.return_value = (True, 0)  # Mock returns tuple
         mock_finalize.return_value = True
+        mock_beta.return_value = None  # Beta tester returns None
         
         success, count, stats, cleanup_runs = process_work_item(
             item, interactive=True
@@ -881,11 +887,12 @@ class TestProcessWorkItem:
         # Cleanup is called even with no changes (it just exits early)
         mock_cleanup_timeout.assert_called_once()
     
+    @patch('src.pokepoke.workflow.run_beta_tester')  # Mock beta tester
     @patch('src.pokepoke.workflow.cleanup_worktree')
     @patch('os.chdir')
     @patch('os.getcwd')
     @patch('src.pokepoke.workflow._run_cleanup_with_timeout')
-    @patch('src.pokepoke.workflow.invoke_copilot_cli')
+    @patch('src.pokepoke.workflow.invoke_copilot')
     @patch('src.pokepoke.workflow.has_uncommitted_changes')
     @patch('src.pokepoke.workflow._setup_worktree')
     @patch('src.pokepoke.workflow.assign_and_sync_item')
@@ -902,7 +909,8 @@ class TestProcessWorkItem:
         mock_cleanup_timeout: Mock,
         mock_getcwd: Mock,
         mock_chdir: Mock,
-        mock_cleanup: Mock
+        mock_cleanup: Mock,
+        mock_beta: Mock
     ) -> None:
         """Test when Copilot CLI fails."""
         item = BeadsWorkItem(
@@ -928,6 +936,7 @@ class TestProcessWorkItem:
             attempt_count=1
         )
         mock_cleanup_timeout.return_value = (True, 0)
+        mock_beta.return_value = None  # Beta tester returns None
         
         success, count, stats, cleanup_runs = process_work_item(
             item, interactive=True

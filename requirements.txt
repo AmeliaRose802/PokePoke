@@ -1,3 +1,5 @@
 # PokePoke Dependencies
-# No external dependencies required - uses stdlib only!
 # Python 3.8+ required for dataclasses and typing features
+
+# GitHub Copilot SDK for programmatic CLI integration
+github-copilot-sdk>=0.1.0

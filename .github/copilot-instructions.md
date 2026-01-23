@@ -251,6 +251,61 @@ pytest tests/integration/
 - Debugging issues with Copilot CLI or git operations
 - Verifying end-to-end workflows
 
+### 🔧 MCP Server Testing
+
+**When modifying the ICM MCP Server (`C:\Users\ameliapayne\icm_queue_c#`):**
+
+**REQUIRED - Restart and test after changes:**
+
+**Note:** The `Restart-MCP` and `rmcp` commands are automatically available when running through PokePoke. No need to source scripts manually!
+
+1. **Restart the MCP server**:
+   ```powershell
+   Restart-MCP
+   # Or use the short alias:
+   rmcp
+   ```
+
+2. **Test your changes** with Copilot CLI:
+   ```powershell
+   copilot -p "Use the MCP tool I just modified to test if my fix works" --allow-all-tools --no-ask-user
+   ```
+
+**Why restart is required:**
+- The MCP server runs as a background process
+- Code changes require a server restart to take effect
+- The `Restart-MCP` command stops the old server and starts a fresh instance
+- Copilot CLI connects to the running server, so it needs to be restarted to pick up changes
+
+**Testing workflow for MCP server changes:**
+1. ✅ Make your code changes to the MCP server
+2. ✅ Commit your changes (quality gates will run)
+3. ✅ Run `Restart-MCP` or `rmcp` to restart the server with your changes
+4. ✅ Use Copilot CLI to test the modified tool in autonomous mode
+5. ✅ Verify the fix works as expected
+6. ✅ If it doesn't work, make additional changes and repeat
+
+**Example - Testing a bug fix:**
+```powershell
+# 1. Fixed a bug in run_kusto_query tool
+git add .
+git commit -m "fix(mcp): handle null parameters in run_kusto_query"
+
+# 2. Restart server to load changes (commands auto-available!)
+rmcp
+
+# 3. Test the fix with Copilot CLI
+copilot -p "Run a kusto query with null parameters to test my fix" --allow-all-tools --no-ask-user
+
+# 4. Verify the fix worked
+# If it worked: You're done!
+# If it failed: Go back to step 1 and refine the fix
+```
+
+**Available commands (automatically loaded by PokePoke):**
+- `Restart-MCP` - Full restart with status verification
+- `rmcp` - Quick alias for Restart-MCP
+
 ---
 
 ## 🔗 TASK TRACKING WITH BEADS

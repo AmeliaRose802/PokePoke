@@ -11,6 +11,7 @@ from pokepoke.types import AgentStats, SessionStats
 from pokepoke.stats import print_stats
 from pokepoke.workflow import select_work_item, process_work_item
 from pokepoke.agent_runner import run_maintenance_agent
+from pokepoke.logging_utils import RunLogger
 
 
 def run_orchestrator(interactive: bool = True, continuous: bool = False) -> int:
@@ -27,10 +28,22 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False) -> int:
     print(f"🎯 PokePoke {mode_name} Mode")
     print("=" * 50)
     
+    # Initialize run logger
+    run_logger = RunLogger()
+    run_id = run_logger.get_run_id()
+    print(f"📝 Run ID: {run_id}")
+    print(f"📁 Logs: {run_logger.get_run_dir()}")
+    run_logger.log_orchestrator(f"PokePoke started in {mode_name} mode")
+    
+    # Use the current working directory (where orchestrator is executed from)
+    main_repo_path = Path.cwd()
+    print(f"📁 Working in repository: {main_repo_path}")
+    run_logger.log_orchestrator(f"Repository: {main_repo_path}")
+    
     # Maintenance agent frequency configuration
-    TECH_DEBT_FREQUENCY = 10
-    JANITOR_FREQUENCY = 3
-    BACKLOG_FREQUENCY = 5
+    TECH_DEBT_FREQUENCY = 3
+    JANITOR_FREQUENCY = 1
+    BACKLOG_FREQUENCY = 4
     
     # Track statistics
     start_time = time.time()
@@ -39,26 +52,34 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False) -> int:
     session_stats = SessionStats(agent_stats=AgentStats())
     
     print("📊 Recording starting beads statistics...")
+    run_logger.log_orchestrator("Recording starting beads statistics")
     session_stats.starting_beads_stats = get_beads_stats()
     
     try:
         while True:
             # Check main repo status before processing
             print("\n🔍 Checking main repository status...")
-            if not _check_and_commit_main_repo():
+            run_logger.log_orchestrator("Checking main repository status")
+            if not _check_and_commit_main_repo(main_repo_path, run_logger):
+                run_logger.log_orchestrator("Main repo check failed", level="ERROR")
                 return 1
             
             print("\nFetching ready work from beads...")
+            run_logger.log_orchestrator("Fetching ready work from beads")
             ready_items = get_ready_work_items()
             
             selected_item = select_work_item(ready_items, interactive)
             
             if selected_item is None:
                 print("\n👋 Exiting PokePoke.")
+                run_logger.log_orchestrator("User chose to exit")
                 return 0
             
             # Process the selected item
-            success, requests, item_stats, cleanup_runs = process_work_item(selected_item, interactive)
+            run_logger.log_orchestrator(f"Selected item: {selected_item.id} - {selected_item.title}")
+            success, requests, item_stats, cleanup_runs = process_work_item(
+                selected_item, interactive, run_logger=run_logger
+            )
             total_requests += requests
             session_stats.work_agent_runs += 1
             session_stats.cleanup_agent_runs += cleanup_runs
@@ -71,14 +92,18 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False) -> int:
             if success:
                 items_completed += 1
                 print(f"\n📈 Items completed this session: {items_completed}")
+                run_logger.log_orchestrator(f"Items completed this session: {items_completed}")
                 
-                _run_periodic_maintenance(items_completed, session_stats)
+                _run_periodic_maintenance(items_completed, session_stats, run_logger)
             
             # Decide whether to continue
             if not continuous:
                 session_stats.ending_beads_stats = get_beads_stats()
                 elapsed = time.time() - start_time
                 print_stats(items_completed, total_requests, elapsed, session_stats)
+                run_logger.finalize(items_completed, total_requests, elapsed)
+                print(f"\n📝 Run ID: {run_id}")
+                print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
                 return 0 if success else 1
             
             if interactive:
@@ -88,6 +113,9 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False) -> int:
                     elapsed = time.time() - start_time
                     print("\n👋 Exiting PokePoke.")
                     print_stats(items_completed, total_requests, elapsed, session_stats)
+                    run_logger.finalize(items_completed, total_requests, elapsed)
+                    print(f"\n📝 Run ID: {run_id}")
+                    print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
                     return 0
             else:
                 print("\n⏳ Waiting 5 seconds before next iteration...")
@@ -98,6 +126,9 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False) -> int:
         elapsed = time.time() - start_time
         print("\n\n👋 Interrupted. Exiting PokePoke.")
         print_stats(items_completed, total_requests, elapsed, session_stats)
+        run_logger.finalize(items_completed, total_requests, elapsed)
+        print(f"\n📝 Run ID: {run_id}")
+        print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
         return 0
     except Exception as e:
         session_stats.ending_beads_stats = get_beads_stats()
@@ -106,11 +137,19 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False) -> int:
         import traceback
         traceback.print_exc()
         print_stats(items_completed, total_requests, elapsed, session_stats)
+        run_logger.log_orchestrator(f"Error: {e}", level="ERROR")
+        run_logger.finalize(items_completed, total_requests, elapsed)
+        print(f"\n📝 Run ID: {run_id}")
+        print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
         return 1
 
 
-def _check_and_commit_main_repo() -> bool:
+def _check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool:
     """Check main repository status and commit beads changes if needed.
+    
+    Args:
+        repo_path: Path to the main repository
+        run_logger: Run logger instance
     
     Returns:
         True if ready to continue, False if should exit
@@ -120,7 +159,8 @@ def _check_and_commit_main_repo() -> bool:
         capture_output=True,
         text=True,
         encoding='utf-8',
-        check=True
+        check=True,
+        cwd=str(repo_path)
     )
     
     uncommitted = status_result.stdout.strip()
@@ -141,6 +181,7 @@ def _check_and_commit_main_repo() -> bool:
         # Handle problematic changes that need agent intervention
         if other_changes:
             print("\n⚠️  Main repository has uncommitted changes:")
+            run_logger.log_orchestrator("Main repository has uncommitted changes", level="WARNING")
             for line in other_changes[:10]:
                 print(f"   {line}")
             if len(other_changes) > 10:
@@ -148,6 +189,7 @@ def _check_and_commit_main_repo() -> bool:
             
             # Immediately run cleanup agent instead of delegating
             print("\n🤖 Launching cleanup agent to resolve uncommitted changes...")
+            run_logger.log_orchestrator("Launching cleanup agent for uncommitted changes")
             
             from pokepoke.agent_runner import invoke_cleanup_agent
             from pokepoke.types import BeadsWorkItem
@@ -163,27 +205,29 @@ def _check_and_commit_main_repo() -> bool:
                 labels=["cleanup", "auto-generated"]
             )
             
-            repo_root = Path.cwd()
-            cleanup_success, cleanup_stats = invoke_cleanup_agent(cleanup_item, repo_root)
+            cleanup_success, cleanup_stats = invoke_cleanup_agent(cleanup_item, repo_path)
             
             if cleanup_success:
                 print("✅ Cleanup agent successfully resolved uncommitted changes")
+                run_logger.log_orchestrator("Cleanup agent successfully resolved uncommitted changes")
                 return True  # Continue processing
             else:
                 print("❌ Cleanup agent failed to resolve uncommitted changes")
                 print("   Please manually resolve and try again")
+                run_logger.log_orchestrator("Cleanup agent failed to resolve uncommitted changes", level="ERROR")
                 return False
         
         # Auto-resolve beads changes
         if beads_changes:
             print("🔧 Committing beads database changes...")
-            subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8')
+            subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8', cwd=str(repo_path))
             
             # Check if there are actually staged changes to commit
             result = subprocess.run(
                 ["git", "diff", "--cached", "--quiet"],
                 capture_output=True,
-                encoding='utf-8'
+                encoding='utf-8',
+                cwd=str(repo_path)
             )
             
             if result.returncode != 0:  # Non-zero means there are staged changes
@@ -191,7 +235,8 @@ def _check_and_commit_main_repo() -> bool:
                     ["git", "commit", "-m", "chore: auto-commit beads changes"],
                     check=True,
                     capture_output=True,
-                    encoding='utf-8'
+                    encoding='utf-8',
+                    cwd=str(repo_path)
                 )
                 print("✅ Beads changes committed")
             else:
@@ -200,12 +245,13 @@ def _check_and_commit_main_repo() -> bool:
         # Auto-resolve worktree cleanup deletions
         if worktree_changes:
             print("🧹 Committing worktree cleanup changes...")
-            subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8')
+            subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8', cwd=str(repo_path))
             subprocess.run(
                 ["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
                 check=True,
                 capture_output=True,
-                encoding='utf-8'
+                encoding='utf-8',
+                cwd=str(repo_path)
             )
             print("✅ Worktree cleanup committed")
     
@@ -223,33 +269,51 @@ def _aggregate_stats(session_stats: SessionStats, item_stats: AgentStats) -> Non
     session_stats.agent_stats.premium_requests += item_stats.premium_requests
 
 
-def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats) -> None:
-    """Run periodic maintenance agents based on completion count."""
+def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats, run_logger: 'RunLogger') -> None:
+    """Run periodic maintenance agents based on completion count.
+    
+    Args:
+        items_completed: Number of items completed
+        session_stats: Session statistics
+        run_logger: Run logger instance
+    """
     pokepoke_repo = Path(r"C:\Users\ameliapayne\PokePoke")
     
     # Run Tech Debt Agent
-    if items_completed % 10 == 0:
+    if items_completed % 3 == 0:
         print("\n📊 Running Tech Debt Agent...")
+        run_logger.log_maintenance("tech_debt", "Starting Tech Debt Agent")
         session_stats.tech_debt_agent_runs += 1
         tech_stats = run_maintenance_agent("Tech Debt", "tech-debt.md", repo_root=pokepoke_repo, needs_worktree=False)
         if tech_stats:
             _aggregate_stats(session_stats, tech_stats)
+            run_logger.log_maintenance("tech_debt", "Tech Debt Agent completed successfully")
+        else:
+            run_logger.log_maintenance("tech_debt", "Tech Debt Agent failed")
     
     # Run Janitor Agent
-    if items_completed % 3 == 0:
+    if items_completed % 1 == 0:
         print("\n🧹 Running Janitor Agent...")
+        run_logger.log_maintenance("janitor", "Starting Janitor Agent")
         session_stats.janitor_agent_runs += 1
         janitor_stats = run_maintenance_agent("Janitor", "janitor.md", repo_root=pokepoke_repo, needs_worktree=True)
         if janitor_stats:
             _aggregate_stats(session_stats, janitor_stats)
+            run_logger.log_maintenance("janitor", "Janitor Agent completed successfully")
+        else:
+            run_logger.log_maintenance("janitor", "Janitor Agent failed")
     
     # Run Backlog Cleanup Agent
-    if items_completed % 5 == 0:
+    if items_completed % 4 == 0:
         print("\n🗑️ Running Backlog Cleanup Agent...")
+        run_logger.log_maintenance("backlog_cleanup", "Starting Backlog Cleanup Agent")
         session_stats.backlog_cleanup_agent_runs += 1
         backlog_stats = run_maintenance_agent("Backlog Cleanup", "backlog-cleanup.md", repo_root=pokepoke_repo, needs_worktree=False)
         if backlog_stats:
             _aggregate_stats(session_stats, backlog_stats)
+            run_logger.log_maintenance("backlog_cleanup", "Backlog Cleanup Agent completed successfully")
+        else:
+            run_logger.log_maintenance("backlog_cleanup", "Backlog Cleanup Agent failed")
 
 
 

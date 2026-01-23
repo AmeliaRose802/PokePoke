@@ -96,7 +96,7 @@ class TestCommitAllChanges:
 class TestInvokeCleanupAgent:
     """Test invoke_cleanup_agent function."""
     
-    @patch('src.pokepoke.agent_runner.invoke_copilot_cli')
+    @patch('src.pokepoke.agent_runner.invoke_copilot')
     @patch('pathlib.Path.read_text')
     @patch('pathlib.Path.exists')
     def test_successful_cleanup(
@@ -170,7 +170,7 @@ class TestInvokeCleanupAgent:
         assert success is False
         assert stats is None
     
-    @patch('src.pokepoke.agent_runner.invoke_copilot_cli')
+    @patch('src.pokepoke.agent_runner.invoke_copilot')
     @patch('pathlib.Path.read_text')
     @patch('pathlib.Path.exists')
     def test_cleanup_failure(
@@ -205,7 +205,7 @@ class TestInvokeCleanupAgent:
         assert success is False
         assert stats is None
     
-    @patch('src.pokepoke.agent_runner.invoke_copilot_cli')
+    @patch('src.pokepoke.agent_runner.invoke_copilot')
     @patch('pathlib.Path.read_text')
     @patch('pathlib.Path.exists')
     def test_cleanup_with_labels(
@@ -573,7 +573,7 @@ class TestRunBeadsOnlyAgent:
     """Test _run_beads_only_agent function."""
     
     @patch('src.pokepoke.agent_runner.parse_agent_stats')
-    @patch('src.pokepoke.agent_runner.invoke_copilot_cli')
+    @patch('src.pokepoke.agent_runner.invoke_copilot')
     def test_successful_beads_agent(
         self, 
         mock_invoke: Mock, 
@@ -615,7 +615,7 @@ class TestRunBeadsOnlyAgent:
             deny_write=True
         )
     
-    @patch('src.pokepoke.agent_runner.invoke_copilot_cli')
+    @patch('src.pokepoke.agent_runner.invoke_copilot')
     def test_failed_beads_agent(self, mock_invoke: Mock) -> None:
         """Test failed beads-only agent."""
         agent_item = BeadsWorkItem(
@@ -651,7 +651,7 @@ class TestRunWorktreeAgent:
     @patch('src.pokepoke.agent_runner.run_cleanup_loop')
     @patch('os.chdir')
     @patch('os.getcwd')
-    @patch('src.pokepoke.agent_runner.invoke_copilot_cli')
+    @patch('src.pokepoke.agent_runner.invoke_copilot')
     @patch('src.pokepoke.agent_runner.create_worktree')
     def test_successful_worktree_agent(
         self,
@@ -739,7 +739,7 @@ class TestRunWorktreeAgent:
     @patch('os.chdir')
     @patch('os.getcwd')
     @patch('src.pokepoke.agent_runner.run_cleanup_loop')
-    @patch('src.pokepoke.agent_runner.invoke_copilot_cli')
+    @patch('src.pokepoke.agent_runner.invoke_copilot')
     @patch('src.pokepoke.agent_runner.create_worktree')
     def test_worktree_agent_failure(
         self,
