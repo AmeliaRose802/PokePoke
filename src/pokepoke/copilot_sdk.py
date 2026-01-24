@@ -4,6 +4,7 @@ This module demonstrates using the GitHub Copilot SDK instead of subprocess call
 """
 
 import asyncio
+import os
 from typing import Optional, TYPE_CHECKING, Any
 
 from copilot import CopilotClient  # type: ignore[import-not-found]
@@ -64,6 +65,11 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     final_prompt = prompt or build_prompt_from_work_item(work_item)
     max_timeout = timeout or 7200.0
     
+    # Configure environment to handle encoding errors gracefully in SDK subprocess
+    # The SDK spawns copilot.cmd as a subprocess, and tool results may contain non-UTF-8 data
+    original_pythonioencoding = os.environ.get('PYTHONIOENCODING')
+    os.environ['PYTHONIOENCODING'] = 'utf-8:replace'
+    
     print(f"\n[WORK_ITEM] Invoking Copilot SDK for work item: {work_item.id}")
     print(f"   Title: {work_item.title}")
     print(f"   [TIMEOUT]  Max timeout: {max_timeout/60:.1f} minutes\n")
@@ -105,55 +111,90 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         output_lines = []
         errors = []
         
+        # Track statistics from usage events
+        total_input_tokens = 0
+        total_output_tokens = 0
+        total_cache_read_tokens = 0
+        total_cache_write_tokens = 0
+        total_cost = 0.0
+        turn_count = 0
+        
         # Event handler for streaming output
         def handle_event(event: Any) -> None:
-            # Debug: Print raw event structure to understand what we're receiving
+            nonlocal total_input_tokens, total_output_tokens, total_cache_read_tokens
+            nonlocal total_cache_write_tokens, total_cost, turn_count
+            
             event_type = event.type.value if hasattr(event.type, 'value') else str(event.type)
             
-            # Debug output to see actual event structure
-            print(f"[SDK DEBUG] Event type: {event_type}")
-            if hasattr(event, 'data'):
-                print(f"[SDK DEBUG] Event data type: {type(event.data)}")
-                print(f"[SDK DEBUG] Event data: {event.data}")
-            
             if event_type == "assistant.message_delta":
-                # Streaming message chunk - try multiple possible field names
+                # Streaming message chunk
                 delta = None
                 if hasattr(event, 'data'):
                     delta = getattr(event.data, 'delta_content', None) or \
                             getattr(event.data, 'delta', None) or \
-                            getattr(event.data, 'content', None) or \
-                            getattr(event.data, 'text', None)
+                            getattr(event.data, 'content', None)
                 
                 if delta:
                     print(delta, end="", flush=True)
                     output_lines.append(delta)
                     
             elif event_type == "assistant.message":
-                # Final complete message - try multiple possible field names
-                content = None
-                if hasattr(event, 'data'):
-                    content = getattr(event.data, 'content', None) or \
-                              getattr(event.data, 'text', None) or \
-                              getattr(event.data, 'message', None)
+                # Complete message - may have text content or tool requests
+                content = getattr(event.data, 'content', None) if hasattr(event, 'data') else None
+                tool_requests = getattr(event.data, 'tool_requests', None) if hasattr(event, 'data') else None
                 
-                print(f"\n[SDK] Message complete ({len(content) if content else 0} chars)")
-                if content and not output_lines:
-                    # If we didn't get deltas, use the complete message
-                    print(content)  # Print the content so we can see it
+                if content:
+                    print(content)
                     output_lines.append(content)
-                    
-            elif event_type == "tool.call":
-                # Tool being invoked
-                tool_name = getattr(event.data, 'tool_name', 'unknown') if hasattr(event, 'data') else 'unknown'
-                print(f"\n[SDK] Tool call: {tool_name}")
                 
-            elif event_type == "tool.result":
-                # Tool completed
+                # Show tool requests if present
+                if tool_requests and len(tool_requests) > 0:
+                    print(f"\n[Copilot] Calling {len(tool_requests)} tool(s)...")
+                    
+            elif event_type == "tool.execution_start":
+                # Tool is being executed
                 if hasattr(event, 'data'):
                     tool_name = getattr(event.data, 'tool_name', 'unknown')
-                    result_type = getattr(event.data, 'result_type', 'unknown')
-                    print(f"[SDK] Tool result: {tool_name} -> {result_type}")
+                    arguments = getattr(event.data, 'arguments', {})
+                    
+                    # Format tool call nicely
+                    args_preview = str(arguments)[:80]
+                    if len(str(arguments)) > 80:
+                        args_preview += "..."
+                    print(f"  🔧 {tool_name}({args_preview})")
+                    output_lines.append(f"\n[Tool] {tool_name}({args_preview})\n")
+                    output_lines.append(f"\n[Tool] {tool_name}({args_preview})\n")
+                
+            elif event_type == "tool.execution_complete":
+                # Tool completed - show result preview
+                if hasattr(event, 'data'):
+                    tool_call_id = getattr(event.data, 'tool_call_id', '')
+                    result = getattr(event.data, 'result', None)
+                    success = getattr(event.data, 'success', True)
+                    
+                    if result:
+                        # Result object has a 'content' attribute
+                        result_content = getattr(result, 'content', str(result)) if hasattr(result, 'content') else str(result)
+                        result_preview = str(result_content)[:100]
+                        if len(str(result_content)) > 100:
+                            result_preview += "..."
+                        
+                        status = "✅" if success else "❌"
+                        print(f"  {status} Result: {result_preview}")
+                        output_lines.append(f"[Result] {result_preview}\n")
+            
+            elif event_type == "assistant.usage":
+                # Track usage statistics
+                if hasattr(event, 'data'):
+                    total_input_tokens += getattr(event.data, 'input_tokens', 0) or 0
+                    total_output_tokens += getattr(event.data, 'output_tokens', 0) or 0
+                    total_cache_read_tokens += getattr(event.data, 'cache_read_tokens', 0) or 0
+                    total_cache_write_tokens += getattr(event.data, 'cache_write_tokens', 0) or 0
+                    total_cost += getattr(event.data, 'cost', 0.0) or 0.0
+            
+            elif event_type == "assistant.turn_end":
+                # Track turns
+                turn_count += 1
                 
             elif event_type == "session.idle":
                 # Session finished
@@ -186,6 +227,18 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                 error=f"SDK timeout after {max_timeout}s",
                 attempt_count=1
             )
+        except KeyboardInterrupt:
+            print("\n\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")
+            try:
+                await session.abort()
+            except Exception:
+                pass  # Best effort cleanup
+            return CopilotResult(
+                work_item_id=work_item.id,
+                success=False,
+                error="Interrupted by user",
+                attempt_count=1
+            )
         
         # Clean up session
         await session.destroy()
@@ -198,11 +251,35 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         print(f"[SDK] Result: {'SUCCESS' if success else 'FAILURE'}")
         print("=" * 60)
         
+        # Display statistics
+        if turn_count > 0 or total_input_tokens > 0:
+            print("\n📊 Session Statistics:")
+            print(f"   Turns: {turn_count}")
+            print(f"   Input tokens: {total_input_tokens:,}")
+            print(f"   Output tokens: {total_output_tokens:,}")
+            if total_cache_read_tokens > 0:
+                print(f"   Cache read tokens: {total_cache_read_tokens:,}")
+            if total_cache_write_tokens > 0:
+                print(f"   Cache write tokens: {total_cache_write_tokens:,}")
+            print(f"   Total tokens: {total_input_tokens + total_output_tokens:,}")
+            if total_cost > 0:
+                print(f"   Estimated cost: ${total_cost:.4f}")
+            print()
+        
         return CopilotResult(
             work_item_id=work_item.id,
             success=success,
             output=output_text,
             error="; ".join(errors) if errors else None,
+            attempt_count=1
+        )
+        
+    except KeyboardInterrupt:
+        print(f"\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")
+        return CopilotResult(
+            work_item_id=work_item.id,
+            success=False,
+            error="Interrupted by user",
             attempt_count=1
         )
         
@@ -222,6 +299,12 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             print("\n[SDK] Client stopped")
         except Exception as e:
             print(f"\n[SDK] Error stopping client: {e}")
+        
+        # Restore original encoding setting
+        if original_pythonioencoding is not None:
+            os.environ['PYTHONIOENCODING'] = original_pythonioencoding
+        else:
+            os.environ.pop('PYTHONIOENCODING', None)
 
 
 # Synchronous wrapper for compatibility

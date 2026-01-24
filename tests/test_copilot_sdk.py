@@ -603,3 +603,278 @@ class TestInvokeCopilotSDKAsync:
         )
         
         mock_build_prompt.assert_called_once_with(sample_work_item)
+    
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_invoke_copilot_sdk_with_tool_execution(self, mock_client_class, sample_work_item):
+        """Test SDK invocation with tool execution events."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        import asyncio
+        
+        mock_client = AsyncMock()
+        mock_session = AsyncMock()
+        mock_session.session_id = "test-session-tool-exec"
+        
+        mock_client.start = AsyncMock()
+        mock_client.create_session = AsyncMock(return_value=mock_session)
+        mock_client.stop = AsyncMock()
+        
+        mock_client_class.return_value = mock_client
+        
+        stored_handler = None
+        def mock_on(handler):
+            nonlocal stored_handler
+            stored_handler = handler
+        mock_session.on = mock_on
+        
+        async def mock_send(message):
+            async def send_events():
+                await asyncio.sleep(0.01)
+                if stored_handler:
+                    # Tool execution start
+                    event = MagicMock()
+                    event.type.value = "tool.execution_start"
+                    event.data = MagicMock(
+                        tool_name="read_file",
+                        arguments={"path": "/test/file.txt"}
+                    )
+                    stored_handler(event)
+                    
+                    # Tool execution complete with result
+                    event = MagicMock()
+                    event.type.value = "tool.execution_complete"
+                    result_obj = MagicMock()
+                    result_obj.content = "File content here"
+                    event.data = MagicMock(
+                        tool_call_id="call-123",
+                        result=result_obj,
+                        success=True
+                    )
+                    stored_handler(event)
+                    
+                    # Completion
+                    event = MagicMock()
+                    event.type.value = "session.idle"
+                    stored_handler(event)
+            asyncio.create_task(send_events())
+        
+        mock_session.send = mock_send
+        mock_session.destroy = AsyncMock()
+        
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item
+        )
+        
+        assert result.success
+        assert "[Tool] read_file" in result.output
+        assert "[Result]" in result.output
+    
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_invoke_copilot_sdk_with_usage_statistics(self, mock_client_class, sample_work_item):
+        """Test SDK invocation with usage statistics tracking."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        import asyncio
+        
+        mock_client = AsyncMock()
+        mock_session = AsyncMock()
+        mock_session.session_id = "test-session-stats"
+        
+        mock_client.start = AsyncMock()
+        mock_client.create_session = AsyncMock(return_value=mock_session)
+        mock_client.stop = AsyncMock()
+        
+        mock_client_class.return_value = mock_client
+        
+        stored_handler = None
+        def mock_on(handler):
+            nonlocal stored_handler
+            stored_handler = handler
+        mock_session.on = mock_on
+        
+        async def mock_send(message):
+            async def send_events():
+                await asyncio.sleep(0.01)
+                if stored_handler:
+                    # Usage statistics
+                    event = MagicMock()
+                    event.type.value = "assistant.usage"
+                    event.data = MagicMock(
+                        input_tokens=100,
+                        output_tokens=50,
+                        cache_read_tokens=20,
+                        cache_write_tokens=10,
+                        cost=0.0042
+                    )
+                    stored_handler(event)
+                    
+                    # Turn end
+                    event = MagicMock()
+                    event.type.value = "assistant.turn_end"
+                    stored_handler(event)
+                    
+                    # Completion
+                    event = MagicMock()
+                    event.type.value = "session.idle"
+                    stored_handler(event)
+            asyncio.create_task(send_events())
+        
+        mock_session.send = mock_send
+        mock_session.destroy = AsyncMock()
+        
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item
+        )
+        
+        assert result.success
+    
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_invoke_copilot_sdk_keyboard_interrupt_during_wait(self, mock_client_class, sample_work_item):
+        """Test SDK invocation with keyboard interrupt during wait."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        import asyncio
+        
+        mock_client = AsyncMock()
+        mock_session = AsyncMock()
+        mock_session.session_id = "test-session-interrupt"
+        mock_session.abort = AsyncMock()
+        
+        mock_client.start = AsyncMock()
+        mock_client.create_session = AsyncMock(return_value=mock_session)
+        mock_client.stop = AsyncMock()
+        
+        mock_client_class.return_value = mock_client
+        
+        stored_handler = None
+        def mock_on(handler):
+            nonlocal stored_handler
+            stored_handler = handler
+        mock_session.on = mock_on
+        
+        # Simulate keyboard interrupt during send
+        async def mock_send(message):
+            await asyncio.sleep(0.01)
+            raise KeyboardInterrupt("User interrupted")
+        
+        mock_session.send = mock_send
+        mock_session.destroy = AsyncMock()
+        
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item
+        )
+        
+        assert not result.success
+        assert "Interrupted by user" in result.error
+    
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.copilot_sdk.os.environ', new_callable=dict)
+    async def test_invoke_copilot_sdk_environment_handling(self, mock_environ, mock_client_class, sample_work_item):
+        """Test SDK invocation handles PYTHONIOENCODING environment variable."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        import asyncio
+        
+        # Start with original value
+        mock_environ['PYTHONIOENCODING'] = 'utf-8'
+        
+        mock_client = AsyncMock()
+        mock_session = AsyncMock()
+        mock_session.session_id = "test-session-env"
+        
+        mock_client.start = AsyncMock()
+        mock_client.create_session = AsyncMock(return_value=mock_session)
+        mock_client.stop = AsyncMock()
+        
+        mock_client_class.return_value = mock_client
+        
+        stored_handler = None
+        def mock_on(handler):
+            nonlocal stored_handler
+            stored_handler = handler
+        mock_session.on = mock_on
+        
+        async def mock_send(message):
+            async def send_events():
+                await asyncio.sleep(0.01)
+                if stored_handler:
+                    event = MagicMock()
+                    event.type.value = "session.idle"
+                    stored_handler(event)
+            asyncio.create_task(send_events())
+        
+        mock_session.send = mock_send
+        mock_session.destroy = AsyncMock()
+        
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item
+        )
+        
+        assert result.success
+        # Environment should be restored to original value
+        assert mock_environ.get('PYTHONIOENCODING') == 'utf-8'
+    
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_invoke_copilot_sdk_with_tool_requests(self, mock_client_class, sample_work_item):
+        """Test SDK invocation with tool requests in assistant message."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        import asyncio
+        
+        mock_client = AsyncMock()
+        mock_session = AsyncMock()
+        mock_session.session_id = "test-session-tool-requests"
+        
+        mock_client.start = AsyncMock()
+        mock_client.create_session = AsyncMock(return_value=mock_session)
+        mock_client.stop = AsyncMock()
+        
+        mock_client_class.return_value = mock_client
+        
+        stored_handler = None
+        def mock_on(handler):
+            nonlocal stored_handler
+            stored_handler = handler
+        mock_session.on = mock_on
+        
+        async def mock_send(message):
+            async def send_events():
+                await asyncio.sleep(0.01)
+                if stored_handler:
+                    # Message with tool requests
+                    event = MagicMock()
+                    event.type.value = "assistant.message"
+                    event.data = MagicMock(
+                        content="Let me read that file",
+                        tool_requests=[{"tool": "read_file", "args": {}}]
+                    )
+                    stored_handler(event)
+                    
+                    # Completion
+                    event = MagicMock()
+                    event.type.value = "session.idle"
+                    stored_handler(event)
+            asyncio.create_task(send_events())
+        
+        mock_session.send = mock_send
+        mock_session.destroy = AsyncMock()
+        
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item
+        )
+        
+        assert result.success
+        assert "Let me read that file" in result.output
+    
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_invoke_copilot_sdk_keyboard_interrupt_outer(self, mock_client_class, sample_work_item):
+        """Test SDK invocation with keyboard interrupt in outer try block."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        
+        mock_client = AsyncMock()
+        mock_client.start = AsyncMock(side_effect=KeyboardInterrupt("User interrupted"))
+        mock_client.stop = AsyncMock()
+        
+        mock_client_class.return_value = mock_client
+        
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item
+        )
+        
+        assert not result.success
+        assert "Interrupted by user" in result.error
