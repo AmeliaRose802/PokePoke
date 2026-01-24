@@ -218,40 +218,22 @@ def _check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> boo
                 run_logger.log_orchestrator("Cleanup agent failed to resolve uncommitted changes", level="ERROR")
                 return False
         
-        # Auto-resolve beads changes
+        # Beads changes are handled by beads' own sync mechanism (bd sync)
+        # Do NOT manually commit them - beads daemon handles this automatically
         if beads_changes:
-            print("🔧 Committing beads database changes...")
-            subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8', cwd=str(repo_path))
-            
-            # Check if there are actually staged changes to commit
-            result = subprocess.run(
-                ["git", "diff", "--cached", "--quiet"],
-                capture_output=True,
-                encoding='utf-8',
-                cwd=str(repo_path)
-            )
-            
-            if result.returncode != 0:  # Non-zero means there are staged changes
-                subprocess.run(
-                    ["git", "commit", "-m", "chore: auto-commit beads changes"],
-                    check=True,
-                    capture_output=True,
-                    encoding='utf-8',
-                    cwd=str(repo_path)
-                )
-                print("✅ Beads changes committed")
-            else:
-                print("ℹ️  No beads changes to commit")
+            print("ℹ️  Beads database changes detected - will be synced by beads daemon")
+            print("ℹ️  Run 'bd sync' to force immediate sync if needed")
         
         # Auto-resolve worktree cleanup deletions
         if worktree_changes:
             print("🧹 Committing worktree cleanup changes...")
-            subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8', cwd=str(repo_path))
+            subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8', errors='replace', cwd=str(repo_path))
             subprocess.run(
                 ["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
                 check=True,
                 capture_output=True,
                 encoding='utf-8',
+                errors='replace',
                 cwd=str(repo_path)
             )
             print("✅ Worktree cleanup committed")
