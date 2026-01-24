@@ -4,12 +4,15 @@ This module demonstrates using the GitHub Copilot SDK instead of subprocess call
 """
 
 import asyncio
-from typing import Optional
+from typing import Optional, TYPE_CHECKING, Any
 
-from copilot import CopilotClient
+from copilot import CopilotClient  # type: ignore[import-not-found]
 
 from .types import BeadsWorkItem, CopilotResult, RetryConfig
 from .prompts import PromptService
+
+if TYPE_CHECKING:
+    from .logging import ItemLogger  # type: ignore[import-untyped]
 
 
 def build_prompt_from_work_item(work_item: BeadsWorkItem) -> str:
@@ -36,12 +39,13 @@ def build_prompt_from_work_item(work_item: BeadsWorkItem) -> str:
     return service.load_and_render("beads-item", variables)
 
 
-async def invoke_copilot_sdk(
+async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     work_item: BeadsWorkItem,
     prompt: Optional[str] = None,
     retry_config: Optional[RetryConfig] = None,
     timeout: Optional[float] = None,
-    deny_write: bool = False
+    deny_write: bool = False,
+    item_logger: Optional['ItemLogger'] = None
 ) -> CopilotResult:
     """Invoke GitHub Copilot using the SDK (async).
     
@@ -51,6 +55,7 @@ async def invoke_copilot_sdk(
         retry_config: Retry configuration (uses defaults if not provided).
         timeout: Maximum execution time in seconds (default: 7200 = 2 hours).
         deny_write: If True, deny file write tools (for beads-only agents).
+        item_logger: Optional item logger for file logging (currently unused in SDK mode).
         
     Returns:
         Result of the Copilot invocation.
@@ -101,7 +106,7 @@ async def invoke_copilot_sdk(
         errors = []
         
         # Event handler for streaming output
-        def handle_event(event):
+        def handle_event(event: Any) -> None:
             event_type = event.type.value if hasattr(event.type, 'value') else str(event.type)
             
             if event_type == "assistant.message_delta":
@@ -200,22 +205,35 @@ async def invoke_copilot_sdk(
 
 
 # Synchronous wrapper for compatibility
-def invoke_copilot_sdk_sync(
+def invoke_copilot_sdk_sync(  # type: ignore[no-any-unimported]
     work_item: BeadsWorkItem,
     prompt: Optional[str] = None,
     retry_config: Optional[RetryConfig] = None,
     timeout: Optional[float] = None,
-    deny_write: bool = False
+    deny_write: bool = False,
+    item_logger: Optional['ItemLogger'] = None
 ) -> CopilotResult:
     """Synchronous wrapper around invoke_copilot_sdk.
     
     This allows the SDK version to be used as a drop-in replacement
     for the current subprocess-based implementation.
+    
+    Args:
+        work_item: The beads work item to process.
+        prompt: Optional pre-built prompt (if not provided, will build one from template).
+        retry_config: Retry configuration (uses defaults if not provided).
+        timeout: Maximum execution time in seconds (default: 7200 = 2 hours).
+        deny_write: If True, deny file write tools (for beads-only agents).
+        item_logger: Optional item logger for file logging (currently unused in SDK mode).
+        
+    Returns:
+        Result of the Copilot invocation.
     """
     return asyncio.run(invoke_copilot_sdk(
         work_item=work_item,
         prompt=prompt,
         retry_config=retry_config,
         timeout=timeout,
-        deny_write=deny_write
+        deny_write=deny_write,
+        item_logger=item_logger
     ))
