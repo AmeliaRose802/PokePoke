@@ -87,12 +87,13 @@ def handle_beads_auto_commit() -> None:
     """
     try:
         print("🔧 Committing beads database changes in main repo...")
-        subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8')
+        subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8', errors='replace')
         subprocess.run(
             ["git", "commit", "-m", "chore: sync beads before worktree merge"],
             check=True,
             capture_output=True,
-            encoding='utf-8'
+            encoding='utf-8',
+            errors='replace'
         )
         print("✅ Beads changes committed")
     except subprocess.CalledProcessError as e:

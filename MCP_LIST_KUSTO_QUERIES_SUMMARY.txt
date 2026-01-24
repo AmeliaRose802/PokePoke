@@ -1,0 +1,333 @@
+========================================================================
+MCP TOOL TEST REPORT: list_kusto_queries
+========================================================================
+Test Date: 2026-01-23
+Tester: Beta Test Agent
+Tool Server: IcmMcpServer v1.0.0.0
+========================================================================
+
+TEST EXECUTION SUMMARY
+========================================================================
+
+All 13 test cases executed successfully (100% pass rate):
+✓ 1 test with no parameters
+✓ 5 tests with category filters  
+✓ 5 tests with search terms
+✓ 2 tests with combined parameters
+
+No crashes, exceptions, or errors encountered.
+
+========================================================================
+TEST CASE 1: NO PARAMETERS
+========================================================================
+
+Parameters Used: {}
+Result: ✓ SUCCESS
+
+What I Got:
+- Returned 19 query templates
+- Execution time: 234ms
+- Structured JSON response with complete metadata
+
+Key Findings:
+- Tool returned ALL available queries when no filters applied
+- Each query includes: name, description, category, cluster, database, parameters
+- Two main categories discovered: 'node' (7 queries) and 'resolution' (12 queries)
+
+Issues Found:
+❌ Does NOT return actual Kusto query text - only metadata
+❌ Categories are 'node' and 'resolution', NOT the documented examples
+
+========================================================================
+TEST CASE 2: CATEGORY FILTERS
+========================================================================
+
+Tested Categories: performance, error, security, diagnostics, troubleshooting
+Result: ✓ ALL PASSED (but all returned 0 results)
+
+Test 2.1 - Category: "performance"
+  Parameters: {"category": "performance"}
+  Result: 0 queries found (empty array)
+  Execution time: 132ms
+
+Test 2.2 - Category: "error"
+  Parameters: {"category": "error"}  
+  Result: 0 queries found (empty array)
+  Execution time: 206ms
+
+Test 2.3 - Category: "security"
+  Parameters: {"category": "security"}
+  Result: 0 queries found (empty array)
+  Execution time: 96ms
+
+Test 2.4 - Category: "diagnostics"
+  Parameters: {"category": "diagnostics"}
+  Result: 0 queries found (empty array)
+  Execution time: 334ms
+
+Test 2.5 - Category: "troubleshooting"
+  Parameters: {"category": "troubleshooting"}
+  Result: 0 queries found (empty array)
+  Execution time: 230ms
+
+Issues Found:
+❌ CRITICAL: Tool documentation examples don't match reality
+❌ All suggested category names returned zero results
+❌ Actual categories are: 'node' and 'resolution'
+❌ This creates a terrible user experience during incidents
+
+========================================================================
+TEST CASE 3: SEARCH PARAMETER
+========================================================================
+
+Tested Search Terms: error, performance, security, latency, failure
+Result: ✓ ALL PASSED (but all returned 0 results)
+
+Test 3.1 - Search: "error"
+  Parameters: {"search": "error"}
+  Result: 0 queries found
+  Execution time: 144ms
+
+Test 3.2 - Search: "performance"
+  Parameters: {"search": "performance"}
+  Result: 0 queries found
+  Execution time: 99ms
+
+Test 3.3 - Search: "security"
+  Parameters: {"search": "security"}
+  Result: 0 queries found
+  Execution time: 94ms
+
+Test 3.4 - Search: "latency"
+  Parameters: {"search": "latency"}
+  Result: 0 queries found
+  Execution time: 142ms
+
+Test 3.5 - Search: "failure"
+  Parameters: {"search": "failure"}
+  Result: 0 queries found
+  Execution time: 161ms
+
+Issues Found:
+❌ CRITICAL: None of the common incident investigation terms matched
+❌ Search appears to be exact match only (no fuzzy matching)
+❌ Poor discoverability - hard to find relevant queries during incidents
+❌ Need better query descriptions/tags or fuzzy search
+
+========================================================================
+TEST CASE 4: COMBINED PARAMETERS
+========================================================================
+
+Test 4.1 - Combined filters
+  Parameters: {"category": "performance", "search": "latency"}
+  Result: 0 queries found
+  Execution time: 89ms
+
+Test 4.2 - Combined filters
+  Parameters: {"category": "error", "search": "failure"}
+  Result: 0 queries found
+  Execution time: 126ms
+
+Issues Found:
+❌ Both tests failed to find queries due to category/search mismatches
+✓ Combined filtering works technically, just no data matches
+
+========================================================================
+AVAILABLE QUERY TEMPLATES (19 total)
+========================================================================
+
+CATEGORY: node (7 queries)
+----------------------------------------------------------------------
+1. imds_heartbeat
+   - Get IMDS heartbeat status over time for a node
+   - Params: node_id, start_date, end_date
+   - Cluster: azcore.centralus / SharedWorkspace
+
+2. imds_successful_requests  
+   - Count successful IMDS requests with container ID info
+   - Params: node_id, start_date, end_date
+   - Cluster: azcore.centralus / Fa
+
+3. imds_version
+   - Get IMDS version/package information
+   - Params: node_id, start_date, end_date
+   - Cluster: azcore.centralus / SharedWorkspace
+
+4. node_snapshot
+   - Comprehensive node state snapshot
+   - Params: node_id, start_time, end_time
+   - Cluster: hawkeye / AzureCM
+
+5. wireserver_heartbeat
+   - Get WireServer heartbeat status
+   - Params: node_id, start_date, end_date
+   - Cluster: azcore.centralus / Fa
+
+6. wireserver_successful_requests
+   - Count HTTP 200 responses from WireServer
+   - Params: node_id, start_date, end_date
+   - Cluster: azcore.centralus / Fa
+
+7. wireserver_version
+   - Get WireServer/Host Agent versions
+   - Params: node_id, start_date, end_date
+   - Cluster: azcore.centralus / AzureCP
+
+CATEGORY: resolution (12 queries)
+----------------------------------------------------------------------
+8-19. Various resolution queries:
+   - resolve_arm_resourceid_to_nodeid
+   - resolve_arm_to_container_guestagent
+   - resolve_arm_to_container_imds
+   - resolve_containerid_to_nodeid_wireserver
+   - resolve_containerid_to_nodeid_wireserver_precise
+   - resolve_containerid_via_guestagent
+   - resolve_correlationid_to_nodeid
+   - resolve_subscriptionid_to_nodeid
+   - resolve_tenantid_to_nodeid
+   - resolve_vmid_to_nodeid_imds
+   - resolve_vmid_via_attest
+   - resolve_vmid_via_guestagent
+
+All resolution queries map Azure identifiers to physical nodes.
+
+========================================================================
+USEFULNESS FOR INCIDENT INVESTIGATION
+========================================================================
+
+SCORE: 6.4/10 - Moderately Useful But Needs Improvement
+
+STRENGTHS (What Works Well)
+----------------------------------------------------------------------
+✓ 100% stability - never crashed or errored
+✓ Fast response times (89-334ms)
+✓ Well-structured JSON output
+✓ Excellent coverage for Azure infrastructure mapping
+✓ Multiple fallback strategies (IMDS/WireServer/GuestAgent)
+✓ Comprehensive node health monitoring
+✓ Good for tracing VM/Container → Node relationships
+
+WEAKNESSES (Critical Issues)
+----------------------------------------------------------------------
+❌ Documentation lies - suggested categories don't exist
+❌ Search functionality nearly useless for common terms
+❌ Only returns metadata, not actual Kusto queries
+❌ Narrow focus - 63% of queries are just ID resolution
+❌ No query complexity indicators
+❌ No execution time estimates
+❌ No examples or expected outputs
+❌ Poor discoverability during incidents
+❌ Missing application-level diagnostic queries
+
+REAL-WORLD INCIDENT SCENARIOS
+----------------------------------------------------------------------
+
+GOOD FOR:
+✓ Azure VM won't start - need to find the physical node
+✓ Container connectivity issues - trace to node
+✓ Customer reports ARM errors - map to infrastructure  
+✓ IMDS/WireServer health checks
+✓ Multi-level Azure identifier resolution
+
+BAD FOR:
+❌ Application throwing errors (no error analysis queries)
+❌ Performance degradation (no latency/throughput queries)
+❌ Security incident response (no security queries)
+❌ Capacity planning (no resource utilization queries)
+❌ Network issues (no network diagnostic queries)
+
+========================================================================
+HARSH CRITIQUE (As Requested)
+========================================================================
+
+🔥 DEAL-BREAKER ISSUES:
+
+1. THE DOCUMENTATION IS WRONG
+   - Tool says use categories like 'performance', 'error', 'security'
+   - Reality: only 'node' and 'resolution' exist
+   - During a production incident, I don't have time for this BS
+   - This is user-hostile and wastes precious incident time
+
+2. SEARCH IS BROKEN/USELESS
+   - 5 common incident terms = 5 zero-result responses
+   - If I search 'error' during an error incident, I expect results
+   - Either the search is too strict or queries are poorly tagged
+   - Either way, it's nearly useless for discovery
+
+3. IT'S A CATALOG, NOT A SOLUTION
+   - I get metadata but NO actual query text
+   - What's the point? I still need another tool to execute
+   - Should be integrated with execute_kusto_query
+   - Currently just an incomplete reference
+
+4. EXTREMELY NARROW FOCUS
+   - 12 of 19 queries (63%) are ID resolution variations
+   - That's one job done twelve different ways
+   - Where are the actual DIAGNOSTIC queries?
+   - This feels like an MVP that never got expanded
+
+5. MISSING CRITICAL METADATA
+   - No indication if query will take 1 second or 1 hour
+   - No complexity indicators
+   - No 'this will be slow' warnings
+   - Could accidentally DoS Kusto during incident
+
+🤔 CONFUSING DESIGN CHOICES:
+
+- Why two 'precise' vs 'non-precise' wireserver queries?
+- When do I use IMDS vs GuestAgent vs WireServer?
+- No guidance in descriptions
+- No best practices or recommendations
+
+========================================================================
+RECOMMENDED IMPROVEMENTS
+========================================================================
+
+HIGH PRIORITY (Must Fix):
+----------------------------------------------------------------------
+1. Fix documentation - match reality or implement documented categories
+2. Include actual Kusto query text with parameter placeholders
+3. Implement fuzzy search or improve query tagging
+4. Add query complexity/execution time estimates
+
+MEDIUM PRIORITY (Should Have):
+----------------------------------------------------------------------
+5. Expand query library beyond infrastructure mapping
+6. Add application-level diagnostic queries
+7. Include performance/error/security queries as documented
+8. Better organization - subcategories or tags
+9. Add usage examples and expected outputs
+10. Show which resolution strategy to use when
+
+LOW PRIORITY (Nice to Have):
+----------------------------------------------------------------------
+11. Track query usage statistics
+12. Surface 'most helpful for incidents like this'
+13. Direct integration with execute_kusto_query
+14. Pre-fill parameters from incident context
+15. Cost indicators for expensive queries
+
+========================================================================
+FINAL VERDICT
+========================================================================
+
+Stability:        10/10 - Rock solid, never failed
+Functionality:     6/10 - Works, but UX issues reduce effectiveness
+Coverage:          5/10 - Great for infra, poor for general diagnostics
+Usability:         4/10 - Hard to discover relevant queries
+Incident Value:    7/10 - Useful for Azure infra, limited otherwise
+
+OVERALL: 6.4/10 - USEFUL BUT NEEDS SIGNIFICANT WORK
+
+RECOMMENDATION:
+✓ Use it for Azure infrastructure incidents (VM/Container mapping)
+❌ Don't rely on it for general application diagnostics
+⚠ Keep manual Kusto queries as backup
+⚠ Be aware documentation doesn't match reality
+
+The tool has a solid foundation but needs significant UX improvements
+before it becomes truly valuable during high-pressure incidents.
+
+========================================================================
+END OF REPORT
+========================================================================

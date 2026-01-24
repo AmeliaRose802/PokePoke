@@ -189,22 +189,24 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
             # Auto-resolve beads changes
             if beads_changes:
                 print("🔧 Committing beads database changes...")
-                subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8')
+                subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8', errors='replace')
                 subprocess.run(
                     ["git", "commit", "-m", f"chore: sync beads before merge of {branch_name}"],
                     check=True,
-                    encoding='utf-8'
+                    encoding='utf-8',
+                    errors='replace'
                 )
                 print("✅ Beads changes committed")
             
             # Auto-resolve worktree cleanup deletions
             if worktree_changes:
                 print("🧹 Committing worktree cleanup changes...")
-                subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8')
+                subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8', errors='replace')
                 subprocess.run(
                     ["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
                     check=True,
-                    encoding='utf-8'
+                    encoding='utf-8',
+                    errors='replace'
                 )
                 print("✅ Worktree cleanup committed")
         

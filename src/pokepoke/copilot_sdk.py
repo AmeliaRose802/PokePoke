@@ -107,33 +107,53 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         
         # Event handler for streaming output
         def handle_event(event: Any) -> None:
+            # Debug: Print raw event structure to understand what we're receiving
             event_type = event.type.value if hasattr(event.type, 'value') else str(event.type)
             
+            # Debug output to see actual event structure
+            print(f"[SDK DEBUG] Event type: {event_type}")
+            if hasattr(event, 'data'):
+                print(f"[SDK DEBUG] Event data type: {type(event.data)}")
+                print(f"[SDK DEBUG] Event data: {event.data}")
+            
             if event_type == "assistant.message_delta":
-                # Streaming message chunk - print and collect
-                delta = event.data.delta_content or ""
+                # Streaming message chunk - try multiple possible field names
+                delta = None
+                if hasattr(event, 'data'):
+                    delta = getattr(event.data, 'delta_content', None) or \
+                            getattr(event.data, 'delta', None) or \
+                            getattr(event.data, 'content', None) or \
+                            getattr(event.data, 'text', None)
+                
                 if delta:
                     print(delta, end="", flush=True)
                     output_lines.append(delta)
                     
             elif event_type == "assistant.message":
-                # Final complete message
-                content = event.data.content or ""
-                print(f"\n[SDK] Message complete ({len(content)} chars)")
+                # Final complete message - try multiple possible field names
+                content = None
+                if hasattr(event, 'data'):
+                    content = getattr(event.data, 'content', None) or \
+                              getattr(event.data, 'text', None) or \
+                              getattr(event.data, 'message', None)
+                
+                print(f"\n[SDK] Message complete ({len(content) if content else 0} chars)")
                 if content and not output_lines:
                     # If we didn't get deltas, use the complete message
+                    print(content)  # Print the content so we can see it
                     output_lines.append(content)
                     
             elif event_type == "tool.call":
                 # Tool being invoked
-                tool_name = getattr(event.data, 'tool_name', 'unknown')
+                tool_name = getattr(event.data, 'tool_name', 'unknown') if hasattr(event, 'data') else 'unknown'
                 print(f"\n[SDK] Tool call: {tool_name}")
                 
             elif event_type == "tool.result":
                 # Tool completed
-                tool_name = getattr(event.data, 'tool_name', 'unknown')
-                result_type = getattr(event.data, 'result_type', 'unknown')
-                print(f"[SDK] Tool result: {tool_name} -> {result_type}")
+                if hasattr(event, 'data'):
+                    tool_name = getattr(event.data, 'tool_name', 'unknown')
+                    result_type = getattr(event.data, 'result_type', 'unknown')
+                    print(f"[SDK] Tool result: {tool_name} -> {result_type}")
                 
             elif event_type == "session.idle":
                 # Session finished
@@ -142,7 +162,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                 
             elif event_type == "session.error":
                 # Error occurred
-                error_msg = getattr(event.data, 'message', 'Unknown error')
+                error_msg = getattr(event.data, 'message', 'Unknown error') if hasattr(event, 'data') else 'Unknown error'
                 print(f"\n[SDK] ERROR: {error_msg}")
                 errors.append(error_msg)
                 done.set()
