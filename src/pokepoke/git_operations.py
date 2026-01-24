@@ -4,6 +4,51 @@ import subprocess
 from typing import Tuple
 
 
+def has_uncommitted_changes() -> bool:
+    """Check if there are uncommitted changes in the current directory."""
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            check=True
+        )
+        return bool(result.stdout.strip())
+    except subprocess.CalledProcessError:
+        return False
+
+
+def commit_all_changes(message: str = "Auto-commit by PokePoke") -> tuple[bool, str]:
+    """Commit all changes, triggering pre-commit hooks for validation."""
+    try:
+        subprocess.run(
+            ["git", "add", "-A"],
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding='utf-8'
+        )
+        
+        result = subprocess.run(
+            ["git", "commit", "-m", message],
+            capture_output=True,
+            text=True,
+            encoding='utf-8'
+        )
+        
+        if result.returncode == 0:
+            return True, ""
+        else:
+            error_lines = result.stderr.strip().split('\n') if result.stderr else []
+            if error_lines:
+                errors = [line for line in error_lines if line.strip() and not line.startswith('hint:')][:5]
+                return False, '\n   '.join(errors) if errors else "Commit failed"
+            return False, "Commit failed (unknown reason)"
+    except subprocess.CalledProcessError as e:
+        return False, f"Commit error: {e.stderr if e.stderr else str(e)}"
+
+
 def verify_main_repo_clean() -> Tuple[bool, str, list[str]]:
     """Verify main repository has no uncommitted non-beads changes.
     
@@ -73,65 +118,3 @@ def check_main_repo_ready_for_merge() -> Tuple[bool, str]:
         return True, ""
     except Exception as e:
         return False, f"Error checking main repo status: {e}"
-
-
-def has_uncommitted_changes() -> bool:
-    """Check if there are any uncommitted changes in the current directory.
-    
-    Returns:
-        True if there are uncommitted changes, False otherwise
-    """
-    try:
-        # Check git status
-        result = subprocess.run(
-            ["git", "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True
-        )
-        # If output is non-empty, there are uncommitted changes
-        return bool(result.stdout.strip())
-    except subprocess.CalledProcessError:
-        return False
-
-
-def commit_all_changes(message: str = "Auto-commit by PokePoke") -> Tuple[bool, str]:
-    """Commit all changes, triggering pre-commit hooks for validation.
-    
-    Args:
-        message: Commit message
-        
-    Returns:
-        Tuple of (success: bool, error_message: str)
-    """
-    try:
-        # Stage all changes
-        subprocess.run(
-            ["git", "add", "-A"],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding='utf-8'
-        )
-        
-        # Try to commit (this will trigger pre-commit hooks)
-        result = subprocess.run(
-            ["git", "commit", "-m", message],
-            capture_output=True,
-            text=True,
-            encoding='utf-8'
-        )
-        
-        if result.returncode == 0:
-            return True, ""
-        else:
-            # Extract error details from stderr
-            error_lines = result.stderr.strip().split('\n') if result.stderr else []
-            if error_lines:
-                # Get meaningful error lines (skip hints)
-                errors = [line for line in error_lines if line.strip() and not line.startswith('hint:')][:5]
-                return False, '\n   '.join(errors) if errors else "Commit failed"
-            return False, "Commit failed (unknown reason)"
-    except subprocess.CalledProcessError as e:
-        return False, f"Commit error: {e.stderr if e.stderr else str(e)}"

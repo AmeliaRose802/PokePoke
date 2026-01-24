@@ -9,7 +9,8 @@ from pathlib import Path
 from pokepoke.beads import get_ready_work_items, get_beads_stats
 from pokepoke.types import AgentStats, SessionStats
 from pokepoke.stats import print_stats
-from pokepoke.workflow import select_work_item, process_work_item
+from pokepoke.workflow import process_work_item
+from pokepoke.work_item_selection import select_work_item
 from pokepoke.agent_runner import run_maintenance_agent
 from pokepoke.logging_utils import RunLogger
 

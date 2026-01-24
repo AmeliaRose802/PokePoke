@@ -5,10 +5,11 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from pokepoke.copilot import invoke_copilot_cli
+from pokepoke.copilot import invoke_copilot
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
 from pokepoke.stats import parse_agent_stats
 from pokepoke.worktrees import create_worktree, merge_worktree, cleanup_worktree
+from pokepoke.git_operations import has_uncommitted_changes, commit_all_changes
 
 
 def get_pokepoke_prompts_dir() -> Path:
@@ -26,51 +27,6 @@ def get_pokepoke_prompts_dir() -> Path:
         )
     
     return prompts_dir
-
-
-def has_uncommitted_changes() -> bool:
-    """Check if there are uncommitted changes in the current directory."""
-    try:
-        result = subprocess.run(
-            ["git", "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True
-        )
-        return bool(result.stdout.strip())
-    except subprocess.CalledProcessError:
-        return False
-
-
-def commit_all_changes(message: str = "Auto-commit by PokePoke") -> tuple[bool, str]:
-    """Commit all changes, triggering pre-commit hooks for validation."""
-    try:
-        subprocess.run(
-            ["git", "add", "-A"],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding='utf-8'
-        )
-        
-        result = subprocess.run(
-            ["git", "commit", "-m", message],
-            capture_output=True,
-            text=True,
-            encoding='utf-8'
-        )
-        
-        if result.returncode == 0:
-            return True, ""
-        else:
-            error_lines = result.stderr.strip().split('\n') if result.stderr else []
-            if error_lines:
-                errors = [line for line in error_lines if line.strip() and not line.startswith('hint:')][:5]
-                return False, '\n   '.join(errors) if errors else "Commit failed"
-            return False, "Commit failed (unknown reason)"
-    except subprocess.CalledProcessError as e:
-        return False, f"Commit error: {e.stderr if e.stderr else str(e)}"
 
 
 def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path) -> tuple[bool, Optional[AgentStats]]:
@@ -117,7 +73,7 @@ def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path) -> tuple[bool, Op
     )
     
     print("\n🧹 Invoking cleanup agent...")
-    result = invoke_copilot_cli(cleanup_item, prompt=cleanup_prompt)
+    result = invoke_copilot(cleanup_item, prompt=cleanup_prompt)
     
     return result.success, result.stats
 
@@ -224,7 +180,7 @@ def _run_beads_only_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prom
     print(f"\n📋 Running {agent_name} in main repository (beads-only)")
     print(f"   File write access: DENIED")
     
-    result = invoke_copilot_cli(agent_item, prompt=agent_prompt, deny_write=True)
+    result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=True)
     
     if result.success:
         print(f"\n✅ {agent_name} agent completed successfully")
@@ -249,7 +205,7 @@ def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkIte
         os.chdir(worktree_path)
         print(f"   Switched to worktree directory\n")
         
-        result = invoke_copilot_cli(agent_item, prompt=agent_prompt)
+        result = invoke_copilot(agent_item, prompt=agent_prompt)
         
         cleanup_success, _ = run_cleanup_loop(agent_item, result, repo_root)
         
@@ -364,3 +320,80 @@ def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkIte
         print(f"\n🧹 Cleaning up worktree...")
         cleanup_worktree(agent_id, force=True)
         return None
+
+
+def run_beta_tester() -> Optional[AgentStats]:
+    """Run beta tester agent to test all MCP tools.
+    
+    Restarts the MCP server before testing to ensure latest code is loaded.
+    Beta tester runs without a worktree since it only tests and files issues.
+    
+    Returns:
+        AgentStats if successful, None otherwise
+    """
+    print(f"\n{'='*60}")
+    print(f"🧪 Running Beta Tester Agent")
+    print(f"{'='*60}")
+    
+    # Restart MCP server to load latest code
+    print("\n🔄 Restarting MCP server to load latest changes...")
+    try:
+        restart_script = Path(r"C:\Users\ameliapayne\PokePoke\scripts\Restart-MCPServer.ps1")
+        if not restart_script.exists():
+            print(f"⚠️  Restart script not found at {restart_script}")
+            print("   Proceeding without restart - server may have stale code")
+        else:
+            result = subprocess.run(
+                ["pwsh", "-NoProfile", "-File", str(restart_script)],
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                timeout=60  # 60 second timeout for restart
+            )
+            if result.returncode == 0:
+                print("✓ MCP server restarted successfully")
+            else:
+                print(f"⚠️  MCP server restart had issues (exit code {result.returncode})")
+                if result.stdout:
+                    print(f"   Output: {result.stdout[:200]}")
+    except subprocess.TimeoutExpired:
+        print("⚠️  MCP server restart timed out (server may still be starting)")
+    except Exception as e:
+        print(f"⚠️  Could not restart MCP server: {e}")
+        print("   Proceeding anyway - server may have stale code")
+    
+    # Load beta tester prompt
+    try:
+        prompts_dir = get_pokepoke_prompts_dir()
+        prompt_path = prompts_dir / "beta-tester.md"
+    except FileNotFoundError as e:
+        print(f"❌ {e}")
+        return None
+    
+    if not prompt_path.exists():
+        print(f"❌ Prompt not found at {prompt_path}")
+        return None
+    
+    beta_prompt = prompt_path.read_text(encoding='utf-8')
+    
+    beta_item = BeadsWorkItem(
+        id="beta-tester",
+        title="Beta Test All MCP Tools",
+        description=beta_prompt,
+        status="in_progress",
+        priority=2,
+        issue_type="task",
+        labels=["testing", "mcp-server", "automated"]
+    )
+    
+    print("\n🧪 Invoking beta tester agent...")
+    # Beta tester doesn't need file write access - it only tests and files issues
+    copilot_result = invoke_copilot(beta_item, prompt=beta_prompt, deny_write=True)
+    
+    if copilot_result.success:
+        print(f"\n✅ Beta tester completed successfully!")
+        return parse_agent_stats(copilot_result.output) if copilot_result.output else None
+    else:
+        print(f"\n❌ Beta tester failed: {copilot_result.error}")
+        return None
+
