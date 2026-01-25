@@ -31,7 +31,7 @@ def commit_all_changes(message: str = "Auto-commit by PokePoke") -> tuple[bool, 
             text=True,
             encoding='utf-8',
             errors='replace',
-            timeout=10
+            timeout=240
         )
         
         result = subprocess.run(
