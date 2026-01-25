@@ -193,9 +193,19 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                 turn_count += 1
                 
             elif event_type == "session.idle":
-                # Session finished
-                print("\n[SDK] Session idle - processing complete")
-                done.set()
+                # Session idle - might mean thinking or complete
+                # Don't immediately exit, wait a bit to see if more activity follows
+                print("\n[SDK] Session idle - waiting to confirm completion...")
+                
+                # Use a delay to distinguish between "thinking" and "done"
+                async def check_still_idle() -> None:
+                    await asyncio.sleep(10)  # Wait 10 seconds
+                    if not done.is_set():
+                        print("[SDK] Session confirmed idle - processing complete")
+                        done.set()
+                
+                # Schedule the delayed check
+                asyncio.create_task(check_still_idle())
                 
             elif event_type == "session.error":
                 # Error occurred

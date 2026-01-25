@@ -2,10 +2,16 @@
 
 The previous agent failed to commit all files. Please get all files committed and all pre-commit validations passing.
 
+## Current Context
+
+**Current Working Directory:** {cwd}
+**Current Branch:** {branch}
+**Is Worktree:** {is_worktree}
+
 ## 🚨 CRITICAL REQUIREMENTS
 
 **YOU MUST:**
-- ✅ Fix all validation failures (tests, coverage, linting, build errors)
+- ✅ Fix all pre-commit validation failures (tests, coverage, linting, build errors)
 - ✅ Get pre-commit hooks passing with actual fixes
 - ✅ Commit all changes with proper validation
 - ✅ Ensure 80%+ test coverage for modified files
@@ -41,9 +47,14 @@ This repository has integrity checks that detect tampering:
 4. **Merge and cleanup** - Once validation passes
 5. **Close the beads item** - Mark work complete
 
+If the work has not been completed, it is acceptable to move the beads item to open and make sure everything on `ameliapayne/dev` is committed.
+
+You do not need to make intigration tests pass, just the pre-commit tests.
+
 ## Important Notes
 
 - Main branch: ameliapayne/dev
-- If uncommitted work exists on ameliapayne/dev, commit it with validation passing
+- If uncommitted work exists on the current worktree, commit it with validation passing
+- Merge the worktree back to the ameliapayne/dev branch
 - Do not leave anything uncommitted
 - Quality gates exist to maintain code health - respect them
