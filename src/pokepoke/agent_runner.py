@@ -45,32 +45,31 @@ def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path) -> tuple[bool, Op
     cleanup_prompt_template = cleanup_prompt_path.read_text(encoding='utf-8')
     
     # Get current context information
-    import os
     current_dir = os.getcwd()
     
     # Get current branch
     try:
-        result = subprocess.run(
+        branch_result = subprocess.run(
             ["git", "branch", "--show-current"],
             capture_output=True,
             text=True,
             timeout=10,
             errors='replace'
         )
-        current_branch = result.stdout.strip() if result.returncode == 0 else "unknown"
+        current_branch = branch_result.stdout.strip() if branch_result.returncode == 0 else "unknown"
     except Exception:
         current_branch = "unknown"
     
     # Determine if we're in a worktree
     try:
-        result = subprocess.run(
+        worktree_result = subprocess.run(
             ["git", "rev-parse", "--is-inside-work-tree"],
             capture_output=True,
             text=True,
             timeout=10,
             errors='replace'
         )
-        is_worktree = result.returncode == 0 and result.stdout.strip() == "true"
+        is_worktree = worktree_result.returncode == 0 and worktree_result.stdout.strip() == "true"
     except Exception:
         is_worktree = False
     
@@ -108,9 +107,9 @@ def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path) -> tuple[bool, Op
     )
     
     print("\n🧹 Invoking cleanup agent...")
-    result = invoke_copilot(cleanup_item, prompt=cleanup_prompt)
+    copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt)
     
-    return result.success, result.stats
+    return copilot_result.success, copilot_result.stats
 
 
 def aggregate_cleanup_stats(result_stats: Optional[AgentStats], cleanup_stats: Optional[AgentStats]) -> None:
