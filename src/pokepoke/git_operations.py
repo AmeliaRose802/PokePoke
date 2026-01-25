@@ -12,10 +12,12 @@ def has_uncommitted_changes() -> bool:
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            errors='replace',
+            check=True,
+            timeout=10
         )
         return bool(result.stdout.strip())
-    except subprocess.CalledProcessError:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return False
 
 
@@ -27,14 +29,18 @@ def commit_all_changes(message: str = "Auto-commit by PokePoke") -> tuple[bool, 
             check=True,
             capture_output=True,
             text=True,
-            encoding='utf-8'
+            encoding='utf-8',
+            errors='replace',
+            timeout=10
         )
         
         result = subprocess.run(
             ["git", "commit", "-m", message],
             capture_output=True,
             text=True,
-            encoding='utf-8'
+            encoding='utf-8',
+            errors='replace',
+            timeout=300  # 5 minutes for pre-commit hooks
         )
         
         if result.returncode == 0:
@@ -45,6 +51,8 @@ def commit_all_changes(message: str = "Auto-commit by PokePoke") -> tuple[bool, 
                 errors = [line for line in error_lines if line.strip() and not line.startswith('hint:')][:5]
                 return False, '\n   '.join(errors) if errors else "Commit failed"
             return False, "Commit failed (unknown reason)"
+    except subprocess.TimeoutExpired as e:
+        return False, f"Commit timed out after {e.timeout} seconds (pre-commit hooks may be hanging)"
     except subprocess.CalledProcessError as e:
         return False, f"Commit error: {e.stderr if e.stderr else str(e)}"
 
@@ -64,7 +72,9 @@ def verify_main_repo_clean() -> Tuple[bool, str, list[str]]:
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            errors='replace',
+            check=True,
+            timeout=10
         )
         
         uncommitted = status_result.stdout.strip()
@@ -87,15 +97,18 @@ def handle_beads_auto_commit() -> None:
     """
     try:
         print("🔧 Committing beads database changes in main repo...")
-        subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8', errors='replace')
+        subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8', errors='replace', timeout=10)
         subprocess.run(
             ["git", "commit", "-m", "chore: sync beads before worktree merge"],
             check=True,
             capture_output=True,
             encoding='utf-8',
-            errors='replace'
+            errors='replace',
+            timeout=300
         )
         print("✅ Beads changes committed")
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(f"Beads commit timed out after {e.timeout} seconds")
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Failed to commit beads changes: {e}")
 
