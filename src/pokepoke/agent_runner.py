@@ -44,6 +44,41 @@ def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path) -> tuple[bool, Op
     
     cleanup_prompt_template = cleanup_prompt_path.read_text(encoding='utf-8')
     
+    # Get current context information
+    import os
+    current_dir = os.getcwd()
+    
+    # Get current branch
+    try:
+        result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            errors='replace'
+        )
+        current_branch = result.stdout.strip() if result.returncode == 0 else "unknown"
+    except Exception:
+        current_branch = "unknown"
+    
+    # Determine if we're in a worktree
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            errors='replace'
+        )
+        is_worktree = result.returncode == 0 and result.stdout.strip() == "true"
+    except Exception:
+        is_worktree = False
+    
+    # Replace placeholders in template
+    cleanup_prompt_template = cleanup_prompt_template.replace("{cwd}", current_dir)
+    cleanup_prompt_template = cleanup_prompt_template.replace("{branch}", current_branch)
+    cleanup_prompt_template = cleanup_prompt_template.replace("{is_worktree}", str(is_worktree))
+    
     work_item_context = f"""
 # Work Item Being Cleaned Up
 
