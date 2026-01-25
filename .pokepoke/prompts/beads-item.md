@@ -121,7 +121,6 @@ Get-NetTCPConnection -LocalPort 5000 | ForEach-Object { Stop-Process -Id $_.Owni
 .\scripts\Restart-MCPServer.ps1
 ```
 
-
 ## Test data
 
 
@@ -148,3 +147,11 @@ When you need a VM Id, use: 14b9cc89-0c2d-4884-a7b7-ff83270592cd
 When you need a containerID use: d3c66d44-bd8f-4600-8b28-3c5e7cdb6b0a
 
 Use incident time: 2026-01-23T20:14:55.9797441Z
+
+## If it is already completed
+
+Close the beads item
+
+## When you finish it
+
+Close the beads item

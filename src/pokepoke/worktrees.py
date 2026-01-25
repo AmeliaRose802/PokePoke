@@ -352,15 +352,42 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
 
 
 def cleanup_worktree(item_id: str, force: bool = False) -> bool:
-    """Remove a worktree and its associated branch."""
+    """Remove a worktree and its associated branch.
+    
+    Handles both sanitized and unsanitized worktree paths by searching
+    for the actual worktree associated with this item_id.
+    
+    Returns True if cleanup succeeds or if the worktree/branch don't exist.
+    """
     sanitized_id = sanitize_branch_name(item_id)
     branch_name = f"task/{sanitized_id}"
-    worktree_path = Path("worktrees") / f"task-{sanitized_id}"
+    expected_worktree_path = Path("worktrees") / f"task-{sanitized_id}"
     
-    try:
-        # Remove worktree
-        if worktree_path.exists():
-            cmd = ["git", "worktree", "remove", str(worktree_path)]
+    # Find the actual worktree for this item (might have unsanitized path if created before fix)
+    actual_worktree_path = None
+    existing_worktrees = list_worktrees()
+    
+    # Search by branch name first
+    for wt in existing_worktrees:
+        wt_branch = wt.get("branch", "")
+        if wt_branch.endswith(branch_name):
+            actual_worktree_path = Path(wt["path"])
+            break
+    
+    # If not found by branch, check if expected path exists
+    if actual_worktree_path is None and expected_worktree_path.exists():
+        actual_worktree_path = expected_worktree_path
+    
+    # Also check for unsanitized path (for backwards compatibility)
+    if actual_worktree_path is None:
+        unsanitized_path = Path("worktrees") / f"task-{item_id}"
+        if unsanitized_path.exists():
+            actual_worktree_path = unsanitized_path
+    
+    # Remove worktree if found
+    if actual_worktree_path and actual_worktree_path.exists():
+        try:
+            cmd = ["git", "worktree", "remove", str(actual_worktree_path)]
             if force:
                 cmd.append("--force")
             
@@ -371,9 +398,20 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
                 text=True,
                 encoding='utf-8'
             )
-        
-        # Delete branch
-        delete_flag = "-D" if force else "-d"
+        except subprocess.CalledProcessError as e:
+            # Check if error is because worktree doesn't exist
+            if e.stderr and ("not a working tree" in e.stderr.lower() or "no such file" in e.stderr.lower()):
+                # Already gone, that's fine
+                pass
+            else:
+                print(f"⚠️  Worktree removal warning: {e.stderr if e.stderr else str(e)}")
+                # Continue to try branch deletion
+    
+    # Delete branch (try both sanitized and unsanitized branch names)
+    delete_flag = "-D" if force else "-d"
+    
+    # Try sanitized branch name first
+    try:
         subprocess.run(
             ["git", "branch", delete_flag, branch_name],
             check=True,
@@ -381,12 +419,29 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
             text=True,
             encoding='utf-8'
         )
-        
-        return True
-        
     except subprocess.CalledProcessError as e:
-        print(f"❌ Cleanup failed: {e.stderr if e.stderr else str(e)}")
-        return False
+        # Try unsanitized branch name as fallback
+        try:
+            unsanitized_branch = f"task/{item_id}"
+            subprocess.run(
+                ["git", "branch", delete_flag, unsanitized_branch],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding='utf-8'
+            )
+        except subprocess.CalledProcessError as e2:
+            # Check if branch doesn't exist
+            if e2.stderr and ("not found" in e2.stderr.lower() or "does not exist" in e2.stderr.lower()):
+                # Already gone, that's fine
+                pass
+            else:
+                print(f"⚠️  Branch deletion warning: {e2.stderr if e2.stderr else str(e2)}")
+                # If both worktree and branch operations failed, return False
+                if actual_worktree_path is not None:
+                    return False
+    
+    return True
 
 
 def list_worktrees() -> list[dict[str, str]]:
