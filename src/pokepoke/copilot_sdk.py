@@ -157,16 +157,14 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     tool_name = getattr(event.data, 'tool_name', 'unknown')
                     arguments = getattr(event.data, 'arguments', {})
                     
-                    # Format tool call nicely
-                    args_preview = str(arguments)[:80]
-                    if len(str(arguments)) > 80:
-                        args_preview += "..."
-                    print(f"  🔧 {tool_name}({args_preview})")
-                    output_lines.append(f"\n[Tool] {tool_name}({args_preview})\n")
-                    output_lines.append(f"\n[Tool] {tool_name}({args_preview})\n")
+                    # Format tool call nicely - show full arguments
+                    args_str = str(arguments)
+                    print(f"  🔧 {tool_name}({args_str})")
+                    output_lines.append(f"\n[Tool] {tool_name}({args_str})\n")
+                    output_lines.append(f"\n[Tool] {tool_name}({args_str})\n")
                 
             elif event_type == "tool.execution_complete":
-                # Tool completed - show result preview
+                # Tool completed - show full result
                 if hasattr(event, 'data'):
                     tool_call_id = getattr(event.data, 'tool_call_id', '')
                     result = getattr(event.data, 'result', None)
@@ -175,13 +173,11 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     if result:
                         # Result object has a 'content' attribute
                         result_content = getattr(result, 'content', str(result)) if hasattr(result, 'content') else str(result)
-                        result_preview = str(result_content)[:100]
-                        if len(str(result_content)) > 100:
-                            result_preview += "..."
+                        result_str = str(result_content)
                         
                         status = "✅" if success else "❌"
-                        print(f"  {status} Result: {result_preview}")
-                        output_lines.append(f"[Result] {result_preview}\n")
+                        print(f"  {status} Result: {result_str}")
+                        output_lines.append(f"[Result] {result_str}\n")
             
             elif event_type == "assistant.usage":
                 # Track usage statistics
