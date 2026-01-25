@@ -17,7 +17,42 @@ from pokepoke.worktrees import (
     merge_worktree,
     cleanup_worktree,
     list_worktrees,
+    sanitize_branch_name,
 )
+
+
+class TestSanitizeBranchName:
+    """Tests for sanitize_branch_name function."""
+    
+    def test_sanitize_hash_symbol(self):
+        """Test that # is replaced with hyphen."""
+        assert sanitize_branch_name("icm_queue_c#-j1ly") == "icm_queue_c-j1ly"
+    
+    def test_sanitize_multiple_invalid_chars(self):
+        """Test that multiple invalid characters are sanitized."""
+        assert sanitize_branch_name("feat:add*feature?now") == "feat-add-feature-now"
+    
+    def test_sanitize_spaces(self):
+        """Test that spaces are replaced with hyphens."""
+        assert sanitize_branch_name("my feature branch") == "my-feature-branch"
+    
+    def test_sanitize_consecutive_dots(self):
+        """Test that consecutive dots are collapsed."""
+        assert sanitize_branch_name("branch..name...here") == "branch.name.here"
+    
+    def test_sanitize_leading_trailing_chars(self):
+        """Test that leading/trailing hyphens and dots are removed."""
+        assert sanitize_branch_name("-branch-name-") == "branch-name"
+        assert sanitize_branch_name(".branch.name.") == "branch.name"
+    
+    def test_sanitize_already_valid(self):
+        """Test that valid branch names are unchanged."""
+        assert sanitize_branch_name("valid-branch-name") == "valid-branch-name"
+        assert sanitize_branch_name("task/PokePoke-123") == "task/PokePoke-123"
+    
+    def test_sanitize_multiple_invalid_sequences(self):
+        """Test handling of multiple invalid character sequences."""
+        assert sanitize_branch_name("a~b^c:d?e*f[g]h") == "a-b-c-d-e-f-g-h"
 
 
 class TestGetMainRepoRoot:
@@ -259,21 +294,23 @@ class TestCreateWorktree:
             result = create_worktree('incredible_icm-42')
             
             assert result == Path('/existing/path')
-            mock_print.assert_called_once()
+            # Should be called twice: once for error message, once for reusing
+            assert mock_print.call_count == 2
             assert 'Reusing existing worktree' in mock_print.call_args[0][0]
     
     def test_create_worktree_unrecoverable_error(self):
         """Test when worktree creation fails with unrecoverable error."""
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees', return_value=[]), \
-             patch('pathlib.Path.mkdir'):
+             patch('pathlib.Path.mkdir'), \
+             patch('builtins.print'):
             
             error = subprocess.CalledProcessError(
                 1, ['git'], stderr='fatal: some other error'
             )
             mock_run.side_effect = error
             
-            with pytest.raises(subprocess.CalledProcessError):
+            with pytest.raises(RuntimeError, match="Failed to create worktree"):
                 create_worktree('incredible_icm-42')
 
 

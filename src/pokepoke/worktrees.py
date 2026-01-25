@@ -1,7 +1,32 @@
 """Git worktree management for PokePoke."""
 
+import re
 import subprocess
 from pathlib import Path
+
+
+def sanitize_branch_name(name: str) -> str:
+    """Sanitize a string to be a valid git branch name.
+    
+    Git branch names cannot contain:
+    - Space characters
+    - Tilde ~, caret ^, colon :, question mark ?, asterisk *, left bracket [
+    - Two consecutive dots ..
+    - The sequence @{
+    - A backslash \
+    - ASCII control characters
+    
+    This function replaces invalid characters with hyphens.
+    """
+    # Replace invalid characters with hyphen
+    sanitized = re.sub(r'[~^:?*\[\]\\@{}#<>|&;\s]+', '-', name)
+    # Replace consecutive dots with single dot
+    sanitized = re.sub(r'\.\.+', '.', sanitized)
+    # Replace consecutive hyphens with single hyphen
+    sanitized = re.sub(r'-+', '-', sanitized)
+    # Remove leading/trailing hyphens and dots
+    sanitized = sanitized.strip('-.')
+    return sanitized
 
 
 def get_main_repo_root() -> Path:
@@ -61,11 +86,14 @@ def verify_branch_pushed(branch_name: str) -> bool:
 
 def create_worktree(item_id: str, base_branch: str = "ameliapayne/dev") -> Path:
     """Create a git worktree for a work item. Returns existing path if already exists."""
-    # Worktree path: ./worktrees/task-{id}
-    worktree_path = Path("worktrees") / f"task-{item_id}"
+    # Sanitize the item_id for use in branch names
+    sanitized_id = sanitize_branch_name(item_id)
+    
+    # Worktree path: ./worktrees/task-{sanitized_id}
+    worktree_path = Path("worktrees") / f"task-{sanitized_id}"
     
     # Branch name for the worktree
-    branch_name = f"task/{item_id}"
+    branch_name = f"task/{sanitized_id}"
     
     # Check if worktree already exists
     existing_worktrees = list_worktrees()
@@ -89,6 +117,9 @@ def create_worktree(item_id: str, base_branch: str = "ameliapayne/dev") -> Path:
             encoding='utf-8'
         )
     except subprocess.CalledProcessError as e:
+        # Log the actual error for debugging
+        print(f"   ⚠️  Git error: {e.stderr if e.stderr else 'No stderr'}")
+        
         # Check if error is because branch already exists
         if e.stderr and ("already exists" in e.stderr.lower() or "already checked out" in e.stderr.lower()):
             # Try to find the existing worktree
@@ -97,15 +128,21 @@ def create_worktree(item_id: str, base_branch: str = "ameliapayne/dev") -> Path:
                 if wt.get("branch", "").endswith(branch_name):
                     print(f"   ♻️  Reusing existing worktree at {wt['path']}")
                     return Path(wt["path"])
-        # If we couldn't recover, re-raise the error
-        raise
+        
+        # Check if the base branch doesn't exist
+        if e.stderr and ("invalid reference" in e.stderr.lower() or "not a valid" in e.stderr.lower()):
+            raise RuntimeError(f"Base branch '{base_branch}' does not exist. Please create it first or specify a different base branch.")
+        
+        # If we couldn't recover, re-raise the error with more context
+        raise RuntimeError(f"Failed to create worktree: {e.stderr if e.stderr else str(e)}") from e
     
     return worktree_path
 
 
 def is_worktree_merged(item_id: str, target_branch: str = "ameliapayne/dev") -> bool:
     """Check if a worktree's branch has been merged into the target branch."""
-    branch_name = f"task/{item_id}"
+    sanitized_id = sanitize_branch_name(item_id)
+    branch_name = f"task/{sanitized_id}"
     
     try:
         # Get list of branches merged into target
@@ -127,8 +164,9 @@ def is_worktree_merged(item_id: str, target_branch: str = "ameliapayne/dev") -> 
 
 def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup: bool = True) -> bool:
     """Merge a worktree's branch into the target branch and optionally clean up."""
-    branch_name = f"task/{item_id}"
-    worktree_path = Path("worktrees") / f"task-{item_id}"
+    sanitized_id = sanitize_branch_name(item_id)
+    branch_name = f"task/{sanitized_id}"
+    worktree_path = Path("worktrees") / f"task-{sanitized_id}"
     
     # PRE-MERGE VALIDATION: Verify worktree is clean
     if not is_worktree_clean(worktree_path):
@@ -315,8 +353,9 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
 
 def cleanup_worktree(item_id: str, force: bool = False) -> bool:
     """Remove a worktree and its associated branch."""
-    branch_name = f"task/{item_id}"
-    worktree_path = Path("worktrees") / f"task-{item_id}"
+    sanitized_id = sanitize_branch_name(item_id)
+    branch_name = f"task/{sanitized_id}"
+    worktree_path = Path("worktrees") / f"task-{sanitized_id}"
     
     try:
         # Remove worktree
