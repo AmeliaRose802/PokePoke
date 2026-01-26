@@ -9,7 +9,7 @@ from pokepoke.copilot import invoke_copilot
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
 from pokepoke.stats import parse_agent_stats
 from pokepoke.worktrees import create_worktree, merge_worktree, cleanup_worktree
-from pokepoke.git_operations import has_uncommitted_changes, commit_all_changes
+from pokepoke.git_operations import verify_main_repo_clean, commit_all_changes
 
 
 def get_pokepoke_prompts_dir() -> Path:
@@ -129,9 +129,17 @@ def run_cleanup_loop(item: BeadsWorkItem, result: CopilotResult, repo_root: Path
     cleanup_agent_runs = 0
     cleanup_attempt = 0
     
-    while result.success and has_uncommitted_changes():
+    # Check for uncommitted changes, excluding beads-only changes
+    try:
+        is_clean, uncommitted, non_beads_changes = verify_main_repo_clean()
+    except Exception as e:
+        print(f"\n⚠️  Error checking git status: {e}")
+        return False, cleanup_agent_runs
+    
+    while result.success and not is_clean:
         cleanup_attempt += 1
-        print(f"\n⚠️  Uncommitted changes detected (cleanup attempt {cleanup_attempt})")
+        print(f"\n⚠️  Uncommitted non-beads changes detected (cleanup attempt {cleanup_attempt})")
+        print(f"   Files: {', '.join(f.split()[1] if len(f.split()) > 1 else f for f in non_beads_changes[:5])}..." if len(non_beads_changes) > 5 else f"   Files: {', '.join(f.split()[1] if len(f.split()) > 1 else f for f in non_beads_changes)}")
         
         commit_success, commit_error = commit_all_changes(f"Work on {item.id}")
         
@@ -152,6 +160,15 @@ def run_cleanup_loop(item: BeadsWorkItem, result: CopilotResult, repo_root: Path
             print("\n❌ Cleanup agent failed")
             result.success = False
             result.error = "Cleanup agent failed to fix issues"
+            break
+        
+        # Re-check status after cleanup
+        try:
+            is_clean, uncommitted, non_beads_changes = verify_main_repo_clean()
+        except Exception as e:
+            print(f"\n⚠️  Error checking git status after cleanup: {e}")
+            result.success = False
+            result.error = f"Git status check failed: {e}"
             break
     
     return result.success, cleanup_agent_runs
