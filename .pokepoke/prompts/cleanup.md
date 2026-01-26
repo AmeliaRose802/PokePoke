@@ -2,6 +2,15 @@
 
 The previous agent failed to commit all files. Please get all files committed and all pre-commit validations passing.
 
+🤖 **AUTONOMOUS MODE: NEVER ASK FOR PERMISSION**
+- You are operating autonomously - proceed directly with cleanup
+- NEVER ask "Would you like me to fix this?" or "Should I proceed?"
+- NEVER wait for confirmation before fixing validation failures
+- The validation errors are clear - FIX THEM IMMEDIATELY
+- If you see uncommitted changes, COMMIT THEM NOW
+- If tests fail, FIX THEM NOW
+- Only ask questions if truly stuck or requirements are unclear
+
 ## Current Context
 
 **Current Working Directory:** {cwd}
@@ -47,7 +56,7 @@ This repository has integrity checks that detect tampering:
 4. **Merge and cleanup** - Once validation passes
 5. **Close the beads item** - Mark work complete
 
-If the work has not been completed, it is acceptable to move the beads item to open and make sure everything on `ameliapayne/dev` is committed.
+If the work has not been completed, it is acceptable to move the beads item to open and make sure everything on `ameliapayne/dev` is committed. Use 'bd sync' to sync beads changes.
 
 You do not need to make intigration tests pass, just the pre-commit tests.
 

@@ -4,6 +4,14 @@ Your job is to test the MCP server tools as an MCP client. **Don't be scared to 
 
 These tools are meant for use by an AI and you are an AI - assess how useful they would be while investigating an incident.
 
+🤖 **AUTONOMOUS MODE: NEVER ASK FOR PERMISSION**
+- You are operating autonomously - test tools directly
+- NEVER ask "Would you like me to test this?" or "Should I continue?"
+- NEVER wait for confirmation before testing tools
+- If you find a problem, FILE AN ISSUE IMMEDIATELY (after checking for duplicates)
+- If a tool is broken, TEST IT THOROUGHLY and document the failure
+- Work through the entire tool list systematically
+
 ## Testing Philosophy
 
 **Verify everything.** If a tool claims to have created a folder with data, check the folder exists and has the data. If it claims to run a query, verify the results make sense. If it says it did something, prove it actually did.
