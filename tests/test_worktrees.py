@@ -426,6 +426,60 @@ class TestMergeWorktree:
             assert any('worktree' in call and 'remove' in call for call in calls)
             assert any('branch' in call and '-d' in call for call in calls)
     
+    def test_merge_worktree_cleanup_failure_non_critical(self):
+        """Test that cleanup failures don't fail the merge - merge already succeeded."""
+        with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
+             patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.is_worktree_merged', return_value=True), \
+             patch('pathlib.Path.exists', return_value=True), \
+             patch('builtins.print') as mock_print:
+            
+            call_count = [0]
+            
+            def run_side_effect(*args, **kwargs):
+                cmd = args[0]
+                # Handle each command type
+                if 'branch' in cmd and '--show-current' in cmd:
+                    return Mock(stdout='ameliapayne/dev\n', returncode=0)
+                elif 'status' in cmd and '--porcelain' in cmd:
+                    return Mock(stdout='', returncode=0)
+                elif 'worktree' in cmd and 'remove' in cmd:
+                    # Simulate worktree removal failure (permission denied)
+                    raise subprocess.CalledProcessError(
+                        1, cmd, 
+                        stderr="error: failed to delete 'worktrees/task-xyz': Permission denied"
+                    )
+                elif 'branch' in cmd and '-d' in cmd:
+                    # Branch deletion also fails
+                    raise subprocess.CalledProcessError(
+                        1, cmd,
+                        stderr="error: unable to delete branch"
+                    )
+                else:
+                    return Mock(stdout='', stderr='', returncode=0)
+            
+            mock_run.side_effect = run_side_effect
+            
+            # CRITICAL: Merge should succeed even though cleanup failed
+            result = merge_worktree('incredible_icm-42')
+            
+            assert result is True, "Merge should succeed even when cleanup fails"
+            
+            # Verify merge was confirmed
+            print_calls = [str(call) for call in mock_print.call_args_list]
+            assert any('Merge confirmed' in call for call in print_calls), \
+                "Should print merge confirmation"
+            
+            # Verify cleanup warnings were printed
+            assert any('Could not remove worktree' in call for call in print_calls), \
+                "Should warn about worktree removal failure"
+            assert any('Could not delete branch' in call for call in print_calls), \
+                "Should warn about branch deletion failure"
+            
+            # Verify helpful message about non-critical failure
+            assert any('Merge successful' in call for call in print_calls), \
+                "Should clarify that merge succeeded despite cleanup failure"
+    
     def test_merge_worktree_success_no_cleanup(self):
         """Test successful merge without cleanup."""
         with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \

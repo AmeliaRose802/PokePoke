@@ -6,48 +6,22 @@ from pathlib import Path
 
 
 def sanitize_branch_name(name: str) -> str:
-    """Sanitize a string to be a valid git branch name.
-    
-    Git branch names cannot contain:
-    - Space characters
-    - Tilde ~, caret ^, colon :, question mark ?, asterisk *, left bracket [
-    - Two consecutive dots ..
-    - The sequence @{
-    - A backslash \
-    - ASCII control characters
-    
-    This function replaces invalid characters with hyphens.
-    """
-    # Replace invalid characters with hyphen
+    """Sanitize string to valid git branch name (replace invalid chars with hyphens)."""
     sanitized = re.sub(r'[~^:?*\[\]\\@{}#<>|&;\s]+', '-', name)
-    # Replace consecutive dots with single dot
     sanitized = re.sub(r'\.\.+', '.', sanitized)
-    # Replace consecutive hyphens with single hyphen
     sanitized = re.sub(r'-+', '-', sanitized)
-    # Remove leading/trailing hyphens and dots
-    sanitized = sanitized.strip('-.')
-    return sanitized
+    return sanitized.strip('-.')
 
 
 def get_main_repo_root() -> Path:
     """Get the main repository root directory (not a worktree)."""
     try:
-        # Get the common git directory (points to main repo's .git)
         result = subprocess.run(
             ["git", "rev-parse", "--git-common-dir"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True
+            capture_output=True, text=True, encoding='utf-8', check=True
         )
         git_common_dir = Path(result.stdout.strip())
-        
-        # The main repo root is the parent of the .git directory
-        if git_common_dir.name == ".git":
-            return git_common_dir.parent
-        else:
-            # If git-common-dir returns an absolute path
-            return git_common_dir.parent
+        return git_common_dir.parent
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Not in a git repository: {e}")
 
@@ -143,21 +117,12 @@ def is_worktree_merged(item_id: str, target_branch: str = "ameliapayne/dev") -> 
     """Check if a worktree's branch has been merged into the target branch."""
     sanitized_id = sanitize_branch_name(item_id)
     branch_name = f"task/{sanitized_id}"
-    
     try:
-        # Get list of branches merged into target
         result = subprocess.run(
             ["git", "branch", "--merged", target_branch],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding='utf-8'
+            check=True, capture_output=True, text=True, encoding='utf-8'
         )
-        
-        # Check if our branch is in the list
-        merged_branches = result.stdout.splitlines()
-        return any(branch_name in branch for branch in merged_branches)
-        
+        return any(branch_name in branch for branch in result.stdout.splitlines())
     except subprocess.CalledProcessError:
         return False
 
@@ -224,78 +189,41 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
                 print("❌ Cannot merge: main repo has uncommitted non-beads changes")
                 return False
             
-            # Auto-resolve beads changes
             if beads_changes:
                 print("🔧 Committing beads database changes...")
                 subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8', errors='replace')
-                subprocess.run(
-                    ["git", "commit", "-m", f"chore: sync beads before merge of {branch_name}"],
-                    check=True,
-                    encoding='utf-8',
-                    errors='replace'
-                )
+                subprocess.run(["git", "commit", "-m", f"chore: sync beads before merge of {branch_name}"],
+                             check=True, encoding='utf-8', errors='replace')
                 print("✅ Beads changes committed")
             
-            # Auto-resolve worktree cleanup deletions
             if worktree_changes:
                 print("🧹 Committing worktree cleanup changes...")
                 subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8', errors='replace')
-                subprocess.run(
-                    ["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
-                    check=True,
-                    encoding='utf-8',
-                    errors='replace'
-                )
+                subprocess.run(["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
+                             check=True, encoding='utf-8', errors='replace')
                 print("✅ Worktree cleanup committed")
         
-        # Switch to target branch
-        subprocess.run(
-            ["git", "checkout", target_branch],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding='utf-8'
-        )
-        
-        # Pull latest changes
-        subprocess.run(
-            ["git", "pull", "--rebase"],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding='utf-8'
-        )
-        
-        # Merge the work branch
-        merge_result = subprocess.run(
-            ["git", "merge", "--no-ff", branch_name, "-m", f"Merge {branch_name}"],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding='utf-8'
-        )
+        subprocess.run(["git", "checkout", target_branch],
+                     check=True, capture_output=True, text=True, encoding='utf-8')
+        subprocess.run(["git", "pull", "--rebase"],
+                     check=True, capture_output=True, text=True, encoding='utf-8')
+        subprocess.run(["git", "merge", "--no-ff", branch_name, "-m", f"Merge {branch_name}"],
+                     check=True, capture_output=True, text=True, encoding='utf-8')
         print(f"✅ Merged {branch_name} into {target_branch}")
         
-        # POST-MERGE VALIDATION: Verify we're still on target branch and clean
+        # POST-MERGE VALIDATION
         current_branch = subprocess.run(
             ["git", "branch", "--show-current"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True
+            capture_output=True, text=True, encoding='utf-8', check=True
         ).stdout.strip()
         
         if current_branch != target_branch:
             print(f"❌ Post-merge validation failed: Not on {target_branch} (on {current_branch})")
             return False
         
-        # Verify target branch is clean after merge
         status_result = subprocess.run(
             ["git", "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True
+            capture_output=True, text=True, encoding='utf-8', check=True
         )
         
         if status_result.stdout.strip():
@@ -304,14 +232,7 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
         
         print(f"✅ Post-merge validation passed: {target_branch} is clean")
         
-        # Push the merge
-        push_result = subprocess.run(
-            ["git", "push"],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding='utf-8'
-        )
+        subprocess.run(["git", "push"], check=True, capture_output=True, text=True, encoding='utf-8')
         print(f"✅ Pushed {target_branch} to remote")
         
         # MERGE CONFIRMATION: Verify branch is actually merged
@@ -321,29 +242,29 @@ def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup
         
         print(f"✅ Merge confirmed: {branch_name} is merged into {target_branch}")
         
+        # Best-effort cleanup - merge already succeeded
         if cleanup:
-            # Remove the worktree
             if worktree_path.exists():
-                subprocess.run(
-                    ["git", "worktree", "remove", str(worktree_path)],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    encoding='utf-8'
-                )
-                print(f"✅ Removed worktree at {worktree_path}")
+                try:
+                    subprocess.run(
+                        ["git", "worktree", "remove", str(worktree_path)],
+                        check=True, capture_output=True, text=True, encoding='utf-8'
+                    )
+                    print(f"✅ Removed worktree at {worktree_path}")
+                except subprocess.CalledProcessError as e:
+                    print(f"⚠️  Could not remove worktree: {e.stderr or e}")
+                    print(f"   Merge successful - worktree cleanup can be done later")
             
-            # Delete the branch
-            subprocess.run(
-                ["git", "branch", "-d", branch_name],
-                check=True,
-                capture_output=True,
-                text=True,
-                encoding='utf-8'
-            )
-            print(f"✅ Deleted branch {branch_name}")
+            try:
+                subprocess.run(
+                    ["git", "branch", "-d", branch_name],
+                    check=True, capture_output=True, text=True, encoding='utf-8'
+                )
+                print(f"✅ Deleted branch {branch_name}")
+            except subprocess.CalledProcessError as e:
+                print(f"⚠️  Could not delete branch: {e.stderr or e}")
         
-        return True
+        return True  # Merge completed, cleanup failures are non-critical
         
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr if e.stderr else str(e)
