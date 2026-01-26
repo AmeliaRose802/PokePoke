@@ -97,7 +97,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         
         # Create session with appropriate configuration
         session_config = {
-            "model": "gpt-4.1",  # Use GPT-4.1 (more stable than GPT-5)
+            "model": "claude-sonnet-4.5",  # Use Claude Sonnet 4.5
             "streaming": True,  # Enable streaming for real-time output
         }
         
