@@ -1,7 +1,9 @@
 """Git Operations - Utilities for git status checks, commits, and repository management."""
 
+import re
 import subprocess
-from typing import Tuple
+from pathlib import Path
+from typing import Optional, Tuple
 
 
 def has_uncommitted_changes() -> bool:
@@ -132,3 +134,109 @@ def check_main_repo_ready_for_merge() -> Tuple[bool, str]:
         return True, ""
     except Exception as e:
         return False, f"Error checking main repo status: {e}"
+
+
+def sanitize_branch_name(name: str) -> str:
+    """Sanitize string to valid git branch name (replace invalid chars with hyphens)."""
+    sanitized = re.sub(r'[~^:?*\[\]\\@{}#<>|&;\s]+', '-', name)
+    sanitized = re.sub(r'\.\.+', '.', sanitized)
+    sanitized = re.sub(r'-+', '-', sanitized)
+    return sanitized.strip('-.')
+
+
+def branch_exists(branch_name: str) -> bool:
+    """Check if a local branch exists."""
+    try:
+        result = subprocess.run(
+            ["git", "show-ref", "--verify", f"refs/heads/{branch_name}"],
+            capture_output=True,
+            text=True,
+            encoding='utf-8'
+        )
+        return result.returncode == 0
+    except subprocess.CalledProcessError:
+        return False
+
+
+def get_default_branch(preferred: str = "ameliapayne/dev", fallback: str = "master") -> str:
+    """Resolve the default branch name for the repo.
+
+    Prefers ameliapayne/dev when it exists, otherwise uses origin/HEAD or current branch.
+    """
+    if preferred and branch_exists(preferred):
+        return preferred
+
+    try:
+        result = subprocess.run(
+            ["git", "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            check=True
+        )
+        ref = result.stdout.strip()
+        if ref.startswith("origin/"):
+            return ref.split("/", 1)[1]
+    except subprocess.CalledProcessError:
+        pass
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            check=True
+        )
+        branch = result.stdout.strip()
+        if branch:
+            return branch
+    except subprocess.CalledProcessError:
+        pass
+
+    return fallback
+
+
+def get_main_repo_root() -> Path:
+    """Get the main repository root directory (not a worktree)."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            capture_output=True, text=True, encoding='utf-8', check=True
+        )
+        git_common_dir = Path(result.stdout.strip())
+        return git_common_dir.parent
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Not in a git repository: {e}")
+
+
+def is_worktree_clean(worktree_path: Path) -> bool:
+    """Check if a worktree has no uncommitted changes."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(worktree_path), "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            check=True
+        )
+        # Empty output means clean status
+        return not bool(result.stdout.strip())
+    except subprocess.CalledProcessError:
+        return False
+
+
+def verify_branch_pushed(branch_name: str) -> bool:
+    """Verify that a branch exists on the remote."""
+    try:
+        result = subprocess.run(
+            ["git", "ls-remote", "--heads", "origin", branch_name],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            check=True
+        )
+        # Non-empty output means branch exists on remote
+        return bool(result.stdout.strip())
+    except subprocess.CalledProcessError:
+        return False

@@ -1,64 +1,27 @@
 """Git worktree management for PokePoke."""
 
-import re
 import subprocess
 from pathlib import Path
+from typing import Optional
+
+from pokepoke.git_operations import (
+    sanitize_branch_name,
+    get_default_branch,
+    is_worktree_clean,
+    branch_exists
+)
 
 
-def sanitize_branch_name(name: str) -> str:
-    """Sanitize string to valid git branch name (replace invalid chars with hyphens)."""
-    sanitized = re.sub(r'[~^:?*\[\]\\@{}#<>|&;\s]+', '-', name)
-    sanitized = re.sub(r'\.\.+', '.', sanitized)
-    sanitized = re.sub(r'-+', '-', sanitized)
-    return sanitized.strip('-.')
 
 
-def get_main_repo_root() -> Path:
-    """Get the main repository root directory (not a worktree)."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--git-common-dir"],
-            capture_output=True, text=True, encoding='utf-8', check=True
-        )
-        git_common_dir = Path(result.stdout.strip())
-        return git_common_dir.parent
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Not in a git repository: {e}")
 
 
-def is_worktree_clean(worktree_path: Path) -> bool:
-    """Check if a worktree has no uncommitted changes."""
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(worktree_path), "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True
-        )
-        # Empty output means clean status
-        return not bool(result.stdout.strip())
-    except subprocess.CalledProcessError:
-        return False
 
 
-def verify_branch_pushed(branch_name: str) -> bool:
-    """Verify that a branch exists on the remote."""
-    try:
-        result = subprocess.run(
-            ["git", "ls-remote", "--heads", "origin", branch_name],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True
-        )
-        # Non-empty output means branch exists on remote
-        return bool(result.stdout.strip())
-    except subprocess.CalledProcessError:
-        return False
 
 
-def create_worktree(item_id: str, base_branch: str = "ameliapayne/dev") -> Path:
+
+def create_worktree(item_id: str, base_branch: Optional[str] = None) -> Path:
     """Create a git worktree for a work item. Returns existing path if already exists."""
     # Sanitize the item_id for use in branch names
     sanitized_id = sanitize_branch_name(item_id)
@@ -81,6 +44,10 @@ def create_worktree(item_id: str, base_branch: str = "ameliapayne/dev") -> Path:
     # Create worktrees directory if it doesn't exist
     Path("worktrees").mkdir(exist_ok=True)
     
+    # Resolve default base branch if not provided
+    if base_branch is None:
+        base_branch = get_default_branch()
+
     # Create the worktree
     try:
         subprocess.run(
@@ -113,10 +80,12 @@ def create_worktree(item_id: str, base_branch: str = "ameliapayne/dev") -> Path:
     return worktree_path
 
 
-def is_worktree_merged(item_id: str, target_branch: str = "ameliapayne/dev") -> bool:
+def is_worktree_merged(item_id: str, target_branch: Optional[str] = None) -> bool:
     """Check if a worktree's branch has been merged into the target branch."""
     sanitized_id = sanitize_branch_name(item_id)
     branch_name = f"task/{sanitized_id}"
+    if target_branch is None:
+        target_branch = get_default_branch()
     try:
         result = subprocess.run(
             ["git", "branch", "--merged", target_branch],
@@ -127,11 +96,14 @@ def is_worktree_merged(item_id: str, target_branch: str = "ameliapayne/dev") -> 
         return False
 
 
-def merge_worktree(item_id: str, target_branch: str = "ameliapayne/dev", cleanup: bool = True) -> bool:
+def merge_worktree(item_id: str, target_branch: Optional[str] = None, cleanup: bool = True) -> bool:
     """Merge a worktree's branch into the target branch and optionally clean up."""
     sanitized_id = sanitize_branch_name(item_id)
     branch_name = f"task/{sanitized_id}"
     worktree_path = Path("worktrees") / f"task-{sanitized_id}"
+
+    if target_branch is None:
+        target_branch = get_default_branch()
     
     # PRE-MERGE VALIDATION: Verify worktree is clean
     if not is_worktree_clean(worktree_path):
