@@ -101,6 +101,7 @@ class SessionStats:
     janitor_agent_runs: int = 0
     backlog_cleanup_agent_runs: int = 0
     cleanup_agent_runs: int = 0
+    beta_tester_agent_runs: int = 0
     starting_beads_stats: Optional[BeadsStats] = None
     ending_beads_stats: Optional[BeadsStats] = None
 

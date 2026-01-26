@@ -15,6 +15,7 @@ from pokepoke.work_item_selection import select_work_item
 from pokepoke.agent_runner import run_maintenance_agent
 from pokepoke.logging_utils import RunLogger
 from pokepoke.agent_names import initialize_agent_name
+from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner, clear_terminal_banner
 
 
 def run_orchestrator(interactive: bool = True, continuous: bool = False, run_beta_first: bool = False) -> int:
@@ -33,37 +34,29 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
     os.environ['AGENT_NAME'] = agent_name
     
     mode_name = "Interactive" if interactive else "Autonomous"
-    print(f"🎯 PokePoke {mode_name} Mode")
-    print(f"🤖 Agent Name: {agent_name}")
+    print(f"🎯 PokePoke {mode_name} Mode | 🤖 Agent: {agent_name}")
     print("=" * 50)
+    set_terminal_banner(f"PokePoke {mode_name} - {agent_name}")
     
     # Initialize run logger
     run_logger = RunLogger()
     run_id = run_logger.get_run_id()
-    print(f"📝 Run ID: {run_id}")
-    print(f"📁 Logs: {run_logger.get_run_dir()}")
+    print(f"📝 Run ID: {run_id} | 📁 Logs: {run_logger.get_run_dir()}")
     run_logger.log_orchestrator(f"PokePoke started in {mode_name} mode with agent name: {agent_name}")
     
-    # Use the current working directory (where orchestrator is executed from)
+    # Use the current working directory
     main_repo_path = Path.cwd()
-    print(f"📁 Working in repository: {main_repo_path}")
+    print(f"📁 Repository: {main_repo_path}")
     run_logger.log_orchestrator(f"Repository: {main_repo_path}")
-    
-    # Maintenance agent frequency configuration
-    TECH_DEBT_FREQUENCY = 3
-    JANITOR_FREQUENCY = 1
-    BACKLOG_FREQUENCY = 4
     
     # Track statistics
     start_time = time.time()
     items_completed = 0
     total_requests = 0
     session_stats = SessionStats(agent_stats=AgentStats())
-    
     print("📊 Recording starting beads statistics...")
     run_logger.log_orchestrator("Recording starting beads statistics")
     session_stats.starting_beads_stats = get_beads_stats()
-    
     # Run beta tester first if requested
     if run_beta_first:
         print("\n🧪 Running Beta Tester at startup...")
@@ -78,7 +71,6 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             session_stats.agent_stats.output_tokens += beta_stats.output_tokens
             session_stats.agent_stats.premium_requests += beta_stats.premium_requests
         print("✅ Beta Tester completed\n")
-    
     try:
         while True:
             # Check main repo status before processing
@@ -87,20 +79,22 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             if not _check_and_commit_main_repo(main_repo_path, run_logger):
                 run_logger.log_orchestrator("Main repo check failed", level="ERROR")
                 return 1
-            
             print("\nFetching ready work from beads...")
             run_logger.log_orchestrator("Fetching ready work from beads")
             ready_items = get_ready_work_items()
-            
             selected_item = select_work_item(ready_items, interactive)
             
             if selected_item is None:
                 print("\n👋 Exiting PokePoke.")
                 run_logger.log_orchestrator("User chose to exit")
+                clear_terminal_banner()
                 return 0
             
             # Process the selected item
             run_logger.log_orchestrator(f"Selected item: {selected_item.id} - {selected_item.title}")
+            # Update terminal banner with current work item
+            banner = format_work_item_banner(selected_item.id, selected_item.title)
+            set_terminal_banner(banner)
             success, requests, item_stats, cleanup_runs = process_work_item(
                 selected_item, interactive, run_logger=run_logger
             )
@@ -128,9 +122,12 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
                 run_logger.finalize(items_completed, total_requests, elapsed)
                 print(f"\n📝 Run ID: {run_id}")
                 print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
+                clear_terminal_banner()
                 return 0 if success else 1
             
             if interactive:
+                # Clear banner between items
+                set_terminal_banner(f"PokePoke {mode_name} - {agent_name}")
                 cont = input("\nProcess another item? [Y/n]: ").strip().lower()
                 if cont and cont != 'y':
                     session_stats.ending_beads_stats = get_beads_stats()
@@ -140,6 +137,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
                     run_logger.finalize(items_completed, total_requests, elapsed)
                     print(f"\n📝 Run ID: {run_id}")
                     print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
+                    clear_terminal_banner()
                     return 0
             else:
                 print("\n⏳ Waiting 5 seconds before next iteration...")
@@ -163,6 +161,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         run_logger.finalize(items_completed, total_requests, elapsed)
         print(f"\n📝 Run ID: {run_id}")
         print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
+        clear_terminal_banner()
         return 0
     except Exception as e:
         print("\n📊 Collecting final statistics...")
@@ -181,6 +180,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         run_logger.finalize(items_completed, total_requests, elapsed)
         print(f"\n📝 Run ID: {run_id}")
         print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
+        clear_terminal_banner()
         return 1
 
 
@@ -321,9 +321,7 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
         janitor_stats = run_maintenance_agent("Janitor", "janitor.md", repo_root=pokepoke_repo, needs_worktree=True)
         if janitor_stats:
             _aggregate_stats(session_stats, janitor_stats)
-            run_logger.log_maintenance("janitor", "Janitor Agent completed successfully")
-        else:
-            run_logger.log_maintenance("janitor", "Janitor Agent failed")
+        run_logger.log_maintenance("janitor", f"Janitor Agent {'completed successfully' if janitor_stats else 'failed'}")
     
     # Run Backlog Cleanup Agent
     if items_completed % 4 == 0:
@@ -333,9 +331,18 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
         backlog_stats = run_maintenance_agent("Backlog Cleanup", "backlog-cleanup.md", repo_root=pokepoke_repo, needs_worktree=False)
         if backlog_stats:
             _aggregate_stats(session_stats, backlog_stats)
-            run_logger.log_maintenance("backlog_cleanup", "Backlog Cleanup Agent completed successfully")
-        else:
-            run_logger.log_maintenance("backlog_cleanup", "Backlog Cleanup Agent failed")
+        run_logger.log_maintenance("backlog_cleanup", f"Backlog Cleanup Agent {'completed successfully' if backlog_stats else 'failed'}")
+    
+    # Run Beta Tester Agent
+    if items_completed % 2 == 0:
+        from pokepoke.agent_runner import run_beta_tester
+        print("\n🧪 Running Beta Tester Agent...")
+        run_logger.log_maintenance("beta_tester", "Starting Beta Tester Agent")
+        session_stats.beta_tester_agent_runs += 1
+        beta_stats = run_beta_tester()
+        if beta_stats:
+            _aggregate_stats(session_stats, beta_stats)
+        run_logger.log_maintenance("beta_tester", f"Beta Tester Agent {'completed successfully' if beta_stats else 'failed'}")
 
 
 

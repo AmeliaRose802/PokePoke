@@ -14,6 +14,7 @@ from pokepoke.agent_runner import run_cleanup_loop, run_beta_tester
 from pokepoke.worktree_finalization import finalize_work_item
 from pokepoke.work_item_selection import select_work_item
 from pokepoke.stats import parse_agent_stats
+from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import RunLogger
@@ -116,11 +117,19 @@ def process_work_item(
         os.chdir(original_dir)
     
     if result.success:
+        set_terminal_banner(format_work_item_banner(item.id, item.title, "Finalizing"))
         success = finalize_work_item(item, worktree_path)
         item_stats = parse_agent_stats(result.output) if result.output else None
         
+        # Update banner based on finalization result
+        if success:
+            set_terminal_banner(format_work_item_banner(item.id, item.title, "Completed"))
+        else:
+            set_terminal_banner(format_work_item_banner(item.id, item.title, "Failed"))
+        
         # Run beta tester after successful completion
         if success and run_beta_test:
+            set_terminal_banner(format_work_item_banner(item.id, item.title, "Beta Testing"))
             beta_stats = run_beta_tester()
             if beta_stats and item_stats:
                 # Aggregate beta tester stats
@@ -129,12 +138,14 @@ def process_work_item(
                 item_stats.input_tokens += beta_stats.input_tokens
                 item_stats.output_tokens += beta_stats.output_tokens
                 item_stats.premium_requests += beta_stats.premium_requests
+            set_terminal_banner(format_work_item_banner(item.id, item.title, "Completed"))
         
         if run_logger:
             run_logger.end_item_log(success, request_count)
         
         return success, request_count, item_stats, cleanup_agent_runs
     else:
+        set_terminal_banner(format_work_item_banner(item.id, item.title, "Failed"))
         print(f"\n❌ Failed to complete work item: {result.error}")
         print(f"\n🧹 Cleaning up worktree...")
         cleanup_worktree(item.id, force=True)
@@ -170,6 +181,7 @@ def _run_cleanup_with_timeout(item: BeadsWorkItem, result: CopilotResult, repo_r
             return False, cleanup_agent_runs
         
         cleanup_attempt += 1
+        set_terminal_banner(format_work_item_banner(item.id, item.title, f"Cleanup #{cleanup_attempt}"))
         cleanup_success, cleanup_runs = run_cleanup_loop(item, result, repo_root)
         cleanup_agent_runs += cleanup_runs
         

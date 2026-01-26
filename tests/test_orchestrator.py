@@ -614,6 +614,7 @@ class TestCheckMainRepoReadyForMerge:
 class TestRunOrchestratorContinuousMode:
     """Test continuous mode scenarios."""
     
+    @patch('pokepoke.agent_runner.run_beta_tester')
     @patch('pokepoke.orchestrator.run_maintenance_agent')
     @patch('time.sleep')
     @patch('pokepoke.orchestrator.get_beads_stats')
@@ -629,7 +630,8 @@ class TestRunOrchestratorContinuousMode:
         mock_process: Mock,
         mock_stats: Mock,
         mock_sleep: Mock,
-        mock_maintenance: Mock
+        mock_maintenance: Mock,
+        mock_beta: Mock
     ) -> None:
         """Test continuous autonomous mode processes multiple items."""
         from pokepoke.orchestrator import run_orchestrator
@@ -661,6 +663,7 @@ class TestRunOrchestratorContinuousMode:
         ]
         mock_stats.return_value = {}
         mock_maintenance.return_value = None
+        mock_beta.return_value = None
         
         result = run_orchestrator(interactive=False, continuous=True)
         
@@ -668,6 +671,7 @@ class TestRunOrchestratorContinuousMode:
         assert mock_process.call_count == 2
     
     @patch('time.sleep')  # Mock sleep to avoid delays
+    @patch('pokepoke.agent_runner.run_beta_tester')
     @patch('pokepoke.orchestrator.run_maintenance_agent')
     @patch('pokepoke.orchestrator.get_beads_stats')
     @patch('pokepoke.orchestrator.process_work_item')
@@ -682,6 +686,7 @@ class TestRunOrchestratorContinuousMode:
         mock_process: Mock,
         mock_stats: Mock,
         mock_maintenance: Mock,
+        mock_beta: Mock,
         mock_sleep: Mock
     ) -> None:
         """Test maintenance agents are triggered at correct intervals."""
@@ -704,17 +709,19 @@ class TestRunOrchestratorContinuousMode:
         mock_process.return_value = (True, 1, AgentStats(), 0)
         mock_stats.return_value = {}
         mock_maintenance.return_value = AgentStats()
+        mock_beta.return_value = AgentStats()
         
         result = run_orchestrator(interactive=False, continuous=True)
         
         assert result == 0
-        # At item 3: janitor
-        # At item 5: backlog cleanup
-        # At item 6: janitor
-        # At item 9: janitor
-        # At item 10: tech debt, janitor, backlog cleanup
-        # Total: 4 janitor, 2 backlog cleanup, 1 tech debt
+        # At item 1: janitor
+        # At item 2: janitor, beta tester
+        # At item 3: janitor, tech debt
+        # At item 4: janitor, beta tester, backlog cleanup
+        # ... etc
+        # Total: 10 janitor, 5 beta tester, 3 tech debt, 2 backlog cleanup
         assert mock_maintenance.call_count >= 3  # At least some maintenance agents ran
+        assert mock_beta.call_count >= 5  # Beta tester runs every 2 items
     
     @patch('builtins.input')
     @patch('pokepoke.orchestrator.get_beads_stats')
