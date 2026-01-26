@@ -16,6 +16,7 @@ from pokepoke.agent_runner import run_maintenance_agent
 from pokepoke.logging_utils import RunLogger
 from pokepoke.agent_names import initialize_agent_name
 from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner, clear_terminal_banner
+from pokepoke.maintenance_state import increment_items_completed
 
 
 def run_orchestrator(interactive: bool = True, continuous: bool = False, run_beta_first: bool = False) -> int:
@@ -113,10 +114,12 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             # Increment counter on successful processing
             if success:
                 items_completed += 1
+                total_persistent_count = increment_items_completed()
                 print(f"\n📈 Items completed this session: {items_completed}")
+                print(f"📈 Total items completed (lifetime): {total_persistent_count}")
                 run_logger.log_orchestrator(f"Items completed this session: {items_completed}")
                 
-                _run_periodic_maintenance(items_completed, session_stats, run_logger)
+                _run_periodic_maintenance(total_persistent_count, session_stats, run_logger)
             
             # Decide whether to continue
             if not continuous:
@@ -342,7 +345,6 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
         if backlog_stats:
             _aggregate_stats(session_stats, backlog_stats)
         run_logger.log_maintenance("backlog_cleanup", "Backlog Cleanup Agent completed successfully")
-    
     # Run Beta Tester Agent (every 3 items - swap with Janitor)
     if items_completed % 3 == 0:
         from pokepoke.agent_runner import run_beta_tester
@@ -386,12 +388,9 @@ def main() -> int:
         action="store_true",
         help="Run beta tester at startup before processing work items",
     )
-    
     args = parser.parse_args()
-    
     # Autonomous flag overrides interactive
     interactive = not args.autonomous
-    
     return run_orchestrator(interactive=interactive, continuous=args.continuous, run_beta_first=args.beta_first)
 
 

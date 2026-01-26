@@ -723,6 +723,8 @@ class TestRunOrchestratorContinuousMode:
         assert mock_maintenance.call_count >= 5  # At least 5 maintenance agents ran (janitor alone)
         assert mock_beta.call_count >= 3  # Beta tester runs every 3 items
     
+    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_maintenance_agent')
     @patch('builtins.input')
     @patch('pokepoke.orchestrator.get_beads_stats')
     @patch('pokepoke.orchestrator.process_work_item')
@@ -736,11 +738,17 @@ class TestRunOrchestratorContinuousMode:
         mock_select: Mock,
         mock_process: Mock,
         mock_stats: Mock,
-        mock_input: Mock
+        mock_input: Mock,
+        mock_maintenance: Mock,
+        mock_beta: Mock
     ) -> None:
         """Test continuous interactive mode with user continuation prompt."""
         from pokepoke.orchestrator import run_orchestrator
         from pokepoke.types import AgentStats
+        
+        # Configure mocks to avoid returning Mocks that cause TypeErrors during stats aggregation
+        mock_maintenance.return_value = None
+        mock_beta.return_value = None
         
         item = BeadsWorkItem(
             id="task-1",

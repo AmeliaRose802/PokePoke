@@ -240,3 +240,34 @@ def verify_branch_pushed(branch_name: str) -> bool:
         return bool(result.stdout.strip())
     except subprocess.CalledProcessError:
         return False
+
+def execute_merge_sequence(branch_name: str, target_branch: str) -> None:
+    """Execute the checkout, pull, and merge sequence."""
+    subprocess.run(["git", "checkout", target_branch],
+                 check=True, capture_output=True, text=True, encoding='utf-8')
+    subprocess.run(["git", "pull", "--rebase"],
+                 check=True, capture_output=True, text=True, encoding='utf-8')
+    subprocess.run(["git", "merge", "--no-ff", branch_name, "-m", f"Merge {branch_name}"],
+                 check=True, capture_output=True, text=True, encoding='utf-8')
+
+def validate_post_merge(target_branch: str) -> bool:
+    """Validate repository state after merge."""
+    current_branch = subprocess.run(
+        ["git", "branch", "--show-current"],
+        capture_output=True, text=True, encoding='utf-8', check=True
+    ).stdout.strip()
+    
+    if current_branch != target_branch:
+        print(f"❌ Post-merge validation failed: Not on {target_branch} (on {current_branch})")
+        return False
+    
+    status_result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        capture_output=True, text=True, encoding='utf-8', check=True
+    )
+    
+    if status_result.stdout.strip():
+        print(f"❌ Post-merge validation failed: {target_branch} has uncommitted changes")
+        return False
+    
+    return True

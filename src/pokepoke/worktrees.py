@@ -8,7 +8,9 @@ from pokepoke.git_operations import (
     sanitize_branch_name,
     get_default_branch,
     is_worktree_clean,
-    branch_exists
+    branch_exists,
+    execute_merge_sequence,
+    validate_post_merge,
 )
 
 
@@ -102,6 +104,7 @@ def merge_worktree(item_id: str, target_branch: Optional[str] = None, cleanup: b
     branch_name = f"task/{sanitized_id}"
     worktree_path = Path("worktrees") / f"task-{sanitized_id}"
 
+
     if target_branch is None:
         target_branch = get_default_branch()
     
@@ -113,93 +116,13 @@ def merge_worktree(item_id: str, target_branch: Optional[str] = None, cleanup: b
     print("✅ Pre-merge validation passed: Worktree is clean")
     
     try:
-        # CRITICAL: Sync beads before merge to avoid uncommitted .beads files blocking checkout
-        print("🔄 Syncing beads database before merge...")
-        bd_sync_result = subprocess.run(
-            ["bd", "sync"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            timeout=30
-        )
-        if bd_sync_result.returncode != 0:
-            print(f"⚠️  bd sync returned non-zero: {bd_sync_result.returncode}")
-            print(f"   stdout: {bd_sync_result.stdout}")
-            print(f"   stderr: {bd_sync_result.stderr}")
-            # Continue anyway - sync may have partially succeeded
-        
-        # Verify main repo is clean before checkout
-        main_status = subprocess.run(
-            ["git", "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True
-        ).stdout.strip()
-        
-        if main_status:
-            # Categorize changes for proper handling
-            lines = main_status.split('\n')
-            beads_changes = [line for line in lines if line and '.beads/' in line]
-            worktree_changes = [line for line in lines if line and 'worktrees/' in line and not line.startswith('??')]
-            untracked_files = [line for line in lines if line and line.startswith('??')]
-            other_changes = [
-                line for line in lines
-                if line
-                and '.beads/' not in line
-                and 'worktrees/' not in line
-                and not line.startswith('??')
-            ]
-            
-            # Block merge if there are problematic changes
-            if other_changes:
-                print("⚠️  Main repo has uncommitted changes:")
-                for line in other_changes[:10]:
-                    print(f"   {line}")
-                if len(other_changes) > 10:
-                    print(f"   ... and {len(other_changes) - 10} more")
-                print("❌ Cannot merge: main repo has uncommitted non-beads changes")
-                return False
-            
-            if beads_changes:
-                print("🔧 Committing beads database changes...")
-                subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8', errors='replace')
-                subprocess.run(["git", "commit", "-m", f"chore: sync beads before merge of {branch_name}"],
-                             check=True, encoding='utf-8', errors='replace')
-                print("✅ Beads changes committed")
-            
-            if worktree_changes:
-                print("🧹 Committing worktree cleanup changes...")
-                subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8', errors='replace')
-                subprocess.run(["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
-                             check=True, encoding='utf-8', errors='replace')
-                print("✅ Worktree cleanup committed")
-        
-        subprocess.run(["git", "checkout", target_branch],
-                     check=True, capture_output=True, text=True, encoding='utf-8')
-        subprocess.run(["git", "pull", "--rebase"],
-                     check=True, capture_output=True, text=True, encoding='utf-8')
-        subprocess.run(["git", "merge", "--no-ff", branch_name, "-m", f"Merge {branch_name}"],
-                     check=True, capture_output=True, text=True, encoding='utf-8')
-        print(f"✅ Merged {branch_name} into {target_branch}")
-        
-        # POST-MERGE VALIDATION
-        current_branch = subprocess.run(
-            ["git", "branch", "--show-current"],
-            capture_output=True, text=True, encoding='utf-8', check=True
-        ).stdout.strip()
-        
-        if current_branch != target_branch:
-            print(f"❌ Post-merge validation failed: Not on {target_branch} (on {current_branch})")
+        if not _sync_and_ensure_clean_main_repo(branch_name):
             return False
         
-        status_result = subprocess.run(
-            ["git", "status", "--porcelain"],
-            capture_output=True, text=True, encoding='utf-8', check=True
-        )
+        execute_merge_sequence(branch_name, target_branch)
+        print(f"✅ Merged {branch_name} into {target_branch}")
         
-        if status_result.stdout.strip():
-            print(f"❌ Post-merge validation failed: {target_branch} has uncommitted changes")
+        if not validate_post_merge(target_branch):
             return False
         
         print(f"✅ Post-merge validation passed: {target_branch} is clean")
@@ -214,29 +137,10 @@ def merge_worktree(item_id: str, target_branch: Optional[str] = None, cleanup: b
         
         print(f"✅ Merge confirmed: {branch_name} is merged into {target_branch}")
         
-        # Best-effort cleanup - merge already succeeded
         if cleanup:
-            if worktree_path.exists():
-                try:
-                    subprocess.run(
-                        ["git", "worktree", "remove", str(worktree_path)],
-                        check=True, capture_output=True, text=True, encoding='utf-8'
-                    )
-                    print(f"✅ Removed worktree at {worktree_path}")
-                except subprocess.CalledProcessError as e:
-                    print(f"⚠️  Could not remove worktree: {e.stderr or e}")
-                    print(f"   Merge successful - worktree cleanup can be done later")
-            
-            try:
-                subprocess.run(
-                    ["git", "branch", "-d", branch_name],
-                    check=True, capture_output=True, text=True, encoding='utf-8'
-                )
-                print(f"✅ Deleted branch {branch_name}")
-            except subprocess.CalledProcessError as e:
-                print(f"⚠️  Could not delete branch: {e.stderr or e}")
+            _cleanup_after_merge(worktree_path, branch_name)
         
-        return True  # Merge completed, cleanup failures are non-critical
+        return True  # Merge completed
         
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr if e.stderr else str(e)
@@ -368,3 +272,97 @@ def list_worktrees() -> list[dict[str, str]]:
         
     except subprocess.CalledProcessError:
         return []
+
+def _sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
+    """Sync beads and ensure main repo is clean before merge."""
+    # CRITICAL: Sync beads before merge to avoid uncommitted .beads files blocking checkout
+    print("🔄 Syncing beads database before merge...")
+    try:
+        bd_sync_result = subprocess.run(
+            ["bd", "sync"],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            timeout=30
+        )
+        if bd_sync_result.returncode != 0:
+            print(f"⚠️  bd sync returned non-zero: {bd_sync_result.returncode}")
+            print(f"   stdout: {bd_sync_result.stdout}")
+            print(f"   stderr: {bd_sync_result.stderr}")
+    except subprocess.TimeoutExpired:
+        print("⚠️  bd sync timed out")
+
+    # Verify main repo is clean before checkout
+    try:
+        main_status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            check=True
+        ).stdout.strip()
+        
+        if main_status:
+            # Categorize changes for proper handling
+            lines = main_status.split('\n')
+            beads_changes = [line for line in lines if line and '.beads/' in line]
+            worktree_changes = [line for line in lines if line and 'worktrees/' in line and not line.startswith('??')]
+            untracked_files = [line for line in lines if line and line.startswith('??')]
+            other_changes = [
+                line for line in lines
+                if line
+                and '.beads/' not in line
+                and 'worktrees/' not in line
+                and not line.startswith('??')
+            ]
+            
+            # Block merge if there are problematic changes
+            if other_changes:
+                print("⚠️  Main repo has uncommitted changes:")
+                for line in other_changes[:10]:
+                    print(f"   {line}")
+                if len(other_changes) > 10:
+                    print(f"   ... and {len(other_changes) - 10} more")
+                print("❌ Cannot merge: main repo has uncommitted non-beads changes")
+                return False
+            
+            if beads_changes:
+                print("🔧 Committing beads database changes...")
+                subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8', errors='replace')
+                subprocess.run(["git", "commit", "-m", f"chore: sync beads before merge of {branch_name}"],
+                             check=True, encoding='utf-8', errors='replace')
+                print("✅ Beads changes committed")
+            
+            if worktree_changes:
+                print("🧹 Committing worktree cleanup changes...")
+                subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8', errors='replace')
+                subprocess.run(["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
+                             check=True, encoding='utf-8', errors='replace')
+                print("✅ Worktree cleanup committed")
+                
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Failed to check/clean main repo: {e}")
+        return False
+
+def _cleanup_after_merge(worktree_path: Path, branch_name: str) -> None:
+    """Cleanup worktree and branch after successful merge."""
+    if worktree_path.exists():
+        try:
+            subprocess.run(
+                ["git", "worktree", "remove", str(worktree_path)],
+                check=True, capture_output=True, text=True, encoding='utf-8'
+            )
+            print(f"✅ Removed worktree at {worktree_path}")
+        except subprocess.CalledProcessError as e:
+            print(f"⚠️  Could not remove worktree: {e.stderr or e}")
+            print(f"   Merge successful - worktree cleanup can be done later")
+    
+    try:
+        subprocess.run(
+            ["git", "branch", "-d", branch_name],
+            check=True, capture_output=True, text=True, encoding='utf-8'
+        )
+        print(f"✅ Deleted branch {branch_name}")
+    except subprocess.CalledProcessError as e:
+        print(f"⚠️  Could not delete branch: {e.stderr or e}")

@@ -40,3 +40,5 @@ coverage.json
 htmlcov/
 .tox/
 .nox/
+
+.maintenance_state.json
