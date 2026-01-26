@@ -2,25 +2,22 @@
 
 import subprocess
 from pathlib import Path
-from unittest.mock import Mock, patch, call, mock_open
+from unittest.mock import Mock, MagicMock, patch, call, mock_open
 import pytest
 
-from src.pokepoke.agent_runner import (
-    invoke_cleanup_agent,
-    aggregate_cleanup_stats,
-    run_cleanup_loop,
+from pokepoke.agent_runner import (
     run_maintenance_agent,
     _run_beads_only_agent,
     _run_worktree_agent
 )
-from src.pokepoke.git_operations import has_uncommitted_changes, commit_all_changes
-from src.pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
+from pokepoke.git_operations import has_uncommitted_changes, commit_all_changes
+from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
 
 
 class TestHasUncommittedChanges:
     """Test has_uncommitted_changes function."""
     
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git_operations.subprocess.run')
     def test_no_changes(self, mock_run: Mock) -> None:
         """Test repository with no uncommitted changes."""
         mock_run.return_value = Mock(
@@ -41,7 +38,7 @@ class TestHasUncommittedChanges:
             timeout=10
         )
     
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git_operations.subprocess.run')
     def test_has_changes(self, mock_run: Mock) -> None:
         """Test repository with uncommitted changes."""
         mock_run.return_value = Mock(
@@ -53,7 +50,7 @@ class TestHasUncommittedChanges:
         
         assert result is True
     
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git_operations.subprocess.run')
     def test_git_error(self, mock_run: Mock) -> None:
         """Test error handling when git command fails."""
         mock_run.side_effect = subprocess.CalledProcessError(1, "git status")
@@ -66,7 +63,7 @@ class TestHasUncommittedChanges:
 class TestCommitAllChanges:
     """Test commit_all_changes function."""
     
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git_operations.subprocess.run')
     def test_successful_commit(self, mock_run: Mock) -> None:
         """Test successful commit."""
         mock_run.return_value = Mock(returncode=0, stderr="")
@@ -77,7 +74,7 @@ class TestCommitAllChanges:
         assert error_msg == ""
         assert mock_run.call_count == 2
     
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git_operations.subprocess.run')
     def test_commit_failure_with_errors(self, mock_run: Mock) -> None:
         """Test commit failure with error messages."""
         mock_run.side_effect = [
@@ -94,407 +91,14 @@ class TestCommitAllChanges:
         assert "pre-commit hook failed" in error_msg
 
 
-class TestInvokeCleanupAgent:
-    """Test invoke_cleanup_agent function."""
-    
-    @patch('src.pokepoke.agent_runner.invoke_copilot')
-    @patch('pathlib.Path.read_text')
-    @patch('pathlib.Path.exists')
-    def test_successful_cleanup(
-        self, 
-        mock_exists: Mock, 
-        mock_read: Mock, 
-        mock_invoke: Mock
-    ) -> None:
-        """Test successful cleanup agent invocation."""
-        item = BeadsWorkItem(
-            id="task-1",
-            title="Test Task",
-            description="Test description",
-            status="in_progress",
-            priority=1,
-            issue_type="task",
-            labels=["test"]
-        )
-        repo_root = Path("/fake/repo")
-        
-        mock_exists.return_value = True
-        mock_read.return_value = "Cleanup instructions"
-        mock_invoke.return_value = CopilotResult(
-            work_item_id="task-1-cleanup",
-            success=True,
-            output="Cleanup completed",
-            attempt_count=1,
-            stats=AgentStats(
-                wall_duration=10.0,
-                api_duration=5.0,
-                input_tokens=100,
-                output_tokens=50,
-                lines_added=10,
-                lines_removed=5,
-                premium_requests=1
-            )
-        )
-        
-        success, stats = invoke_cleanup_agent(item, repo_root)
-        
-        assert success is True
-        assert stats is not None
-        assert stats.wall_duration == 10.0
-        assert stats.input_tokens == 100
-        mock_invoke.assert_called_once()
-        
-        # Verify cleanup item was created with correct properties
-        call_args = mock_invoke.call_args
-        cleanup_item = call_args[0][0]
-        assert cleanup_item.id == "task-1-cleanup"
-        assert "cleanup" in cleanup_item.labels
-        assert "automated" in cleanup_item.labels
-    
-    @patch('pathlib.Path.exists')
-    def test_missing_cleanup_prompt(self, mock_exists: Mock) -> None:
-        """Test cleanup when prompt file is missing."""
-        item = BeadsWorkItem(
-            id="task-1",
-            title="Test Task",
-            description="",
-            status="in_progress",
-            priority=1,
-            issue_type="task"
-        )
-        repo_root = Path("/fake/repo")
-        
-        mock_exists.return_value = False
-        
-        success, stats = invoke_cleanup_agent(item, repo_root)
-        
-        assert success is False
-        assert stats is None
-    
-    @patch('src.pokepoke.agent_runner.invoke_copilot')
-    @patch('pathlib.Path.read_text')
-    @patch('pathlib.Path.exists')
-    def test_cleanup_failure(
-        self, 
-        mock_exists: Mock, 
-        mock_read: Mock, 
-        mock_invoke: Mock
-    ) -> None:
-        """Test cleanup agent failure."""
-        item = BeadsWorkItem(
-            id="task-1",
-            title="Test Task",
-            description="",
-            status="in_progress",
-            priority=1,
-            issue_type="task"
-        )
-        repo_root = Path("/fake/repo")
-        
-        mock_exists.return_value = True
-        mock_read.return_value = "Cleanup instructions"
-        mock_invoke.return_value = CopilotResult(
-            work_item_id="task-1-cleanup",
-            success=False,
-            output="",
-            error="Cleanup failed",
-            attempt_count=1
-        )
-        
-        success, stats = invoke_cleanup_agent(item, repo_root)
-        
-        assert success is False
-        assert stats is None
-    
-    @patch('src.pokepoke.agent_runner.invoke_copilot')
-    @patch('pathlib.Path.read_text')
-    @patch('pathlib.Path.exists')
-    def test_cleanup_with_labels(
-        self, 
-        mock_exists: Mock, 
-        mock_read: Mock, 
-        mock_invoke: Mock
-    ) -> None:
-        """Test cleanup includes work item labels in context."""
-        item = BeadsWorkItem(
-            id="task-1",
-            title="Test Task",
-            description="Test description",
-            status="in_progress",
-            priority=1,
-            issue_type="task",
-            labels=["backend", "api"]
-        )
-        repo_root = Path("/fake/repo")
-        
-        mock_exists.return_value = True
-        mock_read.return_value = "Cleanup instructions"
-        mock_invoke.return_value = CopilotResult(
-            work_item_id="task-1-cleanup",
-            success=True,
-            output="",
-            attempt_count=1
-        )
-        
-        invoke_cleanup_agent(item, repo_root)
-        
-        # Verify prompt includes labels
-        call_args = mock_invoke.call_args
-        prompt = call_args[1]['prompt']
-        assert "backend" in prompt
-        assert "api" in prompt
 
 
-class TestAggregateCleanupStats:
-    """Test aggregate_cleanup_stats function."""
-    
-    def test_aggregate_with_both_stats(self) -> None:
-        """Test aggregating cleanup stats into result stats."""
-        result_stats = AgentStats(
-            wall_duration=10.0,
-            api_duration=5.0,
-            input_tokens=100,
-            output_tokens=50,
-            lines_added=10,
-            lines_removed=5,
-            premium_requests=1
-        )
-        cleanup_stats = AgentStats(
-            wall_duration=5.0,
-            api_duration=2.0,
-            input_tokens=50,
-            output_tokens=25,
-            lines_added=5,
-            lines_removed=2,
-            premium_requests=1
-        )
-        
-        aggregate_cleanup_stats(result_stats, cleanup_stats)
-        
-        assert result_stats.wall_duration == 15.0
-        assert result_stats.api_duration == 7.0
-        assert result_stats.input_tokens == 150
-        assert result_stats.output_tokens == 75
-        assert result_stats.lines_added == 15
-        assert result_stats.lines_removed == 7
-        assert result_stats.premium_requests == 2
-    
-    def test_aggregate_with_none_cleanup_stats(self) -> None:
-        """Test aggregating when cleanup stats is None."""
-        result_stats = AgentStats(
-            wall_duration=10.0,
-            api_duration=5.0,
-            input_tokens=100,
-            output_tokens=50,
-            lines_added=10,
-            lines_removed=5,
-            premium_requests=1
-        )
-        
-        aggregate_cleanup_stats(result_stats, None)
-        
-        # Should remain unchanged
-        assert result_stats.wall_duration == 10.0
-        assert result_stats.input_tokens == 100
-    
-    def test_aggregate_with_none_result_stats(self) -> None:
-        """Test aggregating when result stats is None."""
-        cleanup_stats = AgentStats(
-            wall_duration=5.0,
-            api_duration=2.0,
-            input_tokens=50,
-            output_tokens=25,
-            lines_added=5,
-            lines_removed=2,
-            premium_requests=1
-        )
-        
-        # Should not raise exception
-        aggregate_cleanup_stats(None, cleanup_stats)
-
-
-class TestRunCleanupLoop:
-    """Test run_cleanup_loop function."""
-    
-    @patch('src.pokepoke.agent_runner.invoke_cleanup_agent')
-    @patch('src.pokepoke.agent_runner.commit_all_changes')
-    @patch('src.pokepoke.agent_runner.verify_main_repo_clean')
-    def test_no_uncommitted_changes(
-        self, 
-        mock_verify: Mock, 
-        mock_commit: Mock, 
-        mock_invoke: Mock
-    ) -> None:
-        """Test cleanup loop when no uncommitted changes."""
-        item = BeadsWorkItem(
-            id="task-1",
-            title="Test",
-            description="",
-            status="in_progress",
-            priority=1,
-            issue_type="task"
-        )
-        result = CopilotResult(
-            work_item_id="task-1",
-            success=True,
-            output="",
-            attempt_count=1
-        )
-        repo_root = Path("/fake/repo")
-        
-        # is_clean=True, no uncommitted output, no non-beads changes
-        mock_verify.return_value = (True, "", [])
-        
-        success, cleanup_runs = run_cleanup_loop(item, result, repo_root)
-        
-        assert success is True
-        assert cleanup_runs == 0
-        mock_commit.assert_not_called()
-        mock_invoke.assert_not_called()
-    
-    @patch('src.pokepoke.agent_runner.invoke_cleanup_agent')
-    @patch('src.pokepoke.agent_runner.commit_all_changes')
-    @patch('src.pokepoke.agent_runner.verify_main_repo_clean')
-    def test_successful_commit_first_try(
-        self, 
-        mock_verify: Mock, 
-        mock_commit: Mock, 
-        mock_invoke: Mock
-    ) -> None:
-        """Test cleanup loop with successful commit on first try."""
-        item = BeadsWorkItem(
-            id="task-1",
-            title="Test",
-            description="",
-            status="in_progress",
-            priority=1,
-            issue_type="task"
-        )
-        result = CopilotResult(
-            work_item_id="task-1",
-            success=True,
-            output="",
-            attempt_count=1
-        )
-        repo_root = Path("/fake/repo")
-        
-        # is_clean=False (has non-beads changes), then True after commit
-        mock_verify.return_value = (False, " M file.py\n", [" M file.py"])
-        mock_commit.return_value = (True, "")
-        
-        success, cleanup_runs = run_cleanup_loop(item, result, repo_root)
-        
-        assert success is True
-        assert cleanup_runs == 0
-        mock_commit.assert_called_once()
-        mock_invoke.assert_not_called()
-    
-    @patch('src.pokepoke.agent_runner.invoke_cleanup_agent')
-    @patch('src.pokepoke.agent_runner.commit_all_changes')
-    @patch('src.pokepoke.agent_runner.verify_main_repo_clean')
-    def test_commit_fails_cleanup_succeeds(
-        self, 
-        mock_verify: Mock, 
-        mock_commit: Mock, 
-        mock_invoke: Mock
-    ) -> None:
-        """Test cleanup loop with commit failure then cleanup success."""
-        item = BeadsWorkItem(
-            id="task-1",
-            title="Test",
-            description="",
-            status="in_progress",
-            priority=1,
-            issue_type="task"
-        )
-        result = CopilotResult(
-            work_item_id="task-1",
-            success=True,
-            output="",
-            attempt_count=1,
-            stats=AgentStats(
-                wall_duration=10.0,
-                api_duration=5.0,
-                input_tokens=100,
-                output_tokens=50,
-                lines_added=10,
-                lines_removed=5,
-                premium_requests=1
-            )
-        )
-        repo_root = Path("/fake/repo")
-        
-        # First call: has non-beads changes, second call: clean after cleanup
-        mock_verify.side_effect = [
-            (False, " M file.py\n", [" M file.py"]),  # Initial state
-            (True, "", [])  # After cleanup
-        ]
-        mock_commit.return_value = (False, "Tests failed")
-        mock_invoke.return_value = (
-            True,
-            AgentStats(
-                wall_duration=5.0,
-                api_duration=2.0,
-                input_tokens=50,
-                output_tokens=25,
-                lines_added=5,
-                lines_removed=2,
-                premium_requests=1
-            )
-        )
-        
-        success, cleanup_runs = run_cleanup_loop(item, result, repo_root)
-        
-        assert success is True
-        assert cleanup_runs == 1
-        mock_commit.assert_called_once()
-        mock_invoke.assert_called_once()
-        # Stats should be aggregated
-        assert result.stats.wall_duration == 15.0
-    
-    @patch('src.pokepoke.agent_runner.invoke_cleanup_agent')
-    @patch('src.pokepoke.agent_runner.commit_all_changes')
-    @patch('src.pokepoke.agent_runner.verify_main_repo_clean')
-    def test_cleanup_agent_fails(
-        self, 
-        mock_verify: Mock, 
-        mock_commit: Mock, 
-        mock_invoke: Mock
-    ) -> None:
-        """Test cleanup loop when cleanup agent fails."""
-        item = BeadsWorkItem(
-            id="task-1",
-            title="Test",
-            description="",
-            status="in_progress",
-            priority=1,
-            issue_type="task"
-        )
-        result = CopilotResult(
-            work_item_id="task-1",
-            success=True,
-            output="",
-            attempt_count=1
-        )
-        repo_root = Path("/fake/repo")
-        
-        # is_clean=False (has non-beads changes)
-        mock_verify.return_value = (False, " M file.py\n", [" M file.py"])
-        mock_commit.return_value = (False, "Tests failed")
-        mock_invoke.return_value = (False, None)
-        
-        success, cleanup_runs = run_cleanup_loop(item, result, repo_root)
-        
-        assert success is False
-        assert cleanup_runs == 1
-        assert result.success is False
-        assert "Cleanup agent failed" in result.error
 
 
 class TestRunMaintenanceAgent:
     """Test run_maintenance_agent function."""
     
-    @patch('src.pokepoke.agent_runner._run_beads_only_agent')
+    @patch('pokepoke.agent_runner._run_beads_only_agent')
     @patch('pathlib.Path.read_text')
     @patch('pathlib.Path.exists')
     @patch('pathlib.Path.cwd')
@@ -529,7 +133,7 @@ class TestRunMaintenanceAgent:
         assert stats.wall_duration == 10.0
         mock_run_beads.assert_called_once()
     
-    @patch('src.pokepoke.agent_runner._run_worktree_agent')
+    @patch('pokepoke.agent_runner._run_worktree_agent')
     @patch('pathlib.Path.read_text')
     @patch('pathlib.Path.exists')
     @patch('pathlib.Path.cwd')
@@ -579,8 +183,8 @@ class TestRunMaintenanceAgent:
 class TestRunBeadsOnlyAgent:
     """Test _run_beads_only_agent function."""
     
-    @patch('src.pokepoke.agent_runner.parse_agent_stats')
-    @patch('src.pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agent_runner.invoke_copilot')
     def test_successful_beads_agent(
         self, 
         mock_invoke: Mock, 
@@ -622,7 +226,7 @@ class TestRunBeadsOnlyAgent:
             deny_write=True
         )
     
-    @patch('src.pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.invoke_copilot')
     def test_failed_beads_agent(self, mock_invoke: Mock) -> None:
         """Test failed beads-only agent."""
         agent_item = BeadsWorkItem(
@@ -652,14 +256,14 @@ class TestRunWorktreeAgent:
     """Test _run_worktree_agent function."""
     
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')  # Patch at module level
-    @patch('src.pokepoke.agent_runner.cleanup_worktree')
-    @patch('src.pokepoke.agent_runner.merge_worktree')
-    @patch('src.pokepoke.agent_runner.parse_agent_stats')
-    @patch('src.pokepoke.agent_runner.run_cleanup_loop')
+    @patch('pokepoke.agent_runner.cleanup_worktree')
+    @patch('pokepoke.agent_runner.merge_worktree')
+    @patch('pokepoke.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agent_runner.run_cleanup_loop')
     @patch('os.chdir')
     @patch('os.getcwd')
-    @patch('src.pokepoke.agent_runner.invoke_copilot')
-    @patch('src.pokepoke.agent_runner.create_worktree')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.create_worktree')
     def test_successful_worktree_agent(
         self,
         mock_create: Mock,
@@ -717,7 +321,7 @@ class TestRunWorktreeAgent:
         mock_merge.assert_called_once_with("maintenance-test", cleanup=True)
         mock_cleanup.assert_not_called()
     
-    @patch('src.pokepoke.agent_runner.create_worktree')
+    @patch('pokepoke.agent_runner.create_worktree')
     def test_worktree_creation_failure(self, mock_create: Mock) -> None:
         """Test worktree agent when worktree creation fails."""
         agent_item = BeadsWorkItem(
@@ -742,12 +346,12 @@ class TestRunWorktreeAgent:
         
         assert stats is None
     
-    @patch('src.pokepoke.agent_runner.cleanup_worktree')
+    @patch('pokepoke.agent_runner.cleanup_worktree')
     @patch('os.chdir')
     @patch('os.getcwd')
-    @patch('src.pokepoke.agent_runner.run_cleanup_loop')
-    @patch('src.pokepoke.agent_runner.invoke_copilot')
-    @patch('src.pokepoke.agent_runner.create_worktree')
+    @patch('pokepoke.agent_runner.run_cleanup_loop')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.create_worktree')
     def test_worktree_agent_failure(
         self,
         mock_create: Mock,
@@ -788,4 +392,231 @@ class TestRunWorktreeAgent:
         )
         
         assert stats is None
-        mock_cleanup.assert_called_once_with("maintenance-test", force=True)
+
+    @patch('pokepoke.agent_runner.invoke_merge_conflict_cleanup_agent')
+    @patch('pokepoke.agent_runner.cleanup_worktree')
+    @patch('pokepoke.agent_runner.merge_worktree')
+    @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
+    @patch('os.chdir')
+    @patch('os.getcwd')
+    @patch('pokepoke.agent_runner.run_cleanup_loop')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.create_worktree')
+    def test_worktree_merge_failure(
+        self,
+        mock_create: Mock,
+        mock_invoke: Mock,
+        mock_cleanup_loop: Mock,
+        mock_getcwd: Mock,
+        mock_chdir: Mock,
+        mock_check_ready: Mock,
+        mock_merge: Mock,
+        mock_cleanup: Mock,
+        mock_invoke_merge_cleanup: Mock
+    ) -> None:
+        """Test worktree agent when merge fails."""
+        agent_item = BeadsWorkItem(
+            id="maintenance-test",
+            title="Test Maintenance",
+            description="Test",
+            status="in_progress",
+            priority=0,
+            issue_type="task",
+            labels=["maintenance"]
+        )
+        
+        mock_create.return_value = Path("/fake/worktree")
+        mock_getcwd.return_value = "/original"
+        # Mock successful agent run
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="maintenance-test",
+            success=True,
+            output='{"wall_duration": 10.0, "input_tokens": 100, "output_tokens": 50}',
+            error="",
+            attempt_count=1
+        )
+        mock_cleanup_loop.return_value = (True, 0)
+        
+        # Repo ready, but merge fails
+        mock_check_ready.return_value = (True, "")
+        mock_merge.return_value = False
+        
+        # Cleanup fails too
+        mock_invoke_merge_cleanup.return_value = (False, None)
+        
+        stats = _run_worktree_agent(
+            "Test",
+            "maintenance-test",
+            agent_item,
+            "Test prompt",
+            Path("/fake/repo")
+        )
+        
+        assert stats is None
+        # Verify cleanup invoked
+        mock_invoke_merge_cleanup.assert_called_once()
+        mock_cleanup.assert_not_called()
+
+
+class TestRunBetaTester:
+    """Test run_beta_tester function."""
+    
+    @patch('pokepoke.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('subprocess.run')
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.read_text')
+    def test_beta_tester_success(
+        self,
+        mock_read: Mock,
+        mock_exists: Mock,
+        mock_run: Mock,
+        mock_invoke: Mock,
+        mock_get_prompts: Mock,
+        mock_parse: Mock
+    ) -> None:
+        """Test successful beta tester run."""
+        mock_exists.return_value = True
+        mock_read.return_value = "Beta test prompt"
+        mock_run.return_value = Mock(returncode=0)
+        
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="beta-tester",
+            success=True,
+            output='{"wall_duration": 10.0, "input_tokens": 100, "output_tokens": 50}',
+            attempt_count=1
+        )
+        
+        mock_parse.return_value = AgentStats(
+            wall_duration=10.0,
+            api_duration=5.0,
+            input_tokens=100,
+            output_tokens=50,
+            lines_added=10,
+            lines_removed=5,
+            premium_requests=1
+        )
+        
+        # Mock prompts dir
+        mock_dir = MagicMock()
+        mock_get_prompts.return_value = mock_dir
+        mock_file = Mock()
+        mock_file.exists.return_value = True
+        mock_file.read_text.return_value = "Beta test prompt"
+        mock_dir.__truediv__.return_value = mock_file
+        
+        from pokepoke.agent_runner import run_beta_tester
+        stats = run_beta_tester()
+        
+        assert stats is not None
+        assert stats.wall_duration == 10.0
+        mock_invoke.assert_called_once()
+        mock_run.assert_called()  # Restart script
+
+    @patch('pokepoke.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('subprocess.run')
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.read_text')
+    def test_beta_tester_restart_missing_keeps_going(
+        self, 
+        mock_read: Mock, 
+        mock_exists: Mock, 
+        mock_run: Mock, 
+        mock_invoke: Mock, 
+        mock_get_prompts: Mock,
+        mock_parse: Mock
+    ) -> None:
+        """Test restart script missing but proceeds."""
+        # restart_script.exists() -> False
+        # prompt_path.exists() -> True
+        mock_exists.side_effect = [False, True]
+        mock_read.return_value = "prompt"
+        
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="beta", success=True, output="{}", attempt_count=1
+        )
+        
+        mock_parse.return_value = AgentStats(
+            wall_duration=10.0,
+            api_duration=5.0,
+            input_tokens=100,
+            output_tokens=50,
+            lines_added=10,
+            lines_removed=5,
+            premium_requests=1
+        )
+        
+        mock_dir = MagicMock()
+        mock_get_prompts.return_value = mock_dir
+        mock_file = Mock()
+        mock_file.exists.return_value = True
+        mock_file.read_text.return_value = "prompt"
+        mock_dir.__truediv__.return_value = mock_file
+        
+        from pokepoke.agent_runner import run_beta_tester
+        stats = run_beta_tester()
+        
+        assert stats is not None # It proceeded!
+        mock_run.assert_not_called() # Did not run restart
+
+    @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
+    @patch('subprocess.run')
+    @patch('pathlib.Path.exists')
+    def test_beta_tester_prompt_missing(
+        self, 
+        mock_exists: Mock, 
+        mock_run: Mock, 
+        mock_get_prompts: Mock
+    ) -> None:
+        """Test prompt file missing returns None."""
+        # restart_script.exists() -> True
+        # prompt_path.exists() -> False
+        mock_exists.side_effect = [True, False]
+        mock_run.return_value = Mock(returncode=0)
+        
+        mock_dir = MagicMock()
+        mock_get_prompts.return_value = mock_dir
+        mock_file = Mock()
+        mock_file.exists.return_value = False # Explicitly false here too
+        mock_dir.__truediv__.return_value = mock_file
+        
+        from pokepoke.agent_runner import run_beta_tester
+        stats = run_beta_tester()
+        assert stats is None
+
+    @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('subprocess.run')
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.read_text')
+    def test_beta_tester_invoke_failure(
+        self, 
+        mock_read: Mock, 
+        mock_exists: Mock, 
+        mock_run: Mock, 
+        mock_invoke: Mock,
+        mock_get_prompts: Mock
+    ) -> None:
+        """Test failure in invoke_copilot returns None."""
+        mock_exists.return_value = True
+        mock_run.return_value = Mock(returncode=0)
+        mock_read.return_value = "prompt"
+        
+        mock_dir = MagicMock()
+        mock_get_prompts.return_value = mock_dir
+        mock_file = Mock()
+        mock_file.exists.return_value = True
+        mock_file.read_text.return_value = "prompt"
+        mock_dir.__truediv__.return_value = mock_file
+        
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="beta", success=False, output=None, attempt_count=1, error="Failed"
+        )
+        
+        from pokepoke.agent_runner import run_beta_tester
+        stats = run_beta_tester()
+        assert stats is None
+

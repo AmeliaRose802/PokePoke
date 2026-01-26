@@ -619,9 +619,10 @@ class TestMergeWorktreeToDev:
         assert result is True
         mock_merge.assert_called_once_with("task-1", cleanup=True)
     
+    @patch('pokepoke.cleanup_agents.invoke_copilot')
     @patch('pokepoke.worktree_finalization.create_cleanup_delegation_issue')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
-    def test_repo_not_ready(self, mock_check: Mock, mock_create_issue: Mock) -> None:
+    def test_repo_not_ready(self, mock_check: Mock, mock_create_issue: Mock, mock_invoke_copilot: Mock) -> None:
         """Test when main repo is not ready for merge."""
         item = BeadsWorkItem(
             id="task-1",
@@ -631,24 +632,26 @@ class TestMergeWorktreeToDev:
             priority=1,
             issue_type="task"
         )
-        
+
         mock_check.return_value = (False, "Uncommitted changes")
         mock_create_issue.return_value = "cleanup-issue-1"
-        
+        mock_invoke_copilot.return_value = CopilotResult(
+            work_item_id="task-1-cleanup",
+            success=False,
+            output="",
+            error="Cleanup failed",
+            attempt_count=1
+        )
+
         result = merge_worktree_to_dev(item)
-        
+
         assert result is False
-        mock_create_issue.assert_called_once()
-        call_kwargs = mock_create_issue.call_args.kwargs
-        assert 'Resolve merge conflict' in call_kwargs['title']
-        assert 'task-1' in call_kwargs['title']
-        assert call_kwargs['parent_id'] == 'task-1'
-        assert call_kwargs['priority'] == 1
-    
+        
+    @patch('pokepoke.cleanup_agents.invoke_copilot')
     @patch('pokepoke.worktree_finalization.create_cleanup_delegation_issue')
     @patch('pokepoke.worktree_finalization.merge_worktree')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
-    def test_merge_fails(self, mock_check: Mock, mock_merge: Mock, mock_create_issue: Mock) -> None:
+    def test_merge_fails(self, mock_check: Mock, mock_merge: Mock, mock_create_issue: Mock, mock_invoke_copilot: Mock) -> None:
         """Test when merge operation fails."""
         item = BeadsWorkItem(
             id="task-1",
@@ -658,20 +661,21 @@ class TestMergeWorktreeToDev:
             priority=1,
             issue_type="task"
         )
-        
+
         mock_check.return_value = (True, "")
         mock_merge.return_value = False
         mock_create_issue.return_value = "cleanup-issue-1"
-        
+        mock_invoke_copilot.return_value = CopilotResult(
+            work_item_id="task-1-merge-fix",
+            success=False,
+            output="",
+            error="Cleanup failed",
+            attempt_count=1
+        )
+
         result = merge_worktree_to_dev(item)
-        
+
         assert result is False
-        mock_create_issue.assert_called_once()
-        call_kwargs = mock_create_issue.call_args.kwargs
-        assert 'Resolve merge conflict' in call_kwargs['title']
-        assert 'task-1' in call_kwargs['title']
-        assert call_kwargs['parent_id'] == 'task-1'
-        assert call_kwargs['priority'] == 1
 
 
 class TestCloseWorkItemAndParents:

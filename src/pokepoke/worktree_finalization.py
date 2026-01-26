@@ -95,15 +95,31 @@ def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
 **Work Item:** {item.id} - {item.title}
 """
         
-        create_cleanup_delegation_issue(
-            title=f"Resolve merge conflict for work item {item.id}",
-            description=description,
-            labels=['git', 'worktree', 'merge-conflict'],
-            parent_id=item.id,
-            priority=1  # High priority
-        )
+        print(f"   Invoking cleanup agent to resolve uncommitted changes before merge...")
+        from .cleanup_agents import invoke_cleanup_agent
         
-        print(f"   📋 Created delegation issue for cleanup")
+        cleanup_success, _ = invoke_cleanup_agent(item, Path.cwd())
+        
+        if cleanup_success:
+             print("   Cleanup successful, retrying merge check...")
+             is_ready, error_msg = check_main_repo_ready_for_merge()
+             if not is_ready:
+                 print(f"   Still failing after cleanup: {error_msg}")
+                 return False
+        else:
+             print("   Cleanup failed.")
+             return False
+
+        # print(f"   Note: Automatic cleanup issue creation disabled by user request.")
+        # create_cleanup_delegation_issue(
+        #     title=f"Resolve merge conflict for work item {item.id}",
+        #     description=description,
+        #     labels=['git', 'worktree', 'merge-conflict'],
+        #     parent_id=item.id,
+        #     priority=1  # High priority
+        # )
+        
+        # print(f"   📋 Created delegation issue for cleanup")
         return False
     
     print(f"\n🔀 Merging worktree for {item.id}...")
@@ -141,15 +157,34 @@ def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
 **Work Item:** {item.id} - {item.title}
 """
         
-        create_cleanup_delegation_issue(
-            title=f"Resolve merge conflict for work item {item.id}",
-            description=description,
-            labels=['git', 'worktree', 'merge-conflict'],
-            parent_id=item.id,
-            priority=1  # High priority
-        )
+        print(f"   Invoking cleanup agent to resolve conflicts...")
+        from .cleanup_agents import invoke_merge_conflict_cleanup_agent
         
-        print(f"   📋 Created delegation issue for cleanup")
+        success, _ = invoke_merge_conflict_cleanup_agent(item, Path.cwd(), "Merge conflict detected")
+        
+        if success:
+            print("   Cleanup successful, retrying merge...")
+            merge_success = merge_worktree(item.id, cleanup=True)
+            if merge_success:
+                 print("   Merged and cleaned up worktree")
+                 return True
+            else:
+                 print("   Merge failed again after cleanup.")
+                 return False
+        else:
+             print("   Cleanup failed.")
+             return False
+
+        # print(f"   Note: Automatic cleanup issue creation disabled by user request.")
+        # create_cleanup_delegation_issue(
+        #     title=f"Resolve merge conflict for work item {item.id}",
+        #     description=description,
+        #     labels=['git', 'worktree', 'merge-conflict'],
+        #     parent_id=item.id,
+        #     priority=1  # High priority
+        # )
+        
+        # print(f"   📋 Created delegation issue for cleanup")
         return False
     
     print("   Merged and cleaned up worktree")
