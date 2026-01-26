@@ -11,7 +11,7 @@ def _is_assigned_to_current_user(item: BeadsWorkItem) -> bool:
     """Check if item is assigned to current user or unassigned.
     
     This function determines if a work item can be claimed by the current agent.
-    Items that are in_progress AND assigned to another agent are NOT claimable.
+    ANY item with an owner that's not the current user should be skipped.
     
     Args:
         item: Work item to check.
@@ -19,33 +19,32 @@ def _is_assigned_to_current_user(item: BeadsWorkItem) -> bool:
     Returns:
         True if item is unassigned or assigned to current user, False if assigned to someone else.
     """
-    # CRITICAL: If item is in_progress AND has an owner, it's already being worked on
-    # Only skip it if the owner is NOT the current user
-    if item.status == "in_progress" and item.owner:
-        # Item is actively being worked on - check if it's us or someone else
-        agent_name = os.environ.get('AGENT_NAME', '')
-        username = os.environ.get('USERNAME', '')
-        
-        owner = item.owner.lower()
-        
-        # Check if assigned to current agent
-        if agent_name and agent_name.lower() == owner:
-            return True
-        
-        # Check if assigned to current user by username
-        if username and username.lower() == owner:
-            return True
-        
-        # Check if username is in the owner email (e.g., "ameliapayne@microsoft.com")
-        if username and username.lower() in owner:
-            return True
-        
-        # It's in_progress and assigned to someone else - SKIP IT
-        print(f"   ⏭️  Skipping {item.id} (in_progress, assigned to {item.owner})")
-        return False
+    # If no owner, it's claimable
+    if not item.owner:
+        return True
     
-    # Item is not in_progress, or has no owner - it's claimable
-    return True
+    # Has an owner - check if it's us or someone else
+    agent_name = os.environ.get('AGENT_NAME', '')
+    username = os.environ.get('USERNAME', '')
+    
+    owner = item.owner.lower()
+    
+    # Check if assigned to current agent
+    if agent_name and agent_name.lower() == owner:
+        return True
+    
+    # Check if assigned to current user by username
+    if username and username.lower() == owner:
+        return True
+    
+    # Check if username is in the owner email (e.g., "ameliapayne@microsoft.com")
+    if username and username.lower() in owner:
+        return True
+    
+    # Assigned to someone else - ALWAYS SKIP regardless of status
+    status_info = f" ({item.status})" if item.status else ""
+    print(f"   ⏭️  Skipping {item.id}{status_info} - assigned to {item.owner}")
+    return False
 
 
 def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool) -> Optional[BeadsWorkItem]:
