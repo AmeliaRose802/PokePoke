@@ -14,6 +14,7 @@ class BeadsWorkItem:
     issue_type: str
     description: Optional[str] = None
     owner: Optional[str] = None
+    assignee: Optional[str] = None  # Agent actively working on it (pokepoke_agent_123)
     created_at: Optional[str] = None
     created_by: Optional[str] = None
     updated_at: Optional[str] = None

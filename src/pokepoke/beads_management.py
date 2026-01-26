@@ -53,46 +53,29 @@ def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool
             data = json.loads(json_text)
             current_item = data[0] if isinstance(data, list) else data
             
-            current_owner = current_item.get('owner', '')
+            # CRITICAL: Check 'assignee' field, NOT 'owner' field!
+            # - assignee: The specific agent currently working on it (pokepoke_agent_123)
+            # - owner: The human user who owns it (ameliapayne@microsoft.com)
+            current_assignee = current_item.get('assignee', '')
             current_status = current_item.get('status', '')
             
             # DEBUG: Show what we're checking
             print(f"🔍 [DEBUG] Ownership check for {item_id}:")
-            print(f"   Current owner: '{current_owner}'")
+            print(f"   Current assignee: '{current_assignee}'")
             print(f"   Current status: '{current_status}'")
             print(f"   Our agent_name: '{agent_name}'")
-            print(f"   Our USERNAME: '{os.environ.get('USERNAME', '')}'")
             
-            # Check if already claimed by someone else
-            if current_owner:
-                username = os.environ.get('USERNAME', '').lower()
-                owner_lower = current_owner.lower()
+            # Check if already assigned to another agent
+            if current_assignee:
+                assignee_lower = current_assignee.lower()
                 
-                # CRITICAL: Distinguish between agent names vs human users
-                # - Agent names (pokepoke_*): ONLY that specific agent can claim
-                # - Human users (email@domain.com): ANY agent run by that user can claim
-                # - Human usernames (ameliapayne): ANY agent run by that user can claim
-                
-                # Is it ours?
-                is_ours = False
-                
-                # Exact match on agent name - this agent specifically owns it
-                if owner_lower == agent_name.lower():
-                    is_ours = True
-                # Exact match on username - human user owns it, any agent can claim
-                elif owner_lower == username:
-                    is_ours = True
-                # Email address containing username - human user owns it
-                elif '@' in owner_lower and username and username in owner_lower:
-                    is_ours = True
-                # If owner is an agent name (starts with pokepoke_), it's NOT ours unless exact match
-                elif current_owner.startswith('pokepoke_') and owner_lower != agent_name.lower():
-                    is_ours = False
+                # Is it assigned to us?
+                is_ours = (assignee_lower == agent_name.lower())
                 
                 print(f"   Is ours? {is_ours}")
                 
                 if not is_ours:
-                    print(f"⚠️  RACE CONDITION DETECTED: {item_id} already assigned to {current_owner}")
+                    print(f"⚠️  RACE CONDITION DETECTED: {item_id} already assigned to {current_assignee}")
                     print(f"   Skipping to prevent conflict - another agent claimed it first")
                     return False
             else:

@@ -91,7 +91,7 @@ class TestSelectWorkItem:
                 status="in_progress",
                 priority=1,
                 issue_type="task",
-                owner="agent_beta"  # Assigned to different agent
+                assignee="agent_beta"  # Assigned to different agent
             ),
             BeadsWorkItem(
                 id="task-2",
@@ -100,7 +100,7 @@ class TestSelectWorkItem:
                 status="open",
                 priority=2,
                 issue_type="task",
-                owner=None  # Unassigned
+                assignee=None  # Unassigned
             )
         ]
         mock_select.return_value = items[1]
@@ -128,7 +128,7 @@ class TestSelectWorkItem:
                 status="in_progress",
                 priority=1,
                 issue_type="task",
-                owner="agent_beta"
+                assignee="agent_beta"
             ),
             BeadsWorkItem(
                 id="task-2",
@@ -137,7 +137,7 @@ class TestSelectWorkItem:
                 status="in_progress",
                 priority=2,
                 issue_type="task",
-                owner="agent_gamma"
+                assignee="agent_gamma"
             )
         ]
         

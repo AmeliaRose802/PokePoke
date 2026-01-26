@@ -383,11 +383,11 @@ class TestAssignAndSyncItem:
             'USERNAME': 'testuser'
         }.get(key, default)
         
-        # Mock bd show returns item assigned to OTHER agent
+        # Mock bd show returns item assigned to OTHER agent (via assignee field)
         show_result = Mock(
             stdout=json.dumps([{
                 "id": "task-1",
-                "owner": "other-agent",
+                "assignee": "other-agent",  # CRITICAL: assignee field, not owner!
                 "status": "in_progress"
             }]),
             returncode=0

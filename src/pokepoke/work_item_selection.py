@@ -8,42 +8,35 @@ from .beads import select_next_hierarchical_item
 
 
 def _is_assigned_to_current_user(item: BeadsWorkItem) -> bool:
-    """Check if item is assigned to current user or unassigned.
+    """Check if item is assignable by current agent.
     
-    This function determines if a work item can be claimed by the current agent.
-    ANY item with an owner that's not the current user should be skipped.
+    CRITICAL: Checks the 'assignee' field (specific agent), NOT 'owner' field (human user).
+    - assignee: pokepoke_agent_123 (who is actively working on it)
+    - owner: ameliapayne@microsoft.com (who created/owns it)
     
     Args:
         item: Work item to check.
         
     Returns:
-        True if item is unassigned or assigned to current user, False if assigned to someone else.
+        True if item is unassigned or assigned to THIS agent, False if assigned to another agent.
     """
-    # If no owner, it's claimable
-    if not item.owner:
+    # Get the assignee (specific agent working on it)
+    assignee = getattr(item, 'assignee', None) or ''
+    
+    # If no assignee, it's claimable
+    if not assignee:
         return True
     
-    # Has an owner - check if it's us or someone else
+    # Has an assignee - check if it's THIS agent
     agent_name = os.environ.get('AGENT_NAME', '')
-    username = os.environ.get('USERNAME', '')
     
-    owner = item.owner.lower()
-    
-    # Check if assigned to current agent
-    if agent_name and agent_name.lower() == owner:
+    # Is it assigned to THIS agent specifically?
+    if agent_name and agent_name.lower() == assignee.lower():
         return True
     
-    # Check if assigned to current user by username
-    if username and username.lower() == owner:
-        return True
-    
-    # Check if username is in the owner email (e.g., "ameliapayne@microsoft.com")
-    if username and username.lower() in owner:
-        return True
-    
-    # Assigned to someone else - ALWAYS SKIP regardless of status
+    # Assigned to a different agent - SKIP
     status_info = f" ({item.status})" if item.status else ""
-    print(f"   ⏭️  Skipping {item.id}{status_info} - assigned to {item.owner}")
+    print(f"   ⏭️  Skipping {item.id}{status_info} - assigned to {assignee}")
     return False
 
 
