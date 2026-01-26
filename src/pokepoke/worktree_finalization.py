@@ -9,7 +9,7 @@ from .types import BeadsWorkItem
 from .worktrees import merge_worktree, cleanup_worktree
 from .git_operations import check_main_repo_ready_for_merge
 from .beads_hierarchy import get_parent_id, close_parent_if_complete
-from .beads_management import close_item
+from .beads_management import close_item, create_cleanup_delegation_issue
 
 
 def finalize_work_item(item: BeadsWorkItem, worktree_path: Path) -> bool:
@@ -66,7 +66,44 @@ def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
     if not is_ready:
         print(f"\n⚠️  Cannot merge: {error_msg}")
         print(f"   Worktree preserved at worktrees/task-{item.id} - requires cleanup")
-        # Don't create issues - let orchestrator handle it
+        
+        # Create delegation issue for merge pre-check failure
+        description = f"""Failed to merge worktree for work item {item.id} ({item.title})
+
+**Issue:** {error_msg}
+
+**Worktree Location:** `worktrees/task-{item.id}`
+
+**Required Actions:**
+1. Resolve the issue preventing merge:
+   - {error_msg}
+2. If main repo has uncommitted changes:
+   ```bash
+   git status
+   git add <files>
+   git commit -m "your message"
+   ```
+3. Push resolved changes:
+   ```bash
+   cd worktrees/task-{item.id}
+   git push
+   cd ../..
+   git merge task/{item.id}
+   ```
+4. Clean up the worktree: `git worktree remove worktrees/task-{item.id}`
+
+**Work Item:** {item.id} - {item.title}
+"""
+        
+        create_cleanup_delegation_issue(
+            title=f"Resolve merge conflict for work item {item.id}",
+            description=description,
+            labels=['git', 'worktree', 'merge-conflict'],
+            parent_id=item.id,
+            priority=1  # High priority
+        )
+        
+        print(f"   📋 Created delegation issue for cleanup")
         return False
     
     print(f"\n🔀 Merging worktree for {item.id}...")
@@ -75,7 +112,44 @@ def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
     if not merge_success:
         print(f"\n❌ Worktree merge failed (likely merge conflicts)!")
         print(f"   Worktree preserved at worktrees/task-{item.id} - requires conflict resolution")
-        # Don't create issues - let orchestrator handle it
+        
+        # Create delegation issue for merge failure
+        description = f"""Failed to merge worktree for work item {item.id} ({item.title})
+
+**Issue:** Git merge command failed (likely merge conflicts)
+
+**Worktree Location:** `worktrees/task-{item.id}`
+
+**Required Actions:**
+1. Check merge conflicts:
+   ```bash
+   cd worktrees/task-{item.id}
+   git status
+   ```
+2. Resolve conflicts manually:
+   - Edit conflicted files
+   - Mark as resolved: `git add <file>`
+   - Complete merge: `git commit`
+3. Push resolved changes: `git push`
+4. Switch to main repo and merge:
+   ```bash
+   cd ../..
+   git merge task/{item.id}
+   ```
+5. Clean up worktree: `git worktree remove worktrees/task-{item.id}`
+
+**Work Item:** {item.id} - {item.title}
+"""
+        
+        create_cleanup_delegation_issue(
+            title=f"Resolve merge conflict for work item {item.id}",
+            description=description,
+            labels=['git', 'worktree', 'merge-conflict'],
+            parent_id=item.id,
+            priority=1  # High priority
+        )
+        
+        print(f"   📋 Created delegation issue for cleanup")
         return False
     
     print("   Merged and cleaned up worktree")
