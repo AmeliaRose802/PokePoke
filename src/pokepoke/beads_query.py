@@ -50,7 +50,7 @@ def get_ready_work_items() -> List[BeadsWorkItem]:
     # Filter out fields not in BeadsWorkItem dataclass
     valid_work_item_fields = {
         'id', 'title', 'status', 'priority', 'issue_type', 'description',
-        'owner', 'created_at', 'created_by', 'updated_at', 'labels',
+        'owner', 'assignee', 'created_at', 'created_by', 'updated_at', 'labels',
         'dependency_count', 'dependent_count', 'notes'
     }
     
