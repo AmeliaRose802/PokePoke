@@ -15,18 +15,70 @@ def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool
     This should be called BEFORE creating a worktree to ensure other parallel
     agents see the assignment and don't pick the same item.
     
+    CRITICAL: Verifies item is still claimable immediately before assignment
+    to catch race conditions where another agent claimed it between fetch and now.
+    
     Args:
         item_id: The item ID to assign.
         agent_name: Agent name to assign to (defaults to $AGENT_NAME env var or 'agent').
         
     Returns:
-        True if successful, False otherwise.
+        True if successful, False if already claimed or failed.
     """
     if agent_name is None:
         agent_name = os.environ.get('AGENT_NAME', 'agent')
     
+    # CRITICAL: Check current ownership RIGHT BEFORE claiming
+    # This catches race conditions where another agent claimed between fetch and now
     try:
-        # Update item to in_progress and assign to agent
+        result = subprocess.run(
+            ['bd', 'show', item_id, '--json'],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            check=True
+        )
+        
+        # Parse current item state
+        filtered_lines = [
+            line for line in result.stdout.split('\n')
+            if line.strip() and not line.strip().startswith(('Note:', 'Warning:', 'Hint:'))
+        ]
+        json_start = next(
+            (i for i, line in enumerate(filtered_lines) if line.strip().startswith('[') or line.strip().startswith('{')),
+            None
+        )
+        if json_start is not None:
+            json_text = '\n'.join(filtered_lines[json_start:])
+            data = json.loads(json_text)
+            current_item = data[0] if isinstance(data, list) else data
+            
+            current_owner = current_item.get('owner', '')
+            current_status = current_item.get('status', '')
+            
+            # Check if already claimed by someone else
+            if current_owner:
+                username = os.environ.get('USERNAME', '').lower()
+                owner_lower = current_owner.lower()
+                
+                # Is it ours?
+                is_ours = (
+                    owner_lower == agent_name.lower() or
+                    owner_lower == username or
+                    (username and username in owner_lower)
+                )
+                
+                if not is_ours:
+                    print(f"⚠️  RACE CONDITION DETECTED: {item_id} already assigned to {current_owner}")
+                    print(f"   Skipping to prevent conflict - another agent claimed it first")
+                    return False
+    
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+        print(f"⚠️  Failed to verify {item_id} ownership: {e}")
+        return False
+    
+    try:
+        # Now safe to claim - we verified it's unassigned or ours
         subprocess.run(
             ['bd', 'update', item_id, '--status', 'in_progress', '-a', agent_name, '--json'],
             capture_output=True,
