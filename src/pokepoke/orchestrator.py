@@ -305,11 +305,8 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
     if items_completed == 0:
         return
     
-    print(f"\n🔧 Checking maintenance agents (items_completed={items_completed})...")
-    
     # Run Tech Debt Agent (every 5 items)
     if items_completed % 5 == 0:
-        print(f"   ✓ Tech Debt trigger (items_completed % 5 == 0)")
         print("\n📊 Running Tech Debt Agent...")
         run_logger.log_maintenance("tech_debt", "Starting Tech Debt Agent")
         session_stats.tech_debt_agent_runs += 1
@@ -322,7 +319,6 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
     
     # Run Janitor Agent (every 2 items instead of 3 for more frequent runs)
     if items_completed % 2 == 0:
-        print(f"   ✓ Janitor trigger (items_completed % 2 == 0)")
         print("\n🧹 Running Janitor Agent...")
         run_logger.log_maintenance("janitor", "Starting Janitor Agent")
         session_stats.janitor_agent_runs += 1
@@ -335,7 +331,6 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
     
     # Run Backlog Cleanup Agent (every 7 items)
     if items_completed % 7 == 0:
-        print(f"   ✓ Backlog Cleanup trigger (items_completed % 7 == 0)")
         print("\n🗑️ Running Backlog Cleanup Agent...")
         run_logger.log_maintenance("backlog_cleanup", "Starting Backlog Cleanup Agent")
         session_stats.backlog_cleanup_agent_runs += 1
@@ -346,7 +341,6 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
     
     # Run Beta Tester Agent (every 3 items - swap with Janitor)
     if items_completed % 3 == 0:
-        print(f"   ✓ Beta Tester trigger (items_completed % 3 == 0)")
         from pokepoke.agent_runner import run_beta_tester
         print("\n🧪 Running Beta Tester Agent...")
         run_logger.log_maintenance("beta_tester", "Starting Beta Tester Agent")
