@@ -305,8 +305,11 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
     if items_completed == 0:
         return
     
+    print(f"\n🔧 Checking maintenance agents (items_completed={items_completed})...")
+    
     # Run Tech Debt Agent (every 5 items)
     if items_completed % 5 == 0:
+        print(f"   ✓ Tech Debt trigger (items_completed % 5 == 0)")
         print("\n📊 Running Tech Debt Agent...")
         run_logger.log_maintenance("tech_debt", "Starting Tech Debt Agent")
         session_stats.tech_debt_agent_runs += 1
@@ -317,28 +320,33 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
         else:
             run_logger.log_maintenance("tech_debt", "Tech Debt Agent failed")
     
-    # Run Janitor Agent (every 3 items)
-    if items_completed % 3 == 0:
+    # Run Janitor Agent (every 2 items instead of 3 for more frequent runs)
+    if items_completed % 2 == 0:
+        print(f"   ✓ Janitor trigger (items_completed % 2 == 0)")
         print("\n🧹 Running Janitor Agent...")
         run_logger.log_maintenance("janitor", "Starting Janitor Agent")
         session_stats.janitor_agent_runs += 1
         janitor_stats = run_maintenance_agent("Janitor", "janitor.md", repo_root=pokepoke_repo, needs_worktree=True)
         if janitor_stats:
             _aggregate_stats(session_stats, janitor_stats)
-        run_logger.log_maintenance("janitor", f"Janitor Agent {'completed successfully' if janitor_stats else 'failed'}")
+            run_logger.log_maintenance("janitor", "Janitor Agent completed successfully")
+        else:
+            run_logger.log_maintenance("janitor", "Janitor Agent failed")
     
     # Run Backlog Cleanup Agent (every 7 items)
     if items_completed % 7 == 0:
+        print(f"   ✓ Backlog Cleanup trigger (items_completed % 7 == 0)")
         print("\n🗑️ Running Backlog Cleanup Agent...")
         run_logger.log_maintenance("backlog_cleanup", "Starting Backlog Cleanup Agent")
         session_stats.backlog_cleanup_agent_runs += 1
         backlog_stats = run_maintenance_agent("Backlog Cleanup", "backlog-cleanup.md", repo_root=pokepoke_repo, needs_worktree=False)
         if backlog_stats:
             _aggregate_stats(session_stats, backlog_stats)
-        run_logger.log_maintenance("backlog_cleanup", f"Backlog Cleanup Agent {'completed successfully' if backlog_stats else 'failed'}")
+        run_logger.log_maintenance("backlog_cleanup", "Backlog Cleanup Agent completed successfully")
     
-    # Run Beta Tester Agent (every 2 items)
-    if items_completed % 2 == 0:
+    # Run Beta Tester Agent (every 3 items - swap with Janitor)
+    if items_completed % 3 == 0:
+        print(f"   ✓ Beta Tester trigger (items_completed % 3 == 0)")
         from pokepoke.agent_runner import run_beta_tester
         print("\n🧪 Running Beta Tester Agent...")
         run_logger.log_maintenance("beta_tester", "Starting Beta Tester Agent")

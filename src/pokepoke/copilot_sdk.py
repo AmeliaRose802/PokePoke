@@ -214,25 +214,25 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     idle_task.cancel()
                     # Don't await, just cancel and move on
                 
-                # If we have pending tool calls, don't consider this idle yet
+                # If we have pending tool calls, don't start idle check
                 if pending_tool_calls > 0:
-                    print(f"\n[SDK] Session idle but {pending_tool_calls} tool(s) still executing...")
-                    return
-                
-                print("\n[SDK] Session idle - waiting to confirm completion...")
-                
-                # Use a delay to distinguish between "thinking" and "done"
-                async def check_still_idle() -> None:
-                    try:
-                        await asyncio.sleep(idle_timeout)  # Wait configured time
-                        if not done.is_set() and pending_tool_calls == 0:
-                            print("[SDK] Session confirmed idle - processing complete")
-                            done.set()
-                    except asyncio.CancelledError:
-                        pass  # Task was cancelled, that's fine
-                
-                # Schedule the delayed check
-                idle_task = asyncio.create_task(check_still_idle())
+                    print(f"\n[SDK] Session idle but {pending_tool_calls} tool(s) still executing - continuing...")
+                    # Don't start idle check, just continue processing events
+                else:
+                    print("\n[SDK] Session idle - waiting to confirm completion...")
+                    
+                    # Use a delay to distinguish between "thinking" and "done"
+                    async def check_still_idle() -> None:
+                        try:
+                            await asyncio.sleep(idle_timeout)  # Wait configured time
+                            if not done.is_set() and pending_tool_calls == 0:
+                                print("[SDK] Session confirmed idle - processing complete")
+                                done.set()
+                        except asyncio.CancelledError:
+                            pass  # Task was cancelled, that's fine
+                    
+                    # Schedule the delayed check
+                    idle_task = asyncio.create_task(check_still_idle())
                 
             elif event_type == "session.error":
                 # Error occurred

@@ -714,14 +714,14 @@ class TestRunOrchestratorContinuousMode:
         result = run_orchestrator(interactive=False, continuous=True)
         
         assert result == 0
-        # At item 1: janitor
-        # At item 2: janitor, beta tester
-        # At item 3: janitor, tech debt
-        # At item 4: janitor, beta tester, backlog cleanup
-        # ... etc
-        # Total: 10 janitor, 5 beta tester, 3 tech debt, 2 backlog cleanup
-        assert mock_maintenance.call_count >= 3  # At least some maintenance agents ran
-        assert mock_beta.call_count >= 5  # Beta tester runs every 2 items
+        # New frequencies:
+        # Janitor: every 2 items -> runs at 2, 4, 6, 8, 10 (5 times)
+        # Beta Tester: every 3 items -> runs at 3, 6, 9 (3 times)
+        # Tech Debt: every 5 items -> runs at 5, 10 (2 times)
+        # Backlog Cleanup: every 7 items -> runs at 7 (1 time)
+        # Total maintenance calls: 5 + 2 + 1 = 8 (not counting beta tester)
+        assert mock_maintenance.call_count >= 5  # At least 5 maintenance agents ran (janitor alone)
+        assert mock_beta.call_count >= 3  # Beta tester runs every 3 items
     
     @patch('builtins.input')
     @patch('pokepoke.orchestrator.get_beads_stats')
