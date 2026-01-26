@@ -1,9 +1,51 @@
 """Work item selection logic for PokePoke."""
 
+import os
 from typing import Optional
 
 from .types import BeadsWorkItem
 from .beads import select_next_hierarchical_item
+
+
+def _is_assigned_to_current_user(item: BeadsWorkItem) -> bool:
+    """Check if item is assigned to current user or unassigned.
+    
+    This function determines if a work item can be claimed by the current agent.
+    Items that are in_progress AND assigned to another agent are NOT claimable.
+    
+    Args:
+        item: Work item to check.
+        
+    Returns:
+        True if item is unassigned or assigned to current user, False if assigned to someone else.
+    """
+    # CRITICAL: If item is in_progress AND has an owner, it's already being worked on
+    # Only skip it if the owner is NOT the current user
+    if item.status == "in_progress" and item.owner:
+        # Item is actively being worked on - check if it's us or someone else
+        agent_name = os.environ.get('AGENT_NAME', '')
+        username = os.environ.get('USERNAME', '')
+        
+        owner = item.owner.lower()
+        
+        # Check if assigned to current agent
+        if agent_name and agent_name.lower() == owner:
+            return True
+        
+        # Check if assigned to current user by username
+        if username and username.lower() == owner:
+            return True
+        
+        # Check if username is in the owner email (e.g., "ameliapayne@microsoft.com")
+        if username and username.lower() in owner:
+            return True
+        
+        # It's in_progress and assigned to someone else - SKIP IT
+        print(f"   ⏭️  Skipping {item.id} (in_progress, assigned to {item.owner})")
+        return False
+    
+    # Item is not in_progress, or has no owner - it's claimable
+    return True
 
 
 def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool) -> Optional[BeadsWorkItem]:
@@ -20,6 +62,21 @@ def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool) -> Opt
         print("\n✨ No ready work found in beads database.")
         print("   Run 'bd ready' to see available work items.")
         return None
+    
+    # Filter out items assigned to other agents
+    available_items = [item for item in ready_items if _is_assigned_to_current_user(item)]
+    
+    # Show how many items were filtered out
+    filtered_count = len(ready_items) - len(available_items)
+    if filtered_count > 0:
+        print(f"\n⏭️  Skipped {filtered_count} item(s) assigned to other agents")
+    
+    if not available_items:
+        print("\n✨ No available work - all ready items are assigned to other agents.")
+        print("   Wait for other agents to complete their work, or claim unassigned items.")
+        return None
+    
+    ready_items = available_items
     
     print(f"\n📋 Found {len(ready_items)} ready work items:\n")
     

@@ -36,7 +36,7 @@ class TestSelectWorkItem:
         assert result is None
     
     @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
-    def testautonomous_selection(self, mock_select: Mock) -> None:
+    def test_autonomous_selection(self, mock_select: Mock) -> None:
         """Test autonomous mode selection."""
         items = [
             BeadsWorkItem(
@@ -54,10 +54,11 @@ class TestSelectWorkItem:
         
         assert result is not None
         assert result.id == "task-1"
-        mock_select.assert_called_once_with(items)
+        # Should have passed the full list (no filtering since no items assigned to others)
+        mock_select.assert_called_once()
     
     @patch('builtins.input')
-    def testinteractive_selection(self, mock_input: Mock) -> None:
+    def test_interactive_selection(self, mock_input: Mock) -> None:
         """Test interactive mode selection."""
         items = [
             BeadsWorkItem(
@@ -75,6 +76,75 @@ class TestSelectWorkItem:
         
         assert result is not None
         assert result.id == "task-1"
+    
+    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    def test_filters_items_assigned_to_others(self, mock_select: Mock) -> None:
+        """Test that items assigned to other agents are filtered out."""
+        import os
+        os.environ['AGENT_NAME'] = 'agent_alpha'
+        
+        items = [
+            BeadsWorkItem(
+                id="task-1",
+                title="Task assigned to other agent",
+                description="",
+                status="in_progress",
+                priority=1,
+                issue_type="task",
+                owner="agent_beta"  # Assigned to different agent
+            ),
+            BeadsWorkItem(
+                id="task-2",
+                title="Task available",
+                description="",
+                status="open",
+                priority=2,
+                issue_type="task",
+                owner=None  # Unassigned
+            )
+        ]
+        mock_select.return_value = items[1]
+        
+        result = select_work_item(items, interactive=False)
+        
+        # Should have filtered out task-1 and only passed task-2
+        mock_select.assert_called_once()
+        passed_items = mock_select.call_args[0][0]
+        assert len(passed_items) == 1
+        assert passed_items[0].id == "task-2"
+        assert result is not None
+        assert result.id == "task-2"
+    
+    def test_all_items_assigned_to_others(self) -> None:
+        """Test when all items are assigned to other agents."""
+        import os
+        os.environ['AGENT_NAME'] = 'agent_alpha'
+        
+        items = [
+            BeadsWorkItem(
+                id="task-1",
+                title="Task assigned to beta",
+                description="",
+                status="in_progress",
+                priority=1,
+                issue_type="task",
+                owner="agent_beta"
+            ),
+            BeadsWorkItem(
+                id="task-2",
+                title="Task assigned to gamma",
+                description="",
+                status="in_progress",
+                priority=2,
+                issue_type="task",
+                owner="agent_gamma"
+            )
+        ]
+        
+        result = select_work_item(items, interactive=False)
+        
+        # Should return None since all items are assigned to others
+        assert result is None
 
 
 class TestInteractiveSelection:
