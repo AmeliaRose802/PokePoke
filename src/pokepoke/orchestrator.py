@@ -301,8 +301,12 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
     """
     pokepoke_repo = Path(r"C:\Users\ameliapayne\PokePoke")
     
-    # Run Tech Debt Agent
-    if items_completed % 3 == 0:
+    # Skip maintenance at start (items_completed == 0)
+    if items_completed == 0:
+        return
+    
+    # Run Tech Debt Agent (every 5 items)
+    if items_completed % 5 == 0:
         print("\n📊 Running Tech Debt Agent...")
         run_logger.log_maintenance("tech_debt", "Starting Tech Debt Agent")
         session_stats.tech_debt_agent_runs += 1
@@ -313,8 +317,8 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
         else:
             run_logger.log_maintenance("tech_debt", "Tech Debt Agent failed")
     
-    # Run Janitor Agent
-    if items_completed % 1 == 0:
+    # Run Janitor Agent (every 3 items)
+    if items_completed % 3 == 0:
         print("\n🧹 Running Janitor Agent...")
         run_logger.log_maintenance("janitor", "Starting Janitor Agent")
         session_stats.janitor_agent_runs += 1
@@ -323,8 +327,8 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
             _aggregate_stats(session_stats, janitor_stats)
         run_logger.log_maintenance("janitor", f"Janitor Agent {'completed successfully' if janitor_stats else 'failed'}")
     
-    # Run Backlog Cleanup Agent
-    if items_completed % 4 == 0:
+    # Run Backlog Cleanup Agent (every 7 items)
+    if items_completed % 7 == 0:
         print("\n🗑️ Running Backlog Cleanup Agent...")
         run_logger.log_maintenance("backlog_cleanup", "Starting Backlog Cleanup Agent")
         session_stats.backlog_cleanup_agent_runs += 1
@@ -333,7 +337,7 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
             _aggregate_stats(session_stats, backlog_stats)
         run_logger.log_maintenance("backlog_cleanup", f"Backlog Cleanup Agent {'completed successfully' if backlog_stats else 'failed'}")
     
-    # Run Beta Tester Agent
+    # Run Beta Tester Agent (every 2 items)
     if items_completed % 2 == 0:
         from pokepoke.agent_runner import run_beta_tester
         print("\n🧪 Running Beta Tester Agent...")
