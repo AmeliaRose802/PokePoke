@@ -142,6 +142,84 @@ class TestHierarchicalWorkAssignment:
         assert next_child.priority == 1
     
     @patch('src.pokepoke.beads_hierarchy.get_children')
+    def test_get_next_child_task_skips_items_assigned_to_others(self, mock_get_children: Mock) -> None:
+        """Test that next child skips items assigned to other agents."""
+        # Set up current agent
+        import os
+        os.environ['AGENT_NAME'] = 'agent_alpha'
+        
+        mock_get_children.return_value = [
+            BeadsWorkItem(
+                id="task-1",
+                title="High priority but assigned to other agent",
+                description="",
+                status="in_progress",
+                priority=1,
+                issue_type="task",
+                owner="agent_beta"  # Assigned to different agent
+            ),
+            BeadsWorkItem(
+                id="task-2",
+                title="Lower priority but available",
+                description="",
+                status="open",
+                priority=2,
+                issue_type="task",
+                owner=None  # Unassigned
+            ),
+            BeadsWorkItem(
+                id="task-3",
+                title="Assigned to current agent",
+                description="",
+                status="in_progress",
+                priority=3,
+                issue_type="task",
+                owner="agent_alpha"  # Assigned to us
+            )
+        ]
+        
+        next_child = get_next_child_task("epic-1")
+        
+        # Should return task-2 (unassigned, priority 2) because task-1 is assigned to someone else
+        # Even though task-3 is assigned to us, task-2 has higher priority
+        assert next_child is not None
+        assert next_child.id == "task-2"
+        assert next_child.priority == 2
+    
+    @patch('src.pokepoke.beads_hierarchy.get_children')
+    def test_get_next_child_task_all_assigned_to_others(self, mock_get_children: Mock) -> None:
+        """Test that next child returns None when all items are assigned to other agents."""
+        # Set up current agent
+        import os
+        os.environ['AGENT_NAME'] = 'agent_alpha'
+        
+        mock_get_children.return_value = [
+            BeadsWorkItem(
+                id="task-1",
+                title="Assigned to agent beta",
+                description="",
+                status="in_progress",
+                priority=1,
+                issue_type="task",
+                owner="agent_beta"
+            ),
+            BeadsWorkItem(
+                id="task-2",
+                title="Assigned to agent gamma",
+                description="",
+                status="in_progress",
+                priority=2,
+                issue_type="task",
+                owner="agent_gamma"
+            )
+        ]
+        
+        next_child = get_next_child_task("epic-1")
+        
+        # Should return None since all children are assigned to other agents
+        assert next_child is None
+    
+    @patch('src.pokepoke.beads_hierarchy.get_children')
     def test_all_children_complete_no_children(self, mock_get_children: Mock) -> None:
         """Test that no children means all complete (trivially true)."""
         mock_get_children.return_value = []

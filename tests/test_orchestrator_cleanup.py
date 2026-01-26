@@ -44,19 +44,20 @@ class TestOrchestratorCleanupDetection:
     
     @patch('src.pokepoke.orchestrator.get_ready_work_items')
     @patch('subprocess.run')
-    def test_autocommits_beads_changes(
+    def test_detects_beads_changes_without_autocommit(
         self,
         mock_subprocess: Mock,
         mock_get_items: Mock
     ) -> None:
-        """Test that beads-only changes are auto-committed."""
-        # Mock git status showing only beads changes, then clean
+        """Test that beads-only changes are detected but NOT auto-committed.
+        
+        Beads has its own sync mechanism via 'bd sync' and daemon mode.
+        The orchestrator should just detect and notify, not manually commit.
+        """
+        # Mock git status showing only beads changes
         mock_subprocess.side_effect = [
             Mock(stdout='{"summary": {"total_issues": 10}}', returncode=0),  # bd stats for starting beads stats
-            Mock(stdout=" M .beads/issues.jsonl", returncode=0),  # First status check
-            Mock(stdout="", returncode=0),  # git add
-            Mock(stdout="", returncode=1),  # git diff --cached --quiet (returncode 1 = changes exist)
-            Mock(stdout="", returncode=0),  # git commit
+            Mock(stdout=" M .beads/issues.jsonl", returncode=0),  # git status check
         ]
         
         # Mock no work items
@@ -64,9 +65,10 @@ class TestOrchestratorCleanupDetection:
         
         result = run_orchestrator(interactive=False, continuous=False)
         
-        # Verify we auto-committed beads changes (5 calls: bd stats, git status, git add, git diff, git commit)
-        assert mock_subprocess.call_count >= 5
-        # Check that git add and commit were called
+        # Verify we only called bd stats and git status (no git add/commit)
+        assert mock_subprocess.call_count == 2
+        
+        # Verify no git add or commit calls were made
         add_calls = [
             call for call in mock_subprocess.call_args_list
             if len(call[0]) > 0 and 'add' in str(call[0][0])
@@ -75,8 +77,8 @@ class TestOrchestratorCleanupDetection:
             call for call in mock_subprocess.call_args_list
             if len(call[0]) > 0 and 'commit' in str(call[0][0])
         ]
-        assert len(add_calls) > 0
-        assert len(commit_calls) > 0
+        assert len(add_calls) == 0
+        assert len(commit_calls) == 0
         assert result == 0
     
     @patch('src.pokepoke.orchestrator.get_ready_work_items')

@@ -119,6 +119,8 @@ def print_stats(items_completed: int, total_requests: int, elapsed_seconds: floa
             print(f"🧹 Janitor agents:      {session_stats.janitor_agent_runs}")
         if session_stats.backlog_cleanup_agent_runs > 0:
             print(f"🗑️  Backlog agents:      {session_stats.backlog_cleanup_agent_runs}")
+        if session_stats.beta_tester_agent_runs > 0:
+            print(f"🧪 Beta Tester agents:  {session_stats.beta_tester_agent_runs}")
     
     # Print agent statistics if available and has non-zero values
     if session_stats and session_stats.agent_stats and (

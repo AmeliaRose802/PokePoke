@@ -343,3 +343,207 @@ class TestFilterWorkItems:
         result = has_feature_parent("task-1")
         
         assert result is False
+
+
+class TestAssignAndSyncItem:
+    """Test assign_and_sync_item race condition detection."""
+    
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_assign_unassigned_item_success(self, mock_run: Mock) -> None:
+        """Test successfully assigning an unassigned item."""
+        from src.pokepoke.beads import assign_and_sync_item
+        
+        # Mock bd show returns unassigned item
+        show_result = Mock(
+            stdout=json.dumps([{"id": "task-1", "owner": "", "status": "open"}]),
+            returncode=0
+        )
+        
+        # Mock bd update succeeds
+        update_result = Mock(returncode=0)
+        
+        # Mock bd sync succeeds
+        sync_result = Mock(returncode=0)
+        
+        mock_run.side_effect = [show_result, update_result, sync_result]
+        
+        result = assign_and_sync_item("task-1", "test-agent")
+        
+        assert result is True
+        assert mock_run.call_count == 3
+    
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    @patch('src.pokepoke.beads_management.os.environ.get')
+    def test_assign_detects_race_condition(self, mock_env: Mock, mock_run: Mock) -> None:
+        """Test detection of race condition when another agent claimed item."""
+        from src.pokepoke.beads import assign_and_sync_item
+        
+        mock_env.side_effect = lambda key, default='': {
+            'AGENT_NAME': 'my-agent',
+            'USERNAME': 'testuser'
+        }.get(key, default)
+        
+        # Mock bd show returns item assigned to OTHER agent
+        show_result = Mock(
+            stdout=json.dumps([{
+                "id": "task-1",
+                "owner": "other-agent",
+                "status": "in_progress"
+            }]),
+            returncode=0
+        )
+        
+        mock_run.return_value = show_result
+        
+        result = assign_and_sync_item("task-1", "my-agent")
+        
+        # Should detect race condition and return False
+        assert result is False
+        # Should only call bd show, NOT bd update
+        assert mock_run.call_count == 1
+    
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    @patch('src.pokepoke.beads_management.os.environ.get')
+    def test_assign_allows_claiming_own_item(self, mock_env: Mock, mock_run: Mock) -> None:
+        """Test that agent can update items already assigned to them."""
+        from src.pokepoke.beads import assign_and_sync_item
+        
+        mock_env.side_effect = lambda key, default='': {
+            'AGENT_NAME': 'my-agent',
+            'USERNAME': 'testuser'
+        }.get(key, default)
+        
+        # Mock bd show returns item already assigned to THIS agent
+        show_result = Mock(
+            stdout=json.dumps([{
+                "id": "task-1",
+                "owner": "my-agent",
+                "status": "in_progress"
+            }]),
+            returncode=0
+        )
+        
+        # Mock bd update succeeds
+        update_result = Mock(returncode=0)
+        
+        # Mock bd sync succeeds
+        sync_result = Mock(returncode=0)
+        
+        mock_run.side_effect = [show_result, update_result, sync_result]
+        
+        result = assign_and_sync_item("task-1", "my-agent")
+        
+        # Should allow updating own item
+        assert result is True
+        assert mock_run.call_count == 3
+    
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    @patch('src.pokepoke.beads_management.os.environ.get')
+    def test_assign_allows_claiming_by_username(self, mock_env: Mock, mock_run: Mock) -> None:
+        """Test that agent can claim items assigned to their username."""
+        from src.pokepoke.beads import assign_and_sync_item
+        
+        mock_env.side_effect = lambda key, default='': {
+            'AGENT_NAME': 'agent-1',
+            'USERNAME': 'ameliapayne'
+        }.get(key, default)
+        
+        # Mock bd show returns item assigned to username (email format)
+        show_result = Mock(
+            stdout=json.dumps([{
+                "id": "task-1",
+                "owner": "ameliapayne@microsoft.com",
+                "status": "in_progress"
+            }]),
+            returncode=0
+        )
+        
+        # Mock bd update succeeds
+        update_result = Mock(returncode=0)
+        
+        # Mock bd sync succeeds
+        sync_result = Mock(returncode=0)
+        
+        mock_run.side_effect = [show_result, update_result, sync_result]
+        
+        result = assign_and_sync_item("task-1", "agent-1")
+        
+        # Should allow claiming item assigned to username in email
+        assert result is True
+        assert mock_run.call_count == 3
+    
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_assign_handles_show_failure(self, mock_run: Mock) -> None:
+        """Test handling of bd show command failure."""
+        from src.pokepoke.beads import assign_and_sync_item
+        
+        # Mock bd show fails
+        mock_run.side_effect = subprocess.CalledProcessError(1, 'bd', stderr="not found")
+        
+        result = assign_and_sync_item("task-1", "agent-1")
+        
+        # Should return False on verification failure
+        assert result is False
+    
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_assign_handles_update_failure(self, mock_run: Mock) -> None:
+        """Test handling of bd update command failure."""
+        from src.pokepoke.beads import assign_and_sync_item
+        
+        # Mock bd show succeeds (unassigned)
+        show_result = Mock(
+            stdout=json.dumps([{"id": "task-1", "owner": "", "status": "open"}]),
+            returncode=0
+        )
+        
+        # Mock bd update fails
+        update_failure = subprocess.CalledProcessError(1, 'bd', stderr="update failed")
+        
+        mock_run.side_effect = [show_result, update_failure]
+        
+        result = assign_and_sync_item("task-1", "agent-1")
+        
+        # Should return False on update failure
+        assert result is False
+    
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_assign_handles_json_parse_error(self, mock_run: Mock) -> None:
+        """Test handling of malformed JSON from bd show."""
+        from src.pokepoke.beads import assign_and_sync_item
+        
+        # Mock bd show returns invalid JSON (has { but malformed)
+        show_result = Mock(
+            stdout='{"id": "task-1", "owner": INVALID}',
+            returncode=0
+        )
+        
+        mock_run.return_value = show_result
+        
+        result = assign_and_sync_item("task-1", "agent-1")
+        
+        # Should return False on parse error
+        assert result is False
+    
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_assign_sync_failure_still_succeeds(self, mock_run: Mock) -> None:
+        """Test that assignment succeeds even if sync fails."""
+        from src.pokepoke.beads import assign_and_sync_item
+        
+        # Mock bd show returns unassigned
+        show_result = Mock(
+            stdout=json.dumps([{"id": "task-1", "owner": "", "status": "open"}]),
+            returncode=0
+        )
+        
+        # Mock bd update succeeds
+        update_result = Mock(returncode=0)
+        
+        # Mock bd sync fails (non-zero return)
+        sync_result = Mock(returncode=1)
+        
+        mock_run.side_effect = [show_result, update_result, sync_result]
+        
+        result = assign_and_sync_item("task-1", "agent-1")
+        
+        # Should still return True - assignment succeeded even if sync failed
+        assert result is True

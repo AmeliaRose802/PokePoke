@@ -17,7 +17,42 @@ from pokepoke.worktrees import (
     merge_worktree,
     cleanup_worktree,
     list_worktrees,
+    sanitize_branch_name,
 )
+
+
+class TestSanitizeBranchName:
+    """Tests for sanitize_branch_name function."""
+    
+    def test_sanitize_hash_symbol(self):
+        """Test that # is replaced with hyphen."""
+        assert sanitize_branch_name("icm_queue_c#-j1ly") == "icm_queue_c-j1ly"
+    
+    def test_sanitize_multiple_invalid_chars(self):
+        """Test that multiple invalid characters are sanitized."""
+        assert sanitize_branch_name("feat:add*feature?now") == "feat-add-feature-now"
+    
+    def test_sanitize_spaces(self):
+        """Test that spaces are replaced with hyphens."""
+        assert sanitize_branch_name("my feature branch") == "my-feature-branch"
+    
+    def test_sanitize_consecutive_dots(self):
+        """Test that consecutive dots are collapsed."""
+        assert sanitize_branch_name("branch..name...here") == "branch.name.here"
+    
+    def test_sanitize_leading_trailing_chars(self):
+        """Test that leading/trailing hyphens and dots are removed."""
+        assert sanitize_branch_name("-branch-name-") == "branch-name"
+        assert sanitize_branch_name(".branch.name.") == "branch.name"
+    
+    def test_sanitize_already_valid(self):
+        """Test that valid branch names are unchanged."""
+        assert sanitize_branch_name("valid-branch-name") == "valid-branch-name"
+        assert sanitize_branch_name("task/PokePoke-123") == "task/PokePoke-123"
+    
+    def test_sanitize_multiple_invalid_sequences(self):
+        """Test handling of multiple invalid character sequences."""
+        assert sanitize_branch_name("a~b^c:d?e*f[g]h") == "a-b-c-d-e-f-g-h"
 
 
 class TestGetMainRepoRoot:
@@ -259,21 +294,23 @@ class TestCreateWorktree:
             result = create_worktree('incredible_icm-42')
             
             assert result == Path('/existing/path')
-            mock_print.assert_called_once()
+            # Should be called twice: once for error message, once for reusing
+            assert mock_print.call_count == 2
             assert 'Reusing existing worktree' in mock_print.call_args[0][0]
     
     def test_create_worktree_unrecoverable_error(self):
         """Test when worktree creation fails with unrecoverable error."""
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees', return_value=[]), \
-             patch('pathlib.Path.mkdir'):
+             patch('pathlib.Path.mkdir'), \
+             patch('builtins.print'):
             
             error = subprocess.CalledProcessError(
                 1, ['git'], stderr='fatal: some other error'
             )
             mock_run.side_effect = error
             
-            with pytest.raises(subprocess.CalledProcessError):
+            with pytest.raises(RuntimeError, match="Failed to create worktree"):
                 create_worktree('incredible_icm-42')
 
 
@@ -388,6 +425,60 @@ class TestMergeWorktree:
             assert any('push' in call for call in calls)
             assert any('worktree' in call and 'remove' in call for call in calls)
             assert any('branch' in call and '-d' in call for call in calls)
+    
+    def test_merge_worktree_cleanup_failure_non_critical(self):
+        """Test that cleanup failures don't fail the merge - merge already succeeded."""
+        with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
+             patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.is_worktree_merged', return_value=True), \
+             patch('pathlib.Path.exists', return_value=True), \
+             patch('builtins.print') as mock_print:
+            
+            call_count = [0]
+            
+            def run_side_effect(*args, **kwargs):
+                cmd = args[0]
+                # Handle each command type
+                if 'branch' in cmd and '--show-current' in cmd:
+                    return Mock(stdout='ameliapayne/dev\n', returncode=0)
+                elif 'status' in cmd and '--porcelain' in cmd:
+                    return Mock(stdout='', returncode=0)
+                elif 'worktree' in cmd and 'remove' in cmd:
+                    # Simulate worktree removal failure (permission denied)
+                    raise subprocess.CalledProcessError(
+                        1, cmd, 
+                        stderr="error: failed to delete 'worktrees/task-xyz': Permission denied"
+                    )
+                elif 'branch' in cmd and '-d' in cmd:
+                    # Branch deletion also fails
+                    raise subprocess.CalledProcessError(
+                        1, cmd,
+                        stderr="error: unable to delete branch"
+                    )
+                else:
+                    return Mock(stdout='', stderr='', returncode=0)
+            
+            mock_run.side_effect = run_side_effect
+            
+            # CRITICAL: Merge should succeed even though cleanup failed
+            result = merge_worktree('incredible_icm-42')
+            
+            assert result is True, "Merge should succeed even when cleanup fails"
+            
+            # Verify merge was confirmed
+            print_calls = [str(call) for call in mock_print.call_args_list]
+            assert any('Merge confirmed' in call for call in print_calls), \
+                "Should print merge confirmation"
+            
+            # Verify cleanup warnings were printed
+            assert any('Could not remove worktree' in call for call in print_calls), \
+                "Should warn about worktree removal failure"
+            assert any('Could not delete branch' in call for call in print_calls), \
+                "Should warn about branch deletion failure"
+            
+            # Verify helpful message about non-critical failure
+            assert any('Merge successful' in call for call in print_calls), \
+                "Should clarify that merge succeeded despite cleanup failure"
     
     def test_merge_worktree_success_no_cleanup(self):
         """Test successful merge without cleanup."""
@@ -616,16 +707,21 @@ class TestCleanupWorktree:
     def test_cleanup_worktree_success(self):
         """Test successful worktree cleanup."""
         with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.list_worktrees') as mock_list, \
              patch('pathlib.Path.exists', return_value=True):
             
+            mock_list.return_value = [
+                {'path': 'worktrees/task-incredible_icm-42', 'branch': 'refs/heads/task/incredible_icm-42'}
+            ]
             mock_run.return_value = Mock(returncode=0, stderr='', stdout='')
             
             result = cleanup_worktree('incredible_icm-42')
             
             assert result is True
+            # Should call: list_worktrees, worktree remove, branch delete
             assert mock_run.call_count == 2
             
-            # Check worktree removal call - verify command structure (path separator may vary)
+            # Check worktree removal call
             call_args = mock_run.call_args_list[0][0][0]
             assert call_args[0:3] == ['git', 'worktree', 'remove']
             assert 'task-incredible_icm-42' in call_args[3]
@@ -638,8 +734,12 @@ class TestCleanupWorktree:
     def test_cleanup_worktree_force(self):
         """Test forced worktree cleanup."""
         with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.list_worktrees') as mock_list, \
              patch('pathlib.Path.exists', return_value=True):
             
+            mock_list.return_value = [
+                {'path': 'worktrees/task-incredible_icm-42', 'branch': 'refs/heads/task/incredible_icm-42'}
+            ]
             mock_run.return_value = Mock(returncode=0, stderr='', stdout='')
             
             result = cleanup_worktree('incredible_icm-42', force=True)
@@ -660,34 +760,51 @@ class TestCleanupWorktree:
     def test_cleanup_worktree_not_exists(self):
         """Test cleanup when worktree path doesn't exist."""
         with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.list_worktrees', return_value=[]), \
              patch('pathlib.Path.exists', return_value=False):
             
-            mock_run.return_value = Mock(returncode=0, stderr='', stdout='')
-            
-            result = cleanup_worktree('incredible_icm-42')
-            
-            assert result is True
-            
-            # Should only call branch deletion, not worktree removal
-            assert mock_run.call_count == 1
-            assert mock_run.call_args_list[0][0][0] == [
-                'git', 'branch', '-d', 'task/incredible_icm-42'
-            ]
-    
-    def test_cleanup_worktree_subprocess_error(self):
-        """Test cleanup failure on subprocess error."""
-        with patch('subprocess.run') as mock_run, \
-             patch('pathlib.Path.exists', return_value=True), \
-             patch('builtins.print') as mock_print:
-            
+            # Branch deletion fails because it doesn't exist
             mock_run.side_effect = subprocess.CalledProcessError(
-                1, ['git'], stderr='worktree removal failed'
+                1, ['git'], stderr='error: branch not found'
             )
             
             result = cleanup_worktree('incredible_icm-42')
             
+            # Should succeed even if branch doesn't exist
+            assert result is True
+            # Should try to delete branch (twice: sanitized and unsanitized)
+            assert mock_run.call_count == 2
+    
+    def test_cleanup_worktree_subprocess_error(self):
+        """Test cleanup continues despite subprocess errors for non-existent items."""
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.list_worktrees') as mock_list, \
+             patch('pathlib.Path.exists', return_value=True), \
+             patch('builtins.print') as mock_print:
+            
+            mock_list.return_value = [
+                {'path': 'worktrees/task-incredible_icm-42', 'branch': 'refs/heads/task/incredible_icm-42'}
+            ]
+            
+            # Worktree removal succeeds
+            def run_side_effect(*args, **kwargs):
+                cmd = args[0]
+                if 'worktree' in cmd and 'remove' in cmd:
+                    return Mock(returncode=0, stderr='', stdout='')
+                else:
+                    # Branch deletion fails with real error
+                    raise subprocess.CalledProcessError(
+                        1, cmd, stderr='fatal: some other error'
+                    )
+            
+            mock_run.side_effect = run_side_effect
+            
+            result = cleanup_worktree('incredible_icm-42')
+            
+            # Should fail if branch deletion fails with non-ignorable error
             assert result is False
-            assert any('Cleanup failed' in str(call) for call in mock_print.call_args_list)
+            mock_print.assert_called()
+            assert 'Branch deletion warning' in mock_print.call_args[0][0]
 
 
 class TestListWorktrees:

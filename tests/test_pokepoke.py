@@ -75,7 +75,7 @@ def main():
     print("\n⚠️  Full orchestrator (worktree creation, Copilot invocation, validation)")
     print("   is not yet implemented in the main source tree.")
     print("\n💡 To implement a work item manually, you can use:")
-    print("   python -c \"from src.pokepoke.copilot import invoke_copilot_cli; ...")
+    print("   python -c \"from src.pokepoke.copilot import invoke_copilot; ...")
     
     return 0
 

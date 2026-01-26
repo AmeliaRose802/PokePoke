@@ -6,8 +6,6 @@ from unittest.mock import Mock, patch, call, mock_open
 import pytest
 
 from src.pokepoke.agent_runner import (
-    has_uncommitted_changes,
-    commit_all_changes,
     invoke_cleanup_agent,
     aggregate_cleanup_stats,
     run_cleanup_loop,
@@ -15,13 +13,14 @@ from src.pokepoke.agent_runner import (
     _run_beads_only_agent,
     _run_worktree_agent
 )
+from src.pokepoke.git_operations import has_uncommitted_changes, commit_all_changes
 from src.pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
 
 
 class TestHasUncommittedChanges:
     """Test has_uncommitted_changes function."""
     
-    @patch('src.pokepoke.agent_runner.subprocess.run')
+    @patch('src.pokepoke.git_operations.subprocess.run')
     def test_no_changes(self, mock_run: Mock) -> None:
         """Test repository with no uncommitted changes."""
         mock_run.return_value = Mock(
@@ -37,10 +36,12 @@ class TestHasUncommittedChanges:
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            errors='replace',
+            check=True,
+            timeout=10
         )
     
-    @patch('src.pokepoke.agent_runner.subprocess.run')
+    @patch('src.pokepoke.git_operations.subprocess.run')
     def test_has_changes(self, mock_run: Mock) -> None:
         """Test repository with uncommitted changes."""
         mock_run.return_value = Mock(
@@ -52,7 +53,7 @@ class TestHasUncommittedChanges:
         
         assert result is True
     
-    @patch('src.pokepoke.agent_runner.subprocess.run')
+    @patch('src.pokepoke.git_operations.subprocess.run')
     def test_git_error(self, mock_run: Mock) -> None:
         """Test error handling when git command fails."""
         mock_run.side_effect = subprocess.CalledProcessError(1, "git status")
@@ -65,7 +66,7 @@ class TestHasUncommittedChanges:
 class TestCommitAllChanges:
     """Test commit_all_changes function."""
     
-    @patch('src.pokepoke.agent_runner.subprocess.run')
+    @patch('src.pokepoke.git_operations.subprocess.run')
     def test_successful_commit(self, mock_run: Mock) -> None:
         """Test successful commit."""
         mock_run.return_value = Mock(returncode=0, stderr="")
@@ -76,7 +77,7 @@ class TestCommitAllChanges:
         assert error_msg == ""
         assert mock_run.call_count == 2
     
-    @patch('src.pokepoke.agent_runner.subprocess.run')
+    @patch('src.pokepoke.git_operations.subprocess.run')
     def test_commit_failure_with_errors(self, mock_run: Mock) -> None:
         """Test commit failure with error messages."""
         mock_run.side_effect = [
@@ -96,7 +97,7 @@ class TestCommitAllChanges:
 class TestInvokeCleanupAgent:
     """Test invoke_cleanup_agent function."""
     
-    @patch('src.pokepoke.agent_runner.invoke_copilot_cli')
+    @patch('src.pokepoke.agent_runner.invoke_copilot')
     @patch('pathlib.Path.read_text')
     @patch('pathlib.Path.exists')
     def test_successful_cleanup(
@@ -170,7 +171,7 @@ class TestInvokeCleanupAgent:
         assert success is False
         assert stats is None
     
-    @patch('src.pokepoke.agent_runner.invoke_copilot_cli')
+    @patch('src.pokepoke.agent_runner.invoke_copilot')
     @patch('pathlib.Path.read_text')
     @patch('pathlib.Path.exists')
     def test_cleanup_failure(
@@ -205,7 +206,7 @@ class TestInvokeCleanupAgent:
         assert success is False
         assert stats is None
     
-    @patch('src.pokepoke.agent_runner.invoke_copilot_cli')
+    @patch('src.pokepoke.agent_runner.invoke_copilot')
     @patch('pathlib.Path.read_text')
     @patch('pathlib.Path.exists')
     def test_cleanup_with_labels(
@@ -317,10 +318,10 @@ class TestRunCleanupLoop:
     
     @patch('src.pokepoke.agent_runner.invoke_cleanup_agent')
     @patch('src.pokepoke.agent_runner.commit_all_changes')
-    @patch('src.pokepoke.agent_runner.has_uncommitted_changes')
+    @patch('src.pokepoke.agent_runner.verify_main_repo_clean')
     def test_no_uncommitted_changes(
         self, 
-        mock_uncommitted: Mock, 
+        mock_verify: Mock, 
         mock_commit: Mock, 
         mock_invoke: Mock
     ) -> None:
@@ -341,7 +342,8 @@ class TestRunCleanupLoop:
         )
         repo_root = Path("/fake/repo")
         
-        mock_uncommitted.return_value = False
+        # is_clean=True, no uncommitted output, no non-beads changes
+        mock_verify.return_value = (True, "", [])
         
         success, cleanup_runs = run_cleanup_loop(item, result, repo_root)
         
@@ -352,10 +354,10 @@ class TestRunCleanupLoop:
     
     @patch('src.pokepoke.agent_runner.invoke_cleanup_agent')
     @patch('src.pokepoke.agent_runner.commit_all_changes')
-    @patch('src.pokepoke.agent_runner.has_uncommitted_changes')
+    @patch('src.pokepoke.agent_runner.verify_main_repo_clean')
     def test_successful_commit_first_try(
         self, 
-        mock_uncommitted: Mock, 
+        mock_verify: Mock, 
         mock_commit: Mock, 
         mock_invoke: Mock
     ) -> None:
@@ -376,7 +378,8 @@ class TestRunCleanupLoop:
         )
         repo_root = Path("/fake/repo")
         
-        mock_uncommitted.return_value = True
+        # is_clean=False (has non-beads changes), then True after commit
+        mock_verify.return_value = (False, " M file.py\n", [" M file.py"])
         mock_commit.return_value = (True, "")
         
         success, cleanup_runs = run_cleanup_loop(item, result, repo_root)
@@ -388,10 +391,10 @@ class TestRunCleanupLoop:
     
     @patch('src.pokepoke.agent_runner.invoke_cleanup_agent')
     @patch('src.pokepoke.agent_runner.commit_all_changes')
-    @patch('src.pokepoke.agent_runner.has_uncommitted_changes')
+    @patch('src.pokepoke.agent_runner.verify_main_repo_clean')
     def test_commit_fails_cleanup_succeeds(
         self, 
-        mock_uncommitted: Mock, 
+        mock_verify: Mock, 
         mock_commit: Mock, 
         mock_invoke: Mock
     ) -> None:
@@ -421,8 +424,11 @@ class TestRunCleanupLoop:
         )
         repo_root = Path("/fake/repo")
         
-        # First call: has changes, second call: no changes
-        mock_uncommitted.side_effect = [True, False]
+        # First call: has non-beads changes, second call: clean after cleanup
+        mock_verify.side_effect = [
+            (False, " M file.py\n", [" M file.py"]),  # Initial state
+            (True, "", [])  # After cleanup
+        ]
         mock_commit.return_value = (False, "Tests failed")
         mock_invoke.return_value = (
             True,
@@ -448,10 +454,10 @@ class TestRunCleanupLoop:
     
     @patch('src.pokepoke.agent_runner.invoke_cleanup_agent')
     @patch('src.pokepoke.agent_runner.commit_all_changes')
-    @patch('src.pokepoke.agent_runner.has_uncommitted_changes')
+    @patch('src.pokepoke.agent_runner.verify_main_repo_clean')
     def test_cleanup_agent_fails(
         self, 
-        mock_uncommitted: Mock, 
+        mock_verify: Mock, 
         mock_commit: Mock, 
         mock_invoke: Mock
     ) -> None:
@@ -472,7 +478,8 @@ class TestRunCleanupLoop:
         )
         repo_root = Path("/fake/repo")
         
-        mock_uncommitted.return_value = True
+        # is_clean=False (has non-beads changes)
+        mock_verify.return_value = (False, " M file.py\n", [" M file.py"])
         mock_commit.return_value = (False, "Tests failed")
         mock_invoke.return_value = (False, None)
         
@@ -573,7 +580,7 @@ class TestRunBeadsOnlyAgent:
     """Test _run_beads_only_agent function."""
     
     @patch('src.pokepoke.agent_runner.parse_agent_stats')
-    @patch('src.pokepoke.agent_runner.invoke_copilot_cli')
+    @patch('src.pokepoke.agent_runner.invoke_copilot')
     def test_successful_beads_agent(
         self, 
         mock_invoke: Mock, 
@@ -615,7 +622,7 @@ class TestRunBeadsOnlyAgent:
             deny_write=True
         )
     
-    @patch('src.pokepoke.agent_runner.invoke_copilot_cli')
+    @patch('src.pokepoke.agent_runner.invoke_copilot')
     def test_failed_beads_agent(self, mock_invoke: Mock) -> None:
         """Test failed beads-only agent."""
         agent_item = BeadsWorkItem(
@@ -651,7 +658,7 @@ class TestRunWorktreeAgent:
     @patch('src.pokepoke.agent_runner.run_cleanup_loop')
     @patch('os.chdir')
     @patch('os.getcwd')
-    @patch('src.pokepoke.agent_runner.invoke_copilot_cli')
+    @patch('src.pokepoke.agent_runner.invoke_copilot')
     @patch('src.pokepoke.agent_runner.create_worktree')
     def test_successful_worktree_agent(
         self,
@@ -739,7 +746,7 @@ class TestRunWorktreeAgent:
     @patch('os.chdir')
     @patch('os.getcwd')
     @patch('src.pokepoke.agent_runner.run_cleanup_loop')
-    @patch('src.pokepoke.agent_runner.invoke_copilot_cli')
+    @patch('src.pokepoke.agent_runner.invoke_copilot')
     @patch('src.pokepoke.agent_runner.create_worktree')
     def test_worktree_agent_failure(
         self,

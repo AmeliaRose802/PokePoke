@@ -6,20 +6,24 @@ from pathlib import Path
 from unittest.mock import Mock, patch, call
 import pytest
 
-from src.pokepoke.workflow import (
+from pokepoke.workflow import (
     select_work_item,
-    _interactive_selection,
-    _autonomous_selection,
     process_work_item,
     _setup_worktree,
-    _run_cleanup_with_timeout,
-    _finalize_work_item,
-    _check_and_merge_worktree,
-    _merge_worktree_to_dev,
-    _close_work_item_and_parents,
-    _check_parent_hierarchy
+    _run_cleanup_with_timeout
 )
-from src.pokepoke.types import BeadsWorkItem, CopilotResult, AgentStats
+from pokepoke.work_item_selection import (
+    interactive_selection,
+    autonomous_selection
+)
+from pokepoke.worktree_finalization import (
+    finalize_work_item,
+    check_and_merge_worktree,
+    merge_worktree_to_dev,
+    close_work_item_and_parents,
+    check_parent_hierarchy
+)
+from pokepoke.types import BeadsWorkItem, CopilotResult, AgentStats
 
 
 class TestSelectWorkItem:
@@ -31,7 +35,7 @@ class TestSelectWorkItem:
         
         assert result is None
     
-    @patch('src.pokepoke.workflow.select_next_hierarchical_item')
+    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
     def test_autonomous_selection(self, mock_select: Mock) -> None:
         """Test autonomous mode selection."""
         items = [
@@ -50,7 +54,8 @@ class TestSelectWorkItem:
         
         assert result is not None
         assert result.id == "task-1"
-        mock_select.assert_called_once_with(items)
+        # Should have passed the full list (no filtering since no items assigned to others)
+        mock_select.assert_called_once()
     
     @patch('builtins.input')
     def test_interactive_selection(self, mock_input: Mock) -> None:
@@ -71,10 +76,79 @@ class TestSelectWorkItem:
         
         assert result is not None
         assert result.id == "task-1"
+    
+    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    def test_filters_items_assigned_to_others(self, mock_select: Mock) -> None:
+        """Test that items assigned to other agents are filtered out."""
+        import os
+        os.environ['AGENT_NAME'] = 'agent_alpha'
+        
+        items = [
+            BeadsWorkItem(
+                id="task-1",
+                title="Task assigned to other agent",
+                description="",
+                status="in_progress",
+                priority=1,
+                issue_type="task",
+                owner="agent_beta"  # Assigned to different agent
+            ),
+            BeadsWorkItem(
+                id="task-2",
+                title="Task available",
+                description="",
+                status="open",
+                priority=2,
+                issue_type="task",
+                owner=None  # Unassigned
+            )
+        ]
+        mock_select.return_value = items[1]
+        
+        result = select_work_item(items, interactive=False)
+        
+        # Should have filtered out task-1 and only passed task-2
+        mock_select.assert_called_once()
+        passed_items = mock_select.call_args[0][0]
+        assert len(passed_items) == 1
+        assert passed_items[0].id == "task-2"
+        assert result is not None
+        assert result.id == "task-2"
+    
+    def test_all_items_assigned_to_others(self) -> None:
+        """Test when all items are assigned to other agents."""
+        import os
+        os.environ['AGENT_NAME'] = 'agent_alpha'
+        
+        items = [
+            BeadsWorkItem(
+                id="task-1",
+                title="Task assigned to beta",
+                description="",
+                status="in_progress",
+                priority=1,
+                issue_type="task",
+                owner="agent_beta"
+            ),
+            BeadsWorkItem(
+                id="task-2",
+                title="Task assigned to gamma",
+                description="",
+                status="in_progress",
+                priority=2,
+                issue_type="task",
+                owner="agent_gamma"
+            )
+        ]
+        
+        result = select_work_item(items, interactive=False)
+        
+        # Should return None since all items are assigned to others
+        assert result is None
 
 
 class TestInteractiveSelection:
-    """Test _interactive_selection function."""
+    """Test interactive_selection function."""
     
     @patch('builtins.input')
     def test_valid_selection(self, mock_input: Mock) -> None:
@@ -99,7 +173,7 @@ class TestInteractiveSelection:
         ]
         mock_input.return_value = '2'
         
-        result = _interactive_selection(items)
+        result = interactive_selection(items)
         
         assert result is not None
         assert result.id == "task-2"
@@ -119,7 +193,7 @@ class TestInteractiveSelection:
         ]
         mock_input.return_value = 'q'
         
-        result = _interactive_selection(items)
+        result = interactive_selection(items)
         
         assert result is None
     
@@ -138,7 +212,7 @@ class TestInteractiveSelection:
         ]
         mock_input.side_effect = ['invalid', '1']
         
-        result = _interactive_selection(items)
+        result = interactive_selection(items)
         
         assert result is not None
         assert result.id == "task-1"
@@ -158,7 +232,7 @@ class TestInteractiveSelection:
         ]
         mock_input.side_effect = ['99', '1']
         
-        result = _interactive_selection(items)
+        result = interactive_selection(items)
         
         assert result is not None
         assert result.id == "task-1"
@@ -178,15 +252,15 @@ class TestInteractiveSelection:
         ]
         mock_input.side_effect = KeyboardInterrupt()
         
-        result = _interactive_selection(items)
+        result = interactive_selection(items)
         
         assert result is None
 
 
 class TestAutonomousSelection:
-    """Test _autonomous_selection function."""
+    """Test autonomous_selection function."""
     
-    @patch('src.pokepoke.workflow.select_next_hierarchical_item')
+    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
     def test_item_selected(self, mock_select: Mock) -> None:
         """Test successful hierarchical selection."""
         items = [
@@ -201,12 +275,12 @@ class TestAutonomousSelection:
         ]
         mock_select.return_value = items[0]
         
-        result = _autonomous_selection(items)
+        result = autonomous_selection(items)
         
         assert result is not None
         assert result.id == "task-1"
     
-    @patch('src.pokepoke.workflow.select_next_hierarchical_item')
+    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
     def test_no_item_selected(self, mock_select: Mock) -> None:
         """Test when no item is selected."""
         items = [
@@ -221,7 +295,7 @@ class TestAutonomousSelection:
         ]
         mock_select.return_value = None
         
-        result = _autonomous_selection(items)
+        result = autonomous_selection(items)
         
         assert result is None
 
@@ -229,7 +303,7 @@ class TestAutonomousSelection:
 class TestSetupWorktree:
     """Test _setup_worktree function."""
     
-    @patch('src.pokepoke.workflow.create_worktree')
+    @patch('pokepoke.workflow.create_worktree')
     def test_successful_setup(self, mock_create: Mock) -> None:
         """Test successful worktree creation."""
         item = BeadsWorkItem(
@@ -248,7 +322,7 @@ class TestSetupWorktree:
         assert result == Path("/fake/worktree")
         mock_create.assert_called_once_with("task-1")
     
-    @patch('src.pokepoke.workflow.create_worktree')
+    @patch('pokepoke.workflow.create_worktree')
     def test_creation_failure(self, mock_create: Mock) -> None:
         """Test worktree creation failure."""
         item = BeadsWorkItem(
@@ -269,8 +343,8 @@ class TestSetupWorktree:
 class TestRunCleanupWithTimeout:
     """Test _run_cleanup_with_timeout function."""
     
-    @patch('src.pokepoke.workflow.run_cleanup_loop')
-    @patch('src.pokepoke.workflow.has_uncommitted_changes')
+    @patch('pokepoke.workflow.run_cleanup_loop')
+    @patch('pokepoke.workflow.has_uncommitted_changes')
     @patch('time.time')
     def test_no_uncommitted_changes(
         self, 
@@ -306,8 +380,8 @@ class TestRunCleanupWithTimeout:
         assert cleanup_runs == 0
         mock_cleanup.assert_not_called()
     
-    @patch('src.pokepoke.workflow.run_cleanup_loop')
-    @patch('src.pokepoke.workflow.has_uncommitted_changes')
+    @patch('pokepoke.workflow.run_cleanup_loop')
+    @patch('pokepoke.workflow.has_uncommitted_changes')
     @patch('time.time')
     def test_cleanup_success(
         self, 
@@ -344,8 +418,8 @@ class TestRunCleanupWithTimeout:
         assert cleanup_runs == 1
         mock_cleanup.assert_called_once()
     
-    @patch('src.pokepoke.workflow.run_cleanup_loop')
-    @patch('src.pokepoke.workflow.has_uncommitted_changes')
+    @patch('pokepoke.workflow.run_cleanup_loop')
+    @patch('pokepoke.workflow.has_uncommitted_changes')
     @patch('time.time')
     def test_timeout_during_cleanup(
         self, 
@@ -385,8 +459,8 @@ class TestRunCleanupWithTimeout:
         assert cleanup_runs == 1  # One cleanup was attempted before timeout
         mock_cleanup.assert_called_once()  # Cleanup called once before timeout
     
-    @patch('src.pokepoke.workflow.run_cleanup_loop')
-    @patch('src.pokepoke.workflow.has_uncommitted_changes')
+    @patch('pokepoke.workflow.run_cleanup_loop')
+    @patch('pokepoke.workflow.has_uncommitted_changes')
     @patch('time.time')
     def test_cleanup_failure(
         self, 
@@ -427,10 +501,10 @@ class TestRunCleanupWithTimeout:
 
 
 class TestCheckAndMergeWorktree:
-    """Test _check_and_merge_worktree function."""
+    """Test check_and_merge_worktree function."""
     
-    @patch('src.pokepoke.workflow._merge_worktree_to_dev')
-    @patch('src.pokepoke.workflow.cleanup_worktree')
+    @patch('pokepoke.worktree_finalization.merge_worktree_to_dev')
+    @patch('pokepoke.worktree_finalization.cleanup_worktree')
     @patch('os.chdir')
     @patch('subprocess.run')
     def test_no_commits_to_merge(
@@ -453,13 +527,13 @@ class TestCheckAndMergeWorktree:
         
         mock_run.return_value = Mock(stdout="0\n", returncode=0)
         
-        result = _check_and_merge_worktree(item, worktree_path)
+        result = check_and_merge_worktree(item, worktree_path)
         
         assert result is True
         mock_cleanup.assert_called_once_with("task-1", force=True)
         mock_merge.assert_not_called()
     
-    @patch('src.pokepoke.workflow._merge_worktree_to_dev')
+    @patch('pokepoke.worktree_finalization.merge_worktree_to_dev')
     @patch('os.chdir')
     @patch('subprocess.run')
     def test_has_commits_to_merge(
@@ -482,12 +556,12 @@ class TestCheckAndMergeWorktree:
         mock_run.return_value = Mock(stdout="3\n", returncode=0)
         mock_merge.return_value = True
         
-        result = _check_and_merge_worktree(item, worktree_path)
+        result = check_and_merge_worktree(item, worktree_path)
         
         assert result is True
         mock_merge.assert_called_once_with(item)
     
-    @patch('src.pokepoke.workflow._merge_worktree_to_dev')
+    @patch('pokepoke.worktree_finalization.merge_worktree_to_dev')
     @patch('os.chdir')
     @patch('subprocess.run')
     def test_commit_count_check_fails(
@@ -510,7 +584,7 @@ class TestCheckAndMergeWorktree:
         mock_run.side_effect = subprocess.CalledProcessError(1, "git rev-list")
         mock_merge.return_value = True
         
-        result = _check_and_merge_worktree(item, worktree_path)
+        result = check_and_merge_worktree(item, worktree_path)
         
         # Should attempt merge anyway
         assert result is True
@@ -518,10 +592,10 @@ class TestCheckAndMergeWorktree:
 
 
 class TestMergeWorktreeToDev:
-    """Test _merge_worktree_to_dev function."""
+    """Test merge_worktree_to_dev function."""
     
-    @patch('src.pokepoke.workflow.merge_worktree')
-    @patch('src.pokepoke.workflow.check_main_repo_ready_for_merge')
+    @patch('pokepoke.worktree_finalization.merge_worktree')
+    @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
     def test_successful_merge(
         self, 
         mock_check: Mock, 
@@ -540,13 +614,14 @@ class TestMergeWorktreeToDev:
         mock_check.return_value = (True, "")
         mock_merge.return_value = True
         
-        result = _merge_worktree_to_dev(item)
+        result = merge_worktree_to_dev(item)
         
         assert result is True
         mock_merge.assert_called_once_with("task-1", cleanup=True)
     
-    @patch('src.pokepoke.workflow.check_main_repo_ready_for_merge')
-    def test_repo_not_ready(self, mock_check: Mock) -> None:
+    @patch('pokepoke.worktree_finalization.create_cleanup_delegation_issue')
+    @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
+    def test_repo_not_ready(self, mock_check: Mock, mock_create_issue: Mock) -> None:
         """Test when main repo is not ready for merge."""
         item = BeadsWorkItem(
             id="task-1",
@@ -558,14 +633,22 @@ class TestMergeWorktreeToDev:
         )
         
         mock_check.return_value = (False, "Uncommitted changes")
+        mock_create_issue.return_value = "cleanup-issue-1"
         
-        result = _merge_worktree_to_dev(item)
+        result = merge_worktree_to_dev(item)
         
         assert result is False
+        mock_create_issue.assert_called_once()
+        call_kwargs = mock_create_issue.call_args.kwargs
+        assert 'Resolve merge conflict' in call_kwargs['title']
+        assert 'task-1' in call_kwargs['title']
+        assert call_kwargs['parent_id'] == 'task-1'
+        assert call_kwargs['priority'] == 1
     
-    @patch('src.pokepoke.workflow.merge_worktree')
-    @patch('src.pokepoke.workflow.check_main_repo_ready_for_merge')
-    def test_merge_fails(self, mock_check: Mock, mock_merge: Mock) -> None:
+    @patch('pokepoke.worktree_finalization.create_cleanup_delegation_issue')
+    @patch('pokepoke.worktree_finalization.merge_worktree')
+    @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
+    def test_merge_fails(self, mock_check: Mock, mock_merge: Mock, mock_create_issue: Mock) -> None:
         """Test when merge operation fails."""
         item = BeadsWorkItem(
             id="task-1",
@@ -578,17 +661,24 @@ class TestMergeWorktreeToDev:
         
         mock_check.return_value = (True, "")
         mock_merge.return_value = False
+        mock_create_issue.return_value = "cleanup-issue-1"
         
-        result = _merge_worktree_to_dev(item)
+        result = merge_worktree_to_dev(item)
         
         assert result is False
+        mock_create_issue.assert_called_once()
+        call_kwargs = mock_create_issue.call_args.kwargs
+        assert 'Resolve merge conflict' in call_kwargs['title']
+        assert 'task-1' in call_kwargs['title']
+        assert call_kwargs['parent_id'] == 'task-1'
+        assert call_kwargs['priority'] == 1
 
 
 class TestCloseWorkItemAndParents:
-    """Test _close_work_item_and_parents function."""
+    """Test close_work_item_and_parents function."""
     
-    @patch('src.pokepoke.workflow._check_parent_hierarchy')
-    @patch('src.pokepoke.workflow.close_item')
+    @patch('pokepoke.worktree_finalization.check_parent_hierarchy')
+    @patch('pokepoke.worktree_finalization.close_item')
     @patch('subprocess.run')
     def test_item_already_closed(
         self, 
@@ -611,13 +701,13 @@ class TestCloseWorkItemAndParents:
             returncode=0
         )
         
-        _close_work_item_and_parents(item)
+        close_work_item_and_parents(item)
         
         mock_close.assert_not_called()
         mock_check_parents.assert_called_once_with(item)
     
-    @patch('src.pokepoke.workflow._check_parent_hierarchy')
-    @patch('src.pokepoke.workflow.close_item')
+    @patch('pokepoke.worktree_finalization.check_parent_hierarchy')
+    @patch('pokepoke.worktree_finalization.close_item')
     @patch('subprocess.run')
     def test_item_not_closed_fallback(
         self, 
@@ -640,13 +730,13 @@ class TestCloseWorkItemAndParents:
             returncode=0
         )
         
-        _close_work_item_and_parents(item)
+        close_work_item_and_parents(item)
         
         mock_close.assert_called_once()
         mock_check_parents.assert_called_once_with(item)
     
-    @patch('src.pokepoke.workflow._check_parent_hierarchy')
-    @patch('src.pokepoke.workflow.close_item')
+    @patch('pokepoke.worktree_finalization.check_parent_hierarchy')
+    @patch('pokepoke.worktree_finalization.close_item')
     @patch('subprocess.run')
     def test_check_status_fails(
         self, 
@@ -666,17 +756,17 @@ class TestCloseWorkItemAndParents:
         
         mock_run.side_effect = subprocess.CalledProcessError(1, "bd show")
         
-        _close_work_item_and_parents(item)
+        close_work_item_and_parents(item)
         
         mock_close.assert_called_once()
         mock_check_parents.assert_called_once_with(item)
 
 
 class TestCheckParentHierarchy:
-    """Test _check_parent_hierarchy function."""
+    """Test check_parent_hierarchy function."""
     
-    @patch('src.pokepoke.workflow.close_parent_if_complete')
-    @patch('src.pokepoke.workflow.get_parent_id')
+    @patch('pokepoke.worktree_finalization.close_parent_if_complete')
+    @patch('pokepoke.beads_hierarchy.get_parent_id')
     def test_no_parent(self, mock_get_parent: Mock, mock_close_parent: Mock) -> None:
         """Test when item has no parent."""
         item = BeadsWorkItem(
@@ -690,12 +780,12 @@ class TestCheckParentHierarchy:
         
         mock_get_parent.return_value = None
         
-        _check_parent_hierarchy(item)
+        check_parent_hierarchy(item)
         
         mock_close_parent.assert_not_called()
     
-    @patch('src.pokepoke.workflow.close_parent_if_complete')
-    @patch('src.pokepoke.workflow.get_parent_id')
+    @patch('pokepoke.worktree_finalization.close_parent_if_complete')
+    @patch('pokepoke.worktree_finalization.get_parent_id')
     def test_with_parent_no_grandparent(
         self, 
         mock_get_parent: Mock, 
@@ -713,13 +803,13 @@ class TestCheckParentHierarchy:
         
         mock_get_parent.side_effect = ["parent-1", None]
         
-        _check_parent_hierarchy(item)
+        check_parent_hierarchy(item)
         
         assert mock_close_parent.call_count == 1
         mock_close_parent.assert_called_with("parent-1")
     
-    @patch('src.pokepoke.workflow.close_parent_if_complete')
-    @patch('src.pokepoke.workflow.get_parent_id')
+    @patch('pokepoke.worktree_finalization.close_parent_if_complete')
+    @patch('pokepoke.worktree_finalization.get_parent_id')
     def test_with_parent_and_grandparent(
         self, 
         mock_get_parent: Mock, 
@@ -737,7 +827,7 @@ class TestCheckParentHierarchy:
         
         mock_get_parent.side_effect = ["parent-1", "grandparent-1"]
         
-        _check_parent_hierarchy(item)
+        check_parent_hierarchy(item)
         
         assert mock_close_parent.call_count == 2
         mock_close_parent.assert_any_call("parent-1")
@@ -747,13 +837,14 @@ class TestCheckParentHierarchy:
 class TestProcessWorkItem:
     """Test process_work_item function."""
     
-    @patch('src.pokepoke.workflow._finalize_work_item')
+    @patch('pokepoke.workflow.run_beta_tester')  # Mock beta tester
+    @patch('pokepoke.workflow.finalize_work_item')
     @patch('os.chdir')
     @patch('os.getcwd')
-    @patch('src.pokepoke.workflow._run_cleanup_with_timeout')
-    @patch('src.pokepoke.workflow.invoke_copilot_cli')
-    @patch('src.pokepoke.workflow.has_uncommitted_changes')
-    @patch('src.pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow._run_cleanup_with_timeout')
+    @patch('pokepoke.workflow.invoke_copilot')
+    @patch('pokepoke.workflow.has_uncommitted_changes')
+    @patch('pokepoke.workflow._setup_worktree')
     @patch('builtins.input')
     @patch('time.time')
     def test_skip_in_interactive_mode(
@@ -766,7 +857,8 @@ class TestProcessWorkItem:
         mock_cleanup_timeout: Mock,
         mock_getcwd: Mock,
         mock_chdir: Mock,
-        mock_finalize: Mock
+        mock_finalize: Mock,
+        mock_beta: Mock
     ) -> None:
         """Test skipping item in interactive mode."""
         item = BeadsWorkItem(
@@ -779,6 +871,7 @@ class TestProcessWorkItem:
         )
         
         mock_input.return_value = 'n'
+        mock_beta.return_value = None  # Beta tester returns None
         
         success, count, stats, cleanup_runs = process_work_item(
             item, interactive=True
@@ -790,8 +883,8 @@ class TestProcessWorkItem:
         assert cleanup_runs == 0
         mock_setup.assert_not_called()
     
-    @patch('src.pokepoke.workflow._setup_worktree')
-    @patch('src.pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
     @patch('builtins.input')
     @patch('time.time')
     def test_worktree_setup_fails(
@@ -824,14 +917,15 @@ class TestProcessWorkItem:
         assert stats is None
         assert cleanup_runs == 0
     
-    @patch('src.pokepoke.workflow._finalize_work_item')
+    @patch('pokepoke.workflow.run_beta_tester')  # Mock beta tester
+    @patch('pokepoke.workflow.finalize_work_item')
     @patch('os.chdir')
     @patch('os.getcwd')
-    @patch('src.pokepoke.workflow._run_cleanup_with_timeout')
-    @patch('src.pokepoke.workflow.invoke_copilot_cli')
-    @patch('src.pokepoke.workflow.has_uncommitted_changes')
-    @patch('src.pokepoke.workflow._setup_worktree')
-    @patch('src.pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.workflow._run_cleanup_with_timeout')
+    @patch('pokepoke.workflow.invoke_copilot')
+    @patch('pokepoke.workflow.has_uncommitted_changes')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
     @patch('builtins.input')
     @patch('time.time')
     def test_no_changes_made(
@@ -845,7 +939,8 @@ class TestProcessWorkItem:
         mock_cleanup_timeout: Mock,
         mock_getcwd: Mock,
         mock_chdir: Mock,
-        mock_finalize: Mock
+        mock_finalize: Mock,
+        mock_beta: Mock
     ) -> None:
         """Test when Copilot makes no changes."""
         item = BeadsWorkItem(
@@ -871,6 +966,7 @@ class TestProcessWorkItem:
         )
         mock_cleanup_timeout.return_value = (True, 0)  # Mock returns tuple
         mock_finalize.return_value = True
+        mock_beta.return_value = None  # Beta tester returns None
         
         success, count, stats, cleanup_runs = process_work_item(
             item, interactive=True
@@ -881,14 +977,15 @@ class TestProcessWorkItem:
         # Cleanup is called even with no changes (it just exits early)
         mock_cleanup_timeout.assert_called_once()
     
-    @patch('src.pokepoke.workflow.cleanup_worktree')
+    @patch('pokepoke.workflow.run_beta_tester')  # Mock beta tester
+    @patch('pokepoke.workflow.cleanup_worktree')
     @patch('os.chdir')
     @patch('os.getcwd')
-    @patch('src.pokepoke.workflow._run_cleanup_with_timeout')
-    @patch('src.pokepoke.workflow.invoke_copilot_cli')
-    @patch('src.pokepoke.workflow.has_uncommitted_changes')
-    @patch('src.pokepoke.workflow._setup_worktree')
-    @patch('src.pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.workflow._run_cleanup_with_timeout')
+    @patch('pokepoke.workflow.invoke_copilot')
+    @patch('pokepoke.workflow.has_uncommitted_changes')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
     @patch('builtins.input')
     @patch('time.time')
     def test_copilot_failure(
@@ -902,7 +999,8 @@ class TestProcessWorkItem:
         mock_cleanup_timeout: Mock,
         mock_getcwd: Mock,
         mock_chdir: Mock,
-        mock_cleanup: Mock
+        mock_cleanup: Mock,
+        mock_beta: Mock
     ) -> None:
         """Test when Copilot CLI fails."""
         item = BeadsWorkItem(
@@ -928,6 +1026,7 @@ class TestProcessWorkItem:
             attempt_count=1
         )
         mock_cleanup_timeout.return_value = (True, 0)
+        mock_beta.return_value = None  # Beta tester returns None
         
         success, count, stats, cleanup_runs = process_work_item(
             item, interactive=True
@@ -936,3 +1035,13 @@ class TestProcessWorkItem:
         assert success is False
         assert count == 1
         mock_cleanup.assert_called_once_with("task-1", force=True)
+
+
+
+
+
+
+
+
+
+

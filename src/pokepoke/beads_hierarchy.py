@@ -1,5 +1,6 @@
 """Beads hierarchy operations - parent-child relationships."""
 
+import os
 import subprocess
 from typing import List, Optional
 
@@ -51,10 +52,46 @@ def get_children(parent_id: str) -> List[BeadsWorkItem]:
     return children
 
 
+def _is_assigned_to_current_user(item: BeadsWorkItem) -> bool:
+    """Check if item is assigned to current user or unassigned.
+    
+    Args:
+        item: Work item to check.
+        
+    Returns:
+        True if item is unassigned or assigned to current user, False if assigned to someone else.
+    """
+    # Unassigned items are claimable
+    if not item.owner:
+        return True
+    
+    # Get current agent identifiers
+    agent_name = os.environ.get('AGENT_NAME', '')
+    username = os.environ.get('USERNAME', '')
+    
+    owner = item.owner.lower()
+    
+    # Check if assigned to current agent
+    if agent_name and agent_name.lower() == owner:
+        return True
+    
+    # Check if assigned to current user by username
+    if username and username.lower() == owner:
+        return True
+    
+    # Check if username is in the owner email (e.g., "ameliapayne@microsoft.com")
+    if username and username.lower() in owner:
+        return True
+    
+    # Otherwise, assigned to someone else
+    return False
+
+
 def get_next_child_task(parent_id: str) -> Optional[BeadsWorkItem]:
     """Get the next ready child task for a parent epic or feature.
     
     Returns the highest priority open child, or None if all children are complete.
+    Skips items that are in_progress and assigned to other agents.
     
     Args:
         parent_id: The parent issue ID.
@@ -76,8 +113,18 @@ def get_next_child_task(parent_id: str) -> Optional[BeadsWorkItem]:
     if not open_children:
         return None
     
+    # Filter out items assigned to other agents
+    available_children = [
+        child for child in open_children
+        if _is_assigned_to_current_user(child)
+    ]
+    
+    if not available_children:
+        # All children are assigned to other agents
+        return None
+    
     # Return highest priority (lowest number)
-    return min(open_children, key=lambda x: x.priority)
+    return min(available_children, key=lambda x: x.priority)
 
 
 def all_children_complete(parent_id: str) -> bool:
