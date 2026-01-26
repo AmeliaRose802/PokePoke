@@ -68,12 +68,26 @@ def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool
                 username = os.environ.get('USERNAME', '').lower()
                 owner_lower = current_owner.lower()
                 
+                # CRITICAL: Distinguish between agent names vs human users
+                # - Agent names (pokepoke_*): ONLY that specific agent can claim
+                # - Human users (email@domain.com): ANY agent run by that user can claim
+                # - Human usernames (ameliapayne): ANY agent run by that user can claim
+                
                 # Is it ours?
-                is_ours = (
-                    owner_lower == agent_name.lower() or
-                    owner_lower == username or
-                    (username and username in owner_lower)
-                )
+                is_ours = False
+                
+                # Exact match on agent name - this agent specifically owns it
+                if owner_lower == agent_name.lower():
+                    is_ours = True
+                # Exact match on username - human user owns it, any agent can claim
+                elif owner_lower == username:
+                    is_ours = True
+                # Email address containing username - human user owns it
+                elif '@' in owner_lower and username and username in owner_lower:
+                    is_ours = True
+                # If owner is an agent name (starts with pokepoke_), it's NOT ours unless exact match
+                elif current_owner.startswith('pokepoke_') and owner_lower != agent_name.lower():
+                    is_ours = False
                 
                 print(f"   Is ours? {is_ours}")
                 
