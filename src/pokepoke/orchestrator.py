@@ -108,10 +108,6 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             session_stats.work_agent_runs += 1
             session_stats.cleanup_agent_runs += cleanup_runs
             
-            # Track item worked on
-            if session_stats.items_worked_on is not None:
-                session_stats.items_worked_on.append((selected_item.id, selected_item.title, success))
-            
             # Aggregate statistics
             if item_stats:
                 _aggregate_stats(session_stats, item_stats)
