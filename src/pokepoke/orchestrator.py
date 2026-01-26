@@ -1,6 +1,7 @@
 """PokePoke Orchestrator - Main entry point for autonomous and interactive modes."""
 
 import argparse
+import os
 import subprocess
 import sys
 import time
@@ -13,20 +14,27 @@ from pokepoke.workflow import process_work_item
 from pokepoke.work_item_selection import select_work_item
 from pokepoke.agent_runner import run_maintenance_agent
 from pokepoke.logging_utils import RunLogger
+from pokepoke.agent_names import initialize_agent_name
 
 
-def run_orchestrator(interactive: bool = True, continuous: bool = False) -> int:
+def run_orchestrator(interactive: bool = True, continuous: bool = False, run_beta_first: bool = False) -> int:
     """Main orchestrator loop.
     
     Args:
         interactive: If True, prompt for user input at decision points
         continuous: If True, loop continuously; if False, process one item and exit
+        run_beta_first: If True, run beta tester at startup before processing work items
         
     Returns:
         Exit code (0 for success, 1 for failure)
     """
+    # Initialize unique agent name for this run
+    agent_name = initialize_agent_name()
+    os.environ['AGENT_NAME'] = agent_name
+    
     mode_name = "Interactive" if interactive else "Autonomous"
     print(f"🎯 PokePoke {mode_name} Mode")
+    print(f"🤖 Agent Name: {agent_name}")
     print("=" * 50)
     
     # Initialize run logger
@@ -34,7 +42,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False) -> int:
     run_id = run_logger.get_run_id()
     print(f"📝 Run ID: {run_id}")
     print(f"📁 Logs: {run_logger.get_run_dir()}")
-    run_logger.log_orchestrator(f"PokePoke started in {mode_name} mode")
+    run_logger.log_orchestrator(f"PokePoke started in {mode_name} mode with agent name: {agent_name}")
     
     # Use the current working directory (where orchestrator is executed from)
     main_repo_path = Path.cwd()
@@ -55,6 +63,21 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False) -> int:
     print("📊 Recording starting beads statistics...")
     run_logger.log_orchestrator("Recording starting beads statistics")
     session_stats.starting_beads_stats = get_beads_stats()
+    
+    # Run beta tester first if requested
+    if run_beta_first:
+        print("\n🧪 Running Beta Tester at startup...")
+        run_logger.log_orchestrator("Running Beta Tester at startup")
+        from pokepoke.agent_runner import run_beta_tester
+        beta_stats = run_beta_tester()
+        if beta_stats:
+            # Aggregate beta tester stats
+            session_stats.agent_stats.wall_duration += beta_stats.wall_duration
+            session_stats.agent_stats.api_duration += beta_stats.api_duration
+            session_stats.agent_stats.input_tokens += beta_stats.input_tokens
+            session_stats.agent_stats.output_tokens += beta_stats.output_tokens
+            session_stats.agent_stats.premium_requests += beta_stats.premium_requests
+        print("✅ Beta Tester completed\n")
     
     try:
         while True:
@@ -84,6 +107,10 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False) -> int:
             total_requests += requests
             session_stats.work_agent_runs += 1
             session_stats.cleanup_agent_runs += cleanup_runs
+            
+            # Track item worked on
+            if session_stats.items_worked_on is not None:
+                session_stats.items_worked_on.append((selected_item.id, selected_item.title, success))
             
             # Aggregate statistics
             if item_stats:
@@ -123,16 +150,32 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False) -> int:
                 time.sleep(5)
     
     except KeyboardInterrupt:
-        session_stats.ending_beads_stats = get_beads_stats()
+        # Clean shutdown on Ctrl+C
+        print("\n\n⚠️  Interrupted by user (Ctrl+C)")
+        print("📊 Collecting final statistics...")
+        
+        # Try to get ending stats, but don't fail if interrupted again
+        try:
+            session_stats.ending_beads_stats = get_beads_stats()
+        except KeyboardInterrupt:
+            print("⚠️  Stats collection interrupted, skipping...")
+            session_stats.ending_beads_stats = None
+        
         elapsed = time.time() - start_time
-        print("\n\n👋 Interrupted. Exiting PokePoke.")
+        print("\n👋 Exiting PokePoke.")
         print_stats(items_completed, total_requests, elapsed, session_stats)
         run_logger.finalize(items_completed, total_requests, elapsed)
         print(f"\n📝 Run ID: {run_id}")
         print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
         return 0
     except Exception as e:
-        session_stats.ending_beads_stats = get_beads_stats()
+        print("\n📊 Collecting final statistics...")
+        try:
+            session_stats.ending_beads_stats = get_beads_stats()
+        except KeyboardInterrupt:
+            print("⚠️  Stats collection interrupted, skipping...")
+            session_stats.ending_beads_stats = None
+        
         elapsed = time.time() - start_time
         print(f"\n❌ Error: {e}")
         import traceback
@@ -325,13 +368,18 @@ def main() -> int:
         action="store_true",
         help="Continuous mode: loop through multiple items instead of single-shot",
     )
+    parser.add_argument(
+        "--beta-first",
+        action="store_true",
+        help="Run beta tester at startup before processing work items",
+    )
     
     args = parser.parse_args()
     
     # Autonomous flag overrides interactive
     interactive = not args.autonomous
     
-    return run_orchestrator(interactive=interactive, continuous=args.continuous)
+    return run_orchestrator(interactive=interactive, continuous=args.continuous, run_beta_first=args.beta_first)
 
 
 if __name__ == "__main__":

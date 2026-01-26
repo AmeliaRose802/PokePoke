@@ -240,7 +240,8 @@ class TestInvokeCopilotSDKAsync:
         
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            prompt="Test prompt"
+            prompt="Test prompt",
+            idle_timeout=0.01
         )
         
         assert result.work_item_id == sample_work_item.id
@@ -295,7 +296,8 @@ class TestInvokeCopilotSDKAsync:
         
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            prompt="Test prompt"
+            prompt="Test prompt",
+            idle_timeout=0.01
         )
         
         assert result.success
@@ -344,7 +346,8 @@ class TestInvokeCopilotSDKAsync:
         mock_session.destroy = AsyncMock()
         
         result = await invoke_copilot_sdk(
-            work_item=sample_work_item
+            work_item=sample_work_item,
+            idle_timeout=0.01
         )
         
         assert result.success
@@ -399,7 +402,8 @@ class TestInvokeCopilotSDKAsync:
         mock_session.destroy = AsyncMock()
         
         result = await invoke_copilot_sdk(
-            work_item=sample_work_item
+            work_item=sample_work_item,
+            idle_timeout=0.01
         )
         
         assert result.success
@@ -441,7 +445,8 @@ class TestInvokeCopilotSDKAsync:
         mock_session.destroy = AsyncMock()
         
         result = await invoke_copilot_sdk(
-            work_item=sample_work_item
+            work_item=sample_work_item,
+            idle_timeout=0.01
         )
         
         assert not result.success
@@ -470,7 +475,8 @@ class TestInvokeCopilotSDKAsync:
         
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            timeout=0.1  # Very short timeout
+            timeout=0.1,  # Very short timeout
+            idle_timeout=0.01
         )
         
         assert not result.success
@@ -489,7 +495,8 @@ class TestInvokeCopilotSDKAsync:
         mock_client_class.return_value = mock_client
         
         result = await invoke_copilot_sdk(
-            work_item=sample_work_item
+            work_item=sample_work_item,
+            idle_timeout=0.01
         )
         
         assert not result.success
@@ -509,7 +516,8 @@ class TestInvokeCopilotSDKAsync:
         
         # Should not raise - exception in stop should be caught
         result = await invoke_copilot_sdk(
-            work_item=sample_work_item
+            work_item=sample_work_item,
+            idle_timeout=0.01
         )
         
         assert not result.success
@@ -553,7 +561,8 @@ class TestInvokeCopilotSDKAsync:
         
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            deny_write=True
+            deny_write=True,
+            idle_timeout=0.01
         )
         
         # Verify deny_write added excluded_tools
@@ -599,7 +608,8 @@ class TestInvokeCopilotSDKAsync:
         
         # Don't provide prompt - should generate one
         result = await invoke_copilot_sdk(
-            work_item=sample_work_item
+            work_item=sample_work_item,
+            idle_timeout=0.01
         )
         
         mock_build_prompt.assert_called_once_with(sample_work_item)
@@ -661,7 +671,8 @@ class TestInvokeCopilotSDKAsync:
         mock_session.destroy = AsyncMock()
         
         result = await invoke_copilot_sdk(
-            work_item=sample_work_item
+            work_item=sample_work_item,
+            idle_timeout=0.01
         )
         
         assert result.success
@@ -721,7 +732,8 @@ class TestInvokeCopilotSDKAsync:
         mock_session.destroy = AsyncMock()
         
         result = await invoke_copilot_sdk(
-            work_item=sample_work_item
+            work_item=sample_work_item,
+            idle_timeout=0.01
         )
         
         assert result.success
@@ -758,7 +770,8 @@ class TestInvokeCopilotSDKAsync:
         mock_session.destroy = AsyncMock()
         
         result = await invoke_copilot_sdk(
-            work_item=sample_work_item
+            work_item=sample_work_item,
+            idle_timeout=0.01
         )
         
         assert not result.success
@@ -803,7 +816,8 @@ class TestInvokeCopilotSDKAsync:
         mock_session.destroy = AsyncMock()
         
         result = await invoke_copilot_sdk(
-            work_item=sample_work_item
+            work_item=sample_work_item,
+            idle_timeout=0.01
         )
         
         assert result.success
@@ -855,7 +869,8 @@ class TestInvokeCopilotSDKAsync:
         mock_session.destroy = AsyncMock()
         
         result = await invoke_copilot_sdk(
-            work_item=sample_work_item
+            work_item=sample_work_item,
+            idle_timeout=0.01
         )
         
         assert result.success
@@ -873,7 +888,8 @@ class TestInvokeCopilotSDKAsync:
         mock_client_class.return_value = mock_client
         
         result = await invoke_copilot_sdk(
-            work_item=sample_work_item
+            work_item=sample_work_item,
+            idle_timeout=0.01
         )
         
         assert not result.success

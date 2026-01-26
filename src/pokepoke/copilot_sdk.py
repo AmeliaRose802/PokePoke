@@ -46,7 +46,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     retry_config: Optional[RetryConfig] = None,
     timeout: Optional[float] = None,
     deny_write: bool = False,
-    item_logger: Optional['ItemLogger'] = None
+    item_logger: Optional['ItemLogger'] = None,
+    idle_timeout: float = 10.0
 ) -> CopilotResult:
     """Invoke GitHub Copilot using the SDK (async).
     
@@ -57,6 +58,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         timeout: Maximum execution time in seconds (default: 7200 = 2 hours).
         deny_write: If True, deny file write tools (for beads-only agents).
         item_logger: Optional item logger for file logging (currently unused in SDK mode).
+        idle_timeout: Seconds to wait after session.idle before considering complete (default: 10.0).
         
     Returns:
         Result of the Copilot invocation.
@@ -111,6 +113,10 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         output_lines = []
         errors = []
         
+        # Track tool execution state
+        pending_tool_calls = 0  # Tools currently executing
+        idle_task: Optional[asyncio.Task[None]] = None  # Current idle check task
+        
         # Track statistics from usage events
         total_input_tokens = 0
         total_output_tokens = 0
@@ -123,6 +129,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         def handle_event(event: Any) -> None:
             nonlocal total_input_tokens, total_output_tokens, total_cache_read_tokens
             nonlocal total_cache_write_tokens, total_cost, turn_count
+            nonlocal pending_tool_calls, idle_task
             
             event_type = event.type.value if hasattr(event.type, 'value') else str(event.type)
             
@@ -153,6 +160,13 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     
             elif event_type == "tool.execution_start":
                 # Tool is being executed
+                pending_tool_calls += 1
+                
+                # Cancel any pending idle check - we have activity
+                if idle_task and not idle_task.done():
+                    idle_task.cancel()
+                    idle_task = None
+                
                 if hasattr(event, 'data'):
                     tool_name = getattr(event.data, 'tool_name', 'unknown')
                     arguments = getattr(event.data, 'arguments', {})
@@ -161,10 +175,11 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     args_str = str(arguments)
                     print(f"  🔧 {tool_name}({args_str})")
                     output_lines.append(f"\n[Tool] {tool_name}({args_str})\n")
-                    output_lines.append(f"\n[Tool] {tool_name}({args_str})\n")
                 
             elif event_type == "tool.execution_complete":
                 # Tool completed - show full result
+                pending_tool_calls = max(0, pending_tool_calls - 1)
+                
                 if hasattr(event, 'data'):
                     tool_call_id = getattr(event.data, 'tool_call_id', '')
                     result = getattr(event.data, 'result', None)
@@ -194,18 +209,30 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                 
             elif event_type == "session.idle":
                 # Session idle - might mean thinking or complete
-                # Don't immediately exit, wait a bit to see if more activity follows
+                # Cancel any previous idle check
+                if idle_task and not idle_task.done():
+                    idle_task.cancel()
+                    # Don't await, just cancel and move on
+                
+                # If we have pending tool calls, don't consider this idle yet
+                if pending_tool_calls > 0:
+                    print(f"\n[SDK] Session idle but {pending_tool_calls} tool(s) still executing...")
+                    return
+                
                 print("\n[SDK] Session idle - waiting to confirm completion...")
                 
                 # Use a delay to distinguish between "thinking" and "done"
                 async def check_still_idle() -> None:
-                    await asyncio.sleep(10)  # Wait 10 seconds
-                    if not done.is_set():
-                        print("[SDK] Session confirmed idle - processing complete")
-                        done.set()
+                    try:
+                        await asyncio.sleep(idle_timeout)  # Wait configured time
+                        if not done.is_set() and pending_tool_calls == 0:
+                            print("[SDK] Session confirmed idle - processing complete")
+                            done.set()
+                    except asyncio.CancelledError:
+                        pass  # Task was cancelled, that's fine
                 
                 # Schedule the delayed check
-                asyncio.create_task(check_still_idle())
+                idle_task = asyncio.create_task(check_still_idle())
                 
             elif event_type == "session.error":
                 # Error occurred

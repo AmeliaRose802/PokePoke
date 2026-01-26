@@ -366,6 +366,42 @@ class TestRunOrchestrator:
     """Test orchestrator main loop."""
     
     @patch('subprocess.run')  # Mock git status check
+    @patch('pokepoke.orchestrator.initialize_agent_name')
+    @patch('pokepoke.orchestrator.process_work_item')
+    @patch('pokepoke.orchestrator.select_work_item')
+    @patch('pokepoke.orchestrator.get_ready_work_items')
+    def test_run_orchestrator_sets_agent_name(
+        self,
+        mock_get_items: Mock,
+        mock_select: Mock,
+        mock_process: Mock,
+        mock_init_agent_name: Mock,
+        mock_subprocess_run: Mock
+    ) -> None:
+        """Test that orchestrator initializes and sets AGENT_NAME env var."""
+        import os
+        
+        # Mock git status to return clean repo
+        mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
+        
+        # Mock agent name initialization
+        test_agent_name = "pokepoke_test_agent_1234"
+        mock_init_agent_name.return_value = test_agent_name
+        
+        mock_get_items.return_value = []
+        mock_select.return_value = None
+        
+        result = run_orchestrator(interactive=False, continuous=False)
+        
+        # Verify agent name was initialized
+        mock_init_agent_name.assert_called_once()
+        
+        # Verify AGENT_NAME env var was set
+        assert os.environ.get('AGENT_NAME') == test_agent_name
+        
+        assert result == 0
+    
+    @patch('subprocess.run')  # Mock git status check
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
     @patch('pokepoke.orchestrator.get_ready_work_items')
@@ -821,7 +857,7 @@ class TestOrchestratorMain:
         result = main()
         
         assert result == 0
-        mock_run.assert_called_once_with(interactive=False, continuous=False)
+        mock_run.assert_called_once_with(interactive=False, continuous=False, run_beta_first=False)
     
     @patch('pokepoke.orchestrator.run_orchestrator')
     @patch('sys.argv', ['pokepoke', '--continuous'])
@@ -834,7 +870,7 @@ class TestOrchestratorMain:
         result = main()
         
         assert result == 0
-        mock_run.assert_called_once_with(interactive=True, continuous=True)
+        mock_run.assert_called_once_with(interactive=True, continuous=True, run_beta_first=False)
     
     @patch('pokepoke.orchestrator.run_orchestrator')
     @patch('sys.argv', ['pokepoke', '--autonomous', '--continuous'])
@@ -847,7 +883,7 @@ class TestOrchestratorMain:
         result = main()
         
         assert result == 0
-        mock_run.assert_called_once_with(interactive=False, continuous=True)
+        mock_run.assert_called_once_with(interactive=False, continuous=True, run_beta_first=False)
 
 
 
