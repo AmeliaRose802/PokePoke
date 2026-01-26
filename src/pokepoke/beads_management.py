@@ -56,6 +56,13 @@ def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool
             current_owner = current_item.get('owner', '')
             current_status = current_item.get('status', '')
             
+            # DEBUG: Show what we're checking
+            print(f"🔍 [DEBUG] Ownership check for {item_id}:")
+            print(f"   Current owner: '{current_owner}'")
+            print(f"   Current status: '{current_status}'")
+            print(f"   Our agent_name: '{agent_name}'")
+            print(f"   Our USERNAME: '{os.environ.get('USERNAME', '')}'")
+            
             # Check if already claimed by someone else
             if current_owner:
                 username = os.environ.get('USERNAME', '').lower()
@@ -68,10 +75,14 @@ def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool
                     (username and username in owner_lower)
                 )
                 
+                print(f"   Is ours? {is_ours}")
+                
                 if not is_ours:
                     print(f"⚠️  RACE CONDITION DETECTED: {item_id} already assigned to {current_owner}")
                     print(f"   Skipping to prevent conflict - another agent claimed it first")
                     return False
+            else:
+                print(f"   ✅ Item is unassigned - safe to claim")
     
     except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
         print(f"⚠️  Failed to verify {item_id} ownership: {e}")
