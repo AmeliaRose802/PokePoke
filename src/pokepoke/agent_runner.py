@@ -287,7 +287,11 @@ def run_beta_tester() -> Optional[AgentStats]:
     # Restart MCP server to load latest code
     print("\n🔄 Restarting MCP server to load latest changes...")
     try:
-        restart_script = Path(r"C:\Users\ameliapayne\PokePoke\scripts\Restart-MCPServer.ps1")
+        # Resolve script path relative to this file
+        # src/pokepoke/agent_runner.py -> src/pokepoke -> src -> root -> scripts
+        package_root = Path(__file__).resolve().parent.parent.parent
+        restart_script = package_root / "scripts" / "Restart-MCPServer.ps1"
+        
         if not restart_script.exists():
             print(f"⚠️  Restart script not found at {restart_script}")
             print("   Proceeding without restart - server may have stale code")

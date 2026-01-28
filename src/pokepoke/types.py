@@ -1,6 +1,6 @@
 """Type definitions for PokePoke orchestrator."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, List
 
 
@@ -81,6 +81,9 @@ class AgentStats:
     lines_added: int = 0
     lines_removed: int = 0
     premium_requests: int = 0
+    retries: int = 0
+    tool_calls: int = 0
+    estimated_cost: float = 0.0
 
 
 @dataclass
@@ -97,6 +100,8 @@ class BeadsStats:
 class SessionStats:
     """Combined session statistics including agent stats and run counts."""
     agent_stats: AgentStats
+    items_completed: int = 0  # Number of items successfully completed in this session
+    completed_items_list: List[BeadsWorkItem] = field(default_factory=list)  # List of items successfully completed
     work_agent_runs: int = 0
     tech_debt_agent_runs: int = 0
     janitor_agent_runs: int = 0

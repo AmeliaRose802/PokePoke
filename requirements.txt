@@ -3,3 +3,6 @@
 
 # GitHub Copilot SDK for programmatic CLI integration
 github-copilot-sdk>=0.1.0
+
+# Terminal UI
+rich>=13.0.0

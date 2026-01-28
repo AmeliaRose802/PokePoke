@@ -366,6 +366,7 @@ class TestRunOrchestrator:
     """Test orchestrator main loop."""
     
     @patch('subprocess.run')  # Mock git status check
+    @patch('pokepoke.agent_runner.run_beta_tester')
     @patch('pokepoke.orchestrator.initialize_agent_name')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
@@ -376,11 +377,14 @@ class TestRunOrchestrator:
         mock_select: Mock,
         mock_process: Mock,
         mock_init_agent_name: Mock,
+        mock_beta: Mock,
         mock_subprocess_run: Mock
     ) -> None:
         """Test that orchestrator initializes and sets AGENT_NAME env var."""
         import os
         
+        mock_beta.return_value = None
+
         # Mock git status to return clean repo
         mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
         
@@ -402,6 +406,7 @@ class TestRunOrchestrator:
         assert result == 0
     
     @patch('subprocess.run')  # Mock git status check
+    @patch('pokepoke.agent_runner.run_beta_tester')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
     @patch('pokepoke.orchestrator.get_ready_work_items')
@@ -410,9 +415,11 @@ class TestRunOrchestrator:
         mock_get_items: Mock,
         mock_select: Mock,
         mock_process: Mock,
+        mock_beta: Mock,
         mock_subprocess_run: Mock
     ) -> None:
         """Test orchestrator with no ready items."""
+        mock_beta.return_value = None
         # Mock git status to return clean repo
         mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
         
@@ -425,6 +432,7 @@ class TestRunOrchestrator:
         mock_process.assert_not_called()
     
     @patch('subprocess.run')  # Mock git status check
+    @patch('pokepoke.agent_runner.run_beta_tester')
     @patch('pokepoke.orchestrator.run_maintenance_agent')  # Mock maintenance
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
@@ -435,9 +443,11 @@ class TestRunOrchestrator:
         mock_select: Mock,
         mock_process: Mock,
         mock_maintenance: Mock,
+        mock_beta: Mock,
         mock_subprocess_run: Mock
     ) -> None:
         """Test single-shot mode with successful processing."""
+        mock_beta.return_value = None
         # Mock git status to return clean repo
         mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
         
@@ -462,6 +472,7 @@ class TestRunOrchestrator:
         mock_process.assert_called_once()
     
     @patch('subprocess.run')  # Mock git status check
+    @patch('pokepoke.agent_runner.run_beta_tester')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
     @patch('pokepoke.orchestrator.get_ready_work_items')
@@ -470,9 +481,11 @@ class TestRunOrchestrator:
         mock_get_items: Mock,
         mock_select: Mock,
         mock_process: Mock,
+        mock_beta: Mock,
         mock_subprocess_run: Mock
     ) -> None:
         """Test single-shot mode with processing failure."""
+        mock_beta.return_value = None
         # Mock git status to return clean repo
         mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
         
@@ -494,6 +507,7 @@ class TestRunOrchestrator:
     
     @patch('subprocess.run')  # Mock git status check
     @patch('builtins.input')
+    @patch('pokepoke.agent_runner.run_beta_tester')
     @patch('pokepoke.orchestrator.run_maintenance_agent')  # Mock maintenance
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
@@ -504,10 +518,12 @@ class TestRunOrchestrator:
         mock_select: Mock,
         mock_process: Mock,
         mock_maintenance: Mock,
+        mock_beta: Mock,
         mock_input: Mock,
         mock_subprocess_run: Mock
     ) -> None:
         """Test continuous interactive mode with user quit."""
+        mock_beta.return_value = None
         # Mock git status to return clean repo
         mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
         
@@ -533,6 +549,7 @@ class TestRunOrchestrator:
         mock_process.assert_called_once()
     
     @patch('subprocess.run')  # Mock git status check
+    @patch('pokepoke.agent_runner.run_beta_tester')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
     @patch('pokepoke.orchestrator.get_ready_work_items')
@@ -541,9 +558,11 @@ class TestRunOrchestrator:
         mock_get_items: Mock,
         mock_select: Mock,
         mock_process: Mock,
+        mock_beta: Mock,
         mock_subprocess_run: Mock
     ) -> None:
         """Test orchestrator handles exceptions."""
+        mock_beta.return_value = None
         # Mock git status to return clean repo initially
         mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
         
@@ -621,7 +640,7 @@ class TestRunOrchestratorContinuousMode:
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
     @patch('pokepoke.orchestrator.get_ready_work_items')
-    @patch('pokepoke.orchestrator._check_and_commit_main_repo')
+    @patch('pokepoke.orchestrator.check_and_commit_main_repo')
     def test_continuous_autonomous_multiple_items(
         self,
         mock_check_repo: Mock,
@@ -677,7 +696,7 @@ class TestRunOrchestratorContinuousMode:
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
     @patch('pokepoke.orchestrator.get_ready_work_items')
-    @patch('pokepoke.orchestrator._check_and_commit_main_repo')
+    @patch('pokepoke.orchestrator.check_and_commit_main_repo')
     def test_maintenance_agents_triggered(
         self,
         mock_check_repo: Mock,
@@ -730,7 +749,7 @@ class TestRunOrchestratorContinuousMode:
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
     @patch('pokepoke.orchestrator.get_ready_work_items')
-    @patch('pokepoke.orchestrator._check_and_commit_main_repo')
+    @patch('pokepoke.orchestrator.check_and_commit_main_repo')
     def test_continuous_interactive_loop(
         self,
         mock_check_repo: Mock,
@@ -782,8 +801,8 @@ class TestOrchestratorHelperFunctions:
         mock_subprocess: Mock,
         mock_cleanup: Mock
     ) -> None:
-        """Test _check_and_commit_main_repo with non-beads changes - should invoke cleanup agent."""
-        from pokepoke.orchestrator import _check_and_commit_main_repo
+        """Test check_and_commit_main_repo with non-beads changes - should invoke cleanup agent."""
+        from pokepoke.repo_check import check_and_commit_main_repo
         from pokepoke.types import AgentStats
         from pokepoke.logging_utils import RunLogger
         from pathlib import Path
@@ -809,7 +828,7 @@ class TestOrchestratorHelperFunctions:
             run_logger = RunLogger(base_dir=tmpdir)
             repo_path = Path.cwd()
             
-            result = _check_and_commit_main_repo(repo_path, run_logger)
+            result = check_and_commit_main_repo(repo_path, run_logger)
             
             assert result is True  # Should return True after successful cleanup
             # Should call subprocess for git status

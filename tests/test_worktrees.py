@@ -76,7 +76,7 @@ class TestDefaultBranchResolution:
              patch('subprocess.run') as mock_run:
             mock_run.return_value = Mock(returncode=0, stdout='origin/master\n', stderr='')
 
-            assert get_default_branch() == 'master'
+            assert get_default_branch(preferred=None) == 'master'
 
     def test_get_default_branch_uses_current_branch(self):
         """Test get_default_branch falls back to current branch when origin/HEAD fails."""
@@ -87,7 +87,7 @@ class TestDefaultBranchResolution:
                 Mock(returncode=0, stdout='task/PokePoke-6g1\n', stderr='')
             ]
 
-            assert get_default_branch() == 'task/PokePoke-6g1'
+            assert get_default_branch(preferred=None) == 'task/PokePoke-6g1'
 
 
 class TestGetMainRepoRoot:

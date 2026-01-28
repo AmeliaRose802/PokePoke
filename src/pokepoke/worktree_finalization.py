@@ -120,8 +120,8 @@ def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
         # )
         
         # print(f"   📋 Created delegation issue for cleanup")
-        return False
-    
+        # return False - FIXED: Proceed to merge if cleanup succeeded
+
     print(f"\n🔀 Merging worktree for {item.id}...")
     merge_success = merge_worktree(item.id, cleanup=True)
     
@@ -129,18 +129,15 @@ def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
         print(f"\n❌ Worktree merge failed (likely merge conflicts)!")
         print(f"   Worktree preserved at worktrees/task-{item.id} - requires conflict resolution")
         
-        # Create delegation issue for merge failure
-        description = f"""Failed to merge worktree for work item {item.id} ({item.title})
+        description = f"""
+Unable to automatically merge worktree for {item.id}.
 
-**Issue:** Git merge command failed (likely merge conflicts)
+Conflicts detected. Manual resolution required.
 
-**Worktree Location:** `worktrees/task-{item.id}`
-
-**Required Actions:**
-1. Check merge conflicts:
+**Steps to resolve:**
+1. Go to worktree directory:
    ```bash
    cd worktrees/task-{item.id}
-   git status
    ```
 2. Resolve conflicts manually:
    - Edit conflicted files

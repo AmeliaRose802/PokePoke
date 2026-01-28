@@ -9,8 +9,9 @@ from typing import Optional, TYPE_CHECKING, Any
 
 from copilot import CopilotClient  # type: ignore[import-not-found]
 
-from .types import BeadsWorkItem, CopilotResult, RetryConfig
+from .types import BeadsWorkItem, CopilotResult, RetryConfig, AgentStats
 from .prompts import PromptService
+from .terminal_ui import ui
 
 if TYPE_CHECKING:
     from .logging import ItemLogger  # type: ignore[import-untyped]
@@ -75,12 +76,6 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     print(f"\n[WORK_ITEM] Invoking Copilot SDK for work item: {work_item.id}")
     print(f"   Title: {work_item.title}")
     print(f"   [TIMEOUT]  Max timeout: {max_timeout/60:.1f} minutes\n")
-    print("=" * 60)
-    print("\n[DEBUG] Full Prompt Being Sent:")
-    print("=" * 60)
-    print(final_prompt)
-    print("=" * 60)
-    print()
     
     # Create SDK client with explicit CLI path
     # The SDK looks for 'copilot' in PATH, but we need to ensure it finds the right one
@@ -124,16 +119,18 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         total_cache_write_tokens = 0
         total_cost = 0.0
         turn_count = 0
+        total_tool_calls = 0
         
         # Event handler for streaming output
         def handle_event(event: Any) -> None:
             nonlocal total_input_tokens, total_output_tokens, total_cache_read_tokens
-            nonlocal total_cache_write_tokens, total_cost, turn_count
+            nonlocal total_cache_write_tokens, total_cost, turn_count, total_tool_calls
             nonlocal pending_tool_calls, idle_task
             
             event_type = event.type.value if hasattr(event.type, 'value') else str(event.type)
             
             if event_type == "assistant.message_delta":
+                ui.set_style("green")
                 # Streaming message chunk
                 delta = None
                 if hasattr(event, 'data'):
@@ -146,6 +143,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     output_lines.append(delta)
                     
             elif event_type == "assistant.message":
+                ui.set_style("green")
                 # Complete message - may have text content or tool requests
                 content = getattr(event.data, 'content', None) if hasattr(event, 'data') else None
                 tool_requests = getattr(event.data, 'tool_requests', None) if hasattr(event, 'data') else None
@@ -154,12 +152,16 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     print(content)
                     output_lines.append(content)
                 
+                # Reset style for tool announcements
+                ui.set_style(None)
                 # Show tool requests if present
                 if tool_requests and len(tool_requests) > 0:
                     print(f"\n[Copilot] Calling {len(tool_requests)} tool(s)...")
                     
             elif event_type == "tool.execution_start":
+                ui.set_style(None)
                 # Tool is being executed
+                total_tool_calls += 1
                 pending_tool_calls += 1
                 
                 # Cancel any pending idle check - we have activity
@@ -177,6 +179,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     output_lines.append(f"\n[Tool] {tool_name}({args_str})\n")
                 
             elif event_type == "tool.execution_complete":
+                ui.set_style(None)
                 # Tool completed - show full result
                 pending_tool_calls = max(0, pending_tool_calls - 1)
                 
@@ -195,6 +198,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                         output_lines.append(f"[Result] {result_str}\n")
             
             elif event_type == "assistant.usage":
+                ui.set_style(None)
                 # Track usage statistics
                 if hasattr(event, 'data'):
                     total_input_tokens += getattr(event.data, 'input_tokens', 0) or 0
@@ -246,32 +250,34 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         
         # Send the message
         print("[SDK] Sending message...\n")
-        await session.send({"prompt": final_prompt})
         
-        # Wait for completion with timeout
-        try:
-            await asyncio.wait_for(done.wait(), timeout=max_timeout)
-        except asyncio.TimeoutError:
-            print(f"\n[SDK] TIMEOUT after {max_timeout}s")
-            await session.abort()
-            return CopilotResult(
-                work_item_id=work_item.id,
-                success=False,
-                error=f"SDK timeout after {max_timeout}s",
-                attempt_count=1
-            )
-        except KeyboardInterrupt:
-            print("\n\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")
+        with ui.agent_output():
+            await session.send({"prompt": final_prompt})
+            
+            # Wait for completion with timeout
             try:
+                await asyncio.wait_for(done.wait(), timeout=max_timeout)
+            except asyncio.TimeoutError:
+                print(f"\n[SDK] TIMEOUT after {max_timeout}s")
                 await session.abort()
-            except Exception:
-                pass  # Best effort cleanup
-            return CopilotResult(
-                work_item_id=work_item.id,
-                success=False,
-                error="Interrupted by user",
-                attempt_count=1
-            )
+                return CopilotResult(
+                    work_item_id=work_item.id,
+                    success=False,
+                    error=f"SDK timeout after {max_timeout}s",
+                    attempt_count=1
+                )
+            except KeyboardInterrupt:
+                print("\n\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")
+                try:
+                    await session.abort()
+                except Exception:
+                    pass  # Best effort cleanup
+                return CopilotResult(
+                    work_item_id=work_item.id,
+                    success=False,
+                    error="Interrupted by user",
+                    attempt_count=1
+                )
         
         # Clean up session
         await session.destroy()
@@ -299,12 +305,24 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                 print(f"   Estimated cost: ${total_cost:.4f}")
             print()
         
+        # Create stats object
+        stats = AgentStats(
+            input_tokens=total_input_tokens,
+            output_tokens=total_output_tokens,
+            premium_requests=turn_count,  # Approximation: 1 turn = 1 premium request
+            tool_calls=total_tool_calls,
+            estimated_cost=total_cost,
+            api_duration=0.0,  # TODO: Track duration
+            wall_duration=0.0  # TODO: Track duration
+        )
+        
         return CopilotResult(
             work_item_id=work_item.id,
             success=success,
             output=output_text,
             error="; ".join(errors) if errors else None,
-            attempt_count=1
+            attempt_count=1,
+            stats=stats
         )
         
     except KeyboardInterrupt:

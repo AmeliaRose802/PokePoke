@@ -1,7 +1,8 @@
 """Tests for terminal UI utilities."""
 
 import pytest
-from pokepoke.terminal_ui import format_work_item_banner, set_terminal_banner, clear_terminal_banner
+from unittest.mock import MagicMock, patch
+from pokepoke.terminal_ui import format_work_item_banner, set_terminal_banner, clear_terminal_banner, PokePokeUI
 
 
 class TestFormatWorkItemBanner:
@@ -55,3 +56,47 @@ class TestSetTerminalBanner:
         set_terminal_banner("Test 2")
         clear_terminal_banner()
         # No assertion needed - we just want to ensure no exceptions
+
+
+class TestPokePokeUI:
+    @patch('pokepoke.terminal_ui.Console')
+    def test_init_check_layout(self, mock_console):
+        """Test PokePokeUI initialization and layout structure."""
+        # Mock Console to avoid real terminal interaction
+        mock_console.return_value = MagicMock()
+        
+        ui = PokePokeUI()
+        
+        # Check layout structure
+        # _setup_layout splits the root layout. We verify correct children are present.
+        children = ui.layout.children
+        # Expect 4 children: top_spacer, header, body, footer
+        assert len(children) == 4
+        
+        names = [child.name for child in children]
+        assert 'top_spacer' in names
+        assert 'header' in names
+        assert 'body' in names
+        assert 'footer' in names
+        
+        # Check specific constraints
+        for child in children:
+            if child.name == 'top_spacer':
+                assert child.size == 1
+            elif child.name == 'header':
+                assert child.size == 3
+            elif child.name == 'footer':
+                assert child.size == 5
+            elif child.name == 'body':
+                assert child.ratio == 1
+
+    @patch('pokepoke.terminal_ui.Console')
+    def test_update_header(self, mock_console):
+        """Test header update."""
+        ui = PokePokeUI()
+        ui.update_header('ITEM-123', 'Test Title', 'Active')
+        
+        # Verify header content is updated
+        header_layout = ui.layout['header']
+        assert header_layout.renderable is not None
+

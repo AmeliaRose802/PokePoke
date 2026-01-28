@@ -70,17 +70,18 @@ def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool) -> Opt
     
     ready_items = available_items
     
-    print(f"\n📋 Found {len(ready_items)} ready work items:\n")
-    
-    for idx, item in enumerate(ready_items, 1):
-        print(f"{idx}. [{item.id}] {item.title}")
-        print(f"   Type: {item.issue_type} | Priority: {item.priority}")
-        if item.description:
-            desc = item.description[:80]
-            if len(item.description) > 80:
-                desc += "..."
-            print(f"   {desc}")
-        print()
+    if interactive:
+        print(f"\n📋 Found {len(ready_items)} ready work items:\n")
+        
+        for idx, item in enumerate(ready_items, 1):
+            print(f"{idx}. [{item.id}] {item.title}")
+            print(f"   Type: {item.issue_type} | Priority: {item.priority}")
+            if item.description:
+                desc = item.description[:80]
+                if len(item.description) > 80:
+                    desc += "..."
+                print(f"   {desc}")
+            print()
     
     if interactive:
         return interactive_selection(ready_items)

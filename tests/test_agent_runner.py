@@ -620,3 +620,52 @@ class TestRunBetaTester:
         stats = run_beta_tester()
         assert stats is None
 
+    @patch('pokepoke.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('subprocess.run')
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.read_text')
+    def test_beta_tester_restart_failure_keeps_going(
+        self, 
+        mock_read: Mock, 
+        mock_exists: Mock, 
+        mock_run: Mock, 
+        mock_invoke: Mock, 
+        mock_get_prompts: Mock,
+        mock_parse: Mock
+    ) -> None:
+        """Test restart script execution failure but proceeds."""
+        mock_exists.return_value = True
+        mock_read.return_value = "prompt"
+        
+        # Restart fails
+        mock_run.return_value = Mock(returncode=1, stdout="Error")
+        
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="beta", success=True, output="{}", attempt_count=1
+        )
+
+        mock_parse.return_value = AgentStats(
+            wall_duration=10.0,
+            api_duration=5.0,
+            input_tokens=100,
+            output_tokens=50,
+            lines_added=10,
+            lines_removed=5,
+            premium_requests=1
+        )
+        
+        mock_dir = MagicMock()
+        mock_get_prompts.return_value = mock_dir
+        mock_file = Mock()
+        mock_file.exists.return_value = True
+        mock_file.read_text.return_value = "prompt"
+        mock_dir.__truediv__.return_value = mock_file
+        
+        from pokepoke.agent_runner import run_beta_tester
+        stats = run_beta_tester()
+        
+        assert stats is not None
+        mock_run.assert_called_once()
+

@@ -31,6 +31,12 @@ Fix these issues immediately. Focus on:
 4. Following project conventions
 {{/retry_context}}
 
+**MCP Server & Tools:**
+If modifying the MCP server or using tools:
+- **Restart:** Use `rmcp` or `.\scripts\Restart-MCPServer.ps1`.
+- **Invoke:** Use `.\scripts\Invoke-MCPTool.ps1` for testing.
+- **Forbidden:** Do NOT use `Invoke-RestMethod` or manual HTTP calls.
+
 **Requirements:**
 1. Follow coding standards and project conventions
 2. Add appropriate tests with 80%+ coverage

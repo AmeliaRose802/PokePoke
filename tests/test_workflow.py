@@ -619,63 +619,68 @@ class TestMergeWorktreeToDev:
         assert result is True
         mock_merge.assert_called_once_with("task-1", cleanup=True)
     
-    @patch('pokepoke.cleanup_agents.invoke_copilot')
-    @patch('pokepoke.worktree_finalization.create_cleanup_delegation_issue')
-    @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
-    def test_repo_not_ready(self, mock_check: Mock, mock_create_issue: Mock, mock_invoke_copilot: Mock) -> None:
-        """Test when main repo is not ready for merge."""
-        item = BeadsWorkItem(
-            id="task-1",
-            title="Task 1",
-            description="",
-            status="open",
-            priority=1,
-            issue_type="task"
-        )
+    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent')
+    @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
+    def test_repo_not_ready_autofix_fails(self, mock_check: Mock, mock_cleanup: Mock) -> None:
+        """Test when main repo is not ready and cleanup fails."""
+        item = BeadsWorkItem(id="task-1", title="Task 1", description="", status="open", priority=1, issue_type="task")
 
         mock_check.return_value = (False, "Uncommitted changes")
-        mock_create_issue.return_value = "cleanup-issue-1"
-        mock_invoke_copilot.return_value = CopilotResult(
-            work_item_id="task-1-cleanup",
-            success=False,
-            output="",
-            error="Cleanup failed",
-            attempt_count=1
-        )
+        mock_cleanup.return_value = (False, "Reason")
 
         result = merge_worktree_to_dev(item)
 
         assert result is False
-        
-    @patch('pokepoke.cleanup_agents.invoke_copilot')
-    @patch('pokepoke.worktree_finalization.create_cleanup_delegation_issue')
+        mock_cleanup.assert_called_once()
+    
     @patch('pokepoke.worktree_finalization.merge_worktree')
-    @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
-    def test_merge_fails(self, mock_check: Mock, mock_merge: Mock, mock_create_issue: Mock, mock_invoke_copilot: Mock) -> None:
-        """Test when merge operation fails."""
-        item = BeadsWorkItem(
-            id="task-1",
-            title="Task 1",
-            description="",
-            status="open",
-            priority=1,
-            issue_type="task"
-        )
+    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent')
+    @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
+    def test_repo_not_ready_autofix_succeeds(self, mock_check: Mock, mock_cleanup: Mock, mock_merge: Mock) -> None:
+        """Test when main repo not ready, cleanup succeeds, merge proceeds."""
+        item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
+        
+        mock_check.side_effect = [(False, "Changes"), (True, "")]
+        mock_cleanup.return_value = (True, "Fixed")
+        mock_merge.return_value = True
+        
+        result = merge_worktree_to_dev(item)
+        
+        assert result is True
+        mock_cleanup.assert_called_once()
+        mock_merge.assert_called_once()
+
+    @patch('pokepoke.cleanup_agents.invoke_merge_conflict_cleanup_agent')
+    @patch('pokepoke.worktree_finalization.merge_worktree')
+    @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
+    def test_merge_fails_autofix_fails(self, mock_check: Mock, mock_merge: Mock, mock_cleanup: Mock) -> None:
+        """Test when merge fails and cleanup fails."""
+        item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
 
         mock_check.return_value = (True, "")
         mock_merge.return_value = False
-        mock_create_issue.return_value = "cleanup-issue-1"
-        mock_invoke_copilot.return_value = CopilotResult(
-            work_item_id="task-1-merge-fix",
-            success=False,
-            output="",
-            error="Cleanup failed",
-            attempt_count=1
-        )
+        mock_cleanup.return_value = (False, "Failed")
 
         result = merge_worktree_to_dev(item)
 
         assert result is False
+        mock_cleanup.assert_called_once()
+
+    @patch('pokepoke.cleanup_agents.invoke_merge_conflict_cleanup_agent')
+    @patch('pokepoke.worktree_finalization.merge_worktree')
+    @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
+    def test_merge_fails_autofix_succeeds(self, mock_check: Mock, mock_merge: Mock, mock_cleanup: Mock) -> None:
+        """Test when merge fails, cleanup succeeds, retry works."""
+        item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
+
+        mock_check.return_value = (True, "")
+        mock_merge.side_effect = [False, True]
+        mock_cleanup.return_value = (True, "Fixed")
+
+        result = merge_worktree_to_dev(item)
+
+        assert result is True
+        assert mock_merge.call_count == 2
 
 
 class TestCloseWorkItemAndParents:

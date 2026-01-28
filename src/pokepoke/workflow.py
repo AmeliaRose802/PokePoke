@@ -14,7 +14,7 @@ from pokepoke.agent_runner import run_cleanup_loop, run_beta_tester
 from pokepoke.worktree_finalization import finalize_work_item
 from pokepoke.work_item_selection import select_work_item
 from pokepoke.stats import parse_agent_stats
-from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner
+from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner, ui
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import RunLogger
@@ -56,7 +56,9 @@ def process_work_item(
         item_logger = run_logger.start_item_log(item.id, item.title)
     
     if interactive:
+        ui.stop()
         confirm = input("Proceed with this item? [Y/n]: ").strip().lower()
+        ui.start()
         if confirm and confirm != 'y':
             print("⏭️  Skipped.")
             if run_logger:
@@ -64,14 +66,15 @@ def process_work_item(
             return False, 0, None, 0
     
     # Assign and sync BEFORE creating worktree to prevent parallel conflicts
-    print(f"\n🔒 Claiming work item on main branch...")
+    print(f"\n🔒 Claiming work item...")
     if not assign_and_sync_item(item.id):
         print(f"❌ Failed to assign work item {item.id}")
         if run_logger:
             run_logger.end_item_log(False, 0)
         return False, 0, None, 0
     
-    pokepoke_root = Path(r"C:\Users\ameliapayne\PokePoke")
+    # Use current working directory as repo root
+    pokepoke_root = Path.cwd()
     worktree_path = _setup_worktree(item)
     
     if worktree_path is None:
@@ -119,7 +122,7 @@ def process_work_item(
     if result.success:
         set_terminal_banner(format_work_item_banner(item.id, item.title, "Finalizing"))
         success = finalize_work_item(item, worktree_path)
-        item_stats = parse_agent_stats(result.output) if result.output else None
+        item_stats = result.stats if result.stats else (parse_agent_stats(result.output) if result.output else None)
         
         # Update banner based on finalization result
         if success:

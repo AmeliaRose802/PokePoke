@@ -161,10 +161,32 @@ def branch_exists(branch_name: str) -> bool:
 def get_default_branch(preferred: str = "ameliapayne/dev", fallback: str = "master") -> str:
     """Resolve the default branch name for the repo.
 
-    Prefers ameliapayne/dev when it exists, otherwise uses origin/HEAD or current branch.
+    Prefers ameliapayne/dev when it exists (local or remote), otherwise uses origin/HEAD or current branch.
+    If remote exists but local doesn't, it creates the local tracking branch.
     """
-    if preferred and branch_exists(preferred):
-        return preferred
+    if preferred:
+        # Check local
+        if branch_exists(preferred):
+            return preferred
+            
+        # Check remote
+        try:
+            subprocess.run(
+                ["git", "show-ref", "--verify", f"refs/remotes/origin/{preferred}"],
+                capture_output=True,
+                check=True
+            )
+            
+            # Found on remote, create local tracking branch
+            print(f"   ✨ Creating local tracking branch for {preferred}...")
+            subprocess.run(
+                ["git", "branch", "--track", preferred, f"origin/{preferred}"],
+                capture_output=True,
+                check=True
+            )
+            return preferred
+        except subprocess.CalledProcessError:
+            pass
 
     try:
         result = subprocess.run(

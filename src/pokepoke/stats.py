@@ -163,4 +163,12 @@ def print_stats(items_completed: int, total_requests: int, elapsed_seconds: floa
             avg_str = f"{avg_secs}s"
         print(f"📈 Avg time per item:  {avg_str}")
     
+    # Print list of completed items
+    if session_stats and session_stats.completed_items_list:
+        print("\n" + "=" * 60)
+        print("✅ Completed Work Items")
+        print("=" * 60)
+        for item in session_stats.completed_items_list:
+            print(f"• {item.id}: {item.title}")
+            
     print("=" * 60)

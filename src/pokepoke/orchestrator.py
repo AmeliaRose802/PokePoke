@@ -15,8 +15,9 @@ from pokepoke.work_item_selection import select_work_item
 from pokepoke.agent_runner import run_maintenance_agent
 from pokepoke.logging_utils import RunLogger
 from pokepoke.agent_names import initialize_agent_name
-from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner, clear_terminal_banner
+from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner, clear_terminal_banner, ui
 from pokepoke.maintenance_state import increment_items_completed
+from pokepoke.repo_check import check_and_commit_main_repo
 
 
 def run_orchestrator(interactive: bool = True, continuous: bool = False, run_beta_first: bool = False) -> int:
@@ -30,66 +31,83 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
     Returns:
         Exit code (0 for success, 1 for failure)
     """
-    # TELLTALE: Version identifier to verify correct code is running
-    print("🔷 PokePoke MASTER-MERGED-v2 (2026-01-25 post-worktree-fix)")
-    print("=" * 50)
-    
-    # Initialize unique agent name for this run
-    agent_name = initialize_agent_name()
-    os.environ['AGENT_NAME'] = agent_name
-    
-    mode_name = "Interactive" if interactive else "Autonomous"
-    print(f"🎯 PokePoke {mode_name} Mode | 🤖 Agent: {agent_name}")
-    print("=" * 50)
-    set_terminal_banner(f"PokePoke {mode_name} - {agent_name}")
-    
-    # Initialize run logger
-    run_logger = RunLogger()
-    run_id = run_logger.get_run_id()
-    print(f"📝 Run ID: {run_id} | 📁 Logs: {run_logger.get_run_dir()}")
-    run_logger.log_orchestrator(f"PokePoke started in {mode_name} mode with agent name: {agent_name}")
-    
-    # Use the current working directory
-    main_repo_path = Path.cwd()
-    print(f"📁 Repository: {main_repo_path}")
-    run_logger.log_orchestrator(f"Repository: {main_repo_path}")
-    
-    # Track statistics
-    start_time = time.time()
-    items_completed = 0
-    total_requests = 0
-    session_stats = SessionStats(agent_stats=AgentStats())
-    print("📊 Recording starting beads statistics...")
-    run_logger.log_orchestrator("Recording starting beads statistics")
-    session_stats.starting_beads_stats = get_beads_stats()
-    # Run beta tester first if requested
-    if run_beta_first:
-        print("\n🧪 Running Beta Tester at startup...")
-        run_logger.log_orchestrator("Running Beta Tester at startup")
-        from pokepoke.agent_runner import run_beta_tester
-        beta_stats = run_beta_tester()
-        if beta_stats:
-            # Aggregate beta tester stats
-            session_stats.agent_stats.wall_duration += beta_stats.wall_duration
-            session_stats.agent_stats.api_duration += beta_stats.api_duration
-            session_stats.agent_stats.input_tokens += beta_stats.input_tokens
-            session_stats.agent_stats.output_tokens += beta_stats.output_tokens
-            session_stats.agent_stats.premium_requests += beta_stats.premium_requests
-        print("✅ Beta Tester completed\n")
+    # Start UI immediately to capture startup logs
+    ui.start()
+    ui.update_header("PokePoke", f"Initializing {interactive and 'Interactive' or 'Autonomous'} Mode...")
+
     try:
+        # TELLTALE: Version identifier to verify correct code is running
+        print("🔷 PokePoke MASTER-MERGED-v2 (2026-01-25 post-worktree-fix)")
+        print("=" * 50)
+        
+        # Initialize unique agent name for this run
+        agent_name = initialize_agent_name()
+        os.environ['AGENT_NAME'] = agent_name
+        
+        mode_name = "Interactive" if interactive else "Autonomous"
+        print(f"🎯 PokePoke {mode_name} Mode | 🤖 Agent: {agent_name}")
+        print("=" * 50)
+        set_terminal_banner(f"PokePoke {mode_name} - {agent_name}")
+        ui.update_header("PokePoke", f"{mode_name} Mode", agent_name)
+        
+        # Initialize run logger
+        run_logger = RunLogger()
+        run_id = run_logger.get_run_id()
+        print(f"📝 Run ID: {run_id} | 📁 Logs: {run_logger.get_run_dir()}")
+        run_logger.log_orchestrator(f"PokePoke started in {mode_name} mode with agent name: {agent_name}")
+        
+        # Use the current working directory
+        main_repo_path = Path.cwd()
+        print(f"📁 Repository: {main_repo_path}")
+        run_logger.log_orchestrator(f"Repository: {main_repo_path}")
+        
+        # Track statistics
+        start_time = time.time()
+        items_completed = 0
+        total_requests = 0
+        session_stats = SessionStats(agent_stats=AgentStats())
+        print("📊 Recording starting beads statistics...")
+        run_logger.log_orchestrator("Recording starting beads statistics")
+        session_stats.starting_beads_stats = get_beads_stats()
+        
+        # Initial stats display with 0 elapsed time (or very small)
+        ui.update_stats(session_stats, time.time() - start_time)
+        
+        # Run beta tester first if requested
+        if run_beta_first:
+            print("\n🧪 Running Beta Tester at startup...")
+            run_logger.log_orchestrator("Running Beta Tester at startup")
+            from pokepoke.agent_runner import run_beta_tester
+            beta_stats = run_beta_tester()
+            if beta_stats:
+                # Aggregate beta tester stats
+                session_stats.agent_stats.wall_duration += beta_stats.wall_duration
+                session_stats.agent_stats.api_duration += beta_stats.api_duration
+                session_stats.agent_stats.input_tokens += beta_stats.input_tokens
+                session_stats.agent_stats.output_tokens += beta_stats.output_tokens
+                session_stats.agent_stats.premium_requests += beta_stats.premium_requests
+            print("✅ Beta Tester completed\n")
+            
         while True:
             # Check main repo status before processing
             print("\n🔍 Checking main repository status...")
             run_logger.log_orchestrator("Checking main repository status")
-            if not _check_and_commit_main_repo(main_repo_path, run_logger):
+            if not check_and_commit_main_repo(main_repo_path, run_logger):
                 run_logger.log_orchestrator("Main repo check failed", level="ERROR")
                 return 1
             print("\nFetching ready work from beads...")
             run_logger.log_orchestrator("Fetching ready work from beads")
             ready_items = get_ready_work_items()
+            
+            # Pause UI for interactive selection
+            if interactive:
+                ui.stop()
             selected_item = select_work_item(ready_items, interactive)
+            if interactive:
+                ui.start()
             
             if selected_item is None:
+                ui.stop()
                 print("\n👋 Exiting PokePoke.")
                 run_logger.log_orchestrator("User chose to exit")
                 clear_terminal_banner()
@@ -97,13 +115,19 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             
             # Process the selected item
             run_logger.log_orchestrator(f"Selected item: {selected_item.id} - {selected_item.title}")
-            # Update terminal banner with current work item
+            
+            # Update terminal banner and UI header
             banner = format_work_item_banner(selected_item.id, selected_item.title)
             set_terminal_banner(banner)
+            ui.update_header(selected_item.id, selected_item.title)
+            
             success, requests, item_stats, cleanup_runs = process_work_item(
                 selected_item, interactive, run_logger=run_logger
             )
             total_requests += requests
+            if requests > 1:
+                session_stats.agent_stats.retries += (requests - 1)
+            
             session_stats.work_agent_runs += 1
             session_stats.cleanup_agent_runs += cleanup_runs
             
@@ -114,15 +138,21 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             # Increment counter on successful processing
             if success:
                 items_completed += 1
+                session_stats.items_completed = items_completed
+                session_stats.completed_items_list.append(selected_item)
                 total_persistent_count = increment_items_completed()
                 print(f"\n📈 Items completed this session: {items_completed}")
                 print(f"📈 Total items completed (lifetime): {total_persistent_count}")
                 run_logger.log_orchestrator(f"Items completed this session: {items_completed}")
                 
                 _run_periodic_maintenance(total_persistent_count, session_stats, run_logger)
+
+            # Update UI stats with current runtime
+            ui.update_stats(session_stats, time.time() - start_time)
             
             # Decide whether to continue
             if not continuous:
+                ui.stop()
                 session_stats.ending_beads_stats = get_beads_stats()
                 elapsed = time.time() - start_time
                 print_stats(items_completed, total_requests, elapsed, session_stats)
@@ -135,8 +165,14 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             if interactive:
                 # Clear banner between items
                 set_terminal_banner(f"PokePoke {mode_name} - {agent_name}")
+                ui.update_header("PokePoke", f"{mode_name} Mode", "Waiting...")
+                
+                ui.stop()
                 cont = input("\nProcess another item? [Y/n]: ").strip().lower()
+                ui.start()
+                
                 if cont and cont != 'y':
+                    ui.stop()
                     session_stats.ending_beads_stats = get_beads_stats()
                     elapsed = time.time() - start_time
                     print("\n👋 Exiting PokePoke.")
@@ -147,11 +183,13 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
                     clear_terminal_banner()
                     return 0
             else:
+                ui.update_header("PokePoke", f"{mode_name} Mode", "Sleeping...")
                 print("\n⏳ Waiting 5 seconds before next iteration...")
                 time.sleep(5)
     
     except KeyboardInterrupt:
         # Clean shutdown on Ctrl+C
+        ui.stop()
         print("\n\n⚠️  Interrupted by user (Ctrl+C)")
         print("📊 Collecting final statistics...")
         
@@ -171,6 +209,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         clear_terminal_banner()
         return 0
     except Exception as e:
+        ui.stop()
         print("\n📊 Collecting final statistics...")
         try:
             session_stats.ending_beads_stats = get_beads_stats()
@@ -189,102 +228,9 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
         clear_terminal_banner()
         return 1
+    finally:
+        ui.stop()
 
-
-def _check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool:
-    """Check main repository status and commit beads changes if needed.
-    
-    Args:
-        repo_path: Path to the main repository
-        run_logger: Run logger instance
-    
-    Returns:
-        True if ready to continue, False if should exit
-    """
-    status_result = subprocess.run(
-        ["git", "status", "--porcelain"],
-        capture_output=True,
-        text=True,
-        encoding='utf-8',
-        check=True,
-        cwd=str(repo_path)
-    )
-    
-    uncommitted = status_result.stdout.strip()
-    if uncommitted:
-        lines = uncommitted.split('\n')
-        # Categorize changes for proper handling
-        beads_changes = [line for line in lines if line and '.beads/' in line]
-        worktree_changes = [line for line in lines if line and 'worktrees/' in line and not line.startswith('??')]
-        untracked_files = [line for line in lines if line and line.startswith('??')]
-        other_changes = [
-            line for line in lines
-            if line
-            and '.beads/' not in line
-            and 'worktrees/' not in line
-            and not line.startswith('??')
-        ]
-        
-        # Handle problematic changes that need agent intervention
-        if other_changes:
-            print("\n⚠️  Main repository has uncommitted changes:")
-            run_logger.log_orchestrator("Main repository has uncommitted changes", level="WARNING")
-            for line in other_changes[:10]:
-                print(f"   {line}")
-            if len(other_changes) > 10:
-                print(f"   ... and {len(other_changes) - 10} more")
-            
-            # Immediately run cleanup agent instead of delegating
-            print("\n🤖 Launching cleanup agent to resolve uncommitted changes...")
-            run_logger.log_orchestrator("Launching cleanup agent for uncommitted changes")
-            
-            from pokepoke.agent_runner import invoke_cleanup_agent
-            from pokepoke.types import BeadsWorkItem
-            
-            # Create a temporary work item for the cleanup agent
-            cleanup_item = BeadsWorkItem(
-                id="cleanup-main-repo",
-                title="Clean up uncommitted changes in main repository",
-                description="Auto-generated cleanup task for uncommitted changes",
-                issue_type="task",
-                priority=0,
-                status="in_progress",
-                labels=["cleanup", "auto-generated"]
-            )
-            
-            cleanup_success, cleanup_stats = invoke_cleanup_agent(cleanup_item, repo_path)
-            
-            if cleanup_success:
-                print("✅ Cleanup agent successfully resolved uncommitted changes")
-                run_logger.log_orchestrator("Cleanup agent successfully resolved uncommitted changes")
-                return True  # Continue processing
-            else:
-                print("❌ Cleanup agent failed to resolve uncommitted changes")
-                print("   Please manually resolve and try again")
-                run_logger.log_orchestrator("Cleanup agent failed to resolve uncommitted changes", level="ERROR")
-                return False
-        
-        # Beads changes are handled by beads' own sync mechanism (bd sync)
-        # Do NOT manually commit them - beads daemon handles this automatically
-        if beads_changes:
-            print("ℹ️  Beads database changes detected - will be synced by beads daemon")
-            print("ℹ️  Run 'bd sync' to force immediate sync if needed")
-        
-        # Auto-resolve worktree cleanup deletions
-        if worktree_changes:
-            print("🧹 Committing worktree cleanup changes...")
-            subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8', errors='replace', cwd=str(repo_path))
-            subprocess.run(
-                ["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
-                check=True,
-                capture_output=True,
-                encoding='utf-8',
-                errors='replace',
-                cwd=str(repo_path)
-            )
-            print("✅ Worktree cleanup committed")
-    
-    return True
 
 
 def _aggregate_stats(session_stats: SessionStats, item_stats: AgentStats) -> None:
@@ -296,6 +242,9 @@ def _aggregate_stats(session_stats: SessionStats, item_stats: AgentStats) -> Non
     session_stats.agent_stats.lines_added += item_stats.lines_added
     session_stats.agent_stats.lines_removed += item_stats.lines_removed
     session_stats.agent_stats.premium_requests += item_stats.premium_requests
+    session_stats.agent_stats.tool_calls += item_stats.tool_calls
+    session_stats.agent_stats.estimated_cost += item_stats.estimated_cost
+    session_stats.agent_stats.retries += item_stats.retries
 
 
 def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats, run_logger: 'RunLogger') -> None:
@@ -306,7 +255,7 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
         session_stats: Session statistics
         run_logger: Run logger instance
     """
-    pokepoke_repo = Path(r"C:\Users\ameliapayne\PokePoke")
+    pokepoke_repo = Path.cwd()
     
     # Skip maintenance at start (items_completed == 0)
     if items_completed == 0:
@@ -314,6 +263,8 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
     
     # Run Tech Debt Agent (every 5 items)
     if items_completed % 5 == 0:
+        set_terminal_banner("PokePoke - Synced Tech Debt Agent")
+        ui.update_header("MAINTENANCE", "Tech Debt Agent", "Running")
         print("\n📊 Running Tech Debt Agent...")
         run_logger.log_maintenance("tech_debt", "Starting Tech Debt Agent")
         session_stats.tech_debt_agent_runs += 1
@@ -326,6 +277,8 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
     
     # Run Janitor Agent (every 2 items instead of 3 for more frequent runs)
     if items_completed % 2 == 0:
+        set_terminal_banner("PokePoke - Synced Janitor Agent")
+        ui.update_header("MAINTENANCE", "Janitor Agent", "Running")
         print("\n🧹 Running Janitor Agent...")
         run_logger.log_maintenance("janitor", "Starting Janitor Agent")
         session_stats.janitor_agent_runs += 1
@@ -338,6 +291,8 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
     
     # Run Backlog Cleanup Agent (every 7 items)
     if items_completed % 7 == 0:
+        set_terminal_banner("PokePoke - Synced Backlog Cleanup Agent")
+        ui.update_header("MAINTENANCE", "Backlog Cleanup Agent", "Running")
         print("\n🗑️ Running Backlog Cleanup Agent...")
         run_logger.log_maintenance("backlog_cleanup", "Starting Backlog Cleanup Agent")
         session_stats.backlog_cleanup_agent_runs += 1
@@ -347,6 +302,8 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
         run_logger.log_maintenance("backlog_cleanup", "Backlog Cleanup Agent completed successfully")
     # Run Beta Tester Agent (every 3 items - swap with Janitor)
     if items_completed % 3 == 0:
+        set_terminal_banner("PokePoke - Synced Beta Tester Agent")
+        ui.update_header("MAINTENANCE", "Beta Tester Agent", "Running")
         from pokepoke.agent_runner import run_beta_tester
         print("\n🧪 Running Beta Tester Agent...")
         run_logger.log_maintenance("beta_tester", "Starting Beta Tester Agent")

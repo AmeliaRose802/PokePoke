@@ -74,27 +74,11 @@ This automatically:
 .\scripts\Invoke-MCPTool.ps1 -Tool "check_kusto_health" -ShowRaw
 ```
 
-**Manual tool call (if you need full control):**
-```powershell
-$body = @{
-    jsonrpc = "2.0"
-    id = 1
-    method = "tools/call"
-    params = @{
-        name = "get_incident_context"
-        arguments = @{
-            incidentId = 731982504
-        }
-    }
-} | ConvertTo-Json -Depth 10
-
-$headers = @{
-    "Content-Type" = "application/json"
-    "Accept" = "application/json, text/event-stream"
-}
-
-Invoke-RestMethod -Uri "http://localhost:5000" -Method Post -Body $body -Headers $headers
-```
+**IMPORTANT: Always use the `Invoke-MCPTool.ps1` script.**
+Do not try to construct raw HTTP requests (Invoke-RestMethod) or use other clients. The script handles:
+- Correct JSON-RPC 2.0 formatting
+- Session headers and SSE connection details
+- Output parsing and error handling
 
 ### Troubleshooting
 
