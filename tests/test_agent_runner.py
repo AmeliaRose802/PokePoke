@@ -461,9 +461,9 @@ class TestRunWorktreeAgent:
 class TestRunBetaTester:
     """Test run_beta_tester function."""
     
+    @patch('pokepoke.agent_runner._run_worktree_agent')
     @patch('pokepoke.agent_runner.parse_agent_stats')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
-    @patch('pokepoke.agent_runner.invoke_copilot')
     @patch('subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('pathlib.Path.read_text')
@@ -472,23 +472,16 @@ class TestRunBetaTester:
         mock_read: Mock,
         mock_exists: Mock,
         mock_run: Mock,
-        mock_invoke: Mock,
         mock_get_prompts: Mock,
-        mock_parse: Mock
+        mock_parse: Mock,
+        mock_worktree_agent: Mock
     ) -> None:
         """Test successful beta tester run."""
         mock_exists.return_value = True
         mock_read.return_value = "Beta test prompt"
         mock_run.return_value = Mock(returncode=0)
         
-        mock_invoke.return_value = CopilotResult(
-            work_item_id="beta-tester",
-            success=True,
-            output='{"wall_duration": 10.0, "input_tokens": 100, "output_tokens": 50}',
-            attempt_count=1
-        )
-        
-        mock_parse.return_value = AgentStats(
+        mock_worktree_agent.return_value = AgentStats(
             wall_duration=10.0,
             api_duration=5.0,
             input_tokens=100,
@@ -511,12 +504,15 @@ class TestRunBetaTester:
         
         assert stats is not None
         assert stats.wall_duration == 10.0
-        mock_invoke.assert_called_once()
+        mock_worktree_agent.assert_called_once()
+        # Verify call args have merge_changes=False
+        args, kwargs = mock_worktree_agent.call_args
+        assert kwargs.get('merge_changes') is False
         mock_run.assert_called()  # Restart script
 
+    @patch('pokepoke.agent_runner._run_worktree_agent')
     @patch('pokepoke.agent_runner.parse_agent_stats')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
-    @patch('pokepoke.agent_runner.invoke_copilot')
     @patch('subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('pathlib.Path.read_text')
@@ -525,9 +521,9 @@ class TestRunBetaTester:
         mock_read: Mock, 
         mock_exists: Mock, 
         mock_run: Mock, 
-        mock_invoke: Mock, 
         mock_get_prompts: Mock,
-        mock_parse: Mock
+        mock_parse: Mock,
+        mock_worktree_agent: Mock
     ) -> None:
         """Test restart script missing but proceeds."""
         # restart_script.exists() -> False
@@ -535,11 +531,7 @@ class TestRunBetaTester:
         mock_exists.side_effect = [False, True]
         mock_read.return_value = "prompt"
         
-        mock_invoke.return_value = CopilotResult(
-            work_item_id="beta", success=True, output="{}", attempt_count=1
-        )
-        
-        mock_parse.return_value = AgentStats(
+        mock_worktree_agent.return_value = AgentStats(
             wall_duration=10.0,
             api_duration=5.0,
             input_tokens=100,
@@ -587,8 +579,8 @@ class TestRunBetaTester:
         stats = run_beta_tester()
         assert stats is None
 
+    @patch('pokepoke.agent_runner._run_worktree_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
-    @patch('pokepoke.agent_runner.invoke_copilot')
     @patch('subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('pathlib.Path.read_text')
@@ -597,14 +589,15 @@ class TestRunBetaTester:
         mock_read: Mock, 
         mock_exists: Mock, 
         mock_run: Mock, 
-        mock_invoke: Mock,
-        mock_get_prompts: Mock
+        mock_get_prompts: Mock,
+        mock_worktree_agent: Mock
     ) -> None:
-        """Test failure in invoke_copilot returns None."""
+        """Test beta tester returns None on invocation failure."""
         mock_exists.return_value = True
-        mock_run.return_value = Mock(returncode=0)
         mock_read.return_value = "prompt"
+        mock_run.return_value = Mock(returncode=0)
         
+        # Mock prompts dir
         mock_dir = MagicMock()
         mock_get_prompts.return_value = mock_dir
         mock_file = Mock()
@@ -612,17 +605,15 @@ class TestRunBetaTester:
         mock_file.read_text.return_value = "prompt"
         mock_dir.__truediv__.return_value = mock_file
         
-        mock_invoke.return_value = CopilotResult(
-            work_item_id="beta", success=False, output=None, attempt_count=1, error="Failed"
-        )
+        mock_worktree_agent.return_value = None
         
         from pokepoke.agent_runner import run_beta_tester
         stats = run_beta_tester()
         assert stats is None
 
+    @patch('pokepoke.agent_runner._run_worktree_agent')
     @patch('pokepoke.agent_runner.parse_agent_stats')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
-    @patch('pokepoke.agent_runner.invoke_copilot')
     @patch('subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('pathlib.Path.read_text')
@@ -631,9 +622,9 @@ class TestRunBetaTester:
         mock_read: Mock, 
         mock_exists: Mock, 
         mock_run: Mock, 
-        mock_invoke: Mock, 
         mock_get_prompts: Mock,
-        mock_parse: Mock
+        mock_parse: Mock,
+        mock_worktree_agent: Mock
     ) -> None:
         """Test restart script execution failure but proceeds."""
         mock_exists.return_value = True
@@ -642,11 +633,7 @@ class TestRunBetaTester:
         # Restart fails
         mock_run.return_value = Mock(returncode=1, stdout="Error")
         
-        mock_invoke.return_value = CopilotResult(
-            work_item_id="beta", success=True, output="{}", attempt_count=1
-        )
-
-        mock_parse.return_value = AgentStats(
+        mock_worktree_agent.return_value = AgentStats(
             wall_duration=10.0,
             api_duration=5.0,
             input_tokens=100,

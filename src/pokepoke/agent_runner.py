@@ -28,7 +28,7 @@ __all__ = [
 ]
 
 
-def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional[Path] = None, needs_worktree: bool = True) -> Optional[AgentStats]:
+def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional[Path] = None, needs_worktree: bool = True, merge_changes: bool = True) -> Optional[AgentStats]:
     """Run a maintenance agent with optional worktree isolation.
     
     Args:
@@ -36,6 +36,7 @@ def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional
         prompt_file: Path to the prompt file (e.g., 'janitor.md')
         repo_root: Path to the main repository root (defaults to current directory)
         needs_worktree: If True, creates worktree for code changes. If False, runs in main repo for beads-only changes.
+        merge_changes: If True, merges changes back to main repo. If False, discards worktree after run.
         
     Returns:
         AgentStats if successful, None otherwise
@@ -77,7 +78,7 @@ def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional
     if repo_root is None:
         repo_root = Path.cwd()
     
-    return _run_worktree_agent(agent_name, agent_id, agent_item, agent_prompt, repo_root)
+    return _run_worktree_agent(agent_name, agent_id, agent_item, agent_prompt, repo_root, merge_changes=merge_changes)
 
 
 def _run_beads_only_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str) -> Optional[AgentStats]:
@@ -95,7 +96,7 @@ def _run_beads_only_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prom
         return None
 
 
-def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkItem, agent_prompt: str, repo_root: Path) -> Optional[AgentStats]:
+def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkItem, agent_prompt: str, repo_root: Path, merge_changes: bool = True) -> Optional[AgentStats]:
     """Run a code-modifying maintenance agent in a worktree."""
     print(f"\n🌳 Creating worktree for {agent_id}...")
     try:
@@ -133,6 +134,12 @@ def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkIte
     
     if result.success:
         print(f"\n✅ {agent_name} agent completed successfully!")
+        
+        if not merge_changes:
+            print("   Discarding worktree (merge_changes=False)")
+            cleanup_worktree(agent_id, force=True)
+            return parse_agent_stats(result.output) if result.output else None
+
         print("   All changes committed and validated")
         
         agent_stats = parse_agent_stats(result.output) if result.output else None
@@ -271,11 +278,11 @@ def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkIte
         return None
 
 
-def run_beta_tester() -> Optional[AgentStats]:
+def run_beta_tester(repo_root: Optional[Path] = None) -> Optional[AgentStats]:
     """Run beta tester agent to test all MCP tools.
     
     Restarts the MCP server before testing to ensure latest code is loaded.
-    Beta tester runs without a worktree since it only tests and files issues.
+    Runs in a disposable worktree to isolate any generated documentation.
     
     Returns:
         AgentStats if successful, None otherwise
@@ -329,8 +336,9 @@ def run_beta_tester() -> Optional[AgentStats]:
     
     beta_prompt = prompt_path.read_text(encoding='utf-8')
     
+    agent_id = "beta-tester"
     beta_item = BeadsWorkItem(
-        id="beta-tester",
+        id=agent_id,
         title="Beta Test All MCP Tools",
         description=beta_prompt,
         status="in_progress",
@@ -339,14 +347,10 @@ def run_beta_tester() -> Optional[AgentStats]:
         labels=["testing", "mcp-server", "automated"]
     )
     
-    print("\n🧪 Invoking beta tester agent...")
-    # Beta tester doesn't need file write access - it only tests and files issues
-    copilot_result = invoke_copilot(beta_item, prompt=beta_prompt, deny_write=True)
+    print("\n🧪 Invoking beta tester agent in isolated worktree (will be discarded)...")
     
-    if copilot_result.success:
-        print(f"\n✅ Beta tester completed successfully!")
-        return parse_agent_stats(copilot_result.output) if copilot_result.output else None
-    else:
-        print(f"\n❌ Beta tester failed: {copilot_result.error}")
-        return None
+    if repo_root is None:
+        repo_root = Path.cwd()
+        
+    return _run_worktree_agent("Beta Tester", agent_id, beta_item, beta_prompt, repo_root, merge_changes=False)
 

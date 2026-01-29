@@ -78,7 +78,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             print("\n🧪 Running Beta Tester at startup...")
             run_logger.log_orchestrator("Running Beta Tester at startup")
             from pokepoke.agent_runner import run_beta_tester
-            beta_stats = run_beta_tester()
+            beta_stats = run_beta_tester(repo_root=main_repo_path)
             if beta_stats:
                 # Aggregate beta tester stats
                 session_stats.agent_stats.wall_duration += beta_stats.wall_duration
@@ -296,7 +296,8 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
         print("\n🗑️ Running Backlog Cleanup Agent...")
         run_logger.log_maintenance("backlog_cleanup", "Starting Backlog Cleanup Agent")
         session_stats.backlog_cleanup_agent_runs += 1
-        backlog_stats = run_maintenance_agent("Backlog Cleanup", "backlog-cleanup.md", repo_root=pokepoke_repo, needs_worktree=False)
+        # Run in worktree but do not merge (discard documentation changes)
+        backlog_stats = run_maintenance_agent("Backlog Cleanup", "backlog-cleanup.md", repo_root=pokepoke_repo, needs_worktree=True, merge_changes=False)
         if backlog_stats:
             _aggregate_stats(session_stats, backlog_stats)
         run_logger.log_maintenance("backlog_cleanup", "Backlog Cleanup Agent completed successfully")
@@ -308,7 +309,7 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
         print("\n🧪 Running Beta Tester Agent...")
         run_logger.log_maintenance("beta_tester", "Starting Beta Tester Agent")
         session_stats.beta_tester_agent_runs += 1
-        beta_stats = run_beta_tester()
+        beta_stats = run_beta_tester(repo_root=pokepoke_repo)
         if beta_stats:
             _aggregate_stats(session_stats, beta_stats)
         run_logger.log_maintenance("beta_tester", f"Beta Tester Agent {'completed successfully' if beta_stats else 'failed'}")
