@@ -108,8 +108,15 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             
             if selected_item is None:
                 ui.stop()
-                print("\n👋 Exiting PokePoke.")
-                run_logger.log_orchestrator("User chose to exit")
+                # Get ending stats and print session stats before exiting
+                session_stats.ending_beads_stats = get_beads_stats()
+                elapsed = time.time() - start_time
+                print("\n👋 Exiting PokePoke - no work items available.")
+                run_logger.log_orchestrator("No work items available - exiting")
+                print_stats(items_completed, total_requests, elapsed, session_stats)
+                run_logger.finalize(items_completed, total_requests, elapsed)
+                print(f"\n📝 Run ID: {run_id}")
+                print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
                 clear_terminal_banner()
                 return 0
             

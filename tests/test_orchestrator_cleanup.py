@@ -58,6 +58,7 @@ class TestOrchestratorCleanupDetection:
         mock_subprocess.side_effect = [
             Mock(stdout='{"summary": {"total_issues": 10}}', returncode=0),  # bd stats for starting beads stats
             Mock(stdout=" M .beads/issues.jsonl", returncode=0),  # git status check
+            Mock(stdout='{"summary": {"total_issues": 10}}', returncode=0),  # bd stats for ending beads stats
         ]
         
         # Mock no work items
@@ -65,8 +66,8 @@ class TestOrchestratorCleanupDetection:
         
         result = run_orchestrator(interactive=False, continuous=False)
         
-        # Verify we only called bd stats and git status (no git add/commit)
-        assert mock_subprocess.call_count == 2
+        # Verify we called bd stats (start), git status, and bd stats (end) - no git add/commit
+        assert mock_subprocess.call_count == 3
         
         # Verify no git add or commit calls were made
         add_calls = [
