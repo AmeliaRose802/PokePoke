@@ -38,15 +38,15 @@ class TestUIScrolling:
         
         ui._update_panels()
         
-        # With height=100, body lines = max(5, 100 - 10) = 90
-        # Should show last 90 lines: 110 to 199
+        # With height=100, body lines = max(5, 100 - 12) = 88
+        # Should show last 88 lines: 112 to 199
         args, kwargs = mock_orch_layout.update.call_args
         panel = args[0]
         content = panel.renderable
         
         assert "Line 199" in content
-        assert "Line 110" in content
-        assert "Line 109" not in content
+        assert "Line 112" in content
+        assert "Line 111" not in content
         assert "Orchestrator" in panel.title
         assert "scrolled" not in panel.title.lower()
 
@@ -67,8 +67,8 @@ class TestUIScrolling:
         ui._update_panels()
         
         # Offset 10: end_index = 200 - 10 = 190
-        # start_index = 190 - 90 = 100
-        # Should show Line 100 to Line 189
+        # With body_lines = 88, start_index = 190 - 88 = 102
+        # Should show Line 102 to Line 189
         
         args, kwargs = mock_orch_layout.update.call_args
         panel = args[0]
@@ -76,5 +76,5 @@ class TestUIScrolling:
         
         assert "Line 189" in content
         assert "Line 190" not in content  # Should be scrolled off bottom
-        assert "Line 100" in content
+        assert "Line 102" in content
         assert "scrolled" in panel.title.lower()

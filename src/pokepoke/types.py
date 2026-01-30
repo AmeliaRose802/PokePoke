@@ -105,9 +105,11 @@ class SessionStats:
     work_agent_runs: int = 0
     tech_debt_agent_runs: int = 0
     janitor_agent_runs: int = 0
+    janitor_lines_removed: int = 0
     backlog_cleanup_agent_runs: int = 0
     cleanup_agent_runs: int = 0
     beta_tester_agent_runs: int = 0
+    code_review_agent_runs: int = 0
     starting_beads_stats: Optional[BeadsStats] = None
     ending_beads_stats: Optional[BeadsStats] = None
 

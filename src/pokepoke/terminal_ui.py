@@ -1,21 +1,13 @@
 """Terminal UI utilities for PowerShell display enhancements and TUI."""
 
-import os
-import sys
-import builtins
-import time
-import threading
+import os, sys, builtins, time, threading
 from typing import Optional, List, Any, Dict, Iterator
 from datetime import datetime
 from contextlib import contextmanager
 
-# Try msvcrt for Windows key handling
-try:
-    import msvcrt
-except ImportError:
-    msvcrt = None  # type: ignore
+try: import msvcrt
+except ImportError: msvcrt = None  # type: ignore
 
-# Try logging imports, handled gracefully if rich not installed (though strictly required now)
 try:
     from rich.console import Console, Group
     from rich.layout import Layout
@@ -26,38 +18,24 @@ try:
     from rich.box import ROUNDED, HEAVY
     from rich.table import Table
     from rich import print as rprint
-except ImportError:
-    # Fallback or error
-    pass
+except ImportError: pass
 
 from pokepoke.types import SessionStats, AgentStats
 
 def set_terminal_banner(text: str) -> None:
-    """Set the PowerShell window title to display a banner.
-    
-    Args:
-        text: Text to display in the terminal title bar
-    """
-    if sys.platform != 'win32':
-        return
-    
+    """Set the PowerShell window title to display a banner."""
+    if sys.platform != 'win32': return
     try:
         import ctypes
         ctypes.windll.kernel32.SetConsoleTitleW(text)
-    except Exception:
-        pass
+    except Exception: pass
 
-
-def clear_terminal_banner() -> None:
-    """Clear the terminal banner."""
-    set_terminal_banner("PokePoke")
-
+def clear_terminal_banner() -> None: set_terminal_banner("PokePoke")
 
 def format_work_item_banner(item_id: str, title: str, status: str = "In Progress") -> str:
     """Format a work item as a banner string."""
     max_title_length = 60
-    if len(title) > max_title_length:
-        title = title[:max_title_length - 3] + "..."
+    if len(title) > max_title_length: title = title[:max_title_length - 3] + "..."
     return f"🚀 PokePoke: {item_id} - {title} [{status}]"
 
 
@@ -103,6 +81,11 @@ class PokePokeUI:
         # Initial UI Setup
         if self.console:
             self._setup_layout()
+
+        # State for footer rendering
+        self.current_work_item: Optional[Dict[str, str]] = None
+        self.current_stats: Optional[SessionStats] = None
+        self.current_elapsed_time: float = 0.0
             
     def set_style(self, style: Optional[str]) -> None:
         """Set the current text style for logs."""
@@ -114,10 +97,8 @@ class PokePokeUI:
         
     def _setup_layout(self) -> None:
         self.layout.split(
-            Layout(name="top_spacer", size=1),
-            Layout(name="header", size=3),
             Layout(name="body", ratio=1),
-            Layout(name="footer", size=5)
+            Layout(name="footer", size=7)
         )
         
         # Split body into two vertical panels
@@ -126,7 +107,6 @@ class PokePokeUI:
             Layout(name="agent", ratio=1)
         )
         
-        self.layout["header"].update(Panel("Initialize...", style="bold white on blue", box=ROUNDED))
         self.layout["footer"].update(Panel("Waiting for stats...", style="dim", box=ROUNDED))
         
         self.layout["orchestrator"].update(Panel("", title="Orchestrator Logs", box=ROUNDED))
@@ -152,7 +132,7 @@ class PokePokeUI:
                 self.layout, 
                 console=self.console, 
                 screen=True, 
-                refresh_per_second=4,
+                refresh_per_second=10,
                 auto_refresh=True
             )
             self.live.start()
@@ -175,49 +155,30 @@ class PokePokeUI:
             
     def _input_loop(self) -> None:
         """Monitor keyboard input for scrolling."""
-        if not msvcrt:
-            return
+        if not msvcrt: return
 
         while self.is_running:
             if msvcrt.kbhit():
                 try:
                     key = msvcrt.getch()
-                    
-                    # Tab to switch focus
                     if key == b'\t':
                         self.active_panel = "agent" if self.active_panel == "orchestrator" else "orchestrator"
                         self._update_panels()
                         continue
                         
-                    if key == b'\xe0':  # Arrow prefix
+                    if key == b'\xe0':
                         code = msvcrt.getch()
-                        moved = False
-                        
-                        curr_offset = self.scroll_offsets[self.active_panel]
+                        moved, curr_offset = False, self.scroll_offsets[self.active_panel]
                         buffer_len = len(self.orchestrator_buffer) if self.active_panel == "orchestrator" else len(self.agent_buffer)
                         
-                        if code == b'H':  # Up
-                            curr_offset += 1
-                            moved = True
-                        elif code == b'P':  # Down
-                            curr_offset = max(0, curr_offset - 1)
-                            moved = True
-                        elif code == b'I':  # Page Up
-                            curr_offset += 10
-                            moved = True
-                        elif code == b'Q':  # Page Down
-                            curr_offset = max(0, curr_offset - 10)
-                            moved = True
+                        if code == b'H': curr_offset += 1; moved = True
+                        elif code == b'P': curr_offset = max(0, curr_offset - 1); moved = True
+                        elif code == b'I': curr_offset += 10; moved = True
+                        elif code == b'Q': curr_offset = max(0, curr_offset - 10); moved = True
                             
-                        # Clamp offset
-                        max_offset = max(0, buffer_len - 5)
-                        curr_offset = min(curr_offset, max_offset)
-                        
-                        if moved:
-                            self.scroll_offsets[self.active_panel] = curr_offset
-                            self._update_panels()
-                except Exception:
-                    pass
+                        self.scroll_offsets[self.active_panel] = min(curr_offset, max(0, buffer_len - 5))
+                        if moved: self._update_panels()
+                except Exception: pass
             time.sleep(0.05)
             
     def print_redirect(self, *args: Any, **kwargs: Any) -> None:
@@ -239,8 +200,8 @@ class PokePokeUI:
                 self.current_line_buffer = remaining
                 
             # Update UI to show partial progress if desired
-            if self.current_line_buffer:
-                self._update_panels()
+            # if self.current_line_buffer:
+            #    self._update_panels()
         else:
             # Pass through stderr or other file handles
             self.original_print(*args, **kwargs)
@@ -287,9 +248,10 @@ class PokePokeUI:
             return
             
         # Calculate visible lines roughly
-        # Header (3) + Footer (5) + Borders (2) = ~10 lines overhead
+        # Footer (7) + Borders (2) = 9 lines overhead
         term_height = self.console.height
-        body_lines = max(5, term_height - 10)
+        # Use -12 to be strictly safe and avoid ANY overflow/scrolling that causes flashing
+        body_lines = max(5, term_height - 12)
         
         # --- Orchestrator Panel ---
         orch_logs = self._get_panel_content(
@@ -330,57 +292,106 @@ class PokePokeUI:
             Panel("\n".join(agent_logs), title=agent_title, box=ROUNDED, style=agent_style)
         )
 
-    def update_header(self, item_id: str, title: str, status: str = "In Progress") -> None:
-        """Update the sticky header."""
+    def _render_footer(self) -> None:
+        """Render the footer panel containing work item info and stats."""
         if not self.console:
             return
-            
-        # Truncate title
-        if len(title) > 60:
-            title = title[:57] + "..."
-            
-        grid = Table.grid(expand=True)
-        grid.add_column(justify="left", ratio=1)
-        grid.add_column(justify="right")
-        grid.add_row(
-            f"[bold]{item_id}[/bold] - {title}", 
-            f"[{status}]"
-        )
+
+        outer_grid = Table.grid(expand=True)
+        outer_grid.add_column()
         
-        self.layout["header"].update(Panel(grid, style="bold white on blue", box=ROUNDED))
+        # 1. Work Item Info (if active)
+        if self.current_work_item:
+            item_id = self.current_work_item["id"]
+            title = self.current_work_item["title"]
+            status = self.current_work_item["status"]
+            
+            # Truncate title
+            available_width = max(20, self.console.width - 40)
+            if len(title) > available_width:
+                title = title[:available_width-3] + "..."
+                
+            header_grid = Table.grid(expand=True)
+            header_grid.add_column(justify="left", ratio=1, no_wrap=True, overflow="ellipsis")
+            header_grid.add_column(justify="right", no_wrap=True)
+            header_grid.add_row(
+                f"[bold white]{item_id}[/bold white] - [white]{title}[/white]", 
+                f"[{status}]"
+            )
+            # Add a separator line or style
+            outer_grid.add_row(Panel(header_grid, style="bold white on blue", box=ROUNDED))
+        else:
+            outer_grid.add_row(Panel("No active work item", style="dim", box=ROUNDED))
 
-    def update_stats(self, session_stats: Optional[SessionStats], elapsed_time: float = 0.0) -> None:
-        """Update the sticky footer with stats."""
-        if not self.console:
-            return
+        # 2. Stats
+        if not self.current_stats:
+             from pokepoke.types import SessionStats, AgentStats
+             self.current_stats = SessionStats(agent_stats=AgentStats())
 
-        if not session_stats:
-            from pokepoke.types import SessionStats, AgentStats
-            session_stats = SessionStats(agent_stats=AgentStats())
-
+        session_stats = self.current_stats
         agent_stats = session_stats.agent_stats
+        elapsed_time = self.current_elapsed_time
+
+        # Stats grid
+        stats_grid = Table.grid(expand=True)
+        stats_grid.add_column()
         
-        # Format stats into a grid
-        grid = Table.grid(expand=True)
-        grid.add_column(justify="center", ratio=1)
-        grid.add_column(justify="center", ratio=1)
-        grid.add_column(justify="center", ratio=1)
-        grid.add_column(justify="center", ratio=1)
+        # Metrics row
+        metrics_grid = Table.grid(expand=True)
+        metrics_grid.add_column(justify="center", ratio=1)
+        metrics_grid.add_column(justify="center", ratio=1)
+        metrics_grid.add_column(justify="center", ratio=1)
+        metrics_grid.add_column(justify="center", ratio=1)
         
-        grid.add_row(
-            f"⏱️ Runtime: {elapsed_time/60:.1f}m",
+        metrics_grid.add_row(
+            f"⏱️ {elapsed_time/60:.1f}m",
             f"⚡ API: {agent_stats.api_duration/60:.1f}m",
-            f"📥 In: {agent_stats.input_tokens:,}",
-            f"📤 Out: {agent_stats.output_tokens:,}"
+            f"📥 {agent_stats.input_tokens:,}",
+            f"📤 {agent_stats.output_tokens:,}"
         )
-        grid.add_row(
+        
+        # 2nd row metrics
+        metrics_grid.add_row(
             f"✅ Done: {session_stats.items_completed}",
             f"🔄 Retries: {agent_stats.retries}",
             f"💲 Est: ${agent_stats.estimated_cost:.3f}",
             f"🛠️ Tools: {agent_stats.tool_calls}"
         )
+        stats_grid.add_row(metrics_grid)
+
+        # Agent stats row
+        agents_grid = Table.grid(expand=True)
+        for _ in range(6):
+            agents_grid.add_column(justify="center", ratio=1)
+            
+        agents_grid.add_row(
+            f"👷 Work:{session_stats.work_agent_runs}",
+            f"💸 Debt:{session_stats.tech_debt_agent_runs}",
+            f"🧹 Jan:{session_stats.janitor_agent_runs}",
+            f"🗄️ Blog:{session_stats.backlog_cleanup_agent_runs}",
+            f"🧼 Cln:{session_stats.cleanup_agent_runs}",
+            f"🧪 Beta:{session_stats.beta_tester_agent_runs}"
+        )
+        stats_grid.add_row(agents_grid)
         
-        self.layout["footer"].update(Panel(grid, title="Session Stats", style="cyan", box=ROUNDED))
+        outer_grid.add_row(stats_grid)
+        
+        self.layout["footer"].update(Panel(outer_grid, title="Status", style="cyan", box=ROUNDED))
+
+    def update_header(self, item_id: str, title: str, status: str = "In Progress") -> None:
+        """Update the current work item info (now part of footer)."""
+        self.current_work_item = {
+            "id": item_id,
+            "title": title,
+            "status": status
+        }
+        self._render_footer()
+
+    def update_stats(self, session_stats: Optional[SessionStats], elapsed_time: float = 0.0) -> None:
+        """Update the stats info (part of footer)."""
+        self.current_stats = session_stats
+        self.current_elapsed_time = elapsed_time
+        self._render_footer()
 
 # Global UI instance
 ui = PokePokeUI()

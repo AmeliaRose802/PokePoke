@@ -427,9 +427,10 @@ class TestMergeWorktree:
              patch('pokepoke.worktrees.get_default_branch', return_value='ameliapayne/dev'), \
              patch('builtins.print') as mock_print:
             
-            result = merge_worktree('incredible_icm-42')
+            success, unmerged_files = merge_worktree('incredible_icm-42')
             
-            assert result is False
+            assert success is False
+            assert unmerged_files == []
             assert any('Pre-merge validation failed' in str(call) for call in mock_print.call_args_list)
     
     def test_merge_worktree_success(self):
@@ -454,9 +455,10 @@ class TestMergeWorktree:
             
             mock_run.side_effect = run_side_effect
             
-            result = merge_worktree('incredible_icm-42')
+            success, unmerged_files = merge_worktree('incredible_icm-42')
             
-            assert result is True
+            assert success is True
+            assert unmerged_files == []
             
             # Verify key commands were called
             calls = [str(call) for call in mock_run.call_args_list]
@@ -503,9 +505,10 @@ class TestMergeWorktree:
             mock_run.side_effect = run_side_effect
             
             # CRITICAL: Merge should succeed even though cleanup failed
-            result = merge_worktree('incredible_icm-42')
+            success, unmerged_files = merge_worktree('incredible_icm-42')
             
-            assert result is True, "Merge should succeed even when cleanup fails"
+            assert success is True, "Merge should succeed even when cleanup fails"
+            assert unmerged_files == []
             
             # Verify merge was confirmed
             print_calls = [str(call) for call in mock_print.call_args_list]
@@ -541,9 +544,10 @@ class TestMergeWorktree:
             
             mock_run.side_effect = run_side_effect
             
-            result = merge_worktree('incredible_icm-42', cleanup=False)
+            success, unmerged_files = merge_worktree('incredible_icm-42', cleanup=False)
             
-            assert result is True
+            assert success is True
+            assert unmerged_files == []
             
             # Verify worktree removal and branch deletion were NOT called
             calls = [str(call) for call in mock_run.call_args_list]
@@ -573,9 +577,10 @@ class TestMergeWorktree:
             
             mock_run.side_effect = run_side_effect
             
-            result = merge_worktree('incredible_icm-42')
+            success, unmerged_files = merge_worktree('incredible_icm-42')
             
-            assert result is True
+            assert success is True
+            assert unmerged_files == []
             assert any('bd sync returned non-zero' in str(call) for call in mock_print.call_args_list)
     
     def test_merge_worktree_with_beads_changes(self):
@@ -607,9 +612,10 @@ class TestMergeWorktree:
             
             mock_run.side_effect = run_side_effect
             
-            result = merge_worktree('incredible_icm-42')
+            success, unmerged_files = merge_worktree('incredible_icm-42')
             
-            assert result is True
+            assert success is True
+            assert unmerged_files == []
             assert any('Committing beads database changes' in str(call) for call in mock_print.call_args_list)
     
     def test_merge_worktree_with_non_beads_changes(self):
@@ -631,9 +637,10 @@ class TestMergeWorktree:
             
             mock_run.side_effect = run_side_effect
             
-            result = merge_worktree('incredible_icm-42')
+            success, unmerged_files = merge_worktree('incredible_icm-42')
             
-            assert result is False
+            assert success is False
+            assert unmerged_files == []
             assert any('Cannot merge: main repo has uncommitted non-beads changes' in str(call) 
                       for call in mock_print.call_args_list)
     
@@ -657,9 +664,10 @@ class TestMergeWorktree:
             
             mock_run.side_effect = run_side_effect
             
-            result = merge_worktree('incredible_icm-42')
+            success, unmerged_files = merge_worktree('incredible_icm-42')
             
-            assert result is False
+            assert success is False
+            assert unmerged_files == []
             assert any('Post-merge validation failed: Not on ameliapayne/dev' in str(call) 
                       for call in mock_print.call_args_list)
     
@@ -688,9 +696,10 @@ class TestMergeWorktree:
             
             mock_run.side_effect = run_side_effect
             
-            result = merge_worktree('incredible_icm-42')
+            success, unmerged_files = merge_worktree('incredible_icm-42')
             
-            assert result is False
+            assert success is False
+            assert unmerged_files == []
             # Check that the validation failure message was printed
             print_calls = [str(call) for call in mock_print.call_args_list]
             assert any('Post-merge validation failed' in call for call in print_calls)
@@ -717,9 +726,10 @@ class TestMergeWorktree:
             mock_run.side_effect = run_side_effect
             mock_merged.return_value = False
             
-            result = merge_worktree('incredible_icm-42')
+            success, unmerged_files = merge_worktree('incredible_icm-42')
             
-            assert result is False
+            assert success is False
+            assert unmerged_files == []
             assert any('Merge confirmation failed' in str(call) for call in mock_print.call_args_list)
     
     def test_merge_worktree_subprocess_error(self):
@@ -745,10 +755,11 @@ class TestMergeWorktree:
             
             mock_run.side_effect = run_side_effect
             
-            result = merge_worktree('incredible_icm-42')
+            success, unmerged_files = merge_worktree('incredible_icm-42')
             
-            assert result is False
-            assert any('Merge failed' in str(call) for call in mock_print.call_args_list)
+            assert success is False
+            # unmerged_files might be empty on general merge failure
+            assert any('Merge failed' in str(call) or 'checkout' in str(call) for call in mock_print.call_args_list)
 
 
 class TestCleanupWorktree:

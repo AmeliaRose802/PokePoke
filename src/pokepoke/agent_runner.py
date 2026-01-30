@@ -2,6 +2,8 @@
 
 import os
 import subprocess
+import json
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -9,26 +11,76 @@ from pokepoke.copilot import invoke_copilot
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
 from pokepoke.stats import parse_agent_stats
 from pokepoke.worktrees import create_worktree, merge_worktree, cleanup_worktree
+from pokepoke.prompts import PromptService
 from pokepoke.cleanup_agents import (
-    invoke_cleanup_agent, 
-    invoke_merge_conflict_cleanup_agent, 
-    get_pokepoke_prompts_dir,
-    run_cleanup_loop,
-    aggregate_cleanup_stats
+    invoke_cleanup_agent, invoke_merge_conflict_cleanup_agent, 
+    get_pokepoke_prompts_dir, run_cleanup_loop, aggregate_cleanup_stats
 )
 
 # Re-export cleanup agent functions for backward compatibility
-__all__ = [
-    'invoke_cleanup_agent',
-    'invoke_merge_conflict_cleanup_agent',
-    'aggregate_cleanup_stats',
-    'run_cleanup_loop',
-    'run_maintenance_agent',
-    'run_beta_tester',
-]
+__all__ = ['invoke_cleanup_agent', 'invoke_merge_conflict_cleanup_agent',
+           'aggregate_cleanup_stats', 'run_cleanup_loop', 'run_maintenance_agent',
+           'run_beta_tester', 'run_gate_agent']
+
+def run_gate_agent(item: BeadsWorkItem) -> tuple[bool, str, Optional[AgentStats]]:
+    """Run the Gate Agent to verify a fixed work item.
+    
+    Args:
+        item: The work item to verify
+        
+    Returns:
+        Tuple of (success: bool, reason: str, stats: AgentStats)
+    """
+    print(f"\n{'='*60}")
+    print(f"🕵️ Running Gate Agent on {item.id}")
+    print(f"{'='*60}")
+    
+    service = PromptService()
+    try:
+        final_prompt = service.load_and_render("gate-agent", {
+            "item_id": item.id,
+            "title": item.title,
+            "description": item.description or ""
+        })
+    except Exception as e:
+        return False, f"Failed to render prompt: {e}", None
+
+    # Gate Agent runs in the current directory (which should be the worktree)
+    # deny_write=True ensures it only reads/runs tests but doesn't modify code
+    result = invoke_copilot(item, prompt=final_prompt, deny_write=True)
+    
+    stats = parse_agent_stats(result.output) if result.output else None
+    
+    if not result.success:
+        return False, f"Gate Agent execution failed: {result.error}", stats
+        
+    # Parse output for decision
+    output = result.output or ""
+    
+    # Try to find JSON block
+    json_match = re.search(r'```json\s*(\{.*?\})\s*```', output, re.DOTALL)
+    if json_match:
+        try:
+            data = json.loads(json_match.group(1))
+            status = data.get("status")
+            if status == "success":
+                return True, data.get("message", "Verification successful"), stats
+            else:
+                reason = data.get("reason", "Verification failed")
+                details = data.get("details", "")
+                full_reason = f"{reason}\nDetails: {details}"
+                return False, full_reason, stats
+        except json.JSONDecodeError:
+            pass
+            
+    # Fallback to text matching if JSON fails
+    if "VERIFICATION SUCCESSFUL" in output:
+        return True, "Verification successful (text match)", stats
+    
+    return False, "Gate Agent did not explicitly approve the fix. Check logs.", stats
 
 
-def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional[Path] = None, needs_worktree: bool = True, merge_changes: bool = True) -> Optional[AgentStats]:
+def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional[Path] = None, needs_worktree: bool = True, merge_changes: bool = True, model: Optional[str] = None) -> Optional[AgentStats]:
     """Run a maintenance agent with optional worktree isolation.
     
     Args:
@@ -37,6 +89,7 @@ def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional
         repo_root: Path to the main repository root (defaults to current directory)
         needs_worktree: If True, creates worktree for code changes. If False, runs in main repo for beads-only changes.
         merge_changes: If True, merges changes back to main repo. If False, discards worktree after run.
+        model: Optional model name to use (e.g., 'gpt-5.1-codex', defaults to 'claude-sonnet-4.5')
         
     Returns:
         AgentStats if successful, None otherwise
@@ -71,22 +124,24 @@ def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional
     
     # Beads-only agents run in main repo without worktree
     if not needs_worktree:
-        return _run_beads_only_agent(agent_name, agent_item, agent_prompt)
+        return _run_beads_only_agent(agent_name, agent_item, agent_prompt, model=model)
     
     # Code-modifying agents need worktree isolation
     # Ensure repo_root has a value
     if repo_root is None:
         repo_root = Path.cwd()
     
-    return _run_worktree_agent(agent_name, agent_id, agent_item, agent_prompt, repo_root, merge_changes=merge_changes)
+    return _run_worktree_agent(agent_name, agent_id, agent_item, agent_prompt, repo_root, merge_changes=merge_changes, model=model)
 
 
-def _run_beads_only_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str) -> Optional[AgentStats]:
+def _run_beads_only_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: Optional[str] = None) -> Optional[AgentStats]:
     """Run a beads-only maintenance agent in the main repo."""
     print(f"\n📋 Running {agent_name} in main repository (beads-only)")
     print(f"   File write access: DENIED")
+    if model:
+        print(f"   Model: {model}")
     
-    result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=True)
+    result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=True, model=model)
     
     if result.success:
         print(f"\n✅ {agent_name} agent completed successfully")
@@ -96,7 +151,7 @@ def _run_beads_only_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prom
         return None
 
 
-def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkItem, agent_prompt: str, repo_root: Path, merge_changes: bool = True) -> Optional[AgentStats]:
+def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkItem, agent_prompt: str, repo_root: Path, merge_changes: bool = True, model: Optional[str] = None) -> Optional[AgentStats]:
     """Run a code-modifying maintenance agent in a worktree."""
     print(f"\n🌳 Creating worktree for {agent_id}...")
     try:
@@ -110,9 +165,11 @@ def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkIte
     try:
         os.chdir(worktree_path)
         print(f"   Switched to worktree directory\n")
+        if model:
+            print(f"   Model: {model}")
         
         try:
-            result = invoke_copilot(agent_item, prompt=agent_prompt)
+            result = invoke_copilot(agent_item, prompt=agent_prompt, model=model)
         except Exception as e:
             print(f"❌ Error invoking Copilot: {e}")
             from pokepoke.types import CopilotResult
@@ -193,81 +250,64 @@ def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkIte
                  print("   Cleanup failed.")
                  return None
 
-            # print(f"   Note: Automatic cleanup issue creation disabled by user request.")
-            # create_cleanup_delegation_issue(
-            #     title=f"Resolve merge conflict for {agent_name} agent worktree",
-            #     description=description,
-            #     labels=['git', 'worktree', 'merge-conflict', 'agent'],
-            #     priority=1  # High priority
-            # )
-            
-            # print(f"   📋 Created delegation issue for cleanup")
             return None
         
         print(f"\n🔀 Merging worktree for {agent_id}...")
-        merge_success = merge_worktree(agent_id, cleanup=True)
+        from pokepoke.git_operations import is_merge_in_progress, get_unmerged_files, abort_merge
+        
+        merge_success, unmerged_files = merge_worktree(agent_id, cleanup=True)
         
         if not merge_success:
             print(f"\n❌ Worktree merge failed!")
+            if unmerged_files:
+                print(f"   Conflicted files ({len(unmerged_files)}):")
+                for f in unmerged_files[:5]:
+                    print(f"      - {f}")
+                if len(unmerged_files) > 5:
+                    print(f"      ... and {len(unmerged_files) - 5} more")
             print(f"   Worktree preserved at worktrees/task-{agent_id} for manual intervention")
-            
-            # Create delegation issue for merge failure
-            from pokepoke.beads_management import create_cleanup_delegation_issue
-            
-            description = f"""Failed to merge worktree for {agent_name} agent (ID: {agent_id})
-
-**Issue:** Git merge command failed (likely merge conflicts)
-
-**Worktree Location:** `worktrees/task-{agent_id}`
-
-**Required Actions:**
-1. Check merge conflicts:
-   ```bash
-   cd worktrees/task-{agent_id}
-   git status
-   ```
-2. Resolve conflicts manually:
-   - Edit conflicted files
-   - Mark as resolved: `git add <file>`
-   - Complete merge: `git commit`
-3. Push resolved changes: `git push`
-4. Switch to main repo and merge:
-   ```bash
-   cd ../..
-   git merge task/{agent_id}
-   ```
-5. Clean up worktree: `git worktree remove worktrees/task-{agent_id}`
-
-**Agent:** {agent_name}
-"""
             
             print(f"   Invoking cleanup agent to resolve conflicts...")
             
-            success, _ = invoke_merge_conflict_cleanup_agent(agent_item, repo_root, "Merge conflict detected")
+            # Get fresh unmerged files if not provided
+            if not unmerged_files:
+                unmerged_files = get_unmerged_files()
+            
+            success, _ = invoke_merge_conflict_cleanup_agent(
+                agent_item, 
+                repo_root, 
+                f"Merge conflict detected in {len(unmerged_files)} file(s)",
+                unmerged_files=unmerged_files
+            )
             
             if success:
                 print("   Cleanup successful, retrying merge...")
-                merge_success = merge_worktree(agent_id, cleanup=True)
+                # Check if merge is still in progress (agent may have completed it)
+                if is_merge_in_progress():
+                    print("   ⚠️  Merge still in progress after cleanup - aborting to reset state")
+                    abort_success, abort_error = abort_merge()
+                    if not abort_success:
+                        print(f"   ❌ Failed to abort merge: {abort_error}")
+                        return None
+                    print("   ✅ Merge aborted, will retry")
+                
+                merge_success, _ = merge_worktree(agent_id, cleanup=True)
                 if merge_success:
                      print("   Merged and cleaned up worktree")
                      return agent_stats
                 else:
                      print("   Merge failed again after cleanup.")
+                     # Abort the merge to leave clean state
+                     if is_merge_in_progress():
+                         abort_merge()
                      return None
             else:
                  print("   Cleanup failed.")
+                 # Abort the merge to leave clean state
+                 if is_merge_in_progress():
+                     print("   Aborting merge to reset state...")
+                     abort_merge()
                  return None
-
-            # print(f"   Note: Automatic cleanup issue creation disabled by user request.")
-            # create_cleanup_delegation_issue(
-            #     title=f"Resolve merge conflict for {agent_name} agent worktree",
-            #     description=description,
-            #     labels=['git', 'worktree', 'merge-conflict', 'agent'],
-            #     priority=1  # High priority
-            # )
-            
-            # print(f"   📋 Created delegation issue for cleanup")
-            return None
         
         print("   Merged and cleaned up worktree")
         return agent_stats

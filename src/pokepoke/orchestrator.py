@@ -285,6 +285,7 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
         janitor_stats = run_maintenance_agent("Janitor", "janitor.md", repo_root=pokepoke_repo, needs_worktree=True)
         if janitor_stats:
             _aggregate_stats(session_stats, janitor_stats)
+            session_stats.janitor_lines_removed += janitor_stats.lines_removed
             run_logger.log_maintenance("janitor", "Janitor Agent completed successfully")
         else:
             run_logger.log_maintenance("janitor", "Janitor Agent failed")
@@ -313,6 +314,27 @@ def _run_periodic_maintenance(items_completed: int, session_stats: SessionStats,
         if beta_stats:
             _aggregate_stats(session_stats, beta_stats)
         run_logger.log_maintenance("beta_tester", f"Beta Tester Agent {'completed successfully' if beta_stats else 'failed'}")
+    
+    # Run Code Review Agent (every 5 items)
+    if items_completed % 5 == 0:
+        set_terminal_banner("PokePoke - Synced Code Review Agent")
+        ui.update_header("MAINTENANCE", "Code Review Agent", "Running")
+        print("\n🔍 Running Code Review Agent...")
+        run_logger.log_maintenance("code_review", "Starting Code Review Agent")
+        session_stats.code_review_agent_runs += 1
+        # Code reviewer files issues in beads, doesn't need worktree
+        code_review_stats = run_maintenance_agent(
+            "Code Review", 
+            "code-reviewer.md", 
+            repo_root=pokepoke_repo, 
+            needs_worktree=False,
+            model="gpt-5.1-codex"
+        )
+        if code_review_stats:
+            _aggregate_stats(session_stats, code_review_stats)
+            run_logger.log_maintenance("code_review", "Code Review Agent completed successfully")
+        else:
+            run_logger.log_maintenance("code_review", "Code Review Agent failed")
 
 
 

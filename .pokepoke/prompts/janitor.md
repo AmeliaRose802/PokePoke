@@ -1,6 +1,6 @@
 # Universal Janitor
 
-Clean any codebase by eliminating tech debt. Every line of code is potential dWebt - remove safely, simplify aggressively.
+Clean any codebase by eliminating tech debt. Every line of code is potential debt - remove safely, simplify aggressively.
 
 ## Core Philosophy
 
@@ -83,4 +83,3 @@ Use `microsoft.docs.mcp` for:
 5. Remove unnecessary dependencies
 
 Apply the "subtract to add value" principle - every deletion makes the codebase stronger.
-

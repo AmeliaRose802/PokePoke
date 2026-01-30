@@ -70,33 +70,37 @@ class TestPokePokeUI:
         # Check layout structure
         # _setup_layout splits the root layout. We verify correct children are present.
         children = ui.layout.children
-        # Expect 4 children: top_spacer, header, body, footer
-        assert len(children) == 4
+        # Expect 2 children now: body, footer (header removed and merged into footer)
+        assert len(children) == 2
         
         names = [child.name for child in children]
-        assert 'top_spacer' in names
-        assert 'header' in names
+        assert 'header' not in names
         assert 'body' in names
         assert 'footer' in names
         
         # Check specific constraints
         for child in children:
-            if child.name == 'top_spacer':
-                assert child.size == 1
-            elif child.name == 'header':
-                assert child.size == 3
-            elif child.name == 'footer':
-                assert child.size == 5
+            if child.name == 'footer':
+                assert child.size == 7
             elif child.name == 'body':
                 assert child.ratio == 1
 
     @patch('pokepoke.terminal_ui.Console')
-    def test_update_header(self, mock_console):
-        """Test header update."""
+    def test_update_header_footer_merge(self, mock_console):
+        """Test header update now updates the footer status panel."""
+        mock_console_instance = MagicMock()
+        mock_console_instance.width = 100
+        mock_console.return_value = mock_console_instance
+        
         ui = PokePokeUI()
         ui.update_header('ITEM-123', 'Test Title', 'Active')
         
-        # Verify header content is updated
-        header_layout = ui.layout['header']
-        assert header_layout.renderable is not None
+        # Verify state is updated
+        assert ui.current_work_item["id"] == "ITEM-123"
+        assert ui.current_work_item["title"] == "Test Title"
+        assert ui.current_work_item["status"] == "Active"
+        
+        # Verify footer exists
+        footer_layout = ui.layout['footer']
+        assert footer_layout is not None
 

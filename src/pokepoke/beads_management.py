@@ -142,6 +142,31 @@ def close_item(item_id: str, message: str = "Completed") -> bool:
         return False
 
 
+def add_comment(item_id: str, comment: str) -> bool:
+    """Add a comment to a beads item.
+    
+    Args:
+        item_id: The item ID to add a comment to.
+        comment: The comment text.
+        
+    Returns:
+        True if successful, False otherwise.
+    """
+    try:
+        subprocess.run(
+            ['bd', 'comments', 'add', item_id, comment],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            check=True
+        )
+        print(f"💬 Added comment to {item_id}")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"⚠️  Failed to add comment to {item_id}: {e.stderr}")
+        return False
+
+
 def create_issue(
     title: str,
     issue_type: str = "task",

@@ -48,7 +48,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     timeout: Optional[float] = None,
     deny_write: bool = False,
     item_logger: Optional['ItemLogger'] = None,
-    idle_timeout: float = 10.0
+    idle_timeout: float = 10.0,
+    model: Optional[str] = None
 ) -> CopilotResult:
     """Invoke GitHub Copilot using the SDK (async).
     
@@ -60,6 +61,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         deny_write: If True, deny file write tools (for beads-only agents).
         item_logger: Optional item logger for file logging (currently unused in SDK mode).
         idle_timeout: Seconds to wait after session.idle before considering complete (default: 10.0).
+        model: Optional model name to use (e.g., 'gpt-5.1-codex', defaults to 'claude-sonnet-4.5').
         
     Returns:
         Result of the Copilot invocation.
@@ -92,7 +94,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         
         # Create session with appropriate configuration
         session_config = {
-            "model": "claude-sonnet-4.5",  # Use Claude Sonnet 4.5
+            "model": model or "claude-sonnet-4.5",  # Use specified model or default to Claude Sonnet 4.5
             "streaming": True,  # Enable streaming for real-time output
         }
         
@@ -365,7 +367,8 @@ def invoke_copilot_sdk_sync(  # type: ignore[no-any-unimported]
     retry_config: Optional[RetryConfig] = None,
     timeout: Optional[float] = None,
     deny_write: bool = False,
-    item_logger: Optional['ItemLogger'] = None
+    item_logger: Optional['ItemLogger'] = None,
+    model: Optional[str] = None
 ) -> CopilotResult:
     """Synchronous wrapper around invoke_copilot_sdk.
     
@@ -379,6 +382,7 @@ def invoke_copilot_sdk_sync(  # type: ignore[no-any-unimported]
         timeout: Maximum execution time in seconds (default: 7200 = 2 hours).
         deny_write: If True, deny file write tools (for beads-only agents).
         item_logger: Optional item logger for file logging (currently unused in SDK mode).
+        model: Optional model name to use (e.g., 'gpt-5.1-codex', defaults to 'claude-sonnet-4.5').
         
     Returns:
         Result of the Copilot invocation.
@@ -389,5 +393,6 @@ def invoke_copilot_sdk_sync(  # type: ignore[no-any-unimported]
         retry_config=retry_config,
         timeout=timeout,
         deny_write=deny_write,
-        item_logger=item_logger
+        item_logger=item_logger,
+        model=model
     ))

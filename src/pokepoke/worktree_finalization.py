@@ -60,6 +60,8 @@ def check_and_merge_worktree(item: BeadsWorkItem, worktree_path: Path) -> bool:
 
 def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
     """Merge worktree to ameliapayne/dev branch."""
+    from .git_operations import is_merge_in_progress, get_unmerged_files, abort_merge
+    
     print(f"\n🔍 Checking if main repo is ready for merge...")
     is_ready, error_msg = check_main_repo_ready_for_merge()
     
@@ -110,79 +112,70 @@ def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
              print("   Cleanup failed.")
              return False
 
-        # print(f"   Note: Automatic cleanup issue creation disabled by user request.")
-        # create_cleanup_delegation_issue(
-        #     title=f"Resolve merge conflict for work item {item.id}",
-        #     description=description,
-        #     labels=['git', 'worktree', 'merge-conflict'],
-        #     parent_id=item.id,
-        #     priority=1  # High priority
-        # )
-        
-        # print(f"   📋 Created delegation issue for cleanup")
-        # return False - FIXED: Proceed to merge if cleanup succeeded
-
     print(f"\n🔀 Merging worktree for {item.id}...")
-    merge_success = merge_worktree(item.id, cleanup=True)
+    merge_success, unmerged_files = merge_worktree(item.id, cleanup=True)
     
     if not merge_success:
-        print(f"\n❌ Worktree merge failed (likely merge conflicts)!")
+        # Check if we're in a conflict state
+        if is_merge_in_progress():
+            print(f"\n❌ Worktree merge has conflicts!")
+            if unmerged_files:
+                print(f"   Conflicted files ({len(unmerged_files)}):")
+                for f in unmerged_files[:10]:
+                    print(f"      - {f}")
+                if len(unmerged_files) > 10:
+                    print(f"      ... and {len(unmerged_files) - 10} more")
+        else:
+            print(f"\n❌ Worktree merge failed!")
+            # Get fresh unmerged files if not provided
+            if not unmerged_files:
+                unmerged_files = get_unmerged_files()
+        
         print(f"   Worktree preserved at worktrees/task-{item.id} - requires conflict resolution")
         
-        description = f"""
-Unable to automatically merge worktree for {item.id}.
-
-Conflicts detected. Manual resolution required.
-
-**Steps to resolve:**
-1. Go to worktree directory:
-   ```bash
-   cd worktrees/task-{item.id}
-   ```
-2. Resolve conflicts manually:
-   - Edit conflicted files
-   - Mark as resolved: `git add <file>`
-   - Complete merge: `git commit`
-3. Push resolved changes: `git push`
-4. Switch to main repo and merge:
-   ```bash
-   cd ../..
-   git merge task/{item.id}
-   ```
-5. Clean up worktree: `git worktree remove worktrees/task-{item.id}`
-
-**Work Item:** {item.id} - {item.title}
-"""
+        # Build detailed error message with file list
+        conflict_details = ""
+        if unmerged_files:
+            conflict_details = "\n**Conflicted Files:**\n" + "\n".join(f"- `{f}`" for f in unmerged_files)
         
         print(f"   Invoking cleanup agent to resolve conflicts...")
         from .cleanup_agents import invoke_merge_conflict_cleanup_agent
         
-        success, _ = invoke_merge_conflict_cleanup_agent(item, Path.cwd(), "Merge conflict detected")
+        success, _ = invoke_merge_conflict_cleanup_agent(
+            item, 
+            Path.cwd(), 
+            f"Merge conflict detected in {len(unmerged_files)} file(s){conflict_details}",
+            unmerged_files=unmerged_files
+        )
         
         if success:
             print("   Cleanup successful, retrying merge...")
-            merge_success = merge_worktree(item.id, cleanup=True)
+            # Check if merge is still in progress (agent may have completed it)
+            if is_merge_in_progress():
+                print("   ⚠️  Merge still in progress after cleanup - aborting to reset state")
+                abort_success, abort_error = abort_merge()
+                if not abort_success:
+                    print(f"   ❌ Failed to abort merge: {abort_error}")
+                    return False
+                print("   ✅ Merge aborted, will retry")
+            
+            merge_success, _ = merge_worktree(item.id, cleanup=True)
             if merge_success:
                  print("   Merged and cleaned up worktree")
                  return True
             else:
                  print("   Merge failed again after cleanup.")
+                 # Abort the merge to leave clean state
+                 if is_merge_in_progress():
+                     abort_merge()
                  return False
         else:
              print("   Cleanup failed.")
+             # Abort the merge to leave clean state
+             if is_merge_in_progress():
+                 print("   Aborting merge to reset state...")
+                 abort_merge()
              return False
-
-        # print(f"   Note: Automatic cleanup issue creation disabled by user request.")
-        # create_cleanup_delegation_issue(
-        #     title=f"Resolve merge conflict for work item {item.id}",
-        #     description=description,
-        #     labels=['git', 'worktree', 'merge-conflict'],
-        #     parent_id=item.id,
-        #     priority=1  # High priority
-        # )
-        
-        # print(f"   📋 Created delegation issue for cleanup")
-        return False
     
     print("   Merged and cleaned up worktree")
     return True

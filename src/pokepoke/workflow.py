@@ -9,8 +9,8 @@ from pokepoke.copilot import invoke_copilot
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
 from pokepoke.worktrees import create_worktree, cleanup_worktree
 from pokepoke.git_operations import has_uncommitted_changes
-from pokepoke.beads import assign_and_sync_item
-from pokepoke.agent_runner import run_cleanup_loop, run_beta_tester
+from pokepoke.beads import assign_and_sync_item, add_comment
+from pokepoke.agent_runner import run_cleanup_loop, run_beta_tester, run_gate_agent
 from pokepoke.worktree_finalization import finalize_work_item
 from pokepoke.work_item_selection import select_work_item
 from pokepoke.stats import parse_agent_stats
@@ -88,33 +88,89 @@ def process_work_item(
         os.chdir(worktree_path)
         print(f"   Switched to worktree directory\n")
         
-        # Check timeout before invoking Copilot
-        elapsed = time.time() - start_time
-        if elapsed >= timeout_seconds:
-            print(f"\n⏱️  TIMEOUT: Execution exceeded {timeout_hours} hours")
-            print(f"   Restarting item {item.id} in same worktree...\n")
-            os.chdir(original_dir)
-            return process_work_item(item, interactive, timeout_hours, run_cleanup_agents, run_beta_test, run_logger)
+        last_feedback = ""
+        # Initialize accumulated stats
+        accumulated_stats = AgentStats()
         
-        remaining_timeout = timeout_seconds - elapsed
-        result = invoke_copilot(item, timeout=remaining_timeout, item_logger=item_logger)
-        request_count += result.attempt_count
-        
-        if result.success and not has_uncommitted_changes():
-            print("\n✅ No changes made - work item may already be complete")
-            print("   Skipping cleanup and commit steps")
-        
-        # Run cleanup loop with timeout checking
-        cleanup_success, cleanup_runs = _run_cleanup_with_timeout(
-            item, result, pokepoke_root, start_time, timeout_seconds, timeout_hours
-        )
-        cleanup_agent_runs += cleanup_runs
-        
-        if not cleanup_success:
-            os.chdir(original_dir)
-            if run_logger:
-                run_logger.end_item_log(False, request_count)
-            return False, request_count, None, cleanup_agent_runs
+        while True:
+            # Check timeout before invoking Copilot
+            elapsed = time.time() - start_time
+            if elapsed >= timeout_seconds:
+                print(f"\n⏱️  TIMEOUT: Execution exceeded {timeout_hours} hours")
+                print(f"   Restarting item {item.id} in same worktree...\n")
+                os.chdir(original_dir)
+                return process_work_item(item, interactive, timeout_hours, run_cleanup_agents, run_beta_test, run_logger)
+            
+            remaining_timeout = timeout_seconds - elapsed
+            
+            # Append feedback if retrying
+            if last_feedback:
+                 print(f"\n🔄 Restarting Work Agent with feedback...")
+                 current_desc = item.description or ""
+                 if "**PREVIOUS GATE AGENT FEEDBACK:**" not in current_desc:
+                     current_desc += "\n\n**PREVIOUS GATE AGENT FEEDBACK:**\n"
+                 current_desc += f"\n- {last_feedback}"
+                 item.description = current_desc
+
+            result = invoke_copilot(item, timeout=remaining_timeout, item_logger=item_logger)
+            request_count += result.attempt_count
+            
+            # Aggregate stats
+            current_stats = result.stats if result.stats else (parse_agent_stats(result.output) if result.output else None)
+            if current_stats:
+                accumulated_stats.wall_duration += current_stats.wall_duration
+                accumulated_stats.api_duration += current_stats.api_duration
+                accumulated_stats.input_tokens += current_stats.input_tokens
+                accumulated_stats.output_tokens += current_stats.output_tokens
+                accumulated_stats.lines_added += current_stats.lines_added
+                accumulated_stats.lines_removed += current_stats.lines_removed
+                accumulated_stats.premium_requests += current_stats.premium_requests
+                accumulated_stats.tool_calls += current_stats.tool_calls
+                accumulated_stats.retries += current_stats.retries
+                accumulated_stats.estimated_cost += current_stats.estimated_cost
+
+            # If work agent failed, break
+            if not result.success:
+                break
+            
+            if not has_uncommitted_changes():
+                print("\n✅ No changes made - work item may already be complete")
+                print("   Skipping cleanup and commit steps")
+            
+            # Run cleanup loop with timeout checking
+            cleanup_success, cleanup_runs = _run_cleanup_with_timeout(
+                item, result, pokepoke_root, start_time, timeout_seconds, timeout_hours
+            )
+            cleanup_agent_runs += cleanup_runs
+            
+            if not cleanup_success:
+                # Cleanup failed (e.g. timeout), consider item failed or retry?
+                # For now, if cleanup fails, we fail the cycle.
+                result.success = False
+                os.chdir(original_dir)
+                if run_logger:
+                    run_logger.end_item_log(False, request_count)
+                return False, request_count, accumulated_stats, cleanup_agent_runs
+
+            # --- GATE AGENT CHECK ---
+            gate_success, gate_reason, gate_stats = run_gate_agent(item)
+            if gate_stats:
+                accumulated_stats.wall_duration += gate_stats.wall_duration
+                accumulated_stats.api_duration += gate_stats.api_duration
+                accumulated_stats.input_tokens += gate_stats.input_tokens
+                accumulated_stats.output_tokens += gate_stats.output_tokens
+                accumulated_stats.premium_requests += gate_stats.premium_requests
+                accumulated_stats.tool_calls += gate_stats.tool_calls
+                accumulated_stats.estimated_cost += gate_stats.estimated_cost
+            
+            if gate_success:
+                print("\n✅ Gate Agent signed off!")
+                break
+            else:
+                print(f"\n❌ Gate Agent rejected fix: {gate_reason}")
+                add_comment(item.id, f"Gate Agent Rejection:\n{gate_reason}")
+                last_feedback = gate_reason
+                # Loop continues...
     
     finally:
         os.chdir(original_dir)
@@ -122,7 +178,8 @@ def process_work_item(
     if result.success:
         set_terminal_banner(format_work_item_banner(item.id, item.title, "Finalizing"))
         success = finalize_work_item(item, worktree_path)
-        item_stats = result.stats if result.stats else (parse_agent_stats(result.output) if result.output else None)
+        # Use accumulated stats
+        item_stats = accumulated_stats
         
         # Update banner based on finalization result
         if success:

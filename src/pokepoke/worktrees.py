@@ -98,8 +98,15 @@ def is_worktree_merged(item_id: str, target_branch: Optional[str] = None) -> boo
         return False
 
 
-def merge_worktree(item_id: str, target_branch: Optional[str] = None, cleanup: bool = True) -> bool:
-    """Merge a worktree's branch into the target branch and optionally clean up."""
+def merge_worktree(item_id: str, target_branch: Optional[str] = None, cleanup: bool = True) -> tuple[bool, list[str]]:
+    """Merge a worktree's branch into the target branch and optionally clean up.
+    
+    Returns:
+        Tuple of (success: bool, unmerged_files: list[str])
+        - If successful: (True, [])
+        - If failed due to conflicts: (False, list_of_conflicted_files)
+        - If failed for other reasons: (False, [])
+    """
     sanitized_id = sanitize_branch_name(item_id)
     branch_name = f"task/{sanitized_id}"
     worktree_path = Path("worktrees") / f"task-{sanitized_id}"
@@ -111,41 +118,52 @@ def merge_worktree(item_id: str, target_branch: Optional[str] = None, cleanup: b
     # PRE-MERGE VALIDATION: Verify worktree is clean
     if not is_worktree_clean(worktree_path):
         print("❌ Pre-merge validation failed: Worktree has uncommitted changes")
-        return False
+        return False, []
     
     print("✅ Pre-merge validation passed: Worktree is clean")
     
+    if not _sync_and_ensure_clean_main_repo(branch_name):
+        return False, []
+    
+    # Execute merge sequence with proper error handling
+    merge_success, merge_error, unmerged_files = execute_merge_sequence(branch_name, target_branch)
+    
+    if not merge_success:
+        if unmerged_files:
+            print(f"❌ Merge conflicts detected in {len(unmerged_files)} file(s):")
+            for f in unmerged_files[:10]:
+                print(f"   - {f}")
+            if len(unmerged_files) > 10:
+                print(f"   ... and {len(unmerged_files) - 10} more")
+        else:
+            print(f"❌ Merge failed: {merge_error}")
+        return False, unmerged_files
+    
+    print(f"✅ Merged {branch_name} into {target_branch}")
+    
+    if not validate_post_merge(target_branch):
+        return False, []
+    
+    print(f"✅ Post-merge validation passed: {target_branch} is clean")
+    
     try:
-        if not _sync_and_ensure_clean_main_repo(branch_name):
-            return False
-        
-        execute_merge_sequence(branch_name, target_branch)
-        print(f"✅ Merged {branch_name} into {target_branch}")
-        
-        if not validate_post_merge(target_branch):
-            return False
-        
-        print(f"✅ Post-merge validation passed: {target_branch} is clean")
-        
         subprocess.run(["git", "push"], check=True, capture_output=True, text=True, encoding='utf-8')
         print(f"✅ Pushed {target_branch} to remote")
-        
-        # MERGE CONFIRMATION: Verify branch is actually merged
-        if not is_worktree_merged(item_id, target_branch):
-            print(f"❌ Merge confirmation failed: {branch_name} not showing as merged")
-            return False
-        
-        print(f"✅ Merge confirmed: {branch_name} is merged into {target_branch}")
-        
-        if cleanup:
-            _cleanup_after_merge(worktree_path, branch_name)
-        
-        return True  # Merge completed
-        
     except subprocess.CalledProcessError as e:
-        error_msg = e.stderr if e.stderr else str(e)
-        print(f"❌ Merge failed: {error_msg}")
-        return False
+        print(f"❌ Push failed: {e.stderr if e.stderr else str(e)}")
+        return False, []
+    
+    # MERGE CONFIRMATION: Verify branch is actually merged
+    if not is_worktree_merged(item_id, target_branch):
+        print(f"❌ Merge confirmation failed: {branch_name} not showing as merged")
+        return False, []
+    
+    print(f"✅ Merge confirmed: {branch_name} is merged into {target_branch}")
+    
+    if cleanup:
+        _cleanup_after_merge(worktree_path, branch_name)
+    
+    return True, []  # Merge completed
 
 
 def cleanup_worktree(item_id: str, force: bool = False) -> bool:

@@ -176,6 +176,7 @@ class TestInvokeCopilot:
             retry_config=None,
             timeout=3600.0,
             deny_write=True,
-            item_logger=None
+            item_logger=None,
+            model=None
         )
 

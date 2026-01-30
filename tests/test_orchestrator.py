@@ -134,6 +134,7 @@ class TestSelectWorkItem:
 class TestProcessWorkItem:
     """Test work item processing logic."""
     
+    @patch('pokepoke.workflow.run_gate_agent')  # Mock gate agent to avoid actual copilot calls
     @patch('pokepoke.beads_hierarchy.close_parent_if_complete')
     @patch('pokepoke.worktree_finalization.get_parent_id')
     @patch('pokepoke.worktree_finalization.close_item')  # Patch where it's used
@@ -161,7 +162,8 @@ class TestProcessWorkItem:
         mock_subprocess: Mock,
         mock_close: Mock,
         mock_get_parent: Mock,
-        mock_close_parent: Mock
+        mock_close_parent: Mock,
+        mock_gate_agent: Mock
     ) -> None:
         """Test successful processing without parent."""
         item = BeadsWorkItem(
@@ -177,8 +179,9 @@ class TestProcessWorkItem:
         mock_getcwd.return_value = '/original'
         mock_uncommitted.return_value = False
         mock_check_ready.return_value = (True, "")
-        mock_merge.return_value = True
+        mock_merge.return_value = (True, [])  # Updated to return tuple
         mock_close.return_value = True
+        mock_gate_agent.return_value = (True, "Gate passed", None)  # Gate agent passes
         mock_invoke.return_value = CopilotResult(
             work_item_id="task-1",
             success=True,
@@ -214,6 +217,7 @@ class TestProcessWorkItem:
         assert cleanup_runs == 0
         mock_close.assert_called_once_with("task-1", "Completed by PokePoke orchestrator (agent did not close)")
     
+    @patch('pokepoke.workflow.run_gate_agent')  # Mock gate agent to avoid actual copilot calls
     @patch('pokepoke.worktree_finalization.close_parent_if_complete')
     @patch('pokepoke.worktree_finalization.get_parent_id')
     @patch('pokepoke.worktree_finalization.close_item')  # Patch where it's used
@@ -237,7 +241,8 @@ class TestProcessWorkItem:
         mock_subprocess: Mock,
         mock_close: Mock,
         mock_get_parent: Mock,
-        mock_close_parent: Mock
+        mock_close_parent: Mock,
+        mock_gate_agent: Mock
     ) -> None:
         """Test successful processing with parent closure."""
         item = BeadsWorkItem(
@@ -251,8 +256,9 @@ class TestProcessWorkItem:
         mock_create_wt.return_value = '/tmp/worktree'
         mock_getcwd.return_value = '/original'
         mock_check_ready.return_value = (True, "")
-        mock_merge.return_value = True
+        mock_merge.return_value = (True, [])  # Updated to return tuple
         mock_close.return_value = True
+        mock_gate_agent.return_value = (True, "Gate passed", None)  # Gate agent passes
         mock_invoke.return_value = CopilotResult(
             work_item_id="task-1",
             success=True,
@@ -290,6 +296,7 @@ class TestProcessWorkItem:
         mock_close_parent.assert_any_call("feature-1")
         mock_close_parent.assert_any_call("epic-1")
     
+    @patch('pokepoke.workflow.run_gate_agent')  # Mock gate agent to avoid actual copilot calls
     @patch('subprocess.run')
     @patch('pokepoke.workflow.cleanup_worktree')
     @patch('pokepoke.worktree_finalization.merge_worktree')
@@ -309,7 +316,8 @@ class TestProcessWorkItem:
         mock_check_ready: Mock,
         mock_merge: Mock,
         mock_cleanup: Mock,
-        mock_subprocess: Mock
+        mock_subprocess: Mock,
+        mock_gate_agent: Mock
     ) -> None:
         """Test processing failure - copilot fails and worktree is cleaned up."""
         item = BeadsWorkItem(
@@ -324,7 +332,8 @@ class TestProcessWorkItem:
         mock_getcwd.return_value = '/original'
         mock_uncommitted.return_value = False
         mock_check_ready.return_value = (True, "")
-        mock_merge.return_value = True
+        mock_merge.return_value = (True, [])  # Updated to return tuple
+        mock_gate_agent.return_value = (True, "Gate passed", None)  # Gate agent passes
 
         # Copilot fails
         mock_invoke.return_value = CopilotResult(

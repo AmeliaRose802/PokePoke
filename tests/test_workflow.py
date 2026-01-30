@@ -554,7 +554,7 @@ class TestCheckAndMergeWorktree:
         worktree_path = Path("/fake/worktree")
         
         mock_run.return_value = Mock(stdout="3\n", returncode=0)
-        mock_merge.return_value = True
+        mock_merge.return_value = True  # merge_worktree_to_dev returns bool, not tuple
         
         result = check_and_merge_worktree(item, worktree_path)
         
@@ -582,7 +582,7 @@ class TestCheckAndMergeWorktree:
         worktree_path = Path("/fake/worktree")
         
         mock_run.side_effect = subprocess.CalledProcessError(1, "git rev-list")
-        mock_merge.return_value = True
+        mock_merge.return_value = True  # merge_worktree_to_dev returns bool, not tuple
         
         result = check_and_merge_worktree(item, worktree_path)
         
@@ -612,7 +612,7 @@ class TestMergeWorktreeToDev:
         )
         
         mock_check.return_value = (True, "")
-        mock_merge.return_value = True
+        mock_merge.return_value = (True, [])  # Updated to return tuple
         
         result = merge_worktree_to_dev(item)
         
@@ -642,7 +642,7 @@ class TestMergeWorktreeToDev:
         
         mock_check.side_effect = [(False, "Changes"), (True, "")]
         mock_cleanup.return_value = (True, "Fixed")
-        mock_merge.return_value = True
+        mock_merge.return_value = (True, [])  # Updated to return tuple
         
         result = merge_worktree_to_dev(item)
         
@@ -658,7 +658,7 @@ class TestMergeWorktreeToDev:
         item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
 
         mock_check.return_value = (True, "")
-        mock_merge.return_value = False
+        mock_merge.return_value = (False, ["conflict.py"])  # Updated to return tuple
         mock_cleanup.return_value = (False, "Failed")
 
         result = merge_worktree_to_dev(item)
@@ -674,7 +674,7 @@ class TestMergeWorktreeToDev:
         item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
 
         mock_check.return_value = (True, "")
-        mock_merge.side_effect = [False, True]
+        mock_merge.side_effect = [(False, ["conflict.py"]), (True, [])]  # Updated to return tuples
         mock_cleanup.return_value = (True, "Fixed")
 
         result = merge_worktree_to_dev(item)
@@ -926,6 +926,7 @@ class TestProcessWorkItem:
         assert stats is None
         assert cleanup_runs == 0
     
+    @patch('pokepoke.workflow.run_gate_agent')  # Mock gate agent
     @patch('pokepoke.workflow.run_beta_tester')  # Mock beta tester
     @patch('pokepoke.workflow.finalize_work_item')
     @patch('os.chdir')
@@ -949,7 +950,8 @@ class TestProcessWorkItem:
         mock_getcwd: Mock,
         mock_chdir: Mock,
         mock_finalize: Mock,
-        mock_beta: Mock
+        mock_beta: Mock,
+        mock_gate_agent: Mock
     ) -> None:
         """Test when Copilot makes no changes."""
         item = BeadsWorkItem(
@@ -967,6 +969,7 @@ class TestProcessWorkItem:
         mock_setup.return_value = Path("/fake/worktree")
         mock_getcwd.return_value = "/original"
         mock_uncommitted.return_value = False
+        mock_gate_agent.return_value = (True, "Gate passed", None)  # Gate agent passes
         mock_invoke.return_value = CopilotResult(
             work_item_id="task-1",
             success=True,
@@ -986,6 +989,7 @@ class TestProcessWorkItem:
         # Cleanup is called even with no changes (it just exits early)
         mock_cleanup_timeout.assert_called_once()
     
+    @patch('pokepoke.workflow.run_gate_agent')  # Mock gate agent
     @patch('pokepoke.workflow.run_beta_tester')  # Mock beta tester
     @patch('pokepoke.workflow.cleanup_worktree')
     @patch('os.chdir')
@@ -1009,7 +1013,8 @@ class TestProcessWorkItem:
         mock_getcwd: Mock,
         mock_chdir: Mock,
         mock_cleanup: Mock,
-        mock_beta: Mock
+        mock_beta: Mock,
+        mock_gate_agent: Mock
     ) -> None:
         """Test when Copilot CLI fails."""
         item = BeadsWorkItem(
@@ -1027,6 +1032,7 @@ class TestProcessWorkItem:
         mock_setup.return_value = Path("/fake/worktree")
         mock_getcwd.return_value = "/original"
         mock_uncommitted.return_value = True
+        mock_gate_agent.return_value = (True, "Gate passed", None)  # Gate agent passes
         mock_invoke.return_value = CopilotResult(
             work_item_id="task-1",
             success=False,
@@ -1044,9 +1050,234 @@ class TestProcessWorkItem:
         assert success is False
         assert count == 1
         mock_cleanup.assert_called_once_with("task-1", force=True)
-
-
-
+    
+    @patch('pokepoke.workflow.add_comment')
+    @patch('pokepoke.workflow.run_gate_agent')
+    @patch('pokepoke.workflow.run_beta_tester')
+    @patch('pokepoke.workflow.finalize_work_item')
+    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('os.chdir')
+    @patch('os.getcwd')
+    @patch('pokepoke.workflow._run_cleanup_with_timeout')
+    @patch('pokepoke.workflow.invoke_copilot')
+    @patch('pokepoke.workflow.has_uncommitted_changes')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('builtins.input')
+    @patch('time.time')
+    def test_gate_agent_retry_loop(
+        self,
+        mock_time: Mock,
+        mock_input: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
+        mock_uncommitted: Mock,
+        mock_invoke: Mock,
+        mock_cleanup_timeout: Mock,
+        mock_getcwd: Mock,
+        mock_chdir: Mock,
+        mock_cleanup: Mock,
+        mock_finalize: Mock,
+        mock_beta: Mock,
+        mock_gate_agent: Mock,
+        mock_add_comment: Mock
+    ) -> None:
+        """Test gate agent rejection triggers retry loop."""
+        item = BeadsWorkItem(
+            id="task-1",
+            title="Task 1",
+            description="Original description",
+            status="open",
+            priority=1,
+            issue_type="task"
+        )
+        
+        mock_time.return_value = 0
+        mock_input.return_value = 'y'
+        mock_assign.return_value = True
+        mock_setup.return_value = Path("/fake/worktree")
+        mock_getcwd.return_value = "/original"
+        mock_uncommitted.return_value = True
+        mock_cleanup_timeout.return_value = (True, 0)
+        mock_finalize.return_value = True
+        mock_beta.return_value = None
+        
+        # First invoke: work agent succeeds
+        # Gate agent fails first time, passes second time
+        mock_gate_agent.side_effect = [
+            (False, "Tests failed", None),
+            (True, "All tests pass", None)
+        ]
+        # Two work agent invocations
+        mock_invoke.side_effect = [
+            CopilotResult(work_item_id="task-1", success=True, output="Try 1", attempt_count=1),
+            CopilotResult(work_item_id="task-1", success=True, output="Try 2", attempt_count=1)
+        ]
+        
+        success, count, stats, cleanup_runs = process_work_item(
+            item, interactive=True
+        )
+        
+        assert success is True
+        assert count == 2  # Two invocations
+        mock_add_comment.assert_called_once()  # Comment added for gate rejection
+        assert mock_gate_agent.call_count == 2
+    
+    @patch('pokepoke.workflow.add_comment')
+    @patch('pokepoke.workflow.run_gate_agent')
+    @patch('pokepoke.workflow.run_beta_tester')
+    @patch('pokepoke.workflow.finalize_work_item')
+    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('os.chdir')
+    @patch('os.getcwd')
+    @patch('pokepoke.workflow._run_cleanup_with_timeout')
+    @patch('pokepoke.workflow.invoke_copilot')
+    @patch('pokepoke.workflow.has_uncommitted_changes')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('builtins.input')
+    @patch('time.time')
+    def test_gate_agent_stats_aggregation(
+        self,
+        mock_time: Mock,
+        mock_input: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
+        mock_uncommitted: Mock,
+        mock_invoke: Mock,
+        mock_cleanup_timeout: Mock,
+        mock_getcwd: Mock,
+        mock_chdir: Mock,
+        mock_cleanup: Mock,
+        mock_finalize: Mock,
+        mock_beta: Mock,
+        mock_gate_agent: Mock,
+        mock_add_comment: Mock
+    ) -> None:
+        """Test gate agent stats are aggregated into totals."""
+        item = BeadsWorkItem(
+            id="task-1",
+            title="Task 1",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task"
+        )
+        
+        mock_time.return_value = 0
+        mock_input.return_value = 'y'
+        mock_assign.return_value = True
+        mock_setup.return_value = Path("/fake/worktree")
+        mock_getcwd.return_value = "/original"
+        mock_uncommitted.return_value = True
+        mock_cleanup_timeout.return_value = (True, 0)
+        mock_finalize.return_value = True
+        mock_beta.return_value = None
+        
+        # Gate agent returns stats
+        gate_stats = AgentStats(
+            wall_duration=5.0,
+            api_duration=2.0,
+            input_tokens=50,
+            output_tokens=25,
+            premium_requests=1
+        )
+        mock_gate_agent.return_value = (True, "Pass", gate_stats)
+        
+        work_stats = AgentStats(
+            wall_duration=10.0,
+            api_duration=5.0,
+            input_tokens=100,
+            output_tokens=50,
+            premium_requests=2
+        )
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="task-1",
+            success=True,
+            output="Completed",
+            attempt_count=1,
+            stats=work_stats
+        )
+        
+        success, count, stats, cleanup_runs = process_work_item(
+            item, interactive=True
+        )
+        
+        assert success is True
+        assert stats is not None
+        # Stats should be aggregated
+        assert stats.wall_duration == 15.0  # 10 + 5
+        assert stats.input_tokens == 150  # 100 + 50
+    
+    @patch('pokepoke.workflow.run_gate_agent')
+    @patch('pokepoke.workflow.run_beta_tester')
+    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('os.chdir')
+    @patch('os.getcwd')
+    @patch('pokepoke.workflow._run_cleanup_with_timeout')
+    @patch('pokepoke.workflow.invoke_copilot')
+    @patch('pokepoke.workflow.has_uncommitted_changes')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('builtins.input')
+    @patch('time.time')
+    def test_cleanup_failure_returns_stats(
+        self,
+        mock_time: Mock,
+        mock_input: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
+        mock_uncommitted: Mock,
+        mock_invoke: Mock,
+        mock_cleanup_timeout: Mock,
+        mock_getcwd: Mock,
+        mock_chdir: Mock,
+        mock_cleanup: Mock,
+        mock_beta: Mock,
+        mock_gate_agent: Mock
+    ) -> None:
+        """Test that cleanup failure returns accumulated stats."""
+        item = BeadsWorkItem(
+            id="task-1",
+            title="Task 1",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task"
+        )
+        
+        mock_time.return_value = 0
+        mock_input.return_value = 'y'
+        mock_assign.return_value = True
+        mock_setup.return_value = Path("/fake/worktree")
+        mock_getcwd.return_value = "/original"
+        mock_uncommitted.return_value = True
+        mock_gate_agent.return_value = (True, "Pass", None)
+        mock_beta.return_value = None
+        
+        work_stats = AgentStats(
+            wall_duration=10.0,
+            api_duration=5.0,
+            input_tokens=100,
+            output_tokens=50
+        )
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="task-1",
+            success=True,
+            output="Completed",
+            attempt_count=1,
+            stats=work_stats
+        )
+        mock_cleanup_timeout.return_value = (False, 2)  # Cleanup fails
+        
+        success, count, stats, cleanup_runs = process_work_item(
+            item, interactive=True
+        )
+        
+        assert success is False
+        assert cleanup_runs == 2
+        assert stats is not None  # Stats should be returned even on failure
+        assert stats.wall_duration == 10.0
 
 
 

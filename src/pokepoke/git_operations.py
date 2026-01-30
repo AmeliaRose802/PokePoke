@@ -3,8 +3,21 @@
 import re
 import subprocess
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
+# Re-export merge conflict utilities for backward compatibility
+from .merge_conflict import (
+    is_merge_in_progress,
+    get_unmerged_files,
+    abort_merge,
+    get_merge_conflict_details,
+)
+
+__all__ = [
+    'is_merge_in_progress', 'get_unmerged_files', 'abort_merge',
+    'get_merge_conflict_details', 'has_uncommitted_changes',
+    'execute_merge_sequence', 'check_main_repo_ready_for_merge',
+]
 
 def has_uncommitted_changes() -> bool:
     """Check if there are uncommitted changes in the current directory."""
@@ -263,14 +276,39 @@ def verify_branch_pushed(branch_name: str) -> bool:
     except subprocess.CalledProcessError:
         return False
 
-def execute_merge_sequence(branch_name: str, target_branch: str) -> None:
-    """Execute the checkout, pull, and merge sequence."""
-    subprocess.run(["git", "checkout", target_branch],
-                 check=True, capture_output=True, text=True, encoding='utf-8')
-    subprocess.run(["git", "pull", "--rebase"],
-                 check=True, capture_output=True, text=True, encoding='utf-8')
-    subprocess.run(["git", "merge", "--no-ff", branch_name, "-m", f"Merge {branch_name}"],
-                 check=True, capture_output=True, text=True, encoding='utf-8')
+def execute_merge_sequence(branch_name: str, target_branch: str) -> Tuple[bool, str, List[str]]:
+    """Execute the checkout, pull, and merge sequence.
+    
+    Returns:
+        Tuple of (success, error_message, unmerged_files)
+        - If successful: (True, "", [])
+        - If failed: (False, error_message, list_of_unmerged_files)
+    """
+    try:
+        subprocess.run(["git", "checkout", target_branch],
+                     check=True, capture_output=True, text=True, encoding='utf-8')
+    except subprocess.CalledProcessError as e:
+        return False, f"Failed to checkout {target_branch}: {e.stderr or str(e)}", []
+    
+    try:
+        subprocess.run(["git", "pull", "--rebase"],
+                     check=True, capture_output=True, text=True, encoding='utf-8')
+    except subprocess.CalledProcessError as e:
+        return False, f"Failed to pull with rebase: {e.stderr or str(e)}", []
+    
+    try:
+        subprocess.run(["git", "merge", "--no-ff", branch_name, "-m", f"Merge {branch_name}"],
+                     check=True, capture_output=True, text=True, encoding='utf-8')
+        return True, "", []
+    except subprocess.CalledProcessError as e:
+        # Check if this is a merge conflict
+        unmerged = get_unmerged_files()
+        is_merging = is_merge_in_progress()
+        
+        if is_merging and unmerged:
+            return False, f"Merge conflicts detected in {len(unmerged)} file(s)", unmerged
+        else:
+            return False, f"Merge failed: {e.stderr or str(e)}", unmerged
 
 def validate_post_merge(target_branch: str) -> bool:
     """Validate repository state after merge."""

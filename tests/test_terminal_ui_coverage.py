@@ -15,6 +15,7 @@ class TestPokePokeUICoverage:
         with patch('pokepoke.terminal_ui.Console') as mock_console:
             mock_instance = MagicMock()
             mock_instance.height = 100
+            mock_instance.width = 100
             mock_console.return_value = mock_instance
             ui = PokePokeUI()
             ui.console = mock_instance
@@ -81,7 +82,10 @@ class TestPokePokeUICoverage:
     def test_update_header(self, ui_mock):
         """Test updating header."""
         ui_mock.update_header("ITEM-123", "Test Title")
-        assert ui_mock.layout["header"] is not None
+        # Header info is now stored in current_work_item and rendered in footer
+        assert ui_mock.current_work_item is not None
+        assert ui_mock.current_work_item["id"] == "ITEM-123"
+        assert ui_mock.current_work_item["title"] == "Test Title"
 
     def test_update_stats(self, ui_mock):
         """Test updating footer stats."""

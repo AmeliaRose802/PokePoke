@@ -178,8 +178,22 @@ def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path) -> tuple[bool, Op
     return copilot_result.success, copilot_result.stats
 
 
-def invoke_merge_conflict_cleanup_agent(item: BeadsWorkItem, repo_root: Path, error_msg: str) -> tuple[bool, Optional[AgentStats]]:
-    """Invoke cleanup agent to resolve merge conflicts."""
+def invoke_merge_conflict_cleanup_agent(
+    item: BeadsWorkItem, 
+    repo_root: Path, 
+    error_msg: str,
+    unmerged_files: Optional[list[str]] = None
+) -> tuple[bool, Optional[AgentStats]]:
+    """Invoke cleanup agent to resolve merge conflicts.
+    
+    Args:
+        item: The work item being processed
+        repo_root: Path to the repository root
+        error_msg: Description of the merge error
+        unmerged_files: Optional list of files with merge conflicts
+    """
+    from pokepoke.git_operations import is_merge_in_progress, get_unmerged_files as git_get_unmerged
+    
     try:
         prompts_dir = get_pokepoke_prompts_dir()
         cleanup_prompt_path = prompts_dir / "merge-conflict-cleanup.md"
@@ -197,12 +211,27 @@ def invoke_merge_conflict_cleanup_agent(item: BeadsWorkItem, repo_root: Path, er
     # Get current context information
     current_dir, current_branch, is_worktree = _get_current_git_context()
     
+    # Get merge state info
+    is_merging = is_merge_in_progress()
+    if unmerged_files is None:
+        unmerged_files = git_get_unmerged()
+    
+    # Build conflict files section
+    conflict_files_section = ""
+    if unmerged_files:
+        conflict_files_section = "\n**Conflicted Files:**\n"
+        for f in unmerged_files:
+            conflict_files_section += f"- `{f}`\n"
+    
     # Replace placeholders in template
     cleanup_prompt_template = cleanup_prompt_template.replace("{cwd}", current_dir)
     cleanup_prompt_template = cleanup_prompt_template.replace("{branch}", current_branch)
     cleanup_prompt_template = cleanup_prompt_template.replace("{is_worktree}", str(is_worktree))
     cleanup_prompt_template = cleanup_prompt_template.replace("{merge_error}", error_msg)
     cleanup_prompt_template = cleanup_prompt_template.replace("{worktree_path}", f"worktrees/task-{item.id}")
+    cleanup_prompt_template = cleanup_prompt_template.replace("{is_merge_in_progress}", str(is_merging))
+    cleanup_prompt_template = cleanup_prompt_template.replace("{conflict_files}", conflict_files_section)
+    cleanup_prompt_template = cleanup_prompt_template.replace("{conflict_count}", str(len(unmerged_files)))
     
     work_item_context = f"""
 # Work Item That Failed to Merge
@@ -215,6 +244,11 @@ def invoke_merge_conflict_cleanup_agent(item: BeadsWorkItem, repo_root: Path, er
 
 **Description:**
 {item.description}
+
+**Merge State:**
+- Merge in progress: {is_merging}
+- Conflicted files: {len(unmerged_files)}
+{conflict_files_section}
 
 **Merge Error:**
 {error_msg}
@@ -236,6 +270,13 @@ def invoke_merge_conflict_cleanup_agent(item: BeadsWorkItem, repo_root: Path, er
     )
     
     print("\n🧹 Invoking merge conflict cleanup agent...")
+    if unmerged_files:
+        print(f"   Conflicted files: {len(unmerged_files)}")
+        for f in unmerged_files[:5]:
+            print(f"      - {f}")
+        if len(unmerged_files) > 5:
+            print(f"      ... and {len(unmerged_files) - 5} more")
+    
     copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt)
     
     return copilot_result.success, copilot_result.stats
