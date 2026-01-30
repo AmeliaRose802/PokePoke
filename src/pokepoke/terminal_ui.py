@@ -86,6 +86,10 @@ class PokePokeUI:
         self.current_work_item: Optional[Dict[str, str]] = None
         self.current_stats: Optional[SessionStats] = None
         self.current_elapsed_time: float = 0.0
+        self.session_start_time: Optional[float] = None  # For real-time clock updates
+        
+        # Current agent tracking
+        self.current_agent_name: Optional[str] = None
             
     def set_style(self, style: Optional[str]) -> None:
         """Set the current text style for logs."""
@@ -94,11 +98,15 @@ class PokePokeUI:
             self.log_message(self.current_line_buffer)
             self.current_line_buffer = ""
         self.current_style = style
+    
+    def set_current_agent(self, agent_name: Optional[str]) -> None:
+        """Set the currently running agent name for display."""
+        self.current_agent_name = agent_name
         
     def _setup_layout(self) -> None:
         self.layout.split(
             Layout(name="body", ratio=1),
-            Layout(name="footer", size=7)
+            Layout(name="footer", size=10)
         )
         
         # Split body into two vertical panels
@@ -230,17 +238,27 @@ class PokePokeUI:
             
         self._update_panels()
 
-    def _get_panel_content(self, logs: List[str], offset: int, height: int) -> List[str]:
-        """Get visible logs for a panel."""
+    def _get_panel_content(self, logs: List[str], offset: int, height: int) -> tuple[List[str], bool, bool]:
+        """Get visible logs for a panel.
+        
+        Returns:
+            Tuple of (visible_logs, can_scroll_up, can_scroll_down)
+        """
         logs_to_show = list(logs)
         total = len(logs_to_show)
         
         if offset == 0:
-            return logs_to_show[-height:]
+            visible = logs_to_show[-height:]
+            can_scroll_up = total > height
+            can_scroll_down = False
         else:
             end_idx = total - offset
             start_idx = max(0, end_idx - height)
-            return logs_to_show[start_idx:end_idx]
+            visible = logs_to_show[start_idx:end_idx]
+            can_scroll_up = start_idx > 0
+            can_scroll_down = offset > 0
+            
+        return visible, can_scroll_up, can_scroll_down
 
     def _update_panels(self) -> None:
         """Update both panels with current content."""
@@ -254,12 +272,24 @@ class PokePokeUI:
         body_lines = max(5, term_height - 12)
         
         # --- Orchestrator Panel ---
-        orch_logs = self._get_panel_content(
+        orch_logs, orch_can_up, orch_can_down = self._get_panel_content(
             self.orchestrator_buffer, 
             self.scroll_offsets["orchestrator"],
             body_lines
         )
-        orch_title = f"Orchestrator ({self.scroll_offsets['orchestrator']} scrolled)" if self.scroll_offsets["orchestrator"] > 0 else "Orchestrator"
+        
+        # Build orchestrator title with scroll indicators
+        orch_title = "Orchestrator"
+        scroll_indicators = []
+        if orch_can_up:
+            scroll_indicators.append("↑")
+        if orch_can_down:
+            scroll_indicators.append("↓")
+        if scroll_indicators:
+            orch_title += f" [{'/'.join(scroll_indicators)}]"
+        if self.scroll_offsets["orchestrator"] > 0:
+            orch_title += f" (+{self.scroll_offsets['orchestrator']})"
+            
         orch_style = "yellow" if self.scroll_offsets["orchestrator"] > 0 else "white"
         if self.active_panel == "orchestrator":
             orch_title += " [ACTIVE]"
@@ -276,16 +306,31 @@ class PokePokeUI:
              timestamp = datetime.now().strftime("%H:%M:%S")
              agent_logs_source.append(f"[{timestamp}] >> {self.current_line_buffer}")
 
-        agent_logs = self._get_panel_content(
+        agent_logs, agent_can_up, agent_can_down = self._get_panel_content(
             agent_logs_source,
             self.scroll_offsets["agent"],
             body_lines
         )
         
-        agent_title = f"Agent ({self.scroll_offsets['agent']} scrolled)" if self.scroll_offsets["agent"] > 0 else "Agent"
+        # Build agent panel title with current agent name and scroll indicators
+        if self.current_agent_name:
+            agent_title = f"🤖 {self.current_agent_name}"
+        else:
+            agent_title = "Agent"
+            
+        scroll_indicators = []
+        if agent_can_up:
+            scroll_indicators.append("↑")
+        if agent_can_down:
+            scroll_indicators.append("↓")
+        if scroll_indicators:
+            agent_title += f" [{'/'.join(scroll_indicators)}]"
+        if self.scroll_offsets["agent"] > 0:
+            agent_title += f" (+{self.scroll_offsets['agent']})"
+            
         agent_style = "yellow" if self.scroll_offsets["agent"] > 0 else "white"
         if self.active_panel == "agent":
-            agent_title += " [ACTIVE] (Tab to switch)"
+            agent_title += " [ACTIVE]"
             agent_style = "blue"
             
         self.layout["agent"].update(
@@ -306,16 +351,17 @@ class PokePokeUI:
             title = self.current_work_item["title"]
             status = self.current_work_item["status"]
             
-            # Truncate title
-            available_width = max(20, self.console.width - 40)
+            # Truncate title - use more available space (reduce reserved space from 40 to 25)
+            available_width = max(20, self.console.width - 25)
             if len(title) > available_width:
                 title = title[:available_width-3] + "..."
                 
             header_grid = Table.grid(expand=True)
             header_grid.add_column(justify="left", ratio=1, no_wrap=True, overflow="ellipsis")
             header_grid.add_column(justify="right", no_wrap=True)
+            # Use dim style for more compact appearance
             header_grid.add_row(
-                f"[bold white]{item_id}[/bold white] - [white]{title}[/white]", 
+                f"[bold]{item_id}[/bold] - [dim]{title}[/dim]", 
                 f"[{status}]"
             )
             # Add a separator line or style
@@ -330,7 +376,12 @@ class PokePokeUI:
 
         session_stats = self.current_stats
         agent_stats = session_stats.agent_stats
-        elapsed_time = self.current_elapsed_time
+        
+        # Compute elapsed time dynamically for real-time updates
+        if self.session_start_time is not None:
+            elapsed_time = time.time() - self.session_start_time
+        else:
+            elapsed_time = self.current_elapsed_time
 
         # Stats grid
         stats_grid = Table.grid(expand=True)
@@ -354,14 +405,14 @@ class PokePokeUI:
         metrics_grid.add_row(
             f"✅ Done: {session_stats.items_completed}",
             f"🔄 Retries: {agent_stats.retries}",
-            f"💲 Est: ${agent_stats.estimated_cost:.3f}",
-            f"🛠️ Tools: {agent_stats.tool_calls}"
+            f"�️ Tools: {agent_stats.tool_calls}",
+            ""
         )
         stats_grid.add_row(metrics_grid)
 
         # Agent stats row
         agents_grid = Table.grid(expand=True)
-        for _ in range(6):
+        for _ in range(7):
             agents_grid.add_column(justify="center", ratio=1)
             
         agents_grid.add_row(
@@ -370,7 +421,8 @@ class PokePokeUI:
             f"🧹 Jan:{session_stats.janitor_agent_runs}",
             f"🗄️ Blog:{session_stats.backlog_cleanup_agent_runs}",
             f"🧼 Cln:{session_stats.cleanup_agent_runs}",
-            f"🧪 Beta:{session_stats.beta_tester_agent_runs}"
+            f"🧪 Beta:{session_stats.beta_tester_agent_runs}",
+            f"🔍 Rev:{session_stats.code_review_agent_runs}"
         )
         stats_grid.add_row(agents_grid)
         
@@ -392,6 +444,10 @@ class PokePokeUI:
         self.current_stats = session_stats
         self.current_elapsed_time = elapsed_time
         self._render_footer()
+    
+    def set_session_start_time(self, start_time: float) -> None:
+        """Set the session start time for real-time clock updates."""
+        self.session_start_time = start_time
 
 # Global UI instance
 ui = PokePokeUI()

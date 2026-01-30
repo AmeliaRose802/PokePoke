@@ -112,6 +112,7 @@ def process_work_item(
                  current_desc += f"\n- {last_feedback}"
                  item.description = current_desc
 
+            ui.set_current_agent("Work Agent")
             result = invoke_copilot(item, timeout=remaining_timeout, item_logger=item_logger)
             request_count += result.attempt_count
             
@@ -203,6 +204,7 @@ def process_work_item(
         if run_logger:
             run_logger.end_item_log(success, request_count)
         
+        ui.set_current_agent(None)
         return success, request_count, item_stats, cleanup_agent_runs
     else:
         set_terminal_banner(format_work_item_banner(item.id, item.title, "Failed"))
@@ -213,6 +215,7 @@ def process_work_item(
         if run_logger:
             run_logger.end_item_log(False, request_count)
         
+        ui.set_current_agent(None)
         return False, request_count, None, cleanup_agent_runs
 
 

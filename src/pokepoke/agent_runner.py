@@ -12,6 +12,7 @@ from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
 from pokepoke.stats import parse_agent_stats
 from pokepoke.worktrees import create_worktree, merge_worktree, cleanup_worktree
 from pokepoke.prompts import PromptService
+from pokepoke.terminal_ui import ui
 from pokepoke.cleanup_agents import (
     invoke_cleanup_agent, invoke_merge_conflict_cleanup_agent, 
     get_pokepoke_prompts_dir, run_cleanup_loop, aggregate_cleanup_stats
@@ -31,6 +32,7 @@ def run_gate_agent(item: BeadsWorkItem) -> tuple[bool, str, Optional[AgentStats]
     Returns:
         Tuple of (success: bool, reason: str, stats: AgentStats)
     """
+    ui.set_current_agent("Gate Agent")
     print(f"\n{'='*60}")
     print(f"🕵️ Running Gate Agent on {item.id}")
     print(f"{'='*60}")
@@ -94,6 +96,7 @@ def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional
     Returns:
         AgentStats if successful, None otherwise
     """
+    ui.set_current_agent(f"{agent_name} Agent")
     print(f"\n{'='*60}")
     print(f"🔧 Running {agent_name} Agent")
     print(f"{'='*60}")
@@ -327,6 +330,7 @@ def run_beta_tester(repo_root: Optional[Path] = None) -> Optional[AgentStats]:
     Returns:
         AgentStats if successful, None otherwise
     """
+    ui.set_current_agent("Beta Tester")
     print(f"\n{'='*60}")
     print(f"🧪 Running Beta Tester Agent")
     print(f"{'='*60}")

@@ -70,6 +70,9 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         run_logger.log_orchestrator("Recording starting beads statistics")
         session_stats.starting_beads_stats = get_beads_stats()
         
+        # Set session start time for real-time clock updates
+        ui.set_session_start_time(start_time)
+        
         # Initial stats display with 0 elapsed time (or very small)
         ui.update_stats(session_stats, time.time() - start_time)
         
