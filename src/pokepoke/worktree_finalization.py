@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .types import BeadsWorkItem
 from .worktrees import merge_worktree, cleanup_worktree
-from .git_operations import check_main_repo_ready_for_merge
+from .git_operations import check_main_repo_ready_for_merge, get_default_branch
 from .beads_hierarchy import get_parent_id, close_parent_if_complete
 from .beads_management import close_item, create_cleanup_delegation_issue
 
@@ -34,8 +34,11 @@ def check_and_merge_worktree(item: BeadsWorkItem, worktree_path: Path) -> bool:
     try:
         original_dir = os.getcwd()
         os.chdir(worktree_path)
+        
+        # Use the actual target branch (ameliapayne/dev) not master
+        target_branch = get_default_branch()
         check_result = subprocess.run(
-            ["git", "rev-list", "--count", "HEAD", "^master"],
+            ["git", "rev-list", "--count", "HEAD", f"^{target_branch}"],
             capture_output=True,
             text=True,
             check=True

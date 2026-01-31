@@ -290,11 +290,42 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> Tuple[bool, 
     except subprocess.CalledProcessError as e:
         return False, f"Failed to checkout {target_branch}: {e.stderr or str(e)}", []
     
+    # Stash any beads daemon changes before pull to avoid "unstaged changes" error
+    # The beads daemon continuously updates .beads/issues.jsonl which can cause
+    # git pull --rebase to fail if changes happen between our commit and the pull
+    stashed = False
+    try:
+        status = subprocess.run(
+            ["git", "status", "--porcelain", ".beads/"],
+            capture_output=True, text=True, encoding='utf-8', check=True
+        ).stdout.strip()
+        if status:
+            subprocess.run(
+                ["git", "stash", "push", "-m", "beads-daemon-changes-during-merge", "--", ".beads/"],
+                check=True, capture_output=True, text=True, encoding='utf-8'
+            )
+            stashed = True
+    except subprocess.CalledProcessError:
+        pass  # Stash failed, will try pull anyway
+    
     try:
         subprocess.run(["git", "pull", "--rebase"],
                      check=True, capture_output=True, text=True, encoding='utf-8')
     except subprocess.CalledProcessError as e:
+        # Restore stash if we had one
+        if stashed:
+            try:
+                subprocess.run(["git", "stash", "pop"], capture_output=True, text=True, encoding='utf-8')
+            except subprocess.CalledProcessError:
+                pass
         return False, f"Failed to pull with rebase: {e.stderr or str(e)}", []
+    
+    # Restore stashed beads changes after successful pull
+    if stashed:
+        try:
+            subprocess.run(["git", "stash", "pop"], capture_output=True, text=True, encoding='utf-8')
+        except subprocess.CalledProcessError:
+            pass  # Stash pop conflict - beads will re-sync anyway
     
     try:
         subprocess.run(["git", "merge", "--no-ff", branch_name, "-m", f"Merge {branch_name}"],

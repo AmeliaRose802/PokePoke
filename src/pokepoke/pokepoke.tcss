@@ -1,0 +1,84 @@
+/* PokePoke Textual UI Stylesheet
+ * Provides consistent theming for the TUI components.
+ */
+
+/* Global screen styling */
+Screen {
+    background: $surface;
+}
+
+/* Work item header at top */
+#work-header {
+    dock: top;
+    height: 3;
+    padding: 1 2;
+    background: $primary-darken-2;
+    border-bottom: heavy $primary;
+    color: $text;
+}
+
+/* Log container holding both panels */
+#log-container {
+    height: 1fr;
+    padding: 1 2;
+    background: $surface;
+}
+
+/* Base log panel styling */
+.log-panel {
+    width: 1fr;
+    height: 100%;
+    border: round $surface-lighten-2;
+    padding: 1 1;
+    background: $surface-darken-1;
+    scrollbar-gutter: stable;
+}
+
+/* Focused log panel gets highlight border */
+.log-panel.focused {
+    border: round $accent;
+}
+
+/* Orchestrator panel specific - subtle left border accent */
+#orchestrator-log {
+    border-left: wide $warning;
+}
+
+#orchestrator-log.focused {
+    border: round $accent;
+    border-left: wide $warning;
+}
+
+/* Agent panel specific - subtle right border accent */
+#agent-log {
+    border-right: wide $success;
+}
+
+#agent-log.focused {
+    border: round $accent;
+    border-right: wide $success;
+}
+
+/* Stats bar at bottom */
+#stats-bar {
+    dock: bottom;
+    height: 3;
+    min-height: 3;
+    max-height: 3;
+    padding: 0 2;
+    background: $primary-darken-3;
+    border-top: heavy $primary;
+    color: $text;
+    overflow: hidden;
+}
+
+/* Focus indicator */
+*:focus {
+    outline: none;
+}
+
+/* Panel titles via RichLog - these appear in the border */
+RichLog {
+    scrollbar-size: 1 1;
+    scrollbar-color: $accent;
+}
