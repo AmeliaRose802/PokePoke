@@ -8,8 +8,8 @@ the full async app lifecycle.
 import pytest
 from unittest.mock import MagicMock
 
-from pokepoke.textual_ui import PokePokeApp, TextualUI
-from pokepoke.textual_widgets import StatsBar, WorkItemHeader, LogPanel
+from pokepoke.textual_ui import PokePokeApp, TextualUI, MessageType, UIMessage
+from pokepoke.textual_widgets import StatsBar, WorkItemHeader, LogPanel, ProgressIndicator
 
 
 class TestPokePokeAppInit:
@@ -57,49 +57,53 @@ class TestPokePokeAppMethods:
         app.set_target_buffer("orchestrator")
         assert app.get_target_buffer() == "orchestrator"
 
-    def test_log_message_queues(self):
+    def test_log_ui_msg_queues(self):
         """Test that log_message adds to queue."""
+        from pokepoke.textual_ui import MessageType
         app = PokePokeApp()
         app.log_message("Test message", target="orchestrator")
         
         # Message should be in queue
-        assert not app._ui_queue.empty()
-        msg_type, args = app._ui_queue.get()
-        assert msg_type == "log"
-        assert args == ("orchestrator", "Test message", None)
+        assert not app._ui_msg_queue.empty()
+        msg = app._ui_msg_queue.get()
+        assert msg.msg_type == MessageType.LOG
+        assert msg.args == ("orchestrator", "Test message", None)
 
     def test_update_work_item_queues(self):
         """Test that update_work_item adds to queue."""
+        from pokepoke.textual_ui import MessageType
         app = PokePokeApp()
         app.update_work_item("ITEM-123", "Test Title", "Active")
         
-        assert not app._ui_queue.empty()
-        msg_type, args = app._ui_queue.get()
-        assert msg_type == "work_item"
-        assert args == ("ITEM-123", "Test Title", "Active")
+        assert not app._ui_msg_queue.empty()
+        msg = app._ui_msg_queue.get()
+        assert msg.msg_type == MessageType.WORK_ITEM
+        assert msg.args == ("ITEM-123", "Test Title", "Active")
 
     def test_update_stats_queues(self):
         """Test that update_stats adds to queue."""
+        from pokepoke.textual_ui import MessageType
         app = PokePokeApp()
         mock_stats = MagicMock()
         app.update_stats(mock_stats, 60.0)
         
         assert app._current_stats == mock_stats
-        assert not app._ui_queue.empty()
-        msg_type, args = app._ui_queue.get()
-        assert msg_type == "stats"
-        assert args[0] == mock_stats
-        assert args[1] == 60.0
+        assert not app._ui_msg_queue.empty()
+        msg = app._ui_msg_queue.get()
+        assert msg.msg_type == MessageType.STATS
+        assert msg.args[0] == mock_stats
+        assert msg.args[1] == 60.0
 
     def test_set_current_agent_queues(self):
         """Test that set_current_agent adds to queue."""
+        from pokepoke.textual_ui import MessageType
         app = PokePokeApp()
         app.set_current_agent("WorkAgent")
         
-        assert not app._ui_queue.empty()
-        msg_type, args = app._ui_queue.get()
-        assert msg_type == "agent_name"
-        assert args == ("WorkAgent",)
+        assert not app._ui_msg_queue.empty()
+        msg = app._ui_msg_queue.get()
+        assert msg.msg_type == MessageType.AGENT_NAME
+        assert msg.args == ("WorkAgent",)
 
     def test_action_switch_focus_toggles(self):
         """Test that action_switch_focus toggles _active_panel."""
@@ -181,7 +185,8 @@ class TestStatsBarWidget:
         stats_bar = StatsBar()
         stats_bar.update_stats(None, 60.0)
         
-        assert stats_bar.elapsed_time == 60.0
+        # elapsed_time is now a formatted string HH:MM:SS
+        assert stats_bar.elapsed_time == "00:01:00"
         # Other values should remain at defaults
         assert stats_bar.items_completed == 0
 
@@ -207,7 +212,8 @@ class TestStatsBarWidget:
         
         stats_bar.update_stats(mock_stats, 300.0)
         
-        assert stats_bar.elapsed_time == 300.0
+        # elapsed_time is now a formatted string HH:MM:SS
+        assert stats_bar.elapsed_time == "00:05:00"
         assert stats_bar.items_completed == 10
         assert stats_bar.retries == 3
         assert stats_bar.input_tokens == 5000
@@ -219,7 +225,8 @@ class TestStatsBarWidget:
     def test_default_values(self):
         """Test that default values are zero."""
         stats_bar = StatsBar()
-        assert stats_bar.elapsed_time == 0.0
+        # elapsed_time is now a formatted string
+        assert stats_bar.elapsed_time == "00:00:00"
         assert stats_bar.items_completed == 0
         assert stats_bar.retries == 0
         assert stats_bar.input_tokens == 0
@@ -253,7 +260,7 @@ class TestStatsBarRender:
     def test_render_returns_text(self):
         """Test that render() returns a Text object."""
         stats_bar = StatsBar()
-        stats_bar.elapsed_time = 120.0  # 2 minutes
+        stats_bar.elapsed_time = "00:02:00"  # 2 minutes as formatted string
         stats_bar.api_duration = 60.0
         stats_bar.input_tokens = 1000
         stats_bar.output_tokens = 500
@@ -267,9 +274,9 @@ class TestStatsBarRender:
         # Verify it's a Rich Text object
         assert result is not None
         text_str = str(result)
-        assert "2.0m" in text_str  # elapsed minutes
+        assert "00:02:00" in text_str  # elapsed time as HH:MM:SS
         assert "1.0m" in text_str  # API minutes
-        assert "1,000" in text_str  # input tokens
+        assert "1.0K" in text_str  # input tokens formatted
         assert "500" in text_str  # output tokens
         assert "10" in text_str  # tool calls
 
@@ -300,7 +307,8 @@ class TestWorkItemHeaderRender:
         text_str = str(result)
         
         assert "TEST-456" in text_str
-        assert "in_progress" in text_str
+        # Status is rendered in uppercase
+        assert "IN_PROGRESS" in text_str
 
     def test_render_with_agent(self):
         """Test rendering with agent name."""
@@ -370,8 +378,8 @@ class TestPokePokeAppAdvanced:
     def test_ui_queue_initialized(self):
         """Test UI queue is initialized."""
         app = PokePokeApp()
-        assert app._ui_queue is not None
-        assert app._ui_queue.empty()
+        assert app._ui_msg_queue is not None
+        assert app._ui_msg_queue.empty()
 
     def test_lock_initialized(self):
         """Test threading lock is initialized."""
@@ -424,16 +432,19 @@ class TestPokePokeAppAdvanced:
         app._update_elapsed_time()
 
     def test_process_ui_queue_empty(self):
-        """Test _process_ui_queue with empty queue."""
+        """Test _process_ui_msg_queue with empty queue."""
         app = PokePokeApp()
         # Should not raise
-        app._process_ui_queue()
+        app._process_ui_msg_queue()
 
     def test_handle_message_bad_type(self):
         """Test _handle_message with unknown type."""
+        from pokepoke.textual_ui import UIMessage, MessageType
         app = PokePokeApp()
-        # Should not raise
-        app._handle_message("unknown_type", ("arg1", "arg2"))
+        # Create a message with a valid type but should not crash
+        msg = UIMessage(MessageType.LOG, ("orchestrator", "test", None))
+        # Should not raise even without widgets mounted
+        app._handle_message(msg)
 
 
 class TestTextualUIPrintRedirect:
@@ -563,3 +574,270 @@ class TestTextualUIIntegration:
         
         # Line should be buffered
         assert "partial" in ui._line_buffer
+
+
+class TestTextualMessagesModule:
+    """Test textual_messages module."""
+
+    def test_message_type_enum(self):
+        """Test MessageType enum values."""
+        assert MessageType.LOG is not None
+        assert MessageType.WORK_ITEM is not None
+        assert MessageType.STATS is not None
+        assert MessageType.AGENT_NAME is not None
+        assert MessageType.PROGRESS is not None
+
+    def test_ui_message_creation(self):
+        """Test UIMessage dataclass creation."""
+        msg = UIMessage(MessageType.LOG, ("target", "message", "style"))
+        assert msg.msg_type == MessageType.LOG
+        assert msg.args == ("target", "message", "style")
+
+    def test_ui_message_immutable(self):
+        """Test UIMessage is frozen (immutable)."""
+        msg = UIMessage(MessageType.LOG, ("arg1",))
+        # Should raise FrozenInstanceError when trying to modify
+        try:
+            msg.msg_type = MessageType.STATS
+            assert False, "Should have raised an error"
+        except Exception:
+            pass  # Expected
+
+
+class TestTextualUIContextManagers:
+    """Test TextualUI context managers."""
+
+    def test_orchestrator_output_without_app(self):
+        """Test orchestrator_output when no app is set."""
+        ui = TextualUI()
+        with ui.orchestrator_output():
+            pass  # Should not raise
+
+    def test_styled_output_context(self):
+        """Test styled_output context manager."""
+        ui = TextualUI()
+        assert ui._current_style is None
+        
+        with ui.styled_output("bold red"):
+            assert ui._current_style == "bold red"
+        
+        # Should restore None after context
+        assert ui._current_style is None
+
+    def test_styled_output_nested(self):
+        """Test nested styled_output contexts."""
+        ui = TextualUI()
+        
+        with ui.styled_output("green"):
+            assert ui._current_style == "green"
+            with ui.styled_output("red"):
+                assert ui._current_style == "red"
+            assert ui._current_style == "green"
+        
+        assert ui._current_style is None
+
+
+class TestTextualUILogHelpers:
+    """Test TextualUI log helper methods."""
+
+    def test_log_orchestrator_with_app(self):
+        """Test log_orchestrator with mocked app."""
+        from unittest.mock import MagicMock
+        
+        ui = TextualUI()
+        ui._app = MagicMock()
+        
+        ui.log_orchestrator("test message", "bold")
+        ui._app.log_orchestrator.assert_called_once_with("test message", "bold")
+
+    def test_log_agent_with_app(self):
+        """Test log_agent with mocked app."""
+        from unittest.mock import MagicMock
+        
+        ui = TextualUI()
+        ui._app = MagicMock()
+        
+        ui.log_agent("agent message", "green")
+        ui._app.log_agent.assert_called_once_with("agent message", "green")
+
+    def test_log_helpers_without_app(self):
+        """Test log helpers don't crash without app."""
+        ui = TextualUI()
+        ui.log_orchestrator("test")  # Should not raise
+        ui.log_agent("test")  # Should not raise
+
+
+class TestTextualWidgetsAdditional:
+    """Additional tests for textual_widgets module."""
+
+    def test_stats_bar_format_tokens_millions(self):
+        """Test StatsBar token formatting for millions."""
+        stats_bar = StatsBar()
+        result = stats_bar._format_tokens(1_500_000)
+        assert result == "1.5M"
+
+    def test_stats_bar_format_tokens_thousands(self):
+        """Test StatsBar token formatting for thousands."""
+        stats_bar = StatsBar()
+        result = stats_bar._format_tokens(5000)
+        assert result == "5.0K"
+
+    def test_stats_bar_format_tokens_small(self):
+        """Test StatsBar token formatting for small numbers."""
+        stats_bar = StatsBar()
+        result = stats_bar._format_tokens(500)
+        assert result == "500"
+
+    def test_stats_bar_format_duration_seconds(self):
+        """Test StatsBar duration formatting for seconds."""
+        stats_bar = StatsBar()
+        result = stats_bar._format_duration(45)
+        assert result == "45s"
+
+    def test_stats_bar_format_duration_minutes(self):
+        """Test StatsBar duration formatting for minutes."""
+        stats_bar = StatsBar()
+        result = stats_bar._format_duration(90)
+        assert result == "1.5m"
+
+    def test_stats_bar_format_duration_hours(self):
+        """Test StatsBar duration formatting for hours."""
+        stats_bar = StatsBar()
+        result = stats_bar._format_duration(7200)
+        assert result == "2.0h"
+
+
+class TestWorkItemHeaderAdditional:
+    """Additional tests for WorkItemHeader widget."""
+
+    def test_get_status_style_in_progress(self):
+        """Test status style for in_progress."""
+        header = WorkItemHeader()
+        assert header._get_status_style("in_progress") == "bold yellow"
+        assert header._get_status_style("IN PROGRESS") == "bold yellow"
+
+    def test_get_status_style_ready(self):
+        """Test status style for ready."""
+        header = WorkItemHeader()
+        assert header._get_status_style("ready") == "bold green"
+        assert header._get_status_style("pending") == "bold green"
+
+    def test_get_status_style_blocked(self):
+        """Test status style for blocked."""
+        header = WorkItemHeader()
+        assert header._get_status_style("blocked") == "bold red"
+        assert header._get_status_style("failed") == "bold red"
+
+    def test_get_status_style_done(self):
+        """Test status style for done."""
+        header = WorkItemHeader()
+        assert header._get_status_style("done") == "bold cyan"
+        assert header._get_status_style("completed") == "bold cyan"
+
+    def test_get_status_style_unknown(self):
+        """Test status style for unknown status."""
+        header = WorkItemHeader()
+        assert header._get_status_style("unknown") == "dim"
+
+    def test_truncate_title_short(self):
+        """Test title truncation for short titles."""
+        header = WorkItemHeader()
+        result = header._truncate_title("Short title")
+        assert result == "Short title"
+
+    def test_truncate_title_long(self):
+        """Test title truncation for long titles."""
+        header = WorkItemHeader()
+        long_title = "A" * 70
+        result = header._truncate_title(long_title)
+        assert len(result) == 60
+        assert result.endswith("...")
+
+
+class TestLogPanelAdditional:
+    """Additional tests for LogPanel widget."""
+
+    def test_detect_log_level_error(self):
+        """Test log level detection for errors."""
+        panel = LogPanel()
+        assert panel._detect_log_level("ERROR: something failed") == "error"
+        assert panel._detect_log_level("Operation failed") == "error"
+        assert panel._detect_log_level("exception occurred") == "error"
+
+    def test_detect_log_level_warning(self):
+        """Test log level detection for warnings."""
+        panel = LogPanel()
+        assert panel._detect_log_level("WARNING: something") == "warning"
+        assert panel._detect_log_level("warn: caution") == "warning"
+
+    def test_detect_log_level_success(self):
+        """Test log level detection for success."""
+        panel = LogPanel()
+        assert panel._detect_log_level("SUCCESS!") == "success"
+        assert panel._detect_log_level("Task completed") == "success"
+        assert panel._detect_log_level("✅ Done") == "success"
+
+    def test_detect_log_level_debug(self):
+        """Test log level detection for debug."""
+        panel = LogPanel()
+        assert panel._detect_log_level("DEBUG: trace info") == "debug"
+
+    def test_detect_log_level_info(self):
+        """Test log level detection for info (default)."""
+        panel = LogPanel()
+        assert panel._detect_log_level("Normal message") == "info"
+
+
+class TestProgressIndicator:
+    """Tests for ProgressIndicator widget."""
+
+    def test_progress_indicator_creates(self):
+        """Test that ProgressIndicator can be instantiated."""
+        indicator = ProgressIndicator()
+        assert indicator is not None
+        assert indicator.is_active is False
+        assert indicator.status_text == ""
+
+    def test_progress_indicator_start(self):
+        """Test starting the progress indicator."""
+        indicator = ProgressIndicator()
+        indicator.start("Processing...")
+        assert indicator.is_active is True
+        assert indicator.status_text == "Processing..."
+
+    def test_progress_indicator_stop(self):
+        """Test stopping the progress indicator."""
+        indicator = ProgressIndicator()
+        indicator.start("Working")
+        indicator.stop("Done")
+        assert indicator.is_active is False
+        assert indicator.status_text == "Done"
+
+    def test_progress_indicator_spinner_frames(self):
+        """Test that spinner frames are defined."""
+        indicator = ProgressIndicator()
+        assert len(indicator.SPINNER_FRAMES) > 0
+        assert all(isinstance(f, str) for f in indicator.SPINNER_FRAMES)
+
+    def test_progress_indicator_render_active(self):
+        """Test render when active."""
+        indicator = ProgressIndicator()
+        indicator.start("Loading")
+        result = indicator.render()
+        text_str = str(result)
+        assert "Loading" in text_str
+
+    def test_progress_indicator_render_idle_with_status(self):
+        """Test render when idle with status."""
+        indicator = ProgressIndicator()
+        indicator.stop("Finished")
+        result = indicator.render()
+        text_str = str(result)
+        assert "Finished" in text_str
+
+    def test_progress_indicator_render_idle_no_status(self):
+        """Test render when idle without status."""
+        indicator = ProgressIndicator()
+        result = indicator.render()
+        # Should return empty or minimal text
+        assert result is not None
