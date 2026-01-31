@@ -3,6 +3,7 @@
 The previous agent failed to commit all files. Please get all files committed and all pre-commit validations passing.
 
 🤖 **AUTONOMOUS MODE: NEVER ASK FOR PERMISSION**
+
 - You are operating autonomously - proceed directly with cleanup
 - NEVER ask "Would you like me to fix this?" or "Should I proceed?"
 - NEVER wait for confirmation before fixing validation failures
@@ -26,11 +27,13 @@ git status
 ```
 
 If you see:
+
 - `Unmerged paths:` - There are merge conflicts that need resolution
 - `both modified:` - Files with conflict markers that need to be resolved
 - `You have unmerged paths.` - Merge is in progress with conflicts
 
 **If merge conflicts exist:**
+
 1. Open each conflicted file
 2. Look for conflict markers: `<<<<<<<`, `=======`, `>>>>>>>`
 3. Resolve the conflict by choosing or combining the changes
@@ -39,6 +42,8 @@ If you see:
 6. Commit the resolution: `git commit -m "fix: resolve merge conflicts"`
 
 **If you cannot resolve conflicts, abort the merge to reset state:**
+
+
 ```bash
 git merge --abort
 ```
@@ -46,6 +51,7 @@ git merge --abort
 ## 🚨 CRITICAL REQUIREMENTS
 
 **YOU MUST:**
+
 - ✅ Fix all pre-commit validation failures (tests, coverage, linting, build errors)
 - ✅ Get pre-commit hooks passing with actual fixes
 - ✅ Commit all changes with proper validation
@@ -55,6 +61,7 @@ git merge --abort
 - ✅ Resolve any merge conflicts before attempting to commit
 
 **YOU MUST NEVER:**
+
 - ❌ NEVER use `--no-verify` or `-n` with git commit
 - ❌ NEVER modify quality gate scripts in `.githooks/`
 - ❌ NEVER add files to exclusion lists or skip conditions
@@ -65,6 +72,7 @@ git merge --abort
 ## Quality Gate Protection System
 
 This repository has integrity checks that detect tampering:
+
 - Pre-commit hook runs integrity verification FIRST
 - CODEOWNERS requires admin approval for `.githooks/` changes
 - Commits fail automatically if bypasses are detected
