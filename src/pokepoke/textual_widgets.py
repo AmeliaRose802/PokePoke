@@ -354,3 +354,18 @@ class LogPanel(RichLog):
     def log_debug(self, message: str) -> None:
         """Write a debug log message."""
         self.write_log(message, level="debug")
+
+    def get_all_text(self) -> str:
+        """Get all log text as a plain string for copying.
+
+        Returns:
+            All log content as plain text with newlines between lines.
+        """
+        text_lines = []
+        for strip in self.lines:
+            # Strip objects have a 'text' property that returns plain text
+            if hasattr(strip, "text"):
+                text_lines.append(strip.text)
+            else:
+                text_lines.append(str(strip))
+        return "\n".join(text_lines)

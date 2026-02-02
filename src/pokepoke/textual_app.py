@@ -44,6 +44,8 @@ class PokePokeApp(App[int]):
         Binding("tab", "switch_focus", "Switch Panel", show=True),
         Binding("o", "focus_orchestrator", "Orchestrator", show=True),
         Binding("a", "focus_agent", "Agent", show=True),
+        Binding("c", "copy_selection", "Copy", show=True),
+        Binding("y", "copy_all", "Copy All", show=True),
         Binding("home", "scroll_top", "Top"),
         Binding("end", "scroll_bottom", "Bottom"),
         Binding("pageup", "page_up", "Page Up"),
@@ -231,6 +233,30 @@ class PokePokeApp(App[int]):
     def action_page_down(self) -> None:  # pragma: no cover
         """Scroll active panel down one page."""
         self._get_active_panel().scroll_page_down()
+
+    def action_copy_selection(self) -> None:  # pragma: no cover
+        """Copy selected text from active panel to clipboard."""
+        panel = self._get_active_panel()
+        selection = panel.text_selection
+        if selection:
+            result = panel.get_selection(selection)
+            if result:
+                text, _ = result
+                self.copy_to_clipboard(text)
+                self.notify("Copied selection to clipboard", timeout=2)
+        else:
+            self.notify("No text selected (drag to select)", timeout=2)
+
+    def action_copy_all(self) -> None:  # pragma: no cover
+        """Copy all logs from active panel to clipboard."""
+        panel = self._get_active_panel()
+        all_text = panel.get_all_text()
+        if all_text:
+            self.copy_to_clipboard(all_text)
+            lines = all_text.count('\n') + 1
+            self.notify(f"Copied {lines} lines to clipboard", timeout=2)
+        else:
+            self.notify("No logs to copy", timeout=2)
 
     def log_message(self, message: str, target: str = "orchestrator", style: Optional[str] = None) -> None:
         """Thread-safe: Queue a log message for display."""

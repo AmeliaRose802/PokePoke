@@ -33,6 +33,9 @@ class TestPokePokeAppInit:
         assert "q" in binding_keys
         assert "home" in binding_keys
         assert "end" in binding_keys
+        # Should have copy bindings
+        assert "c" in binding_keys  # copy selection
+        assert "y" in binding_keys  # copy all
 
 
 class TestPokePokeAppMethods:
@@ -819,6 +822,33 @@ class TestLogPanelAdditional:
         """Test log level detection for info (default)."""
         panel = LogPanel()
         assert panel._detect_log_level("Normal message") == "info"
+
+    def test_get_all_text_empty(self):
+        """Test get_all_text returns empty string when no logs."""
+        panel = LogPanel()
+        result = panel.get_all_text()
+        assert result == ""
+
+    def test_get_all_text_with_lines(self):
+        """Test get_all_text extracts text from Strip objects."""
+        from unittest.mock import MagicMock
+        panel = LogPanel()
+        # Create mock Strip objects with text property
+        mock_strip1 = MagicMock()
+        mock_strip1.text = "First line"
+        mock_strip2 = MagicMock()
+        mock_strip2.text = "Second line"
+        panel.lines = [mock_strip1, mock_strip2]
+        result = panel.get_all_text()
+        assert result == "First line\nSecond line"
+
+    def test_get_all_text_fallback_to_str(self):
+        """Test get_all_text uses str() for non-Strip objects."""
+        panel = LogPanel()
+        # Add plain strings (fallback case)
+        panel.lines = ["plain text"]
+        result = panel.get_all_text()
+        assert "plain text" in result
 
 
 class TestProgressIndicator:
