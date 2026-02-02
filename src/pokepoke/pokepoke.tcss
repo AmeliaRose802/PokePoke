@@ -11,9 +11,6 @@
 /* Global screen styling */
 Screen {
     background: $surface;
-    layout: grid;
-    grid-size: 1;
-    grid-rows: auto 1fr auto;
 }
 
 /* =============================================================================
