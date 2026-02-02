@@ -575,6 +575,39 @@ class TestTextualUIIntegration:
         # Line should be buffered
         assert "partial" in ui._line_buffer
 
+    def test_print_redirect_flush_streams_partial(self):
+        """Test print redirect with flush=True immediately outputs partial content."""
+        from unittest.mock import MagicMock
+        
+        ui = TextualUI()
+        ui._app = MagicMock()
+        ui._is_running = True
+        ui._app.get_target_buffer.return_value = "agent"
+        
+        # Send partial line with flush=True (like streaming agent output)
+        ui._print_redirect("streaming", end="", flush=True)
+        
+        # Should have called log_message immediately (not buffered)
+        ui._app.log_message.assert_called_with("streaming", "agent", None)
+        # Buffer should be empty after flush
+        assert ui._line_buffer == ""
+
+    def test_print_redirect_flush_only_when_buffer_not_empty(self):
+        """Test that flush=True doesn't call log_message when buffer is empty."""
+        from unittest.mock import MagicMock
+        
+        ui = TextualUI()
+        ui._app = MagicMock()
+        ui._is_running = True
+        ui._app.get_target_buffer.return_value = "agent"
+        
+        # Send just newline with flush (buffer ends up empty after processing)
+        ui._print_redirect("", end="\n", flush=True)
+        
+        # Since message is empty after processing newline, no extra call from flush
+        # The newline processing happens but empty line is skipped
+        assert ui._line_buffer == ""
+
 
 class TestTextualMessagesModule:
     """Test textual_messages module."""

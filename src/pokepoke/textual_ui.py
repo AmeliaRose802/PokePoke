@@ -93,13 +93,22 @@ class TextualUI:
             return
         sep = kwargs.get("sep", " ")
         end = kwargs.get("end", "\n")
+        flush = kwargs.get("flush", False)
         msg = sep.join(str(arg) for arg in args) + end
         self._line_buffer += msg
+        
+        # Process complete lines
         while "\n" in self._line_buffer:
             line, self._line_buffer = self._line_buffer.split("\n", 1)
             if line:
                 target = self._app.get_target_buffer()
                 self._app.log_message(line, target, self._current_style)
+        
+        # For streaming output (flush=True with no newline), flush partial buffer
+        if flush and self._line_buffer:
+            target = self._app.get_target_buffer()
+            self._app.log_message(self._line_buffer, target, self._current_style)
+            self._line_buffer = ""
 
     @contextmanager
     def orchestrator_output(self) -> Iterator[None]:
