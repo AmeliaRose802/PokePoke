@@ -335,6 +335,45 @@ class TestTextualUIAdvanced:
         ui.stop()  # Should not raise
         assert ui.is_running is False
 
+    def test_stop_and_capture_captures_output(self):
+        """Test stop_and_capture() captures print output to _final_output."""
+        import builtins
+        ui = TextualUI()
+        original_print = builtins.print
+        
+        ui.stop_and_capture()
+        assert ui.is_running is False
+        
+        # Print should now be captured
+        print("Test output 1")
+        print("Test output 2")
+        
+        assert len(ui._final_output) == 2
+        assert "Test output 1" in ui._final_output[0]
+        assert "Test output 2" in ui._final_output[1]
+        
+        # Restore original print
+        builtins.print = original_print
+
+    def test_stop_and_capture_to_file_not_captured(self):
+        """Test stop_and_capture() doesn't capture output to files."""
+        import builtins
+        import io
+        ui = TextualUI()
+        original_print = builtins.print
+        
+        ui.stop_and_capture()
+        
+        # Print to file should not be captured
+        buffer = io.StringIO()
+        print("File output", file=buffer)
+        
+        assert len(ui._final_output) == 0
+        assert buffer.getvalue() == "File output\n"
+        
+        # Restore original print
+        builtins.print = original_print
+
     def test_log_message_without_app(self):
         """Test log_message when no app is running."""
         ui = TextualUI()
