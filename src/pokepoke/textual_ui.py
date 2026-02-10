@@ -37,6 +37,7 @@ class TextualUI:
         self._original_print = print
         self._current_style: Optional[str] = None
         self._line_buffer: str = ""
+        self._final_output: list[str] = []  # Output to print after UI exits
 
     @property
     def is_running(self) -> bool:
@@ -51,6 +52,7 @@ class TextualUI:
         """
         self._app = PokePokeApp(orchestrator_func=orchestrator_func)
         self._is_running = True
+        self._final_output = []  # Reset final output
         import builtins
         builtins.print = self._print_redirect
         try:
@@ -59,6 +61,9 @@ class TextualUI:
         finally:
             builtins.print = self._original_print
             self._is_running = False
+            # Print any final output that was queued during shutdown
+            for line in self._final_output:
+                self._original_print(line)
 
     def start(self) -> None:
         """Resume the UI after a pause (for interactive input prompts)."""
@@ -68,10 +73,34 @@ class TextualUI:
             builtins.print = self._print_redirect
 
     def stop(self) -> None:
-        """Pause the UI temporarily (for interactive input prompts)."""
+        """Pause the UI temporarily (for interactive input prompts).
+        
+        Restores original print so user can see prompts and input text.
+        """
         import builtins
         builtins.print = self._original_print
         self._is_running = False
+
+    def stop_and_capture(self) -> None:
+        """Stop UI and capture remaining output for after Textual exits.
+        
+        Use this when exiting the orchestrator to ensure stats are printed
+        after Textual restores the terminal. Output is captured to _final_output.
+        """
+        import builtins
+        builtins.print = self._capture_final_output
+        self._is_running = False
+
+    def _capture_final_output(self, *args: Any, **kwargs: Any) -> None:
+        """Capture print output for after Textual exits."""
+        file = kwargs.get("file", sys.stdout)
+        if file not in (sys.stdout, None):
+            self._original_print(*args, **kwargs)
+            return
+        sep = kwargs.get("sep", " ")
+        end = kwargs.get("end", "\n")
+        msg = sep.join(str(arg) for arg in args) + end
+        self._final_output.append(msg.rstrip('\n'))
 
     def exit(self) -> None:
         """Exit the Textual app completely."""

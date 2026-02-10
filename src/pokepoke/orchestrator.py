@@ -109,7 +109,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
                 ui.start()
             
             if selected_item is None:
-                ui.stop()
+                ui.stop_and_capture()
                 # Get ending stats and print session stats before exiting
                 session_stats.ending_beads_stats = get_beads_stats()
                 elapsed = time.time() - start_time
@@ -161,7 +161,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             
             # Decide whether to continue
             if not continuous:
-                ui.stop()
+                ui.stop_and_capture()
                 session_stats.ending_beads_stats = get_beads_stats()
                 elapsed = time.time() - start_time
                 print_stats(items_completed, total_requests, elapsed, session_stats)
@@ -181,7 +181,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
                 ui.start()
                 
                 if cont and cont != 'y':
-                    ui.stop()
+                    ui.stop_and_capture()
                     session_stats.ending_beads_stats = get_beads_stats()
                     elapsed = time.time() - start_time
                     print("\n👋 Exiting PokePoke.")
@@ -198,7 +198,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
     
     except KeyboardInterrupt:
         # Clean shutdown on Ctrl+C
-        ui.stop()
+        ui.stop_and_capture()
         print("\n\n⚠️  Interrupted by user (Ctrl+C)")
         print("📊 Collecting final statistics...")
         
@@ -218,7 +218,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         clear_terminal_banner()
         return 0
     except Exception as e:
-        ui.stop()
+        ui.stop_and_capture()
         print("\n📊 Collecting final statistics...")
         try:
             session_stats.ending_beads_stats = get_beads_stats()
