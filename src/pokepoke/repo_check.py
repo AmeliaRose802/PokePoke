@@ -18,14 +18,29 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
     Returns:
         True if ready to continue, False if should exit
     """
-    status_result = subprocess.run(
-        ["git", "status", "--porcelain"],
-        capture_output=True,
-        text=True,
-        encoding='utf-8',
-        check=True,
-        cwd=str(repo_path)
-    )
+    try:
+        status_result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            check=True,
+            cwd=str(repo_path)
+        )
+    except subprocess.CalledProcessError as e:
+        # Handle git errors gracefully
+        error_msg = e.stderr.strip() if e.stderr else f"exit code {e.returncode}"
+        print(f"⚠️  Warning: git status failed in {repo_path}: {error_msg}")
+        run_logger.log_orchestrator(f"git status failed: {error_msg}", level="WARNING")
+        # Check if this is a valid git repository
+        git_dir = repo_path / ".git"
+        if not git_dir.exists():
+            print(f"❌ Error: {repo_path} is not a git repository")
+            run_logger.log_orchestrator(f"{repo_path} is not a git repository", level="ERROR")
+            return False
+        # For other git errors, try to continue
+        print("   Continuing despite git error...")
+        return True
     
     uncommitted = status_result.stdout.strip()
     if uncommitted:

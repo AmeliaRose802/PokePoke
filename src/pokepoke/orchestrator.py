@@ -31,8 +31,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
     Returns:
         Exit code (0 for success, 1 for failure)
     """
-    # Start UI immediately to capture startup logs
-    ui.start()
+    # UI is started by run_with_orchestrator - just update header
     ui.update_header("PokePoke", f"Initializing {interactive and 'Interactive' or 'Autonomous'} Mode...")
 
     try:
@@ -381,7 +380,16 @@ def main() -> int:
     args = parser.parse_args()
     # Autonomous flag overrides interactive
     interactive = not args.autonomous
-    return run_orchestrator(interactive=interactive, continuous=args.continuous, run_beta_first=args.beta_first)
+    
+    # Use the Textual UI wrapper to run the orchestrator
+    def orchestrator_func() -> int:
+        return run_orchestrator(
+            interactive=interactive,
+            continuous=args.continuous,
+            run_beta_first=args.beta_first
+        )
+    
+    return ui.run_with_orchestrator(orchestrator_func)
 
 
 if __name__ == "__main__":

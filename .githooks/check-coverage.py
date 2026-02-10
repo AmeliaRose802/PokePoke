@@ -31,13 +31,13 @@ def get_staged_python_files():
         
         return files
     except subprocess.CalledProcessError as e:
-        print(f"❌ Failed to get staged files: {e}", file=sys.stderr)
+        print(f"[error] Failed to get staged files: {e}", file=sys.stderr)
         return []
 
 
 def run_tests_with_coverage():
     """Run pytest with coverage."""
-    print("🧪 Running tests with coverage...")
+    print("[test] Running tests with coverage...")
     
     try:
         result = subprocess.run(
@@ -54,15 +54,15 @@ def run_tests_with_coverage():
         )
         
         if result.returncode != 0:
-            print("❌ Tests failed", file=sys.stderr)
+            print("[error] Tests failed", file=sys.stderr)
             return False
         
         return True
     except subprocess.TimeoutExpired:
-        print("❌ Tests timed out", file=sys.stderr)
+        print("[error] Tests timed out", file=sys.stderr)
         return False
     except Exception as e:
-        print(f"❌ Test execution failed: {e}", file=sys.stderr)
+        print(f"[error] Test execution failed: {e}", file=sys.stderr)
         return False
 
 
@@ -73,7 +73,7 @@ def check_coverage(files, min_coverage=80):
     
     coverage_file = Path("coverage.json")
     if not coverage_file.exists():
-        print("⚠️  No coverage data found", file=sys.stderr)
+        print("[warn] No coverage data found", file=sys.stderr)
         return False
     
     with open(coverage_file) as f:
@@ -93,24 +93,24 @@ def check_coverage(files, min_coverage=80):
                 break
         
         if not file_data:
-            print(f"  ⚠️  {file_path} - No coverage data (needs tests)")
+            print(f"  [warn] {file_path} - No coverage data (needs tests)")
             failed_files.append(file_path)
             continue
         
         line_coverage = file_data["summary"]["percent_covered"]
         
         if line_coverage < min_coverage:
-            print(f"  ❌ {file_path} - Coverage: {line_coverage:.1f}% (minimum: {min_coverage}%)")
+            print(f"  [FAIL] {file_path} - Coverage: {line_coverage:.1f}% (minimum: {min_coverage}%)")
             failed_files.append(file_path)
         else:
             passed_count += 1
     
     if failed_files:
-        print(f"\n❌ {len(failed_files)} file(s) below {min_coverage}% coverage")
+        print(f"\n[FAIL] {len(failed_files)} file(s) below {min_coverage}% coverage")
         print("\nAdd tests to increase coverage for these files.")
         return False
     
-    print(f"✅ Coverage {min_coverage}%+ ({passed_count} files)")
+    print(f"[PASS] Coverage {min_coverage}%+ ({passed_count} files)")
     return True
 
 
