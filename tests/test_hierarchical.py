@@ -221,12 +221,14 @@ class TestHierarchicalWorkAssignment:
     
     @patch('src.pokepoke.beads_hierarchy.get_children')
     def test_all_children_complete_no_children(self, mock_get_children: Mock) -> None:
-        """Test that no children means all complete (trivially true)."""
+        """Test that no children means NOT complete (prevents premature closure)."""
         mock_get_children.return_value = []
         
         result = all_children_complete("epic-1")
         
-        assert result is True
+        # No children should return False to prevent premature parent closure
+        # This handles cases where children aren't registered yet or fetch failed
+        assert result is False
     
     @patch('src.pokepoke.beads_hierarchy.get_children')
     def test_all_children_complete_with_open_children(self, mock_get_children: Mock) -> None:

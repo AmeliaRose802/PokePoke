@@ -135,12 +135,15 @@ def all_children_complete(parent_id: str) -> bool:
         
     Returns:
         True if all children are complete, False otherwise.
+        Returns False if no children exist (prevents premature parent closure).
     """
     children = get_children(parent_id)
     
     if not children:
-        # No children means complete (trivially true)
-        return True
+        # No children means NOT complete - prevents premature closure of
+        # features/epics that have no registered children yet or when
+        # get_children fails due to errors/race conditions
+        return False
     
     # Check if all children are in done/closed/resolved status
     return all(
