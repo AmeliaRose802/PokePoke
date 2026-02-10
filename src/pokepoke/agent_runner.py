@@ -4,6 +4,7 @@ import os
 import subprocess
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -22,6 +23,12 @@ from pokepoke.cleanup_agents import (
 __all__ = ['invoke_cleanup_agent', 'invoke_merge_conflict_cleanup_agent',
            'aggregate_cleanup_stats', 'run_cleanup_loop', 'run_maintenance_agent',
            'run_beta_tester', 'run_gate_agent']
+
+
+def _generate_unique_agent_id(agent_type: str) -> str:
+    """Generate a unique agent ID with timestamp to avoid worktree conflicts."""
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return f"{agent_type}-{timestamp}"
 
 def run_gate_agent(item: BeadsWorkItem) -> tuple[bool, str, Optional[AgentStats]]:
     """Run the Gate Agent to verify a fixed work item.
@@ -83,19 +90,7 @@ def run_gate_agent(item: BeadsWorkItem) -> tuple[bool, str, Optional[AgentStats]
 
 
 def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional[Path] = None, needs_worktree: bool = True, merge_changes: bool = True, model: Optional[str] = None) -> Optional[AgentStats]:
-    """Run a maintenance agent with optional worktree isolation.
-    
-    Args:
-        agent_name: Display name for the agent (e.g., 'Janitor', 'Tech Debt')
-        prompt_file: Path to the prompt file (e.g., 'janitor.md')
-        repo_root: Path to the main repository root (defaults to current directory)
-        needs_worktree: If True, creates worktree for code changes. If False, runs in main repo for beads-only changes.
-        merge_changes: If True, merges changes back to main repo. If False, discards worktree after run.
-        model: Optional model name to use (e.g., 'gpt-5.1-codex', defaults to 'claude-sonnet-4.5')
-        
-    Returns:
-        AgentStats if successful, None otherwise
-    """
+    """Run a maintenance agent with optional worktree isolation."""
     ui.set_current_agent(f"{agent_name} Agent")
     print(f"\n{'='*60}")
     print(f"🔧 Running {agent_name} Agent")
@@ -114,7 +109,9 @@ def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional
     
     agent_prompt = prompt_path.read_text()
     
-    agent_id = f"maintenance-{agent_name.lower().replace(' ', '-')}"
+    # Use unique ID with timestamp to avoid worktree conflicts
+    base_agent_type = f"maintenance-{agent_name.lower().replace(' ', '-')}"
+    agent_id = _generate_unique_agent_id(base_agent_type) if needs_worktree else base_agent_type
     agent_item = BeadsWorkItem(
         id=agent_id,
         title=f"{agent_name} Maintenance",
@@ -380,7 +377,8 @@ def run_beta_tester(repo_root: Optional[Path] = None) -> Optional[AgentStats]:
     
     beta_prompt = prompt_path.read_text(encoding='utf-8')
     
-    agent_id = "beta-tester"
+    # Use unique ID with timestamp to avoid worktree conflicts on multiple runs
+    agent_id = _generate_unique_agent_id("beta-tester")
     beta_item = BeadsWorkItem(
         id=agent_id,
         title="Beta Test All MCP Tools",
