@@ -1,6 +1,7 @@
 """GitHub Copilot SDK integration."""
 import asyncio
 import os
+import threading
 from typing import Optional, TYPE_CHECKING, Any
 
 from copilot import CopilotClient  # type: ignore[import-not-found]
@@ -12,6 +13,7 @@ FALLBACK_MODEL = "claude-sonnet-4.5"  # Fallback on rate limit
 from .types import BeadsWorkItem, CopilotResult, RetryConfig, AgentStats
 from .prompts import PromptService
 from .terminal_ui import ui
+from .shutdown import is_shutting_down
 
 if TYPE_CHECKING:
     from .logging import ItemLogger  # type: ignore[import-untyped]
@@ -54,8 +56,6 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     # Configure environment for SDK subprocess encoding
     original_pythonioencoding = os.environ.get('PYTHONIOENCODING')
     os.environ['PYTHONIOENCODING'] = 'utf-8:replace'
-    
-    print(f"\n[WORK_ITEM] {work_item.id}: {work_item.title} (timeout: {max_timeout/60:.1f}m)\n")
     
     # Create SDK client
     client = CopilotClient({"cli_path": "copilot.cmd", "log_level": "info"})
@@ -232,14 +232,25 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             print("[SDK] Sending message...\n")
             await session.send({"prompt": final_prompt})
             
-            # Wait for completion with timeout
+            # Wait for completion with timeout, checking shutdown every second
             try:
-                await asyncio.wait_for(done.wait(), timeout=max_timeout)
-            except asyncio.TimeoutError:
-                print(f"\n[SDK] TIMEOUT after {max_timeout}s")
-                await session.abort()
-                timed_out = True
-                return False
+                deadline = asyncio.get_event_loop().time() + max_timeout
+                while not done.is_set():
+                    if is_shutting_down():
+                        print("\n[SDK] Shutdown requested - aborting session...")
+                        await session.abort()
+                        interrupted = True
+                        return False
+                    remaining = deadline - asyncio.get_event_loop().time()
+                    if remaining <= 0:
+                        print(f"\n[SDK] TIMEOUT after {max_timeout}s")
+                        await session.abort()
+                        timed_out = True
+                        return False
+                    try:
+                        await asyncio.wait_for(done.wait(), timeout=min(1.0, remaining))
+                    except asyncio.TimeoutError:
+                        continue  # Check shutdown again
             except KeyboardInterrupt:
                 print("\n\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")
                 try:

@@ -5,6 +5,7 @@ from typing import Optional
 
 from .types import BeadsWorkItem
 from .beads import select_next_hierarchical_item
+from .shutdown import is_shutting_down
 
 # Label that marks items as requiring human intervention - PokePoke will skip these
 HUMAN_REQUIRED_LABEL = 'human-required'
@@ -118,7 +119,7 @@ def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool) -> Opt
 
 def interactive_selection(ready_items: list[BeadsWorkItem]) -> Optional[BeadsWorkItem]:
     """Prompt user to select a work item."""
-    while True:
+    while not is_shutting_down():
         try:
             choice = input("Select a work item (number) or 'q' to quit: ").strip()
             
@@ -135,7 +136,7 @@ def interactive_selection(ready_items: list[BeadsWorkItem]) -> Optional[BeadsWor
         except KeyboardInterrupt:
             print("\n")
             return None
-
+    return None
 
 def autonomous_selection(ready_items: list[BeadsWorkItem]) -> Optional[BeadsWorkItem]:
     """Use hierarchical selection for autonomous mode."""

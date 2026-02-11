@@ -20,6 +20,7 @@ from textual.worker import Worker, WorkerState
 
 from pokepoke.textual_widgets import StatsBar, WorkItemHeader, LogPanel
 from pokepoke.textual_messages import MessageType, UIMessage
+from pokepoke.shutdown import request_shutdown, is_shutting_down
 
 if TYPE_CHECKING:
     from pokepoke.types import SessionStats
@@ -104,12 +105,22 @@ class PokePokeApp(App[int]):
                 exclusive=True,
             )
 
+    async def action_quit(self) -> None:
+        """Handle quit: signal shutdown, cancel workers, exit."""
+        request_shutdown()
+        for worker in self.workers:
+            worker.cancel()
+        self._exit_code = 130
+        self.exit(130)
+
     def _run_orchestrator_wrapper(self) -> int:
         """Wrapper to run the orchestrator function."""
         if self._orchestrator_func:
             try:
                 return self._orchestrator_func()
             except Exception as e:
+                if is_shutting_down():
+                    return 130
                 self.log_message(f"Orchestrator error: {e}", "orchestrator", "red")
                 return 1
         return 0

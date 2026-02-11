@@ -15,6 +15,7 @@ from pokepoke.worktree_finalization import finalize_work_item
 from pokepoke.work_item_selection import select_work_item
 from pokepoke.stats import parse_agent_stats
 from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner, ui
+from pokepoke.shutdown import is_shutting_down
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import RunLogger
@@ -92,7 +93,7 @@ def process_work_item(
         # Initialize accumulated stats
         accumulated_stats = AgentStats()
         
-        while True:
+        while not is_shutting_down():
             # Check timeout before invoking Copilot
             elapsed = time.time() - start_time
             if elapsed >= timeout_seconds:

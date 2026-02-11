@@ -595,6 +595,34 @@ class TestRunOrchestrator:
         
         assert result == 1
 
+    @patch('subprocess.run')  # Mock git status check
+    @patch('pokepoke.agent_runner.run_worktree_cleanup')
+    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.process_work_item')
+    @patch('pokepoke.orchestrator.select_work_item')
+    @patch('pokepoke.orchestrator.get_ready_work_items')
+    def test_run_orchestrator_shutdown_exit(
+        self,
+        mock_get_items: Mock,
+        mock_select: Mock,
+        mock_process: Mock,
+        mock_beta: Mock,
+        mock_worktree_cleanup: Mock,
+        mock_subprocess_run: Mock
+    ) -> None:
+        """Test orchestrator exits cleanly when shutdown is requested."""
+        from pokepoke.shutdown import request_shutdown, reset
+        mock_beta.return_value = None
+        mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
+
+        # Simulate shutdown being requested before loop runs
+        request_shutdown()
+        try:
+            result = run_orchestrator(interactive=False, continuous=True)
+            assert result == 0
+        finally:
+            reset()
+
 
 class TestCheckMainRepoReadyForMerge:
     """Test check_main_repo_ready_for_merge function."""

@@ -18,6 +18,7 @@ from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner, c
 from pokepoke.maintenance_state import increment_items_completed
 from pokepoke.repo_check import check_and_commit_main_repo
 from pokepoke.maintenance import run_periodic_maintenance, aggregate_stats
+from pokepoke.shutdown import is_shutting_down, request_shutdown
 
 
 def run_orchestrator(interactive: bool = True, continuous: bool = False, run_beta_first: bool = False) -> int:
@@ -90,7 +91,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
                 session_stats.agent_stats.premium_requests += beta_stats.premium_requests
             print("✅ Beta Tester completed\n")
             
-        while True:
+        while not is_shutting_down():
             # Check main repo status before processing
             print("\n🔍 Checking main repository status...")
             run_logger.log_orchestrator("Checking main repository status")
@@ -194,10 +195,24 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             else:
                 ui.update_header("PokePoke", f"{mode_name} Mode", "Sleeping...")
                 print("\n⏳ Waiting 5 seconds before next iteration...")
-                time.sleep(5)
+                for _ in range(10):
+                    if is_shutting_down():
+                        break
+                    time.sleep(0.5)
+
+        # Shutdown requested - clean exit
+        ui.stop_and_capture()
+        session_stats.ending_beads_stats = get_beads_stats()
+        elapsed = time.time() - start_time
+        print("\n\ud83d\udc4b Shutdown requested - exiting PokePoke.")
+        print_stats(items_completed, total_requests, elapsed, session_stats)
+        run_logger.finalize(items_completed, total_requests, elapsed)
+        clear_terminal_banner()
+        return 0
     
     except KeyboardInterrupt:
         # Clean shutdown on Ctrl+C
+        request_shutdown()
         ui.stop_and_capture()
         print("\n\n⚠️  Interrupted by user (Ctrl+C)")
         print("📊 Collecting final statistics...")
