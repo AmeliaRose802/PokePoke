@@ -397,12 +397,14 @@ class TestHierarchicalWorkAssignment:
         
         assert parent_id == "feature-1"
     
+    @patch('src.pokepoke.beads_management.get_children')
     @patch('src.pokepoke.beads_management.get_next_child_task')
     @patch('src.pokepoke.beads_management.close_parent_if_complete')
     def test_select_next_hierarchical_item_epic_with_children(
         self, 
         mock_close_parent: Mock,
-        mock_get_next_child: Mock
+        mock_get_next_child: Mock,
+        mock_get_children: Mock
     ) -> None:
         """Test hierarchical selection with epic that has children."""
         items = [
@@ -413,6 +415,17 @@ class TestHierarchicalWorkAssignment:
                 status="open",
                 priority=1,
                 issue_type="epic"
+            )
+        ]
+        # Mock: epic has children
+        mock_get_children.return_value = [
+            BeadsWorkItem(
+                id="task-1",
+                title="Task",
+                description="",
+                status="open",
+                priority=1,
+                issue_type="task"
             )
         ]
         mock_get_next_child.return_value = BeadsWorkItem(
@@ -430,12 +443,14 @@ class TestHierarchicalWorkAssignment:
         assert selected.id == "task-1"
         mock_close_parent.assert_not_called()
     
+    @patch('src.pokepoke.beads_management.get_children')
     @patch('src.pokepoke.beads_management.get_next_child_task')
     @patch('src.pokepoke.beads_management.close_parent_if_complete')
     def test_select_next_hierarchical_item_epic_all_children_complete(
         self, 
         mock_close_parent: Mock,
-        mock_get_next_child: Mock
+        mock_get_next_child: Mock,
+        mock_get_children: Mock
     ) -> None:
         """Test hierarchical selection with epic where all children complete."""
         items = [
@@ -453,6 +468,17 @@ class TestHierarchicalWorkAssignment:
                 description="",
                 status="open",
                 priority=2,
+                issue_type="task"
+            )
+        ]
+        # Mock: epic has children (but all complete)
+        mock_get_children.return_value = [
+            BeadsWorkItem(
+                id="child-1",
+                title="Completed child",
+                description="",
+                status="done",
+                priority=1,
                 issue_type="task"
             )
         ]
@@ -494,3 +520,91 @@ class TestHierarchicalWorkAssignment:
         selected = select_next_hierarchical_item([])
         
         assert selected is None
+
+    @patch('src.pokepoke.beads_management.get_children')
+    def test_select_next_hierarchical_item_childless_feature(
+        self,
+        mock_get_children: Mock
+    ) -> None:
+        """Test hierarchical selection returns childless feature directly.
+        
+        When a feature has no children, it should be returned for direct work
+        (the agent should break it down into tasks). Previously this was a bug
+        where childless features were skipped, causing 'no work available'.
+        """
+        # Feature with no children
+        feature = BeadsWorkItem(
+            id="feature-1",
+            title="Feature without children",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="feature"
+        )
+        items = [feature]
+        
+        # Mock: feature has no children
+        mock_get_children.return_value = []
+        
+        selected = select_next_hierarchical_item(items)
+        
+        # Should return the childless feature for direct work
+        assert selected is not None
+        assert selected.id == "feature-1"
+        assert selected.issue_type == "feature"
+
+    @patch('src.pokepoke.beads_management.get_children')
+    def test_select_next_hierarchical_item_childless_epic(
+        self,
+        mock_get_children: Mock
+    ) -> None:
+        """Test hierarchical selection returns childless epic directly."""
+        epic = BeadsWorkItem(
+            id="epic-1",
+            title="Epic without children",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="epic"
+        )
+        items = [epic]
+        
+        mock_get_children.return_value = []
+        
+        selected = select_next_hierarchical_item(items)
+        
+        assert selected is not None
+        assert selected.id == "epic-1"
+        assert selected.issue_type == "epic"
+
+    @patch('src.pokepoke.beads_management.get_children')
+    def test_select_next_hierarchical_item_prioritizes_tasks_over_childless_features(
+        self,
+        mock_get_children: Mock
+    ) -> None:
+        """Test that tasks are selected over childless features when same priority."""
+        feature = BeadsWorkItem(
+            id="feature-1",
+            title="Childless feature",
+            description="",
+            status="open",
+            priority=2,
+            issue_type="feature"
+        )
+        task = BeadsWorkItem(
+            id="task-1",
+            title="Regular task",
+            description="",
+            status="open",
+            priority=1,  # Higher priority (lower number)
+            issue_type="task"
+        )
+        items = [feature, task]  # Feature listed first
+        
+        mock_get_children.return_value = []
+        
+        selected = select_next_hierarchical_item(items)
+        
+        # Task should be selected due to higher priority
+        assert selected is not None
+        assert selected.id == "task-1"

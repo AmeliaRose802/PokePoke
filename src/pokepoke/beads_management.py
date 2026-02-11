@@ -6,7 +6,7 @@ import subprocess
 from typing import List, Optional
 
 from .types import BeadsWorkItem
-from .beads_hierarchy import has_feature_parent, get_next_child_task, close_parent_if_complete
+from .beads_hierarchy import has_feature_parent, get_next_child_task, close_parent_if_complete, get_children
 
 
 def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool:
@@ -347,11 +347,11 @@ def select_next_hierarchical_item(items: List[BeadsWorkItem]) -> Optional[BeadsW
     """Select next work item using hierarchical assignment strategy.
     
     Strategy:
-    1. For epics: return first incomplete child (feature or task)
-    2. For features: return first incomplete child (task)
-    3. For standalone tasks: return the task itself
-    4. For items with incomplete children: return next child
-    5. Auto-close parents when all children complete
+    1. For epics/features WITH children: return first incomplete child
+    2. For epics/features with NO children: return the epic/feature itself 
+       (agent should break it down into tasks)
+    3. For standalone tasks/bugs/chores: return the item directly
+    4. Auto-close parents when all children are complete
     
     Args:
         items: List of ready work items.
@@ -366,17 +366,29 @@ def select_next_hierarchical_item(items: List[BeadsWorkItem]) -> Optional[BeadsW
     sorted_items = sorted(items, key=lambda x: x.priority)
     
     for item in sorted_items:
-        # Check if this is an epic or feature with children
+        # Check if this is an epic or feature
         if item.issue_type in ('epic', 'feature'):
-            next_child = get_next_child_task(item.id)
+            # Check for children
+            children = get_children(item.id)
             
-            if next_child:
-                # Work on this child
-                return next_child
+            if children:
+                # Has children - try to get next available child
+                next_child = get_next_child_task(item.id)
+                
+                if next_child:
+                    # Work on this child
+                    return next_child
+                else:
+                    # All children complete - close parent and continue to next item
+                    if close_parent_if_complete(item.id):
+                        continue
+                    # If close failed (some children still open but assigned to others),
+                    # skip to next item
+                    continue
             else:
-                # All children complete, close parent
-                close_parent_if_complete(item.id)
-                continue
+                # No children yet - work on epic/feature directly
+                # The agent should break it down into tasks
+                return item
         
         # Regular task/bug/chore - work on it directly
         return item
