@@ -2,9 +2,27 @@
 
 import json
 import subprocess
+from pathlib import Path
 from typing import List, Optional
 
 from .types import BeadsWorkItem, IssueWithDependencies, Dependency, BeadsStats
+
+
+def _get_main_repo_root() -> Optional[Path]:
+    """Get the main repository root directory (not a worktree).
+    
+    Returns:
+        Path to the main repo root, or None if not in a git repository.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            capture_output=True, text=True, encoding='utf-8', check=True
+        )
+        git_common_dir = Path(result.stdout.strip())
+        return git_common_dir.parent
+    except subprocess.CalledProcessError:
+        return None
 
 
 def get_ready_work_items() -> List[BeadsWorkItem]:
@@ -141,16 +159,24 @@ def get_issue_dependencies(issue_id: str) -> Optional[IssueWithDependencies]:
 def get_beads_stats() -> Optional[BeadsStats]:
     """Get current beads database statistics.
     
+    Runs from the main repository root to ensure beads database is accessible
+    even when called from a worktree.
+    
     Returns:
         BeadsStats object with current counts, or None if command fails.
     """
     try:
+        # Get main repo root to ensure beads database is accessible
+        main_repo = _get_main_repo_root()
+        cwd = str(main_repo) if main_repo else None
+        
         result = subprocess.run(
             ['bd', 'stats', '--json'],
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            cwd=cwd
         )
         
         data = json.loads(result.stdout)

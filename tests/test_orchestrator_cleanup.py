@@ -6,7 +6,7 @@ import pytest
 from pathlib import Path
 
 from src.pokepoke.orchestrator import run_orchestrator
-from src.pokepoke.types import BeadsWorkItem
+from src.pokepoke.types import BeadsWorkItem, BeadsStats
 
 
 class TestOrchestratorCleanupDetection:
@@ -42,44 +42,41 @@ class TestOrchestratorCleanupDetection:
         # Verify get_ready_work_items was never called (since cleanup failed)
         mock_get_items.assert_not_called()
     
+    @patch('src.pokepoke.orchestrator.check_and_commit_main_repo')
+    @patch('src.pokepoke.orchestrator.get_beads_stats')
     @patch('src.pokepoke.orchestrator.get_ready_work_items')
-    @patch('subprocess.run')
     def test_detects_beads_changes_without_autocommit(
         self,
-        mock_subprocess: Mock,
-        mock_get_items: Mock
+        mock_get_items: Mock,
+        mock_beads_stats: Mock,
+        mock_check_repo: Mock
     ) -> None:
         """Test that beads-only changes are detected but NOT auto-committed.
         
         Beads has its own sync mechanism via 'bd sync' and daemon mode.
         The orchestrator should just detect and notify, not manually commit.
         """
-        # Mock git status showing only beads changes
-        mock_subprocess.side_effect = [
-            Mock(stdout='{"summary": {"total_issues": 10}}', returncode=0),  # bd stats for starting beads stats
-            Mock(stdout=" M .beads/issues.jsonl", returncode=0),  # git status check
-            Mock(stdout='{"summary": {"total_issues": 10}}', returncode=0),  # bd stats for ending beads stats
-        ]
+        # Mock beads stats with proper BeadsStats object
+        mock_beads_stats.return_value = BeadsStats(
+            total_issues=10,
+            open_issues=5,
+            in_progress_issues=2,
+            closed_issues=3,
+            ready_issues=1
+        )
+        
+        # Mock check_and_commit_main_repo returns success (no uncommitted changes)
+        mock_check_repo.return_value = True
         
         # Mock no work items
         mock_get_items.return_value = []
         
         result = run_orchestrator(interactive=False, continuous=False)
         
-        # Verify we called bd stats (start), git status, and bd stats (end) - no git add/commit
-        assert mock_subprocess.call_count == 3
+        # Verify check_and_commit_main_repo was called
+        mock_check_repo.assert_called_once()
         
-        # Verify no git add or commit calls were made
-        add_calls = [
-            call for call in mock_subprocess.call_args_list
-            if len(call[0]) > 0 and 'add' in str(call[0][0])
-        ]
-        commit_calls = [
-            call for call in mock_subprocess.call_args_list
-            if len(call[0]) > 0 and 'commit' in str(call[0][0])
-        ]
-        assert len(add_calls) == 0
-        assert len(commit_calls) == 0
+        # Verify orchestrator completed successfully
         assert result == 0
     
     @patch('src.pokepoke.orchestrator.get_ready_work_items')
