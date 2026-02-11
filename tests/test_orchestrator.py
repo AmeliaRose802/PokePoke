@@ -375,6 +375,7 @@ class TestRunOrchestrator:
     """Test orchestrator main loop."""
     
     @patch('subprocess.run')  # Mock git status check
+    @patch('pokepoke.agent_runner.run_worktree_cleanup')
     @patch('pokepoke.agent_runner.run_beta_tester')
     @patch('pokepoke.orchestrator.initialize_agent_name')
     @patch('pokepoke.orchestrator.process_work_item')
@@ -387,6 +388,7 @@ class TestRunOrchestrator:
         mock_process: Mock,
         mock_init_agent_name: Mock,
         mock_beta: Mock,
+        mock_worktree_cleanup: Mock,
         mock_subprocess_run: Mock
     ) -> None:
         """Test that orchestrator initializes and sets AGENT_NAME env var."""
@@ -415,6 +417,7 @@ class TestRunOrchestrator:
         assert result == 0
     
     @patch('subprocess.run')  # Mock git status check
+    @patch('pokepoke.agent_runner.run_worktree_cleanup')
     @patch('pokepoke.agent_runner.run_beta_tester')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
@@ -425,6 +428,7 @@ class TestRunOrchestrator:
         mock_select: Mock,
         mock_process: Mock,
         mock_beta: Mock,
+        mock_worktree_cleanup: Mock,
         mock_subprocess_run: Mock
     ) -> None:
         """Test orchestrator with no ready items."""
@@ -441,8 +445,9 @@ class TestRunOrchestrator:
         mock_process.assert_not_called()
     
     @patch('subprocess.run')  # Mock git status check
+    @patch('pokepoke.agent_runner.run_worktree_cleanup')
     @patch('pokepoke.agent_runner.run_beta_tester')
-    @patch('pokepoke.orchestrator.run_maintenance_agent')  # Mock maintenance
+    @patch('pokepoke.orchestrator.run_periodic_maintenance')  # Mock maintenance
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
     @patch('pokepoke.orchestrator.get_ready_work_items')
@@ -453,9 +458,11 @@ class TestRunOrchestrator:
         mock_process: Mock,
         mock_maintenance: Mock,
         mock_beta: Mock,
+        mock_worktree_cleanup: Mock,
         mock_subprocess_run: Mock
     ) -> None:
         """Test single-shot mode with successful processing."""
+        from pokepoke.types import AgentStats
         mock_beta.return_value = None
         # Mock git status to return clean repo
         mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
@@ -473,7 +480,7 @@ class TestRunOrchestrator:
         )
         mock_get_items.return_value = [item]
         mock_select.return_value = item
-        mock_process.return_value = (True, 1, None, 0)  # 4-tuple: success, request_count, stats, cleanup_runs
+        mock_process.return_value = (True, 1, AgentStats(), 0)  # 4-tuple: success, request_count, stats, cleanup_runs
         
         result = run_orchestrator(interactive=False, continuous=False)
         
@@ -481,6 +488,7 @@ class TestRunOrchestrator:
         mock_process.assert_called_once()
     
     @patch('subprocess.run')  # Mock git status check
+    @patch('pokepoke.agent_runner.run_worktree_cleanup')
     @patch('pokepoke.agent_runner.run_beta_tester')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
@@ -491,6 +499,7 @@ class TestRunOrchestrator:
         mock_select: Mock,
         mock_process: Mock,
         mock_beta: Mock,
+        mock_worktree_cleanup: Mock,
         mock_subprocess_run: Mock
     ) -> None:
         """Test single-shot mode with processing failure."""
@@ -516,8 +525,9 @@ class TestRunOrchestrator:
     
     @patch('subprocess.run')  # Mock git status check
     @patch('builtins.input')
+    @patch('pokepoke.agent_runner.run_worktree_cleanup')
     @patch('pokepoke.agent_runner.run_beta_tester')
-    @patch('pokepoke.orchestrator.run_maintenance_agent')  # Mock maintenance
+    @patch('pokepoke.orchestrator.run_periodic_maintenance')  # Mock maintenance
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
     @patch('pokepoke.orchestrator.get_ready_work_items')
@@ -528,10 +538,12 @@ class TestRunOrchestrator:
         mock_process: Mock,
         mock_maintenance: Mock,
         mock_beta: Mock,
+        mock_worktree_cleanup: Mock,
         mock_input: Mock,
         mock_subprocess_run: Mock
     ) -> None:
         """Test continuous interactive mode with user quit."""
+        from pokepoke.types import AgentStats
         mock_beta.return_value = None
         # Mock git status to return clean repo
         mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
@@ -549,7 +561,7 @@ class TestRunOrchestrator:
         )
         mock_get_items.return_value = [item]
         mock_select.return_value = item
-        mock_process.return_value = (True, 1, None, 0)  # 4-tuple: success, request_count, stats, cleanup_runs
+        mock_process.return_value = (True, 1, AgentStats(), 0)  # 4-tuple: success, request_count, stats, cleanup_runs
         mock_input.return_value = 'n'  # Don't continue
         
         result = run_orchestrator(interactive=True, continuous=True)
@@ -558,6 +570,7 @@ class TestRunOrchestrator:
         mock_process.assert_called_once()
     
     @patch('subprocess.run')  # Mock git status check
+    @patch('pokepoke.agent_runner.run_worktree_cleanup')
     @patch('pokepoke.agent_runner.run_beta_tester')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
@@ -568,6 +581,7 @@ class TestRunOrchestrator:
         mock_select: Mock,
         mock_process: Mock,
         mock_beta: Mock,
+        mock_worktree_cleanup: Mock,
         mock_subprocess_run: Mock
     ) -> None:
         """Test orchestrator handles exceptions."""
@@ -642,8 +656,9 @@ class TestCheckMainRepoReadyForMerge:
 class TestRunOrchestratorContinuousMode:
     """Test continuous mode scenarios."""
     
+    @patch('pokepoke.agent_runner.run_worktree_cleanup')
     @patch('pokepoke.agent_runner.run_beta_tester')
-    @patch('pokepoke.orchestrator.run_maintenance_agent')
+    @patch('pokepoke.orchestrator.run_periodic_maintenance')
     @patch('time.sleep')
     @patch('pokepoke.orchestrator.get_beads_stats')
     @patch('pokepoke.orchestrator.process_work_item')
@@ -659,7 +674,8 @@ class TestRunOrchestratorContinuousMode:
         mock_stats: Mock,
         mock_sleep: Mock,
         mock_maintenance: Mock,
-        mock_beta: Mock
+        mock_beta: Mock,
+        mock_worktree_cleanup: Mock
     ) -> None:
         """Test continuous autonomous mode processes multiple items."""
         from pokepoke.orchestrator import run_orchestrator
@@ -699,8 +715,9 @@ class TestRunOrchestratorContinuousMode:
         assert mock_process.call_count == 2
     
     @patch('time.sleep')  # Mock sleep to avoid delays
+    @patch('pokepoke.agent_runner.run_worktree_cleanup')
     @patch('pokepoke.agent_runner.run_beta_tester')
-    @patch('pokepoke.orchestrator.run_maintenance_agent')
+    @patch('pokepoke.orchestrator.run_periodic_maintenance')  # Mock maintenance
     @patch('pokepoke.orchestrator.get_beads_stats')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
@@ -715,6 +732,7 @@ class TestRunOrchestratorContinuousMode:
         mock_stats: Mock,
         mock_maintenance: Mock,
         mock_beta: Mock,
+        mock_worktree_cleanup: Mock,
         mock_sleep: Mock
     ) -> None:
         """Test maintenance agents are triggered at correct intervals."""
@@ -736,23 +754,18 @@ class TestRunOrchestratorContinuousMode:
         mock_select.side_effect = items[:10] + [None]
         mock_process.return_value = (True, 1, AgentStats(), 0)
         mock_stats.return_value = {}
-        mock_maintenance.return_value = AgentStats()
-        mock_beta.return_value = AgentStats()
+        mock_maintenance.return_value = None  # run_periodic_maintenance doesn't return anything
+        mock_beta.return_value = None
         
         result = run_orchestrator(interactive=False, continuous=True)
         
         assert result == 0
-        # New frequencies:
-        # Janitor: every 2 items -> runs at 2, 4, 6, 8, 10 (5 times)
-        # Beta Tester: every 3 items -> runs at 3, 6, 9 (3 times)
-        # Tech Debt: every 5 items -> runs at 5, 10 (2 times)
-        # Backlog Cleanup: every 7 items -> runs at 7 (1 time)
-        # Total maintenance calls: 5 + 2 + 1 = 8 (not counting beta tester)
-        assert mock_maintenance.call_count >= 5  # At least 5 maintenance agents ran (janitor alone)
-        assert mock_beta.call_count >= 3  # Beta tester runs every 3 items
+        # run_periodic_maintenance is called once per successful item
+        assert mock_maintenance.call_count == 10  # Called once per item
     
+    @patch('pokepoke.agent_runner.run_worktree_cleanup')
     @patch('pokepoke.agent_runner.run_beta_tester')
-    @patch('pokepoke.orchestrator.run_maintenance_agent')
+    @patch('pokepoke.orchestrator.run_periodic_maintenance')
     @patch('builtins.input')
     @patch('pokepoke.orchestrator.get_beads_stats')
     @patch('pokepoke.orchestrator.process_work_item')
@@ -768,7 +781,8 @@ class TestRunOrchestratorContinuousMode:
         mock_stats: Mock,
         mock_input: Mock,
         mock_maintenance: Mock,
-        mock_beta: Mock
+        mock_beta: Mock,
+        mock_worktree_cleanup: Mock
     ) -> None:
         """Test continuous interactive mode with user continuation prompt."""
         from pokepoke.orchestrator import run_orchestrator
@@ -851,8 +865,8 @@ class TestOrchestratorHelperFunctions:
             assert "uncommitted changes" in work_item.title.lower()
     
     def test_aggregate_stats(self) -> None:
-        """Test _aggregate_stats function."""
-        from pokepoke.orchestrator import _aggregate_stats
+        """Test aggregate_stats function."""
+        from pokepoke.maintenance import aggregate_stats
         from pokepoke.types import SessionStats, AgentStats
         
         session_stats = SessionStats(agent_stats=AgentStats(
@@ -875,7 +889,7 @@ class TestOrchestratorHelperFunctions:
             premium_requests=1
         )
         
-        _aggregate_stats(session_stats, item_stats)
+        aggregate_stats(session_stats, item_stats)
         
         assert session_stats.agent_stats.wall_duration == 15.0
         assert session_stats.agent_stats.api_duration == 7.0

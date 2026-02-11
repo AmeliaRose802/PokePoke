@@ -110,6 +110,7 @@ class SessionStats:
     cleanup_agent_runs: int = 0
     beta_tester_agent_runs: int = 0
     code_review_agent_runs: int = 0
+    worktree_cleanup_agent_runs: int = 0
     starting_beads_stats: Optional[BeadsStats] = None
     ending_beads_stats: Optional[BeadsStats] = None
 

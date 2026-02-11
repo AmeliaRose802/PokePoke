@@ -22,7 +22,7 @@ from pokepoke.cleanup_agents import (
 # Re-export cleanup agent functions for backward compatibility
 __all__ = ['invoke_cleanup_agent', 'invoke_merge_conflict_cleanup_agent',
            'aggregate_cleanup_stats', 'run_cleanup_loop', 'run_maintenance_agent',
-           'run_beta_tester', 'run_gate_agent']
+           'run_beta_tester', 'run_gate_agent', 'run_worktree_cleanup']
 
 
 def _generate_unique_agent_id(agent_type: str) -> str:
@@ -31,18 +31,9 @@ def _generate_unique_agent_id(agent_type: str) -> str:
     return f"{agent_type}-{timestamp}"
 
 def run_gate_agent(item: BeadsWorkItem) -> tuple[bool, str, Optional[AgentStats]]:
-    """Run the Gate Agent to verify a fixed work item.
-    
-    Args:
-        item: The work item to verify
-        
-    Returns:
-        Tuple of (success: bool, reason: str, stats: AgentStats)
-    """
+    """Run the Gate Agent to verify a fixed work item."""
     ui.set_current_agent("Gate Agent")
-    print(f"\n{'='*60}")
-    print(f"🕵️ Running Gate Agent on {item.id}")
-    print(f"{'='*60}")
+    print(f"\n{'='*60}\n🕵️ Running Gate Agent on {item.id}\n{'='*60}")
     
     service = PromptService()
     try:
@@ -92,9 +83,7 @@ def run_gate_agent(item: BeadsWorkItem) -> tuple[bool, str, Optional[AgentStats]
 def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional[Path] = None, needs_worktree: bool = True, merge_changes: bool = True, model: Optional[str] = None) -> Optional[AgentStats]:
     """Run a maintenance agent with optional worktree isolation."""
     ui.set_current_agent(f"{agent_name} Agent")
-    print(f"\n{'='*60}")
-    print(f"🔧 Running {agent_name} Agent")
-    print(f"{'='*60}")
+    print(f"\n{'='*60}\n🔧 Running {agent_name} Agent\n{'='*60}")
     
     try:
         prompts_dir = get_pokepoke_prompts_dir()
@@ -134,21 +123,65 @@ def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional
     return _run_worktree_agent(agent_name, agent_id, agent_item, agent_prompt, repo_root, merge_changes=merge_changes, model=model)
 
 
+def _run_simple_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, deny_write: bool = True, model: Optional[str] = None) -> Optional[AgentStats]:
+    """Run a simple agent in the main repo with configurable write access."""
+    print(f"\n📋 Running {agent_name} ({'no write' if deny_write else 'write enabled'}){f', model={model}' if model else ''}")
+    result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=deny_write, model=model)
+    if result.success:
+        print(f"✅ {agent_name} completed")
+        return parse_agent_stats(result.output) if result.output else None
+    print(f"❌ {agent_name} failed: {result.error}")
+    return None
+
+# Backward-compatible aliases
 def _run_beads_only_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: Optional[str] = None) -> Optional[AgentStats]:
     """Run a beads-only maintenance agent in the main repo."""
-    print(f"\n📋 Running {agent_name} in main repository (beads-only)")
-    print(f"   File write access: DENIED")
-    if model:
-        print(f"   Model: {model}")
+    return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=True, model=model)
+
+def _run_main_repo_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: Optional[str] = None) -> Optional[AgentStats]:
+    """Run a maintenance agent in the main repo WITH write access."""
+    return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=False, model=model)
+
+
+def run_worktree_cleanup(repo_root: Optional[Path] = None) -> Optional[AgentStats]:
+    """Run worktree cleanup agent to merge/delete stale worktrees."""
+    ui.set_current_agent("Worktree Cleanup")
+    print(f"\n{'='*60}\n🌳 Running Worktree Cleanup Agent\n{'='*60}")
     
-    result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=True, model=model)
-    
-    if result.success:
-        print(f"\n✅ {agent_name} agent completed successfully")
-        return parse_agent_stats(result.output) if result.output else None
-    else:
-        print(f"\n❌ {agent_name} agent failed: {result.error}")
+    try:
+        prompts_dir = get_pokepoke_prompts_dir()
+        prompt_path = prompts_dir / "worktree-cleanup.md"
+    except FileNotFoundError as e:
+        print(f"❌ {e}")
         return None
+    
+    if not prompt_path.exists():
+        print(f"❌ Prompt not found at {prompt_path}")
+        return None
+    
+    cleanup_prompt = prompt_path.read_text(encoding='utf-8')
+    
+    agent_id = "worktree-cleanup"
+    cleanup_item = BeadsWorkItem(
+        id=agent_id,
+        title="Worktree Cleanup and Merge",
+        description=cleanup_prompt,
+        status="in_progress",
+        priority=0,
+        issue_type="task",
+        labels=["maintenance", "worktree-cleanup"]
+    )
+    
+    # Ensure we're in the main repo directory
+    if repo_root is not None:
+        original_dir = os.getcwd()
+        os.chdir(repo_root)
+    
+    try:
+        return _run_main_repo_agent("Worktree Cleanup", cleanup_item, cleanup_prompt)
+    finally:
+        if repo_root is not None:
+            os.chdir(original_dir)
 
 
 def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkItem, agent_prompt: str, repo_root: Path, merge_changes: bool = True, model: Optional[str] = None) -> Optional[AgentStats]:
@@ -210,31 +243,6 @@ def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkIte
         if not is_ready:
             print(f"\n⚠️  Cannot merge: {error_msg}")
             print(f"   Worktree preserved at worktrees/task-{agent_id} for manual intervention")
-            
-            # Create delegation issue for cleanup
-            from pokepoke.beads_management import create_cleanup_delegation_issue
-            
-            description = f"""Failed to merge worktree for {agent_name} agent (ID: {agent_id})
-
-**Error:** {error_msg}
-
-**Worktree Location:** `worktrees/task-{agent_id}`
-
-**Required Actions:**
-1. Check git status in main repository: `git status`
-2. Check git status in worktree: `cd worktrees/task-{agent_id} && git status`
-3. Resolve any uncommitted changes or conflicts
-4. Manually merge the worktree:
-   ```bash
-   cd worktrees/task-{agent_id}
-   git push
-   cd ../..
-   git merge task/{agent_id}
-   ```
-5. Clean up the worktree: `git worktree remove worktrees/task-{agent_id}`
-
-**Agent:** {agent_name}
-"""
             
             print(f"   Invoking cleanup agent to resolve uncommitted changes before merge...")
             # We use agent_item as context
@@ -319,24 +327,13 @@ def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkIte
 
 
 def run_beta_tester(repo_root: Optional[Path] = None) -> Optional[AgentStats]:
-    """Run beta tester agent to test all MCP tools.
-    
-    Restarts the MCP server before testing to ensure latest code is loaded.
-    Runs in a disposable worktree to isolate any generated documentation.
-    
-    Returns:
-        AgentStats if successful, None otherwise
-    """
+    """Run beta tester agent to test all MCP tools. Restarts MCP server first."""
     ui.set_current_agent("Beta Tester")
-    print(f"\n{'='*60}")
-    print(f"🧪 Running Beta Tester Agent")
-    print(f"{'='*60}")
+    print(f"\n{'='*60}\n🧪 Running Beta Tester Agent\n{'='*60}")
     
     # Restart MCP server to load latest code
-    print("\n🔄 Restarting MCP server to load latest changes...")
+    print("\n🔄 Restarting MCP server...")
     try:
-        # Resolve script path relative to this file
-        # src/pokepoke/agent_runner.py -> src/pokepoke -> src -> root -> scripts
         package_root = Path(__file__).resolve().parent.parent.parent
         restart_script = package_root / "scripts" / "Restart-MCPServer.ps1"
         
