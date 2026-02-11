@@ -20,7 +20,6 @@ class TestAggregateStats:
             lines_removed=5,
             premium_requests=1,
             tool_calls=5,
-            estimated_cost=1.0,
             retries=0
         ))
         
@@ -33,7 +32,6 @@ class TestAggregateStats:
             lines_removed=2,
             premium_requests=1,
             tool_calls=3,
-            estimated_cost=0.5,
             retries=1
         )
         
@@ -47,7 +45,6 @@ class TestAggregateStats:
         assert session_stats.agent_stats.lines_removed == 7
         assert session_stats.agent_stats.premium_requests == 2
         assert session_stats.agent_stats.tool_calls == 8
-        assert session_stats.agent_stats.estimated_cost == 1.5
         assert session_stats.agent_stats.retries == 1
 
     def test_aggregates_from_zero(self) -> None:

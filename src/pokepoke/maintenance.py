@@ -18,7 +18,6 @@ def aggregate_stats(session_stats: SessionStats, item_stats: AgentStats) -> None
     session_stats.agent_stats.lines_removed += item_stats.lines_removed
     session_stats.agent_stats.premium_requests += item_stats.premium_requests
     session_stats.agent_stats.tool_calls += item_stats.tool_calls
-    session_stats.agent_stats.estimated_cost += item_stats.estimated_cost
     session_stats.agent_stats.retries += item_stats.retries
 
 

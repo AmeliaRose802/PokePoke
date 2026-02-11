@@ -83,7 +83,6 @@ class AgentStats:
     premium_requests: int = 0
     retries: int = 0
     tool_calls: int = 0
-    estimated_cost: float = 0.0
 
 
 @dataclass

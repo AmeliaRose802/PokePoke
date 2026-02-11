@@ -79,12 +79,11 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         pending_tool_calls, idle_task = 0, None
         total_input_tokens = total_output_tokens = total_cache_read_tokens = 0
         total_cache_write_tokens = turn_count = total_tool_calls = 0
-        total_cost = 0.0
         
         # Event handler for streaming output
         def handle_event(event: Any) -> None:
             nonlocal total_input_tokens, total_output_tokens, total_cache_read_tokens
-            nonlocal total_cache_write_tokens, total_cost, turn_count, total_tool_calls
+            nonlocal total_cache_write_tokens, turn_count, total_tool_calls
             nonlocal pending_tool_calls, idle_task
             
             event_type = event.type.value if hasattr(event.type, 'value') else str(event.type)
@@ -165,7 +164,6 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     total_output_tokens += getattr(event.data, 'output_tokens', 0) or 0
                     total_cache_read_tokens += getattr(event.data, 'cache_read_tokens', 0) or 0
                     total_cache_write_tokens += getattr(event.data, 'cache_write_tokens', 0) or 0
-                    total_cost += getattr(event.data, 'cost', 0.0) or 0.0
             
             elif event_type == "assistant.turn_end":
                 # Track turns
@@ -320,10 +318,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         
         print(f"\n{'='*60}\n[SDK] Result: {'SUCCESS' if success else 'FAILURE'}\n{'='*60}")
         if turn_count > 0 or total_input_tokens > 0:
-            print(f"\n📊 Stats: {turn_count} turns, {total_input_tokens:,}+{total_output_tokens:,} tokens", end="")
-            if total_cost > 0:
-                print(f", ${total_cost:.4f}", end="")
-            print()
+            print(f"\n📊 Stats: {turn_count} turns, {total_input_tokens:,}+{total_output_tokens:,} tokens")
         
         # Create stats object
         stats = AgentStats(
@@ -331,7 +326,6 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             output_tokens=total_output_tokens,
             premium_requests=turn_count,  # Approximation: 1 turn = 1 premium request
             tool_calls=total_tool_calls,
-            estimated_cost=total_cost,
             api_duration=0.0,  # TODO: Track duration
             wall_duration=0.0  # TODO: Track duration
         )

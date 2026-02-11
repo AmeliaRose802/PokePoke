@@ -130,7 +130,6 @@ def process_work_item(
                 accumulated_stats.premium_requests += current_stats.premium_requests
                 accumulated_stats.tool_calls += current_stats.tool_calls
                 accumulated_stats.retries += current_stats.retries
-                accumulated_stats.estimated_cost += current_stats.estimated_cost
 
             # If work agent failed, break
             if not result.success:
