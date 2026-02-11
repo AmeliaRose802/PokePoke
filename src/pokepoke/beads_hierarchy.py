@@ -7,6 +7,9 @@ from typing import List, Optional
 from .types import BeadsWorkItem
 from .beads_query import get_issue_dependencies
 
+# Label that marks items as requiring human intervention - agents will skip these
+HUMAN_REQUIRED_LABEL = 'human-required'
+
 
 def get_children(parent_id: str) -> List[BeadsWorkItem]:
     """Get all child items for a parent issue (epic or feature).
@@ -117,6 +120,12 @@ def get_next_child_task(parent_id: str) -> Optional[BeadsWorkItem]:
     available_children = [
         child for child in open_children
         if _is_assigned_to_current_user(child)
+    ]
+    
+    # Filter out items that require human intervention
+    available_children = [
+        child for child in available_children
+        if not (child.labels and HUMAN_REQUIRED_LABEL in child.labels)
     ]
     
     if not available_children:

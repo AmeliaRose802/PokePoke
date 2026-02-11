@@ -6,6 +6,26 @@ from typing import Optional
 from .types import BeadsWorkItem
 from .beads import select_next_hierarchical_item
 
+# Label that marks items as requiring human intervention - PokePoke will skip these
+HUMAN_REQUIRED_LABEL = 'human-required'
+
+
+def _is_human_required(item: BeadsWorkItem) -> bool:
+    """Check if an item has the human-required label.
+    
+    Items with this label need human intervention and should be
+    skipped by autonomous agents.
+    
+    Args:
+        item: Work item to check.
+        
+    Returns:
+        True if the item has the human-required label.
+    """
+    if not item.labels:
+        return False
+    return HUMAN_REQUIRED_LABEL in item.labels
+
 
 def _is_assigned_to_current_user(item: BeadsWorkItem) -> bool:
     """Check if item is assignable by current agent.
@@ -63,8 +83,15 @@ def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool) -> Opt
     if filtered_count > 0:
         print(f"\n⏭️  Skipped {filtered_count} item(s) assigned to other agents")
     
+    # Filter out items that require human intervention
+    human_required = [item for item in available_items if _is_human_required(item)]
+    if human_required:
+        for item in human_required:
+            print(f"   🧑 Skipping {item.id} - labeled '{HUMAN_REQUIRED_LABEL}' (needs human)")
+        available_items = [item for item in available_items if not _is_human_required(item)]
+    
     if not available_items:
-        print("\n✨ No available work - all ready items are assigned to other agents.")
+        print("\n✨ No available work - all ready items are assigned to other agents or require human intervention.")
         print("   Wait for other agents to complete their work, or claim unassigned items.")
         return None
     

@@ -6,7 +6,7 @@ import subprocess
 from typing import List, Optional
 
 from .types import BeadsWorkItem
-from .beads_hierarchy import has_feature_parent, get_next_child_task, close_parent_if_complete, get_children
+from .beads_hierarchy import has_feature_parent, get_next_child_task, close_parent_if_complete, get_children, HUMAN_REQUIRED_LABEL
 
 
 def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool:
@@ -366,6 +366,10 @@ def select_next_hierarchical_item(items: List[BeadsWorkItem]) -> Optional[BeadsW
     sorted_items = sorted(items, key=lambda x: x.priority)
     
     for item in sorted_items:
+        # Skip items that require human intervention
+        if item.labels and HUMAN_REQUIRED_LABEL in item.labels:
+            continue
+        
         # Check if this is an epic or feature
         if item.issue_type in ('epic', 'feature'):
             # Check for children
