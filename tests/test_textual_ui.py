@@ -618,7 +618,8 @@ class TestTextualUIIntegration:
         assert "partial" in ui._line_buffer
 
     def test_print_redirect_flush_streams_partial(self):
-        """Test print redirect with flush=True immediately outputs partial content."""
+        """Test print redirect with flush=True defers output to batch streaming tokens."""
+        import time
         from unittest.mock import MagicMock
         
         ui = TextualUI()
@@ -629,9 +630,16 @@ class TestTextualUIIntegration:
         # Send partial line with flush=True (like streaming agent output)
         ui._print_redirect("streaming", end="", flush=True)
         
-        # Should have called log_message immediately (not buffered)
+        # Should NOT have called log_message immediately (deferred flush)
+        ui._app.log_message.assert_not_called()
+        # Buffer should still hold the content
+        assert ui._line_buffer == "streaming"
+        # A flush timer should be scheduled
+        assert ui._flush_timer is not None
+        
+        # After the timer fires, the buffer should be flushed
+        time.sleep(0.15)
         ui._app.log_message.assert_called_with("streaming", "agent", None)
-        # Buffer should be empty after flush
         assert ui._line_buffer == ""
 
     def test_print_redirect_flush_only_when_buffer_not_empty(self):

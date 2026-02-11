@@ -9,6 +9,7 @@ Requires: textual>=0.40.0
 from __future__ import annotations
 
 import sys
+import threading
 from typing import Optional, Any, Iterator, Callable, TYPE_CHECKING
 from contextlib import contextmanager
 
@@ -38,6 +39,8 @@ class TextualUI:
         self._current_style: Optional[str] = None
         self._line_buffer: str = ""
         self._final_output: list[str] = []  # Output to print after UI exits
+        self._flush_timer: Optional[threading.Timer] = None
+        self._buffer_lock = threading.Lock()
 
     @property
     def is_running(self) -> bool:
@@ -124,20 +127,39 @@ class TextualUI:
         end = kwargs.get("end", "\n")
         flush = kwargs.get("flush", False)
         msg = sep.join(str(arg) for arg in args) + end
-        self._line_buffer += msg
-        
-        # Process complete lines
-        while "\n" in self._line_buffer:
-            line, self._line_buffer = self._line_buffer.split("\n", 1)
-            if line:
+
+        with self._buffer_lock:
+            self._line_buffer += msg
+
+            # Process complete lines immediately
+            while "\n" in self._line_buffer:
+                line, self._line_buffer = self._line_buffer.split("\n", 1)
+                if line:
+                    target = self._app.get_target_buffer()
+                    self._app.log_message(line, target, self._current_style)
+                # Cancel pending flush timer - we already flushed a complete line
+                if self._flush_timer:
+                    self._flush_timer.cancel()
+                    self._flush_timer = None
+
+            # For streaming output (flush=True with no newline), schedule a
+            # deferred flush so multiple tokens are batched into one line
+            # instead of each token getting its own timestamped line.
+            if flush and self._line_buffer:
+                if self._flush_timer:
+                    self._flush_timer.cancel()
+                self._flush_timer = threading.Timer(0.1, self._deferred_flush)
+                self._flush_timer.daemon = True
+                self._flush_timer.start()
+
+    def _deferred_flush(self) -> None:
+        """Flush the line buffer after a short delay (batches streaming tokens)."""
+        with self._buffer_lock:
+            if self._line_buffer and self._app and self._is_running:
                 target = self._app.get_target_buffer()
-                self._app.log_message(line, target, self._current_style)
-        
-        # For streaming output (flush=True with no newline), flush partial buffer
-        if flush and self._line_buffer:
-            target = self._app.get_target_buffer()
-            self._app.log_message(self._line_buffer, target, self._current_style)
-            self._line_buffer = ""
+                self._app.log_message(self._line_buffer, target, self._current_style)
+                self._line_buffer = ""
+            self._flush_timer = None
 
     @contextmanager
     def orchestrator_output(self) -> Iterator[None]:
