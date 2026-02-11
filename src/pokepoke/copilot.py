@@ -129,7 +129,7 @@ def invoke_copilot(
         timeout: Maximum execution time in seconds (default: 7200 = 2 hours).
         deny_write: If True, deny file write tools (for beads-only agents).
         item_logger: Optional item logger for file logging.
-        model: Optional model name to use (e.g., 'gpt-5.1-codex', defaults to 'claude-sonnet-4.5').
+        model: Optional model name to use (e.g., 'gpt-5.1-codex', defaults to 'claude-opus-4.6').
         
     Returns:
         Result of the Copilot invocation.

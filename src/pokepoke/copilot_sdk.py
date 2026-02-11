@@ -1,13 +1,13 @@
-"""GitHub Copilot SDK integration - Proof of Concept.
-
-This module demonstrates using the GitHub Copilot SDK instead of subprocess calls.
-"""
-
+"""GitHub Copilot SDK integration."""
 import asyncio
 import os
 from typing import Optional, TYPE_CHECKING, Any
 
 from copilot import CopilotClient  # type: ignore[import-not-found]
+
+# Model configuration
+DEFAULT_MODEL = "claude-opus-4.6"  # Primary model
+FALLBACK_MODEL = "claude-sonnet-4.5"  # Fallback on rate limit
 
 from .types import BeadsWorkItem, CopilotResult, RetryConfig, AgentStats
 from .prompts import PromptService
@@ -18,17 +18,8 @@ if TYPE_CHECKING:
 
 
 def build_prompt_from_work_item(work_item: BeadsWorkItem) -> str:
-    """Build a prompt from a work item using the template system.
-    
-    Args:
-        work_item: The beads work item
-        
-    Returns:
-        Rendered prompt string
-    """
+    """Build a prompt from a work item using the template system."""
     service = PromptService()
-    
-    # Build variables dictionary
     variables = {
         "item_id": work_item.id,
         "title": work_item.title,
@@ -51,52 +42,30 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     idle_timeout: float = 10.0,
     model: Optional[str] = None
 ) -> CopilotResult:
-    """Invoke GitHub Copilot using the SDK (async).
-    
-    Args:
-        work_item: The beads work item to process.
-        prompt: Optional pre-built prompt (if not provided, will build one from template).
-        retry_config: Retry configuration (uses defaults if not provided).
-        timeout: Maximum execution time in seconds (default: 7200 = 2 hours).
-        deny_write: If True, deny file write tools (for beads-only agents).
-        item_logger: Optional item logger for file logging (currently unused in SDK mode).
-        idle_timeout: Seconds to wait after session.idle before considering complete (default: 10.0).
-        model: Optional model name to use (e.g., 'gpt-5.1-codex', defaults to 'claude-sonnet-4.5').
-        
-    Returns:
-        Result of the Copilot invocation.
-    """
+    """Invoke GitHub Copilot using the SDK. Uses Opus 4.6 by default, falls back to Sonnet on rate limit."""
     config = retry_config or RetryConfig()
     final_prompt = prompt or build_prompt_from_work_item(work_item)
     max_timeout = timeout or 7200.0
     
-    # Configure environment to handle encoding errors gracefully in SDK subprocess
-    # The SDK spawns copilot.cmd as a subprocess, and tool results may contain non-UTF-8 data
+    # Determine model to use (supports fallback on rate limit)
+    current_model = model or DEFAULT_MODEL
+    tried_fallback = False
+    
+    # Configure environment for SDK subprocess encoding
     original_pythonioencoding = os.environ.get('PYTHONIOENCODING')
     os.environ['PYTHONIOENCODING'] = 'utf-8:replace'
     
-    print(f"\n[WORK_ITEM] Invoking Copilot SDK for work item: {work_item.id}")
-    print(f"   Title: {work_item.title}")
-    print(f"   [TIMEOUT]  Max timeout: {max_timeout/60:.1f} minutes\n")
+    print(f"\n[WORK_ITEM] {work_item.id}: {work_item.title} (timeout: {max_timeout/60:.1f}m)\n")
     
-    # Create SDK client with explicit CLI path
-    # The SDK looks for 'copilot' in PATH, but we need to ensure it finds the right one
-    client = CopilotClient({
-        "cli_path": "copilot.cmd",  # Use .cmd on Windows to ensure it finds the npm-installed version
-        "log_level": "info",
-    })
+    # Create SDK client
+    client = CopilotClient({"cli_path": "copilot.cmd", "log_level": "info"})
     
     try:
-        # Start the client
         print("[SDK] Starting Copilot client...")
         await client.start()
-        print("[SDK] Client started successfully\n")
         
-        # Create session with appropriate configuration
-        session_config = {
-            "model": model or "claude-sonnet-4.5",  # Use specified model or default to Claude Sonnet 4.5
-            "streaming": True,  # Enable streaming for real-time output
-        }
+        session_config = {"model": current_model, "streaming": True}
+        print(f"[SDK] Using model: {current_model}")
         
         # Add tool restrictions if needed
         if deny_write:
@@ -105,23 +74,12 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         session = await client.create_session(session_config)
         print(f"[SDK] Session created: {session.session_id}\n")
         
-        # Track completion
-        done = asyncio.Event()
-        output_lines = []
-        errors = []
-        
-        # Track tool execution state
-        pending_tool_calls = 0  # Tools currently executing
-        idle_task: Optional[asyncio.Task[None]] = None  # Current idle check task
-        
-        # Track statistics from usage events
-        total_input_tokens = 0
-        total_output_tokens = 0
-        total_cache_read_tokens = 0
-        total_cache_write_tokens = 0
+        # Track state
+        done, output_lines, errors = asyncio.Event(), [], []
+        pending_tool_calls, idle_task = 0, None
+        total_input_tokens = total_output_tokens = total_cache_read_tokens = 0
+        total_cache_write_tokens = turn_count = total_tool_calls = 0
         total_cost = 0.0
-        turn_count = 0
-        total_tool_calls = 0
         
         # Event handler for streaming output
         def handle_event(event: Any) -> None:
@@ -241,19 +199,37 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     idle_task = asyncio.create_task(check_still_idle())
                 
             elif event_type == "session.error":
+                nonlocal tried_fallback, current_model
                 # Error occurred
                 error_msg = getattr(event.data, 'message', 'Unknown error') if hasattr(event, 'data') else 'Unknown error'
                 print(f"\n[SDK] ERROR: {error_msg}")
+                
+                # Check for rate limit error and try fallback model
+                if not tried_fallback and current_model == DEFAULT_MODEL:
+                    error_lower = error_msg.lower()
+                    if 'rate' in error_lower and 'limit' in error_lower:
+                        print(f"\n[SDK] Rate limit detected on {current_model}, will retry with {FALLBACK_MODEL}...")
+                        tried_fallback = True
+                        current_model = FALLBACK_MODEL
+                        # Don't set done - let the retry happen
+                        return
+                
                 errors.append(error_msg)
                 done.set()
         
         # Subscribe to events
         session.on(handle_event)
         
-        # Send the message
-        print("[SDK] Sending message...\n")
+        # Track timeout/interrupt status
+        timed_out = False
+        interrupted = False
         
-        with ui.agent_output():
+        # Send the message (with retry on rate limit)
+        async def send_with_retry() -> bool:
+            """Send message, returns True if should retry with fallback model."""
+            nonlocal session, session_config, tried_fallback, current_model, timed_out, interrupted
+            
+            print("[SDK] Sending message...\n")
             await session.send({"prompt": final_prompt})
             
             # Wait for completion with timeout
@@ -262,24 +238,67 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             except asyncio.TimeoutError:
                 print(f"\n[SDK] TIMEOUT after {max_timeout}s")
                 await session.abort()
-                return CopilotResult(
-                    work_item_id=work_item.id,
-                    success=False,
-                    error=f"SDK timeout after {max_timeout}s",
-                    attempt_count=1
-                )
+                timed_out = True
+                return False
             except KeyboardInterrupt:
                 print("\n\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")
                 try:
                     await session.abort()
                 except Exception:
-                    pass  # Best effort cleanup
-                return CopilotResult(
-                    work_item_id=work_item.id,
-                    success=False,
-                    error="Interrupted by user",
-                    attempt_count=1
-                )
+                    pass
+                interrupted = True
+                return False
+            
+            # Check if we need to retry with fallback model
+            if tried_fallback and current_model == FALLBACK_MODEL and not done.is_set():
+                # Rate limit occurred, need to retry with fallback
+                print(f"\n[SDK] Retrying with fallback model: {FALLBACK_MODEL}")
+                
+                # Clean up current session
+                try:
+                    await session.destroy()
+                except Exception:
+                    pass
+                
+                # Create new session with fallback model
+                session_config["model"] = FALLBACK_MODEL
+                session = await client.create_session(session_config)
+                print(f"[SDK] New session created with {FALLBACK_MODEL}: {session.session_id}\n")
+                
+                # Reset state for retry
+                done.clear()
+                errors.clear()
+                output_lines.clear()
+                session.on(handle_event)
+                
+                return True  # Signal retry needed
+            
+            return False  # No retry needed
+        
+        with ui.agent_output():
+            # First attempt
+            needs_retry = await send_with_retry()
+            
+            # Retry with fallback if rate limited
+            if needs_retry:
+                await send_with_retry()
+        
+        # Handle timeout/interrupt cases
+        if timed_out:
+            return CopilotResult(
+                work_item_id=work_item.id,
+                success=False,
+                error=f"SDK timeout after {max_timeout}s",
+                attempt_count=1
+            )
+        
+        if interrupted:
+            return CopilotResult(
+                work_item_id=work_item.id,
+                success=False,
+                error="Interrupted by user",
+                attempt_count=1
+            )
         
         # Clean up session
         await session.destroy()
@@ -288,23 +307,11 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         output_text = "".join(output_lines)
         success = len(errors) == 0
         
-        print("\n" + "=" * 60)
-        print(f"[SDK] Result: {'SUCCESS' if success else 'FAILURE'}")
-        print("=" * 60)
-        
-        # Display statistics
+        print(f"\n{'='*60}\n[SDK] Result: {'SUCCESS' if success else 'FAILURE'}\n{'='*60}")
         if turn_count > 0 or total_input_tokens > 0:
-            print("\n📊 Session Statistics:")
-            print(f"   Turns: {turn_count}")
-            print(f"   Input tokens: {total_input_tokens:,}")
-            print(f"   Output tokens: {total_output_tokens:,}")
-            if total_cache_read_tokens > 0:
-                print(f"   Cache read tokens: {total_cache_read_tokens:,}")
-            if total_cache_write_tokens > 0:
-                print(f"   Cache write tokens: {total_cache_write_tokens:,}")
-            print(f"   Total tokens: {total_input_tokens + total_output_tokens:,}")
+            print(f"\n📊 Stats: {turn_count} turns, {total_input_tokens:,}+{total_output_tokens:,} tokens", end="")
             if total_cost > 0:
-                print(f"   Estimated cost: ${total_cost:.4f}")
+                print(f", ${total_cost:.4f}", end="")
             print()
         
         # Create stats object
@@ -370,23 +377,7 @@ def invoke_copilot_sdk_sync(  # type: ignore[no-any-unimported]
     item_logger: Optional['ItemLogger'] = None,
     model: Optional[str] = None
 ) -> CopilotResult:
-    """Synchronous wrapper around invoke_copilot_sdk.
-    
-    This allows the SDK version to be used as a drop-in replacement
-    for the current subprocess-based implementation.
-    
-    Args:
-        work_item: The beads work item to process.
-        prompt: Optional pre-built prompt (if not provided, will build one from template).
-        retry_config: Retry configuration (uses defaults if not provided).
-        timeout: Maximum execution time in seconds (default: 7200 = 2 hours).
-        deny_write: If True, deny file write tools (for beads-only agents).
-        item_logger: Optional item logger for file logging (currently unused in SDK mode).
-        model: Optional model name to use (e.g., 'gpt-5.1-codex', defaults to 'claude-sonnet-4.5').
-        
-    Returns:
-        Result of the Copilot invocation.
-    """
+    """Synchronous wrapper around invoke_copilot_sdk."""
     return asyncio.run(invoke_copilot_sdk(
         work_item=work_item,
         prompt=prompt,
