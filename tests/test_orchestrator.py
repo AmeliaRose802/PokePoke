@@ -931,9 +931,10 @@ class TestOrchestratorHelperFunctions:
 class TestOrchestratorMain:
     """Test main entry point."""
     
+    @patch('pokepoke.orchestrator._check_beads_available', return_value=True)
     @patch('pokepoke.orchestrator.run_orchestrator')
     @patch('sys.argv', ['pokepoke', '--autonomous'])
-    def test_main_autonomous(self, mock_run: Mock) -> None:
+    def test_main_autonomous(self, mock_run: Mock, _mock_beads: Mock) -> None:
         """Test main with autonomous flag."""
         from pokepoke.orchestrator import main
         
@@ -944,9 +945,10 @@ class TestOrchestratorMain:
         assert result == 0
         mock_run.assert_called_once_with(interactive=False, continuous=False, run_beta_first=False)
     
+    @patch('pokepoke.orchestrator._check_beads_available', return_value=True)
     @patch('pokepoke.orchestrator.run_orchestrator')
     @patch('sys.argv', ['pokepoke', '--continuous'])
-    def test_main_continuous(self, mock_run: Mock) -> None:
+    def test_main_continuous(self, mock_run: Mock, _mock_beads: Mock) -> None:
         """Test main with continuous flag."""
         from pokepoke.orchestrator import main
         
@@ -957,9 +959,10 @@ class TestOrchestratorMain:
         assert result == 0
         mock_run.assert_called_once_with(interactive=True, continuous=True, run_beta_first=False)
     
+    @patch('pokepoke.orchestrator._check_beads_available', return_value=True)
     @patch('pokepoke.orchestrator.run_orchestrator')
     @patch('sys.argv', ['pokepoke', '--autonomous', '--continuous'])
-    def test_main_both_flags(self, mock_run: Mock) -> None:
+    def test_main_both_flags(self, mock_run: Mock, _mock_beads: Mock) -> None:
         """Test main with both flags."""
         from pokepoke.orchestrator import main
         
@@ -969,6 +972,16 @@ class TestOrchestratorMain:
         
         assert result == 0
         mock_run.assert_called_once_with(interactive=False, continuous=True, run_beta_first=False)
+
+    @patch('pokepoke.orchestrator._check_beads_available', return_value=False)
+    @patch('sys.argv', ['pokepoke', '--autonomous'])
+    def test_main_exits_when_beads_unavailable(self, _mock_beads: Mock) -> None:
+        """Test main exits with code 1 when beads is not available."""
+        from pokepoke.orchestrator import main
+
+        result = main()
+
+        assert result == 1
 
 
 

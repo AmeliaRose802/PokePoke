@@ -20,7 +20,7 @@ class TestCheckBeadsAvailable:
 
         assert result is False
         captured = capsys.readouterr()
-        assert "'bd' (beads) command not found" in captured.out
+        assert "'bd' (beads) command not found" in captured.err
 
     @patch('subprocess.run')
     @patch('shutil.which')
@@ -33,7 +33,7 @@ class TestCheckBeadsAvailable:
 
         assert result is False
         captured = capsys.readouterr()
-        assert "not a beads repository" in captured.out
+        assert "not a beads repository" in captured.err
 
     @patch('subprocess.run')
     @patch('shutil.which')
@@ -46,7 +46,7 @@ class TestCheckBeadsAvailable:
 
         assert result is False
         captured = capsys.readouterr()
-        assert "timed out" in captured.out
+        assert "timed out" in captured.err
 
     @patch('subprocess.run')
     @patch('shutil.which')
@@ -59,7 +59,7 @@ class TestCheckBeadsAvailable:
 
         assert result is False
         captured = capsys.readouterr()
-        assert "Failed to check beads status" in captured.out
+        assert "Failed to check beads status" in captured.err
 
     @patch('subprocess.run')
     @patch('shutil.which')

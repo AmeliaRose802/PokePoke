@@ -30,10 +30,10 @@ def _check_beads_available() -> bool:
     """
     # Check that bd command exists
     if not shutil.which('bd'):
-        print("\n❌ Error: 'bd' (beads) command not found.")
-        print("   PokePoke requires beads for work item tracking.")
-        print("   Install beads: pip install beads")
-        print("   Then initialize: bd init")
+        print("\nError: 'bd' (beads) command not found.", file=sys.stderr)
+        print("   PokePoke requires beads for work item tracking.", file=sys.stderr)
+        print("   Install beads: pip install beads", file=sys.stderr)
+        print("   Then initialize: bd init", file=sys.stderr)
         return False
     
     # Check that beads is initialized (bd info should succeed)
@@ -44,15 +44,15 @@ def _check_beads_available() -> bool:
             timeout=10
         )
         if result.returncode != 0:
-            print("\n❌ Error: This directory is not a beads repository.")
-            print("   Run 'bd init' to set up beads tracking.")
+            print("\nError: This directory is not a beads repository.", file=sys.stderr)
+            print("   Run 'bd init' to set up beads tracking.", file=sys.stderr)
             return False
     except subprocess.TimeoutExpired:
-        print("\n❌ Error: 'bd info' timed out. Beads may not be configured correctly.")
+        print("\nError: 'bd info' timed out. Beads may not be configured correctly.", file=sys.stderr)
         return False
     except Exception as e:
-        print(f"\n❌ Error: Failed to check beads status: {e}")
-        print("   Ensure beads is installed and initialized: bd init")
+        print(f"\nError: Failed to check beads status: {e}", file=sys.stderr)
+        print("   Ensure beads is installed and initialized: bd init", file=sys.stderr)
         return False
     
     return True
@@ -71,11 +71,6 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
     """
     # UI is started by run_with_orchestrator - just update header
     ui.update_header("PokePoke", f"Initializing {interactive and 'Interactive' or 'Autonomous'} Mode...")
-
-    # Check beads availability before anything else
-    if not _check_beads_available():
-        ui.stop_and_capture()
-        return 1
 
     try:
         # TELLTALE: Version identifier to verify correct code is running
@@ -333,6 +328,11 @@ def main() -> int:
     args = parser.parse_args()
     # Autonomous flag overrides interactive
     interactive = not args.autonomous
+    
+    # Check beads availability BEFORE starting the Textual UI
+    # so error messages print directly to stdout
+    if not _check_beads_available():
+        return 1
     
     # Use the Textual UI wrapper to run the orchestrator
     def orchestrator_func() -> int:
