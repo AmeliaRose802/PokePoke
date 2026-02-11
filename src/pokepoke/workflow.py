@@ -8,7 +8,7 @@ from typing import Optional, TYPE_CHECKING
 from pokepoke.copilot import invoke_copilot
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
 from pokepoke.worktrees import create_worktree, cleanup_worktree
-from pokepoke.git_operations import has_uncommitted_changes
+from pokepoke.git_operations import has_uncommitted_changes, has_commits_ahead
 from pokepoke.beads import assign_and_sync_item, add_comment
 from pokepoke.agent_runner import run_cleanup_loop, run_beta_tester, run_gate_agent
 from pokepoke.worktree_finalization import finalize_work_item
@@ -28,7 +28,7 @@ def process_work_item(
     run_cleanup_agents: bool = False, 
     run_beta_test: bool = True,
     run_logger: Optional['RunLogger'] = None
-) -> tuple[bool, int, Optional[AgentStats], int]:
+) -> tuple[bool, int, Optional[AgentStats], int, int]:
     """Process a single work item with timeout protection.
     
     Args:
@@ -40,12 +40,13 @@ def process_work_item(
         run_logger: Optional run logger instance for file logging
         
     Returns:
-        Tuple of (success: bool, request_count: int, stats: Optional[AgentStats], cleanup_agent_runs: int)
+        Tuple of (success: bool, request_count: int, stats: Optional[AgentStats], cleanup_agent_runs: int, gate_agent_runs: int)
     """
     start_time = time.time()
     timeout_seconds = timeout_hours * 3600
     request_count = 0
     cleanup_agent_runs = 0
+    gate_agent_runs = 0
     
     print(f"\n🚀 Processing work item: {item.id}")
     print(f"   {item.title}")
@@ -64,7 +65,7 @@ def process_work_item(
             print("⏭️  Skipped.")
             if run_logger:
                 run_logger.end_item_log(False, 0)
-            return False, 0, None, 0
+            return False, 0, None, 0, 0
     
     # Assign and sync BEFORE creating worktree to prevent parallel conflicts
     print(f"\n🔒 Claiming work item...")
@@ -72,7 +73,7 @@ def process_work_item(
         print(f"❌ Failed to assign work item {item.id}")
         if run_logger:
             run_logger.end_item_log(False, 0)
-        return False, 0, None, 0
+        return False, 0, None, 0, 0
     
     # Use current working directory as repo root
     pokepoke_root = Path.cwd()
@@ -81,7 +82,7 @@ def process_work_item(
     if worktree_path is None:
         if run_logger:
             run_logger.end_item_log(False, 0)
-        return False, 0, None, 0
+        return False, 0, None, 0, 0
     
     original_dir = os.getcwd()
     
@@ -136,8 +137,13 @@ def process_work_item(
                 break
             
             if not has_uncommitted_changes():
-                print("\n✅ No changes made - work item may already be complete")
-                print("   Skipping cleanup and commit steps")
+                commits_ahead = has_commits_ahead()
+                if commits_ahead > 0:
+                    print(f"\n✅ All changes already committed ({commits_ahead} commit{'s' if commits_ahead != 1 else ''} ahead)")
+                    print("   Skipping cleanup and commit steps")
+                else:
+                    print("\n✅ No changes made - work item may already be complete")
+                    print("   Skipping cleanup and commit steps")
             
             # Run cleanup loop with timeout checking
             cleanup_success, cleanup_runs = _run_cleanup_with_timeout(
@@ -152,18 +158,11 @@ def process_work_item(
                 os.chdir(original_dir)
                 if run_logger:
                     run_logger.end_item_log(False, request_count)
-                return False, request_count, accumulated_stats, cleanup_agent_runs
+                return False, request_count, accumulated_stats, cleanup_agent_runs, gate_agent_runs
 
             # --- GATE AGENT CHECK ---
             gate_success, gate_reason, gate_stats = run_gate_agent(item)
-            if gate_stats:
-                accumulated_stats.wall_duration += gate_stats.wall_duration
-                accumulated_stats.api_duration += gate_stats.api_duration
-                accumulated_stats.input_tokens += gate_stats.input_tokens
-                accumulated_stats.output_tokens += gate_stats.output_tokens
-                accumulated_stats.premium_requests += gate_stats.premium_requests
-                accumulated_stats.tool_calls += gate_stats.tool_calls
-                accumulated_stats.estimated_cost += gate_stats.estimated_cost
+            gate_agent_runs += 1
             
             if gate_success:
                 print("\n✅ Gate Agent signed off!")
@@ -206,7 +205,7 @@ def process_work_item(
             run_logger.end_item_log(success, request_count)
         
         ui.set_current_agent(None)
-        return success, request_count, item_stats, cleanup_agent_runs
+        return success, request_count, item_stats, cleanup_agent_runs, gate_agent_runs
     else:
         set_terminal_banner(format_work_item_banner(item.id, item.title, "Failed"))
         print(f"\n❌ Failed to complete work item: {result.error}")
@@ -217,7 +216,7 @@ def process_work_item(
             run_logger.end_item_log(False, request_count)
         
         ui.set_current_agent(None)
-        return False, request_count, None, cleanup_agent_runs
+        return False, request_count, None, cleanup_agent_runs, gate_agent_runs
 
 
 def _setup_worktree(item: BeadsWorkItem) -> Optional[Path]:

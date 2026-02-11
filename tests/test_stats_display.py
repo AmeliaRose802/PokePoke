@@ -251,7 +251,42 @@ def test_print_stats_with_only_work_agent_runs(capsys):
     assert "Work agents:         3" in output
     
     # Check other agents NOT shown (zero counts)
+    assert "Gate agents:" not in output
     assert "Cleanup agents:" not in output
     assert "Tech Debt agents:" not in output
     assert "Janitor agents:" not in output
     assert "Backlog agents:" not in output
+
+
+def test_print_stats_gate_agent_runs_shown(capsys):
+    """Test that gate agent runs are displayed when non-zero."""
+    stats = SessionStats(
+        agent_stats=AgentStats(wall_duration=60.0),
+        work_agent_runs=2,
+        gate_agent_runs=3
+    )
+    
+    print_stats(items_completed=2, total_requests=4, elapsed_seconds=120.0, session_stats=stats)
+    
+    captured = capsys.readouterr()
+    output = captured.out
+    
+    assert "Work agents:         2" in output
+    assert "Gate agents:         3" in output
+
+
+def test_print_stats_gate_agent_runs_hidden_when_zero(capsys):
+    """Test that gate agent runs are hidden when zero."""
+    stats = SessionStats(
+        agent_stats=AgentStats(wall_duration=60.0),
+        work_agent_runs=1,
+        gate_agent_runs=0
+    )
+    
+    print_stats(items_completed=1, total_requests=1, elapsed_seconds=60.0, session_stats=stats)
+    
+    captured = capsys.readouterr()
+    output = captured.out
+    
+    assert "Work agents:         1" in output
+    assert "Gate agents:" not in output

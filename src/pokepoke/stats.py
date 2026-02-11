@@ -111,6 +111,8 @@ def print_stats(items_completed: int, total_requests: int, elapsed_seconds: floa
         print("🤖 Agent Run Counts")
         print("=" * 60)
         print(f"📋 Work agents:         {session_stats.work_agent_runs}")
+        if session_stats.gate_agent_runs > 0:
+            print(f"🚪 Gate agents:         {session_stats.gate_agent_runs}")
         if session_stats.cleanup_agent_runs > 0:
             print(f"🧹 Cleanup agents:      {session_stats.cleanup_agent_runs}")
         if session_stats.tech_debt_agent_runs > 0:

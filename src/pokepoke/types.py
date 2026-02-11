@@ -103,6 +103,7 @@ class SessionStats:
     items_completed: int = 0  # Number of items successfully completed in this session
     completed_items_list: List[BeadsWorkItem] = field(default_factory=list)  # List of items successfully completed
     work_agent_runs: int = 0
+    gate_agent_runs: int = 0
     tech_debt_agent_runs: int = 0
     janitor_agent_runs: int = 0
     janitor_lines_removed: int = 0

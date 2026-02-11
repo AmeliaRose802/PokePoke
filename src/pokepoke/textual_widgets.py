@@ -73,6 +73,7 @@ class StatsBar(Static):
     api_duration: reactive[float] = reactive(0.0)
     tool_calls: reactive[int] = reactive(0)
     work_runs: reactive[int] = reactive(0)
+    gate_runs: reactive[int] = reactive(0)
     tech_debt_runs: reactive[int] = reactive(0)
     janitor_runs: reactive[int] = reactive(0)
     backlog_runs: reactive[int] = reactive(0)
@@ -125,7 +126,9 @@ class StatsBar(Static):
         # Line 3: Agent runs
         text.append("👷 Work:", style="dim")
         text.append(str(self.work_runs), style="white")
-        text.append(" 💸 Debt:", style="dim")
+        text.append(" � Gate:", style="dim")
+        text.append(str(self.gate_runs), style="white")
+        text.append(" �💸 Debt:", style="dim")
         text.append(str(self.tech_debt_runs), style="white")
         text.append(" 🧹 Jan:", style="dim")
         text.append(str(self.janitor_runs), style="white")
@@ -159,6 +162,7 @@ class StatsBar(Static):
             self.api_duration = agent.api_duration
             self.tool_calls = agent.tool_calls
             self.work_runs = session_stats.work_agent_runs
+            self.gate_runs = session_stats.gate_agent_runs
             self.tech_debt_runs = session_stats.tech_debt_agent_runs
             self.janitor_runs = session_stats.janitor_agent_runs
             self.backlog_runs = session_stats.backlog_cleanup_agent_runs

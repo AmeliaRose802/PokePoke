@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -21,6 +22,42 @@ from pokepoke.maintenance import run_periodic_maintenance, aggregate_stats
 from pokepoke.shutdown import is_shutting_down, request_shutdown
 
 
+def _check_beads_available() -> bool:
+    """Check that beads (bd) is installed and initialized in the current directory.
+    
+    Returns:
+        True if beads is available and initialized, False otherwise.
+    """
+    # Check that bd command exists
+    if not shutil.which('bd'):
+        print("\n❌ Error: 'bd' (beads) command not found.")
+        print("   PokePoke requires beads for work item tracking.")
+        print("   Install beads: pip install beads")
+        print("   Then initialize: bd init")
+        return False
+    
+    # Check that beads is initialized (bd info should succeed)
+    try:
+        result = subprocess.run(
+            ['bd', 'info', '--json'],
+            capture_output=True, text=True, encoding='utf-8',
+            timeout=10
+        )
+        if result.returncode != 0:
+            print("\n❌ Error: This directory is not a beads repository.")
+            print("   Run 'bd init' to set up beads tracking.")
+            return False
+    except subprocess.TimeoutExpired:
+        print("\n❌ Error: 'bd info' timed out. Beads may not be configured correctly.")
+        return False
+    except Exception as e:
+        print(f"\n❌ Error: Failed to check beads status: {e}")
+        print("   Ensure beads is installed and initialized: bd init")
+        return False
+    
+    return True
+
+
 def run_orchestrator(interactive: bool = True, continuous: bool = False, run_beta_first: bool = False) -> int:
     """Main orchestrator loop.
     
@@ -34,6 +71,11 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
     """
     # UI is started by run_with_orchestrator - just update header
     ui.update_header("PokePoke", f"Initializing {interactive and 'Interactive' or 'Autonomous'} Mode...")
+
+    # Check beads availability before anything else
+    if not _check_beads_available():
+        ui.stop_and_capture()
+        return 1
 
     try:
         # TELLTALE: Version identifier to verify correct code is running
@@ -131,7 +173,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             set_terminal_banner(banner)
             ui.update_header(selected_item.id, selected_item.title)
             
-            success, requests, item_stats, cleanup_runs = process_work_item(
+            success, requests, item_stats, cleanup_runs, gate_runs = process_work_item(
                 selected_item, interactive, run_logger=run_logger
             )
             total_requests += requests
@@ -140,6 +182,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             
             session_stats.work_agent_runs += 1
             session_stats.cleanup_agent_runs += cleanup_runs
+            session_stats.gate_agent_runs += gate_runs
             
             # Aggregate statistics
             if item_stats:
