@@ -22,7 +22,8 @@ class RunLogger:
             base_dir: Base directory for all log runs (default: "logs")
         """
         self.run_id = self._generate_run_id()
-        self.base_dir = Path(base_dir)
+        # Use absolute path to avoid issues when CWD changes during workflow
+        self.base_dir = Path(base_dir).resolve()
         self.run_dir = self.base_dir / self.run_id
         self.run_dir.mkdir(parents=True, exist_ok=True)
         
