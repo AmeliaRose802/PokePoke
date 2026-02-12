@@ -89,16 +89,16 @@ class TestSelectModelForItem:
         assert model in candidates
 
     @patch("pokepoke.model_selection.get_config")
-    @patch("pokepoke.model_selection.random.choice")
-    def test_uses_random_choice(self, mock_choice, mock_config):
+    @patch("pokepoke.model_selection.random.choices")
+    def test_uses_random_choices(self, mock_choices, mock_config):
         candidates = ["modelA", "modelB", "modelC"]
         mock_config.return_value = ProjectConfig(
             models=ModelConfig(candidate_models=candidates)
         )
-        mock_choice.return_value = "modelB"
+        mock_choices.return_value = ["modelB"]
         model = select_model_for_item("item-3")
         assert model == "modelB"
-        mock_choice.assert_called_once_with(candidates)
+        mock_choices.assert_called_once()
 
     @patch("pokepoke.model_selection.get_config")
     def test_single_candidate(self, mock_config):

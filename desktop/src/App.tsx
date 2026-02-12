@@ -57,7 +57,7 @@ function App() {
       </div>
 
       {/* Stats footer */}
-      <StatsBar stats={bridge.stats} />
+      <StatsBar stats={bridge.stats} modelLeaderboard={bridge.modelLeaderboard} />
     </div>
   );
 }

@@ -46,6 +46,10 @@ class DesktopAPI:
         # Read index for incremental log fetching
         self._log_read_index: int = 0
 
+        # Leaderboard cache for model performance stats
+        self._leaderboard_cache: dict[str, Any] = {}
+        self._leaderboard_cache_time: float = 0.0
+
     def set_window(self, window: Any) -> None:
         """Called once after pywebview creates the window."""
         self._window = window
@@ -105,7 +109,17 @@ class DesktopAPI:
                 "stats": self._serialize_live_stats(),
                 "progress": self._current_progress,
                 "log_count": len(self._log_buffer),
+                "model_leaderboard": self._get_cached_leaderboard(),
             }
+
+    def _get_cached_leaderboard(self) -> dict[str, Any]:
+        """Return model leaderboard, cached for 5 seconds to avoid disk reads on every poll."""
+        now = time.time()
+        if now - self._leaderboard_cache_time > 5.0:
+            from pokepoke.model_stats_store import get_model_summary
+            self._leaderboard_cache = get_model_summary()
+            self._leaderboard_cache_time = now
+        return self._leaderboard_cache
 
     def get_new_logs(self) -> list[dict[str, Any]]:
         """Get log entries added since the last call (incremental).
@@ -135,6 +149,16 @@ class DesktopAPI:
         """Get the current session stats."""
         with self._lock:
             return self._serialize_live_stats()
+
+    def get_model_leaderboard(self) -> dict[str, Any]:
+        """Get all-time model performance stats from persistent storage.
+
+        Returns the per-model summary from .pokepoke/model_stats.json,
+        enabling the desktop UI to show a historical leaderboard alongside
+        the current session's model comparison row.
+        """
+        from pokepoke.model_stats_store import get_model_summary
+        return get_model_summary()
 
     # ─── Python → State: Called by the orchestrator ───────────────────
 

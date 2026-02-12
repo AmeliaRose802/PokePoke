@@ -66,3 +66,15 @@ export interface ProgressState {
 
 /** Connection status of the pywebview bridge */
 export type ConnectionStatus = "connecting" | "connected" | "disconnected";
+
+/** All-time per-model performance summary from persistent storage */
+export interface ModelPerformanceSummary {
+  total_items_attempted: number;
+  total_items_succeeded: number;
+  total_items_failed: number;
+  total_duration_seconds: number;
+  total_retries: number;
+  average_duration: number;
+  success_rate: number;
+  last_used: string;
+}

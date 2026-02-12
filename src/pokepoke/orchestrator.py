@@ -21,6 +21,7 @@ from pokepoke.maintenance_state import increment_items_completed
 from pokepoke.repo_check import check_and_commit_main_repo
 from pokepoke.maintenance import run_periodic_maintenance, aggregate_stats
 from pokepoke.shutdown import is_shutting_down, request_shutdown
+from pokepoke.model_stats_store import record_completion, print_model_leaderboard
 
 
 def _check_beads_available() -> bool:
@@ -202,6 +203,8 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             # Record model completion for A/B testing
             if model_completion:
                 session_stats.model_completions.append(model_completion)
+                # Persist to .pokepoke/model_stats.json for cross-session tracking
+                record_completion(model_completion)
             
             # Increment counter on successful processing
             if success:

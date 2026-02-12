@@ -5,10 +5,11 @@
  * API duration, items completed, retries, and agent run counts.
  */
 
-import type { SessionStats, ModelCompletionRecord } from "../types";
+import type { SessionStats, ModelCompletionRecord, ModelPerformanceSummary } from "../types";
 
 interface Props {
   stats: SessionStats | null;
+  modelLeaderboard: Record<string, ModelPerformanceSummary>;
 }
 
 function formatTokens(count: number): string {
@@ -51,10 +52,14 @@ function summarizeModels(
   });
 }
 
-export function StatsBar({ stats }: Props) {
+export function StatsBar({ stats, modelLeaderboard }: Props) {
   const agent = stats?.agent_stats;
   const elapsed = stats?.elapsed_time ?? 0;
   const modelSummary = summarizeModels(stats?.model_completions ?? []);
+
+  // Build leaderboard rows sorted by success rate descending
+  const leaderboardEntries = Object.entries(modelLeaderboard ?? {})
+    .sort(([, a], [, b]) => b.success_rate - a.success_rate);
 
   return (
     <footer className="stats-bar">
@@ -143,7 +148,7 @@ export function StatsBar({ stats }: Props) {
         </span>
       </div>
 
-      {/* Row 4: Model comparison (A/B testing) */}
+      {/* Row 4: Model comparison (A/B testing) - current session */}
       {modelSummary.length > 0 && (
         <div className="stats-row model-comparison">
           <span className="stat-icon">🔬</span>
@@ -153,6 +158,22 @@ export function StatsBar({ stats }: Props) {
               <span className="stat-value">
                 {count}× {formatDuration(avgTime)}
                 {passRate !== null && ` (${passRate}%)`}
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Row 5: All-time model leaderboard from persistent storage */}
+      {leaderboardEntries.length > 0 && (
+        <div className="stats-row model-leaderboard">
+          <span className="stat-icon">📊</span>
+          <span className="stat-label" style={{ marginRight: "0.5em" }}>All-time:</span>
+          {leaderboardEntries.map(([model, s]) => (
+            <span key={model} className="stat model-stat">
+              <span className="stat-label">{model}:</span>
+              <span className="stat-value">
+                {s.total_items_attempted}× {Math.round(s.success_rate * 100)}%
               </span>
             </span>
           ))}

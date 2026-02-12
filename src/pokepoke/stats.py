@@ -176,9 +176,13 @@ def print_stats(items_completed: int, total_requests: int, elapsed_seconds: floa
         for item in session_stats.completed_items_list:
             print(f"• {item.id}: {item.title}")
 
-    # Print model comparison stats (A/B testing)
+    # Print model comparison stats (A/B testing) - current session
     if session_stats and session_stats.model_completions:
         _print_model_comparison(session_stats.model_completions)
+
+    # Print all-time model leaderboard from persistent stats
+    from pokepoke.model_stats_store import print_model_leaderboard
+    print_model_leaderboard()
             
     print("=" * 60)
 

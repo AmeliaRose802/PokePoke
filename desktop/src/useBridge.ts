@@ -16,6 +16,7 @@ import type {
   SessionStats,
   ProgressState,
   ConnectionStatus,
+  ModelPerformanceSummary,
 } from "./types";
 
 /** Poll interval in ms — 100ms = responsive without hammering */
@@ -30,6 +31,7 @@ interface PyWebViewAPI {
     stats: SessionStats | null;
     progress: ProgressState;
     log_count: number;
+    model_leaderboard: Record<string, ModelPerformanceSummary>;
   }>;
   get_new_logs(): Promise<LogEntry[]>;
   get_all_logs(): Promise<LogEntry[]>;
@@ -53,6 +55,7 @@ export interface BridgeState {
   agentName: string;
   stats: SessionStats | null;
   progress: ProgressState;
+  modelLeaderboard: Record<string, ModelPerformanceSummary>;
   clearLogs: (target: "orchestrator" | "agent" | "all") => void;
 }
 
@@ -72,6 +75,7 @@ export function useBridge(): BridgeState {
     active: false,
     status: "",
   });
+  const [modelLeaderboard, setModelLeaderboard] = useState<Record<string, ModelPerformanceSummary>>({});
 
   const clearLogs = useCallback(
     (target: "orchestrator" | "agent" | "all") => {
@@ -137,6 +141,7 @@ export function useBridge(): BridgeState {
         if (state.agent_name) setAgentName(state.agent_name);
         if (state.stats) setStats(state.stats);
         if (state.progress) setProgress(state.progress);
+        if (state.model_leaderboard) setModelLeaderboard(state.model_leaderboard);
 
         const allLogs = await api.get_all_logs();
         appendLogs(allLogs);
@@ -161,6 +166,7 @@ export function useBridge(): BridgeState {
           setAgentName(state.agent_name);
           if (state.stats) setStats(state.stats);
           if (state.progress) setProgress(state.progress);
+          if (state.model_leaderboard) setModelLeaderboard(state.model_leaderboard);
 
           setConnectionStatus("connected");
         } catch {
@@ -185,6 +191,7 @@ export function useBridge(): BridgeState {
     agentName,
     stats,
     progress,
+    modelLeaderboard,
     clearLogs,
   };
 }

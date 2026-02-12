@@ -3,7 +3,7 @@ import asyncio
 import os
 from typing import Optional, TYPE_CHECKING, Any
 
-from copilot import CopilotClient
+from copilot import CopilotClient  # type: ignore
 
 DEFAULT_MODEL = "claude-opus-4.6"
 FALLBACK_MODEL = "claude-sonnet-4.5"

@@ -63,3 +63,14 @@ pretty = true
 module = "tests.*"
 disallow_untyped_defs = false
 disallow_any_unimported = false
+
+# copilot SDK may not be installed in all environments
+[[tool.mypy.overrides]]
+module = "copilot.*"
+ignore_missing_imports = true
+
+# copilot_sdk uses conditional imports that produce different type: ignore
+# needs depending on whether the copilot SDK is installed
+[[tool.mypy.overrides]]
+module = "pokepoke.copilot_sdk"
+warn_unused_ignores = false
