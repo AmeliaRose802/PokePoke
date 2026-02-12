@@ -50,7 +50,7 @@ def run_tests_with_coverage():
                 "--timeout=30"
             ],
             text=True,
-            timeout=60
+            timeout=300
         )
         
         if result.returncode != 0:

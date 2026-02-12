@@ -3,8 +3,11 @@
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 import uuid
+
+if TYPE_CHECKING:
+    from pokepoke.types import SessionStats
 
 
 class RunLogger:
@@ -118,13 +121,15 @@ class RunLogger:
         """
         self.log_orchestrator(f"[MAINTENANCE:{agent_type}] {message}")
     
-    def finalize(self, items_completed: int, total_requests: int, elapsed: float) -> None:
-        """Write final summary to orchestrator log.
+    def finalize(self, items_completed: int, total_requests: int, elapsed: float,
+                 session_stats: Optional['SessionStats'] = None) -> None:
+        """Write final summary to orchestrator log and persist stats to disk.
         
         Args:
             items_completed: Number of work items completed
             total_requests: Total number of agent requests made
             elapsed: Total elapsed time in seconds
+            session_stats: Optional SessionStats to persist as stats.json
         """
         with open(self.orchestrator_log_path, 'a', encoding='utf-8') as f:
             f.write("\n" + "=" * 80 + "\n")
@@ -135,6 +140,17 @@ class RunLogger:
             f.write(f"Total agent requests: {total_requests}\n")
             f.write(f"Total time: {elapsed / 60:.1f} minutes\n")
             f.write("=" * 80 + "\n")
+        
+        # Persist session stats to stats.json
+        if session_stats is not None:
+            try:
+                from pokepoke.stats import save_session_stats_to_disk
+                stats_path = save_session_stats_to_disk(
+                    self.run_dir, session_stats, elapsed, items_completed, total_requests
+                )
+                self.log_orchestrator(f"Session stats saved to {stats_path}")
+            except Exception as e:
+                self.log_orchestrator(f"Failed to save session stats: {e}", level="ERROR")
         
         self.log_orchestrator("PokePoke run completed")
     

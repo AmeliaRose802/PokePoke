@@ -154,7 +154,7 @@ class TestBeadsIntegration:
 class TestFilterWorkItems:
     """Test work item filtering functions."""
     
-    @patch('src.pokepoke.beads.has_feature_parent')
+    @patch('src.pokepoke.beads_management.has_feature_parent')
     def test_filter_work_items_excludes_epics(self, mock_has_feature_parent: Mock) -> None:
         """Test that epics are excluded from filtered items."""
         from src.pokepoke.beads import filter_work_items
@@ -185,7 +185,7 @@ class TestFilterWorkItems:
         assert len(filtered) == 1
         assert filtered[0].id == "task-1"
     
-    @patch('src.pokepoke.beads.has_feature_parent')
+    @patch('src.pokepoke.beads_management.has_feature_parent')
     def test_filter_work_items_includes_features(self, mock_has_feature_parent: Mock) -> None:
         """Test that features are included in filtered items."""
         from src.pokepoke.beads import filter_work_items
@@ -304,7 +304,7 @@ class TestFilterWorkItems:
         
         assert result is False
     
-    @patch('src.pokepoke.beads.get_issue_dependencies')
+    @patch('src.pokepoke.beads_hierarchy.get_issue_dependencies')
     def test_has_feature_parent_false_non_parent_dependency(self, mock_get_issue: Mock) -> None:
         """Test has_feature_parent returns False for non-parent dependencies."""
         from src.pokepoke.beads import has_feature_parent
@@ -333,7 +333,7 @@ class TestFilterWorkItems:
         
         assert result is False
     
-    @patch('src.pokepoke.beads.get_issue_dependencies')
+    @patch('src.pokepoke.beads_hierarchy.get_issue_dependencies')
     def test_has_feature_parent_error_handling(self, mock_get_issue: Mock) -> None:
         """Test has_feature_parent handles errors gracefully."""
         from src.pokepoke.beads import has_feature_parent

@@ -789,7 +789,7 @@ class TestCheckParentHierarchy:
     """Test check_parent_hierarchy function."""
     
     @patch('pokepoke.worktree_finalization.close_parent_if_complete')
-    @patch('pokepoke.beads_hierarchy.get_parent_id')
+    @patch('pokepoke.worktree_finalization.get_parent_id')
     def test_no_parent(self, mock_get_parent: Mock, mock_close_parent: Mock) -> None:
         """Test when item has no parent."""
         item = BeadsWorkItem(

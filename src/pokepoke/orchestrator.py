@@ -158,7 +158,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
                 print("\n👋 Exiting PokePoke - no work items available.")
                 run_logger.log_orchestrator("No work items available - exiting")
                 print_stats(items_completed, total_requests, elapsed, session_stats)
-                run_logger.finalize(items_completed, total_requests, elapsed)
+                run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
                 print(f"\n📝 Run ID: {run_id}")
                 print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
                 clear_terminal_banner()
@@ -224,7 +224,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
                 session_stats.ending_beads_stats = get_beads_stats()
                 elapsed = time.time() - start_time
                 print_stats(items_completed, total_requests, elapsed, session_stats)
-                run_logger.finalize(items_completed, total_requests, elapsed)
+                run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
                 print(f"\n📝 Run ID: {run_id}")
                 print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
                 clear_terminal_banner()
@@ -245,7 +245,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
                     elapsed = time.time() - start_time
                     print("\n👋 Exiting PokePoke.")
                     print_stats(items_completed, total_requests, elapsed, session_stats)
-                    run_logger.finalize(items_completed, total_requests, elapsed)
+                    run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
                     print(f"\n📝 Run ID: {run_id}")
                     print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
                     clear_terminal_banner()
@@ -264,7 +264,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         elapsed = time.time() - start_time
         print("\n\ud83d\udc4b Shutdown requested - exiting PokePoke.")
         print_stats(items_completed, total_requests, elapsed, session_stats)
-        run_logger.finalize(items_completed, total_requests, elapsed)
+        run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
         clear_terminal_banner()
         return 0
     
@@ -285,7 +285,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         elapsed = time.time() - start_time
         print("\n👋 Exiting PokePoke.")
         print_stats(items_completed, total_requests, elapsed, session_stats)
-        run_logger.finalize(items_completed, total_requests, elapsed)
+        run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
         print(f"\n📝 Run ID: {run_id}")
         print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
         clear_terminal_banner()
@@ -305,7 +305,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         traceback.print_exc()
         print_stats(items_completed, total_requests, elapsed, session_stats)
         run_logger.log_orchestrator(f"Error: {e}", level="ERROR")
-        run_logger.finalize(items_completed, total_requests, elapsed)
+        run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
         print(f"\n📝 Run ID: {run_id}")
         print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
         clear_terminal_banner()

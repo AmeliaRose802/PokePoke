@@ -1,7 +1,10 @@
 """Agent statistics parsing and display utilities."""
 
+import json
 import re
-from typing import Optional, Dict, List
+from dataclasses import asdict
+from pathlib import Path
+from typing import Any, Optional, Dict, List
 
 from pokepoke.types import AgentStats, SessionStats, ModelCompletionRecord
 
@@ -233,3 +236,97 @@ def _print_model_comparison(completions: List[ModelCompletionRecord]) -> None:
             print(f"     Gate pass rate:   {pass_pct:.0f}% ({gate_passed}/{gate_total})")
         else:
             print(f"     Gate pass rate:   N/A (no gate runs)")
+
+
+def serialize_session_stats(
+    session_stats: SessionStats,
+    elapsed_seconds: float,
+    items_completed: int,
+    total_requests: int,
+) -> Dict[str, Any]:
+    """Serialize SessionStats into a JSON-compatible dictionary.
+
+    Includes all agent stats, run counts, beads deltas, model completions,
+    and summary timing information so that no data is lost if the terminal
+    scrollback is cleared or the session crashes.
+
+    Args:
+        session_stats: The session statistics to serialize.
+        elapsed_seconds: Total elapsed wall-clock time for the session.
+        items_completed: Number of items completed in this session.
+        total_requests: Total number of Copilot CLI requests.
+
+    Returns:
+        A plain dict suitable for ``json.dumps``.
+    """
+    data: Dict[str, Any] = {
+        "items_completed": items_completed,
+        "total_requests": total_requests,
+        "elapsed_seconds": round(elapsed_seconds, 2),
+        "agent_stats": asdict(session_stats.agent_stats),
+        "run_counts": {
+            "work_agent": session_stats.work_agent_runs,
+            "gate_agent": session_stats.gate_agent_runs,
+            "tech_debt_agent": session_stats.tech_debt_agent_runs,
+            "janitor_agent": session_stats.janitor_agent_runs,
+            "janitor_lines_removed": session_stats.janitor_lines_removed,
+            "backlog_cleanup_agent": session_stats.backlog_cleanup_agent_runs,
+            "cleanup_agent": session_stats.cleanup_agent_runs,
+            "beta_tester_agent": session_stats.beta_tester_agent_runs,
+            "code_review_agent": session_stats.code_review_agent_runs,
+            "worktree_cleanup_agent": session_stats.worktree_cleanup_agent_runs,
+        },
+        "completed_items": [
+            {"id": item.id, "title": item.title}
+            for item in session_stats.completed_items_list
+        ],
+        "model_completions": [
+            asdict(mc) for mc in session_stats.model_completions
+        ],
+    }
+
+    # Beads deltas
+    if session_stats.starting_beads_stats:
+        data["beads_start"] = asdict(session_stats.starting_beads_stats)
+    if session_stats.ending_beads_stats:
+        data["beads_end"] = asdict(session_stats.ending_beads_stats)
+    if session_stats.starting_beads_stats and session_stats.ending_beads_stats:
+        start = session_stats.starting_beads_stats
+        end = session_stats.ending_beads_stats
+        data["beads_delta"] = {
+            "total_issues": end.total_issues - start.total_issues,
+            "open_issues": end.open_issues - start.open_issues,
+            "in_progress_issues": end.in_progress_issues - start.in_progress_issues,
+            "closed_issues": end.closed_issues - start.closed_issues,
+            "ready_issues": end.ready_issues - start.ready_issues,
+        }
+
+    return data
+
+
+def save_session_stats_to_disk(
+    run_dir: Path,
+    session_stats: SessionStats,
+    elapsed_seconds: float,
+    items_completed: int,
+    total_requests: int,
+) -> Path:
+    """Persist session statistics as ``stats.json`` in the run log directory.
+
+    Args:
+        run_dir: The run-specific log directory (e.g. ``logs/<run-id>/``).
+        session_stats: The session statistics to persist.
+        elapsed_seconds: Total elapsed wall-clock time for the session.
+        items_completed: Number of items completed in this session.
+        total_requests: Total number of Copilot CLI requests.
+
+    Returns:
+        Path to the written ``stats.json`` file.
+    """
+    data = serialize_session_stats(
+        session_stats, elapsed_seconds, items_completed, total_requests
+    )
+    stats_path = run_dir / "stats.json"
+    with open(stats_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    return stats_path
