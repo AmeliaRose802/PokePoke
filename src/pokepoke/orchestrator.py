@@ -325,16 +325,43 @@ def main() -> int:
         action="store_true",
         help="Run beta tester at startup before processing work items",
     )
+    parser.add_argument(
+        "--desktop",
+        action="store_true",
+        help="Launch with native desktop GUI (pywebview) instead of terminal TUI",
+    )
+    parser.add_argument(
+        "--init",
+        action="store_true",
+        help="Initialize .pokepoke/ directory with sample config and templates",
+    )
     args = parser.parse_args()
+
+    if args.init:
+        from pokepoke.init import init_project
+        return 0 if init_project() else 1
+
     # Autonomous flag overrides interactive
     interactive = not args.autonomous
     
-    # Check beads availability BEFORE starting the Textual UI
+    # Check beads availability BEFORE starting any UI
     # so error messages print directly to stdout
     if not _check_beads_available():
         return 1
     
-    # Use the Textual UI wrapper to run the orchestrator
+    # Switch to desktop UI if requested
+    from typing import Union
+    from pokepoke.textual_ui import TextualUI
+    from pokepoke.desktop_ui import DesktopUI
+    active_ui: Union[TextualUI, DesktopUI]
+    if args.desktop:
+        from pokepoke.terminal_ui import use_desktop_ui
+        active_ui = use_desktop_ui()
+    else:
+        from pokepoke.terminal_ui import ui as default_ui
+        active_ui = default_ui
+    
+    # Run the orchestrator with the selected UI
     def orchestrator_func() -> int:
         return run_orchestrator(
             interactive=interactive,
@@ -342,7 +369,7 @@ def main() -> int:
             run_beta_first=args.beta_first
         )
     
-    return ui.run_with_orchestrator(orchestrator_func)
+    return active_ui.run_with_orchestrator(orchestrator_func)
 
 
 if __name__ == "__main__":

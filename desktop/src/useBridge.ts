@@ -1,51 +1,66 @@
 /**
- * WebSocket hook for connecting to the PokePoke orchestrator bridge.
+ * pywebview bridge hook for the PokePoke desktop app.
  *
- * Manages connection lifecycle, auto-reconnection, and message parsing.
- * Provides a clean React interface to the live orchestrator state.
+ * Communicates with the Python orchestrator via direct in-process
+ * method calls through window.pywebview.api — no WebSocket, no server.
+ *
+ * The frontend polls for new logs/state on a fast timer. The Python
+ * side buffers everything and the poll returns only new entries since
+ * the last call (incremental).
  */
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import type {
   LogEntry,
   WorkItem,
   SessionStats,
   ProgressState,
   ConnectionStatus,
-  BridgeMessage,
 } from "./types";
 
-const DEFAULT_WS_URL = "ws://127.0.0.1:9160";
-const RECONNECT_DELAY_MS = 2000;
+/** Poll interval in ms — 100ms = responsive without hammering */
+const POLL_INTERVAL_MS = 100;
 const MAX_LOG_ENTRIES = 2000;
 
+/** pywebview injects this on the window object */
+interface PyWebViewAPI {
+  get_state(): Promise<{
+    work_item: WorkItem | null;
+    agent_name: string;
+    stats: SessionStats | null;
+    progress: ProgressState;
+    log_count: number;
+  }>;
+  get_new_logs(): Promise<LogEntry[]>;
+  get_all_logs(): Promise<LogEntry[]>;
+  get_work_item(): Promise<WorkItem | null>;
+  get_stats(): Promise<SessionStats | null>;
+}
+
+declare global {
+  interface Window {
+    pywebview?: {
+      api: PyWebViewAPI;
+    };
+  }
+}
+
 export interface BridgeState {
-  /** WebSocket connection status */
   connectionStatus: ConnectionStatus;
-  /** Orchestrator log entries */
   orchestratorLogs: LogEntry[];
-  /** Agent log entries */
   agentLogs: LogEntry[];
-  /** Current work item being processed */
   workItem: WorkItem | null;
-  /** Current agent name */
   agentName: string;
-  /** Live session statistics */
   stats: SessionStats | null;
-  /** Progress indicator state */
   progress: ProgressState;
-  /** Clear logs for a specific panel */
   clearLogs: (target: "orchestrator" | "agent" | "all") => void;
 }
 
 /**
- * React hook that connects to the PokePoke WebSocket bridge and
- * provides live orchestrator state.
- *
- * @param wsUrl - WebSocket URL (default: ws://127.0.0.1:9160)
- * @returns BridgeState with live data and helper methods
+ * React hook that polls the Python DesktopAPI for orchestrator state.
+ * Direct in-process calls via pywebview — no network, no server.
  */
-export function useBridge(wsUrl: string = DEFAULT_WS_URL): BridgeState {
+export function useBridge(): BridgeState {
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>("connecting");
   const [orchestratorLogs, setOrchestratorLogs] = useState<LogEntry[]>([]);
@@ -58,113 +73,109 @@ export function useBridge(wsUrl: string = DEFAULT_WS_URL): BridgeState {
     status: "",
   });
 
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const clearLogs = useCallback(
     (target: "orchestrator" | "agent" | "all") => {
-      if (target === "orchestrator" || target === "all") {
+      if (target === "orchestrator" || target === "all")
         setOrchestratorLogs([]);
-      }
-      if (target === "agent" || target === "all") {
-        setAgentLogs([]);
-      }
+      if (target === "agent" || target === "all") setAgentLogs([]);
     },
     []
   );
 
-  const appendLog = useCallback((entry: LogEntry) => {
-    const setter =
-      entry.target === "agent" ? setAgentLogs : setOrchestratorLogs;
-    setter((prev) => {
-      const next = [...prev, entry];
-      // Trim to max buffer size
-      return next.length > MAX_LOG_ENTRIES
-        ? next.slice(next.length - MAX_LOG_ENTRIES)
-        : next;
-    });
-  }, []);
+  const appendLogs = useCallback((entries: LogEntry[]) => {
+    if (entries.length === 0) return;
 
-  const handleMessage = useCallback(
-    (event: MessageEvent) => {
-      try {
-        const msg: BridgeMessage = JSON.parse(event.data);
-
-        switch (msg.type) {
-          case "connected":
-            setConnectionStatus("connected");
-            break;
-
-          case "log":
-            appendLog(msg.data as LogEntry);
-            break;
-
-          case "work_item":
-            setWorkItem(msg.data as WorkItem);
-            break;
-
-          case "stats":
-            setStats(msg.data as SessionStats);
-            break;
-
-          case "agent_name":
-            setAgentName((msg.data as { name: string }).name);
-            break;
-
-          case "progress":
-            setProgress(msg.data as ProgressState);
-            break;
-        }
-      } catch {
-        // Ignore malformed messages
+    // Split into orchestrator and agent logs
+    const orchLogs: LogEntry[] = [];
+    const agLogs: LogEntry[] = [];
+    for (const e of entries) {
+      if (e.target === "agent") {
+        agLogs.push(e);
+      } else {
+        orchLogs.push(e);
       }
-    },
-    [appendLog]
-  );
-
-  const connect = useCallback(() => {
-    // Clean up any existing connection
-    if (wsRef.current) {
-      wsRef.current.close();
     }
 
-    setConnectionStatus("connecting");
-    const ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => {
-      setConnectionStatus("connected");
-    };
-
-    ws.onmessage = handleMessage;
-
-    ws.onclose = () => {
-      setConnectionStatus("disconnected");
-      // Auto-reconnect after delay
-      reconnectTimerRef.current = setTimeout(() => {
-        connect();
-      }, RECONNECT_DELAY_MS);
-    };
-
-    ws.onerror = () => {
-      // onclose will fire after this, triggering reconnect
-    };
-
-    wsRef.current = ws;
-  }, [wsUrl, handleMessage]);
+    if (orchLogs.length > 0) {
+      setOrchestratorLogs((prev) => {
+        const next = [...prev, ...orchLogs];
+        return next.length > MAX_LOG_ENTRIES
+          ? next.slice(next.length - MAX_LOG_ENTRIES)
+          : next;
+      });
+    }
+    if (agLogs.length > 0) {
+      setAgentLogs((prev) => {
+        const next = [...prev, ...agLogs];
+        return next.length > MAX_LOG_ENTRIES
+          ? next.slice(next.length - MAX_LOG_ENTRIES)
+          : next;
+      });
+    }
+  }, []);
 
   useEffect(() => {
-    connect();
+    let timer: ReturnType<typeof setInterval> | null = null;
+    let stopped = false;
+
+    async function waitForApi(): Promise<PyWebViewAPI> {
+      // pywebview injects window.pywebview after the page loads
+      while (!window.pywebview?.api && !stopped) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      return window.pywebview!.api;
+    }
+
+    async function start() {
+      const api = await waitForApi();
+      if (stopped) return;
+
+      // Initial load — get full state + all buffered logs
+      try {
+        const state = await api.get_state();
+        if (state.work_item) setWorkItem(state.work_item);
+        if (state.agent_name) setAgentName(state.agent_name);
+        if (state.stats) setStats(state.stats);
+        if (state.progress) setProgress(state.progress);
+
+        const allLogs = await api.get_all_logs();
+        appendLogs(allLogs);
+
+        setConnectionStatus("connected");
+      } catch {
+        setConnectionStatus("disconnected");
+        return;
+      }
+
+      // Poll for incremental updates
+      timer = setInterval(async () => {
+        if (stopped) return;
+        try {
+          // Get new logs (incremental — only entries since last poll)
+          const newLogs = await api.get_new_logs();
+          appendLogs(newLogs);
+
+          // Get current state
+          const state = await api.get_state();
+          setWorkItem(state.work_item);
+          setAgentName(state.agent_name);
+          if (state.stats) setStats(state.stats);
+          if (state.progress) setProgress(state.progress);
+
+          setConnectionStatus("connected");
+        } catch {
+          setConnectionStatus("disconnected");
+        }
+      }, POLL_INTERVAL_MS);
+    }
+
+    start();
 
     return () => {
-      // Cleanup on unmount
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      stopped = true;
+      if (timer) clearInterval(timer);
     };
-  }, [connect]);
+  }, [appendLogs]);
 
   return {
     connectionStatus,

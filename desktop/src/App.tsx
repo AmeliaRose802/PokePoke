@@ -2,7 +2,7 @@
  * PokePoke Desktop App - Main component.
  *
  * Phase 1: Agent status grid + log panels + stats bar.
- * Connects to the Python orchestrator via WebSocket bridge.
+ * Connects to the Python orchestrator via the pywebview API.
  */
 
 import { useState } from "react";

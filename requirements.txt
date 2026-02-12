@@ -10,3 +10,6 @@ pyyaml>=6.0
 # Terminal UI
 rich>=13.0.0
 textual>=0.40.0
+
+# Desktop GUI (native window via Edge WebView2)
+pywebview>=5.0

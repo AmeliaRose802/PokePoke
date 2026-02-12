@@ -1,47 +1,59 @@
-"""Desktop UI adapter for PokePoke orchestrator.
+"""Desktop UI adapter for PokePoke orchestrator using pywebview.
 
-Provides the same interface as TextualUI but routes all output
-through a WebSocket bridge to the Tauri desktop app instead of
-the terminal-based Textual TUI.
+Opens a native OS window (via Edge WebView2 on Windows) and runs the
+React frontend inside it. Communication is direct in-process method
+calls — no WebSocket, no server, no port.
+
+Architecture:
+    - pywebview creates a native window that renders the React app
+    - DesktopAPI class exposes Python methods to JavaScript directly
+    - The frontend polls for new logs / state via window.pywebview.api
+    - The orchestrator runs on a background thread
 
 Usage:
-    from pokepoke.desktop_ui import DesktopUI
-    ui = DesktopUI()
-    exit_code = ui.run_with_orchestrator(orchestrator_func)
+    python -m pokepoke.orchestrator --desktop
 """
 
 from __future__ import annotations
 
 import builtins
+import os
 import sys
 import threading
 import time
+from pathlib import Path
 from typing import Optional, Any, Iterator, Callable, TYPE_CHECKING
 from contextlib import contextmanager
 
-from pokepoke.desktop_bridge import DesktopBridge, DEFAULT_WS_PORT
+from pokepoke.desktop_api import DesktopAPI
 from pokepoke.shutdown import is_shutting_down, request_shutdown
 
 if TYPE_CHECKING:
     from pokepoke.types import SessionStats
 
 
+def _find_frontend_dist() -> Optional[Path]:
+    """Locate the pre-built React frontend dist/ directory."""
+    # Look relative to this file: src/pokepoke/desktop_ui.py → ../../desktop/dist
+    src_root = Path(__file__).resolve().parent.parent.parent
+    dist = src_root / "desktop" / "dist"
+    if dist.is_dir() and (dist / "index.html").exists():
+        return dist
+    return None
+
+
 class DesktopUI:
-    """UI adapter that sends orchestrator output to the desktop app via WebSocket.
+    """UI adapter that opens a native pywebview window.
 
-    Drop-in replacement for TextualUI. The orchestrator code doesn't need
-    to know whether it's rendering to a terminal TUI or a desktop window —
-    it calls the same methods either way.
+    Drop-in replacement for TextualUI. The orchestrator calls the same
+    methods — this one pushes state to the DesktopAPI which the frontend
+    reads via direct in-process calls (window.pywebview.api).
 
-    Key differences from TextualUI:
-    - No Textual dependency — runs headless
-    - Output goes to WebSocket clients instead of terminal widgets
-    - The orchestrator runs in the main thread (no worker needed)
-    - Print redirect captures output and forwards it over WebSocket
+    Single process. No server. No ports.
     """
 
-    def __init__(self, port: int = DEFAULT_WS_PORT) -> None:
-        self._bridge = DesktopBridge(port=port)
+    def __init__(self) -> None:
+        self._api = DesktopAPI()
         self._is_running = False
         self._original_print = builtins.print
         self._current_style: Optional[str] = None
@@ -49,52 +61,92 @@ class DesktopUI:
         self._line_buffer: str = ""
         self._flush_timer: Optional[threading.Timer] = None
         self._buffer_lock = threading.Lock()
-        self._port = port
 
     @property
     def is_running(self) -> bool:
-        """Check if the UI is running."""
         return self._is_running
 
-    @property
-    def bridge(self) -> DesktopBridge:
-        """Access the underlying WebSocket bridge."""
-        return self._bridge
-
     def run_with_orchestrator(self, orchestrator_func: Callable[[], int]) -> int:
-        """Run the orchestrator with the desktop bridge active.
+        """Run the orchestrator with a native desktop window.
 
-        Starts the WebSocket server, redirects print output, runs the
-        orchestrator function, then cleans up.
-
-        Returns:
-            Exit code from the orchestrator function.
+        pywebview must own the main thread (Windows requirement), so:
+        1. Start the orchestrator on a background thread
+        2. Create the pywebview window on the main thread
+        3. When the window closes, signal shutdown
         """
-        self._bridge.start()
+        import webview  # type: ignore[import-not-found]
+
         self._is_running = True
         builtins.print = self._print_redirect
 
-        # Log startup info to the bridge
-        self._bridge.send_log(
-            f"🖥️  Desktop bridge started on ws://127.0.0.1:{self._port}",
+        self._api.push_log(
+            "🖥️  PokePoke Desktop started (pywebview native window)",
             "orchestrator",
         )
 
-        try:
-            exit_code = orchestrator_func()
-            return exit_code
-        except KeyboardInterrupt:
-            request_shutdown()
-            return 130
-        except Exception as e:
-            self._bridge.send_log(f"Orchestrator error: {e}", "orchestrator", "red")
-            return 1
-        finally:
+        # Find the frontend
+        dist_dir = _find_frontend_dist()
+        if dist_dir is None:
             builtins.print = self._original_print
-            self._is_running = False
-            # Give clients a moment to receive final messages
-            time.sleep(0.2)
-            self._bridge.stop()
+            print("❌ Desktop frontend not built. Run:", file=sys.stderr)
+            print("   cd desktop && npm install && npm run build", file=sys.stderr)
+            return 1
+
+        # Result container for the orchestrator thread
+        exit_code_box: list[int] = [0]
+
+        def run_orchestrator() -> None:
+            try:
+                exit_code_box[0] = orchestrator_func()
+            except KeyboardInterrupt:
+                request_shutdown()
+                exit_code_box[0] = 130
+            except Exception as e:
+                self._api.push_log(f"❌ Orchestrator error: {e}", "orchestrator", "red")
+                exit_code_box[0] = 1
+            finally:
+                builtins.print = self._original_print
+                self._is_running = False
+
+        # Start orchestrator on background thread
+        orch_thread = threading.Thread(
+            target=run_orchestrator,
+            daemon=True,
+            name="orchestrator",
+        )
+
+        def on_window_loaded() -> None:
+            """Called after the webview window is ready."""
+            self._api.set_window(window)
+            orch_thread.start()
+
+        # Create native window pointing at the built React app
+        window = webview.create_window(
+            title="PokePoke - Autonomous Workflow Manager",
+            url=str(dist_dir / "index.html"),
+            js_api=self._api,
+            width=1280,
+            height=800,
+            min_size=(900, 600),
+            text_select=True,
+        )
+
+        # Run pywebview on the main thread (blocks until window closes)
+        webview.start(
+            func=on_window_loaded,
+            debug=(os.environ.get("POKEPOKE_DEBUG", "").lower() in ("1", "true")),
+        )
+
+        # Window closed — tell orchestrator to shut down
+        request_shutdown()
+        self._is_running = False
+        builtins.print = self._original_print
+
+        # Wait for orchestrator to finish (give it a moment)
+        if orch_thread.is_alive():
+            orch_thread.join(timeout=3.0)
+
+        return exit_code_box[0]
 
     def start(self) -> None:
         """Resume UI output capture (after interactive prompt pause)."""
@@ -102,30 +154,22 @@ class DesktopUI:
         builtins.print = self._print_redirect
 
     def stop(self) -> None:
-        """Pause UI output capture (for interactive prompts).
-
-        Restores original print so the user can see terminal prompts.
-        """
+        """Pause UI output capture (for interactive prompts)."""
         builtins.print = self._original_print
         self._is_running = False
 
     def stop_and_capture(self) -> None:
-        """Stop UI but keep capturing output to the bridge.
-
-        Used during shutdown to ensure stats are still sent to desktop.
-        """
-        # Keep print redirect active so final output goes to bridge
+        """Stop UI but keep capturing output."""
         self._is_running = False
 
     def exit(self) -> None:
-        """Exit and stop the bridge."""
+        """Exit."""
         self._is_running = False
-        self._bridge.stop()
 
     # ─── Print Redirect ───────────────────────────────────────────────
 
     def _print_redirect(self, *args: Any, **kwargs: Any) -> None:
-        """Redirect print calls to the desktop bridge."""
+        """Redirect print calls to the desktop API log buffer."""
         file = kwargs.get("file", sys.stdout)
         if file not in (sys.stdout, None):
             self._original_print(*args, **kwargs)
@@ -139,16 +183,14 @@ class DesktopUI:
         with self._buffer_lock:
             self._line_buffer += msg
 
-            # Process complete lines immediately
             while "\n" in self._line_buffer:
                 line, self._line_buffer = self._line_buffer.split("\n", 1)
                 if line:
-                    self._bridge.send_log(line, self._target_buffer, self._current_style)
+                    self._api.push_log(line, self._target_buffer, self._current_style)
                 if self._flush_timer:
                     self._flush_timer.cancel()
                     self._flush_timer = None
 
-            # Deferred flush for streaming tokens
             if flush and self._line_buffer:
                 if self._flush_timer:
                     self._flush_timer.cancel()
@@ -157,10 +199,9 @@ class DesktopUI:
                 self._flush_timer.start()
 
     def _deferred_flush(self) -> None:
-        """Flush the line buffer after a short delay."""
         with self._buffer_lock:
             if self._line_buffer:
-                self._bridge.send_log(
+                self._api.push_log(
                     self._line_buffer, self._target_buffer, self._current_style
                 )
                 self._line_buffer = ""
@@ -170,7 +211,6 @@ class DesktopUI:
 
     @contextmanager
     def orchestrator_output(self) -> Iterator[None]:
-        """Context manager to route output to orchestrator panel."""
         prev = self._target_buffer
         self._target_buffer = "orchestrator"
         try:
@@ -180,7 +220,6 @@ class DesktopUI:
 
     @contextmanager
     def agent_output(self) -> Iterator[None]:
-        """Context manager to route output to agent panel."""
         prev = self._target_buffer
         self._target_buffer = "agent"
         try:
@@ -190,7 +229,6 @@ class DesktopUI:
 
     @contextmanager
     def styled_output(self, style: str) -> Iterator[None]:
-        """Context manager to apply a Rich style to output."""
         prev_style = self._current_style
         self._current_style = style
         try:
@@ -199,43 +237,32 @@ class DesktopUI:
             self._current_style = prev_style
 
     def set_style(self, style: Optional[str]) -> None:
-        """Set the current text style for logs."""
         self._current_style = style
 
     # ─── State Updates ────────────────────────────────────────────────
 
     def set_current_agent(self, agent_name: Optional[str]) -> None:
-        """Set the currently running agent name."""
-        self._bridge.send_agent_name(agent_name or "")
+        self._api.push_agent_name(agent_name or "")
 
     def update_header(self, item_id: str, title: str, status: str = "") -> None:
-        """Update the work item header."""
-        self._bridge.send_work_item(item_id, title, status)
+        self._api.push_work_item(item_id, title, status)
 
     def update_stats(
-        self, session_stats: Optional[SessionStats], elapsed_time: float = 0.0
+        self, session_stats: Optional["SessionStats"], elapsed_time: float = 0.0
     ) -> None:
-        """Update the session statistics display."""
-        self._bridge.send_stats(session_stats, elapsed_time)
+        self._api.push_stats(session_stats, elapsed_time)
 
     def set_session_start_time(self, start_time: float) -> None:
-        """Set the session start time for real-time clock updates.
-
-        In desktop mode the frontend handles its own elapsed time
-        calculation, so we just forward the start timestamp.
-        """
-        self._bridge.send_stats(None, time.time() - start_time)
+        self._api.push_stats(None, time.time() - start_time)
 
     def log_message(
         self, message: str, target: str = "orchestrator", style: Optional[str] = None
     ) -> None:
-        """Directly log a message to a panel."""
-        self._bridge.send_log(message, target, style)
+        self._api.push_log(message, target, style)
 
     def log_orchestrator(self, message: str, style: Optional[str] = None) -> None:
-        """Log a message to the orchestrator panel."""
-        self._bridge.send_log(message, "orchestrator", style)
+        self._api.push_log(message, "orchestrator", style)
 
     def log_agent(self, message: str, style: Optional[str] = None) -> None:
-        """Log a message to the agent panel."""
-        self._bridge.send_log(message, "agent", style)
+        self._api.push_log(message, "agent", style)
+

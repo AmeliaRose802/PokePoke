@@ -13,6 +13,7 @@ setup(
     entry_points={
         "console_scripts": [
             "pokepoke=pokepoke.orchestrator:main",
+            "pokepoke-init=pokepoke.init:main",
         ],
     },
 )

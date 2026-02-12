@@ -38,21 +38,18 @@ from pokepoke.textual_ui import TextualUI
 ui: Union["TextualUI", "DesktopUI"] = TextualUI()
 
 
-def use_desktop_ui(port: int = 9160) -> "DesktopUI":
-    """Switch the global UI to the desktop WebSocket-based UI.
+def use_desktop_ui() -> "DesktopUI":
+    """Switch the global UI to the pywebview native desktop UI.
 
-    Call this before starting the orchestrator to use the desktop app
-    instead of the terminal TUI.
-
-    Args:
-        port: WebSocket server port (default 9160).
+    Call this before starting the orchestrator to open a native
+    desktop window instead of the terminal TUI.
 
     Returns:
         The DesktopUI instance that was installed as the global UI.
     """
     global ui
     from pokepoke.desktop_ui import DesktopUI
-    desktop = DesktopUI(port=port)
+    desktop = DesktopUI()
     ui = desktop
     return desktop
 

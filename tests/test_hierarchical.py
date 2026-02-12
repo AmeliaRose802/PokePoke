@@ -541,7 +541,7 @@ class TestHierarchicalWorkAssignment:
         assert selected.id == "feature-1"
         assert selected.issue_type == "feature"
 
-    @patch('src.pokepoke.beads_hierarchy.get_children')
+    @patch('pokepoke.beads_hierarchy.get_children')
     def test_select_next_hierarchical_item_childless_epic(
         self,
         mock_get_children: Mock
@@ -565,7 +565,7 @@ class TestHierarchicalWorkAssignment:
         assert selected.id == "epic-1"
         assert selected.issue_type == "epic"
 
-    @patch('src.pokepoke.beads_hierarchy.get_children')
+    @patch('pokepoke.beads_hierarchy.get_children')
     def test_select_next_hierarchical_item_prioritizes_tasks_over_childless_features(
         self,
         mock_get_children: Mock

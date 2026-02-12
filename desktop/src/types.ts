@@ -1,8 +1,8 @@
 /**
  * Shared types for PokePoke desktop frontend.
  *
- * These mirror the Python-side WebSocket message protocol from
- * desktop_bridge.py. All messages have a "type" and "data" payload.
+ * These mirror the Python-side DesktopAPI data structures.
+ * Communication is via direct in-process calls through pywebview.
  */
 
 /** Log entry from the orchestrator or agent */
@@ -55,21 +55,5 @@ export interface ProgressState {
   status: string;
 }
 
-/** All possible WebSocket message types from the bridge */
-export type BridgeMessageType =
-  | "connected"
-  | "log"
-  | "work_item"
-  | "stats"
-  | "agent_name"
-  | "progress"
-  | "pong";
-
-/** A typed WebSocket message envelope */
-export interface BridgeMessage<T = unknown> {
-  type: BridgeMessageType;
-  data: T;
-}
-
-/** Connection status of the WebSocket bridge */
+/** Connection status of the pywebview bridge */
 export type ConnectionStatus = "connecting" | "connected" | "disconnected";
