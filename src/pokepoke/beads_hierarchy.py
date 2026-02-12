@@ -10,6 +10,9 @@ from .beads_query import get_issue_dependencies
 # Label that marks items as requiring human intervention - agents will skip these
 HUMAN_REQUIRED_LABEL = 'human-required'
 
+# Statuses that indicate a work item is complete
+COMPLETED_STATUSES = ('done', 'closed', 'resolved')
+
 
 def get_children(parent_id: str) -> List[BeadsWorkItem]:
     """Get all child items for a parent issue (epic or feature).
@@ -111,7 +114,7 @@ def get_next_child_task(parent_id: str) -> Optional[BeadsWorkItem]:
     # Filter to open/in_progress children only
     open_children = [
         child for child in children 
-        if child.status not in ('done', 'closed', 'resolved')
+        if child.status not in COMPLETED_STATUSES
     ]
     
     if not open_children:
@@ -152,7 +155,7 @@ def _get_available_children(parent_id: str) -> tuple[list[BeadsWorkItem], list[B
     # Filter to open/in_progress children only
     open_children = [
         child for child in children
-        if child.status not in ('done', 'closed', 'resolved')
+        if child.status not in COMPLETED_STATUSES
     ]
     
     if not open_children:
@@ -255,7 +258,7 @@ def all_children_complete(parent_id: str) -> bool:
     
     # Check if all children are in done/closed/resolved status
     return all(
-        child.status in ('done', 'closed', 'resolved') 
+        child.status in COMPLETED_STATUSES
         for child in children
     )
 

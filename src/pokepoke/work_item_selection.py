@@ -1,14 +1,11 @@
 """Work item selection logic for PokePoke."""
 
-import os
 from typing import Optional
 
 from .types import BeadsWorkItem
 from .beads import select_next_hierarchical_item
+from .beads_hierarchy import HUMAN_REQUIRED_LABEL, _is_assigned_to_current_user
 from .shutdown import is_shutting_down
-
-# Label that marks items as requiring human intervention - PokePoke will skip these
-HUMAN_REQUIRED_LABEL = 'human-required'
 
 
 def _is_human_required(item: BeadsWorkItem) -> bool:
@@ -26,50 +23,6 @@ def _is_human_required(item: BeadsWorkItem) -> bool:
     if not item.labels:
         return False
     return HUMAN_REQUIRED_LABEL in item.labels
-
-
-def _is_assigned_to_current_user(item: BeadsWorkItem) -> bool:
-    """Check if item is assignable by current agent.
-    
-    CRITICAL: Checks both 'assignee' field and 'status' field.
-    - assignee: pokepoke_agent_123 (who is actively working on it)
-    - owner: user@example.com (who created/owns it)
-    - status: 'in_progress' means another agent likely claimed it
-    
-    NOTE: `bd ready --json` often returns items WITHOUT the assignee field
-    populated, even when the item is assigned. We use the status field as
-    an additional signal: if status is 'in_progress' with no assignee info,
-    another agent likely has it.
-    
-    Args:
-        item: Work item to check.
-        
-    Returns:
-        True if item is unassigned or assigned to THIS agent, False if assigned to another agent.
-    """
-    # Get the assignee (specific agent working on it)
-    assignee = getattr(item, 'assignee', None) or ''
-    agent_name = os.environ.get('AGENT_NAME', '')
-    
-    if assignee:
-        # Has an assignee - check if it's THIS agent
-        if agent_name and agent_name.lower() == assignee.lower():
-            return True
-        
-        # Assigned to a different agent - SKIP
-        status_info = f" ({item.status})" if item.status else ""
-        print(f"   \u23ed\ufe0f  Skipping {item.id}{status_info} - assigned to {assignee}")
-        return False
-    
-    # No assignee field - check status as a fallback signal.
-    # bd ready --json often omits the assignee even when one is set.
-    # If status is 'in_progress', another agent likely claimed it already.
-    if item.status == 'in_progress':
-        print(f"   \u23ed\ufe0f  Skipping {item.id} - status is in_progress (likely claimed by another agent)")
-        return False
-    
-    # No assignee, not in_progress - claimable
-    return True
 
 
 def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool, skip_ids: Optional[set[str]] = None) -> Optional[BeadsWorkItem]:
