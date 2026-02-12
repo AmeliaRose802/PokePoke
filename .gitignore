@@ -10,6 +10,9 @@ worktrees/
 # PokePoke logs
 logs/
 
+# Work artifacts (configurable via work_artifacts_dir in .pokepoke/config.yaml)
+ai_incident_reports/
+
 # Python
 __pycache__/
 *.py[cod]
