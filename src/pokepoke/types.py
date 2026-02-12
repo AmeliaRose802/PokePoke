@@ -54,6 +54,7 @@ class IssueWithDependencies:
     dependencies: Optional[List[Dependency]] = None
     dependents: Optional[List[Dependency]] = None
     owner: Optional[str] = None
+    assignee: Optional[str] = None  # Agent actively working on it (pokepoke_agent_123)
     created_at: Optional[str] = None
     created_by: Optional[str] = None
     updated_at: Optional[str] = None

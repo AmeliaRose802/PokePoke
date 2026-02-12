@@ -129,9 +129,12 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
                 session_stats.agent_stats.premium_requests += beta_stats.premium_requests
             print("✅ Beta Tester completed\n")
             
+        # Track items that failed claiming to avoid infinite retry loops
+        failed_claim_ids: set[str] = set()
+        
         while not is_shutting_down():
             # Check main repo status before processing
-            print("\n🔍 Checking main repository status...")
+            print("\n\ud83d\udd0d Checking main repository status...")
             run_logger.log_orchestrator("Checking main repository status")
             if not check_and_commit_main_repo(main_repo_path, run_logger):
                 run_logger.log_orchestrator("Main repo check failed", level="ERROR")
@@ -143,7 +146,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             # Pause UI for interactive selection
             if interactive:
                 terminal_ui.ui.stop()
-            selected_item = select_work_item(ready_items, interactive)
+            selected_item = select_work_item(ready_items, interactive, skip_ids=failed_claim_ids)
             if interactive:
                 terminal_ui.ui.start()
             
@@ -172,6 +175,18 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             success, requests, item_stats, cleanup_runs, gate_runs, model_completion = process_work_item(
                 selected_item, interactive, run_logger=run_logger
             )
+            
+            # Track items that failed claiming to avoid re-selecting them
+            if not success and requests == 0:
+                failed_claim_ids.add(selected_item.id)
+                run_logger.log_orchestrator(
+                    f"Item {selected_item.id} failed to claim, added to skip list "
+                    f"({len(failed_claim_ids)} skipped)"
+                )
+            elif success:
+                # Clear the skip list on success - stale claims may have been released
+                failed_claim_ids.clear()
+            
             total_requests += requests
             if requests > 1:
                 session_stats.agent_stats.retries += (requests - 1)

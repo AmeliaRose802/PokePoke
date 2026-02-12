@@ -7,6 +7,9 @@ coverage/
 .vscode/settings.json
 worktrees/
 
+# PokePoke runtime state
+.pokepoke/maintenance_state.json
+
 # PokePoke logs
 logs/
 

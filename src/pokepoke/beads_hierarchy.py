@@ -46,6 +46,7 @@ def get_children(parent_id: str) -> List[BeadsWorkItem]:
                 priority=child_issue.priority,
                 issue_type=child_issue.issue_type,
                 owner=child_issue.owner,
+                assignee=getattr(child_issue, 'assignee', None),
                 created_at=child_issue.created_at,
                 created_by=child_issue.created_by,
                 updated_at=child_issue.updated_at,
@@ -56,38 +57,38 @@ def get_children(parent_id: str) -> List[BeadsWorkItem]:
 
 
 def _is_assigned_to_current_user(item: BeadsWorkItem) -> bool:
-    """Check if item is assigned to current user or unassigned.
+    """Check if item is assignable by current agent.
+    
+    CRITICAL: Checks the 'assignee' field (specific agent), NOT 'owner' field.
+    - assignee: pokepoke_agent_123 (who is actively working on it)
+    - owner: user@example.com (who created/owns it - NOT relevant for claiming)
+    
+    Also checks status: if 'in_progress' with no assignee info, assumes
+    another agent has claimed it (bd commands sometimes omit assignee).
     
     Args:
         item: Work item to check.
         
     Returns:
-        True if item is unassigned or assigned to current user, False if assigned to someone else.
+        True if item is unassigned or assigned to THIS agent, False otherwise.
     """
-    # Unassigned items are claimable
-    if not item.owner:
-        return True
-    
-    # Get current agent identifiers
+    assignee = getattr(item, 'assignee', None) or ''
     agent_name = os.environ.get('AGENT_NAME', '')
-    username = os.environ.get('USERNAME', '')
     
-    owner = item.owner.lower()
+    if assignee:
+        # Has an assignee - check if it's THIS agent
+        if agent_name and agent_name.lower() == assignee.lower():
+            return True
+        # Assigned to a different agent - SKIP
+        return False
     
-    # Check if assigned to current agent
-    if agent_name and agent_name.lower() == owner:
-        return True
+    # No assignee field - check status as fallback.
+    # If status is 'in_progress', another agent likely claimed it.
+    if item.status == 'in_progress':
+        return False
     
-    # Check if assigned to current user by username
-    if username and username.lower() == owner:
-        return True
-    
-    # Check if username is in the owner email (e.g., "user@example.com")
-    if username and username.lower() in owner:
-        return True
-    
-    # Otherwise, assigned to someone else
-    return False
+    # No assignee, not in_progress - claimable
+    return True
 
 
 def get_next_child_task(parent_id: str) -> Optional[BeadsWorkItem]:

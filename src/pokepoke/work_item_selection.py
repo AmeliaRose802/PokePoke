@@ -31,9 +31,15 @@ def _is_human_required(item: BeadsWorkItem) -> bool:
 def _is_assigned_to_current_user(item: BeadsWorkItem) -> bool:
     """Check if item is assignable by current agent.
     
-    CRITICAL: Checks the 'assignee' field (specific agent), NOT 'owner' field (human user).
+    CRITICAL: Checks both 'assignee' field and 'status' field.
     - assignee: pokepoke_agent_123 (who is actively working on it)
     - owner: user@example.com (who created/owns it)
+    - status: 'in_progress' means another agent likely claimed it
+    
+    NOTE: `bd ready --json` often returns items WITHOUT the assignee field
+    populated, even when the item is assigned. We use the status field as
+    an additional signal: if status is 'in_progress' with no assignee info,
+    another agent likely has it.
     
     Args:
         item: Work item to check.
@@ -43,37 +49,56 @@ def _is_assigned_to_current_user(item: BeadsWorkItem) -> bool:
     """
     # Get the assignee (specific agent working on it)
     assignee = getattr(item, 'assignee', None) or ''
-    
-    # If no assignee, it's claimable
-    if not assignee:
-        return True
-    
-    # Has an assignee - check if it's THIS agent
     agent_name = os.environ.get('AGENT_NAME', '')
     
-    # Is it assigned to THIS agent specifically?
-    if agent_name and agent_name.lower() == assignee.lower():
-        return True
+    if assignee:
+        # Has an assignee - check if it's THIS agent
+        if agent_name and agent_name.lower() == assignee.lower():
+            return True
+        
+        # Assigned to a different agent - SKIP
+        status_info = f" ({item.status})" if item.status else ""
+        print(f"   \u23ed\ufe0f  Skipping {item.id}{status_info} - assigned to {assignee}")
+        return False
     
-    # Assigned to a different agent - SKIP
-    status_info = f" ({item.status})" if item.status else ""
-    print(f"   ⏭️  Skipping {item.id}{status_info} - assigned to {assignee}")
-    return False
+    # No assignee field - check status as a fallback signal.
+    # bd ready --json often omits the assignee even when one is set.
+    # If status is 'in_progress', another agent likely claimed it already.
+    if item.status == 'in_progress':
+        print(f"   \u23ed\ufe0f  Skipping {item.id} - status is in_progress (likely claimed by another agent)")
+        return False
+    
+    # No assignee, not in_progress - claimable
+    return True
 
 
-def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool) -> Optional[BeadsWorkItem]:
+def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool, skip_ids: Optional[set[str]] = None) -> Optional[BeadsWorkItem]:
     """Select a work item to process using hierarchical assignment.
     
     Args:
         ready_items: List of available work items
         interactive: If True, prompt user to select; if False, use hierarchical selection
+        skip_ids: Set of item IDs to skip (e.g., items that failed claiming)
         
     Returns:
         Selected work item or None to quit
     """
     if not ready_items:
-        print("\n✨ No ready work found in beads database.")
+        print("\n\u2728 No ready work found in beads database.")
         print("   Run 'bd ready' to see available work items.")
+        return None
+    
+    # Filter out items that previously failed claiming this session
+    if skip_ids:
+        skipped = [item for item in ready_items if item.id in skip_ids]
+        if skipped:
+            for item in skipped:
+                print(f"   \u23ed\ufe0f  Skipping {item.id} - failed to claim earlier this session")
+            ready_items = [item for item in ready_items if item.id not in skip_ids]
+    
+    if not ready_items:
+        print("\n\u2728 No ready work found - all items were previously skipped.")
+        print("   Other agents may still be working. Waiting for items to become available.")
         return None
     
     # Filter out items assigned to other agents

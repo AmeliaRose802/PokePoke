@@ -128,7 +128,7 @@ def get_issue_dependencies(issue_id: str) -> Optional[IssueWithDependencies]:
     # Filter out fields not in IssueWithDependencies dataclass
     valid_issue_fields = {
         'id', 'title', 'status', 'priority', 'issue_type', 'description',
-        'dependencies', 'dependents', 'owner', 'created_at', 'created_by',
+        'dependencies', 'dependents', 'owner', 'assignee', 'created_at', 'created_by',
         'updated_at', 'labels', 'notes'
     }
     filtered_issue = {k: v for k, v in issue_dict.items() if k in valid_issue_fields}
