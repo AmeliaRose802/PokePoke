@@ -20,6 +20,13 @@
       "duration_seconds": 494.318222284317,
       "gate_passed": true,
       "timestamp": "2026-02-12T19:42:06.052353+00:00"
+    },
+    {
+      "item_id": "PokePoke-ggbj",
+      "model": "gpt-5-codex",
+      "duration_seconds": 75.132652759552,
+      "gate_passed": false,
+      "timestamp": "2026-02-12T19:54:22.181060+00:00"
     }
   ],
   "summary": {
@@ -52,6 +59,16 @@
       "average_duration": 494.32,
       "success_rate": 1.0,
       "last_used": "2026-02-12T19:42:06.052353+00:00"
+    },
+    "gpt-5-codex": {
+      "total_items_attempted": 1,
+      "total_items_succeeded": 0,
+      "total_items_failed": 1,
+      "total_duration_seconds": 75.132652759552,
+      "total_retries": 0,
+      "average_duration": 75.13,
+      "success_rate": 0.0,
+      "last_used": "2026-02-12T19:54:22.181060+00:00"
     }
   }
 }
