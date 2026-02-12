@@ -1,5 +1,7 @@
 """Tests for DesktopAPI state buffering and retrieval."""
 
+import time
+
 from pokepoke.desktop_api import DesktopAPI
 from pokepoke.types import SessionStats, AgentStats
 
@@ -67,3 +69,73 @@ def test_clear_logs() -> None:
     assert api.get_state()["log_count"] == 1
     api.clear_logs()
     assert api.get_state()["log_count"] == 0
+
+
+def test_elapsed_time_computed_dynamically() -> None:
+    """Timer should tick on every poll, not freeze between push_stats() calls."""
+    api = DesktopAPI()
+    start = time.time()
+    api.set_session_start_time(start)
+
+    # Even without push_stats, get_state should report non-zero elapsed
+    state = api.get_state()
+    assert state["stats"] is not None
+    assert state["stats"]["elapsed_time"] >= 0.0
+
+    # get_stats should also compute it dynamically
+    stats = api.get_stats()
+    assert stats is not None
+    assert stats["elapsed_time"] >= 0.0
+
+
+def test_elapsed_time_overrides_push_stats_value() -> None:
+    """Dynamic elapsed_time should override stale push_stats value."""
+    api = DesktopAPI()
+    start = time.time() - 100  # pretend session started 100s ago
+    api.set_session_start_time(start)
+
+    stats_obj = SessionStats(agent_stats=AgentStats(), items_completed=3)
+    api.push_stats(stats_obj, elapsed_time=5.0)  # stale value
+
+    state = api.get_state()
+    # Should be ~100s, not the stale 5.0
+    assert state["stats"]["elapsed_time"] >= 99.0
+    # Other stats should still be present
+    assert state["stats"]["items_completed"] == 3
+
+
+def test_live_stats_update_in_realtime() -> None:
+    """Mutating the live SessionStats object should be reflected on next poll."""
+    api = DesktopAPI()
+    stats_obj = SessionStats(agent_stats=AgentStats(), items_completed=0)
+    api.push_stats(stats_obj, elapsed_time=0.0)
+
+    # Verify initial state
+    state = api.get_state()
+    assert state["stats"]["work_agent_runs"] == 0
+    assert state["stats"]["gate_agent_runs"] == 0
+    assert state["stats"]["items_completed"] == 0
+
+    # Mutate the live object (as the orchestrator does)
+    stats_obj.work_agent_runs += 1
+    stats_obj.gate_agent_runs += 2
+    stats_obj.items_completed = 1
+    stats_obj.agent_stats.input_tokens = 500
+
+    # Next poll should reflect the mutations without another push_stats()
+    state = api.get_state()
+    assert state["stats"]["work_agent_runs"] == 1
+    assert state["stats"]["gate_agent_runs"] == 2
+    assert state["stats"]["items_completed"] == 1
+    assert state["stats"]["agent_stats"]["input_tokens"] == 500
+
+
+def test_set_live_session_stats_directly() -> None:
+    """set_live_session_stats should register the live reference."""
+    api = DesktopAPI()
+    stats_obj = SessionStats(agent_stats=AgentStats(), work_agent_runs=5)
+    api.set_live_session_stats(stats_obj)
+
+    state = api.get_state()
+    assert state["stats"] is not None
+    assert state["stats"]["work_agent_runs"] == 5

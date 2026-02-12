@@ -253,7 +253,7 @@ class DesktopUI:
         self._api.push_stats(session_stats, elapsed_time)
 
     def set_session_start_time(self, start_time: float) -> None:
-        self._api.push_stats(None, time.time() - start_time)
+        self._api.set_session_start_time(start_time)
 
     def log_message(
         self, message: str, target: str = "orchestrator", style: Optional[str] = None

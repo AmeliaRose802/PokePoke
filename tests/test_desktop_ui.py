@@ -163,10 +163,7 @@ class TestDesktopUIStateUpdates:
         ui = DesktopUI()
         ui._api = MagicMock()
         ui.set_session_start_time(1000.0)
-        ui._api.push_stats.assert_called_once()
-        args = ui._api.push_stats.call_args
-        assert args[0][0] is None
-        assert args[0][1] >= 0.0
+        ui._api.set_session_start_time.assert_called_once_with(1000.0)
 
 
 class TestDesktopUILifecycle:
