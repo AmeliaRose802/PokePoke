@@ -12,3 +12,6 @@ rich>=13.0.0
 
 # Desktop GUI (native window via Edge WebView2)
 pywebview>=5.0
+
+# Cross-process file locking
+filelock>=3.12
