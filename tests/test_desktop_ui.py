@@ -2,12 +2,13 @@
 
 import builtins
 import sys
+import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pokepoke.desktop_ui as desktop_ui_module
 import pokepoke.terminal_ui as terminal_ui_module
-from pokepoke.desktop_ui import DesktopUI
+from pokepoke.desktop_ui import DesktopUI, _shutdown_threading_excepthook
 
 
 class FakeWebviewModule:
@@ -270,3 +271,47 @@ class TestDesktopUIRunWithOrchestrator:
         result = ui.run_with_orchestrator(interrupt)
 
         assert result == 130
+
+
+class TestShutdownThreadingExcepthook:
+    """Tests for _shutdown_threading_excepthook."""
+
+    def _make_args(
+        self, exc: BaseException
+    ) -> threading.ExceptHookArgs:
+        """Build a threading.ExceptHookArgs for *exc*."""
+        return threading.ExceptHookArgs(
+            (type(exc), exc, exc.__traceback__, None)
+        )
+
+    def test_suppresses_unicode_error_during_shutdown(self, monkeypatch) -> None:
+        monkeypatch.setattr(desktop_ui_module, "is_shutting_down", lambda: True)
+        monkeypatch.setattr(
+            desktop_ui_module, "_original_excepthook", MagicMock()
+        )
+        args = self._make_args(
+            UnicodeDecodeError("utf-8", b"\xfb", 0, 1, "invalid start byte")
+        )
+        # Should NOT raise or delegate
+        _shutdown_threading_excepthook(args)
+        desktop_ui_module._original_excepthook.assert_not_called()
+
+    def test_delegates_other_errors_during_shutdown(self, monkeypatch) -> None:
+        monkeypatch.setattr(desktop_ui_module, "is_shutting_down", lambda: True)
+        mock_hook = MagicMock()
+        monkeypatch.setattr(desktop_ui_module, "_original_excepthook", mock_hook)
+        args = self._make_args(RuntimeError("boom"))
+        _shutdown_threading_excepthook(args)
+        mock_hook.assert_called_once_with(args)
+
+    def test_delegates_unicode_error_when_not_shutting_down(
+        self, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(desktop_ui_module, "is_shutting_down", lambda: False)
+        mock_hook = MagicMock()
+        monkeypatch.setattr(desktop_ui_module, "_original_excepthook", mock_hook)
+        args = self._make_args(
+            UnicodeDecodeError("utf-8", b"\xfb", 0, 1, "invalid start byte")
+        )
+        _shutdown_threading_excepthook(args)
+        mock_hook.assert_called_once_with(args)

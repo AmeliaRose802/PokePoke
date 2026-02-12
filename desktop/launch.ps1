@@ -47,8 +47,8 @@ Write-Host ""
 # Activate venv if present
 $venvPython = Join-Path $repoRoot ".venv\Scripts\python.exe"
 if (Test-Path $venvPython) {
-    & $venvPython -m pokepoke.orchestrator --desktop --autonomous --continuous
+    & $venvPython -m pokepoke.orchestrator --autonomous --continuous
 } else {
-    python -m pokepoke.orchestrator --desktop --autonomous --continuous
+    python -m pokepoke.orchestrator --autonomous --continuous
 }
 

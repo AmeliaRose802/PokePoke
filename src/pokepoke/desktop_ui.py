@@ -11,7 +11,7 @@ Architecture:
     - The orchestrator runs on a background thread
 
 Usage:
-    python -m pokepoke.orchestrator --desktop
+    python -m pokepoke.orchestrator --autonomous --continuous
 """
 
 from __future__ import annotations
@@ -30,6 +30,31 @@ from pokepoke.shutdown import is_shutting_down, request_shutdown
 
 if TYPE_CHECKING:
     from pokepoke.types import SessionStats
+
+
+def _shutdown_threading_excepthook(args: threading.ExceptHookArgs) -> None:
+    """Suppress UnicodeDecodeError in background threads during shutdown.
+
+    When the pywebview window closes, the Copilot SDK subprocess may emit
+    non-UTF-8 bytes as it is forcefully terminated.  Python's
+    ``subprocess._readerthread`` tries to decode with strict UTF-8 and
+    raises ``UnicodeDecodeError`` in a daemon thread.  This hook
+    silences that traceback so the user sees a clean exit with stats.
+    """
+    if is_shutting_down() and isinstance(args.exc_value, UnicodeDecodeError):
+        # Swallow the noisy traceback — the process is exiting anyway.
+        return
+    # Fall back to the default hook for everything else.
+    if _original_excepthook is not None:
+        _original_excepthook(args)
+    else:
+        # Last resort: print it ourselves.
+        import traceback as _tb
+        _tb.print_exception(args.exc_type, args.exc_value, args.exc_traceback)
+
+
+# Saved so we can delegate non-shutdown exceptions.
+_original_excepthook: Optional[Callable[..., Any]] = None
 
 
 def _find_frontend_dist() -> Optional[Path]:
@@ -75,6 +100,13 @@ class DesktopUI:
         3. When the window closes, signal shutdown
         """
         import webview
+
+        # Install a threading excepthook that suppresses UnicodeDecodeError
+        # during shutdown (the Copilot SDK subprocess can emit non-UTF-8
+        # bytes when forcefully terminated).
+        global _original_excepthook
+        _original_excepthook = threading.excepthook
+        threading.excepthook = _shutdown_threading_excepthook
 
         self._is_running = True
         builtins.print = self._print_redirect
@@ -142,9 +174,14 @@ class DesktopUI:
         self._is_running = False
         builtins.print = self._original_print
 
-        # Wait for orchestrator to finish (give it a moment)
+        # Wait for orchestrator to finish (needs enough time to collect
+        # beads stats and print the session summary).
         if orch_thread.is_alive():
-            orch_thread.join(timeout=3.0)
+            orch_thread.join(timeout=15.0)
+
+        # Restore the original threading excepthook
+        if _original_excepthook is not None:
+            threading.excepthook = _original_excepthook
 
         return exit_code_box[0]
 

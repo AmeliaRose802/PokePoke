@@ -1,14 +1,12 @@
 """GitHub Copilot SDK integration."""
 import asyncio
 import os
-import threading
 from typing import Optional, TYPE_CHECKING, Any
 
 from copilot import CopilotClient  # type: ignore[import-not-found]
 
-# Model configuration
-DEFAULT_MODEL = "claude-opus-4.6"  # Primary model
-FALLBACK_MODEL = "claude-sonnet-4.5"  # Fallback on rate limit
+DEFAULT_MODEL = "claude-opus-4.6"
+FALLBACK_MODEL = "claude-sonnet-4.5"
 
 from .config import get_config
 from .types import BeadsWorkItem, CopilotResult, RetryConfig, AgentStats
@@ -54,13 +52,12 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     idle_timeout: float = 10.0,
     model: Optional[str] = None
 ) -> CopilotResult:
-    """Invoke GitHub Copilot using the SDK. Uses Opus 4.6 by default, falls back to Sonnet on rate limit."""
+    """Invoke GitHub Copilot using the SDK. Falls back to Sonnet on rate limit."""
     config = retry_config or RetryConfig()
     final_prompt = prompt or build_prompt_from_work_item(work_item)
     max_timeout = timeout or 7200.0
-    current_model = model or DEFAULT_MODEL  # Supports fallback on rate limit
+    current_model = model or DEFAULT_MODEL
     tried_fallback = False
-    # Configure environment for SDK subprocess encoding
     original_pythonioencoding = os.environ.get('PYTHONIOENCODING')
     os.environ['PYTHONIOENCODING'] = 'utf-8:replace'
     # Create SDK client
@@ -80,12 +77,10 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         session = await client.create_session(session_config)
         print(f"[SDK] Session created: {session.session_id}\n")
         
-        # Track state
         done, output_lines, errors = asyncio.Event(), [], []
         pending_tool_calls, idle_task = 0, None
         total_input_tokens = total_output_tokens = total_cache_read_tokens = 0
         total_cache_write_tokens = turn_count = total_tool_calls = 0
-        # Event handler for streaming output
         def handle_event(event: Any) -> None:
             nonlocal total_input_tokens, total_output_tokens, total_cache_read_tokens
             nonlocal total_cache_write_tokens, turn_count, total_tool_calls
@@ -368,6 +363,11 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         try:
             await client.stop()
             print("\n[SDK] Client stopped")
+        except UnicodeDecodeError:
+            # The Copilot subprocess may emit non-UTF-8 bytes when killed
+            # during shutdown.  Swallow the encoding error so we get a
+            # clean exit with stats printed.
+            print("\n[SDK] Client stopped (encoding error suppressed)")
         except Exception as e:
             print(f"\n[SDK] Error stopping client: {e}")
         

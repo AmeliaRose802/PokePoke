@@ -209,8 +209,13 @@ def _detect_git_username() -> Optional[str]:
 
 
 def _find_repo_root() -> Path:
-    """Find the repository root directory."""
-    current = Path(__file__).parent
+    """Find the repository root of the target project.
+
+    Walks up from the current working directory (not from PokePoke's own
+    source tree) so that config is loaded from the project PokePoke is
+    being run *on*, not from PokePoke's own repository.
+    """
+    current = Path.cwd().resolve()
     while current != current.parent:
         if (current / ".git").exists():
             return current

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from dataclasses import dataclass, asdict
 
-STATE_FILE = Path(".maintenance_state.json")
+STATE_FILE = Path(".pokepoke") / "maintenance_state.json"
 
 @dataclass
 class MaintenanceState:

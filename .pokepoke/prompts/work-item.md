@@ -9,12 +9,6 @@ You are working on a beads work item. Please complete the following task:
 **Type:** {{issue_type}}{{#labels}}
 **Labels:** {{labels}}{{/labels}}
 
-**MCP Server Development:**
-If this work item involves modifying the ICM MCP Server or using MCP tools:
-1. **Restarting:** Always use `rmcp` or `.\scripts\Restart-MCPServer.ps1` after code changes.
-2. **Testing Tools:** Always use `.\scripts\Invoke-MCPTool.ps1` to test tools.
-   - Example: `.\scripts\Invoke-MCPTool.ps1 -Tool "tool_name" -Params @{arg="val"}`
-
 🤖 **AUTONOMOUS MODE: NEVER ASK FOR PERMISSION**
 - You are operating autonomously - proceed directly with implementation
 - NEVER ask "Would you like me to proceed?" or "Should I continue?"

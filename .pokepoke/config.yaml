@@ -8,6 +8,18 @@ project_name: PokePoke
 models:
   default: claude-opus-4.6
   fallback: claude-sonnet-4.5
+  candidate_models:
+    - claude-opus-4.5
+    - claude-opus-4.6
+    - claude-sonnet-4
+    - claude-sonnet-4.5
+    - gemini-3-pro
+    - gpt-5-codex
+    - gpt-5.1
+    - gpt-5.1-codex
+    - gpt-5.1-codex-max
+    - gpt-5.2
+    - gpt-5.2-codex
 
 # Git branch configuration
 # If not set, auto-detects from git user.email (e.g., user@example.com -> user/dev)
@@ -18,9 +30,9 @@ git:
 # MCP server integration (optional)
 # Set enabled: true and provide restart_script if your project uses MCP servers
 mcp_server:
-  enabled: true
-  restart_script: scripts/Restart-MCPServer.ps1
-  name: ICM MCP Server
+  enabled: false
+  # restart_script: scripts/Restart-MCPServer.ps1
+  # name: My MCP Server
 
 # Maintenance agent scheduling
 # Each agent runs every N work items completed.
@@ -49,10 +61,10 @@ maintenance:
 
     - name: Beta Tester
       prompt_file: beta-tester.md
-      frequency: 3
+      frequency: 7
       needs_worktree: true
       merge_changes: false
-      enabled: true
+      enabled: false  # No MCP server to test in self-improvement mode
 
     - name: Code Review
       prompt_file: code-reviewer.md
@@ -70,10 +82,10 @@ maintenance:
 # Project-specific test data for prompt templates
 # These values are injected into prompt templates that reference test data.
 test_data:
-  an incident to test with: "https://portal.microsofticm.com/imp/v5/incidents/details/737661947/summary"
-  a VM Id: "14b9cc89-0c2d-4884-a7b7-ff83270592cd"
-  a containerID: "d3c66d44-bd8f-4600-8b28-3c5e7cdb6b0a"
-  an incident time: "2026-01-23T20:14:55.9797441Z"
+  a sample orchestrator command: "python -m pokepoke.orchestrator --interactive"
+  a maintenance agent name: "Janitor"
+  a config file path: ".pokepoke/config.yaml"
+  a prompt template: "beads-item.md"
 
 # Work artifacts directory (optional)
 # If set, agents can store artifacts here. If not set, no artifacts directory is created.

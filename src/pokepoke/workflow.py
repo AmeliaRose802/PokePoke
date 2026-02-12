@@ -28,7 +28,7 @@ def process_work_item(
     interactive: bool, 
     timeout_hours: float = 2.0, 
     run_cleanup_agents: bool = False, 
-    run_beta_test: bool = True,
+    run_beta_test: bool = False,
     run_logger: Optional['RunLogger'] = None
 ) -> tuple[bool, int, Optional[AgentStats], int, int, Optional[ModelCompletionRecord]]:
     """Process a single work item with timeout protection.
