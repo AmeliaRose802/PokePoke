@@ -29,6 +29,11 @@ if ($LASTEXITCODE -ne 0) {
     $repoRoot = $PSScriptRoot | Split-Path -Parent
 }
 
+# Ensure CWD is the repo/worktree root for all child scripts.
+# In git worktrees, CWD should already be the worktree root,
+# but we set it explicitly for robustness.
+Set-Location $repoRoot
+
 Write-Host "Pre-commit checks:" -ForegroundColor Cyan
 
 # INTEGRITY CHECK: Verify no bypass parameters exist in quality scripts
