@@ -9,7 +9,7 @@ import threading
 from pathlib import Path
 from typing import Dict, Optional, Set
 
-from pokepoke.config import get_config
+from pokepoke.config import get_config, MaintenanceAgentConfig
 from pokepoke.coordination import try_lock
 from pokepoke.types import SessionStats
 from pokepoke.logging_utils import RunLogger
@@ -50,10 +50,12 @@ _SPECIAL_AGENTS = {"Beta Tester", "Worktree Cleanup"}
 class MaintenanceScheduler:
     """Coordinated scheduler for maintenance agents with singleton guards."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         # In-process locks for thread coordination
         self._locks: Dict[str, threading.Lock] = {}
         self._lock_creation_lock = threading.Lock()
+        # Lock for thread-safe stat updates
+        self._stats_lock = threading.Lock()
         
     def _get_agent_lock(self, agent_name: str) -> threading.Lock:
         """Get or create a threading lock for the given agent."""
@@ -91,7 +93,7 @@ class MaintenanceScheduler:
             # Agent is due to run - try to schedule it
             self._maybe_run_agent(agent_cfg.name, agent_cfg, pokepoke_repo, session_stats, run_logger)
 
-    def _maybe_run_agent(self, agent_name: str, agent_cfg, pokepoke_repo: Path, session_stats: SessionStats, run_logger: RunLogger) -> None:
+    def _maybe_run_agent(self, agent_name: str, agent_cfg: MaintenanceAgentConfig, pokepoke_repo: Path, session_stats: SessionStats, run_logger: RunLogger) -> None:
         """Try to run a single maintenance agent with appropriate locking.
         
         Args:
@@ -167,7 +169,7 @@ class MaintenanceScheduler:
                 # Release thread lock
                 thread_lock.release()
 
-    def _run_agent_with_coordination(self, agent_name: str, agent_cfg, pokepoke_repo: Path, session_stats: SessionStats, run_logger: RunLogger) -> None:
+    def _run_agent_with_coordination(self, agent_name: str, agent_cfg: MaintenanceAgentConfig, pokepoke_repo: Path, session_stats: SessionStats, run_logger: RunLogger) -> None:
         """Run a maintenance agent and handle statistics coordination.
         
         Args:
@@ -184,10 +186,11 @@ class MaintenanceScheduler:
         print(f"\n🔧 Running {agent_name} Agent...")
         run_logger.log_maintenance(log_key, f"Starting {agent_name} Agent")
 
-        # Update run count on session stats if attribute exists
+        # Update run count on session stats if attribute exists (thread-safe)
         stat_attr = _AGENT_STAT_ATTRS.get(agent_name)
         if stat_attr and hasattr(session_stats, stat_attr):
-            setattr(session_stats, stat_attr, getattr(session_stats, stat_attr) + 1)
+            with self._stats_lock:
+                setattr(session_stats, stat_attr, getattr(session_stats, stat_attr) + 1)
 
         # Run the agent
         if agent_name in _SPECIAL_AGENTS:
@@ -203,23 +206,28 @@ class MaintenanceScheduler:
             )
 
         if result:
-            aggregate_stats(session_stats, result)
-            if agent_name == "Janitor":
-                session_stats.janitor_lines_removed += result.lines_removed
+            with self._stats_lock:
+                aggregate_stats(session_stats, result)
+                if agent_name == "Janitor":
+                    session_stats.janitor_lines_removed += result.lines_removed
             run_logger.log_maintenance(log_key, f"{agent_name} Agent completed successfully")
         else:
             run_logger.log_maintenance(log_key, f"{agent_name} Agent failed")
 
 
-# Global scheduler instance
+# Global scheduler instance and initialization lock
 _scheduler: Optional[MaintenanceScheduler] = None
+_scheduler_lock = threading.Lock()
 
 
 def get_maintenance_scheduler() -> MaintenanceScheduler:
-    """Get the global MaintenanceScheduler instance."""
+    """Get the global MaintenanceScheduler instance with thread-safe initialization."""
     global _scheduler
     if _scheduler is None:
-        _scheduler = MaintenanceScheduler()
+        with _scheduler_lock:
+            # Double-checked locking pattern to prevent TOCTOU race
+            if _scheduler is None:
+                _scheduler = MaintenanceScheduler()
     return _scheduler
 
 
