@@ -4,6 +4,9 @@
 # GitHub Copilot SDK for programmatic CLI integration
 github-copilot-sdk>=0.1.0
 
+# Configuration
+pyyaml>=6.0
+
 # Terminal UI
 rich>=13.0.0
 textual>=0.40.0

@@ -1,0 +1,78 @@
+# PokePoke Project Configuration
+# This file defines project-specific settings for PokePoke.
+# See docs/ for full documentation on configuration options.
+
+project_name: PokePoke
+
+# LLM model configuration
+models:
+  default: claude-opus-4.6
+  fallback: claude-sonnet-4.5
+
+# Git branch configuration
+# If not set, auto-detects from git user.email (e.g., user@example.com -> user/dev)
+git:
+  # default_branch: ameliapayne/dev
+  fallback_branch: master
+
+# MCP server integration (optional)
+# Set enabled: true and provide restart_script if your project uses MCP servers
+mcp_server:
+  enabled: false
+  # restart_script: scripts/Restart-MCPServer.ps1
+  # name: My MCP Server
+
+# Maintenance agent scheduling
+# Each agent runs every N work items completed.
+# Set enabled: false to disable an agent.
+maintenance:
+  agents:
+    - name: Tech Debt
+      prompt_file: tech-debt.md
+      frequency: 5
+      needs_worktree: false
+      enabled: true
+
+    - name: Janitor
+      prompt_file: janitor.md
+      frequency: 2
+      needs_worktree: true
+      merge_changes: true
+      enabled: true
+
+    - name: Backlog Cleanup
+      prompt_file: backlog-cleanup.md
+      frequency: 7
+      needs_worktree: true
+      merge_changes: false
+      enabled: true
+
+    - name: Beta Tester
+      prompt_file: beta-tester.md
+      frequency: 3
+      needs_worktree: true
+      merge_changes: false
+      enabled: true
+
+    - name: Code Review
+      prompt_file: code-reviewer.md
+      frequency: 5
+      needs_worktree: false
+      model: gpt-5.1-codex
+      enabled: true
+
+    - name: Worktree Cleanup
+      prompt_file: worktree-cleanup.md
+      frequency: 4
+      needs_worktree: false
+      enabled: true
+
+# Project-specific test data for prompt templates
+# Use {{test_data.key}} in prompt templates to reference these values.
+# test_data:
+#   example_url: https://example.com/api
+#   example_id: TEST-123
+
+# Work artifacts directory (optional)
+# If set, agents can store artifacts here. If not set, no artifacts directory is created.
+# work_artifacts_dir: work_artifacts

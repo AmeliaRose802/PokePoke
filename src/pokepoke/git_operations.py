@@ -362,3 +362,28 @@ def validate_post_merge(target_branch: str) -> bool:
         return False
     
     return True
+
+
+def has_commits_ahead(target_branch: Optional[str] = None) -> int:
+    """Count commits in current branch ahead of the target branch.
+
+    Args:
+        target_branch: Branch to compare against. Auto-detected if not provided.
+
+    Returns:
+        Number of commits ahead, or 0 on error.
+    """
+    if target_branch is None:
+        target_branch = get_default_branch()
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-list", "--count", f"{target_branch}..HEAD"],
+            capture_output=True, text=True, encoding='utf-8',
+            timeout=10
+        )
+        if result.returncode == 0:
+            return int(result.stdout.strip())
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError):
+        pass
+    return 0
