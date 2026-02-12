@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from pokepoke.config import get_config
 from pokepoke.copilot import invoke_copilot
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
 from pokepoke.stats import parse_agent_stats
@@ -328,37 +329,42 @@ def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkIte
 
 def run_beta_tester(repo_root: Optional[Path] = None) -> Optional[AgentStats]:
     """Run beta tester agent to test all MCP tools. Restarts MCP server first."""
+    config = get_config()
+
     ui.set_current_agent("Beta Tester")
     print(f"\n{'='*60}\n🧪 Running Beta Tester Agent\n{'='*60}")
     
-    # Restart MCP server to load latest code
-    print("\n🔄 Restarting MCP server...")
-    try:
-        package_root = Path(__file__).resolve().parent.parent.parent
-        restart_script = package_root / "scripts" / "Restart-MCPServer.ps1"
-        
-        if not restart_script.exists():
-            print(f"⚠️  Restart script not found at {restart_script}")
-            print("   Proceeding without restart - server may have stale code")
-        else:
-            result = subprocess.run(
-                ["pwsh", "-NoProfile", "-File", str(restart_script)],
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                timeout=60  # 60 second timeout for restart
-            )
-            if result.returncode == 0:
-                print("✓ MCP server restarted successfully")
+    # Restart MCP server to load latest code (if configured)
+    if config.mcp_server.enabled and config.mcp_server.restart_script:
+        print("\n🔄 Restarting MCP server...")
+        try:
+            package_root = Path(__file__).resolve().parent.parent.parent
+            restart_script = package_root / config.mcp_server.restart_script
+            
+            if not restart_script.exists():
+                print(f"⚠️  Restart script not found at {restart_script}")
+                print("   Proceeding without restart - server may have stale code")
             else:
-                print(f"⚠️  MCP server restart had issues (exit code {result.returncode})")
-                if result.stdout:
-                    print(f"   Output: {result.stdout[:200]}")
-    except subprocess.TimeoutExpired:
-        print("⚠️  MCP server restart timed out (server may still be starting)")
-    except Exception as e:
-        print(f"⚠️  Could not restart MCP server: {e}")
-        print("   Proceeding anyway - server may have stale code")
+                result = subprocess.run(
+                    ["pwsh", "-NoProfile", "-File", str(restart_script)],
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    timeout=60
+                )
+                if result.returncode == 0:
+                    print("✓ MCP server restarted successfully")
+                else:
+                    print(f"⚠️  MCP server restart had issues (exit code {result.returncode})")
+                    if result.stdout:
+                        print(f"   Output: {result.stdout[:200]}")
+        except subprocess.TimeoutExpired:
+            print("⚠️  MCP server restart timed out (server may still be starting)")
+        except Exception as e:
+            print(f"⚠️  Could not restart MCP server: {e}")
+            print("   Proceeding anyway - server may have stale code")
+    elif not config.mcp_server.enabled:
+        print("ℹ️  MCP server not enabled in config - skipping restart")
     
     # Load beta tester prompt
     try:
@@ -387,9 +393,6 @@ def run_beta_tester(repo_root: Optional[Path] = None) -> Optional[AgentStats]:
     )
     
     print("\n🧪 Invoking beta tester agent in isolated worktree (will be discarded)...")
-    
     if repo_root is None:
         repo_root = Path.cwd()
-        
     return _run_worktree_agent("Beta Tester", agent_id, beta_item, beta_prompt, repo_root, merge_changes=False)
-

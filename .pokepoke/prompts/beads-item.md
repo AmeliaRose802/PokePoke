@@ -20,8 +20,9 @@ Use these beads commands to get more information if needed:
 - `bd list --deps {{item_id}} --json` - Check dependencies
 - `bd list --label <label> --json` - Find related items by label
 
+{{#mcp_enabled}}
 **MCP Server Testing:**
-If this work item involves modifying the ICM MCP Server (`C:\Users\ameliapayne\icm_queue_c#`):
+If this work item involves modifying the MCP Server:
 1. Make and commit your code changes to the MCP server
 2. Restart the MCP server to load your changes:
    ```powershell
@@ -104,33 +105,21 @@ Receive-Job <job-id>  # See server output/errors
 Get-NetTCPConnection -LocalPort 5000 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
 .\scripts\Restart-MCPServer.ps1
 ```
+{{/mcp_enabled}}
 
+{{#test_data_section}}
 ## Test data
 
-
-When you need an incident to test with, use: https://portal.microsofticm.com/imp/v5/incidents/details/737661947/summary
-
-When you need a VM Id, use: 14b9cc89-0c2d-4884-a7b7-ff83270592cd
-
-When you need a containerID use: d3c66d44-bd8f-4600-8b28-3c5e7cdb6b0a
-
-Use incident time: 2026-01-23T20:14:55.9797441Z
+{{test_data_section}}
+{{/test_data_section}}
 
 **Success Criteria:**
 - Provided item is fully implemented
+{{#mcp_enabled}}
 - If MCP tools were modified, they have been tested manually and work correctly
+{{/mcp_enabled}}
 - All pre-commit validation passes successfully
 - All changes are committed and the worktree has been merged
-
-## Test data
-
-When you need an incident to test with, use: https://portal.microsofticm.com/imp/v5/incidents/details/737661947/summary
-
-When you need a VM Id, use: 14b9cc89-0c2d-4884-a7b7-ff83270592cd
-
-When you need a containerID use: d3c66d44-bd8f-4600-8b28-3c5e7cdb6b0a
-
-Use incident time: 2026-01-23T20:14:55.9797441Z
 
 ## If it is already completed
 

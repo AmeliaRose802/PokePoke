@@ -102,15 +102,11 @@ At the end, give a frank assessment:
 - You CAN file beads issues for problems
 - You CAN and SHOULD be harsh in your assessment
 
+{{#test_data_section}}
 ## Test data
 
-When you need an incident to test with, use: <https://portal.microsofticm.com/imp/v5/incidents/details/737661947/summary>
-
-When you need a VM Id, use: 14b9cc89-0c2d-4884-a7b7-ff83270592cd
-
-When you need a containerID use: d3c66d44-bd8f-4600-8b28-3c5e7cdb6b0a
-
-Use incident time: 2026-01-23T20:14:55.9797441Z
+{{test_data_section}}
+{{/test_data_section}}
 
 ## NO REPORT POLICY
 

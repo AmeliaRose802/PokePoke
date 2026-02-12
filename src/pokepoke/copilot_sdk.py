@@ -10,6 +10,7 @@ from copilot import CopilotClient  # type: ignore[import-not-found]
 DEFAULT_MODEL = "claude-opus-4.6"  # Primary model
 FALLBACK_MODEL = "claude-sonnet-4.5"  # Fallback on rate limit
 
+from .config import get_config
 from .types import BeadsWorkItem, CopilotResult, RetryConfig, AgentStats
 from .prompts import PromptService
 from .terminal_ui import ui
@@ -21,7 +22,14 @@ if TYPE_CHECKING:
 
 def build_prompt_from_work_item(work_item: BeadsWorkItem) -> str:
     """Build a prompt from a work item using the template system."""
+    config = get_config()
     service = PromptService()
+    # Build test data section from config
+    test_data_lines = [
+        f"When you need {k.replace('_', ' ').capitalize()}, use: {v}"
+        for k, v in config.test_data.items()
+    ]
+    test_data_section = "\n\n".join(test_data_lines) if test_data_lines else None
     variables = {
         "item_id": work_item.id,
         "title": work_item.title,
@@ -29,6 +37,8 @@ def build_prompt_from_work_item(work_item: BeadsWorkItem) -> str:
         "issue_type": work_item.issue_type,
         "priority": work_item.priority,
         "labels": ", ".join(work_item.labels) if work_item.labels else None,
+        "mcp_enabled": config.mcp_server.enabled,
+        "test_data_section": test_data_section,
     }
     
     return service.load_and_render("beads-item", variables)
@@ -48,15 +58,11 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     config = retry_config or RetryConfig()
     final_prompt = prompt or build_prompt_from_work_item(work_item)
     max_timeout = timeout or 7200.0
-    
-    # Determine model to use (supports fallback on rate limit)
-    current_model = model or DEFAULT_MODEL
+    current_model = model or DEFAULT_MODEL  # Supports fallback on rate limit
     tried_fallback = False
-    
     # Configure environment for SDK subprocess encoding
     original_pythonioencoding = os.environ.get('PYTHONIOENCODING')
     os.environ['PYTHONIOENCODING'] = 'utf-8:replace'
-    
     # Create SDK client
     client = CopilotClient({"cli_path": "copilot.cmd", "log_level": "info"})
     
@@ -79,7 +85,6 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         pending_tool_calls, idle_task = 0, None
         total_input_tokens = total_output_tokens = total_cache_read_tokens = 0
         total_cache_write_tokens = turn_count = total_tool_calls = 0
-        
         # Event handler for streaming output
         def handle_event(event: Any) -> None:
             nonlocal total_input_tokens, total_output_tokens, total_cache_read_tokens
