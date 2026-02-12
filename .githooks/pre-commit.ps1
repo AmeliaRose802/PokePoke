@@ -98,6 +98,7 @@ $staticChecks = @(
     @{ Name = "Code Quality"; Script = "check-code-quality.ps1" }
     @{ Name = "Skipped Tests"; Script = "check-skipped-tests.ps1" }
     @{ Name = "File Length"; Script = "check-file-length.ps1" }
+    @{ Name = "Desktop TypeScript"; Script = "check-desktop.ps1" }
 )
 
 # Checks that need build artifacts or must run in sequence
