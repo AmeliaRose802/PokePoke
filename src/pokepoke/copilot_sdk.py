@@ -3,7 +3,7 @@ import asyncio
 import os
 from typing import Optional, TYPE_CHECKING, Any
 
-from copilot import CopilotClient  # type: ignore[import-not-found]
+from copilot import CopilotClient
 
 DEFAULT_MODEL = "claude-opus-4.6"
 FALLBACK_MODEL = "claude-sonnet-4.5"
@@ -15,7 +15,7 @@ from . import terminal_ui
 from .shutdown import is_shutting_down
 
 if TYPE_CHECKING:
-    from .logging import ItemLogger  # type: ignore[import-untyped]
+    from .logging import ItemLogger  # type: ignore
 
 
 def build_prompt_from_work_item(work_item: BeadsWorkItem) -> str:
@@ -65,7 +65,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     client_opts: dict[str, Any] = {"cli_path": "copilot.cmd", "log_level": "info"}
     if cwd:
         client_opts["cwd"] = cwd
-    client = CopilotClient(client_opts)
+    client = CopilotClient(client_opts)  # type: ignore[arg-type]
     
     try:
         print("[SDK] Starting Copilot client...")
@@ -78,7 +78,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         if deny_write:
             session_config["excluded_tools"] = ["write", "edit"]
         
-        session = await client.create_session(session_config)
+        session = await client.create_session(session_config)  # type: ignore[arg-type]
         print(f"[SDK] Session created: {session.session_id}\n")
         
         done, output_lines, errors = asyncio.Event(), [], []
@@ -272,7 +272,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                 
                 # Create new session with fallback model
                 session_config["model"] = FALLBACK_MODEL
-                session = await client.create_session(session_config)
+                session = await client.create_session(session_config)  # type: ignore[arg-type]
                 print(f"[SDK] New session created with {FALLBACK_MODEL}: {session.session_id}\n")
                 
                 # Reset state for retry

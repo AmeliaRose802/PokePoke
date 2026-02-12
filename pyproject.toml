@@ -16,6 +16,8 @@ norecursedirs = [
     "__pycache__",
     "worktrees"
 ]
+timeout = 10
+filterwarnings = ['ignore::pytest.PytestWarning']
 
 # Coverage settings
 [tool.coverage.run]
