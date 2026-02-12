@@ -15,7 +15,7 @@ from pokepoke.work_item_selection import select_work_item
 from pokepoke.stats import parse_agent_stats
 from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner
 from pokepoke import terminal_ui
-from pokepoke.shutdown import is_shutting_down
+from pokepoke.shutdown import is_shutting_down, register_agent, unregister_agent
 from pokepoke.model_selection import select_model_for_item
 
 if TYPE_CHECKING:
@@ -43,60 +43,64 @@ def process_work_item(
     Returns:
         Tuple of (success, request_count, stats, cleanup_agent_runs, gate_agent_runs, model_completion)
     """
-    start_time = time.time()
-    timeout_seconds = timeout_hours * 3600
-    request_count = 0
-    cleanup_agent_runs = 0
-    gate_agent_runs = 0
+    # Register this agent for shutdown coordination
+    register_agent()
     
-    # Select model for this work item (A/B testing)
-    selected_model = select_model_for_item(item.id)
-    
-    print(f"\n🚀 Processing work item: {item.id}")
-    print(f"   {item.title}")
-    print(f"   🤖 Model: {selected_model}")
-    print(f"   ⏱️  Timeout: {timeout_hours} hours\n")
-    
-    # Start item logging
-    item_logger = None
-    if run_logger:
-        item_logger = run_logger.start_item_log(item.id, item.title)
-    
-    if interactive:
-        terminal_ui.ui.stop()
-        confirm = input("Proceed with this item? [Y/n]: ").strip().lower()
-        terminal_ui.ui.start()
-        if confirm and confirm != 'y':
-            print("⏭️  Skipped.")
+    try:
+        start_time = time.time()
+        timeout_seconds = timeout_hours * 3600
+        request_count = 0
+        cleanup_agent_runs = 0
+        gate_agent_runs = 0
+        
+        # Select model for this work item (A/B testing)
+        selected_model = select_model_for_item(item.id)
+        
+        print(f"\n🚀 Processing work item: {item.id}")
+        print(f"   {item.title}")
+        print(f"   🤖 Model: {selected_model}")
+        print(f"   ⏱️  Timeout: {timeout_hours} hours\n")
+        
+        # Start item logging
+        item_logger = None
+        if run_logger:
+            item_logger = run_logger.start_item_log(item.id, item.title)
+        
+        if interactive:
+            terminal_ui.ui.stop()
+            confirm = input("Proceed with this item? [Y/n]: ").strip().lower()
+            terminal_ui.ui.start()
+            if confirm and confirm != 'y':
+                print("⏭️  Skipped.")
+                if run_logger:
+                    run_logger.end_item_log(False, 0)
+                return False, 0, None, 0, 0, None
+        
+        # Assign and sync BEFORE creating worktree to prevent parallel conflicts
+        print(f"\n🔒 Claiming work item...")
+        if not assign_and_sync_item(item.id):
+            print(f"❌ Failed to assign work item {item.id}")
             if run_logger:
                 run_logger.end_item_log(False, 0)
             return False, 0, None, 0, 0, None
-    
-    # Assign and sync BEFORE creating worktree to prevent parallel conflicts
-    print(f"\n🔒 Claiming work item...")
-    if not assign_and_sync_item(item.id):
-        print(f"❌ Failed to assign work item {item.id}")
-        if run_logger:
-            run_logger.end_item_log(False, 0)
-        return False, 0, None, 0, 0, None
-    
-    # Use current working directory as repo root
-    pokepoke_root = Path.cwd()
-    worktree_path = _setup_worktree(item)
-    
-    if worktree_path is None:
-        if run_logger:
-            run_logger.end_item_log(False, 0)
-        return False, 0, None, 0, 0, None
-    
-    worktree_cwd = str(worktree_path)
-    
-    print(f"   Working directory: {worktree_cwd}\n")
-    
-    last_feedback = ""
-    # Initialize accumulated stats
-    accumulated_stats = AgentStats()
-    gate_success = False  # Track last gate result for model completion record
+        
+        # Use current working directory as repo root
+        pokepoke_root = Path.cwd()
+        worktree_path = _setup_worktree(item)
+        
+        if worktree_path is None:
+            if run_logger:
+                run_logger.end_item_log(False, 0)
+            return False, 0, None, 0, 0, None
+        
+        worktree_cwd = str(worktree_path)
+        
+        print(f"   Working directory: {worktree_cwd}\n")
+        
+        last_feedback = ""
+        # Initialize accumulated stats
+        accumulated_stats = AgentStats()
+        gate_success = False  # Track last gate result for model completion record
     
     while not is_shutting_down():
         # Check timeout before invoking Copilot
@@ -235,6 +239,10 @@ def process_work_item(
         )
         
         return False, request_count, None, cleanup_agent_runs, gate_agent_runs, model_completion
+    
+    finally:
+        # Always unregister agent when done, regardless of success/failure
+        unregister_agent()
 
 
 def _setup_worktree(item: BeadsWorkItem) -> Optional[Path]:

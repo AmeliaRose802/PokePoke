@@ -291,6 +291,14 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         return 1
     finally:
         terminal_ui.ui.stop()
+        # Ensure merge queue is properly shut down
+        try:
+            from pokepoke.merge_queue import get_merge_queue
+            merge_queue = get_merge_queue()
+            if merge_queue.is_running:
+                merge_queue.shutdown(timeout=10.0)
+        except Exception:
+            pass  # Best effort cleanup
 
 
 
