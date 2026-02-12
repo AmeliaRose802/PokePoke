@@ -9,6 +9,7 @@ worktrees/
 
 # PokePoke runtime state
 .pokepoke/maintenance_state.json
+.pokepoke/model_stats.json
 .maintenance_state.json
 .pokepoke/locks/
 
