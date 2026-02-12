@@ -341,7 +341,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             output=output_text,
             error="; ".join(errors) if errors else None,
             attempt_count=1,
-            stats=stats
+            stats=stats,
+            model=current_model
         )
         
     except KeyboardInterrupt:

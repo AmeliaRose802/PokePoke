@@ -129,6 +129,9 @@ class DesktopAPI:
             stats_data["beta_tester_agent_runs"] = session_stats.beta_tester_agent_runs
             stats_data["code_review_agent_runs"] = session_stats.code_review_agent_runs
             stats_data["worktree_cleanup_agent_runs"] = session_stats.worktree_cleanup_agent_runs
+            stats_data["model_completions"] = [
+                asdict(mc) for mc in session_stats.model_completions
+            ]
         self._current_stats = stats_data
 
     def push_agent_name(self, name: str) -> None:

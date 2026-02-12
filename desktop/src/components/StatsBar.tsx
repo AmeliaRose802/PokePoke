@@ -5,7 +5,7 @@
  * API duration, items completed, retries, and agent run counts.
  */
 
-import type { SessionStats } from "../types";
+import type { SessionStats, ModelCompletionRecord } from "../types";
 
 interface Props {
   stats: SessionStats | null;
@@ -30,9 +30,31 @@ function formatElapsed(seconds: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+/** Summarize model completions into per-model aggregates. */
+function summarizeModels(
+  completions: ModelCompletionRecord[]
+): { model: string; count: number; avgTime: number; passRate: number | null }[] {
+  const byModel = new Map<string, ModelCompletionRecord[]>();
+  for (const rec of completions) {
+    const list = byModel.get(rec.model) ?? [];
+    list.push(rec);
+    byModel.set(rec.model, list);
+  }
+  return Array.from(byModel.entries()).map(([model, recs]) => {
+    const avgTime = recs.reduce((s, r) => s + r.duration_seconds, 0) / recs.length;
+    const gated = recs.filter((r) => r.gate_passed !== null);
+    const passRate =
+      gated.length > 0
+        ? Math.round((gated.filter((r) => r.gate_passed).length / gated.length) * 100)
+        : null;
+    return { model, count: recs.length, avgTime, passRate };
+  });
+}
+
 export function StatsBar({ stats }: Props) {
   const agent = stats?.agent_stats;
   const elapsed = stats?.elapsed_time ?? 0;
+  const modelSummary = summarizeModels(stats?.model_completions ?? []);
 
   return (
     <footer className="stats-bar">
@@ -120,6 +142,22 @@ export function StatsBar({ stats }: Props) {
           🔍 Rev:{stats?.code_review_agent_runs ?? 0}
         </span>
       </div>
+
+      {/* Row 4: Model comparison (A/B testing) */}
+      {modelSummary.length > 0 && (
+        <div className="stats-row model-comparison">
+          <span className="stat-icon">🔬</span>
+          {modelSummary.map(({ model, count, avgTime, passRate }) => (
+            <span key={model} className="stat model-stat">
+              <span className="stat-label">{model}:</span>
+              <span className="stat-value">
+                {count}× {formatDuration(avgTime)}
+                {passRate !== null && ` (${passRate}%)`}
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
     </footer>
   );
 }

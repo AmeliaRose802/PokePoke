@@ -211,7 +211,7 @@ class TestProcessWorkItem:
         
         result = process_work_item(item, interactive=True)
         
-        success, request_count, stats, cleanup_runs, gate_runs = result
+        success, request_count, stats, cleanup_runs, gate_runs, model_completion = result
         assert success == True
         assert request_count == 1
         assert cleanup_runs == 0
@@ -287,7 +287,7 @@ class TestProcessWorkItem:
         
         result = process_work_item(item, interactive=False)
         
-        success, request_count, stats, cleanup_runs, gate_runs = result
+        success, request_count, stats, cleanup_runs, gate_runs, model_completion = result
         assert success == True
         assert request_count == 1
         assert cleanup_runs == 0
@@ -361,7 +361,7 @@ class TestProcessWorkItem:
 
         result = process_work_item(item, interactive=False)
 
-        success, request_count, stats, cleanup_runs, gate_runs = result
+        success, request_count, stats, cleanup_runs, gate_runs, model_completion = result
         assert success == False  # Fails when copilot fails
         assert request_count == 1  # Records the failed attempt
         # Note: In actual failure scenario, cleanup may not be called if exception is raised
@@ -480,7 +480,7 @@ class TestRunOrchestrator:
         )
         mock_get_items.return_value = [item]
         mock_select.return_value = item
-        mock_process.return_value = (True, 1, AgentStats(), 0, 0)  # 5-tuple: success, request_count, stats, cleanup_runs, gate_runs
+        mock_process.return_value = (True, 1, AgentStats(), 0, 0, None)  # 6-tuple: success, request_count, stats, cleanup_runs, gate_runs, model_completion
         
         result = run_orchestrator(interactive=False, continuous=False)
         
@@ -561,7 +561,7 @@ class TestRunOrchestrator:
         )
         mock_get_items.return_value = [item]
         mock_select.return_value = item
-        mock_process.return_value = (True, 1, AgentStats(), 0, 0)  # 5-tuple: success, request_count, stats, cleanup_runs, gate_runs
+        mock_process.return_value = (True, 1, AgentStats(), 0, 0, None)  # 6-tuple: success, request_count, stats, cleanup_runs, gate_runs, model_completion
         mock_input.return_value = 'n'  # Don't continue
         
         result = run_orchestrator(interactive=True, continuous=True)
@@ -730,8 +730,8 @@ class TestRunOrchestratorContinuousMode:
         mock_get_items.side_effect = [[item1], [item2], []]
         mock_select.side_effect = [item1, item2, None]
         mock_process.side_effect = [
-            (True, 1, AgentStats(), 0, 0),
-            (True, 1, AgentStats(), 0, 0)
+            (True, 1, AgentStats(), 0, 0, None),
+            (True, 1, AgentStats(), 0, 0, None)
         ]
         mock_stats.return_value = {}
         mock_maintenance.return_value = None
@@ -780,7 +780,7 @@ class TestRunOrchestratorContinuousMode:
         # Return items for 10 iterations, then None
         mock_get_items.side_effect = [[items[i]] for i in range(10)] + [[]]
         mock_select.side_effect = items[:10] + [None]
-        mock_process.return_value = (True, 1, AgentStats(), 0, 0)
+        mock_process.return_value = (True, 1, AgentStats(), 0, 0, None)
         mock_stats.return_value = {}
         mock_maintenance.return_value = None  # run_periodic_maintenance doesn't return anything
         mock_beta.return_value = None
@@ -832,7 +832,7 @@ class TestRunOrchestratorContinuousMode:
         mock_check_repo.return_value = True
         mock_get_items.return_value = [item]
         mock_select.return_value = item
-        mock_process.return_value = (True, 1, AgentStats(), 0, 0)
+        mock_process.return_value = (True, 1, AgentStats(), 0, 0, None)
         mock_stats.return_value = {}
         mock_input.return_value = 'n'  # Don't continue
         

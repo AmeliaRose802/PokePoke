@@ -1,9 +1,9 @@
 """Agent statistics parsing and display utilities."""
 
 import re
-from typing import Optional
+from typing import Optional, Dict, List
 
-from pokepoke.types import AgentStats, SessionStats
+from pokepoke.types import AgentStats, SessionStats, ModelCompletionRecord
 
 
 def parse_agent_stats(output: str) -> Optional[AgentStats]:
@@ -172,5 +172,64 @@ def print_stats(items_completed: int, total_requests: int, elapsed_seconds: floa
         print("=" * 60)
         for item in session_stats.completed_items_list:
             print(f"• {item.id}: {item.title}")
+
+    # Print model comparison stats (A/B testing)
+    if session_stats and session_stats.model_completions:
+        _print_model_comparison(session_stats.model_completions)
             
     print("=" * 60)
+
+
+def _format_duration(seconds: float) -> str:
+    """Format a duration in seconds to a human-readable string."""
+    minutes = int(seconds // 60)
+    secs = int(seconds % 60)
+    if minutes > 0:
+        return f"{minutes}m {secs}s"
+    return f"{secs}s"
+
+
+def _print_model_comparison(completions: List[ModelCompletionRecord]) -> None:
+    """Print per-model comparison statistics for A/B testing.
+
+    Groups completions by model and displays:
+    - Number of items processed
+    - Average, min, max completion time
+    - Gate pass rate (passed / total with gate results)
+
+    Args:
+        completions: List of ModelCompletionRecord from the session.
+    """
+    # Group by model
+    by_model: Dict[str, List[ModelCompletionRecord]] = {}
+    for rec in completions:
+        by_model.setdefault(rec.model, []).append(rec)
+
+    if len(by_model) < 1:
+        return
+
+    print("\n" + "=" * 60)
+    print("🔬 Model Comparison (A/B Testing)")
+    print("=" * 60)
+
+    for model_name, records in sorted(by_model.items()):
+        durations = [r.duration_seconds for r in records]
+        avg_dur = sum(durations) / len(durations)
+        min_dur = min(durations)
+        max_dur = max(durations)
+
+        # Gate pass/reject stats (only for records where gate ran)
+        gate_records = [r for r in records if r.gate_passed is not None]
+        gate_passed = sum(1 for r in gate_records if r.gate_passed)
+        gate_total = len(gate_records)
+
+        print(f"\n  🤖 {model_name}")
+        print(f"     Items processed:  {len(records)}")
+        print(f"     Avg time:         {_format_duration(avg_dur)}")
+        print(f"     Min/Max time:     {_format_duration(min_dur)} / {_format_duration(max_dur)}")
+
+        if gate_total > 0:
+            pass_pct = (gate_passed / gate_total) * 100
+            print(f"     Gate pass rate:   {pass_pct:.0f}% ({gate_passed}/{gate_total})")
+        else:
+            print(f"     Gate pass rate:   N/A (no gate runs)")

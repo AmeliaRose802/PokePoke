@@ -882,7 +882,7 @@ class TestProcessWorkItem:
         mock_input.return_value = 'n'
         mock_beta.return_value = None  # Beta tester returns None
         
-        success, count, stats, cleanup_runs, gate_runs = process_work_item(
+        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
             item, interactive=True
         )
         
@@ -917,7 +917,7 @@ class TestProcessWorkItem:
         mock_assign.return_value = True
         mock_setup.return_value = None
         
-        success, count, stats, cleanup_runs, gate_runs = process_work_item(
+        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
             item, interactive=True
         )
         
@@ -983,7 +983,7 @@ class TestProcessWorkItem:
         mock_finalize.return_value = True
         mock_beta.return_value = None  # Beta tester returns None
         
-        success, count, stats, cleanup_runs, gate_runs = process_work_item(
+        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
             item, interactive=True
         )
         
@@ -1049,7 +1049,7 @@ class TestProcessWorkItem:
         mock_finalize.return_value = True
         mock_beta.return_value = None
         
-        success, count, stats, cleanup_runs, gate_runs = process_work_item(
+        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
             item, interactive=True
         )
         
@@ -1112,7 +1112,7 @@ class TestProcessWorkItem:
         mock_cleanup_timeout.return_value = (True, 0)
         mock_beta.return_value = None  # Beta tester returns None
         
-        success, count, stats, cleanup_runs, gate_runs = process_work_item(
+        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
             item, interactive=True
         )
         
@@ -1183,7 +1183,7 @@ class TestProcessWorkItem:
             CopilotResult(work_item_id="task-1", success=True, output="Try 2", attempt_count=1)
         ]
         
-        success, count, stats, cleanup_runs, gate_runs = process_work_item(
+        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
             item, interactive=True
         )
         
@@ -1268,7 +1268,7 @@ class TestProcessWorkItem:
             stats=work_stats
         )
         
-        success, count, stats, cleanup_runs, gate_runs = process_work_item(
+        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
             item, interactive=True
         )
         
@@ -1340,7 +1340,7 @@ class TestProcessWorkItem:
         )
         mock_cleanup_timeout.return_value = (False, 2)  # Cleanup fails
         
-        success, count, stats, cleanup_runs, gate_runs = process_work_item(
+        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
             item, interactive=True
         )
         

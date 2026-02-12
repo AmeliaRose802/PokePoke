@@ -24,6 +24,7 @@ class ModelConfig:
     """LLM model configuration."""
     default: str = "claude-opus-4.6"
     fallback: str = "claude-sonnet-4.5"
+    candidate_models: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -146,6 +147,7 @@ class ProjectConfig:
         config.models = ModelConfig(
             default=models_data.get("default", "claude-opus-4.6"),
             fallback=models_data.get("fallback", "claude-sonnet-4.5"),
+            candidate_models=models_data.get("candidate_models", []),
         )
 
         # Git

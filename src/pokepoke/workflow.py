@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
 from pokepoke.copilot import invoke_copilot
-from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
+from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, ModelCompletionRecord
 from pokepoke.worktrees import create_worktree, cleanup_worktree
 from pokepoke.git_operations import has_uncommitted_changes, has_commits_ahead
 from pokepoke.beads import assign_and_sync_item, add_comment
@@ -16,6 +16,7 @@ from pokepoke.work_item_selection import select_work_item
 from pokepoke.stats import parse_agent_stats
 from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner, ui
 from pokepoke.shutdown import is_shutting_down
+from pokepoke.model_selection import select_model_for_item
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import RunLogger
@@ -28,7 +29,7 @@ def process_work_item(
     run_cleanup_agents: bool = False, 
     run_beta_test: bool = True,
     run_logger: Optional['RunLogger'] = None
-) -> tuple[bool, int, Optional[AgentStats], int, int]:
+) -> tuple[bool, int, Optional[AgentStats], int, int, Optional[ModelCompletionRecord]]:
     """Process a single work item with timeout protection.
     
     Args:
@@ -40,7 +41,7 @@ def process_work_item(
         run_logger: Optional run logger instance for file logging
         
     Returns:
-        Tuple of (success: bool, request_count: int, stats: Optional[AgentStats], cleanup_agent_runs: int, gate_agent_runs: int)
+        Tuple of (success, request_count, stats, cleanup_agent_runs, gate_agent_runs, model_completion)
     """
     start_time = time.time()
     timeout_seconds = timeout_hours * 3600
@@ -48,8 +49,12 @@ def process_work_item(
     cleanup_agent_runs = 0
     gate_agent_runs = 0
     
+    # Select model for this work item (A/B testing)
+    selected_model = select_model_for_item(item.id)
+    
     print(f"\n🚀 Processing work item: {item.id}")
     print(f"   {item.title}")
+    print(f"   🤖 Model: {selected_model}")
     print(f"   ⏱️  Timeout: {timeout_hours} hours\n")
     
     # Start item logging
@@ -65,7 +70,7 @@ def process_work_item(
             print("⏭️  Skipped.")
             if run_logger:
                 run_logger.end_item_log(False, 0)
-            return False, 0, None, 0, 0
+            return False, 0, None, 0, 0, None
     
     # Assign and sync BEFORE creating worktree to prevent parallel conflicts
     print(f"\n🔒 Claiming work item...")
@@ -73,7 +78,7 @@ def process_work_item(
         print(f"❌ Failed to assign work item {item.id}")
         if run_logger:
             run_logger.end_item_log(False, 0)
-        return False, 0, None, 0, 0
+        return False, 0, None, 0, 0, None
     
     # Use current working directory as repo root
     pokepoke_root = Path.cwd()
@@ -82,7 +87,7 @@ def process_work_item(
     if worktree_path is None:
         if run_logger:
             run_logger.end_item_log(False, 0)
-        return False, 0, None, 0, 0
+        return False, 0, None, 0, 0, None
     
     original_dir = os.getcwd()
     
@@ -93,6 +98,7 @@ def process_work_item(
         last_feedback = ""
         # Initialize accumulated stats
         accumulated_stats = AgentStats()
+        gate_success = False  # Track last gate result for model completion record
         
         while not is_shutting_down():
             # Check timeout before invoking Copilot
@@ -115,7 +121,7 @@ def process_work_item(
                  item.description = current_desc
 
             ui.set_current_agent("Work Agent")
-            result = invoke_copilot(item, timeout=remaining_timeout, item_logger=item_logger)
+            result = invoke_copilot(item, timeout=remaining_timeout, item_logger=item_logger, model=selected_model)
             request_count += result.attempt_count
             
             # Aggregate stats
@@ -157,7 +163,7 @@ def process_work_item(
                 os.chdir(original_dir)
                 if run_logger:
                     run_logger.end_item_log(False, request_count)
-                return False, request_count, accumulated_stats, cleanup_agent_runs, gate_agent_runs
+                return False, request_count, accumulated_stats, cleanup_agent_runs, gate_agent_runs, None
 
             # --- GATE AGENT CHECK ---
             gate_success, gate_reason, gate_stats = run_gate_agent(item)
@@ -204,18 +210,38 @@ def process_work_item(
             run_logger.end_item_log(success, request_count)
         
         ui.set_current_agent(None)
-        return success, request_count, item_stats, cleanup_agent_runs, gate_agent_runs
+        
+        # Build model completion record for A/B tracking
+        item_duration = time.time() - start_time
+        model_completion = ModelCompletionRecord(
+            item_id=item.id,
+            model=selected_model,
+            duration_seconds=item_duration,
+            gate_passed=gate_success if gate_agent_runs > 0 else None,
+        ) if success else None
+        
+        return success, request_count, item_stats, cleanup_agent_runs, gate_agent_runs, model_completion
     else:
         set_terminal_banner(format_work_item_banner(item.id, item.title, "Failed"))
-        print(f"\n❌ Failed to complete work item: {result.error}")
-        print(f"\n🧹 Cleaning up worktree...")
+        print(f"\n\u274c Failed to complete work item: {result.error}")
+        print(f"\n\U0001f9f9 Cleaning up worktree...")
         cleanup_worktree(item.id, force=True)
         
         if run_logger:
             run_logger.end_item_log(False, request_count)
         
         ui.set_current_agent(None)
-        return False, request_count, None, cleanup_agent_runs, gate_agent_runs
+        
+        # Record failed completion too (gate_passed=False since work agent failed)
+        item_duration = time.time() - start_time
+        model_completion = ModelCompletionRecord(
+            item_id=item.id,
+            model=selected_model,
+            duration_seconds=item_duration,
+            gate_passed=False,
+        )
+        
+        return False, request_count, None, cleanup_agent_runs, gate_agent_runs, model_completion
 
 
 def _setup_worktree(item: BeadsWorkItem) -> Optional[Path]:

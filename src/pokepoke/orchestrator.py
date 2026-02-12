@@ -168,7 +168,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             set_terminal_banner(banner)
             ui.update_header(selected_item.id, selected_item.title)
             
-            success, requests, item_stats, cleanup_runs, gate_runs = process_work_item(
+            success, requests, item_stats, cleanup_runs, gate_runs, model_completion = process_work_item(
                 selected_item, interactive, run_logger=run_logger
             )
             total_requests += requests
@@ -182,6 +182,10 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             # Aggregate statistics
             if item_stats:
                 aggregate_stats(session_stats, item_stats)
+            
+            # Record model completion for A/B testing
+            if model_completion:
+                session_stats.model_completions.append(model_completion)
             
             # Increment counter on successful processing
             if success:

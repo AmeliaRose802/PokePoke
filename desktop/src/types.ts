@@ -33,6 +33,14 @@ export interface AgentStats {
   tool_calls: number;
 }
 
+/** Record of a single work item completion for model A/B testing */
+export interface ModelCompletionRecord {
+  item_id: string;
+  model: string;
+  duration_seconds: number;
+  gate_passed: boolean | null;
+}
+
 /** Session-level statistics from the orchestrator */
 export interface SessionStats {
   elapsed_time: number;
@@ -47,6 +55,7 @@ export interface SessionStats {
   beta_tester_agent_runs?: number;
   code_review_agent_runs?: number;
   worktree_cleanup_agent_runs?: number;
+  model_completions?: ModelCompletionRecord[];
 }
 
 /** Progress indicator state */

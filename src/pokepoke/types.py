@@ -1,7 +1,7 @@
 """Type definitions for PokePoke orchestrator."""
 
 from dataclasses import dataclass, field
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 
 @dataclass
@@ -96,6 +96,15 @@ class BeadsStats:
 
 
 @dataclass
+class ModelCompletionRecord:
+    """Record of a single work item completion for a specific model."""
+    item_id: str
+    model: str
+    duration_seconds: float
+    gate_passed: Optional[bool] = None  # None = gate not run
+
+
+@dataclass
 class SessionStats:
     """Combined session statistics including agent stats and run counts."""
     agent_stats: AgentStats
@@ -113,6 +122,7 @@ class SessionStats:
     worktree_cleanup_agent_runs: int = 0
     starting_beads_stats: Optional[BeadsStats] = None
     ending_beads_stats: Optional[BeadsStats] = None
+    model_completions: List[ModelCompletionRecord] = field(default_factory=list)
 
 
 @dataclass
@@ -126,3 +136,4 @@ class CopilotResult:
     attempt_count: int = 1
     is_rate_limited: bool = False  # True if error was due to rate limiting
     stats: Optional[AgentStats] = None
+    model: Optional[str] = None  # Model used for this invocation
