@@ -27,6 +27,13 @@
       "duration_seconds": 75.132652759552,
       "gate_passed": false,
       "timestamp": "2026-02-12T19:54:22.181060+00:00"
+    },
+    {
+      "item_id": "PokePoke-gdsa",
+      "model": "claude-opus-4.6",
+      "duration_seconds": 2136.0417799949646,
+      "gate_passed": true,
+      "timestamp": "2026-02-12T20:34:52.643990+00:00"
     }
   ],
   "summary": {
@@ -41,14 +48,14 @@
       "last_used": "2026-02-12T18:05:34.470459+00:00"
     },
     "claude-opus-4.6": {
-      "total_items_attempted": 1,
-      "total_items_succeeded": 1,
+      "total_items_attempted": 2,
+      "total_items_succeeded": 2,
       "total_items_failed": 0,
-      "total_duration_seconds": 695.4203479290009,
+      "total_duration_seconds": 2831.4621279239655,
       "total_retries": 0,
-      "average_duration": 695.42,
+      "average_duration": 1415.73,
       "success_rate": 1.0,
-      "last_used": "2026-02-12T19:02:10.997757+00:00"
+      "last_used": "2026-02-12T20:34:52.643990+00:00"
     },
     "gpt-5.1-codex-max": {
       "total_items_attempted": 1,
