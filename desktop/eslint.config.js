@@ -26,6 +26,7 @@ export default defineConfig([
     rules: {
       // Ban inline styles - force use of CSS classes for consistent theming
       'react/forbid-dom-props': ['error', { forbid: ['style'] }],
+      'react/forbid-component-props': ['error', { forbid: ['style'] }],
     },
   },
 ])
