@@ -58,6 +58,18 @@
   flex-shrink: 0;
 }
 
+.connection-dot-connecting {
+  background-color: #f0ad4e;
+}
+
+.connection-dot-connected {
+  background-color: #5cb85c;
+}
+
+.connection-dot-disconnected {
+  background-color: #d9534f;
+}
+
 .connection-dot.pulse {
   animation: pulse 1.5s infinite;
 }
@@ -295,6 +307,10 @@
 .stat-label {
   color: #565f89;
   font-size: 11px;
+}
+
+.stat-label.all-time-label {
+  margin-right: 0.5em;
 }
 
 .stat-value {

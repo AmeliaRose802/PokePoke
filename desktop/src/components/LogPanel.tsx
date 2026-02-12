@@ -45,7 +45,15 @@ export function LogPanel({
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const isUserScrolledUp = useRef(false);
+
+  // Set accent color using CSS custom property
+  useEffect(() => {
+    if (panelRef.current) {
+      panelRef.current.style.setProperty('--accent', accentColor);
+    }
+  }, [accentColor]);
 
   // Detect if user has scrolled up
   const handleScroll = () => {
@@ -65,8 +73,8 @@ export function LogPanel({
 
   return (
     <div
+      ref={panelRef}
       className={`log-panel ${focused ? "focused" : ""}`}
-      style={{ borderLeftColor: accentColor }}
       onClick={onFocus}
     >
       <div className="log-panel-header">

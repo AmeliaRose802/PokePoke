@@ -25,8 +25,7 @@ export function ConnectionIndicator({ status }: Props) {
   return (
     <div className="connection-indicator">
       <span
-        className={`connection-dot ${config.pulse ? "pulse" : ""}`}
-        style={{ backgroundColor: config.color }}
+        className={`connection-dot connection-dot-${status} ${config.pulse ? "pulse" : ""}`}
       />
       <span className="connection-label">{config.label}</span>
     </div>

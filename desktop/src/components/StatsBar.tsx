@@ -168,7 +168,7 @@ export function StatsBar({ stats, modelLeaderboard }: Props) {
       {leaderboardEntries.length > 0 && (
         <div className="stats-row model-leaderboard">
           <span className="stat-icon">📊</span>
-          <span className="stat-label" style={{ marginRight: "0.5em" }}>All-time:</span>
+          <span className="stat-label all-time-label">All-time:</span>
           {leaderboardEntries.map(([model, s]) => (
             <span key={model} className="stat model-stat">
               <span className="stat-label">{model}:</span>
