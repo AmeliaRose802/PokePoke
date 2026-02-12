@@ -82,7 +82,7 @@ def _is_assigned_to_current_user(item: BeadsWorkItem) -> bool:
     if username and username.lower() == owner:
         return True
     
-    # Check if username is in the owner email (e.g., "ameliapayne@microsoft.com")
+    # Check if username is in the owner email (e.g., "user@example.com")
     if username and username.lower() in owner:
         return True
     

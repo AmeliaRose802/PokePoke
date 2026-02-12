@@ -171,12 +171,19 @@ def branch_exists(branch_name: str) -> bool:
         return False
 
 
-def get_default_branch(preferred: str = "ameliapayne/dev", fallback: str = "master") -> str:
+def get_default_branch(preferred: Optional[str] = None, fallback: Optional[str] = None) -> str:
     """Resolve the default branch name for the repo.
 
-    Prefers ameliapayne/dev when it exists (local or remote), otherwise uses origin/HEAD or current branch.
-    If remote exists but local doesn't, it creates the local tracking branch.
+    Uses project config to determine preferred branch. Falls back to origin/HEAD
+    or current branch if preferred not available.
     """
+    from .config import get_config
+    config = get_config()
+
+    if preferred is None:
+        preferred = config.git.get_preferred_branch()
+    if fallback is None:
+        fallback = config.git.fallback_branch
     if preferred:
         # Check local
         if branch_exists(preferred):

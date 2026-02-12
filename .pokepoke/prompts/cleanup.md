@@ -93,7 +93,7 @@ This repository has integrity checks that detect tampering:
 6. **Merge and cleanup** - Once validation passes
 7. **Close the beads item** - Mark work complete
 
-If the work has not been completed, it is acceptable to move the beads item to open and make sure everything on `ameliapayne/dev` is committed. Use 'bd sync' to sync beads changes.
+If the work has not been completed, it is acceptable to move the beads item to open and make sure everything on the default development branch is committed. Use 'bd sync' to sync beads changes.
 
 You do not need to make intigration tests pass, just the pre-commit tests.
 
@@ -101,8 +101,8 @@ Beads changes do not need to be commited. Just run bd sync and that's enough.
 
 ## Important Notes
 
-- Main branch: ameliapayne/dev
+- Main branch: Use `get_default_branch()` to detect automatically
 - If uncommitted work exists on the current worktree, commit it with validation passing
-- Merge the worktree back to the ameliapayne/dev branch
+- Merge the worktree back to the default development branch
 - Do not leave anything uncommitted
 - Quality gates exist to maintain code health - respect them

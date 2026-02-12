@@ -35,7 +35,7 @@ def check_and_merge_worktree(item: BeadsWorkItem, worktree_path: Path) -> bool:
         original_dir = os.getcwd()
         os.chdir(worktree_path)
         
-        # Use the actual target branch (ameliapayne/dev) not master
+        # Use the actual target branch from config (not hardcoded)
         target_branch = get_default_branch()
         check_result = subprocess.run(
             ["git", "rev-list", "--count", "HEAD", f"^{target_branch}"],
@@ -62,7 +62,7 @@ def check_and_merge_worktree(item: BeadsWorkItem, worktree_path: Path) -> bool:
 
 
 def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
-    """Merge worktree to ameliapayne/dev branch."""
+    """Merge worktree to the default development branch."""
     from .git_operations import is_merge_in_progress, get_unmerged_files, abort_merge
     
     print(f"\n🔍 Checking if main repo is ready for merge...")

@@ -55,7 +55,7 @@ def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool
             
             # CRITICAL: Check 'assignee' field, NOT 'owner' field!
             # - assignee: The specific agent currently working on it (pokepoke_agent_123)
-            # - owner: The human user who owns it (ameliapayne@microsoft.com)
+            # - owner: The human user who owns it (e.g., user@example.com)
             current_assignee = current_item.get('assignee', '')
             current_status = current_item.get('status', '')
             

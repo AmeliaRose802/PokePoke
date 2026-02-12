@@ -33,7 +33,7 @@ def _is_assigned_to_current_user(item: BeadsWorkItem) -> bool:
     
     CRITICAL: Checks the 'assignee' field (specific agent), NOT 'owner' field (human user).
     - assignee: pokepoke_agent_123 (who is actively working on it)
-    - owner: ameliapayne@microsoft.com (who created/owns it)
+    - owner: user@example.com (who created/owns it)
     
     Args:
         item: Work item to check.

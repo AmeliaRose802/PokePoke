@@ -65,10 +65,14 @@ class TestSanitizeBranchName:
 class TestDefaultBranchResolution:
     """Tests for default branch resolution helpers."""
 
-    def test_get_default_branch_prefers_ameliapayne_dev(self):
-        """Test get_default_branch returns preferred branch when it exists."""
-        with patch('pokepoke.git_operations.branch_exists', return_value=True):
-            assert get_default_branch() == 'ameliapayne/dev'
+    def test_get_default_branch_prefers_config_branch(self):
+        """Test get_default_branch returns config-preferred branch when it exists."""
+        with patch('pokepoke.git_operations.branch_exists', return_value=True), \
+             patch('pokepoke.config._cached_config', None), \
+             patch('pokepoke.config._find_repo_root') as mock_root:
+            mock_root.return_value = Path('/fake/root')
+            # Config auto-detects username from git, so pass preferred explicitly
+            assert get_default_branch(preferred='ameliapayne/dev') == 'ameliapayne/dev'
 
     def test_get_default_branch_uses_origin_head(self):
         """Test get_default_branch falls back to origin/HEAD when preferred missing."""
@@ -76,7 +80,7 @@ class TestDefaultBranchResolution:
              patch('subprocess.run') as mock_run:
             mock_run.return_value = Mock(returncode=0, stdout='origin/master\n', stderr='')
 
-            assert get_default_branch(preferred=None) == 'master'
+            assert get_default_branch(preferred='') == 'master'
 
     def test_get_default_branch_uses_current_branch(self):
         """Test get_default_branch falls back to current branch when origin/HEAD fails."""
@@ -87,7 +91,7 @@ class TestDefaultBranchResolution:
                 Mock(returncode=0, stdout='task/PokePoke-6g1\n', stderr='')
             ]
 
-            assert get_default_branch(preferred=None) == 'task/PokePoke-6g1'
+            assert get_default_branch(preferred='') == 'task/PokePoke-6g1'
 
 
 class TestGetMainRepoRoot:

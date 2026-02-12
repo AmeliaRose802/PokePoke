@@ -28,7 +28,7 @@ Please implement this task according to the project guidelines and best practice
 3. Update documentation if needed
 4. Commit your code changes with a descriptive message
 5. Update beads items as needed - beads changes sync automatically via 'bd sync'
-6. When done and all validation passes, merge your worktree to `ameliapayne/dev` and close your worktree
+6. When done and all validation passes, merge your worktree to the default development branch and close your worktree
 
 Work independently and autonomously. Report completion when done.
 
