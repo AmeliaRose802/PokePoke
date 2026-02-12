@@ -48,53 +48,11 @@ def _run_special_agent(name: str, repo_root: Path) -> AgentStats | None:
 
 
 def run_periodic_maintenance(items_completed: int, session_stats: SessionStats, run_logger: RunLogger) -> None:
-    """Run periodic maintenance agents based on config and completion count."""
-    pokepoke_repo = Path.cwd()
-
-    if items_completed == 0:
-        return
-
-    config = get_config()
-    agents = config.maintenance.agents
-
-    for agent_cfg in agents:
-        if not agent_cfg.enabled:
-            continue
-        if agent_cfg.frequency <= 0:
-            continue
-        if items_completed % agent_cfg.frequency != 0:
-            continue
-
-        name = agent_cfg.name
-        log_key = name.lower().replace(" ", "_")
-
-        set_terminal_banner(f"PokePoke - Synced {name} Agent")
-        terminal_ui.ui.update_header("MAINTENANCE", f"{name} Agent", "Running")
-        print(f"\n🔧 Running {name} Agent...")
-        run_logger.log_maintenance(log_key, f"Starting {name} Agent")
-
-        # Update run count on session stats if attribute exists
-        stat_attr = _AGENT_STAT_ATTRS.get(name)
-        if stat_attr and hasattr(session_stats, stat_attr):
-            setattr(session_stats, stat_attr, getattr(session_stats, stat_attr) + 1)
-
-        # Run the agent
-        if name in _SPECIAL_AGENTS:
-            result = _run_special_agent(name, pokepoke_repo)
-        else:
-            result = run_maintenance_agent(
-                name,
-                agent_cfg.prompt_file,
-                repo_root=pokepoke_repo,
-                needs_worktree=agent_cfg.needs_worktree,
-                merge_changes=agent_cfg.merge_changes,
-                model=agent_cfg.model,
-            )
-
-        if result:
-            aggregate_stats(session_stats, result)
-            if name == "Janitor":
-                session_stats.janitor_lines_removed += result.lines_removed
-            run_logger.log_maintenance(log_key, f"{name} Agent completed successfully")
-        else:
-            run_logger.log_maintenance(log_key, f"{name} Agent failed")
+    """Run periodic maintenance agents based on config and completion count.
+    
+    This function now delegates to MaintenanceScheduler for singleton coordination.
+    Kept for backward compatibility.
+    """
+    # Import here to avoid circular imports
+    from pokepoke.maintenance_scheduler import run_periodic_maintenance as _run_with_scheduler
+    return _run_with_scheduler(items_completed, session_stats, run_logger)
