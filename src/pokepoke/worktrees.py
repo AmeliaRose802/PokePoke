@@ -12,6 +12,7 @@ from pokepoke.git_operations import (
     execute_merge_sequence,
     validate_post_merge,
 )
+from pokepoke.beads_management import run_bd_sync_with_retry
 
 
 
@@ -296,13 +297,7 @@ def _sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
     # CRITICAL: Sync beads before merge to avoid uncommitted .beads files blocking checkout
     print("🔄 Syncing beads database before merge...")
     try:
-        bd_sync_result = subprocess.run(
-            ["bd", "sync"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            timeout=30
-        )
+        bd_sync_result = run_bd_sync_with_retry(timeout=30)
         if bd_sync_result.returncode != 0:
             print(f"⚠️  bd sync returned non-zero: {bd_sync_result.returncode}")
             print(f"   stdout: {bd_sync_result.stdout}")

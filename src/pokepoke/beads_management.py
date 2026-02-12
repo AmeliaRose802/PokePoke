@@ -3,11 +3,55 @@
 import json
 import os
 import subprocess
+import time
 from typing import List, Optional
 
 from .types import BeadsWorkItem
 from .beads_hierarchy import has_feature_parent, get_next_child_task, close_parent_if_complete, get_children, resolve_to_leaf_task, HUMAN_REQUIRED_LABEL
 from .beads_query import _parse_beads_json
+
+
+def _is_transient_jsonl_sync_error(output: str) -> bool:
+    normalized = output.lower()
+    if "access is denied" in normalized and "jsonl" in normalized:
+        return True
+    return "failed to replace jsonl file" in normalized or "jsonl file hash mismatch" in normalized
+
+
+def run_bd_sync_with_retry(
+    max_attempts: int = 3,
+    base_delay: float = 0.5,
+    timeout: Optional[int] = None
+) -> subprocess.CompletedProcess[str]:
+    """Run bd sync with retries for transient JSONL lock errors."""
+    last_result: Optional[subprocess.CompletedProcess[str]] = None
+    for attempt in range(1, max_attempts + 1):
+        result = subprocess.run(
+            ['bd', 'sync'],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            timeout=timeout
+        )
+        last_result = result
+        if result.returncode == 0:
+            if attempt > 1:
+                print(f"✅ bd sync succeeded after retry ({attempt}/{max_attempts})")
+            return result
+
+        output = f"{result.stdout}\n{result.stderr}"
+        if _is_transient_jsonl_sync_error(output) and attempt < max_attempts:
+            delay = base_delay * (2 ** (attempt - 1))
+            print(
+                "⚠️  bd sync failed due to locked JSONL file; "
+                f"retrying in {delay:.1f}s (attempt {attempt}/{max_attempts})"
+            )
+            time.sleep(delay)
+            continue
+        return result
+
+    assert last_result is not None
+    return last_result
 
 
 def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool:
@@ -74,12 +118,7 @@ def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool
         print(f"✅ Assigned {item_id} to {agent_name} and marked in_progress")
         
         # Sync to push assignment to other agents
-        sync_result = subprocess.run(
-            ['bd', 'sync'],
-            capture_output=True,
-            text=True,
-            encoding='utf-8'
-        )
+        sync_result = run_bd_sync_with_retry()
         
         if sync_result.returncode == 0:
             print(f"✅ Synced assignment - other agents will see {item_id} is claimed")

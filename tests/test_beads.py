@@ -548,6 +548,32 @@ class TestAssignAndSyncItem:
         # Should still return True - assignment succeeded even if sync failed
         assert result is True
 
+    @patch('src.pokepoke.beads_management.time.sleep')
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_assign_sync_retries_on_access_denied(self, mock_run: Mock, mock_sleep: Mock) -> None:
+        """Test that sync retries when JSONL file is locked."""
+        from src.pokepoke.beads import assign_and_sync_item
+
+        show_result = Mock(
+            stdout=json.dumps([{"id": "task-1", "owner": "", "status": "open"}]),
+            returncode=0
+        )
+        update_result = Mock(returncode=0)
+        sync_failure = Mock(
+            returncode=1,
+            stdout="",
+            stderr="failed to replace JSONL file: rename issues.jsonl.tmp issues.jsonl: Access is denied."
+        )
+        sync_success = Mock(returncode=0)
+
+        mock_run.side_effect = [show_result, update_result, sync_failure, sync_success]
+
+        result = assign_and_sync_item("task-1", "agent-1")
+
+        assert result is True
+        assert mock_run.call_count == 4
+        mock_sleep.assert_called_once()
+
     @patch('src.pokepoke.beads_management.subprocess.run')
     def test_assign_defaults_agent_name_from_env(self, mock_run: Mock) -> None:
         """Test that assign_and_sync_item uses AGENT_NAME env var when agent_name is None."""
