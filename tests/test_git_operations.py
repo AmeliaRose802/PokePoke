@@ -36,7 +36,8 @@ class TestVerifyMainRepoClean:
             encoding='utf-8',
             errors='replace',
             check=True,
-            timeout=10
+            timeout=10,
+            cwd=None
         )
     
     @patch('src.pokepoke.git_operations.subprocess.run')
@@ -248,7 +249,8 @@ class TestHasUncommittedChanges:
             encoding='utf-8',
             errors='replace',
             check=True,
-            timeout=10
+            timeout=10,
+            cwd=None
         )
     
     @patch('src.pokepoke.git_operations.subprocess.run')
@@ -305,7 +307,8 @@ class TestCommitAllChanges:
             text=True,
             encoding='utf-8',
             errors='replace',
-            timeout=240
+            timeout=240,
+            cwd=None
         )
         mock_run.assert_any_call(
             ["git", "commit", "-m", "Test commit"],
@@ -313,7 +316,8 @@ class TestCommitAllChanges:
             text=True,
             encoding='utf-8',
             errors='replace',
-            timeout=300
+            timeout=300,
+            cwd=None
         )
     
     @patch('src.pokepoke.git_operations.subprocess.run')

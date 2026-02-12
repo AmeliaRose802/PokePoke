@@ -1,4 +1,4 @@
-"""Git Operations - Utilities for git status checks, commits, and repository management."""
+"""Git operations utilities for status checks, commits, and repository management."""
 
 import re
 import subprocess
@@ -19,8 +19,8 @@ __all__ = [
     'execute_merge_sequence', 'check_main_repo_ready_for_merge',
 ]
 
-def has_uncommitted_changes() -> bool:
-    """Check if there are uncommitted changes in the current directory."""
+def has_uncommitted_changes(cwd: Optional[str] = None) -> bool:
+    """Check if there are uncommitted changes in the given directory."""
     try:
         result = subprocess.run(
             ["git", "status", "--porcelain"],
@@ -29,14 +29,15 @@ def has_uncommitted_changes() -> bool:
             encoding='utf-8',
             errors='replace',
             check=True,
-            timeout=10
+            timeout=10,
+            cwd=cwd
         )
         return bool(result.stdout.strip())
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return False
 
 
-def commit_all_changes(message: str = "Auto-commit by PokePoke") -> tuple[bool, str]:
+def commit_all_changes(message: str = "Auto-commit by PokePoke", cwd: Optional[str] = None) -> tuple[bool, str]:
     """Commit all changes, triggering pre-commit hooks for validation."""
     try:
         subprocess.run(
@@ -46,7 +47,8 @@ def commit_all_changes(message: str = "Auto-commit by PokePoke") -> tuple[bool, 
             text=True,
             encoding='utf-8',
             errors='replace',
-            timeout=240
+            timeout=240,
+            cwd=cwd
         )
         
         result = subprocess.run(
@@ -55,7 +57,8 @@ def commit_all_changes(message: str = "Auto-commit by PokePoke") -> tuple[bool, 
             text=True,
             encoding='utf-8',
             errors='replace',
-            timeout=300  # 5 minutes for pre-commit hooks
+            timeout=300,  # 5 minutes for pre-commit hooks
+            cwd=cwd
         )
         
         if result.returncode == 0:
@@ -72,8 +75,8 @@ def commit_all_changes(message: str = "Auto-commit by PokePoke") -> tuple[bool, 
         return False, f"Commit error: {e.stderr if e.stderr else str(e)}"
 
 
-def verify_main_repo_clean() -> Tuple[bool, str, list[str]]:
-    """Verify main repository has no uncommitted non-beads changes.
+def verify_main_repo_clean(cwd: Optional[str] = None) -> Tuple[bool, str, list[str]]:
+    """Verify repository has no uncommitted non-beads changes.
     
     Returns:
         Tuple of (is_clean, uncommitted_output, non_beads_changes)
@@ -89,7 +92,8 @@ def verify_main_repo_clean() -> Tuple[bool, str, list[str]]:
             encoding='utf-8',
             errors='replace',
             check=True,
-            timeout=10
+            timeout=10,
+            cwd=cwd
         )
         
         uncommitted = status_result.stdout.strip()
@@ -371,15 +375,8 @@ def validate_post_merge(target_branch: str) -> bool:
     return True
 
 
-def has_commits_ahead(target_branch: Optional[str] = None) -> int:
-    """Count commits in current branch ahead of the target branch.
-
-    Args:
-        target_branch: Branch to compare against. Auto-detected if not provided.
-
-    Returns:
-        Number of commits ahead, or 0 on error.
-    """
+def has_commits_ahead(target_branch: Optional[str] = None, cwd: Optional[str] = None) -> int:
+    """Count commits in current branch ahead of the target branch."""
     if target_branch is None:
         target_branch = get_default_branch()
 
@@ -387,7 +384,8 @@ def has_commits_ahead(target_branch: Optional[str] = None) -> int:
         result = subprocess.run(
             ["git", "rev-list", "--count", f"{target_branch}..HEAD"],
             capture_output=True, text=True, encoding='utf-8',
-            timeout=10
+            timeout=10,
+            cwd=cwd
         )
         if result.returncode == 0:
             return int(result.stdout.strip())

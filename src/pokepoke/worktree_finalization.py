@@ -1,7 +1,6 @@
 """Worktree finalization and merging operations."""
 
 import json
-import os
 import subprocess
 from pathlib import Path
 
@@ -32,19 +31,16 @@ def finalize_work_item(item: BeadsWorkItem, worktree_path: Path) -> bool:
 def check_and_merge_worktree(item: BeadsWorkItem, worktree_path: Path) -> bool:
     """Check if worktree has commits and merge if needed."""
     try:
-        original_dir = os.getcwd()
-        os.chdir(worktree_path)
-        
         # Use the actual target branch from config (not hardcoded)
         target_branch = get_default_branch()
         check_result = subprocess.run(
             ["git", "rev-list", "--count", "HEAD", f"^{target_branch}"],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
+            cwd=str(worktree_path)
         )
         commit_count = int(check_result.stdout.strip())
-        os.chdir(original_dir)
         
         if commit_count == 0:
             print("\n⏭️  No commits in worktree - nothing to merge")
@@ -55,7 +51,6 @@ def check_and_merge_worktree(item: BeadsWorkItem, worktree_path: Path) -> bool:
         return merge_worktree_to_dev(item)
         
     except Exception as e:
-        os.chdir(original_dir)
         print(f"\n⚠️  Could not check commit count: {e}")
         print(f"   Attempting merge anyway...")
         return merge_worktree_to_dev(item)

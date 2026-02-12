@@ -118,7 +118,8 @@ def invoke_copilot(
     timeout: Optional[float] = None,
     deny_write: bool = False,
     item_logger: Optional['ItemLogger'] = None,
-    model: Optional[str] = None
+    model: Optional[str] = None,
+    cwd: Optional[str] = None
 ) -> CopilotResult:
     """Invoke GitHub Copilot using SDK.
     
@@ -130,6 +131,7 @@ def invoke_copilot(
         deny_write: If True, deny file write tools (for beads-only agents).
         item_logger: Optional item logger for file logging.
         model: Optional model name to use (e.g., 'gpt-5.1-codex', defaults to 'claude-opus-4.6').
+        cwd: Optional working directory for the Copilot process (for thread-safe worktree isolation).
         
     Returns:
         Result of the Copilot invocation.
@@ -141,6 +143,7 @@ def invoke_copilot(
         timeout=timeout,
         deny_write=deny_write,
         item_logger=item_logger,
-        model=model
+        model=model,
+        cwd=cwd
     )
 

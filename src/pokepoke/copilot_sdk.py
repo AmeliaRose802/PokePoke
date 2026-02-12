@@ -50,7 +50,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     deny_write: bool = False,
     item_logger: Optional['ItemLogger'] = None,
     idle_timeout: float = 10.0,
-    model: Optional[str] = None
+    model: Optional[str] = None,
+    cwd: Optional[str] = None
 ) -> CopilotResult:
     """Invoke GitHub Copilot using the SDK. Falls back to Sonnet on rate limit."""
     config = retry_config or RetryConfig()
@@ -60,8 +61,11 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     tried_fallback = False
     original_pythonioencoding = os.environ.get('PYTHONIOENCODING')
     os.environ['PYTHONIOENCODING'] = 'utf-8:replace'
-    # Create SDK client
-    client = CopilotClient({"cli_path": "copilot.cmd", "log_level": "info"})
+    # Create SDK client with explicit working directory for thread safety
+    client_opts: dict[str, Any] = {"cli_path": "copilot.cmd", "log_level": "info"}
+    if cwd:
+        client_opts["cwd"] = cwd
+    client = CopilotClient(client_opts)
     
     try:
         print("[SDK] Starting Copilot client...")
@@ -215,14 +219,11 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                 errors.append(error_msg)
                 done.set()
         
-        # Subscribe to events
         session.on(handle_event)
         
-        # Track timeout/interrupt status
         timed_out = False
         interrupted = False
         
-        # Send the message (with retry on rate limit)
         async def send_with_retry() -> bool:
             """Send message, returns True if should retry with fallback model."""
             nonlocal session, session_config, tried_fallback, current_model, timed_out, interrupted
@@ -309,10 +310,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                 attempt_count=1
             )
         
-        # Clean up session
         await session.destroy()
         
-        # Determine success
         output_text = "".join(output_lines)
         success = len(errors) == 0
         
@@ -320,7 +319,6 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         if turn_count > 0 or total_input_tokens > 0:
             print(f"\n📊 Stats: {turn_count} turns, {total_input_tokens:,}+{total_output_tokens:,} tokens")
         
-        # Create stats object
         stats = AgentStats(
             input_tokens=total_input_tokens,
             output_tokens=total_output_tokens,
@@ -378,7 +376,6 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             os.environ.pop('PYTHONIOENCODING', None)
 
 
-# Synchronous wrapper for compatibility
 def invoke_copilot_sdk_sync(  # type: ignore[no-any-unimported]
     work_item: BeadsWorkItem,
     prompt: Optional[str] = None,
@@ -386,7 +383,8 @@ def invoke_copilot_sdk_sync(  # type: ignore[no-any-unimported]
     timeout: Optional[float] = None,
     deny_write: bool = False,
     item_logger: Optional['ItemLogger'] = None,
-    model: Optional[str] = None
+    model: Optional[str] = None,
+    cwd: Optional[str] = None
 ) -> CopilotResult:
     """Synchronous wrapper around invoke_copilot_sdk."""
     return asyncio.run(invoke_copilot_sdk(
@@ -396,5 +394,6 @@ def invoke_copilot_sdk_sync(  # type: ignore[no-any-unimported]
         timeout=timeout,
         deny_write=deny_write,
         item_logger=item_logger,
-        model=model
+        model=model,
+        cwd=cwd
     ))

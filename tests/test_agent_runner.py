@@ -36,7 +36,8 @@ class TestHasUncommittedChanges:
             encoding='utf-8',
             errors='replace',
             check=True,
-            timeout=10
+            timeout=10,
+            cwd=None
         )
     
     @patch('pokepoke.git_operations.subprocess.run')
@@ -139,7 +140,7 @@ class TestRunGateAgent:
         assert success is True
         assert "All tests pass" in reason
         assert stats is not None
-        mock_invoke.assert_called_once_with(work_item, prompt="Gate prompt", deny_write=True)
+        mock_invoke.assert_called_once_with(work_item, prompt="Gate prompt", deny_write=True, cwd=None)
     
     @patch('pokepoke.agent_runner.parse_agent_stats')
     @patch('pokepoke.agent_runner.invoke_copilot')
@@ -407,7 +408,8 @@ class TestRunBeadsOnlyAgent:
             agent_item, 
             prompt="Test prompt", 
             deny_write=True,
-            model=None
+            model=None,
+            cwd=None
         )
     
     @patch('pokepoke.agent_runner.invoke_copilot')
@@ -1168,7 +1170,7 @@ class TestRunMainRepoAgent:
         assert stats.wall_duration == 15.0
         # Verify deny_write=False (write access enabled)
         mock_invoke.assert_called_once_with(
-            agent_item, prompt="cleanup prompt", deny_write=False, model=None
+            agent_item, prompt="cleanup prompt", deny_write=False, model=None, cwd=None
         )
 
     @patch('pokepoke.agent_runner.invoke_copilot')
@@ -1353,18 +1355,12 @@ class TestRunWorktreeCleanup:
 
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
-    @patch('os.chdir')
-    @patch('os.getcwd')
-    def test_worktree_cleanup_with_repo_root_changes_dir(
+    def test_worktree_cleanup_with_repo_root_passes_cwd(
         self,
-        mock_getcwd: Mock,
-        mock_chdir: Mock,
         mock_get_prompts: Mock,
         mock_main_repo_agent: Mock
     ) -> None:
-        """Test worktree cleanup changes to repo_root and restores cwd."""
-        mock_getcwd.return_value = "/some/other/dir"
-
+        """Test worktree cleanup passes repo_root as cwd instead of chdir."""
         mock_dir = MagicMock()
         mock_get_prompts.return_value = mock_dir
         mock_file = Mock()
@@ -1377,25 +1373,19 @@ class TestRunWorktreeCleanup:
         from pokepoke.agent_runner import run_worktree_cleanup
         run_worktree_cleanup(repo_root=Path("/main/repo"))
 
-        # Should change to repo_root and then restore
-        calls = mock_chdir.call_args_list
-        assert calls[0] == call(Path("/main/repo"))
-        assert calls[1] == call("/some/other/dir")
+        # Should pass cwd to _run_main_repo_agent instead of using os.chdir
+        mock_main_repo_agent.assert_called_once()
+        _, kwargs = mock_main_repo_agent.call_args
+        assert kwargs.get("cwd") == str(Path("/main/repo"))
 
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
-    @patch('os.chdir')
-    @patch('os.getcwd')
-    def test_worktree_cleanup_restores_dir_on_error(
+    def test_worktree_cleanup_error_propagates(
         self,
-        mock_getcwd: Mock,
-        mock_chdir: Mock,
         mock_get_prompts: Mock,
         mock_main_repo_agent: Mock
     ) -> None:
-        """Test worktree cleanup restores cwd even if agent raises."""
-        mock_getcwd.return_value = "/original/dir"
-
+        """Test worktree cleanup propagates agent errors without chdir."""
         mock_dir = MagicMock()
         mock_get_prompts.return_value = mock_dir
         mock_file = Mock()
@@ -1408,10 +1398,6 @@ class TestRunWorktreeCleanup:
         from pokepoke.agent_runner import run_worktree_cleanup
         with pytest.raises(RuntimeError, match="Agent exploded"):
             run_worktree_cleanup(repo_root=Path("/main/repo"))
-
-        # Should still restore original directory
-        last_chdir = mock_chdir.call_args_list[-1]
-        assert last_chdir == call("/original/dir")
 
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')

@@ -500,17 +500,31 @@ class TestRunCleanupWithTimeout:
         assert cleanup_runs == 1
 
 
+class TestFinalizeWorkItem:
+    """Test finalize_work_item function."""
+    
+    @patch('pokepoke.worktree_finalization.close_work_item_and_parents')
+    @patch('pokepoke.worktree_finalization.check_and_merge_worktree')
+    def test_finalize_returns_false_when_merge_fails(self, mock_merge: Mock, mock_close: Mock) -> None:
+        """Test finalize returns False when check_and_merge_worktree fails."""
+        item = BeadsWorkItem(id="task-1", title="Task", description="", status="open", priority=1, issue_type="task")
+        mock_merge.return_value = False
+        
+        result = finalize_work_item(item, Path("/fake/worktree"))
+        
+        assert result is False
+        mock_close.assert_not_called()
+
+
 class TestCheckAndMergeWorktree:
     """Test check_and_merge_worktree function."""
     
     @patch('pokepoke.worktree_finalization.merge_worktree_to_dev')
     @patch('pokepoke.worktree_finalization.cleanup_worktree')
-    @patch('os.chdir')
     @patch('subprocess.run')
     def test_no_commits_to_merge(
         self, 
         mock_run: Mock, 
-        mock_chdir: Mock, 
         mock_cleanup: Mock, 
         mock_merge: Mock
     ) -> None:
@@ -532,14 +546,16 @@ class TestCheckAndMergeWorktree:
         assert result is True
         mock_cleanup.assert_called_once_with("task-1", force=True)
         mock_merge.assert_not_called()
+        # Verify cwd is passed to subprocess instead of os.chdir
+        cwd_calls = [c for c in mock_run.call_args_list if c.kwargs.get('cwd')]
+        assert len(cwd_calls) == 1
+        assert cwd_calls[0].kwargs['cwd'] == str(worktree_path)
     
     @patch('pokepoke.worktree_finalization.merge_worktree_to_dev')
-    @patch('os.chdir')
     @patch('subprocess.run')
     def test_has_commits_to_merge(
         self, 
         mock_run: Mock, 
-        mock_chdir: Mock, 
         mock_merge: Mock
     ) -> None:
         """Test when worktree has commits to merge."""
@@ -562,12 +578,10 @@ class TestCheckAndMergeWorktree:
         mock_merge.assert_called_once_with(item)
     
     @patch('pokepoke.worktree_finalization.merge_worktree_to_dev')
-    @patch('os.chdir')
     @patch('subprocess.run')
     def test_commit_count_check_fails(
         self, 
         mock_run: Mock, 
-        mock_chdir: Mock, 
         mock_merge: Mock
     ) -> None:
         """Test when commit count check fails."""

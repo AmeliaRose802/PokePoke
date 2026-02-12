@@ -1,6 +1,5 @@
 """Agent runner utilities for cleanup and maintenance agents."""
 
-import os
 import subprocess
 import json
 import re
@@ -31,7 +30,7 @@ def _generate_unique_agent_id(agent_type: str) -> str:
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     return f"{agent_type}-{timestamp}"
 
-def run_gate_agent(item: BeadsWorkItem) -> tuple[bool, str, Optional[AgentStats]]:
+def run_gate_agent(item: BeadsWorkItem, cwd: Optional[str] = None) -> tuple[bool, str, Optional[AgentStats]]:
     """Run the Gate Agent to verify a fixed work item."""
     terminal_ui.ui.set_current_agent("Gate Agent")
     print(f"\n{'='*60}\n🕵️ Running Gate Agent on {item.id}\n{'='*60}")
@@ -46,9 +45,9 @@ def run_gate_agent(item: BeadsWorkItem) -> tuple[bool, str, Optional[AgentStats]
     except Exception as e:
         return False, f"Failed to render prompt: {e}", None
 
-    # Gate Agent runs in the current directory (which should be the worktree)
+    # Gate Agent runs in the specified directory (worktree)
     # deny_write=True ensures it only reads/runs tests but doesn't modify code
-    result = invoke_copilot(item, prompt=final_prompt, deny_write=True)
+    result = invoke_copilot(item, prompt=final_prompt, deny_write=True, cwd=cwd)
     
     stats = parse_agent_stats(result.output) if result.output else None
     
@@ -124,10 +123,10 @@ def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional
     return _run_worktree_agent(agent_name, agent_id, agent_item, agent_prompt, repo_root, merge_changes=merge_changes, model=model)
 
 
-def _run_simple_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, deny_write: bool = True, model: Optional[str] = None) -> Optional[AgentStats]:
+def _run_simple_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, deny_write: bool = True, model: Optional[str] = None, cwd: Optional[str] = None) -> Optional[AgentStats]:
     """Run a simple agent in the main repo with configurable write access."""
     print(f"\n📋 Running {agent_name} ({'no write' if deny_write else 'write enabled'}){f', model={model}' if model else ''}")
-    result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=deny_write, model=model)
+    result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=deny_write, model=model, cwd=cwd)
     if result.success:
         print(f"✅ {agent_name} completed")
         return parse_agent_stats(result.output) if result.output else None
@@ -135,13 +134,13 @@ def _run_simple_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: 
     return None
 
 # Backward-compatible aliases
-def _run_beads_only_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: Optional[str] = None) -> Optional[AgentStats]:
+def _run_beads_only_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: Optional[str] = None, cwd: Optional[str] = None) -> Optional[AgentStats]:
     """Run a beads-only maintenance agent in the main repo."""
-    return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=True, model=model)
+    return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=True, model=model, cwd=cwd)
 
-def _run_main_repo_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: Optional[str] = None) -> Optional[AgentStats]:
+def _run_main_repo_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: Optional[str] = None, cwd: Optional[str] = None) -> Optional[AgentStats]:
     """Run a maintenance agent in the main repo WITH write access."""
-    return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=False, model=model)
+    return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=False, model=model, cwd=cwd)
 
 
 def run_worktree_cleanup(repo_root: Optional[Path] = None) -> Optional[AgentStats]:
@@ -173,16 +172,9 @@ def run_worktree_cleanup(repo_root: Optional[Path] = None) -> Optional[AgentStat
         labels=["maintenance", "worktree-cleanup"]
     )
     
-    # Ensure we're in the main repo directory
-    if repo_root is not None:
-        original_dir = os.getcwd()
-        os.chdir(repo_root)
-    
-    try:
-        return _run_main_repo_agent("Worktree Cleanup", cleanup_item, cleanup_prompt)
-    finally:
-        if repo_root is not None:
-            os.chdir(original_dir)
+    # Pass repo_root as cwd to the agent instead of changing process directory
+    cwd = str(repo_root) if repo_root is not None else None
+    return _run_main_repo_agent("Worktree Cleanup", cleanup_item, cleanup_prompt, cwd=cwd)
 
 
 def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkItem, agent_prompt: str, repo_root: Path, merge_changes: bool = True, model: Optional[str] = None) -> Optional[AgentStats]:
@@ -195,33 +187,28 @@ def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkIte
         print(f"\n❌ Failed to create worktree: {e}")
         return None
     
-    original_dir = os.getcwd()
-    try:
-        os.chdir(worktree_path)
-        print(f"   Switched to worktree directory\n")
-        if model:
-            print(f"   Model: {model}")
-        
-        try:
-            result = invoke_copilot(agent_item, prompt=agent_prompt, model=model)
-        except Exception as e:
-            print(f"❌ Error invoking Copilot: {e}")
-            from pokepoke.types import CopilotResult
-            result = CopilotResult(
-                work_item_id=agent_item.id,
-                success=False,
-                output="",
-                error=str(e),
-                attempt_count=1
-            )
-        
-        cleanup_success, _ = run_cleanup_loop(agent_item, result, repo_root)
-        
-        if not cleanup_success:
-            result.success = False
+    worktree_cwd = str(worktree_path)
+    print(f"   Working directory: {worktree_cwd}\n")
+    if model:
+        print(f"   Model: {model}")
     
-    finally:
-        os.chdir(original_dir)
+    try:
+        result = invoke_copilot(agent_item, prompt=agent_prompt, model=model, cwd=worktree_cwd)
+    except Exception as e:
+        print(f"❌ Error invoking Copilot: {e}")
+        from pokepoke.types import CopilotResult
+        result = CopilotResult(
+            work_item_id=agent_item.id,
+            success=False,
+            output="",
+            error=str(e),
+            attempt_count=1
+        )
+    
+    cleanup_success, _ = run_cleanup_loop(agent_item, result, repo_root, cwd=worktree_cwd)
+    
+    if not cleanup_success:
+        result.success = False
     
     if result.success:
         print(f"\n✅ {agent_name} agent completed successfully!")

@@ -22,14 +22,14 @@ def aggregate_cleanup_stats(result_stats: Optional[AgentStats], cleanup_stats: O
         result_stats.premium_requests += cleanup_stats.premium_requests
 
 
-def run_cleanup_loop(item: BeadsWorkItem, result: CopilotResult, repo_root: Path) -> tuple[bool, int]:
+def run_cleanup_loop(item: BeadsWorkItem, result: CopilotResult, repo_root: Path, cwd: Optional[str] = None) -> tuple[bool, int]:
     """Run cleanup loop to commit changes and fix validation failures."""
     cleanup_agent_runs = 0
     cleanup_attempt = 0
     
     # Check for uncommitted changes, excluding beads-only changes
     try:
-        is_clean, uncommitted, non_beads_changes = verify_main_repo_clean()
+        is_clean, uncommitted, non_beads_changes = verify_main_repo_clean(cwd=cwd)
     except Exception as e:
         print(f"\n⚠️  Error checking git status: {e}")
         return False, cleanup_agent_runs
@@ -39,7 +39,7 @@ def run_cleanup_loop(item: BeadsWorkItem, result: CopilotResult, repo_root: Path
         print(f"\n⚠️  Uncommitted non-beads changes detected (cleanup attempt {cleanup_attempt})")
         print(f"   Files: {', '.join(f.split()[1] if len(f.split()) > 1 else f for f in non_beads_changes[:5])}..." if len(non_beads_changes) > 5 else f"   Files: {', '.join(f.split()[1] if len(f.split()) > 1 else f for f in non_beads_changes)}")
         
-        commit_success, commit_error = commit_all_changes(f"Work on {item.id}")
+        commit_success, commit_error = commit_all_changes(f"Work on {item.id}", cwd=cwd)
         
         if commit_success:
             print("✅ Changes committed successfully (validation passed)")
@@ -50,7 +50,7 @@ def run_cleanup_loop(item: BeadsWorkItem, result: CopilotResult, repo_root: Path
         
         print("\n🧹 Invoking cleanup agent to fix validation errors...")
         cleanup_agent_runs += 1
-        cleanup_success, cleanup_stats = invoke_cleanup_agent(item, repo_root)
+        cleanup_success, cleanup_stats = invoke_cleanup_agent(item, repo_root, cwd=cwd)
         
         aggregate_cleanup_stats(result.stats, cleanup_stats)
         
@@ -62,7 +62,7 @@ def run_cleanup_loop(item: BeadsWorkItem, result: CopilotResult, repo_root: Path
         
         # Re-check status after cleanup
         try:
-            is_clean, uncommitted, non_beads_changes = verify_main_repo_clean()
+            is_clean, uncommitted, non_beads_changes = verify_main_repo_clean(cwd=cwd)
         except Exception as e:
             print(f"\n⚠️  Error checking git status after cleanup: {e}")
             result.success = False
@@ -89,9 +89,9 @@ def get_pokepoke_prompts_dir() -> Path:
     return prompts_dir
 
 
-def _get_current_git_context() -> tuple[str, str, bool]:
+def _get_current_git_context(cwd: Optional[str] = None) -> tuple[str, str, bool]:
     """Get current git context (directory, branch, is_worktree)."""
-    current_dir = os.getcwd()
+    current_dir = cwd or os.getcwd()
     
     # Get current branch
     try:
@@ -100,7 +100,8 @@ def _get_current_git_context() -> tuple[str, str, bool]:
             capture_output=True,
             text=True,
             timeout=10,
-            errors='replace'
+            errors='replace',
+            cwd=cwd
         )
         current_branch = branch_result.stdout.strip() if branch_result.returncode == 0 else "unknown"
     except Exception:
@@ -113,7 +114,8 @@ def _get_current_git_context() -> tuple[str, str, bool]:
             capture_output=True,
             text=True,
             timeout=10,
-            errors='replace'
+            errors='replace',
+            cwd=cwd
         )
         is_worktree = worktree_result.returncode == 0 and worktree_result.stdout.strip() == "true"
     except Exception:
@@ -122,7 +124,7 @@ def _get_current_git_context() -> tuple[str, str, bool]:
     return current_dir, current_branch, is_worktree
 
 
-def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path) -> tuple[bool, Optional[AgentStats]]:
+def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path, cwd: Optional[str] = None) -> tuple[bool, Optional[AgentStats]]:
     """Invoke cleanup agent to commit uncommitted changes."""
     terminal_ui.ui.set_current_agent("Cleanup Agent")
     try:
@@ -139,7 +141,7 @@ def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path) -> tuple[bool, Op
     cleanup_prompt_template = cleanup_prompt_path.read_text(encoding='utf-8')
     
     # Get current context information
-    current_dir, current_branch, is_worktree = _get_current_git_context()
+    current_dir, current_branch, is_worktree = _get_current_git_context(cwd=cwd)
     
     # Replace placeholders in template
     cleanup_prompt_template = cleanup_prompt_template.replace("{cwd}", current_dir)
@@ -175,7 +177,7 @@ def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path) -> tuple[bool, Op
     )
     
     print("\n🧹 Invoking cleanup agent...")
-    copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt)
+    copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd)
     
     return copilot_result.success, copilot_result.stats
 
@@ -184,7 +186,8 @@ def invoke_merge_conflict_cleanup_agent(
     item: BeadsWorkItem, 
     repo_root: Path, 
     error_msg: str,
-    unmerged_files: Optional[list[str]] = None
+    unmerged_files: Optional[list[str]] = None,
+    cwd: Optional[str] = None
 ) -> tuple[bool, Optional[AgentStats]]:
     """Invoke cleanup agent to resolve merge conflicts.
     
@@ -193,6 +196,7 @@ def invoke_merge_conflict_cleanup_agent(
         repo_root: Path to the repository root
         error_msg: Description of the merge error
         unmerged_files: Optional list of files with merge conflicts
+        cwd: Optional working directory for the Copilot process.
     """
     terminal_ui.ui.set_current_agent("Merge Conflict Cleanup")
     from pokepoke.git_operations import is_merge_in_progress, get_unmerged_files as git_get_unmerged
@@ -212,7 +216,7 @@ def invoke_merge_conflict_cleanup_agent(
     cleanup_prompt_template = cleanup_prompt_path.read_text(encoding='utf-8')
     
     # Get current context information
-    current_dir, current_branch, is_worktree = _get_current_git_context()
+    current_dir, current_branch, is_worktree = _get_current_git_context(cwd=cwd)
     
     # Get merge state info
     is_merging = is_merge_in_progress()
@@ -280,6 +284,6 @@ def invoke_merge_conflict_cleanup_agent(
         if len(unmerged_files) > 5:
             print(f"      ... and {len(unmerged_files) - 5} more")
     
-    copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt)
+    copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd)
     
     return copilot_result.success, copilot_result.stats
