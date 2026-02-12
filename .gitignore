@@ -35,6 +35,9 @@ share/python-wheels/
 .installed.cfg
 *.egg
 
+# Type checking
+.mypy_cache/
+
 # Testing / Coverage
 .pytest_cache/
 .coverage
