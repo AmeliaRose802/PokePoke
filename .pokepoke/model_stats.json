@@ -13,6 +13,13 @@
       "duration_seconds": 695.4203479290009,
       "gate_passed": true,
       "timestamp": "2026-02-12T19:02:10.997757+00:00"
+    },
+    {
+      "item_id": "PokePoke-03q5",
+      "model": "gpt-5.1-codex-max",
+      "duration_seconds": 494.318222284317,
+      "gate_passed": true,
+      "timestamp": "2026-02-12T19:42:06.052353+00:00"
     }
   ],
   "summary": {
@@ -35,6 +42,16 @@
       "average_duration": 695.42,
       "success_rate": 1.0,
       "last_used": "2026-02-12T19:02:10.997757+00:00"
+    },
+    "gpt-5.1-codex-max": {
+      "total_items_attempted": 1,
+      "total_items_succeeded": 1,
+      "total_items_failed": 0,
+      "total_duration_seconds": 494.318222284317,
+      "total_retries": 0,
+      "average_duration": 494.32,
+      "success_rate": 1.0,
+      "last_used": "2026-02-12T19:42:06.052353+00:00"
     }
   }
 }
