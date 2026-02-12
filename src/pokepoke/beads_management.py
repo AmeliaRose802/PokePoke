@@ -6,7 +6,7 @@ import subprocess
 from typing import List, Optional
 
 from .types import BeadsWorkItem
-from .beads_hierarchy import has_feature_parent, get_next_child_task, close_parent_if_complete, get_children, HUMAN_REQUIRED_LABEL
+from .beads_hierarchy import has_feature_parent, get_next_child_task, close_parent_if_complete, get_children, resolve_to_leaf_task, HUMAN_REQUIRED_LABEL
 
 
 def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool:
@@ -346,12 +346,20 @@ def get_first_ready_work_item() -> Optional[BeadsWorkItem]:
 def select_next_hierarchical_item(items: List[BeadsWorkItem]) -> Optional[BeadsWorkItem]:
     """Select next work item using hierarchical assignment strategy.
     
+    Core rule: NEVER directly assign an epic/feature that has children.
+    Always assign children before parents, recursively walking down
+    the hierarchy to find an assignable leaf task.
+    
     Strategy:
-    1. For epics/features WITH children: return first incomplete child
-    2. For epics/features with NO children: return the epic/feature itself 
-       (agent should break it down into tasks)
-    3. For standalone tasks/bugs/chores: return the item directly
-    4. Auto-close parents when all children are complete
+    1. For epics/features WITH children: recursively resolve to a leaf task.
+       Iterates through available children by priority. If a child is itself
+       an epic/feature, recursively resolves it.
+    2. For epics/features with NO children: return the epic/feature itself
+       (agent should break it down into tasks).
+    3. For standalone tasks/bugs/chores: return the item directly.
+    4. Auto-close parents when all children are complete.
+    5. Skip parents entirely when all children are blocked
+       (assigned to others, human-required, etc.).
     
     Args:
         items: List of ready work items.
@@ -372,27 +380,14 @@ def select_next_hierarchical_item(items: List[BeadsWorkItem]) -> Optional[BeadsW
         
         # Check if this is an epic or feature
         if item.issue_type in ('epic', 'feature'):
-            # Check for children
-            children = get_children(item.id)
-            
-            if children:
-                # Has children - try to get next available child
-                next_child = get_next_child_task(item.id)
-                
-                if next_child:
-                    # Work on this child
-                    return next_child
-                else:
-                    # All children complete - close parent and continue to next item
-                    if close_parent_if_complete(item.id):
-                        continue
-                    # If close failed (some children still open but assigned to others),
-                    # skip to next item
-                    continue
-            else:
-                # No children yet - work on epic/feature directly
-                # The agent should break it down into tasks
-                return item
+            # Recursively resolve to a leaf task
+            # This handles nested hierarchies (epic → feature → task)
+            # and ensures we never directly assign a parent with children
+            resolved = resolve_to_leaf_task(item)
+            if resolved:
+                return resolved
+            # Could not resolve to an assignable item - skip
+            continue
         
         # Regular task/bug/chore - work on it directly
         return item

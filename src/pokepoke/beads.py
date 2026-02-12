@@ -20,7 +20,8 @@ from .beads_hierarchy import (
     all_children_complete,
     close_parent_if_complete,
     get_parent_id,
-    has_feature_parent
+    has_feature_parent,
+    resolve_to_leaf_task
 )
 
 from .beads_management import (
@@ -46,6 +47,7 @@ __all__ = [
     'close_parent_if_complete',
     'get_parent_id',
     'has_feature_parent',
+    'resolve_to_leaf_task',
     
     # Management operations
     'close_item',

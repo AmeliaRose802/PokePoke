@@ -136,6 +136,104 @@ def get_next_child_task(parent_id: str) -> Optional[BeadsWorkItem]:
     return min(available_children, key=lambda x: x.priority)
 
 
+def _get_available_children(parent_id: str) -> tuple[list[BeadsWorkItem], list[BeadsWorkItem]]:
+    """Get available children for a parent, separated from all children.
+    
+    Returns:
+        Tuple of (available_children sorted by priority, all_children).
+        available_children excludes completed, blocked, and human-required items.
+    """
+    children = get_children(parent_id)
+    
+    if not children:
+        return [], []
+    
+    # Filter to open/in_progress children only
+    open_children = [
+        child for child in children
+        if child.status not in ('done', 'closed', 'resolved')
+    ]
+    
+    if not open_children:
+        return [], children
+    
+    # Filter out items assigned to other agents and human-required
+    available = [
+        child for child in open_children
+        if _is_assigned_to_current_user(child)
+        and not (child.labels and HUMAN_REQUIRED_LABEL in child.labels)
+    ]
+    
+    # Sort by priority (lowest number = highest priority)
+    available.sort(key=lambda x: x.priority)
+    
+    return available, children
+
+
+def resolve_to_leaf_task(item: BeadsWorkItem, _depth: int = 0) -> Optional[BeadsWorkItem]:
+    """Recursively resolve an epic/feature to an assignable leaf task.
+    
+    Core rule: NEVER directly assign an epic/feature that has children.
+    Instead, walk down the hierarchy to find the first assignable leaf task.
+    
+    Behavior:
+    - Non-epic/feature items are returned directly (leaf tasks).
+    - Childless epics/features are returned directly (agent should decompose).
+    - Epics/features with children: iterate available children by priority.
+      Leaf children are returned. Epic/feature children are recursively resolved.
+    - If all children are complete, auto-closes the parent and returns None.
+    - If all children are blocked (assigned to others, human-required),
+      returns None (skip parent entirely).
+    
+    Args:
+        item: The work item to resolve.
+        _depth: Internal recursion depth tracker (prevents infinite loops).
+        
+    Returns:
+        An assignable leaf task, the item itself if childless, or None if
+        all children are blocked/complete.
+    """
+    _MAX_DEPTH = 10
+    if _depth >= _MAX_DEPTH:
+        return None
+    
+    # Non-epic/feature items are always leaf tasks - return directly
+    if item.issue_type not in ('epic', 'feature'):
+        return item
+    
+    available, all_children = _get_available_children(item.id)
+    
+    if not all_children:
+        # Childless epic/feature - return for direct work
+        # (the agent should break it down into tasks)
+        return item
+    
+    if not available:
+        # Has children but none are available
+        # Check if all are complete → auto-close parent
+        # Otherwise they're all blocked → skip parent entirely
+        close_parent_if_complete(item.id)
+        return None
+    
+    # Iterate through available children by priority
+    for child in available:
+        if child.issue_type in ('epic', 'feature'):
+            # Child is itself an epic/feature - recursively resolve
+            resolved = resolve_to_leaf_task(child, _depth + 1)
+            if resolved:
+                return resolved
+            # This child resolved to nothing - try next sibling
+            continue
+        else:
+            # Leaf task (task/bug/chore) - return directly
+            return child
+    
+    # All available children resolved to nothing
+    # Try to auto-close if all children are now complete
+    close_parent_if_complete(item.id)
+    return None
+
+
 def all_children_complete(parent_id: str) -> bool:
     """Check if all children of a parent are complete.
     
