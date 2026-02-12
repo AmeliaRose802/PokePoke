@@ -933,12 +933,14 @@ class TestOrchestratorMain:
     
     @patch('pokepoke.orchestrator._check_beads_available', return_value=True)
     @patch('pokepoke.orchestrator.run_orchestrator')
+    @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke', '--autonomous'])
-    def test_main_autonomous(self, mock_run: Mock, _mock_beads: Mock) -> None:
+    def test_main_autonomous(self, mock_ui: Mock, mock_run: Mock, _mock_beads: Mock) -> None:
         """Test main with autonomous flag."""
         from pokepoke.orchestrator import main
         
         mock_run.return_value = 0
+        mock_ui.run_with_orchestrator.side_effect = lambda f: f()
         
         result = main()
         
@@ -947,12 +949,14 @@ class TestOrchestratorMain:
     
     @patch('pokepoke.orchestrator._check_beads_available', return_value=True)
     @patch('pokepoke.orchestrator.run_orchestrator')
+    @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke', '--continuous'])
-    def test_main_continuous(self, mock_run: Mock, _mock_beads: Mock) -> None:
+    def test_main_continuous(self, mock_ui: Mock, mock_run: Mock, _mock_beads: Mock) -> None:
         """Test main with continuous flag."""
         from pokepoke.orchestrator import main
         
         mock_run.return_value = 0
+        mock_ui.run_with_orchestrator.side_effect = lambda f: f()
         
         result = main()
         
@@ -961,12 +965,14 @@ class TestOrchestratorMain:
     
     @patch('pokepoke.orchestrator._check_beads_available', return_value=True)
     @patch('pokepoke.orchestrator.run_orchestrator')
+    @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke', '--autonomous', '--continuous'])
-    def test_main_both_flags(self, mock_run: Mock, _mock_beads: Mock) -> None:
+    def test_main_both_flags(self, mock_ui: Mock, mock_run: Mock, _mock_beads: Mock) -> None:
         """Test main with both flags."""
         from pokepoke.orchestrator import main
         
         mock_run.return_value = 0
+        mock_ui.run_with_orchestrator.side_effect = lambda f: f()
         
         result = main()
         

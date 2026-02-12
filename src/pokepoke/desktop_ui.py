@@ -45,9 +45,9 @@ def _find_frontend_dist() -> Optional[Path]:
 class DesktopUI:
     """UI adapter that opens a native pywebview window.
 
-    Drop-in replacement for TextualUI. The orchestrator calls the same
-    methods — this one pushes state to the DesktopAPI which the frontend
-    reads via direct in-process calls (window.pywebview.api).
+    The orchestrator calls the standard UI methods — this adapter pushes
+    state to the DesktopAPI which the frontend reads via direct
+    in-process calls (window.pywebview.api).
 
     Single process. No server. No ports.
     """

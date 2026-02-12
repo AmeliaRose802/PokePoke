@@ -3,11 +3,8 @@
 Provides a process-wide shutdown signal that all loops, async tasks,
 and subprocesses can check to enable clean Ctrl+C / quit handling.
 
-The problem: Textual intercepts Ctrl+C as a key event on Windows
-(disables ENABLE_PROCESSED_INPUT), so KeyboardInterrupt never reaches
-the orchestrator worker thread. This module bridges that gap with a
-threading.Event that Textual's quit action sets, and a watchdog thread
-that force-kills the process if graceful shutdown stalls.
+Uses a threading.Event for cross-thread shutdown signaling, and a
+watchdog thread that force-kills the process if graceful shutdown stalls.
 """
 
 import os
@@ -24,7 +21,7 @@ _WATCHDOG_GRACE_SECONDS = 5.0
 def request_shutdown() -> None:
     """Signal all components to shut down.
 
-    Call this from Textual's quit action or any Ctrl+C handler.
+    Call this from the UI quit action or any Ctrl+C handler.
     Starts a watchdog that will force-kill the process if graceful
     shutdown doesn't complete within the grace period.
     """

@@ -331,11 +331,6 @@ def main() -> int:
         help="Run beta tester at startup before processing work items",
     )
     parser.add_argument(
-        "--desktop",
-        action="store_true",
-        help="Launch with native desktop GUI (pywebview) instead of terminal TUI",
-    )
-    parser.add_argument(
         "--init",
         action="store_true",
         help="Initialize .pokepoke/ directory with sample config and templates",
@@ -354,16 +349,8 @@ def main() -> int:
     if not _check_beads_available():
         return 1
     
-    # Switch to desktop UI if requested
-    from typing import Union
-    from pokepoke.textual_ui import TextualUI
     from pokepoke.desktop_ui import DesktopUI
-    active_ui: Union[TextualUI, DesktopUI]
-    if args.desktop:
-        from pokepoke.terminal_ui import use_desktop_ui
-        active_ui = use_desktop_ui()
-    else:
-        active_ui = terminal_ui.ui
+    active_ui: DesktopUI = terminal_ui.ui
     
     # Run the orchestrator with the selected UI
     def orchestrator_func() -> int:

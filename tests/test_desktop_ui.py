@@ -8,7 +8,6 @@ from unittest.mock import MagicMock
 import pokepoke.desktop_ui as desktop_ui_module
 import pokepoke.terminal_ui as terminal_ui_module
 from pokepoke.desktop_ui import DesktopUI
-from pokepoke.terminal_ui import use_desktop_ui
 
 
 class FakeWebviewModule:
@@ -271,14 +270,3 @@ class TestDesktopUIRunWithOrchestrator:
         result = ui.run_with_orchestrator(interrupt)
 
         assert result == 130
-
-
-class TestUseDesktopUI:
-    def test_switches_global_ui(self) -> None:
-        original = terminal_ui_module.ui
-        try:
-            result = use_desktop_ui()
-            assert isinstance(result, DesktopUI)
-            assert terminal_ui_module.ui is result
-        finally:
-            terminal_ui_module.ui = original

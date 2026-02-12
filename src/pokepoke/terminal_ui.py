@@ -1,11 +1,8 @@
-"""Terminal UI utilities for PowerShell display enhancements and TUI."""
+"""Terminal UI utilities for PowerShell display enhancements."""
 
 import sys
-from typing import TYPE_CHECKING, Union
 
-if TYPE_CHECKING:
-    from pokepoke.textual_ui import TextualUI
-    from pokepoke.desktop_ui import DesktopUI
+from pokepoke.desktop_ui import DesktopUI
 
 
 def set_terminal_banner(text: str) -> None:
@@ -32,24 +29,6 @@ def format_work_item_banner(item_id: str, title: str, status: str = "In Progress
     return f"🚀 PokePoke: {item_id} - {title} [{status}]"
 
 
-# Global UI instance - default to Textual UI, switchable to Desktop UI
-from pokepoke.textual_ui import TextualUI
-
-ui: Union["TextualUI", "DesktopUI"] = TextualUI()
-
-
-def use_desktop_ui() -> "DesktopUI":
-    """Switch the global UI to the pywebview native desktop UI.
-
-    Call this before starting the orchestrator to open a native
-    desktop window instead of the terminal TUI.
-
-    Returns:
-        The DesktopUI instance that was installed as the global UI.
-    """
-    global ui
-    from pokepoke.desktop_ui import DesktopUI
-    desktop = DesktopUI()
-    ui = desktop
-    return desktop
+# Global UI instance
+ui: DesktopUI = DesktopUI()
 
