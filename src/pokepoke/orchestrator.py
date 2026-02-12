@@ -1,6 +1,7 @@
 """PokePoke Orchestrator - Main entry point for autonomous and interactive modes."""
 
 import argparse
+import atexit
 import os
 import shutil
 import subprocess
@@ -92,8 +93,12 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         # Initialize run logger
         run_logger = RunLogger()
         run_id = run_logger.get_run_id()
-        print(f"📝 Run ID: {run_id} | 📁 Logs: {run_logger.get_run_dir()}")
+        run_dir = run_logger.get_run_dir()
+        print(f"📝 Run ID: {run_id} | 📁 Logs: {run_dir}")
         run_logger.log_orchestrator(f"PokePoke started in {mode_name} mode with agent name: {agent_name}")
+
+        # Always print log directory on exit so the user can find logs
+        atexit.register(lambda: print(f"\n📁 Logs saved to: {run_dir}"))
         
         # Use the current working directory
         main_repo_path = Path.cwd()
@@ -160,8 +165,6 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
                 run_logger.log_orchestrator("No work items available - exiting")
                 print_stats(items_completed, total_requests, elapsed, session_stats)
                 run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
-                print(f"\n📝 Run ID: {run_id}")
-                print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
                 clear_terminal_banner()
                 return 0
             
@@ -228,8 +231,6 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
                 elapsed = time.time() - start_time
                 print_stats(items_completed, total_requests, elapsed, session_stats)
                 run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
-                print(f"\n📝 Run ID: {run_id}")
-                print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
                 clear_terminal_banner()
                 return 0 if success else 1
             
@@ -249,8 +250,6 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
                     print("\n👋 Exiting PokePoke.")
                     print_stats(items_completed, total_requests, elapsed, session_stats)
                     run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
-                    print(f"\n📝 Run ID: {run_id}")
-                    print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
                     clear_terminal_banner()
                     return 0
             else:
@@ -289,8 +288,6 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         print("\n👋 Exiting PokePoke.")
         print_stats(items_completed, total_requests, elapsed, session_stats)
         run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
-        print(f"\n📝 Run ID: {run_id}")
-        print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
         clear_terminal_banner()
         return 0
     except Exception as e:
@@ -309,8 +306,6 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         print_stats(items_completed, total_requests, elapsed, session_stats)
         run_logger.log_orchestrator(f"Error: {e}", level="ERROR")
         run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
-        print(f"\n📝 Run ID: {run_id}")
-        print(f"📁 Logs saved to: {run_logger.get_run_dir()}")
         clear_terminal_banner()
         return 1
     finally:
