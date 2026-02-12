@@ -74,7 +74,7 @@ class DesktopUI:
         2. Create the pywebview window on the main thread
         3. When the window closes, signal shutdown
         """
-        import webview  # type: ignore[import-not-found]
+        import webview
 
         self._is_running = True
         builtins.print = self._print_redirect

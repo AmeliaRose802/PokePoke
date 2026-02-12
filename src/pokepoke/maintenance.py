@@ -5,7 +5,8 @@ from pathlib import Path
 from pokepoke.config import get_config
 from pokepoke.types import AgentStats, SessionStats
 from pokepoke.agent_runner import run_maintenance_agent
-from pokepoke.terminal_ui import set_terminal_banner, ui
+from pokepoke.terminal_ui import set_terminal_banner
+from pokepoke import terminal_ui
 from pokepoke.logging_utils import RunLogger
 
 # Agents that have special runner functions instead of the generic one
@@ -68,7 +69,7 @@ def run_periodic_maintenance(items_completed: int, session_stats: SessionStats, 
         log_key = name.lower().replace(" ", "_")
 
         set_terminal_banner(f"PokePoke - Synced {name} Agent")
-        ui.update_header("MAINTENANCE", f"{name} Agent", "Running")
+        terminal_ui.ui.update_header("MAINTENANCE", f"{name} Agent", "Running")
         print(f"\n🔧 Running {name} Agent...")
         run_logger.log_maintenance(log_key, f"Starting {name} Agent")
 

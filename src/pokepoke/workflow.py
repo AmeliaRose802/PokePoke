@@ -14,7 +14,8 @@ from pokepoke.agent_runner import run_cleanup_loop, run_beta_tester, run_gate_ag
 from pokepoke.worktree_finalization import finalize_work_item
 from pokepoke.work_item_selection import select_work_item
 from pokepoke.stats import parse_agent_stats
-from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner, ui
+from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner
+from pokepoke import terminal_ui
 from pokepoke.shutdown import is_shutting_down
 from pokepoke.model_selection import select_model_for_item
 
@@ -63,9 +64,9 @@ def process_work_item(
         item_logger = run_logger.start_item_log(item.id, item.title)
     
     if interactive:
-        ui.stop()
+        terminal_ui.ui.stop()
         confirm = input("Proceed with this item? [Y/n]: ").strip().lower()
-        ui.start()
+        terminal_ui.ui.start()
         if confirm and confirm != 'y':
             print("⏭️  Skipped.")
             if run_logger:
@@ -120,7 +121,7 @@ def process_work_item(
                  current_desc += f"\n- {last_feedback}"
                  item.description = current_desc
 
-            ui.set_current_agent("Work Agent")
+            terminal_ui.ui.set_current_agent("Work Agent")
             result = invoke_copilot(item, timeout=remaining_timeout, item_logger=item_logger, model=selected_model)
             request_count += result.attempt_count
             
@@ -209,7 +210,7 @@ def process_work_item(
         if run_logger:
             run_logger.end_item_log(success, request_count)
         
-        ui.set_current_agent(None)
+        terminal_ui.ui.set_current_agent(None)
         
         # Build model completion record for A/B tracking
         item_duration = time.time() - start_time
@@ -230,7 +231,7 @@ def process_work_item(
         if run_logger:
             run_logger.end_item_log(False, request_count)
         
-        ui.set_current_agent(None)
+        terminal_ui.ui.set_current_agent(None)
         
         # Record failed completion too (gate_passed=False since work agent failed)
         item_duration = time.time() - start_time

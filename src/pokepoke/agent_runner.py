@@ -14,7 +14,7 @@ from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
 from pokepoke.stats import parse_agent_stats
 from pokepoke.worktrees import create_worktree, merge_worktree, cleanup_worktree
 from pokepoke.prompts import PromptService
-from pokepoke.terminal_ui import ui
+from pokepoke import terminal_ui
 from pokepoke.cleanup_agents import (
     invoke_cleanup_agent, invoke_merge_conflict_cleanup_agent, 
     get_pokepoke_prompts_dir, run_cleanup_loop, aggregate_cleanup_stats
@@ -33,7 +33,7 @@ def _generate_unique_agent_id(agent_type: str) -> str:
 
 def run_gate_agent(item: BeadsWorkItem) -> tuple[bool, str, Optional[AgentStats]]:
     """Run the Gate Agent to verify a fixed work item."""
-    ui.set_current_agent("Gate Agent")
+    terminal_ui.ui.set_current_agent("Gate Agent")
     print(f"\n{'='*60}\n🕵️ Running Gate Agent on {item.id}\n{'='*60}")
     
     service = PromptService()
@@ -83,7 +83,7 @@ def run_gate_agent(item: BeadsWorkItem) -> tuple[bool, str, Optional[AgentStats]
 
 def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional[Path] = None, needs_worktree: bool = True, merge_changes: bool = True, model: Optional[str] = None) -> Optional[AgentStats]:
     """Run a maintenance agent with optional worktree isolation."""
-    ui.set_current_agent(f"{agent_name} Agent")
+    terminal_ui.ui.set_current_agent(f"{agent_name} Agent")
     print(f"\n{'='*60}\n🔧 Running {agent_name} Agent\n{'='*60}")
     
     try:
@@ -146,7 +146,7 @@ def _run_main_repo_agent(agent_name: str, agent_item: BeadsWorkItem, agent_promp
 
 def run_worktree_cleanup(repo_root: Optional[Path] = None) -> Optional[AgentStats]:
     """Run worktree cleanup agent to merge/delete stale worktrees."""
-    ui.set_current_agent("Worktree Cleanup")
+    terminal_ui.ui.set_current_agent("Worktree Cleanup")
     print(f"\n{'='*60}\n🌳 Running Worktree Cleanup Agent\n{'='*60}")
     
     try:
@@ -331,7 +331,7 @@ def run_beta_tester(repo_root: Optional[Path] = None) -> Optional[AgentStats]:
     """Run beta tester agent to test all MCP tools. Restarts MCP server first."""
     config = get_config()
 
-    ui.set_current_agent("Beta Tester")
+    terminal_ui.ui.set_current_agent("Beta Tester")
     print(f"\n{'='*60}\n🧪 Running Beta Tester Agent\n{'='*60}")
     
     # Restart MCP server to load latest code (if configured)

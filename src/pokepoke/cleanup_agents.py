@@ -8,7 +8,7 @@ from typing import Optional
 from pokepoke.copilot import invoke_copilot
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
 from pokepoke.git_operations import verify_main_repo_clean, commit_all_changes
-from pokepoke.terminal_ui import ui
+from pokepoke import terminal_ui
 
 def aggregate_cleanup_stats(result_stats: Optional[AgentStats], cleanup_stats: Optional[AgentStats]) -> None:
     """Aggregate cleanup agent stats into result stats."""
@@ -124,7 +124,7 @@ def _get_current_git_context() -> tuple[str, str, bool]:
 
 def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path) -> tuple[bool, Optional[AgentStats]]:
     """Invoke cleanup agent to commit uncommitted changes."""
-    ui.set_current_agent("Cleanup Agent")
+    terminal_ui.ui.set_current_agent("Cleanup Agent")
     try:
         prompts_dir = get_pokepoke_prompts_dir()
         cleanup_prompt_path = prompts_dir / "cleanup.md"
@@ -194,7 +194,7 @@ def invoke_merge_conflict_cleanup_agent(
         error_msg: Description of the merge error
         unmerged_files: Optional list of files with merge conflicts
     """
-    ui.set_current_agent("Merge Conflict Cleanup")
+    terminal_ui.ui.set_current_agent("Merge Conflict Cleanup")
     from pokepoke.git_operations import is_merge_in_progress, get_unmerged_files as git_get_unmerged
     
     try:

@@ -15,7 +15,8 @@ from pokepoke.workflow import process_work_item
 from pokepoke.work_item_selection import select_work_item
 from pokepoke.logging_utils import RunLogger
 from pokepoke.agent_names import initialize_agent_name
-from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner, clear_terminal_banner, ui
+from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner, clear_terminal_banner
+from pokepoke import terminal_ui
 from pokepoke.maintenance_state import increment_items_completed
 from pokepoke.repo_check import check_and_commit_main_repo
 from pokepoke.maintenance import run_periodic_maintenance, aggregate_stats
@@ -70,7 +71,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         Exit code (0 for success, 1 for failure)
     """
     # UI is started by run_with_orchestrator - just update header
-    ui.update_header("PokePoke", f"Initializing {interactive and 'Interactive' or 'Autonomous'} Mode...")
+    terminal_ui.ui.update_header("PokePoke", f"Initializing {interactive and 'Interactive' or 'Autonomous'} Mode...")
 
     try:
         # TELLTALE: Version identifier to verify correct code is running
@@ -85,7 +86,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         print(f"🎯 PokePoke {mode_name} Mode | 🤖 Agent: {agent_name}")
         print("=" * 50)
         set_terminal_banner(f"PokePoke {mode_name} - {agent_name}")
-        ui.update_header("PokePoke", f"{mode_name} Mode", agent_name)
+        terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", agent_name)
         
         # Initialize run logger
         run_logger = RunLogger()
@@ -108,10 +109,10 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         session_stats.starting_beads_stats = get_beads_stats()
         
         # Set session start time for real-time clock updates
-        ui.set_session_start_time(start_time)
+        terminal_ui.ui.set_session_start_time(start_time)
         
         # Initial stats display with 0 elapsed time (or very small)
-        ui.update_stats(session_stats, time.time() - start_time)
+        terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
         
         # Run beta tester first if requested
         if run_beta_first:
@@ -141,13 +142,13 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             
             # Pause UI for interactive selection
             if interactive:
-                ui.stop()
+                terminal_ui.ui.stop()
             selected_item = select_work_item(ready_items, interactive)
             if interactive:
-                ui.start()
+                terminal_ui.ui.start()
             
             if selected_item is None:
-                ui.stop_and_capture()
+                terminal_ui.ui.stop_and_capture()
                 # Get ending stats and print session stats before exiting
                 session_stats.ending_beads_stats = get_beads_stats()
                 elapsed = time.time() - start_time
@@ -166,7 +167,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             # Update terminal banner and UI header
             banner = format_work_item_banner(selected_item.id, selected_item.title)
             set_terminal_banner(banner)
-            ui.update_header(selected_item.id, selected_item.title)
+            terminal_ui.ui.update_header(selected_item.id, selected_item.title)
             
             success, requests, item_stats, cleanup_runs, gate_runs, model_completion = process_work_item(
                 selected_item, interactive, run_logger=run_logger
@@ -200,11 +201,11 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
                 run_periodic_maintenance(total_persistent_count, session_stats, run_logger)
 
             # Update UI stats with current runtime
-            ui.update_stats(session_stats, time.time() - start_time)
+            terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
             
             # Decide whether to continue
             if not continuous:
-                ui.stop_and_capture()
+                terminal_ui.ui.stop_and_capture()
                 session_stats.ending_beads_stats = get_beads_stats()
                 elapsed = time.time() - start_time
                 print_stats(items_completed, total_requests, elapsed, session_stats)
@@ -217,14 +218,14 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             if interactive:
                 # Clear banner between items
                 set_terminal_banner(f"PokePoke {mode_name} - {agent_name}")
-                ui.update_header("PokePoke", f"{mode_name} Mode", "Waiting...")
+                terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", "Waiting...")
                 
-                ui.stop()
+                terminal_ui.ui.stop()
                 cont = input("\nProcess another item? [Y/n]: ").strip().lower()
-                ui.start()
+                terminal_ui.ui.start()
                 
                 if cont and cont != 'y':
-                    ui.stop_and_capture()
+                    terminal_ui.ui.stop_and_capture()
                     session_stats.ending_beads_stats = get_beads_stats()
                     elapsed = time.time() - start_time
                     print("\n👋 Exiting PokePoke.")
@@ -235,7 +236,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
                     clear_terminal_banner()
                     return 0
             else:
-                ui.update_header("PokePoke", f"{mode_name} Mode", "Sleeping...")
+                terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", "Sleeping...")
                 print("\n⏳ Waiting 5 seconds before next iteration...")
                 for _ in range(10):
                     if is_shutting_down():
@@ -243,7 +244,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
                     time.sleep(0.5)
 
         # Shutdown requested - clean exit
-        ui.stop_and_capture()
+        terminal_ui.ui.stop_and_capture()
         session_stats.ending_beads_stats = get_beads_stats()
         elapsed = time.time() - start_time
         print("\n\ud83d\udc4b Shutdown requested - exiting PokePoke.")
@@ -255,7 +256,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
     except KeyboardInterrupt:
         # Clean shutdown on Ctrl+C
         request_shutdown()
-        ui.stop_and_capture()
+        terminal_ui.ui.stop_and_capture()
         print("\n\n⚠️  Interrupted by user (Ctrl+C)")
         print("📊 Collecting final statistics...")
         
@@ -275,7 +276,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         clear_terminal_banner()
         return 0
     except Exception as e:
-        ui.stop_and_capture()
+        terminal_ui.ui.stop_and_capture()
         print("\n📊 Collecting final statistics...")
         try:
             session_stats.ending_beads_stats = get_beads_stats()
@@ -295,7 +296,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         clear_terminal_banner()
         return 1
     finally:
-        ui.stop()
+        terminal_ui.ui.stop()
 
 
 
@@ -362,8 +363,7 @@ def main() -> int:
         from pokepoke.terminal_ui import use_desktop_ui
         active_ui = use_desktop_ui()
     else:
-        from pokepoke.terminal_ui import ui as default_ui
-        active_ui = default_ui
+        active_ui = terminal_ui.ui
     
     # Run the orchestrator with the selected UI
     def orchestrator_func() -> int:

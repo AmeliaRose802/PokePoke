@@ -13,7 +13,7 @@ FALLBACK_MODEL = "claude-sonnet-4.5"  # Fallback on rate limit
 from .config import get_config
 from .types import BeadsWorkItem, CopilotResult, RetryConfig, AgentStats
 from .prompts import PromptService
-from .terminal_ui import ui
+from . import terminal_ui
 from .shutdown import is_shutting_down
 
 if TYPE_CHECKING:
@@ -94,7 +94,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             event_type = event.type.value if hasattr(event.type, 'value') else str(event.type)
             
             if event_type == "assistant.message_delta":
-                ui.set_style("green")
+                terminal_ui.ui.set_style("green")
                 # Streaming message chunk
                 delta = None
                 if hasattr(event, 'data'):
@@ -107,7 +107,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     output_lines.append(delta)
                     
             elif event_type == "assistant.message":
-                ui.set_style("green")
+                terminal_ui.ui.set_style("green")
                 # Complete message - may have text content or tool requests
                 content = getattr(event.data, 'content', None) if hasattr(event, 'data') else None
                 tool_requests = getattr(event.data, 'tool_requests', None) if hasattr(event, 'data') else None
@@ -117,13 +117,13 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     output_lines.append(content)
                 
                 # Reset style for tool announcements
-                ui.set_style(None)
+                terminal_ui.ui.set_style(None)
                 # Show tool requests if present
                 if tool_requests and len(tool_requests) > 0:
                     print(f"\n[Copilot] Calling {len(tool_requests)} tool(s)...")
                     
             elif event_type == "tool.execution_start":
-                ui.set_style(None)
+                terminal_ui.ui.set_style(None)
                 # Tool is being executed
                 total_tool_calls += 1
                 pending_tool_calls += 1
@@ -143,7 +143,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     output_lines.append(f"\n[Tool] {tool_name}({args_str})\n")
                 
             elif event_type == "tool.execution_complete":
-                ui.set_style(None)
+                terminal_ui.ui.set_style(None)
                 # Tool completed - show full result
                 pending_tool_calls = max(0, pending_tool_calls - 1)
                 
@@ -162,7 +162,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                         output_lines.append(f"[Result] {result_str}\n")
             
             elif event_type == "assistant.usage":
-                ui.set_style(None)
+                terminal_ui.ui.set_style(None)
                 # Track usage statistics
                 if hasattr(event, 'data'):
                     total_input_tokens += getattr(event.data, 'input_tokens', 0) or 0
@@ -289,7 +289,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             
             return False  # No retry needed
         
-        with ui.agent_output():
+        with terminal_ui.ui.agent_output():
             # First attempt
             needs_retry = await send_with_retry()
             
