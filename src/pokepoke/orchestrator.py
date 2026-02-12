@@ -61,6 +61,25 @@ def _check_beads_available() -> bool:
     return True
 
 
+def _finalize_session(
+    session_stats: SessionStats,
+    start_time: float,
+    items_completed: int,
+    total_requests: int,
+    run_logger: RunLogger,
+) -> None:
+    """Collect ending stats, print summary, and clean up UI."""
+    try:
+        session_stats.ending_beads_stats = get_beads_stats()
+    except KeyboardInterrupt:
+        print("⚠️  Stats collection interrupted, skipping...")
+        session_stats.ending_beads_stats = None
+    elapsed = time.time() - start_time
+    print_stats(items_completed, total_requests, elapsed, session_stats)
+    run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
+    clear_terminal_banner()
+
+
 def run_orchestrator(interactive: bool = True, continuous: bool = False, run_beta_first: bool = False) -> int:
     """Main orchestrator loop.
     
@@ -158,14 +177,9 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             
             if selected_item is None:
                 terminal_ui.ui.stop_and_capture()
-                # Get ending stats and print session stats before exiting
-                session_stats.ending_beads_stats = get_beads_stats()
-                elapsed = time.time() - start_time
                 print("\n👋 Exiting PokePoke - no work items available.")
                 run_logger.log_orchestrator("No work items available - exiting")
-                print_stats(items_completed, total_requests, elapsed, session_stats)
-                run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
-                clear_terminal_banner()
+                _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
                 return 0
             
             # Process the selected item
@@ -227,11 +241,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             # Decide whether to continue
             if not continuous:
                 terminal_ui.ui.stop_and_capture()
-                session_stats.ending_beads_stats = get_beads_stats()
-                elapsed = time.time() - start_time
-                print_stats(items_completed, total_requests, elapsed, session_stats)
-                run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
-                clear_terminal_banner()
+                _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
                 return 0 if success else 1
             
             if interactive:
@@ -245,12 +255,8 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
                 
                 if cont and cont != 'y':
                     terminal_ui.ui.stop_and_capture()
-                    session_stats.ending_beads_stats = get_beads_stats()
-                    elapsed = time.time() - start_time
                     print("\n👋 Exiting PokePoke.")
-                    print_stats(items_completed, total_requests, elapsed, session_stats)
-                    run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
-                    clear_terminal_banner()
+                    _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
                     return 0
             else:
                 terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", "Sleeping...")
@@ -262,12 +268,8 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
 
         # Shutdown requested - clean exit
         terminal_ui.ui.stop_and_capture()
-        session_stats.ending_beads_stats = get_beads_stats()
-        elapsed = time.time() - start_time
         print("\n\ud83d\udc4b Shutdown requested - exiting PokePoke.")
-        print_stats(items_completed, total_requests, elapsed, session_stats)
-        run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
-        clear_terminal_banner()
+        _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
         return 0
     
     except KeyboardInterrupt:
@@ -276,37 +278,16 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         terminal_ui.ui.stop_and_capture()
         print("\n\n⚠️  Interrupted by user (Ctrl+C)")
         print("📊 Collecting final statistics...")
-        
-        # Try to get ending stats, but don't fail if interrupted again
-        try:
-            session_stats.ending_beads_stats = get_beads_stats()
-        except KeyboardInterrupt:
-            print("⚠️  Stats collection interrupted, skipping...")
-            session_stats.ending_beads_stats = None
-        
-        elapsed = time.time() - start_time
         print("\n👋 Exiting PokePoke.")
-        print_stats(items_completed, total_requests, elapsed, session_stats)
-        run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
-        clear_terminal_banner()
+        _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
         return 0
     except Exception as e:
         terminal_ui.ui.stop_and_capture()
-        print("\n📊 Collecting final statistics...")
-        try:
-            session_stats.ending_beads_stats = get_beads_stats()
-        except KeyboardInterrupt:
-            print("⚠️  Stats collection interrupted, skipping...")
-            session_stats.ending_beads_stats = None
-        
-        elapsed = time.time() - start_time
         print(f"\n❌ Error: {e}")
         import traceback
         traceback.print_exc()
-        print_stats(items_completed, total_requests, elapsed, session_stats)
         run_logger.log_orchestrator(f"Error: {e}", level="ERROR")
-        run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
-        clear_terminal_banner()
+        _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
         return 1
     finally:
         terminal_ui.ui.stop()

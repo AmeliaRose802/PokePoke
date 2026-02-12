@@ -49,29 +49,14 @@ def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool
             # - assignee: The specific agent currently working on it (pokepoke_agent_123)
             # - owner: The human user who owns it (e.g., user@example.com)
             current_assignee = current_item.get('assignee', '')
-            current_status = current_item.get('status', '')
-            
-            # DEBUG: Show what we're checking
-            print(f"🔍 [DEBUG] Ownership check for {item_id}:")
-            print(f"   Current assignee: '{current_assignee}'")
-            print(f"   Current status: '{current_status}'")
-            print(f"   Our agent_name: '{agent_name}'")
             
             # Check if already assigned to another agent
             if current_assignee:
-                assignee_lower = current_assignee.lower()
-                
-                # Is it assigned to us?
-                is_ours = (assignee_lower == agent_name.lower())
-                
-                print(f"   Is ours? {is_ours}")
+                is_ours = (current_assignee.lower() == agent_name.lower())
                 
                 if not is_ours:
                     print(f"⚠️  RACE CONDITION DETECTED: {item_id} already assigned to {current_assignee}")
-                    print(f"   Skipping to prevent conflict - another agent claimed it first")
                     return False
-            else:
-                print(f"   ✅ Item is unassigned - safe to claim")
     
     except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
         print(f"⚠️  Failed to verify {item_id} ownership: {e}")
@@ -309,18 +294,6 @@ def filter_work_items(items: List[BeadsWorkItem]) -> List[BeadsWorkItem]:
         filtered.append(item)
     
     return filtered
-
-
-def get_first_ready_work_item() -> Optional[BeadsWorkItem]:
-    """Get the first ready work item that meets selection criteria.
-    
-    Returns:
-        First ready work item, or None if none available.
-    """
-    from .beads_query import get_ready_work_items
-    items = get_ready_work_items()
-    filtered = filter_work_items(items)
-    return filtered[0] if filtered else None
 
 
 def select_next_hierarchical_item(items: List[BeadsWorkItem]) -> Optional[BeadsWorkItem]:

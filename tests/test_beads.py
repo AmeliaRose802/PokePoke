@@ -547,3 +547,217 @@ class TestAssignAndSyncItem:
         
         # Should still return True - assignment succeeded even if sync failed
         assert result is True
+
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_assign_defaults_agent_name_from_env(self, mock_run: Mock) -> None:
+        """Test that assign_and_sync_item uses AGENT_NAME env var when agent_name is None."""
+        import os
+        from src.pokepoke.beads import assign_and_sync_item
+
+        show_result = Mock(
+            stdout=json.dumps([{"id": "task-1", "owner": "", "status": "open"}]),
+            returncode=0
+        )
+        update_result = Mock(returncode=0)
+        sync_result = Mock(returncode=0)
+        mock_run.side_effect = [show_result, update_result, sync_result]
+
+        old_val = os.environ.get('AGENT_NAME')
+        os.environ['AGENT_NAME'] = 'env_agent'
+        try:
+            result = assign_and_sync_item("task-1")
+            assert result is True
+        finally:
+            if old_val is not None:
+                os.environ['AGENT_NAME'] = old_val
+            else:
+                os.environ.pop('AGENT_NAME', None)
+
+
+class TestCloseItem:
+    """Test close_item function."""
+
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_close_item_success(self, mock_run: Mock) -> None:
+        """Test successful item closing."""
+        from src.pokepoke.beads import close_item
+
+        mock_run.return_value = Mock(returncode=0)
+
+        result = close_item("task-1", "Done")
+
+        assert result is True
+        mock_run.assert_called_once_with(
+            ['bd', 'close', 'task-1', '--reason', 'Done'],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            check=True
+        )
+
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_close_item_failure(self, mock_run: Mock) -> None:
+        """Test close_item returns False on failure."""
+        from src.pokepoke.beads import close_item
+
+        mock_run.side_effect = subprocess.CalledProcessError(
+            1, 'bd', stderr="Item not found"
+        )
+
+        result = close_item("task-999")
+
+        assert result is False
+
+
+class TestAddComment:
+    """Test add_comment function."""
+
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_add_comment_success(self, mock_run: Mock) -> None:
+        """Test successful comment addition."""
+        from src.pokepoke.beads import add_comment
+
+        mock_run.return_value = Mock(returncode=0)
+
+        result = add_comment("task-1", "Great progress")
+
+        assert result is True
+        mock_run.assert_called_once_with(
+            ['bd', 'comments', 'add', 'task-1', 'Great progress'],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            check=True
+        )
+
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_add_comment_failure(self, mock_run: Mock) -> None:
+        """Test add_comment returns False on failure."""
+        from src.pokepoke.beads import add_comment
+
+        mock_run.side_effect = subprocess.CalledProcessError(
+            1, 'bd', stderr="Error"
+        )
+
+        result = add_comment("task-1", "comment")
+
+        assert result is False
+
+
+class TestCreateCleanupDelegationIssue:
+    """Test create_cleanup_delegation_issue function."""
+
+    @patch('src.pokepoke.beads_management.create_issue')
+    def test_create_cleanup_delegation_success(self, mock_create: Mock) -> None:
+        """Test successful cleanup delegation issue creation."""
+        from src.pokepoke.beads_management import create_cleanup_delegation_issue
+
+        mock_create.return_value = "cleanup-1"
+
+        result = create_cleanup_delegation_issue(
+            title="Cleanup needed",
+            description="Fix the mess"
+        )
+
+        assert result == "cleanup-1"
+        mock_create.assert_called_once()
+        call_kwargs = mock_create.call_args[1]
+        assert 'cleanup' in call_kwargs['labels']
+        assert 'delegation' in call_kwargs['labels']
+
+    @patch('src.pokepoke.beads_management.create_issue')
+    def test_create_cleanup_delegation_with_extra_labels(self, mock_create: Mock) -> None:
+        """Test cleanup delegation with additional labels."""
+        from src.pokepoke.beads_management import create_cleanup_delegation_issue
+
+        mock_create.return_value = "cleanup-2"
+
+        result = create_cleanup_delegation_issue(
+            title="Cleanup",
+            description="Desc",
+            labels=["urgent"]
+        )
+
+        assert result == "cleanup-2"
+        call_kwargs = mock_create.call_args[1]
+        assert 'urgent' in call_kwargs['labels']
+        assert 'cleanup' in call_kwargs['labels']
+
+    @patch('src.pokepoke.beads_management.create_issue')
+    def test_create_cleanup_delegation_failure(self, mock_create: Mock) -> None:
+        """Test cleanup delegation returns None when create fails."""
+        from src.pokepoke.beads_management import create_cleanup_delegation_issue
+
+        mock_create.return_value = None
+
+        result = create_cleanup_delegation_issue(
+            title="Cleanup",
+            description="Desc"
+        )
+
+        assert result is None
+
+
+class TestSelectNextHierarchicalItem:
+    """Test select_next_hierarchical_item function."""
+
+    def test_empty_list_returns_none(self) -> None:
+        """Test empty list returns None."""
+        from src.pokepoke.beads import select_next_hierarchical_item
+
+        result = select_next_hierarchical_item([])
+
+        assert result is None
+
+    @patch('src.pokepoke.beads_management.resolve_to_leaf_task')
+    def test_epic_resolved_to_leaf(self, mock_resolve: Mock) -> None:
+        """Test epic is resolved to leaf task."""
+        from src.pokepoke.beads import select_next_hierarchical_item
+
+        leaf = BeadsWorkItem(
+            id="task-child", title="Child", description="",
+            status="open", priority=1, issue_type="task"
+        )
+        epic = BeadsWorkItem(
+            id="epic-1", title="Epic", description="",
+            status="open", priority=1, issue_type="epic"
+        )
+        mock_resolve.return_value = leaf
+
+        result = select_next_hierarchical_item([epic])
+
+        assert result == leaf
+
+    @patch('src.pokepoke.beads_management.resolve_to_leaf_task')
+    def test_epic_unresolvable_skipped(self, mock_resolve: Mock) -> None:
+        """Test epic that can't be resolved is skipped."""
+        from src.pokepoke.beads import select_next_hierarchical_item
+
+        epic = BeadsWorkItem(
+            id="epic-1", title="Epic", description="",
+            status="open", priority=1, issue_type="epic"
+        )
+        mock_resolve.return_value = None
+
+        result = select_next_hierarchical_item([epic])
+
+        assert result is None
+
+
+class TestFilterWorkItemsOtherTypes:
+    """Test filter_work_items with non-standard types."""
+
+    @patch('src.pokepoke.beads_hierarchy.has_feature_parent')
+    def test_unknown_type_included(self, mock_has_parent: Mock) -> None:
+        """Test items with unknown types are included by default."""
+        from src.pokepoke.beads import filter_work_items
+
+        item = BeadsWorkItem(
+            id="other-1", title="Other", description="",
+            status="open", priority=1, issue_type="story"
+        )
+
+        result = filter_work_items([item])
+
+        assert len(result) == 1
+        assert result[0].id == "other-1"

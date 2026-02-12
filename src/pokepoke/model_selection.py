@@ -6,7 +6,6 @@ more often, while models with insufficient data get equal opportunity.
 """
 
 import random
-from typing import Optional
 
 from pokepoke.config import get_config
 from pokepoke.model_stats_store import get_model_weights
