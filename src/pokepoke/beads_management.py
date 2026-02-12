@@ -7,6 +7,7 @@ from typing import List, Optional
 
 from .types import BeadsWorkItem
 from .beads_hierarchy import has_feature_parent, get_next_child_task, close_parent_if_complete, get_children, resolve_to_leaf_task, HUMAN_REQUIRED_LABEL
+from .beads_query import _parse_beads_json
 
 
 def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool:
@@ -40,17 +41,8 @@ def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool
         )
         
         # Parse current item state
-        filtered_lines = [
-            line for line in result.stdout.split('\n')
-            if line.strip() and not line.strip().startswith(('Note:', 'Warning:', 'Hint:'))
-        ]
-        json_start = next(
-            (i for i, line in enumerate(filtered_lines) if line.strip().startswith('[') or line.strip().startswith('{')),
-            None
-        )
-        if json_start is not None:
-            json_text = '\n'.join(filtered_lines[json_start:])
-            data = json.loads(json_text)
+        data = _parse_beads_json(result.stdout)
+        if data is not None:
             current_item = data[0] if isinstance(data, list) else data
             
             # CRITICAL: Check 'assignee' field, NOT 'owner' field!
@@ -211,21 +203,9 @@ def create_issue(
             return None
         
         # Parse JSON output to get issue ID
-        filtered_lines = [
-            line for line in result.stdout.split('\n')
-            if line.strip() 
-            and not line.strip().startswith(('Note:', 'Warning:', 'Hint:', 'Created'))
-        ]
+        data = _parse_beads_json(result.stdout, extra_prefixes=('Created',))
         
-        # Find JSON object start
-        json_start = next(
-            (i for i, line in enumerate(filtered_lines) if line.strip().startswith('{') or line.strip().startswith('[')),
-            None
-        )
-        
-        if json_start is not None:
-            json_text = '\n'.join(filtered_lines[json_start:])
-            data = json.loads(json_text)
+        if data is not None:
             
             # Handle both array and single object responses
             if isinstance(data, list):

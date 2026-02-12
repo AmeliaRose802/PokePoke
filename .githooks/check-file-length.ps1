@@ -21,8 +21,8 @@
 #>
 
 param(
-    [int]$MaxLines = [int]($env:MAX_LINES ?? 400),
-    [int]$MaxLinesJs = [int]($env:MAX_LINES_JS ?? 500)
+    [int]$MaxLines = $(if ($env:MAX_LINES) { [int]$env:MAX_LINES } else { 400 }),
+    [int]$MaxLinesJs = $(if ($env:MAX_LINES_JS) { [int]$env:MAX_LINES_JS } else { 500 })
 )
 
 $ErrorActionPreference = "Stop"

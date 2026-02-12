@@ -3,9 +3,35 @@
 import json
 import subprocess
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from .types import BeadsWorkItem, IssueWithDependencies, Dependency, BeadsStats
+
+
+def _parse_beads_json(output: str, extra_prefixes: tuple[str, ...] = ()) -> Any:
+    """Parse JSON from beads CLI output, filtering warning/note lines.
+    
+    Args:
+        output: Raw stdout from a beads command.
+        extra_prefixes: Additional line prefixes to filter out (e.g., 'Created').
+        
+    Returns:
+        Parsed JSON data, or None if no JSON found.
+    """
+    prefixes = ('Note:', 'Warning:', 'Hint:') + extra_prefixes
+    filtered_lines = [
+        line for line in output.split('\n')
+        if line.strip() and not line.strip().startswith(prefixes)
+    ]
+    json_start = next(
+        (i for i, line in enumerate(filtered_lines)
+         if line.strip().startswith('[') or line.strip().startswith('{')),
+        None
+    )
+    if json_start is None:
+        return None
+    json_text = '\n'.join(filtered_lines[json_start:])
+    return json.loads(json_text)
 
 
 def _get_main_repo_root() -> Optional[Path]:
@@ -42,28 +68,9 @@ def get_ready_work_items() -> List[BeadsWorkItem]:
     if not result.stdout:
         return []
     
-    # Filter out warning/note lines
-    filtered_lines = [
-        line for line in result.stdout.split('\n')
-        if line.strip() 
-        and not line.strip().startswith(('Note:', 'Warning:', 'Hint:'))
-    ]
-    
-    # Find JSON array start
-    json_start = next(
-        (i for i, line in enumerate(filtered_lines) if line.strip().startswith('[')),
-        None
-    )
-    
-    if json_start is None:
+    items_data = _parse_beads_json(result.stdout)
+    if not items_data:
         return []
-    
-    json_text = '\n'.join(filtered_lines[json_start:])
-    
-    if json_text.strip() == '[]':
-        return []
-    
-    items_data = json.loads(json_text)
     
     # Filter out fields not in BeadsWorkItem dataclass
     valid_work_item_fields = {
@@ -101,25 +108,7 @@ def get_issue_dependencies(issue_id: str) -> Optional[IssueWithDependencies]:
     if not result.stdout:
         return None
     
-    # Filter out warning/note lines
-    filtered_lines = [
-        line for line in result.stdout.split('\n')
-        if line.strip() 
-        and not line.strip().startswith(('Note:', 'Warning:', 'Hint:'))
-    ]
-    
-    # Find JSON array start
-    json_start = next(
-        (i for i, line in enumerate(filtered_lines) if line.strip().startswith('[')),
-        None
-    )
-    
-    if json_start is None:
-        return None
-    
-    json_text = '\n'.join(filtered_lines[json_start:])
-    issues_data = json.loads(json_text)
-    
+    issues_data = _parse_beads_json(result.stdout)
     if not issues_data:
         return None
     

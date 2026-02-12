@@ -125,12 +125,8 @@ def save_model_stats(data: Dict[str, Any], path: Optional[Path] = None) -> None:
     tmp_path = stats_path.with_suffix(".tmp")
     with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
-    # Atomic rename (on Windows this replaces the existing file)
-    if os.name == "nt":
-        # os.replace is atomic on modern Windows NTFS
-        os.replace(str(tmp_path), str(stats_path))
-    else:
-        os.replace(str(tmp_path), str(stats_path))
+    # Atomic rename (os.replace works on both Windows NTFS and Unix)
+    os.replace(str(tmp_path), str(stats_path))
 
 
 def record_completion(record: ModelCompletionRecord, path: Optional[Path] = None) -> None:
