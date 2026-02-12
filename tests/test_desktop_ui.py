@@ -7,7 +7,6 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pokepoke.desktop_ui as desktop_ui_module
-import pokepoke.terminal_ui as terminal_ui_module
 from pokepoke.desktop_ui import DesktopUI, _shutdown_threading_excepthook
 
 

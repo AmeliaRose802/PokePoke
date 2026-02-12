@@ -1,8 +1,6 @@
 """Tests for agent statistics parsing."""
 
-import pytest
 from pokepoke.stats import parse_agent_stats
-from pokepoke.types import AgentStats
 
 
 def test_parse_agent_stats_with_all_fields():

@@ -7,7 +7,7 @@ Covers:
 - config.py: candidate_models config parsing
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 

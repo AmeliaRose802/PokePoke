@@ -4,7 +4,6 @@ import json
 from unittest.mock import Mock, patch
 import pytest
 from pokepoke.beads import get_beads_stats
-from pokepoke.types import BeadsStats
 
 
 class TestGetBeadsStats:

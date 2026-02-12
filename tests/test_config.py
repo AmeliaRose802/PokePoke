@@ -1,7 +1,6 @@
 """Tests for the project configuration system."""
 
 import json
-import os
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -12,7 +11,6 @@ from pokepoke.config import (
     ModelConfig,
     MaintenanceConfig,
     MaintenanceAgentConfig,
-    MpcServerConfig,
     GitConfig,
     load_config,
     reset_config,

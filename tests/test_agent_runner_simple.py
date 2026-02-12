@@ -1,7 +1,6 @@
 """Simple tests for agent runner to improve coverage."""
-import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 import pytest
 from pokepoke.agent_runner import _run_worktree_agent
 from pokepoke.types import BeadsWorkItem, CopilotResult, AgentStats

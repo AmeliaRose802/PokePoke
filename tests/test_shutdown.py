@@ -12,7 +12,6 @@ from pokepoke.shutdown import (
     wait_for_shutdown,
     reset,
     _shutdown_event,
-    _WATCHDOG_GRACE_SECONDS,
 )
 
 

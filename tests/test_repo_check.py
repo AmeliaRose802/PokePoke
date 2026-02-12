@@ -1,9 +1,8 @@
 """Tests for repository check utilities."""
 
-import pytest
 import subprocess
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from pokepoke.repo_check import check_and_commit_main_repo
 
 

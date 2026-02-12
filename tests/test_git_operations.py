@@ -1,7 +1,7 @@
 """Unit tests for git_operations module."""
 
 import subprocess
-from unittest.mock import Mock, patch, call
+from unittest.mock import Mock, patch
 import pytest
 
 from src.pokepoke.git_operations import (

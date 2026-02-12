@@ -2,9 +2,7 @@
 
 import pytest
 import subprocess
-import os
 from unittest.mock import patch, MagicMock
-from pathlib import Path
 
 from pokepoke.copilot import (
     get_allowed_directories,

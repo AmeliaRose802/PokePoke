@@ -3,7 +3,6 @@
 import pytest
 import subprocess
 from unittest.mock import patch, MagicMock, AsyncMock
-from pathlib import Path
 
 from pokepoke.copilot import get_allowed_directories
 from pokepoke.copilot_sdk import (

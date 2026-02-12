@@ -2,7 +2,7 @@
 
 import subprocess
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, call, mock_open
+from unittest.mock import Mock, MagicMock, patch
 import pytest
 
 from pokepoke.agent_runner import (

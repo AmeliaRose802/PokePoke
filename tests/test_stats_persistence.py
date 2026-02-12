@@ -4,8 +4,6 @@ import json
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from pokepoke.types import (
     AgentStats,
     BeadsStats,

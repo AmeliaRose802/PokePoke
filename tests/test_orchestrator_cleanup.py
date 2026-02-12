@@ -1,12 +1,9 @@
 """Unit tests for orchestrator cleanup detection."""
 
-import subprocess
-from unittest.mock import Mock, patch, MagicMock
-import pytest
-from pathlib import Path
+from unittest.mock import Mock, patch
 
 from src.pokepoke.orchestrator import run_orchestrator
-from src.pokepoke.types import BeadsWorkItem, BeadsStats
+from src.pokepoke.types import BeadsStats
 
 
 class TestOrchestratorCleanupDetection:

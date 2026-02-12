@@ -1,8 +1,7 @@
 """Unit tests for hierarchical work assignment."""
 
 import subprocess
-from unittest.mock import Mock, patch, call
-import json
+from unittest.mock import Mock, patch
 import pytest
 
 from pokepoke.beads import (

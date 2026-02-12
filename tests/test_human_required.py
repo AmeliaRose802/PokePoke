@@ -12,7 +12,6 @@ from src.pokepoke.types import BeadsWorkItem
 from src.pokepoke.work_item_selection import (
     select_work_item,
     _is_human_required,
-    HUMAN_REQUIRED_LABEL,
 )
 from src.pokepoke.beads_management import select_next_hierarchical_item
 from src.pokepoke.beads_hierarchy import get_next_child_task

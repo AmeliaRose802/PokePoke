@@ -25,8 +25,6 @@ from pokepoke.worktrees import (
     list_worktrees,
 )
 
-from pokepoke.git_operations import branch_exists
-
 
 class TestSanitizeBranchName:
     """Tests for sanitize_branch_name function."""

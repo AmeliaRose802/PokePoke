@@ -3,7 +3,6 @@
 import pytest
 from pathlib import Path
 import tempfile
-import shutil
 from pokepoke.logging_utils import RunLogger, ItemLogger
 
 

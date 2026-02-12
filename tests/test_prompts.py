@@ -1,9 +1,7 @@
 """Tests for prompt template loading and rendering."""
 
 import pytest
-from pathlib import Path
 from pokepoke.prompts import PromptService
-from pokepoke.types import BeadsWorkItem
 
 
 def test_prompt_service_initialization():

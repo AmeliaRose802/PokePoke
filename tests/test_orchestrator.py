@@ -1,8 +1,6 @@
 """Unit tests for orchestrator module."""
 
-import sys
-from unittest.mock import Mock, patch, call
-import pytest
+from unittest.mock import Mock, patch
 
 from pokepoke.orchestrator import run_orchestrator
 from pokepoke.workflow import select_work_item, process_work_item

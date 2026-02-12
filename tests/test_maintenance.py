@@ -1,7 +1,7 @@
 """Tests for the periodic maintenance module."""
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from pokepoke.types import AgentStats, SessionStats
 from pokepoke.config import MaintenanceConfig, MaintenanceAgentConfig, ProjectConfig
 from pokepoke.maintenance import aggregate_stats, run_periodic_maintenance

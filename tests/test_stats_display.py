@@ -1,8 +1,5 @@
 """Tests for orchestrator statistics display functions."""
 
-import pytest
-from io import StringIO
-import sys
 from pokepoke.stats import print_stats
 from pokepoke.types import AgentStats, SessionStats
 
