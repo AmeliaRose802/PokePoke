@@ -64,7 +64,18 @@ def run_gate_agent(item: BeadsWorkItem, cwd: Optional[str] = None) -> tuple[bool
             data = json.loads(json_match.group(1))
             status = data.get("status")
             if status == "success":
-                return True, data.get("message", "Verification successful"), stats
+                message = data.get("message", "Verification successful")
+                reason = data.get("reason", "")
+                recommendation = data.get("recommendation", "")
+                
+                # Build success message with context
+                full_message = message
+                if reason:
+                    full_message = f"[{reason}] {message}"
+                if recommendation:
+                    full_message += f"\nRecommendation: {recommendation}"
+                    
+                return True, full_message, stats
             else:
                 reason = data.get("reason", "Verification failed")
                 details = data.get("details", "")

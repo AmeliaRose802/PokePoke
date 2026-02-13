@@ -267,6 +267,38 @@ class TestRunGateAgent:
         assert success is False
         assert "did not explicitly approve" in reason
 
+    @patch('pokepoke.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.PromptService')
+    def test_work_already_complete(
+        self,
+        mock_service_cls: Mock,
+        mock_invoke: Mock,
+        mock_parse: Mock,
+        work_item: BeadsWorkItem
+    ) -> None:
+        """Test gate agent recognizing work already complete on main branch."""
+        mock_service = Mock()
+        mock_service.load_and_render.return_value = "Gate prompt"
+        mock_service_cls.return_value = mock_service
+        
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="test-123",
+            success=True,
+            output='```json\n{"status": "success", "reason": "work_already_complete", '
+                   '"message": "Fix already exists on main", '
+                   '"recommendation": "Close as already-resolved"}\n```',
+            attempt_count=1
+        )
+        mock_parse.return_value = None
+        
+        success, reason, stats = run_gate_agent(work_item)
+        
+        assert success is True
+        assert "work_already_complete" in reason
+        assert "Fix already exists on main" in reason
+        assert "Close as already-resolved" in reason
+
 
 
 
