@@ -745,7 +745,7 @@ class TestResolveToLeafTask:
         mock_close_parent.assert_called_once_with("epic-1")
 
     @patch('pokepoke.beads_hierarchy.get_children')
-    @patch('pokepoke.beads_hierarchy._is_assigned_to_current_user')
+    @patch('pokepoke.beads_hierarchy.is_assigned_to_current_user')
     def test_all_children_blocked_skips_parent(
         self,
         mock_is_current: Mock,

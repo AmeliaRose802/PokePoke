@@ -59,7 +59,7 @@ def get_children(parent_id: str) -> List[BeadsWorkItem]:
     return children
 
 
-def _is_assigned_to_current_user(item: BeadsWorkItem) -> bool:
+def is_assigned_to_current_user(item: BeadsWorkItem) -> bool:
     """Check if item is assignable by current agent.
     
     CRITICAL: Checks the 'assignee' field (specific agent), NOT 'owner' field.
@@ -123,7 +123,7 @@ def get_next_child_task(parent_id: str) -> Optional[BeadsWorkItem]:
     # Filter out items assigned to other agents
     available_children = [
         child for child in open_children
-        if _is_assigned_to_current_user(child)
+        if is_assigned_to_current_user(child)
     ]
     
     # Filter out items that require human intervention
@@ -164,7 +164,7 @@ def _get_available_children(parent_id: str) -> tuple[list[BeadsWorkItem], list[B
     # Filter out items assigned to other agents and human-required
     available = [
         child for child in open_children
-        if _is_assigned_to_current_user(child)
+        if is_assigned_to_current_user(child)
         and not (child.labels and HUMAN_REQUIRED_LABEL in child.labels)
     ]
     

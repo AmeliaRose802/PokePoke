@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 
 from pokepoke.orchestrator import run_orchestrator
 from pokepoke.workflow import select_work_item, process_work_item
-from pokepoke.types import BeadsWorkItem, CopilotResult
+from pokepoke.types import BeadsWorkItem, BeadsStats, CopilotResult
 
 
 class TestSelectWorkItem:
@@ -1923,4 +1923,74 @@ class TestMainWorktreeCoverage:
         result = main()
         assert result == 0
         mock_run.assert_called_once_with(interactive=False, continuous=True, run_beta_first=False)
+
+
+class TestOrchestratorCleanupDetection:
+    """Test orchestrator's main repo cleanup detection."""
+    
+    @patch('pokepoke.agent_runner.invoke_cleanup_agent')
+    @patch('pokepoke.orchestrator.get_ready_work_items')
+    @patch('subprocess.run')
+    def test_detects_uncommitted_changes_and_invokes_cleanup(
+        self,
+        mock_subprocess: Mock,
+        mock_get_items: Mock,
+        mock_cleanup: Mock
+    ) -> None:
+        """Test that uncommitted non-beads changes invoke cleanup agent."""
+        mock_subprocess.return_value = Mock(
+            stdout=" M src/pokepoke/orchestrator.py\n M src/pokepoke/beads.py",
+            returncode=0
+        )
+        mock_cleanup.return_value = (False, None)
+        
+        result = run_orchestrator(interactive=False, continuous=False)
+        
+        assert result == 1
+        mock_cleanup.assert_called_once()
+        mock_get_items.assert_not_called()
+    
+    @patch('pokepoke.orchestrator.check_and_commit_main_repo')
+    @patch('pokepoke.orchestrator.get_beads_stats')
+    @patch('pokepoke.orchestrator.get_ready_work_items')
+    def test_detects_beads_changes_without_autocommit(
+        self,
+        mock_get_items: Mock,
+        mock_beads_stats: Mock,
+        mock_check_repo: Mock
+    ) -> None:
+        """Test that beads-only changes are detected but NOT auto-committed."""
+        mock_beads_stats.return_value = BeadsStats(
+            total_issues=10,
+            open_issues=5,
+            in_progress_issues=2,
+            closed_issues=3,
+            ready_issues=1
+        )
+        mock_check_repo.return_value = True
+        mock_get_items.return_value = []
+        
+        result = run_orchestrator(interactive=False, continuous=False)
+        
+        mock_check_repo.assert_called_once()
+        assert result == 0
+    
+    @patch('pokepoke.orchestrator.get_ready_work_items')
+    @patch('subprocess.run')
+    def test_clean_repo_proceeds_to_work(
+        self,
+        mock_subprocess: Mock,
+        mock_get_items: Mock
+    ) -> None:
+        """Test that clean repo proceeds to normal work processing."""
+        mock_subprocess.return_value = Mock(
+            stdout="",
+            returncode=0
+        )
+        mock_get_items.return_value = []
+        
+        result = run_orchestrator(interactive=False, continuous=False)
+        
+        mock_get_items.assert_called_once()
+        assert result == 0
 

@@ -95,10 +95,6 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
     terminal_ui.ui.update_header("PokePoke", f"Initializing {interactive and 'Interactive' or 'Autonomous'} Mode...")
 
     try:
-        # TELLTALE: Version identifier to verify correct code is running
-        print("🔷 PokePoke MASTER-MERGED-v2 (2026-01-25 post-worktree-fix)")
-        print("=" * 50)
-        
         # Initialize unique agent name for this run
         agent_name = initialize_agent_name()
         os.environ['AGENT_NAME'] = agent_name
