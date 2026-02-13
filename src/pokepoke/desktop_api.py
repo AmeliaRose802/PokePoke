@@ -67,20 +67,21 @@ class DesktopAPI:
         stats: dict[str, Any] | None = None
         live = self._live_session_stats
         if live is not None:
+            snapshot = live.snapshot()
             stats = {
-                "agent_stats": asdict(live.agent_stats),
-                "items_completed": live.items_completed,
-                "work_agent_runs": live.work_agent_runs,
-                "gate_agent_runs": live.gate_agent_runs,
-                "tech_debt_agent_runs": live.tech_debt_agent_runs,
-                "janitor_agent_runs": live.janitor_agent_runs,
-                "backlog_cleanup_agent_runs": live.backlog_cleanup_agent_runs,
-                "cleanup_agent_runs": live.cleanup_agent_runs,
-                "beta_tester_agent_runs": live.beta_tester_agent_runs,
-                "code_review_agent_runs": live.code_review_agent_runs,
-                "worktree_cleanup_agent_runs": live.worktree_cleanup_agent_runs,
+                "agent_stats": asdict(snapshot.agent_stats),
+                "items_completed": snapshot.items_completed,
+                "work_agent_runs": snapshot.work_agent_runs,
+                "gate_agent_runs": snapshot.gate_agent_runs,
+                "tech_debt_agent_runs": snapshot.tech_debt_agent_runs,
+                "janitor_agent_runs": snapshot.janitor_agent_runs,
+                "backlog_cleanup_agent_runs": snapshot.backlog_cleanup_agent_runs,
+                "cleanup_agent_runs": snapshot.cleanup_agent_runs,
+                "beta_tester_agent_runs": snapshot.beta_tester_agent_runs,
+                "code_review_agent_runs": snapshot.code_review_agent_runs,
+                "worktree_cleanup_agent_runs": snapshot.worktree_cleanup_agent_runs,
                 "model_completions": [
-                    asdict(mc) for mc in live.model_completions
+                    asdict(mc) for mc in snapshot.model_completions
                 ],
             }
             # Carry forward elapsed_time from last push_stats snapshot
@@ -218,19 +219,20 @@ class DesktopAPI:
             self._live_session_stats = session_stats
         stats_data: dict[str, Any] = {"elapsed_time": elapsed_time}
         if session_stats:
-            stats_data["agent_stats"] = asdict(session_stats.agent_stats)
-            stats_data["items_completed"] = session_stats.items_completed
-            stats_data["work_agent_runs"] = session_stats.work_agent_runs
-            stats_data["gate_agent_runs"] = session_stats.gate_agent_runs
-            stats_data["tech_debt_agent_runs"] = session_stats.tech_debt_agent_runs
-            stats_data["janitor_agent_runs"] = session_stats.janitor_agent_runs
-            stats_data["backlog_cleanup_agent_runs"] = session_stats.backlog_cleanup_agent_runs
-            stats_data["cleanup_agent_runs"] = session_stats.cleanup_agent_runs
-            stats_data["beta_tester_agent_runs"] = session_stats.beta_tester_agent_runs
-            stats_data["code_review_agent_runs"] = session_stats.code_review_agent_runs
-            stats_data["worktree_cleanup_agent_runs"] = session_stats.worktree_cleanup_agent_runs
+            snapshot = session_stats.snapshot()
+            stats_data["agent_stats"] = asdict(snapshot.agent_stats)
+            stats_data["items_completed"] = snapshot.items_completed
+            stats_data["work_agent_runs"] = snapshot.work_agent_runs
+            stats_data["gate_agent_runs"] = snapshot.gate_agent_runs
+            stats_data["tech_debt_agent_runs"] = snapshot.tech_debt_agent_runs
+            stats_data["janitor_agent_runs"] = snapshot.janitor_agent_runs
+            stats_data["backlog_cleanup_agent_runs"] = snapshot.backlog_cleanup_agent_runs
+            stats_data["cleanup_agent_runs"] = snapshot.cleanup_agent_runs
+            stats_data["beta_tester_agent_runs"] = snapshot.beta_tester_agent_runs
+            stats_data["code_review_agent_runs"] = snapshot.code_review_agent_runs
+            stats_data["worktree_cleanup_agent_runs"] = snapshot.worktree_cleanup_agent_runs
             stats_data["model_completions"] = [
-                asdict(mc) for mc in session_stats.model_completions
+                asdict(mc) for mc in snapshot.model_completions
             ]
         self._current_stats = stats_data
 

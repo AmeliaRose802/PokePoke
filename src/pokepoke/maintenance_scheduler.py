@@ -13,7 +13,7 @@ from pokepoke.config import get_config, MaintenanceAgentConfig
 from pokepoke.coordination import try_lock
 from pokepoke.types import SessionStats
 from pokepoke.logging_utils import RunLogger
-from pokepoke.maintenance import _run_special_agent, aggregate_stats
+from pokepoke.maintenance import _run_special_agent
 from pokepoke.agent_runner import run_maintenance_agent
 from pokepoke.terminal_ui import set_terminal_banner
 from pokepoke import terminal_ui
@@ -54,8 +54,6 @@ class MaintenanceScheduler:
         # In-process locks for thread coordination
         self._locks: Dict[str, threading.Lock] = {}
         self._lock_creation_lock = threading.Lock()
-        # Lock for thread-safe stat updates
-        self._stats_lock = threading.Lock()
         
     def _get_agent_lock(self, agent_name: str) -> threading.Lock:
         """Get or create a threading lock for the given agent."""
@@ -189,8 +187,7 @@ class MaintenanceScheduler:
         # Update run count on session stats if attribute exists (thread-safe)
         stat_attr = _AGENT_STAT_ATTRS.get(agent_name)
         if stat_attr and hasattr(session_stats, stat_attr):
-            with self._stats_lock:
-                setattr(session_stats, stat_attr, getattr(session_stats, stat_attr) + 1)
+            session_stats.record_agent_run(agent_name)
 
         # Run the agent
         if agent_name in _SPECIAL_AGENTS:
@@ -206,10 +203,9 @@ class MaintenanceScheduler:
             )
 
         if result:
-            with self._stats_lock:
-                aggregate_stats(session_stats, result)
-                if agent_name == "Janitor":
-                    session_stats.janitor_lines_removed += result.lines_removed
+            session_stats.record_agent_stats(result)
+            if agent_name == "Janitor":
+                session_stats.record_janitor_lines_removed(result.lines_removed)
             run_logger.log_maintenance(log_key, f"{agent_name} Agent completed successfully")
         else:
             run_logger.log_maintenance(log_key, f"{agent_name} Agent failed")

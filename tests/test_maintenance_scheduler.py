@@ -226,8 +226,7 @@ class TestRunAgentWithCoordination:
     @patch('pokepoke.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.maintenance_scheduler.terminal_ui')
     @patch('pokepoke.maintenance_scheduler._run_special_agent')
-    @patch('pokepoke.maintenance_scheduler.aggregate_stats')
-    def test_runs_special_agent(self, mock_aggregate, mock_special, mock_ui, mock_banner):
+    def test_runs_special_agent(self, mock_special, mock_ui, mock_banner):
         """Test that special agents use their dedicated runners."""
         mock_special.return_value = AgentStats(input_tokens=100)
         
@@ -241,13 +240,12 @@ class TestRunAgentWithCoordination:
         
         mock_special.assert_called_once_with("Beta Tester", pokepoke_repo)
         assert session_stats.beta_tester_agent_runs == 1
-        mock_aggregate.assert_called_once_with(session_stats, AgentStats(input_tokens=100))
+        assert session_stats.agent_stats.input_tokens == 100
     
     @patch('pokepoke.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.maintenance_scheduler.terminal_ui')
     @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
-    @patch('pokepoke.maintenance_scheduler.aggregate_stats')
-    def test_runs_generic_agent(self, mock_aggregate, mock_maintenance, mock_ui, mock_banner):
+    def test_runs_generic_agent(self, mock_maintenance, mock_ui, mock_banner):
         """Test that generic agents use run_maintenance_agent."""
         mock_maintenance.return_value = AgentStats(input_tokens=50)
         
@@ -275,7 +273,7 @@ class TestRunAgentWithCoordination:
             model="claude-opus-4.6"
         )
         assert session_stats.janitor_agent_runs == 1
-        mock_aggregate.assert_called_once_with(session_stats, AgentStats(input_tokens=50))
+        assert session_stats.agent_stats.input_tokens == 50
     
     @patch('pokepoke.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.maintenance_scheduler.terminal_ui')

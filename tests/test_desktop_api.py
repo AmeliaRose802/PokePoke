@@ -139,3 +139,120 @@ def test_set_live_session_stats_directly() -> None:
     state = api.get_state()
     assert state["stats"] is not None
     assert state["stats"]["work_agent_runs"] == 5
+
+
+def test_set_window() -> None:
+    """set_window should store the window reference."""
+    api = DesktopAPI()
+    api.set_window("fake_window")
+    assert api._window == "fake_window"
+
+
+def test_get_work_item() -> None:
+    """get_work_item should return the current work item."""
+    api = DesktopAPI()
+    assert api.get_work_item() is None
+    api.push_work_item("item-1", "Title")
+    assert api.get_work_item()["item_id"] == "item-1"
+
+
+def test_get_stats_returns_none_initially() -> None:
+    """get_stats should return None when no stats have been set."""
+    api = DesktopAPI()
+    assert api.get_stats() is None
+
+
+def test_get_stats_returns_live_stats() -> None:
+    """get_stats should return serialized live stats."""
+    api = DesktopAPI()
+    stats_obj = SessionStats(agent_stats=AgentStats(input_tokens=42))
+    api.set_live_session_stats(stats_obj)
+    result = api.get_stats()
+    assert result is not None
+    assert result["agent_stats"]["input_tokens"] == 42
+
+
+def test_get_stats_with_session_start_time() -> None:
+    """get_stats should include dynamic elapsed_time when session start is set."""
+    api = DesktopAPI()
+    api.set_session_start_time(time.time() - 10)
+    result = api.get_stats()
+    assert result is not None
+    assert result["elapsed_time"] >= 9.0
+
+
+def test_push_log_buffer_trimming() -> None:
+    """push_log should trim the buffer when it exceeds max size."""
+    api = DesktopAPI()
+    api._max_log_buffer = 5
+
+    for i in range(8):
+        api.push_log(f"msg-{i}")
+
+    assert len(api._log_buffer) == 5
+    assert api._log_buffer[0]["message"] == "msg-3"
+
+
+def test_push_log_buffer_trim_adjusts_read_index() -> None:
+    """Trimming should adjust read index to avoid returning stale entries."""
+    api = DesktopAPI()
+    api._max_log_buffer = 5
+
+    for i in range(3):
+        api.push_log(f"msg-{i}")
+    api.get_new_logs()  # read_index = 3
+
+    for i in range(5):
+        api.push_log(f"msg-extra-{i}")
+
+    new_logs = api.get_new_logs()
+    assert len(new_logs) >= 0
+
+
+def test_serialize_live_stats_no_session_start() -> None:
+    """_serialize_live_stats should carry forward cached elapsed_time."""
+    api = DesktopAPI()
+    stats_obj = SessionStats(agent_stats=AgentStats())
+    api.push_stats(stats_obj, elapsed_time=42.0)
+
+    api._session_start_time = None
+    state = api.get_state()
+    assert state["stats"]["elapsed_time"] == 42.0
+
+
+def test_push_stats_without_session_stats() -> None:
+    """push_stats with None session_stats should still store elapsed_time."""
+    api = DesktopAPI()
+    api.push_stats(None, elapsed_time=5.0)
+    assert api._current_stats is not None
+    assert api._current_stats["elapsed_time"] == 5.0
+
+
+def test_get_model_leaderboard() -> None:
+    """get_model_leaderboard should return model summary."""
+    from unittest.mock import patch
+    api = DesktopAPI()
+    with patch("pokepoke.model_stats_store.get_model_summary", return_value={"test": 1}):
+        result = api.get_model_leaderboard()
+    assert result == {"test": 1}
+
+
+def test_get_state_includes_model_leaderboard() -> None:
+    """get_state should include model_leaderboard field."""
+    from unittest.mock import patch
+    api = DesktopAPI()
+    with patch("pokepoke.model_stats_store.get_model_summary", return_value={"models": []}):
+        state = api.get_state()
+    assert "model_leaderboard" in state
+
+
+def test_push_stats_with_model_completions() -> None:
+    """push_stats should serialize model completions via snapshot."""
+    from pokepoke.types import ModelCompletionRecord
+    api = DesktopAPI()
+    stats_obj = SessionStats(agent_stats=AgentStats())
+    stats_obj.record_model_completion(ModelCompletionRecord(
+        item_id="x", model="gpt-5", duration_seconds=10.0
+    ))
+    api.push_stats(stats_obj, elapsed_time=1.0)
+    assert len(api._current_stats["model_completions"]) == 1

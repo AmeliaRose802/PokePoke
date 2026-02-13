@@ -20,7 +20,7 @@ from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner, c
 from pokepoke import terminal_ui
 from pokepoke.maintenance_state import increment_items_completed
 from pokepoke.repo_check import check_and_commit_main_repo
-from pokepoke.maintenance import run_periodic_maintenance, aggregate_stats
+from pokepoke.maintenance import run_periodic_maintenance
 from pokepoke.shutdown import is_shutting_down, request_shutdown
 from pokepoke.model_stats_store import record_completion, print_model_leaderboard
 
@@ -70,10 +70,10 @@ def _finalize_session(
 ) -> None:
     """Collect ending stats, print summary, and clean up UI."""
     try:
-        session_stats.ending_beads_stats = get_beads_stats()
+        session_stats.set_ending_beads_stats(get_beads_stats())
     except KeyboardInterrupt:
         print("⚠️  Stats collection interrupted, skipping...")
-        session_stats.ending_beads_stats = None
+        session_stats.set_ending_beads_stats(None)
     elapsed = time.time() - start_time
     print_stats(items_completed, total_requests, elapsed, session_stats)
     run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
@@ -127,7 +127,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         session_stats = SessionStats(agent_stats=AgentStats())
         print("📊 Recording starting beads statistics...")
         run_logger.log_orchestrator("Recording starting beads statistics")
-        session_stats.starting_beads_stats = get_beads_stats()
+        session_stats.set_starting_beads_stats(get_beads_stats())
         
         # Set session start time for real-time clock updates
         terminal_ui.ui.set_session_start_time(start_time)
@@ -143,11 +143,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             beta_stats = run_beta_tester(repo_root=main_repo_path)
             if beta_stats:
                 # Aggregate beta tester stats
-                session_stats.agent_stats.wall_duration += beta_stats.wall_duration
-                session_stats.agent_stats.api_duration += beta_stats.api_duration
-                session_stats.agent_stats.input_tokens += beta_stats.input_tokens
-                session_stats.agent_stats.output_tokens += beta_stats.output_tokens
-                session_stats.agent_stats.premium_requests += beta_stats.premium_requests
+                session_stats.record_agent_stats(beta_stats)
             print("✅ Beta Tester completed\n")
             
         # Track items that failed claiming to avoid infinite retry loops
@@ -203,27 +199,26 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             
             total_requests += requests
             if requests > 1:
-                session_stats.agent_stats.retries += (requests - 1)
+                session_stats.record_retries(requests - 1)
             
-            session_stats.work_agent_runs += 1
-            session_stats.cleanup_agent_runs += cleanup_runs
-            session_stats.gate_agent_runs += gate_runs
+            session_stats.record_agent_run("work")
+            session_stats.record_agent_run("cleanup", cleanup_runs)
+            session_stats.record_agent_run("gate", gate_runs)
             
             # Aggregate statistics
             if item_stats:
-                aggregate_stats(session_stats, item_stats)
+                session_stats.record_agent_stats(item_stats)
             
             # Record model completion for A/B testing
             if model_completion:
-                session_stats.model_completions.append(model_completion)
+                session_stats.record_model_completion(model_completion)
                 # Persist to .pokepoke/model_stats.json for cross-session tracking
                 record_completion(model_completion)
             
             # Increment counter on successful processing
             if success:
                 items_completed += 1
-                session_stats.items_completed = items_completed
-                session_stats.completed_items_list.append(selected_item)
+                session_stats.record_completion(selected_item, items_completed)
                 total_persistent_count = increment_items_completed()
                 print(f"\n📈 Items completed this session: {items_completed}")
                 print(f"📈 Total items completed (lifetime): {total_persistent_count}")
