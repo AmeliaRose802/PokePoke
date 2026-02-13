@@ -186,8 +186,12 @@ class MaintenanceScheduler:
 
         # Update run count on session stats if attribute exists (thread-safe)
         stat_attr = _AGENT_STAT_ATTRS.get(agent_name)
-        if stat_attr and hasattr(session_stats, stat_attr):
-            session_stats.record_agent_run(agent_name)
+        if stat_attr and hasattr(session_stats, 'record_agent_run'):
+            try:
+                session_stats.record_agent_run(agent_name)
+            except (AttributeError, ValueError):
+                # Silently skip if method doesn't exist or agent name not recognized
+                pass
 
         # Run the agent
         if agent_name in _SPECIAL_AGENTS:

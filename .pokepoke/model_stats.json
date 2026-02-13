@@ -48,6 +48,13 @@
       "duration_seconds": 715.2762176990509,
       "gate_passed": true,
       "timestamp": "2026-02-12T23:37:03.185672+00:00"
+    },
+    {
+      "item_id": "PokePoke-l0tq",
+      "model": "gpt-5-codex",
+      "duration_seconds": 1156.0280916690826,
+      "gate_passed": true,
+      "timestamp": "2026-02-13T02:50:30.420278+00:00"
     }
   ],
   "summary": {
@@ -82,14 +89,14 @@
       "last_used": "2026-02-12T19:42:06.052353+00:00"
     },
     "gpt-5-codex": {
-      "total_items_attempted": 1,
-      "total_items_succeeded": 0,
+      "total_items_attempted": 2,
+      "total_items_succeeded": 1,
       "total_items_failed": 1,
-      "total_duration_seconds": 75.132652759552,
+      "total_duration_seconds": 1231.1607444286346,
       "total_retries": 0,
-      "average_duration": 75.13,
-      "success_rate": 0.0,
-      "last_used": "2026-02-12T19:54:22.181060+00:00"
+      "average_duration": 615.58,
+      "success_rate": 0.5,
+      "last_used": "2026-02-13T02:50:30.420278+00:00"
     },
     "claude-sonnet-4": {
       "total_items_attempted": 1,
