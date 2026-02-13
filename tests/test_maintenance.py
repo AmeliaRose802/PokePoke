@@ -88,7 +88,13 @@ class TestAggregateStats:
 
 class TestRunPeriodicMaintenance:
     """Test run_periodic_maintenance function."""
-    
+
+    def setup_method(self) -> None:
+        """Reset the global scheduler singleton between tests."""
+        import pokepoke.maintenance_scheduler as ms
+        ms._scheduler = None
+
+    @patch('pokepoke.maintenance_scheduler.try_lock')
     @patch('pokepoke.maintenance_scheduler.get_config')
     @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
     @patch('pokepoke.maintenance_scheduler._run_special_agent')
@@ -100,10 +106,12 @@ class TestRunPeriodicMaintenance:
         mock_banner: Mock,
         mock_special_agent: Mock,
         mock_maintenance: Mock,
-        mock_config: Mock
+        mock_config: Mock,
+        mock_lock: Mock
     ) -> None:
         """Test that no maintenance runs when items_completed is 0."""
         mock_config.return_value = _make_default_config()
+        mock_lock.return_value = Mock()
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         
@@ -112,6 +120,7 @@ class TestRunPeriodicMaintenance:
         mock_maintenance.assert_not_called()
         mock_special_agent.assert_not_called()
 
+    @patch('pokepoke.maintenance_scheduler.try_lock')
     @patch('pokepoke.maintenance_scheduler.get_config')
     @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
     @patch('pokepoke.maintenance_scheduler._run_special_agent')
@@ -123,10 +132,12 @@ class TestRunPeriodicMaintenance:
         mock_banner: Mock,
         mock_special_agent: Mock,
         mock_maintenance: Mock,
-        mock_config: Mock
+        mock_config: Mock,
+        mock_lock: Mock
     ) -> None:
         """Test that Janitor runs every 2 items."""
         mock_config.return_value = _make_default_config()
+        mock_lock.return_value = Mock()
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         mock_maintenance.return_value = None
@@ -140,6 +151,7 @@ class TestRunPeriodicMaintenance:
         assert len(calls) == 1
         assert session_stats.janitor_agent_runs == 1
 
+    @patch('pokepoke.maintenance_scheduler.try_lock')
     @patch('pokepoke.maintenance_scheduler.get_config')
     @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
     @patch('pokepoke.maintenance_scheduler._run_special_agent')
@@ -151,10 +163,12 @@ class TestRunPeriodicMaintenance:
         mock_banner: Mock,
         mock_special_agent: Mock,
         mock_maintenance: Mock,
-        mock_config: Mock
+        mock_config: Mock,
+        mock_lock: Mock
     ) -> None:
         """Test that Beta Tester runs every 3 items."""
         mock_config.return_value = _make_default_config()
+        mock_lock.return_value = Mock()
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         mock_special_agent.return_value = None
@@ -167,6 +181,7 @@ class TestRunPeriodicMaintenance:
         assert len(calls) == 1
         assert session_stats.beta_tester_agent_runs == 1
 
+    @patch('pokepoke.maintenance_scheduler.try_lock')
     @patch('pokepoke.maintenance_scheduler.get_config')
     @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
     @patch('pokepoke.maintenance_scheduler._run_special_agent')
@@ -178,10 +193,12 @@ class TestRunPeriodicMaintenance:
         mock_banner: Mock,
         mock_special_agent: Mock,
         mock_maintenance: Mock,
-        mock_config: Mock
+        mock_config: Mock,
+        mock_lock: Mock
     ) -> None:
         """Test that Worktree Cleanup runs every 4 items."""
         mock_config.return_value = _make_default_config()
+        mock_lock.return_value = Mock()
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         mock_special_agent.return_value = None
@@ -194,6 +211,7 @@ class TestRunPeriodicMaintenance:
         assert len(calls) == 1
         assert session_stats.worktree_cleanup_agent_runs == 1
 
+    @patch('pokepoke.maintenance_scheduler.try_lock')
     @patch('pokepoke.maintenance_scheduler.get_config')
     @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
     @patch('pokepoke.maintenance_scheduler._run_special_agent')
@@ -205,10 +223,12 @@ class TestRunPeriodicMaintenance:
         mock_banner: Mock,
         mock_special_agent: Mock,
         mock_maintenance: Mock,
-        mock_config: Mock
+        mock_config: Mock,
+        mock_lock: Mock
     ) -> None:
         """Test that Tech Debt and Code Review run every 5 items."""
         mock_config.return_value = _make_default_config()
+        mock_lock.return_value = Mock()
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         mock_maintenance.return_value = None
@@ -226,6 +246,7 @@ class TestRunPeriodicMaintenance:
         assert session_stats.tech_debt_agent_runs == 1
         assert session_stats.code_review_agent_runs == 1
 
+    @patch('pokepoke.maintenance_scheduler.try_lock')
     @patch('pokepoke.maintenance_scheduler.get_config')
     @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
     @patch('pokepoke.maintenance_scheduler._run_special_agent')
@@ -237,10 +258,12 @@ class TestRunPeriodicMaintenance:
         mock_banner: Mock,
         mock_special_agent: Mock,
         mock_maintenance: Mock,
-        mock_config: Mock
+        mock_config: Mock,
+        mock_lock: Mock
     ) -> None:
         """Test that Backlog Cleanup runs every 7 items."""
         mock_config.return_value = _make_default_config()
+        mock_lock.return_value = Mock()
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         mock_maintenance.return_value = None
@@ -254,6 +277,7 @@ class TestRunPeriodicMaintenance:
         assert len(backlog_calls) == 1
         assert session_stats.backlog_cleanup_agent_runs == 1
 
+    @patch('pokepoke.maintenance_scheduler.try_lock')
     @patch('pokepoke.maintenance_scheduler.get_config')
     @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
     @patch('pokepoke.maintenance_scheduler._run_special_agent')
@@ -265,10 +289,12 @@ class TestRunPeriodicMaintenance:
         mock_banner: Mock,
         mock_special_agent: Mock,
         mock_maintenance: Mock,
-        mock_config: Mock
+        mock_config: Mock,
+        mock_lock: Mock
     ) -> None:
         """Test that stats are aggregated from successful agent runs."""
         mock_config.return_value = _make_default_config()
+        mock_lock.return_value = Mock()
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         
@@ -286,6 +312,7 @@ class TestRunPeriodicMaintenance:
         assert session_stats.agent_stats.input_tokens == 100
         assert session_stats.janitor_lines_removed == 50
 
+    @patch('pokepoke.maintenance_scheduler.try_lock')
     @patch('pokepoke.maintenance_scheduler.get_config')
     @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
     @patch('pokepoke.maintenance_scheduler._run_special_agent')
@@ -297,10 +324,12 @@ class TestRunPeriodicMaintenance:
         mock_banner: Mock,
         mock_special_agent: Mock,
         mock_maintenance: Mock,
-        mock_config: Mock
+        mock_config: Mock,
+        mock_lock: Mock
     ) -> None:
         """Test that None return from agents is handled."""
         mock_config.return_value = _make_default_config()
+        mock_lock.return_value = Mock()
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         
@@ -315,6 +344,7 @@ class TestRunPeriodicMaintenance:
         assert session_stats.janitor_agent_runs == 1
         assert session_stats.tech_debt_agent_runs == 1
 
+    @patch('pokepoke.maintenance_scheduler.try_lock')
     @patch('pokepoke.maintenance_scheduler.get_config')
     @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
     @patch('pokepoke.maintenance_scheduler._run_special_agent')
@@ -326,10 +356,12 @@ class TestRunPeriodicMaintenance:
         mock_banner: Mock,
         mock_special_agent: Mock,
         mock_maintenance: Mock,
-        mock_config: Mock
+        mock_config: Mock,
+        mock_lock: Mock
     ) -> None:
         """Test that maintenance events are logged."""
         mock_config.return_value = _make_default_config()
+        mock_lock.return_value = Mock()
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         mock_maintenance.return_value = AgentStats()
@@ -340,6 +372,7 @@ class TestRunPeriodicMaintenance:
         log_calls = run_logger.log_maintenance.call_args_list
         assert len(log_calls) >= 2  # At least start and end
 
+    @patch('pokepoke.maintenance_scheduler.try_lock')
     @patch('pokepoke.maintenance_scheduler.get_config')
     @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
     @patch('pokepoke.maintenance_scheduler._run_special_agent')
@@ -351,10 +384,12 @@ class TestRunPeriodicMaintenance:
         mock_banner: Mock,
         mock_special_agent: Mock,
         mock_maintenance: Mock,
-        mock_config: Mock
+        mock_config: Mock,
+        mock_lock: Mock
     ) -> None:
         """Test that multiple agents can run at the same interval."""
         mock_config.return_value = _make_default_config()
+        mock_lock.return_value = Mock()
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         mock_maintenance.return_value = None
@@ -371,6 +406,7 @@ class TestRunPeriodicMaintenance:
                       if call[0][0] == "Beta Tester"]
         assert len(beta_calls) == 1
 
+    @patch('pokepoke.maintenance_scheduler.try_lock')
     @patch('pokepoke.maintenance_scheduler.get_config')
     @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
     @patch('pokepoke.maintenance_scheduler._run_special_agent')
@@ -382,10 +418,12 @@ class TestRunPeriodicMaintenance:
         mock_banner: Mock,
         mock_special_agent: Mock,
         mock_maintenance: Mock,
-        mock_config: Mock
+        mock_config: Mock,
+        mock_lock: Mock
     ) -> None:
         """Test that Code Review agent uses gpt-5.1-codex model."""
         mock_config.return_value = _make_default_config()
+        mock_lock.return_value = Mock()
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         mock_maintenance.return_value = None
@@ -401,6 +439,7 @@ class TestRunPeriodicMaintenance:
         call_kwargs = code_review_calls[0][1]
         assert call_kwargs.get('model') == "gpt-5.1-codex"
 
+    @patch('pokepoke.maintenance_scheduler.try_lock')
     @patch('pokepoke.maintenance_scheduler.get_config')
     @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
     @patch('pokepoke.maintenance_scheduler._run_special_agent')
@@ -412,10 +451,12 @@ class TestRunPeriodicMaintenance:
         mock_banner: Mock,
         mock_special_agent: Mock,
         mock_maintenance: Mock,
-        mock_config: Mock
+        mock_config: Mock,
+        mock_lock: Mock
     ) -> None:
         """Test that Backlog Cleanup runs with merge_changes=False."""
         mock_config.return_value = _make_default_config()
+        mock_lock.return_value = Mock()
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         mock_maintenance.return_value = None
@@ -431,6 +472,7 @@ class TestRunPeriodicMaintenance:
         call_kwargs = backlog_calls[0][1]
         assert call_kwargs.get('merge_changes') is False
 
+    @patch('pokepoke.maintenance_scheduler.try_lock')
     @patch('pokepoke.maintenance_scheduler.get_config')
     @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
     @patch('pokepoke.maintenance_scheduler._run_special_agent')
@@ -442,7 +484,8 @@ class TestRunPeriodicMaintenance:
         mock_banner: Mock,
         mock_special: Mock,
         mock_maintenance: Mock,
-        mock_config: Mock
+        mock_config: Mock,
+        mock_lock: Mock
     ) -> None:
         """Test that disabled agents are not run."""
         config = ProjectConfig()
@@ -453,6 +496,7 @@ class TestRunPeriodicMaintenance:
             ),
         ])
         mock_config.return_value = config
+        mock_lock.return_value = Mock()
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
 
@@ -461,6 +505,7 @@ class TestRunPeriodicMaintenance:
         mock_maintenance.assert_not_called()
         mock_special.assert_not_called()
 
+    @patch('pokepoke.maintenance_scheduler.try_lock')
     @patch('pokepoke.maintenance_scheduler.get_config')
     @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
     @patch('pokepoke.maintenance_scheduler._run_special_agent')
@@ -472,7 +517,8 @@ class TestRunPeriodicMaintenance:
         mock_banner: Mock,
         mock_special: Mock,
         mock_maintenance: Mock,
-        mock_config: Mock
+        mock_config: Mock,
+        mock_lock: Mock
     ) -> None:
         """Test that custom frequency from config is respected."""
         config = ProjectConfig()
@@ -483,6 +529,7 @@ class TestRunPeriodicMaintenance:
             ),
         ])
         mock_config.return_value = config
+        mock_lock.return_value = Mock()
         mock_maintenance.return_value = None
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
