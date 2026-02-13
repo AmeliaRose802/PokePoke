@@ -21,7 +21,7 @@ def load_state() -> MaintenanceState:
     """Load maintenance state from disk."""
     if STATE_FILE.exists():
         try:
-            data = json.loads(STATE_FILE.read_text())
+            data = json.loads(STATE_FILE.read_text(encoding='utf-8'))
             return MaintenanceState(**data)
         except Exception:
             return MaintenanceState()
