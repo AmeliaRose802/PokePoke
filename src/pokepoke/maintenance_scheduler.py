@@ -13,7 +13,7 @@ from pokepoke.config import get_config, MaintenanceAgentConfig
 from pokepoke.coordination import try_lock
 from pokepoke.types import SessionStats
 from pokepoke.logging_utils import RunLogger
-from pokepoke.maintenance import _run_special_agent, aggregate_stats
+from pokepoke.maintenance import _run_special_agent
 from pokepoke.agent_runner import run_maintenance_agent
 from pokepoke.terminal_ui import set_terminal_banner
 from pokepoke import terminal_ui
@@ -207,7 +207,7 @@ class MaintenanceScheduler:
 
         if result:
             with self._stats_lock:
-                aggregate_stats(session_stats, result)
+                session_stats.record_agent_stats(result)
                 if agent_name == "Janitor":
                     session_stats.record_janitor_lines_removed(result.lines_removed)
             run_logger.log_maintenance(log_key, f"{agent_name} Agent completed successfully")
