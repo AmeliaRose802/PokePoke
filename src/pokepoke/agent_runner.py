@@ -96,7 +96,7 @@ def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional
         print(f"❌ Prompt not found at {prompt_path}")
         return None
     
-    agent_prompt = prompt_path.read_text()
+    agent_prompt = prompt_path.read_text(encoding='utf-8')
     
     # Use unique ID with timestamp to avoid worktree conflicts
     base_agent_type = f"maintenance-{agent_name.lower().replace(' ', '-')}"
