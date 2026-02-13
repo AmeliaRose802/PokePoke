@@ -28,7 +28,8 @@ def process_work_item(
     timeout_hours: float = 2.0, 
     run_cleanup_agents: bool = False, 
     run_beta_test: bool = False,
-    run_logger: Optional['RunLogger'] = None
+    run_logger: Optional['RunLogger'] = None,
+    max_timeout_restarts: int = 3
 ) -> tuple[bool, int, Optional[AgentStats], int, int, Optional[ModelCompletionRecord]]:
     """Process a single work item with timeout protection.
     
@@ -39,6 +40,7 @@ def process_work_item(
         run_cleanup_agents: If True, run maintenance agents after completion (default: False)
         run_beta_test: If True, run beta tester after completion (default: True)
         run_logger: Optional run logger instance for file logging
+        max_timeout_restarts: Maximum number of timeout restarts before failing (default: 3)
         
     Returns:
         Tuple of (success, request_count, stats, cleanup_agent_runs, gate_agent_runs, model_completion)
@@ -101,14 +103,25 @@ def process_work_item(
         # Initialize accumulated stats
         accumulated_stats = AgentStats()
         gate_success = False  # Track last gate result for model completion record
+        timeout_restart_count = 0
 
         while not is_shutting_down():
             # Check timeout before invoking Copilot
             elapsed = time.time() - start_time
             if elapsed >= timeout_seconds:
+                timeout_restart_count += 1
+                if timeout_restart_count > max_timeout_restarts:
+                    print(f"\n⏱️  TIMEOUT: Exceeded max restarts ({max_timeout_restarts})")
+                    print(f"   Failing item {item.id} after {timeout_restart_count - 1} timeout restart(s).\n")
+                    if run_logger:
+                        run_logger.end_item_log(False, request_count)
+                    cleanup_worktree(item.id, force=True)
+                    terminal_ui.ui.set_current_agent(None)
+                    return False, request_count, accumulated_stats, cleanup_agent_runs, gate_agent_runs, None
                 print(f"\n⏱️  TIMEOUT: Execution exceeded {timeout_hours} hours")
-                print(f"   Restarting item {item.id} in same worktree...\n")
-                return process_work_item(item, interactive, timeout_hours, run_cleanup_agents, run_beta_test, run_logger)
+                print(f"   Restarting item {item.id} (attempt {timeout_restart_count}/{max_timeout_restarts})...\n")
+                start_time = time.time()
+                elapsed = 0
 
             remaining_timeout = timeout_seconds - elapsed
 

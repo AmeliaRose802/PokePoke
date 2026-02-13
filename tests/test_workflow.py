@@ -1362,7 +1362,144 @@ class TestProcessWorkItem:
         assert stats is not None  # Stats should be returned even on failure
         assert stats.wall_duration == 10.0
 
+    @patch('pokepoke.workflow.add_comment')
+    @patch('pokepoke.workflow.run_gate_agent')
+    @patch('pokepoke.workflow.select_model_for_item')
+    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('pokepoke.workflow._run_cleanup_with_timeout')
+    @patch('pokepoke.workflow.invoke_copilot')
+    @patch('pokepoke.workflow.has_commits_ahead')
+    @patch('pokepoke.workflow.has_uncommitted_changes')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('builtins.input')
+    @patch('time.time')
+    def test_timeout_restarts_limited(
+        self,
+        mock_time: Mock,
+        mock_input: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
+        mock_uncommitted: Mock,
+        mock_commits_ahead: Mock,
+        mock_invoke: Mock,
+        mock_cleanup_timeout: Mock,
+        mock_cleanup_worktree: Mock,
+        mock_select_model: Mock,
+        mock_gate_agent: Mock,
+        mock_add_comment: Mock
+    ) -> None:
+        """Test that repeated timeouts are bounded by max_timeout_restarts."""
+        item = BeadsWorkItem(
+            id="task-1",
+            title="Task 1",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task"
+        )
 
+        mock_select_model.return_value = "test-model"
+        # Use a very short timeout (0.001 hours = 3.6s) so timeout fires reliably
+        # Return monotonically increasing values; each call 5s apart ensures timeout
+        call_count = [0]
+        def time_side_effect():
+            call_count[0] += 1
+            return call_count[0] * 5.0
+        mock_time.side_effect = time_side_effect
+        mock_input.return_value = 'y'
+        mock_assign.return_value = True
+        mock_setup.return_value = Path("/fake/worktree")
+        mock_uncommitted.return_value = False
+        mock_commits_ahead.return_value = 0
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="task-1",
+            success=True,
+            output="Completed",
+            attempt_count=1
+        )
+        mock_cleanup_timeout.return_value = (True, 0)
+        # Gate rejects, forcing loop to continue to next timeout check
+        mock_gate_agent.return_value = (False, "Rejected", None)
+
+        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+            item, interactive=True, timeout_hours=0.001, max_timeout_restarts=2
+        )
+
+        assert success is False
+        mock_cleanup_worktree.assert_called_once_with(item.id, force=True)
+
+    @patch('pokepoke.workflow.run_gate_agent')
+    @patch('pokepoke.workflow.run_beta_tester')
+    @patch('pokepoke.workflow.finalize_work_item')
+    @patch('pokepoke.workflow._run_cleanup_with_timeout')
+    @patch('pokepoke.workflow.invoke_copilot')
+    @patch('pokepoke.workflow.has_commits_ahead')
+    @patch('pokepoke.workflow.has_uncommitted_changes')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('builtins.input')
+    @patch('time.time')
+    def test_timeout_restart_then_success(
+        self,
+        mock_time: Mock,
+        mock_input: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
+        mock_uncommitted: Mock,
+        mock_commits_ahead: Mock,
+        mock_invoke: Mock,
+        mock_cleanup_timeout: Mock,
+        mock_finalize: Mock,
+        mock_beta: Mock,
+        mock_gate_agent: Mock
+    ) -> None:
+        """Test that a timeout restart followed by success works correctly."""
+        item = BeadsWorkItem(
+            id="task-1",
+            title="Task 1",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task"
+        )
+
+        # First iteration: past timeout. After restart, within timeout.
+        # time.time() calls: start_time init, elapsed check (past), restart reset,
+        # elapsed check (within), remaining calc, duration calc...
+        call_count = 0
+        def time_side_effect():
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                # Initial start_time and first elapsed check: past timeout
+                return 99999
+            # After restart: well within timeout
+            return 0
+
+        mock_time.side_effect = time_side_effect
+        mock_input.return_value = 'y'
+        mock_assign.return_value = True
+        mock_setup.return_value = Path("/fake/worktree")
+        mock_uncommitted.return_value = False
+        mock_commits_ahead.return_value = 0
+        mock_gate_agent.return_value = (True, "Gate passed", None)
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="task-1",
+            success=True,
+            output="Completed",
+            attempt_count=1
+        )
+        mock_cleanup_timeout.return_value = (True, 0)
+        mock_finalize.return_value = True
+        mock_beta.return_value = None
+
+        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+            item, interactive=True, max_timeout_restarts=3
+        )
+
+        assert success is True
+        mock_invoke.assert_called_once()
 
 
 
