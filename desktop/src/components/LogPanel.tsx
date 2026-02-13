@@ -5,7 +5,7 @@
  * auto-detected log level styling, and auto-scroll to bottom.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { LogEntry } from "../types";
 
 interface Props {
@@ -27,6 +27,67 @@ function detectLevel(message: string): string {
     return "log-success";
   if (lower.includes("debug")) return "log-debug";
   return "log-info";
+}
+
+const TOOL_CALL_PATTERN = /^\s*(?:🔧|\[Tool\])\s*(.*)$/;
+const TOOL_RESULT_PATTERN = /^\s*(✅|❌)\s*Result:\s*(.*)$/;
+const TOOL_RESULT_FALLBACK = /^\s*\[Result\]\s*(.*)$/i;
+
+interface ToolSummary {
+  toolLabel: string;
+  resultSummary?: string;
+  statusClass?: string;
+}
+
+interface RenderLogItem {
+  type: "log" | "tool";
+  entry: LogEntry;
+  result?: LogEntry;
+  summary?: ToolSummary;
+}
+
+function isToolCallMessage(message: string): boolean {
+  return TOOL_CALL_PATTERN.test(message);
+}
+
+function isToolResultMessage(message: string): boolean {
+  return message.includes("Result:") || TOOL_RESULT_FALLBACK.test(message);
+}
+
+function parseToolLabel(message: string): string {
+  const match = message.match(TOOL_CALL_PATTERN);
+  if (!match) return message.trim();
+  const rest = match[1].trim();
+  const callMatch = rest.match(/^([^(]+)\((.*)\)$/);
+  if (!callMatch) return `🔧 ${rest}`;
+  return `🔧 ${callMatch[1].trim()}`;
+}
+
+function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 1)}…`;
+}
+
+function buildToolSummary(callMessage: string, resultMessage?: string): ToolSummary {
+  const toolLabel = parseToolLabel(callMessage);
+  if (!resultMessage) {
+    return { toolLabel };
+  }
+  const resultMatch = resultMessage.match(TOOL_RESULT_PATTERN);
+  const fallbackMatch = resultMessage.match(TOOL_RESULT_FALLBACK);
+  const summaryText = resultMatch?.[2] ?? fallbackMatch?.[1] ?? resultMessage.trim();
+  const statusEmoji = resultMatch?.[1];
+  const statusClass =
+    statusEmoji === "✅" ? "log-success" : statusEmoji === "❌" ? "log-error" : undefined;
+  const resultSummary = `${statusEmoji ? `${statusEmoji} ` : ""}${truncateText(
+    summaryText,
+    120
+  )}`.trim();
+  return {
+    toolLabel,
+    resultSummary,
+    statusClass,
+  };
 }
 
 /** Format a unix timestamp to HH:MM:SS */
@@ -71,6 +132,36 @@ export function LogPanel({
     }
   }, [logs]);
 
+  const renderItems = useMemo<RenderLogItem[]>(() => {
+    const items: RenderLogItem[] = [];
+    for (let i = 0; i < logs.length; i += 1) {
+      const entry = logs[i];
+      if (isToolCallMessage(entry.message)) {
+        const next = logs[i + 1];
+        const result = next && isToolResultMessage(next.message) ? next : undefined;
+        if (result) {
+          i += 1;
+        }
+        items.push({
+          type: "tool",
+          entry,
+          result,
+          summary: buildToolSummary(entry.message, result?.message),
+        });
+        continue;
+      }
+      items.push({ type: "log", entry });
+    }
+    return items;
+  }, [logs]);
+
+  const renderLogEntry = (entry: LogEntry, key: string) => (
+    <div key={key} className={`log-entry ${detectLevel(entry.message)}`}>
+      <span className="log-timestamp">{formatTime(entry.timestamp)}</span>
+      <span className="log-message">{entry.message}</span>
+    </div>
+  );
+
   return (
     <div
       ref={panelRef}
@@ -88,12 +179,37 @@ export function LogPanel({
         ref={containerRef}
         onScroll={handleScroll}
       >
-        {logs.map((entry, i) => (
-          <div key={i} className={`log-entry ${detectLevel(entry.message)}`}>
-            <span className="log-timestamp">{formatTime(entry.timestamp)}</span>
-            <span className="log-message">{entry.message}</span>
-          </div>
-        ))}
+        {renderItems.map((item, i) => {
+          if (item.type === "tool" && item.summary) {
+            const detailsEntries = [item.entry];
+            if (item.result) detailsEntries.push(item.result);
+            return (
+              <details
+                key={`tool-${i}`}
+                className={`log-accordion ${item.summary.statusClass ?? ""}`.trim()}
+              >
+                <summary className="log-accordion-summary">
+                  <span className="log-accordion-chevron">▸</span>
+                  <span className="log-timestamp">
+                    {formatTime(item.entry.timestamp)}
+                  </span>
+                  <span className="log-message">{item.summary.toolLabel}</span>
+                  {item.summary.resultSummary && (
+                    <span className="log-accordion-result">
+                      {item.summary.resultSummary}
+                    </span>
+                  )}
+                </summary>
+                <div className="log-accordion-details">
+                  {detailsEntries.map((entry, detailIndex) =>
+                    renderLogEntry(entry, `tool-${i}-${detailIndex}`)
+                  )}
+                </div>
+              </details>
+            );
+          }
+          return renderLogEntry(item.entry, `log-${i}`);
+        })}
         <div ref={bottomRef} />
       </div>
     </div>

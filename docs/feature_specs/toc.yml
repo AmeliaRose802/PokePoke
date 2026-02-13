@@ -1,0 +1,6 @@
+features:
+  - category: "Desktop UI"
+    items:
+      - name: "Agent tool call accordions"
+        file: "agent-tool-call-accordions.md"
+        status: "Implemented"
