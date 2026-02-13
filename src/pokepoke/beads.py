@@ -11,7 +11,8 @@ Implementation is split across:
 from .beads_query import (
     get_ready_work_items,
     get_issue_dependencies,
-    get_beads_stats
+    get_beads_stats,
+    has_unmet_blocking_dependencies
 )
 
 from .beads_hierarchy import (
@@ -38,6 +39,7 @@ __all__ = [
     'get_ready_work_items',
     'get_issue_dependencies',
     'get_beads_stats',
+    'has_unmet_blocking_dependencies',
     
     # Hierarchy operations
     'get_children',

@@ -3,7 +3,7 @@
 from typing import Optional
 
 from .types import BeadsWorkItem
-from .beads import select_next_hierarchical_item
+from .beads import select_next_hierarchical_item, has_unmet_blocking_dependencies
 from .beads_hierarchy import HUMAN_REQUIRED_LABEL, is_assigned_to_current_user
 from .shutdown import is_shutting_down
 
@@ -68,6 +68,15 @@ def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool, skip_i
         for item in human_required:
             print(f"   🧑 Skipping {item.id} - labeled '{HUMAN_REQUIRED_LABEL}' (needs human)")
         available_items = [item for item in available_items if not _is_human_required(item)]
+    
+    # Filter out items with unmet blocking dependencies
+    items_with_unmet_deps = []
+    for item in available_items:
+        if has_unmet_blocking_dependencies(item.id):
+            items_with_unmet_deps.append(item)
+            print(f"   🚫 Skipping {item.id} - has unmet blocking dependencies")
+    
+    available_items = [item for item in available_items if item not in items_with_unmet_deps]
     
     if not available_items:
         print("\n✨ No available work - all ready items are assigned to other agents or require human intervention.")
