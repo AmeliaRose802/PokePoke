@@ -13,15 +13,7 @@ from pokepoke.git_operations import (
     validate_post_merge,
 )
 from pokepoke.beads_management import run_bd_sync_with_retry
-
-
-
-
-
-
-
-
-
+from pokepoke.worktree_cleanup import force_remove_directory
 
 
 def create_worktree(item_id: str, base_branch: Optional[str] = None) -> Path:
@@ -219,6 +211,10 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
             if e.stderr and ("not a working tree" in e.stderr.lower() or "no such file" in e.stderr.lower()):
                 # Already gone, that's fine
                 pass
+            elif e.stderr and ("permission denied" in e.stderr.lower() or "being used by another process" in e.stderr.lower()):
+                print(f"⚠️  Worktree locked, retrying with force removal...")
+                if not force_remove_directory(actual_worktree_path):
+                    print(f"⚠️  Could not remove worktree directory after retries: {actual_worktree_path}")
             else:
                 print(f"⚠️  Worktree removal warning: {e.stderr if e.stderr else str(e)}")
                 # Continue to try branch deletion
@@ -368,8 +364,17 @@ def _cleanup_after_merge(worktree_path: Path, branch_name: str) -> None:
             )
             print(f"✅ Removed worktree at {worktree_path}")
         except subprocess.CalledProcessError as e:
-            print(f"⚠️  Could not remove worktree: {e.stderr or e}")
-            print(f"   Merge successful - worktree cleanup can be done later")
+            stderr = e.stderr or ""
+            if "permission denied" in stderr.lower() or "being used by another process" in stderr.lower():
+                print(f"⚠️  Worktree locked, retrying with force removal...")
+                if force_remove_directory(worktree_path):
+                    print(f"✅ Force-removed worktree at {worktree_path}")
+                else:
+                    print(f"⚠️  Could not remove worktree after retries: {worktree_path}")
+                    print(f"   Merge successful - worktree cleanup can be done later")
+            else:
+                print(f"⚠️  Could not remove worktree: {stderr or e}")
+                print(f"   Merge successful - worktree cleanup can be done later")
     
     try:
         subprocess.run(

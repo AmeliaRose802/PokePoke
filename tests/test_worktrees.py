@@ -24,6 +24,10 @@ from pokepoke.worktrees import (
     cleanup_worktree,
     list_worktrees,
 )
+from pokepoke.worktree_cleanup import (
+    force_remove_directory,
+    _handle_remove_readonly,
+)
 
 
 class TestSanitizeBranchName:
@@ -904,6 +908,209 @@ class TestCleanupWorktree:
             assert result is False
             mock_print.assert_called()
             assert 'Branch deletion warning' in mock_print.call_args[0][0]
+
+    def test_cleanup_worktree_permission_denied_retries_with_force(self):
+        """Test that permission denied triggers force_remove_directory fallback."""
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.list_worktrees') as mock_list, \
+             patch('pathlib.Path.exists', return_value=True), \
+             patch('pokepoke.worktrees.force_remove_directory', return_value=True) as mock_force, \
+             patch('builtins.print'):
+            
+            mock_list.return_value = [
+                {'path': 'worktrees/task-incredible_icm-42', 'branch': 'refs/heads/task/incredible_icm-42'}
+            ]
+            
+            def run_side_effect(*args, **kwargs):
+                cmd = args[0]
+                if 'worktree' in cmd and 'remove' in cmd:
+                    raise subprocess.CalledProcessError(
+                        1, cmd,
+                        stderr="error: failed to delete 'worktrees/task-xyz': Permission denied"
+                    )
+                else:
+                    return Mock(returncode=0, stderr='', stdout='')
+            
+            mock_run.side_effect = run_side_effect
+            
+            result = cleanup_worktree('incredible_icm-42')
+            
+            assert result is True
+            mock_force.assert_called_once()
+
+    def test_cleanup_worktree_being_used_by_another_process(self):
+        """Test that 'being used by another process' triggers force removal."""
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.list_worktrees') as mock_list, \
+             patch('pathlib.Path.exists', return_value=True), \
+             patch('pokepoke.worktrees.force_remove_directory', return_value=False) as mock_force, \
+             patch('builtins.print') as mock_print:
+            
+            mock_list.return_value = [
+                {'path': 'worktrees/task-incredible_icm-42', 'branch': 'refs/heads/task/incredible_icm-42'}
+            ]
+            
+            def run_side_effect(*args, **kwargs):
+                cmd = args[0]
+                if 'worktree' in cmd and 'remove' in cmd:
+                    raise subprocess.CalledProcessError(
+                        1, cmd,
+                        stderr="error: The process cannot access the file because it is being used by another process"
+                    )
+                elif 'branch' in cmd:
+                    return Mock(returncode=0, stderr='', stdout='')
+                return Mock(returncode=0, stderr='', stdout='')
+            
+            mock_run.side_effect = run_side_effect
+            
+            result = cleanup_worktree('incredible_icm-42')
+            
+            # Should still return True because branch deletion succeeded
+            assert result is True
+            mock_force.assert_called_once()
+            print_calls = [str(c) for c in mock_print.call_args_list]
+            assert any('Could not remove worktree directory after retries' in c for c in print_calls)
+
+
+class TestForceRemoveDirectory:
+    """Tests for force_remove_directory helper."""
+
+    def test_force_remove_git_worktree_force_succeeds(self):
+        """Test that git worktree remove --force succeeds on first attempt."""
+        with patch('subprocess.run') as mock_run:
+            mock_run.return_value = Mock(returncode=0, stderr='', stdout='')
+            
+            result = force_remove_directory(Path("worktrees/task-test"))
+            
+            assert result is True
+            call_args = mock_run.call_args_list[0][0][0]
+            assert call_args[:4] == ['git', 'worktree', 'remove', '--force']
+            assert 'task-test' in call_args[4]
+
+    def test_force_remove_falls_back_to_shutil(self):
+        """Test fallback to shutil.rmtree when git worktree remove --force fails."""
+        with patch('subprocess.run') as mock_run, \
+             patch('shutil.rmtree') as mock_rmtree:
+            
+            def run_side_effect(*args, **kwargs):
+                cmd = args[0]
+                if 'prune' in cmd:
+                    return Mock(returncode=0, stderr='', stdout='')
+                raise subprocess.CalledProcessError(1, cmd, stderr='failed')
+            
+            mock_run.side_effect = run_side_effect
+            mock_rmtree.return_value = None
+            
+            result = force_remove_directory(Path("worktrees/task-test"))
+            
+            assert result is True
+            mock_rmtree.assert_called_once()
+
+    def test_force_remove_retries_on_permission_error(self):
+        """Test retry logic when both git and shutil fail."""
+        with patch('subprocess.run') as mock_run, \
+             patch('shutil.rmtree') as mock_rmtree, \
+             patch('time.sleep') as mock_sleep:
+            
+            def run_side_effect(*args, **kwargs):
+                cmd = args[0]
+                if 'prune' in cmd:
+                    return Mock(returncode=0, stderr='', stdout='')
+                raise subprocess.CalledProcessError(1, cmd, stderr='failed')
+            
+            mock_run.side_effect = run_side_effect
+            # Fail twice, succeed on third attempt
+            mock_rmtree.side_effect = [PermissionError("locked"), PermissionError("locked"), None]
+            
+            result = force_remove_directory(Path("worktrees/task-test"))
+            
+            assert result is True
+            assert mock_sleep.call_count == 2
+
+    def test_force_remove_returns_false_after_all_retries_exhausted(self):
+        """Test that False is returned when all retries are exhausted."""
+        with patch('subprocess.run') as mock_run, \
+             patch('shutil.rmtree') as mock_rmtree, \
+             patch('time.sleep'):
+            
+            def run_side_effect(*args, **kwargs):
+                cmd = args[0]
+                if 'prune' in cmd:
+                    return Mock(returncode=0, stderr='', stdout='')
+                raise subprocess.CalledProcessError(1, cmd, stderr='failed')
+            
+            mock_run.side_effect = run_side_effect
+            mock_rmtree.side_effect = PermissionError("locked")
+            
+            result = force_remove_directory(Path("worktrees/task-test"))
+            
+            assert result is False
+
+    def test_handle_remove_readonly(self):
+        """Test that _handle_remove_readonly clears read-only and retries."""
+        with patch('os.chmod') as mock_chmod:
+            mock_func = Mock()
+            _handle_remove_readonly(mock_func, '/some/path', None)
+            
+            mock_chmod.assert_called_once_with('/some/path', 0o200)
+            mock_func.assert_called_once_with('/some/path')
+
+
+class TestCleanupAfterMergePermissionDenied:
+    """Tests for _cleanup_after_merge with permission denied errors."""
+
+    def test_cleanup_after_merge_permission_denied_force_removes(self):
+        """Test that permission denied in _cleanup_after_merge triggers force removal."""
+        from pokepoke.worktrees import _cleanup_after_merge
+        
+        with patch('subprocess.run') as mock_run, \
+             patch('pathlib.Path.exists', return_value=True), \
+             patch('pokepoke.worktrees.force_remove_directory', return_value=True) as mock_force, \
+             patch('builtins.print') as mock_print:
+            
+            def run_side_effect(*args, **kwargs):
+                cmd = args[0]
+                if 'worktree' in cmd and 'remove' in cmd:
+                    raise subprocess.CalledProcessError(
+                        1, cmd,
+                        stderr="Permission denied"
+                    )
+                return Mock(returncode=0, stderr='', stdout='')
+            
+            mock_run.side_effect = run_side_effect
+            
+            _cleanup_after_merge(Path("worktrees/task-test"), "task/test-branch")
+            
+            mock_force.assert_called_once()
+            print_calls = [str(c) for c in mock_print.call_args_list]
+            assert any('Force-removed worktree' in c for c in print_calls)
+
+    def test_cleanup_after_merge_permission_denied_force_fails(self):
+        """Test fallback message when force removal also fails."""
+        from pokepoke.worktrees import _cleanup_after_merge
+        
+        with patch('subprocess.run') as mock_run, \
+             patch('pathlib.Path.exists', return_value=True), \
+             patch('pokepoke.worktrees.force_remove_directory', return_value=False) as mock_force, \
+             patch('builtins.print') as mock_print:
+            
+            def run_side_effect(*args, **kwargs):
+                cmd = args[0]
+                if 'worktree' in cmd and 'remove' in cmd:
+                    raise subprocess.CalledProcessError(
+                        1, cmd,
+                        stderr="Permission denied"
+                    )
+                return Mock(returncode=0, stderr='', stdout='')
+            
+            mock_run.side_effect = run_side_effect
+            
+            _cleanup_after_merge(Path("worktrees/task-test"), "task/test-branch")
+            
+            mock_force.assert_called_once()
+            print_calls = [str(c) for c in mock_print.call_args_list]
+            assert any('Could not remove worktree after retries' in c for c in print_calls)
+            assert any('Merge successful' in c for c in print_calls)
 
 
 class TestListWorktrees:
