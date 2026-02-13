@@ -190,7 +190,7 @@ class MaintenanceScheduler:
         stat_attr = _AGENT_STAT_ATTRS.get(agent_name)
         if stat_attr and hasattr(session_stats, stat_attr):
             with self._stats_lock:
-                setattr(session_stats, stat_attr, getattr(session_stats, stat_attr) + 1)
+                session_stats.record_agent_run(agent_name)
 
         # Run the agent
         if agent_name in _SPECIAL_AGENTS:
@@ -209,7 +209,7 @@ class MaintenanceScheduler:
             with self._stats_lock:
                 aggregate_stats(session_stats, result)
                 if agent_name == "Janitor":
-                    session_stats.janitor_lines_removed += result.lines_removed
+                    session_stats.record_janitor_lines_removed(result.lines_removed)
             run_logger.log_maintenance(log_key, f"{agent_name} Agent completed successfully")
         else:
             run_logger.log_maintenance(log_key, f"{agent_name} Agent failed")

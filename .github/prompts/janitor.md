@@ -72,7 +72,32 @@ Use `microsoft.docs.mcp` for:
 2. **Delete Safely**: Remove with comprehensive testing
 3. **Simplify Incrementally**: One concept at a time
 4. **Validate Continuously**: Test after each removal
-5. **Document Nothing**: Let code speak for itself
+5. **Commit After Each Change**: See commit workflow below
+6. **Document Nothing**: Let code speak for itself
+
+## ⚠️ CRITICAL: Commit Workflow
+
+**You MUST commit your changes frequently.** Do NOT make all changes and leave them uncommitted.
+
+### Rules:
+- **Commit after every logical unit of work** (e.g., removing one unused function, cleaning one file, updating one dependency)
+- **Keep commits small and focused** - one concern per commit
+- **Run `git add <files>` then `git commit -m "type(scope): description"`** after each change
+- **If a commit fails pre-commit validation**, read the error output carefully and fix the issues before trying again
+- **Never leave uncommitted changes** at the end of your session
+
+### Commit message format:
+```
+refactor(scope): remove unused function X
+chore(deps): remove unused dependency Y
+refactor(scope): simplify conditional logic in Z
+```
+
+### If pre-commit hooks fail:
+1. Read the error message carefully
+2. Fix the specific issue (test failure, coverage, lint error)
+3. Stage the fix and retry the commit
+4. Do NOT skip or bypass hooks - fix the code instead
 
 ## Analysis Priority
 

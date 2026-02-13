@@ -145,6 +145,30 @@ def get_issue_dependencies(issue_id: str) -> Optional[IssueWithDependencies]:
     return IssueWithDependencies(**filtered_issue)
 
 
+def has_unmet_blocking_dependencies(item_id: str) -> bool:
+    """Check if an item has any unmet blocking dependencies.
+    
+    An item should not be worked on if it has dependencies with type 'blocks'
+    that are not in 'closed' status.
+    
+    Args:
+        item_id: The issue ID to check.
+        
+    Returns:
+        True if the item has unmet blocking dependencies, False otherwise.
+    """
+    issue = get_issue_dependencies(item_id)
+    if not issue or not issue.dependencies:
+        return False
+    
+    # Check if any blocking dependencies are not closed
+    for dep in issue.dependencies:
+        if dep.dependency_type == 'blocks' and dep.status != 'closed':
+            return True
+    
+    return False
+
+
 def get_beads_stats() -> Optional[BeadsStats]:
     """Get current beads database statistics.
     

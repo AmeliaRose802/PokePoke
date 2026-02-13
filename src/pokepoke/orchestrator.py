@@ -20,7 +20,7 @@ from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner, c
 from pokepoke import terminal_ui
 from pokepoke.maintenance_state import increment_items_completed
 from pokepoke.repo_check import check_and_commit_main_repo
-from pokepoke.maintenance import run_periodic_maintenance, aggregate_stats
+from pokepoke.maintenance import run_periodic_maintenance
 from pokepoke.shutdown import is_shutting_down, request_shutdown
 from pokepoke.model_stats_store import record_completion, print_model_leaderboard
 
@@ -61,6 +61,25 @@ def _check_beads_available() -> bool:
     return True
 
 
+def _finalize_session(
+    session_stats: SessionStats,
+    start_time: float,
+    items_completed: int,
+    total_requests: int,
+    run_logger: RunLogger,
+) -> None:
+    """Collect ending stats, print summary, and clean up UI."""
+    try:
+        session_stats.set_ending_beads_stats(get_beads_stats())
+    except KeyboardInterrupt:
+        print("⚠️  Stats collection interrupted, skipping...")
+        session_stats.set_ending_beads_stats(None)
+    elapsed = time.time() - start_time
+    print_stats(items_completed, total_requests, elapsed, session_stats)
+    run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
+    clear_terminal_banner()
+
+
 def run_orchestrator(interactive: bool = True, continuous: bool = False, run_beta_first: bool = False) -> int:
     """Main orchestrator loop.
     
@@ -76,10 +95,6 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
     terminal_ui.ui.update_header("PokePoke", f"Initializing {interactive and 'Interactive' or 'Autonomous'} Mode...")
 
     try:
-        # TELLTALE: Version identifier to verify correct code is running
-        print("🔷 PokePoke MASTER-MERGED-v2 (2026-01-25 post-worktree-fix)")
-        print("=" * 50)
-        
         # Initialize unique agent name for this run
         agent_name = initialize_agent_name()
         os.environ['AGENT_NAME'] = agent_name
@@ -112,7 +127,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         session_stats = SessionStats(agent_stats=AgentStats())
         print("📊 Recording starting beads statistics...")
         run_logger.log_orchestrator("Recording starting beads statistics")
-        session_stats.starting_beads_stats = get_beads_stats()
+        session_stats.set_starting_beads_stats(get_beads_stats())
         
         # Set session start time for real-time clock updates
         terminal_ui.ui.set_session_start_time(start_time)
@@ -128,11 +143,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             beta_stats = run_beta_tester(repo_root=main_repo_path)
             if beta_stats:
                 # Aggregate beta tester stats
-                session_stats.agent_stats.wall_duration += beta_stats.wall_duration
-                session_stats.agent_stats.api_duration += beta_stats.api_duration
-                session_stats.agent_stats.input_tokens += beta_stats.input_tokens
-                session_stats.agent_stats.output_tokens += beta_stats.output_tokens
-                session_stats.agent_stats.premium_requests += beta_stats.premium_requests
+                session_stats.record_agent_stats(beta_stats)
             print("✅ Beta Tester completed\n")
             
         # Track items that failed claiming to avoid infinite retry loops
@@ -158,14 +169,9 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             
             if selected_item is None:
                 terminal_ui.ui.stop_and_capture()
-                # Get ending stats and print session stats before exiting
-                session_stats.ending_beads_stats = get_beads_stats()
-                elapsed = time.time() - start_time
                 print("\n👋 Exiting PokePoke - no work items available.")
                 run_logger.log_orchestrator("No work items available - exiting")
-                print_stats(items_completed, total_requests, elapsed, session_stats)
-                run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
-                clear_terminal_banner()
+                _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
                 return 0
             
             # Process the selected item
@@ -193,27 +199,26 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             
             total_requests += requests
             if requests > 1:
-                session_stats.agent_stats.retries += (requests - 1)
+                session_stats.record_retries(requests - 1)
             
-            session_stats.work_agent_runs += 1
-            session_stats.cleanup_agent_runs += cleanup_runs
-            session_stats.gate_agent_runs += gate_runs
+            session_stats.record_agent_run("work")
+            session_stats.record_agent_run("cleanup", cleanup_runs)
+            session_stats.record_agent_run("gate", gate_runs)
             
             # Aggregate statistics
             if item_stats:
-                aggregate_stats(session_stats, item_stats)
+                session_stats.record_agent_stats(item_stats)
             
             # Record model completion for A/B testing
             if model_completion:
-                session_stats.model_completions.append(model_completion)
+                session_stats.record_model_completion(model_completion)
                 # Persist to .pokepoke/model_stats.json for cross-session tracking
                 record_completion(model_completion)
             
             # Increment counter on successful processing
             if success:
                 items_completed += 1
-                session_stats.items_completed = items_completed
-                session_stats.completed_items_list.append(selected_item)
+                session_stats.record_completion(selected_item, items_completed)
                 total_persistent_count = increment_items_completed()
                 print(f"\n📈 Items completed this session: {items_completed}")
                 print(f"📈 Total items completed (lifetime): {total_persistent_count}")
@@ -227,11 +232,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             # Decide whether to continue
             if not continuous:
                 terminal_ui.ui.stop_and_capture()
-                session_stats.ending_beads_stats = get_beads_stats()
-                elapsed = time.time() - start_time
-                print_stats(items_completed, total_requests, elapsed, session_stats)
-                run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
-                clear_terminal_banner()
+                _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
                 return 0 if success else 1
             
             if interactive:
@@ -245,12 +246,8 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
                 
                 if cont and cont != 'y':
                     terminal_ui.ui.stop_and_capture()
-                    session_stats.ending_beads_stats = get_beads_stats()
-                    elapsed = time.time() - start_time
                     print("\n👋 Exiting PokePoke.")
-                    print_stats(items_completed, total_requests, elapsed, session_stats)
-                    run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
-                    clear_terminal_banner()
+                    _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
                     return 0
             else:
                 terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", "Sleeping...")
@@ -262,12 +259,8 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
 
         # Shutdown requested - clean exit
         terminal_ui.ui.stop_and_capture()
-        session_stats.ending_beads_stats = get_beads_stats()
-        elapsed = time.time() - start_time
         print("\n\ud83d\udc4b Shutdown requested - exiting PokePoke.")
-        print_stats(items_completed, total_requests, elapsed, session_stats)
-        run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
-        clear_terminal_banner()
+        _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
         return 0
     
     except KeyboardInterrupt:
@@ -276,40 +269,27 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
         terminal_ui.ui.stop_and_capture()
         print("\n\n⚠️  Interrupted by user (Ctrl+C)")
         print("📊 Collecting final statistics...")
-        
-        # Try to get ending stats, but don't fail if interrupted again
-        try:
-            session_stats.ending_beads_stats = get_beads_stats()
-        except KeyboardInterrupt:
-            print("⚠️  Stats collection interrupted, skipping...")
-            session_stats.ending_beads_stats = None
-        
-        elapsed = time.time() - start_time
         print("\n👋 Exiting PokePoke.")
-        print_stats(items_completed, total_requests, elapsed, session_stats)
-        run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
-        clear_terminal_banner()
+        _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
         return 0
     except Exception as e:
         terminal_ui.ui.stop_and_capture()
-        print("\n📊 Collecting final statistics...")
-        try:
-            session_stats.ending_beads_stats = get_beads_stats()
-        except KeyboardInterrupt:
-            print("⚠️  Stats collection interrupted, skipping...")
-            session_stats.ending_beads_stats = None
-        
-        elapsed = time.time() - start_time
         print(f"\n❌ Error: {e}")
         import traceback
         traceback.print_exc()
-        print_stats(items_completed, total_requests, elapsed, session_stats)
         run_logger.log_orchestrator(f"Error: {e}", level="ERROR")
-        run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
-        clear_terminal_banner()
+        _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
         return 1
     finally:
         terminal_ui.ui.stop()
+        # Ensure merge queue is properly shut down
+        try:
+            from pokepoke.merge_queue import get_merge_queue
+            merge_queue = get_merge_queue()
+            if merge_queue.is_running:
+                merge_queue.shutdown(timeout=10.0)
+        except Exception:
+            pass  # Best effort cleanup
 
 
 

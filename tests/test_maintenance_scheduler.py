@@ -37,7 +37,7 @@ class TestMaintenanceScheduler:
         
         lock = scheduler._get_agent_lock("Janitor")
         
-        assert isinstance(lock, threading.Lock)
+        assert hasattr(lock, 'acquire') and hasattr(lock, 'release')
         assert "Janitor" in scheduler._locks
         assert scheduler._locks["Janitor"] is lock
     

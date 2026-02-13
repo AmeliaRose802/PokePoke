@@ -584,6 +584,42 @@ class TestMergeWorktree:
             assert success is True
             assert unmerged_files == []
             assert any('bd sync returned non-zero' in str(call) for call in mock_print.call_args_list)
+
+    def test_merge_worktree_bd_sync_retries_on_access_denied(self):
+        """Test that bd sync retries when JSONL file is locked."""
+        with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
+             patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.get_default_branch', return_value='ameliapayne/dev'), \
+             patch('pokepoke.worktrees.is_worktree_merged', return_value=True), \
+             patch('pathlib.Path.exists', return_value=True), \
+             patch('time.sleep') as mock_sleep, \
+             patch('builtins.print') as mock_print:
+
+            sync_calls = {'count': 0}
+
+            def run_side_effect(*args, **kwargs):
+                cmd = args[0]
+                if cmd[:2] == ['bd', 'sync']:
+                    sync_calls['count'] += 1
+                    if sync_calls['count'] == 1:
+                        return Mock(stdout='', stderr='Access is denied while replacing issues.jsonl', returncode=1)
+                    return Mock(stdout='', stderr='', returncode=0)
+                elif 'branch' in cmd and '--show-current' in cmd:
+                    return Mock(stdout='ameliapayne/dev\n', returncode=0)
+                elif 'status' in cmd and '--porcelain' in cmd:
+                    return Mock(stdout='', returncode=0)
+                else:
+                    return Mock(stdout='', stderr='', returncode=0)
+
+            mock_run.side_effect = run_side_effect
+
+            success, unmerged_files = merge_worktree('incredible_icm-42')
+
+            assert success is True
+            assert unmerged_files == []
+            assert sync_calls['count'] == 2
+            mock_sleep.assert_called_once()
+            assert any('retrying in' in str(call) for call in mock_print.call_args_list)
     
     def test_merge_worktree_with_beads_changes(self):
         """Test merge with uncommitted beads changes in main repo."""

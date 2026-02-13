@@ -7,9 +7,6 @@ github-copilot-sdk>=0.1.0
 # Configuration
 pyyaml>=6.0
 
-# Terminal UI
-rich>=13.0.0
-
 # Desktop GUI (native window via Edge WebView2)
 pywebview>=5.0
 

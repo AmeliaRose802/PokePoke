@@ -11,7 +11,8 @@ Implementation is split across:
 from .beads_query import (
     get_ready_work_items,
     get_issue_dependencies,
-    get_beads_stats
+    get_beads_stats,
+    has_unmet_blocking_dependencies
 )
 
 from .beads_hierarchy import (
@@ -28,7 +29,6 @@ from .beads_management import (
     close_item,
     create_issue,
     filter_work_items,
-    get_first_ready_work_item,
     select_next_hierarchical_item,
     assign_and_sync_item,
     add_comment
@@ -39,6 +39,7 @@ __all__ = [
     'get_ready_work_items',
     'get_issue_dependencies',
     'get_beads_stats',
+    'has_unmet_blocking_dependencies',
     
     # Hierarchy operations
     'get_children',
@@ -53,7 +54,6 @@ __all__ = [
     'close_item',
     'create_issue',
     'filter_work_items',
-    'get_first_ready_work_item',
     'select_next_hierarchical_item',
     'assign_and_sync_item',
     'add_comment',
