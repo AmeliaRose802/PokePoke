@@ -1131,7 +1131,7 @@ class TestProcessWorkItem:
         
         assert success is False
         assert count == 1
-        mock_cleanup.assert_called_once_with("task-1", force=True)
+        mock_cleanup.assert_called_with("task-1", force=True)
     
     @patch('pokepoke.workflow.add_comment')
     @patch('pokepoke.workflow.run_gate_agent')
@@ -1427,7 +1427,7 @@ class TestProcessWorkItem:
         )
 
         assert success is False
-        mock_cleanup_worktree.assert_called_once_with(item.id, force=True)
+        mock_cleanup_worktree.assert_called_with(item.id, force=True)
 
     @patch('pokepoke.workflow.run_gate_agent')
     @patch('pokepoke.workflow.run_beta_tester')

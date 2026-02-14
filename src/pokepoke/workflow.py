@@ -47,6 +47,7 @@ def process_work_item(
     """
     # Register this agent for shutdown coordination
     register_agent()
+    worktree_path: Optional[Path] = None
     
     try:
         start_time = time.time()
@@ -254,6 +255,12 @@ def process_work_item(
             return False, request_count, None, cleanup_agent_runs, gate_agent_runs, model_completion
 
     finally:
+        # Best-effort worktree cleanup to prevent resource leaks on unhandled exceptions
+        try:
+            if worktree_path is not None:
+                cleanup_worktree(item.id, force=True)
+        except Exception:
+            pass
         # Always unregister agent when done, regardless of success/failure
         unregister_agent()
 

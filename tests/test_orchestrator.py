@@ -368,6 +368,53 @@ class TestProcessWorkItem:
         assert cleanup_runs == 0  # No cleanup agents run on failure
         mock_invoke.assert_called_once()  # Copilot was invoked
 
+    @patch('pokepoke.workflow.run_gate_agent')
+    @patch('subprocess.run')
+    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('pokepoke.workflow.invoke_copilot')
+    @patch('pokepoke.workflow.create_worktree')
+    def test_process_work_item_cleans_worktree_on_unhandled_exception(
+        self,
+        mock_create_wt: Mock,
+        mock_invoke: Mock,
+        mock_cleanup: Mock,
+        mock_subprocess: Mock,
+        mock_gate_agent: Mock
+    ) -> None:
+        """Test that worktree is cleaned up when an unhandled exception occurs."""
+        item = BeadsWorkItem(
+            id="task-1",
+            title="Task",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task"
+        )
+        mock_create_wt.return_value = '/tmp/worktree'
+
+        # Mock subprocess for bd assign/sync
+        def subprocess_side_effect(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get('args', [])
+            if isinstance(cmd, list) and len(cmd) > 0:
+                if cmd[0] == 'bd':
+                    if 'show' in cmd:
+                        return Mock(stdout='[{"id": "task-1", "title": "Test", "status": "open", "priority": 1, "issue_type": "task"}]', returncode=0)
+                    elif 'sync' in cmd or 'update' in cmd:
+                        return Mock(stdout="", stderr="", returncode=0)
+            return Mock(stdout="", returncode=0)
+        mock_subprocess.side_effect = subprocess_side_effect
+
+        # Copilot raises an unhandled exception
+        mock_invoke.side_effect = RuntimeError("Unexpected crash")
+
+        try:
+            process_work_item(item, interactive=False)
+        except RuntimeError:
+            pass
+
+        # Worktree cleanup should have been called in the finally block
+        mock_cleanup.assert_called_with("task-1", force=True)
+
 
 class TestRunOrchestrator:
     """Test orchestrator main loop."""
