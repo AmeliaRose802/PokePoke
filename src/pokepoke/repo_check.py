@@ -4,6 +4,8 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pokepoke.git_operations import categorize_git_changes
+
 if TYPE_CHECKING:
     from pokepoke.logging_utils import RunLogger
 
@@ -45,26 +47,16 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
     uncommitted = status_result.stdout.strip()
     if uncommitted:
         lines = uncommitted.split('\n')
-        # Categorize changes for proper handling
-        beads_changes = [line for line in lines if line and '.beads/' in line]
-        worktree_changes = [line for line in lines if line and 'worktrees/' in line and not line.startswith('??')]
-        untracked_files = [line for line in lines if line and line.startswith('??')]
-        other_changes = [
-            line for line in lines
-            if line
-            and '.beads/' not in line
-            and 'worktrees/' not in line
-            and not line.startswith('??')
-        ]
+        changes = categorize_git_changes(lines)
         
         # Handle problematic changes that need agent intervention
-        if other_changes:
+        if changes['other']:
             print("\n⚠️  Main repository has uncommitted changes:")
             run_logger.log_orchestrator("Main repository has uncommitted changes", level="WARNING")
-            for line in other_changes[:10]:
+            for line in changes['other'][:10]:
                 print(f"   {line}")
-            if len(other_changes) > 10:
-                print(f"   ... and {len(other_changes) - 10} more")
+            if len(changes['other']) > 10:
+                print(f"   ... and {len(changes['other']) - 10} more")
             
             # Immediately run cleanup agent instead of delegating
             print("\n🤖 Launching cleanup agent to resolve uncommitted changes...")
@@ -98,12 +90,12 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
         
         # Beads changes are handled by beads' own sync mechanism (bd sync)
         # Do NOT manually commit them - beads daemon handles this automatically
-        if beads_changes:
+        if changes['beads']:
             print("ℹ️  Beads database changes detected - will be synced by beads daemon")
             print("ℹ️  Run 'bd sync' to force immediate sync if needed")
         
         # Auto-resolve worktree cleanup deletions
-        if worktree_changes:
+        if changes['worktree']:
             print("🧹 Committing worktree cleanup changes...")
             subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8', errors='replace', cwd=str(repo_path))
             subprocess.run(

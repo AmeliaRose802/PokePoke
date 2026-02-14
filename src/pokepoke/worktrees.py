@@ -11,6 +11,7 @@ from pokepoke.git_operations import (
     branch_exists,
     execute_merge_sequence,
     validate_post_merge,
+    categorize_git_changes,
 )
 from pokepoke.beads_management import run_bd_sync_with_retry
 from pokepoke.worktree_cleanup import force_remove_directory
@@ -312,37 +313,27 @@ def _sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
         ).stdout.strip()
         
         if main_status:
-            # Categorize changes for proper handling
             lines = main_status.split('\n')
-            beads_changes = [line for line in lines if line and '.beads/' in line]
-            worktree_changes = [line for line in lines if line and 'worktrees/' in line and not line.startswith('??')]
-            untracked_files = [line for line in lines if line and line.startswith('??')]
-            other_changes = [
-                line for line in lines
-                if line
-                and '.beads/' not in line
-                and 'worktrees/' not in line
-                and not line.startswith('??')
-            ]
+            changes = categorize_git_changes(lines)
             
             # Block merge if there are problematic changes
-            if other_changes:
+            if changes['other']:
                 print("⚠️  Main repo has uncommitted changes:")
-                for line in other_changes[:10]:
+                for line in changes['other'][:10]:
                     print(f"   {line}")
-                if len(other_changes) > 10:
-                    print(f"   ... and {len(other_changes) - 10} more")
+                if len(changes['other']) > 10:
+                    print(f"   ... and {len(changes['other']) - 10} more")
                 print("❌ Cannot merge: main repo has uncommitted non-beads changes")
                 return False
             
-            if beads_changes:
+            if changes['beads']:
                 print("🔧 Committing beads database changes...")
                 subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8', errors='replace')
                 subprocess.run(["git", "commit", "-m", f"chore: sync beads before merge of {branch_name}"],
                              check=True, encoding='utf-8', errors='replace')
                 print("✅ Beads changes committed")
             
-            if worktree_changes:
+            if changes['worktree']:
                 print("🧹 Committing worktree cleanup changes...")
                 subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8', errors='replace')
                 subprocess.run(["git", "commit", "-m", "chore: cleanup deleted worktree directories"],

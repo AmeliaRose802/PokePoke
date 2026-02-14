@@ -17,20 +17,32 @@ __all__ = [
     'is_merge_in_progress', 'get_unmerged_files', 'abort_merge',
     'get_merge_conflict_details', 'has_uncommitted_changes',
     'execute_merge_sequence', 'check_main_repo_ready_for_merge',
+    'categorize_git_changes',
 ]
+
+
+def categorize_git_changes(lines: list[str]) -> dict[str, list[str]]:
+    """Categorize git status --porcelain lines into beads, worktree, untracked, and other changes."""
+    return {
+        'beads': [line for line in lines if line and '.beads/' in line],
+        'worktree': [line for line in lines if line and 'worktrees/' in line and not line.startswith('??')],
+        'untracked': [line for line in lines if line and line.startswith('??')],
+        'other': [
+            line for line in lines
+            if line
+            and '.beads/' not in line
+            and 'worktrees/' not in line
+            and not line.startswith('??')
+        ],
+    }
 
 def has_uncommitted_changes(cwd: Optional[str] = None) -> bool:
     """Check if there are uncommitted changes in the given directory."""
     try:
         result = subprocess.run(
             ["git", "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            check=True,
-            timeout=10,
-            cwd=cwd
+            capture_output=True, text=True, encoding='utf-8',
+            errors='replace', check=True, timeout=10, cwd=cwd
         )
         return bool(result.stdout.strip())
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
@@ -41,14 +53,9 @@ def commit_all_changes(message: str = "Auto-commit by PokePoke", cwd: Optional[s
     """Commit all changes, triggering pre-commit hooks for validation."""
     try:
         subprocess.run(
-            ["git", "add", "-A"],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            timeout=240,
-            cwd=cwd
+            ["git", "add", "-A"], check=True, capture_output=True,
+            text=True, encoding='utf-8', errors='replace',
+            timeout=240, cwd=cwd
         )
         
         result = subprocess.run(
@@ -78,30 +85,25 @@ def commit_all_changes(message: str = "Auto-commit by PokePoke", cwd: Optional[s
 def verify_main_repo_clean(cwd: Optional[str] = None) -> Tuple[bool, str, list[str]]:
     """Verify repository has no uncommitted non-beads changes.
     
-    Returns:
-        Tuple of (is_clean, uncommitted_output, non_beads_changes)
-        - is_clean: True if only beads changes or clean
-        - uncommitted_output: Raw git status output
-        - non_beads_changes: List of non-beads changed files
+    Returns (is_clean, uncommitted_output, non_beads_changes).
     """
     try:
         status_result = subprocess.run(
             ["git", "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            check=True,
-            timeout=10,
-            cwd=cwd
+            capture_output=True, text=True, encoding='utf-8',
+            errors='replace', check=True, timeout=10, cwd=cwd
         )
         
         uncommitted = status_result.stdout.strip()
         if uncommitted:
-            lines = uncommitted.split('\n')
-            # Exclude .beads/ and worktrees/ from uncommitted changes check
-            non_beads_changes = [line for line in lines if line and '.beads/' not in line and 'worktrees/' not in line]
-            return len(non_beads_changes) == 0, uncommitted, non_beads_changes
+            changes = categorize_git_changes(uncommitted.split('\n'))
+            # Exclude untracked files under .beads/ and worktrees/
+            relevant_untracked = [
+                l for l in changes['untracked']
+                if '.beads/' not in l and 'worktrees/' not in l
+            ]
+            non_beads = changes['other'] + relevant_untracked
+            return len(non_beads) == 0, uncommitted, non_beads
         
         return True, "", []
     except Exception as e:
