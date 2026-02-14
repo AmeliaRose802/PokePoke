@@ -14,3 +14,21 @@ if sys.platform == 'win32':
     # Set console code page to UTF-8 for Windows
     os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
 
+import pytest
+
+from pokepoke.types import BeadsWorkItem
+
+
+@pytest.fixture
+def sample_work_item() -> BeadsWorkItem:
+    """Create a sample work item for testing."""
+    return BeadsWorkItem(
+        id="test-123",
+        title="Test work item",
+        description="Test description",
+        status="in_progress",
+        priority=1,
+        issue_type="task",
+        labels=["testing", "coverage"]
+    )
+

@@ -1,26 +1,11 @@
 """Tests for copilot.py module (SDK-based implementation)."""
 
-import pytest
 from unittest.mock import patch, MagicMock
 
 from pokepoke.copilot import (
     invoke_copilot
 )
-from pokepoke.types import BeadsWorkItem, CopilotResult
-
-
-@pytest.fixture
-def sample_work_item():
-    """Create a sample work item for testing."""
-    return BeadsWorkItem(
-        id="test-123",
-        title="Test work item",
-        description="Test description",
-        status="in_progress",
-        priority=1,
-        issue_type="task",
-        labels=["testing", "coverage"]
-    )
+from pokepoke.types import CopilotResult
 
 
 class TestInvokeCopilot:

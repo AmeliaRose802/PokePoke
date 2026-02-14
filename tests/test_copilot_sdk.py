@@ -10,20 +10,6 @@ from pokepoke.copilot_sdk import (
 from pokepoke.types import BeadsWorkItem
 
 
-@pytest.fixture
-def sample_work_item():
-    """Create a sample work item for testing."""
-    return BeadsWorkItem(
-        id="test-123",
-        title="Test work item",
-        description="Test description",
-        status="in_progress",
-        priority=1,
-        issue_type="task",
-        labels=["testing", "coverage"]
-    )
-
-
 class TestBuildPromptFromWorkItem:
     """Tests for build_prompt_from_work_item function."""
     
