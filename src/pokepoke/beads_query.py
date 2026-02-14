@@ -40,14 +40,10 @@ def _get_main_repo_root() -> Optional[Path]:
     Returns:
         Path to the main repo root, or None if not in a git repository.
     """
+    from .git_operations import get_main_repo_root
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--git-common-dir"],
-            capture_output=True, text=True, encoding='utf-8', check=True
-        )
-        git_common_dir = Path(result.stdout.strip())
-        return git_common_dir.parent
-    except subprocess.CalledProcessError:
+        return get_main_repo_root()
+    except RuntimeError:
         return None
 
 
