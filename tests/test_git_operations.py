@@ -9,7 +9,8 @@ from src.pokepoke.git_operations import (
     handle_beads_auto_commit,
     check_main_repo_ready_for_merge,
     has_uncommitted_changes,
-    commit_all_changes
+    commit_all_changes,
+    execute_merge_sequence,
 )
 
 
@@ -407,3 +408,67 @@ class TestCommitAllChanges:
         # Should only have first 5 error lines
         error_lines = error_msg.split('\n')
         assert len(error_lines) <= 6  # 5 errors + potential join artifacts
+
+
+class TestExecuteMergeSequence:
+    """Tests for execute_merge_sequence stash handling."""
+
+    @patch('src.pokepoke.git_operations.restore_beads_stash')
+    @patch('src.pokepoke.git_operations.subprocess.run')
+    def test_stash_restored_after_pull_failure(
+        self,
+        mock_run: Mock,
+        mock_restore: Mock
+    ) -> None:
+        """Stashed beads changes trigger restore helper when pull fails."""
+
+        def side_effect(cmd, **kwargs):
+            if cmd[:2] == ["git", "checkout"]:
+                return Mock(returncode=0)
+            if cmd[:3] == ["git", "status", "--porcelain"]:
+                return Mock(stdout=" M .beads/issues.jsonl", returncode=0)
+            if cmd[:2] == ["git", "stash"] and "push" in cmd:
+                return Mock(returncode=0)
+            if cmd[:3] == ["git", "pull", "--rebase"]:
+                raise subprocess.CalledProcessError(1, cmd, stderr="conflict")
+            raise AssertionError(f"Unexpected command: {cmd}")
+
+        mock_run.side_effect = side_effect
+
+        success, message, unmerged = execute_merge_sequence("feature/foo", "main")
+
+        assert success is False
+        assert "Failed to pull with rebase" in message
+        assert unmerged == []
+        mock_restore.assert_called_once_with("git pull --rebase failure")
+
+    @patch('src.pokepoke.git_operations.restore_beads_stash')
+    @patch('src.pokepoke.git_operations.subprocess.run')
+    def test_stash_restored_after_successful_pull(
+        self,
+        mock_run: Mock,
+        mock_restore: Mock
+    ) -> None:
+        """Stashed beads changes are reapplied after successful pull/merge."""
+
+        def side_effect(cmd, **kwargs):
+            if cmd[:2] == ["git", "checkout"]:
+                return Mock(returncode=0)
+            if cmd[:3] == ["git", "status", "--porcelain"]:
+                return Mock(stdout=" M .beads/issues.jsonl", returncode=0)
+            if cmd[:2] == ["git", "stash"] and "push" in cmd:
+                return Mock(returncode=0)
+            if cmd[:3] == ["git", "pull", "--rebase"]:
+                return Mock(returncode=0)
+            if cmd[:2] == ["git", "merge"]:
+                return Mock(returncode=0)
+            raise AssertionError(f"Unexpected command: {cmd}")
+
+        mock_run.side_effect = side_effect
+
+        success, message, unmerged = execute_merge_sequence("feature/foo", "main")
+
+        assert success is True
+        assert message == ""
+        assert unmerged == []
+        mock_restore.assert_called_once_with("git pull --rebase")

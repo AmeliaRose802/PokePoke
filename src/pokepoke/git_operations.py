@@ -13,6 +13,8 @@ from .merge_conflict import (
     get_merge_conflict_details,
 )
 
+from .git_helpers import restore_beads_stash, verify_branch_pushed
+
 __all__ = [
     'is_merge_in_progress', 'get_unmerged_files', 'abort_merge',
     'get_merge_conflict_details', 'has_uncommitted_changes',
@@ -274,21 +276,6 @@ def is_worktree_clean(worktree_path: Path) -> bool:
         return False
 
 
-def verify_branch_pushed(branch_name: str) -> bool:
-    """Verify that a branch exists on the remote."""
-    try:
-        result = subprocess.run(
-            ["git", "ls-remote", "--heads", "origin", branch_name],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True
-        )
-        # Non-empty output means branch exists on remote
-        return bool(result.stdout.strip())
-    except subprocess.CalledProcessError:
-        return False
-
 def execute_merge_sequence(branch_name: str, target_branch: str) -> Tuple[bool, str, List[str]]:
     """Execute the checkout, pull, and merge sequence.
     
@@ -327,18 +314,12 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> Tuple[bool, 
     except subprocess.CalledProcessError as e:
         # Restore stash if we had one
         if stashed:
-            try:
-                subprocess.run(["git", "stash", "pop"], capture_output=True, text=True, encoding='utf-8')
-            except subprocess.CalledProcessError:
-                pass
+            restore_beads_stash("git pull --rebase failure")
         return False, f"Failed to pull with rebase: {e.stderr or str(e)}", []
     
     # Restore stashed beads changes after successful pull
     if stashed:
-        try:
-            subprocess.run(["git", "stash", "pop"], capture_output=True, text=True, encoding='utf-8')
-        except subprocess.CalledProcessError:
-            pass  # Stash pop conflict - beads will re-sync anyway
+        restore_beads_stash("git pull --rebase")
     
     try:
         subprocess.run(["git", "merge", "--no-ff", branch_name, "-m", f"Merge {branch_name}"],
