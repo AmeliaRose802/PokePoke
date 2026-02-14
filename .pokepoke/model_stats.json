@@ -118,6 +118,13 @@
       "duration_seconds": 7211.781927347183,
       "gate_passed": false,
       "timestamp": "2026-02-14T16:51:30.517404+00:00"
+    },
+    {
+      "item_id": "PokePoke-9bl1",
+      "model": "gpt-5.2",
+      "duration_seconds": 7210.91531085968,
+      "gate_passed": false,
+      "timestamp": "2026-02-14T18:54:30.987319+00:00"
     }
   ],
   "summary": {
@@ -192,14 +199,14 @@
       "last_used": "2026-02-14T11:06:38.433057+00:00"
     },
     "gpt-5.2": {
-      "total_items_attempted": 1,
+      "total_items_attempted": 2,
       "total_items_succeeded": 1,
-      "total_items_failed": 0,
-      "total_duration_seconds": 2153.3633263111115,
+      "total_items_failed": 1,
+      "total_duration_seconds": 9364.278637170792,
       "total_retries": 0,
-      "average_duration": 2153.36,
-      "success_rate": 1.0,
-      "last_used": "2026-02-14T00:21:34.763454+00:00"
+      "average_duration": 4682.14,
+      "success_rate": 0.5,
+      "last_used": "2026-02-14T18:54:30.987319+00:00"
     },
     "gpt-5.2-codex": {
       "total_items_attempted": 2,
