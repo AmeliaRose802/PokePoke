@@ -69,6 +69,13 @@
       "duration_seconds": 2153.3633263111115,
       "gate_passed": true,
       "timestamp": "2026-02-14T00:21:34.763454+00:00"
+    },
+    {
+      "item_id": "PokePoke-8grb",
+      "model": "gpt-5.1",
+      "duration_seconds": 7212.535908937454,
+      "gate_passed": false,
+      "timestamp": "2026-02-14T04:25:20.320298+00:00"
     }
   ],
   "summary": {
@@ -133,14 +140,14 @@
       "last_used": "2026-02-12T23:37:03.185672+00:00"
     },
     "gpt-5.1": {
-      "total_items_attempted": 1,
+      "total_items_attempted": 2,
       "total_items_succeeded": 0,
-      "total_items_failed": 1,
-      "total_duration_seconds": 7210.057638645172,
+      "total_items_failed": 2,
+      "total_duration_seconds": 14422.593547582626,
       "total_retries": 0,
-      "average_duration": 7210.06,
+      "average_duration": 7211.3,
       "success_rate": 0.0,
-      "last_used": "2026-02-13T23:43:16.624765+00:00"
+      "last_used": "2026-02-14T04:25:20.320298+00:00"
     },
     "gpt-5.2": {
       "total_items_attempted": 1,
