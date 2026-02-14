@@ -13,102 +13,11 @@ from .types import BeadsWorkItem, CopilotResult, RetryConfig, AgentStats
 from .prompts import PromptService
 from . import terminal_ui
 from .shutdown import is_shutting_down
-from .process_utils import wait_for_process_cleanup
 
-from .sdk_event_handler import create_event_handler
+from .process_utils import wait_for_process_cleanup
 
 if TYPE_CHECKING:
     from .logging_utils import ItemLogger
-
-
-async def _create_sdk_client_and_session(
-    current_model: str,
-    deny_write: bool,
-    cwd: Optional[str] = None
-) -> tuple[Any, Any]:  # CopilotClient, Session
-    """Create and start SDK client and session."""
-    # Create SDK client with explicit working directory for thread safety
-    client_opts: dict[str, Any] = {"cli_path": "copilot.cmd", "log_level": "info"}
-    if cwd:
-        client_opts["cwd"] = cwd
-    client = CopilotClient(client_opts)  # type: ignore[arg-type]
-    
-    print("[SDK] Starting Copilot client...")
-    await client.start()
-    
-    session_config = {"model": current_model, "streaming": True}
-    print(f"[SDK] Using model: {current_model}")
-    
-    # Add tool restrictions if needed
-    if deny_write:
-        session_config["excluded_tools"] = ["write", "edit"]
-    
-    session = await client.create_session(session_config)  # type: ignore[arg-type]
-    print(f"[SDK] Session created: {session.session_id}\n")
-    
-    return client, session
-
-
-async def _graceful_client_shutdown(client: Any) -> None:
-    """Perform graceful shutdown of SDK client with Chromium process cleanup."""
-    try:
-        print("\n[SDK] Initiating graceful client shutdown...")
-        
-        # Give Chromium subprocess time to clean up UI windows before forcing stop
-        # This prevents Chrome_WidgetWin_0 unregister failures (Error 1411)
-        await asyncio.sleep(0.5)
-        
-        # Stop the client with timeout to prevent hanging
-        try:
-            await asyncio.wait_for(client.stop(), timeout=10.0)
-            print("[SDK] Client stopped gracefully")
-            
-            # Wait for Windows processes to fully terminate
-            # This helps prevent Chrome_WidgetWin_0 class unregister errors
-            if os.name == 'nt':
-                print("[SDK] Waiting for process cleanup...")
-                wait_for_process_cleanup(max_wait=2.0)
-                
-        except asyncio.TimeoutError:
-            print("[SDK] Client stop timed out after 10s - forcing shutdown")
-            # Force stop if graceful shutdown hangs
-            try:
-                await client.stop()
-                # Still wait a bit for process cleanup even after force stop
-                if os.name == 'nt':
-                    wait_for_process_cleanup(max_wait=1.0)
-            except Exception:
-                pass  # Best effort
-                
-    except UnicodeDecodeError:
-        # The Copilot subprocess may emit non-UTF-8 bytes when killed
-        # during shutdown.  Swallow the encoding error so we get a
-        # clean exit with stats printed.
-        print("[SDK] Client stopped (encoding error suppressed)")
-    except Exception as e:
-        print(f"[SDK] Error stopping client: {e}")
-
-
-def _create_result_with_error_distinction(
-    work_item: BeadsWorkItem,
-    error_msg: str,
-    attempt_count: int = 1
-) -> CopilotResult:
-    """Create result with proper error distinction for shutdown vs interruption."""
-    if is_shutting_down():
-        return CopilotResult(
-            work_item_id=work_item.id,
-            success=False,
-            error="Session aborted due to application shutdown",
-            attempt_count=attempt_count
-        )
-    else:
-        return CopilotResult(
-            work_item_id=work_item.id,
-            success=False,
-            error=error_msg,
-            attempt_count=attempt_count
-        )
 
 
 def build_prompt_from_work_item(work_item: BeadsWorkItem) -> str:
@@ -154,17 +63,30 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     tried_fallback = False
     original_pythonioencoding = os.environ.get('PYTHONIOENCODING')
     os.environ['PYTHONIOENCODING'] = 'utf-8:replace'
-    
-    # Create client and session using helper function
-    client, session = await _create_sdk_client_and_session(current_model, deny_write, cwd)
+    # Create SDK client with explicit working directory for thread safety
+    client_opts: dict[str, Any] = {"cli_path": "copilot.cmd", "log_level": "info"}
+    if cwd:
+        client_opts["cwd"] = cwd
+    client = CopilotClient(client_opts)  # type: ignore[arg-type]
     
     try:
-        done, output_lines, errors = asyncio.Event(), [], []
+        print("[SDK] Starting Copilot client...")
+        await client.start()
         
-        # Create event handler using helper function
-        handle_event, stats = create_event_handler(done, output_lines, errors, item_logger)
-        stats['tried_fallback'] = tried_fallback
-        stats['current_model'] = current_model
+        session_config = {"model": current_model, "streaming": True}
+        print(f"[SDK] Using model: {current_model}")
+        
+        # Add tool restrictions if needed
+        if deny_write:
+            session_config["excluded_tools"] = ["write", "edit"]
+        
+        session = await client.create_session(session_config)  # type: ignore[arg-type]
+        print(f"[SDK] Session created: {session.session_id}\n")
+        
+        done, output_lines, errors = asyncio.Event(), [], []
+        pending_tool_calls, idle_task = 0, None
+        total_input_tokens = total_output_tokens = total_cache_read_tokens = 0
+        total_cache_write_tokens = turn_count = total_tool_calls = 0
         def handle_event(event: Any) -> None:
             nonlocal total_input_tokens, total_output_tokens, total_cache_read_tokens
             nonlocal total_cache_write_tokens, turn_count, total_tool_calls
@@ -373,7 +295,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             if needs_retry:
                 await send_with_retry()
         
-        # Handle timeout/interrupt cases with better error distinction
+        # Handle timeout/interrupt cases
         if timed_out:
             return CopilotResult(
                 work_item_id=work_item.id,
@@ -384,7 +306,20 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         
         if interrupted:
             # Distinguish between user interruption and internal shutdown
-            return _create_result_with_error_distinction(work_item, "Interrupted by user")
+            if is_shutting_down():
+                return CopilotResult(
+                    work_item_id=work_item.id,
+                    success=False,
+                    error="Session aborted due to application shutdown",
+                    attempt_count=1
+                )
+            else:
+                return CopilotResult(
+                    work_item_id=work_item.id,
+                    success=False,
+                    error="Interrupted by user",
+                    attempt_count=1
+                )
         
         await session.destroy()
         
@@ -418,9 +353,20 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         # Distinguish between user Ctrl+C and internal shutdown
         if is_shutting_down():
             print(f"\n[SDK] ⚠️  Session aborted due to application shutdown")
+            return CopilotResult(
+                work_item_id=work_item.id,
+                success=False,
+                error="Session aborted due to application shutdown",
+                attempt_count=1
+            )
         else:
             print(f"\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")
-        return _create_result_with_error_distinction(work_item, "Interrupted by user")
+            return CopilotResult(
+                work_item_id=work_item.id,
+                success=False,
+                error="Interrupted by user",
+                attempt_count=1
+            )
         
     except Exception as e:
         print(f"\n[SDK] Exception: {e}")
@@ -433,7 +379,42 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         
     finally:
         # Always stop the client with graceful shutdown for Chromium cleanup
-        await _graceful_client_shutdown(client)
+        try:
+            print("\n[SDK] Initiating graceful client shutdown...")
+            
+            # Give Chromium subprocess time to clean up UI windows before forcing stop
+            # This prevents Chrome_WidgetWin_0 unregister failures (Error 1411)
+            await asyncio.sleep(0.5)
+            
+            # Stop the client with timeout to prevent hanging
+            try:
+                await asyncio.wait_for(client.stop(), timeout=10.0)
+                print("[SDK] Client stopped gracefully")
+                
+                # Wait for Windows processes to fully terminate
+                # This helps prevent Chrome_WidgetWin_0 class unregister errors
+                if os.name == 'nt':
+                    print("[SDK] Waiting for process cleanup...")
+                    wait_for_process_cleanup(max_wait=2.0)
+                    
+            except asyncio.TimeoutError:
+                print("[SDK] Client stop timed out after 10s - forcing shutdown")
+                # Force stop if graceful shutdown hangs
+                try:
+                    await client.stop()
+                    # Still wait a bit for process cleanup even after force stop
+                    if os.name == 'nt':
+                        wait_for_process_cleanup(max_wait=1.0)
+                except Exception:
+                    pass  # Best effort
+                    
+        except UnicodeDecodeError:
+            # The Copilot subprocess may emit non-UTF-8 bytes when killed
+            # during shutdown.  Swallow the encoding error so we get a
+            # clean exit with stats printed.
+            print("[SDK] Client stopped (encoding error suppressed)")
+        except Exception as e:
+            print(f"[SDK] Error stopping client: {e}")
         
         # Restore original encoding setting
         if original_pythonioencoding is not None:
