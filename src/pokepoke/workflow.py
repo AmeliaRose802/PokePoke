@@ -180,7 +180,7 @@ def process_work_item(
                 return False, request_count, accumulated_stats, cleanup_agent_runs, gate_agent_runs, None
 
             # --- GATE AGENT CHECK ---
-            gate_success, gate_reason, gate_stats = run_gate_agent(item, cwd=worktree_cwd)
+            gate_success, gate_reason, gate_stats = run_gate_agent(item, cwd=worktree_cwd, work_model=selected_model)
             gate_agent_runs += 1
 
             if gate_success:
