@@ -132,19 +132,19 @@ export function StatsBar({ stats, modelLeaderboard }: Props) {
           💸 Debt:{stats?.tech_debt_agent_runs ?? 0}
         </span>
         <span className="stat">
-          🧹 Jan:{stats?.janitor_agent_runs ?? 0}
+          🧹 Janitor:{stats?.janitor_agent_runs ?? 0}
         </span>
         <span className="stat">
-          🗄️ Blog:{stats?.backlog_cleanup_agent_runs ?? 0}
+          🗄️ Backlog:{stats?.backlog_cleanup_agent_runs ?? 0}
         </span>
         <span className="stat">
-          🧼 Cln:{stats?.cleanup_agent_runs ?? 0}
+          🧼 Cleanup:{stats?.cleanup_agent_runs ?? 0}
         </span>
         <span className="stat">
           🧪 Beta:{stats?.beta_tester_agent_runs ?? 0}
         </span>
         <span className="stat">
-          🔍 Rev:{stats?.code_review_agent_runs ?? 0}
+          🔍 Review:{stats?.code_review_agent_runs ?? 0}
         </span>
       </div>
 
