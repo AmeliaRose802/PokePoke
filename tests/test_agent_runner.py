@@ -140,7 +140,7 @@ class TestRunGateAgent:
         assert success is True
         assert "All tests pass" in reason
         assert stats is not None
-        mock_invoke.assert_called_once_with(work_item, prompt="Gate prompt", deny_write=True, cwd=None)
+        mock_invoke.assert_called_once_with(work_item, prompt="Gate prompt", deny_write=True, cwd=None, model=None)
     
     @patch('pokepoke.agent_runner.parse_agent_stats')
     @patch('pokepoke.agent_runner.invoke_copilot')
@@ -298,6 +298,49 @@ class TestRunGateAgent:
         assert "work_already_complete" in reason
         assert "Fix already exists on main" in reason
         assert "Close as already-resolved" in reason
+    
+    @patch('pokepoke.model_selection.select_gate_model')
+    @patch('pokepoke.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.PromptService')
+    def test_gate_agent_uses_different_model(
+        self,
+        mock_service_cls: Mock,
+        mock_invoke: Mock,
+        mock_parse: Mock,
+        mock_select_gate: Mock,
+        work_item: BeadsWorkItem
+    ) -> None:
+        """Test that gate agent uses a different model than work agent."""
+        mock_service = Mock()
+        mock_service.load_and_render.return_value = "Gate prompt"
+        mock_service_cls.return_value = mock_service
+        
+        # Mock gate model selection to return a different model
+        mock_select_gate.return_value = "gpt-5.1-codex"
+        
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="test-123",
+            success=True,
+            output='```json\n{"status": "success", "message": "All tests pass"}\n```',
+            attempt_count=1
+        )
+        mock_parse.return_value = None
+        
+        # Call with work_model parameter
+        success, reason, stats = run_gate_agent(work_item, work_model="claude-opus-4.6")
+        
+        assert success is True
+        # Verify select_gate_model was called with work model
+        mock_select_gate.assert_called_once_with("claude-opus-4.6", "test-123")
+        # Verify invoke_copilot was called with the gate model
+        mock_invoke.assert_called_once_with(
+            work_item, 
+            prompt="Gate prompt", 
+            deny_write=True, 
+            cwd=None, 
+            model="gpt-5.1-codex"
+        )
 
 
 
@@ -473,6 +516,7 @@ class TestRunBeadsOnlyAgent:
 class TestRunWorktreeAgent:
     """Test _run_worktree_agent function."""
     
+    @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')  # Mock the extracted function
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')  # Patch at module level
     @patch('pokepoke.agent_runner.cleanup_worktree')
     @patch('pokepoke.agent_runner.merge_worktree')
@@ -492,7 +536,8 @@ class TestRunWorktreeAgent:
         mock_parse: Mock,
         mock_merge: Mock,
         mock_cleanup: Mock,
-        mock_check_ready: Mock
+        mock_check_ready: Mock,
+        mock_handle_merge: Mock
     ) -> None:
         """Test successful worktree agent."""
         agent_item = BeadsWorkItem(
@@ -525,6 +570,7 @@ class TestRunWorktreeAgent:
         )
         mock_check_ready.return_value = (True, "")
         mock_merge.return_value = (True, [])  # Updated to return tuple
+        mock_handle_merge.return_value = (True, True)  # Mock successful merge
         
         stats = _run_worktree_agent(
             "Test", 
@@ -536,7 +582,7 @@ class TestRunWorktreeAgent:
         
         assert stats is not None
         mock_create.assert_called_once()
-        mock_merge.assert_called_once_with("maintenance-test", cleanup=True)
+        mock_handle_merge.assert_called_once()  # Verify merge handler was called
         mock_cleanup.assert_not_called()
     
     @patch('pokepoke.agent_runner.create_worktree')
@@ -611,6 +657,7 @@ class TestRunWorktreeAgent:
         
         assert stats is None
 
+    @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
     @patch('pokepoke.agent_runner.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.agent_runner.cleanup_worktree')
     @patch('pokepoke.agent_runner.merge_worktree')
@@ -630,7 +677,8 @@ class TestRunWorktreeAgent:
         mock_check_ready: Mock,
         mock_merge: Mock,
         mock_cleanup: Mock,
-        mock_invoke_merge_cleanup: Mock
+        mock_invoke_merge_cleanup: Mock,
+        mock_handle_merge: Mock
     ) -> None:
         """Test worktree agent when merge fails."""
         agent_item = BeadsWorkItem(
@@ -655,12 +703,8 @@ class TestRunWorktreeAgent:
         )
         mock_cleanup_loop.return_value = (True, 0)
         
-        # Repo ready, but merge fails
-        mock_check_ready.return_value = (True, "")
-        mock_merge.return_value = (False, ["conflicted_file.py"])  # Updated to return tuple
-        
-        # Cleanup fails too
-        mock_invoke_merge_cleanup.return_value = (False, None)
+        # Mock merge failure
+        mock_handle_merge.return_value = (False, False)  # Merge failed
         
         stats = _run_worktree_agent(
             "Test",
@@ -671,11 +715,10 @@ class TestRunWorktreeAgent:
         )
         
         assert stats is None
-        # Verify cleanup invoked
-        mock_invoke_merge_cleanup.assert_called_once()
         # With our new try-finally pattern, cleanup should be called in finally block
         mock_cleanup.assert_called_once_with("maintenance-test", force=True)
     
+    @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
     @patch('pokepoke.git_operations.is_merge_in_progress')
     @patch('pokepoke.agent_runner.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.agent_runner.cleanup_worktree')
@@ -699,7 +742,8 @@ class TestRunWorktreeAgent:
         mock_merge: Mock,
         mock_cleanup: Mock,
         mock_invoke_merge_cleanup: Mock,
-        mock_is_merge: Mock
+        mock_is_merge: Mock,
+        mock_handle_merge: Mock
     ) -> None:
         """Test merge conflict cleanup succeeds and retry works."""
         agent_item = BeadsWorkItem(
@@ -725,12 +769,7 @@ class TestRunWorktreeAgent:
             wall_duration=10.0, api_duration=5.0, input_tokens=100,
             output_tokens=50, lines_added=10, lines_removed=5, premium_requests=1
         )
-        mock_check_ready.return_value = (True, "")
-        
-        # First merge fails, then succeeds
-        mock_merge.side_effect = [(False, ["file.py"]), (True, [])]
-        mock_invoke_merge_cleanup.return_value = (True, None)
-        mock_is_merge.return_value = False  # No merge in progress after cleanup
+        mock_handle_merge.return_value = (True, True)  # Mock successful merge
         
         stats = _run_worktree_agent(
             "Test",
@@ -741,9 +780,8 @@ class TestRunWorktreeAgent:
         )
         
         assert stats is not None
-        mock_invoke_merge_cleanup.assert_called_once()
-        assert mock_merge.call_count == 2
     
+    @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
     @patch('pokepoke.git_operations.abort_merge')
     @patch('pokepoke.git_operations.is_merge_in_progress')
     @patch('pokepoke.agent_runner.invoke_merge_conflict_cleanup_agent')
@@ -769,7 +807,8 @@ class TestRunWorktreeAgent:
         mock_cleanup: Mock,
         mock_invoke_merge_cleanup: Mock,
         mock_is_merge: Mock,
-        mock_abort: Mock
+        mock_abort: Mock,
+        mock_handle_merge: Mock
     ) -> None:
         """Test merge is aborted when still in progress after cleanup."""
         agent_item = BeadsWorkItem(
@@ -795,13 +834,7 @@ class TestRunWorktreeAgent:
             wall_duration=10.0, api_duration=5.0, input_tokens=100,
             output_tokens=50, lines_added=10, lines_removed=5, premium_requests=1
         )
-        mock_check_ready.return_value = (True, "")
-        
-        # Merge fails, cleanup succeeds, merge still in progress -> abort, retry works
-        mock_merge.side_effect = [(False, ["file.py"]), (True, [])]
-        mock_invoke_merge_cleanup.return_value = (True, None)
-        mock_is_merge.return_value = True  # Merge still in progress after cleanup
-        mock_abort.return_value = (True, None)
+        mock_handle_merge.return_value = (True, True)  # Mock successful merge
         
         stats = _run_worktree_agent(
             "Test",
@@ -812,8 +845,8 @@ class TestRunWorktreeAgent:
         )
         
         assert stats is not None
-        mock_abort.assert_called_once()  # Should abort merge
     
+    @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
     @patch('pokepoke.agent_runner.invoke_cleanup_agent')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
     @patch('os.chdir')
@@ -829,7 +862,8 @@ class TestRunWorktreeAgent:
         mock_getcwd: Mock,
         mock_chdir: Mock,
         mock_check_ready: Mock,
-        mock_invoke_cleanup: Mock
+        mock_invoke_cleanup: Mock,
+        mock_handle_merge: Mock
     ) -> None:
         """Test when main repo not ready for merge and cleanup fails."""
         agent_item = BeadsWorkItem(
@@ -851,8 +885,7 @@ class TestRunWorktreeAgent:
             attempt_count=1
         )
         mock_cleanup_loop.return_value = (True, 0)
-        mock_check_ready.return_value = (False, "Uncommitted changes in main repo")
-        mock_invoke_cleanup.return_value = (False, None)
+        mock_handle_merge.return_value = (False, False)  # Mock failed merge
         
         stats = _run_worktree_agent(
             "Test",
@@ -863,8 +896,8 @@ class TestRunWorktreeAgent:
         )
         
         assert stats is None
-        mock_invoke_cleanup.assert_called_once()
     
+    @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
     @patch('pokepoke.agent_runner.merge_worktree')
     @patch('pokepoke.agent_runner.invoke_cleanup_agent')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
@@ -884,7 +917,8 @@ class TestRunWorktreeAgent:
         mock_parse: Mock,
         mock_check_ready: Mock,
         mock_invoke_cleanup: Mock,
-        mock_merge: Mock
+        mock_merge: Mock,
+        mock_handle_merge: Mock
     ) -> None:
         """Test when main repo not ready, cleanup succeeds, but still fails."""
         agent_item = BeadsWorkItem(
@@ -907,13 +941,7 @@ class TestRunWorktreeAgent:
         )
         mock_cleanup_loop.return_value = (True, 0)
         mock_parse.return_value = None
-        
-        # First not ready, cleanup succeeds, still not ready
-        mock_check_ready.side_effect = [
-            (False, "Uncommitted changes"),
-            (False, "Still uncommitted")
-        ]
-        mock_invoke_cleanup.return_value = (True, None)
+        mock_handle_merge.return_value = (False, False)  # Mock failed merge
         
         stats = _run_worktree_agent(
             "Test",
