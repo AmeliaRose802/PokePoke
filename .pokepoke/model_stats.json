@@ -90,6 +90,13 @@
       "duration_seconds": 2376.769294500351,
       "gate_passed": true,
       "timestamp": "2026-02-14T05:31:21.911812+00:00"
+    },
+    {
+      "item_id": "PokePoke-hdxy",
+      "model": "gpt-5.2-codex",
+      "duration_seconds": 7208.843608140945,
+      "gate_passed": false,
+      "timestamp": "2026-02-14T08:41:27.167775+00:00"
     }
   ],
   "summary": {
@@ -174,14 +181,14 @@
       "last_used": "2026-02-14T00:21:34.763454+00:00"
     },
     "gpt-5.2-codex": {
-      "total_items_attempted": 1,
+      "total_items_attempted": 2,
       "total_items_succeeded": 1,
-      "total_items_failed": 0,
-      "total_duration_seconds": 2376.769294500351,
+      "total_items_failed": 1,
+      "total_duration_seconds": 9585.612902641296,
       "total_retries": 0,
-      "average_duration": 2376.77,
-      "success_rate": 1.0,
-      "last_used": "2026-02-14T05:31:21.911812+00:00"
+      "average_duration": 4792.81,
+      "success_rate": 0.5,
+      "last_used": "2026-02-14T08:41:27.167775+00:00"
     }
   }
 }
