@@ -15,7 +15,7 @@ from . import terminal_ui
 from .shutdown import is_shutting_down
 
 if TYPE_CHECKING:
-    from .logging import ItemLogger  # type: ignore
+    from .logging_utils import ItemLogger
 
 
 def build_prompt_from_work_item(work_item: BeadsWorkItem) -> str:
