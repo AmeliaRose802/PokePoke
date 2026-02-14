@@ -1,6 +1,7 @@
 """GitHub Copilot SDK integration."""
 import asyncio
 import os
+from time import monotonic as _monotonic
 from typing import Optional, TYPE_CHECKING, Any
 
 from copilot import CopilotClient  # type: ignore
@@ -66,21 +67,20 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     if cwd:
         client_opts["cwd"] = cwd
     client = CopilotClient(client_opts)  # type: ignore[arg-type]
-    
+
+    invocation_start = _monotonic()
+    total_api_seconds = 0.0
+
     try:
         print("[SDK] Starting Copilot client...")
         await client.start()
-        
         session_config = {"model": current_model, "streaming": True}
         print(f"[SDK] Using model: {current_model}")
-        
         # Add tool restrictions if needed
         if deny_write:
             session_config["excluded_tools"] = ["write", "edit"]
-        
         session = await client.create_session(session_config)  # type: ignore[arg-type]
         print(f"[SDK] Session created: {session.session_id}\n")
-        
         done, output_lines, errors = asyncio.Event(), [], []
         pending_tool_calls, idle_task = 0, None
         total_input_tokens = total_output_tokens = total_cache_read_tokens = 0
@@ -89,9 +89,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             nonlocal total_input_tokens, total_output_tokens, total_cache_read_tokens
             nonlocal total_cache_write_tokens, turn_count, total_tool_calls
             nonlocal pending_tool_calls, idle_task
-            
             event_type = event.type.value if hasattr(event.type, 'value') else str(event.type)
-            
             if event_type == "assistant.message_delta":
                 terminal_ui.ui.set_style("green")
                 # Streaming message chunk
@@ -100,7 +98,6 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     delta = getattr(event.data, 'delta_content', None) or \
                             getattr(event.data, 'delta', None) or \
                             getattr(event.data, 'content', None)
-                
                 if delta:
                     print(delta, end="", flush=True)
                     output_lines.append(delta)
@@ -126,12 +123,10 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                 # Tool is being executed
                 total_tool_calls += 1
                 pending_tool_calls += 1
-                
                 # Cancel any pending idle check - we have activity
                 if idle_task and not idle_task.done():
                     idle_task.cancel()
                     idle_task = None
-                
                 if hasattr(event, 'data'):
                     tool_name = getattr(event.data, 'tool_name', 'unknown')
                     arguments = getattr(event.data, 'arguments', {})
@@ -213,7 +208,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                         print(f"\n[SDK] Rate limit detected on {current_model}, will retry with {FALLBACK_MODEL}...")
                         tried_fallback = True
                         current_model = FALLBACK_MODEL
-                        # Don't set done - let the retry happen
+                        done.set()
                         return
                 
                 errors.append(error_msg)
@@ -227,68 +222,71 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         async def send_with_retry() -> bool:
             """Send message, returns True if should retry with fallback model."""
             nonlocal session, session_config, tried_fallback, current_model, timed_out, interrupted
-            
-            print("[SDK] Sending message...\n")
-            await session.send({"prompt": final_prompt})
-            
-            # Wait for completion with timeout, checking shutdown every second
+            nonlocal total_api_seconds
+
+            attempt_start = _monotonic()
             try:
-                deadline = asyncio.get_event_loop().time() + max_timeout
-                while not done.is_set():
-                    if is_shutting_down():
-                        print("\n[SDK] Shutdown requested - aborting session...")
-                        await session.abort()
-                        interrupted = True
-                        return False
-                    remaining = deadline - asyncio.get_event_loop().time()
-                    if remaining <= 0:
-                        print(f"\n[SDK] TIMEOUT after {max_timeout}s")
-                        await session.abort()
-                        timed_out = True
-                        return False
+                print("[SDK] Sending message...\n")
+                await session.send({"prompt": final_prompt})
+                # Wait for completion with timeout, checking shutdown every second
+                try:
+                    deadline = asyncio.get_event_loop().time() + max_timeout
+                    while not done.is_set():
+                        if is_shutting_down():
+                            print("\n[SDK] Shutdown requested - aborting session...")
+                            await session.abort()
+                            interrupted = True
+                            return False
+                        remaining = deadline - asyncio.get_event_loop().time()
+                        if remaining <= 0:
+                            print(f"\n[SDK] TIMEOUT after {max_timeout}s")
+                            await session.abort()
+                            timed_out = True
+                            return False
+                        try:
+                            await asyncio.wait_for(done.wait(), timeout=min(1.0, remaining))
+                        except asyncio.TimeoutError:
+                            continue  # Check shutdown again
+                except KeyboardInterrupt:
+                    print("\n\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")
                     try:
-                        await asyncio.wait_for(done.wait(), timeout=min(1.0, remaining))
-                    except asyncio.TimeoutError:
-                        continue  # Check shutdown again
-            except KeyboardInterrupt:
-                print("\n\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")
-                try:
-                    await session.abort()
-                except Exception:
-                    pass
-                interrupted = True
-                return False
-            
-            # Check if we need to retry with fallback model
-            if tried_fallback and current_model == FALLBACK_MODEL and not done.is_set():
-                # Rate limit occurred, need to retry with fallback
-                print(f"\n[SDK] Retrying with fallback model: {FALLBACK_MODEL}")
-                
-                # Clean up current session
-                try:
-                    await session.destroy()
-                except Exception:
-                    pass
-                
-                # Create new session with fallback model
-                session_config["model"] = FALLBACK_MODEL
-                session = await client.create_session(session_config)  # type: ignore[arg-type]
-                print(f"[SDK] New session created with {FALLBACK_MODEL}: {session.session_id}\n")
-                
-                # Reset state for retry
-                done.clear()
-                errors.clear()
-                output_lines.clear()
-                session.on(handle_event)
-                
-                return True  # Signal retry needed
-            
-            return False  # No retry needed
+                        await session.abort()
+                    except Exception:
+                        pass
+                    interrupted = True
+                    return False
+
+                # Check if we need to retry with fallback model
+                if tried_fallback and session_config.get("model") != current_model:
+                    # Rate limit occurred, need to retry with fallback
+                    print(f"\n[SDK] Retrying with fallback model: {current_model}")
+
+                    # Clean up current session
+                    try:
+                        await session.destroy()
+                    except Exception:
+                        pass
+
+                    # Create new session with fallback model
+                    session_config["model"] = current_model
+                    session = await client.create_session(session_config)  # type: ignore[arg-type]
+                    print(f"[SDK] New session created with {current_model}: {session.session_id}\n")
+
+                    # Reset state for retry
+                    done.clear()
+                    errors.clear()
+                    output_lines.clear()
+                    session.on(handle_event)
+
+                    return True  # Signal retry needed
+
+                return False  # No retry needed
+            finally:
+                total_api_seconds += _monotonic() - attempt_start
         
         with terminal_ui.ui.agent_output():
             # First attempt
             needs_retry = await send_with_retry()
-            
             # Retry with fallback if rate limited
             if needs_retry:
                 await send_with_retry()
@@ -319,13 +317,15 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         if turn_count > 0 or total_input_tokens > 0:
             print(f"\n📊 Stats: {turn_count} turns, {total_input_tokens:,}+{total_output_tokens:,} tokens")
         
+        wall_seconds = _monotonic() - invocation_start
+
         stats = AgentStats(
             input_tokens=total_input_tokens,
             output_tokens=total_output_tokens,
             premium_requests=turn_count,  # Approximation: 1 turn = 1 premium request
             tool_calls=total_tool_calls,
-            api_duration=0.0,  # TODO: Track duration
-            wall_duration=0.0  # TODO: Track duration
+            api_duration=total_api_seconds,
+            wall_duration=wall_seconds,
         )
         
         return CopilotResult(
