@@ -130,7 +130,7 @@ def get_merge_conflict_details(repo_path: Optional[Path] = None) -> dict[str, ob
             )
             if result.returncode == 0:
                 merge_head = result.stdout.strip()
-        except:
+        except Exception:
             pass
     
     return {

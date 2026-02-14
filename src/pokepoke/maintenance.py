@@ -5,8 +5,6 @@ from pathlib import Path
 from pokepoke.config import get_config
 from pokepoke.types import AgentStats, SessionStats
 from pokepoke.agent_runner import run_maintenance_agent
-from pokepoke.terminal_ui import set_terminal_banner
-from pokepoke import terminal_ui
 from pokepoke.logging_utils import RunLogger
 
 # Agents that have special runner functions instead of the generic one

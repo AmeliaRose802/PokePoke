@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import Mock, patch
 from pokepoke.types import AgentStats, SessionStats
 from pokepoke.config import MaintenanceConfig, MaintenanceAgentConfig, ProjectConfig
-from pokepoke.maintenance import aggregate_stats, run_periodic_maintenance
+from pokepoke.maintenance import aggregate_stats, run_periodic_maintenance, _run_special_agent
 
 
 def _make_default_config() -> ProjectConfig:
@@ -542,3 +542,31 @@ class TestRunPeriodicMaintenance:
         run_periodic_maintenance(10, session_stats, run_logger)
         calls = [c for c in mock_maintenance.call_args_list if c[0][0] == "Tech Debt"]
         assert len(calls) == 1
+
+
+class TestRunSpecialAgent:
+    """Test _run_special_agent function."""
+
+    @patch('pokepoke.maintenance.run_maintenance_agent')
+    def test_beta_tester(self, _mock: Mock) -> None:
+        """Test that Beta Tester delegates to run_beta_tester."""
+        from pathlib import Path
+        with patch('pokepoke.agent_runner.run_beta_tester', return_value=AgentStats()) as mock_bt:
+            result = _run_special_agent("Beta Tester", Path("/repo"))
+            mock_bt.assert_called_once_with(repo_root=Path("/repo"))
+            assert isinstance(result, AgentStats)
+
+    @patch('pokepoke.maintenance.run_maintenance_agent')
+    def test_worktree_cleanup(self, _mock: Mock) -> None:
+        """Test that Worktree Cleanup delegates to run_worktree_cleanup."""
+        from pathlib import Path
+        with patch('pokepoke.agent_runner.run_worktree_cleanup', return_value=AgentStats()) as mock_wc:
+            result = _run_special_agent("Worktree Cleanup", Path("/repo"))
+            mock_wc.assert_called_once_with(repo_root=Path("/repo"))
+            assert isinstance(result, AgentStats)
+
+    def test_unknown_agent_returns_none(self) -> None:
+        """Test that unknown agent name returns None."""
+        from pathlib import Path
+        result = _run_special_agent("Unknown Agent", Path("/repo"))
+        assert result is None
