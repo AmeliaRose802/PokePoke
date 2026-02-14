@@ -1,10 +1,24 @@
 """Event handler utilities for SDK client sessions."""
 import asyncio
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional, Tuple, TypedDict
+
 from . import terminal_ui
 
 DEFAULT_MODEL = "claude-opus-4.6"
 FALLBACK_MODEL = "claude-sonnet-4.5"
+
+
+class SessionStats(TypedDict):
+    pending_tool_calls: int
+    idle_task: Optional[asyncio.Task[None]]
+    total_input_tokens: int
+    total_output_tokens: int
+    total_cache_read_tokens: int
+    total_cache_write_tokens: int
+    turn_count: int
+    total_tool_calls: int
+    tried_fallback: bool
+    current_model: str
 
 
 def create_event_handler(
@@ -12,14 +26,14 @@ def create_event_handler(
     output_lines: List[str],
     errors: List[str],
     item_logger: Optional[Any] = None
-) -> tuple[Any, dict[str, Any]]:
+) -> Tuple[Callable[[Any], bool], SessionStats]:
     """Create an event handler for SDK session events.
     
     Returns:
         tuple: (event_handler_function, stats_dict)
     """
     # Shared state for event handler
-    stats = {
+    stats: SessionStats = {
         'pending_tool_calls': 0,
         'idle_task': None,
         'total_input_tokens': 0,
@@ -68,7 +82,7 @@ def create_event_handler(
             if stats['idle_task']:
                 stats['idle_task'].cancel()
                 
-            async def wait_for_idle():
+            async def wait_for_idle() -> None:
                 await asyncio.sleep(1.0)  # Wait 1 second for idle
                 if stats['pending_tool_calls'] > 0:
                     print(f"\n[SDK] Session idle but {stats['pending_tool_calls']} tool(s) still executing - continuing...")
