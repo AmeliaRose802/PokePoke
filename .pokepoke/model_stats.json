@@ -83,6 +83,13 @@
       "duration_seconds": 1349.8460054397583,
       "gate_passed": true,
       "timestamp": "2026-02-14T04:49:53.029218+00:00"
+    },
+    {
+      "item_id": "PokePoke-jvjm",
+      "model": "gpt-5.2-codex",
+      "duration_seconds": 2376.769294500351,
+      "gate_passed": true,
+      "timestamp": "2026-02-14T05:31:21.911812+00:00"
     }
   ],
   "summary": {
@@ -165,6 +172,16 @@
       "average_duration": 2153.36,
       "success_rate": 1.0,
       "last_used": "2026-02-14T00:21:34.763454+00:00"
+    },
+    "gpt-5.2-codex": {
+      "total_items_attempted": 1,
+      "total_items_succeeded": 1,
+      "total_items_failed": 0,
+      "total_duration_seconds": 2376.769294500351,
+      "total_retries": 0,
+      "average_duration": 2376.77,
+      "success_rate": 1.0,
+      "last_used": "2026-02-14T05:31:21.911812+00:00"
     }
   }
 }
