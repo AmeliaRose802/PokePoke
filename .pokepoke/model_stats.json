@@ -97,6 +97,13 @@
       "duration_seconds": 7208.843608140945,
       "gate_passed": false,
       "timestamp": "2026-02-14T08:41:27.167775+00:00"
+    },
+    {
+      "item_id": "PokePoke-7r9t",
+      "model": "gpt-5.1",
+      "duration_seconds": 7215.463146448135,
+      "gate_passed": false,
+      "timestamp": "2026-02-14T11:06:38.433057+00:00"
     }
   ],
   "summary": {
@@ -161,14 +168,14 @@
       "last_used": "2026-02-12T23:37:03.185672+00:00"
     },
     "gpt-5.1": {
-      "total_items_attempted": 2,
+      "total_items_attempted": 3,
       "total_items_succeeded": 0,
-      "total_items_failed": 2,
-      "total_duration_seconds": 14422.593547582626,
+      "total_items_failed": 3,
+      "total_duration_seconds": 21638.05669403076,
       "total_retries": 0,
-      "average_duration": 7211.3,
+      "average_duration": 7212.69,
       "success_rate": 0.0,
-      "last_used": "2026-02-14T04:25:20.320298+00:00"
+      "last_used": "2026-02-14T11:06:38.433057+00:00"
     },
     "gpt-5.2": {
       "total_items_attempted": 1,
