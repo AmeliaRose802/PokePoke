@@ -125,6 +125,13 @@
       "duration_seconds": 7210.91531085968,
       "gate_passed": false,
       "timestamp": "2026-02-14T18:54:30.987319+00:00"
+    },
+    {
+      "item_id": "PokePoke-ykg6",
+      "model": "gpt-5.1-codex",
+      "duration_seconds": 1647.824749469757,
+      "gate_passed": true,
+      "timestamp": "2026-02-14T19:24:13.275743+00:00"
     }
   ],
   "summary": {
@@ -179,14 +186,14 @@
       "last_used": "2026-02-14T14:39:05.116901+00:00"
     },
     "gpt-5.1-codex": {
-      "total_items_attempted": 1,
-      "total_items_succeeded": 1,
+      "total_items_attempted": 2,
+      "total_items_succeeded": 2,
       "total_items_failed": 0,
-      "total_duration_seconds": 715.2762176990509,
+      "total_duration_seconds": 2363.100967168808,
       "total_retries": 0,
-      "average_duration": 715.28,
+      "average_duration": 1181.55,
       "success_rate": 1.0,
-      "last_used": "2026-02-12T23:37:03.185672+00:00"
+      "last_used": "2026-02-14T19:24:13.275743+00:00"
     },
     "gpt-5.1": {
       "total_items_attempted": 3,
