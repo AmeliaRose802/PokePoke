@@ -62,6 +62,13 @@
       "duration_seconds": 7210.057638645172,
       "gate_passed": false,
       "timestamp": "2026-02-13T23:43:16.624765+00:00"
+    },
+    {
+      "item_id": "PokePoke-6jh7",
+      "model": "gpt-5.2",
+      "duration_seconds": 2153.3633263111115,
+      "gate_passed": true,
+      "timestamp": "2026-02-14T00:21:34.763454+00:00"
     }
   ],
   "summary": {
@@ -134,6 +141,16 @@
       "average_duration": 7210.06,
       "success_rate": 0.0,
       "last_used": "2026-02-13T23:43:16.624765+00:00"
+    },
+    "gpt-5.2": {
+      "total_items_attempted": 1,
+      "total_items_succeeded": 1,
+      "total_items_failed": 0,
+      "total_duration_seconds": 2153.3633263111115,
+      "total_retries": 0,
+      "average_duration": 2153.36,
+      "success_rate": 1.0,
+      "last_used": "2026-02-14T00:21:34.763454+00:00"
     }
   }
 }
