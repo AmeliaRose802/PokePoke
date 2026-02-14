@@ -1,59 +1,212 @@
 """Prompt template loading and rendering service."""
 
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 import re
 
 
+# Built-in prompts ship with the package
+BUILTIN_PROMPTS_DIR = Path(__file__).parent / "builtin_prompts"
+
+# Template variables used across prompts
+TEMPLATE_VARIABLES: Dict[str, str] = {
+    "id": "Work item ID (e.g. PokePoke-123)",
+    "item_id": "Beads item ID",
+    "title": "Work item title",
+    "description": "Work item description",
+    "priority": "Priority level (0-4)",
+    "issue_type": "Type (bug, feature, task)",
+    "labels": "Comma-separated labels",
+    "retry_context": "Boolean to show retry section",
+    "attempt": "Current retry attempt number",
+    "max_retries": "Maximum retry attempts",
+    "errors": "Formatted error list from previous attempt",
+    "mcp_enabled": "Boolean to show MCP server section",
+    "test_data_section": "Rendered test data for the prompt",
+}
+
+
 class PromptService:
-    """Service for loading and rendering prompt templates."""
-    
-    def __init__(self, prompts_dir: Optional[Path] = None):
+    """Service for loading and rendering prompt templates.
+
+    Loads prompts with a two-tier fallback:
+      1. User overrides in ``prompts_dir`` (default ``.pokepoke/prompts/``)
+      2. Built-in defaults bundled with the package
+    """
+
+    def __init__(
+        self,
+        prompts_dir: Optional[Path] = None,
+        builtin_dir: Optional[Path] = None,
+    ):
         """Initialize the prompt service.
-        
+
         Args:
-            prompts_dir: Optional path to prompts directory. 
-                        Defaults to .pokepoke/prompts/ in repo root.
+            prompts_dir: Path to user prompts directory.
+                         Defaults to ``.pokepoke/prompts/`` in repo root.
+            builtin_dir: Path to built-in prompts shipped with package.
+                         Defaults to ``src/pokepoke/builtin_prompts/``.
         """
         if prompts_dir is None:
-            # Find repo root by looking for .git directory
             current = Path(__file__).parent
             while current != current.parent:
                 if (current / ".git").exists():
                     prompts_dir = current / ".pokepoke" / "prompts"
                     break
                 current = current.parent
-            
             if prompts_dir is None:
-                # Fallback: relative to this file
-                prompts_dir = Path(__file__).parent.parent.parent / ".pokepoke" / "prompts"
-        
+                prompts_dir = (
+                    Path(__file__).parent.parent.parent / ".pokepoke" / "prompts"
+                )
+
         self.prompts_dir = Path(prompts_dir)
-        if not self.prompts_dir.exists():
+        self.builtin_dir = Path(builtin_dir) if builtin_dir else BUILTIN_PROMPTS_DIR
+
+        # At least one directory must exist
+        if not self.prompts_dir.exists() and not self.builtin_dir.exists():
             raise FileNotFoundError(
-                f"Prompts directory not found: {self.prompts_dir}"
+                f"No prompts directory found: checked {self.prompts_dir} "
+                f"and {self.builtin_dir}"
             )
-    
+
     def load_prompt(self, template_name: str) -> str:
         """Load a prompt template by name.
-        
+
+        Checks user directory first, then falls back to built-in defaults.
+
         Args:
             template_name: Name of template (without .md extension)
-            
+
         Returns:
             Raw template content
-            
+
         Raises:
-            FileNotFoundError: If template doesn't exist
+            FileNotFoundError: If template doesn't exist in either location
         """
-        template_path = self.prompts_dir / f"{template_name}.md"
-        
-        if not template_path.exists():
+        # User override takes priority
+        user_path = self.prompts_dir / f"{template_name}.md"
+        if user_path.exists():
+            return user_path.read_text(encoding="utf-8")
+
+        # Fall back to built-in
+        builtin_path = self.builtin_dir / f"{template_name}.md"
+        if builtin_path.exists():
+            return builtin_path.read_text(encoding="utf-8")
+
+        raise FileNotFoundError(
+            f"Template not found: {template_name} "
+            f"(checked {user_path} and {builtin_path})"
+        )
+
+    def list_prompts(self) -> List[Dict[str, Any]]:
+        """List all available prompt templates with metadata.
+
+        Returns:
+            List of dicts with keys: name, is_override, has_builtin,
+            source ('user' | 'builtin').
+        """
+        prompts: Dict[str, Dict[str, Any]] = {}
+
+        # Collect built-in prompts
+        if self.builtin_dir.exists():
+            for f in sorted(self.builtin_dir.glob("*.md")):
+                if f.name == "README.md":
+                    continue
+                name = f.stem
+                prompts[name] = {
+                    "name": name,
+                    "is_override": False,
+                    "has_builtin": True,
+                    "source": "builtin",
+                }
+
+        # Overlay user prompts
+        if self.prompts_dir.exists():
+            for f in sorted(self.prompts_dir.glob("*.md")):
+                if f.name == "README.md":
+                    continue
+                name = f.stem
+                if name in prompts:
+                    prompts[name]["is_override"] = True
+                    prompts[name]["source"] = "user"
+                else:
+                    prompts[name] = {
+                        "name": name,
+                        "is_override": False,
+                        "has_builtin": False,
+                        "source": "user",
+                    }
+
+        return sorted(prompts.values(), key=lambda p: p["name"])
+
+    def get_prompt_metadata(self, template_name: str) -> Dict[str, Any]:
+        """Get metadata for a prompt template.
+
+        Args:
+            template_name: Name of template (without .md extension)
+
+        Returns:
+            Dict with name, content, is_override, has_builtin, source,
+            and template_variables found in the content.
+        """
+        content = self.load_prompt(template_name)
+        user_path = self.prompts_dir / f"{template_name}.md"
+        builtin_path = self.builtin_dir / f"{template_name}.md"
+
+        is_override = user_path.exists() and builtin_path.exists()
+        has_builtin = builtin_path.exists()
+        source = "user" if user_path.exists() else "builtin"
+
+        # Extract template variables from content
+        found_vars = sorted(set(re.findall(r'\{\{(\w+)\}\}', content)))
+
+        return {
+            "name": template_name,
+            "content": content,
+            "is_override": is_override,
+            "has_builtin": has_builtin,
+            "source": source,
+            "template_variables": found_vars,
+        }
+
+    def save_prompt(self, template_name: str, content: str) -> Dict[str, Any]:
+        """Save a prompt override to the user directory.
+
+        Args:
+            template_name: Name of template (without .md extension)
+            content: Template content to save
+
+        Returns:
+            Dict with path and saved status.
+        """
+        self.prompts_dir.mkdir(parents=True, exist_ok=True)
+        target = self.prompts_dir / f"{template_name}.md"
+        target.write_text(content, encoding="utf-8")
+        return {"path": str(target), "saved": True}
+
+    def reset_prompt(self, template_name: str) -> Dict[str, Any]:
+        """Remove a user override so the built-in default is used.
+
+        Args:
+            template_name: Name of template (without .md extension)
+
+        Returns:
+            Dict with reset status and whether a builtin fallback exists.
+
+        Raises:
+            FileNotFoundError: If no built-in default exists to fall back to.
+        """
+        builtin_path = self.builtin_dir / f"{template_name}.md"
+        if not builtin_path.exists():
             raise FileNotFoundError(
-                f"Template not found: {template_name} at {template_path}"
+                f"Cannot reset '{template_name}': no built-in default exists"
             )
-        
-        return template_path.read_text(encoding="utf-8")
+
+        user_path = self.prompts_dir / f"{template_name}.md"
+        if user_path.exists():
+            user_path.unlink()
+            return {"reset": True, "had_override": True}
+        return {"reset": True, "had_override": False}
     
     def render_prompt(self, template: str, variables: Dict[str, Any]) -> str:
         """Render a prompt template with variables.

@@ -17,6 +17,8 @@ import type {
   ProgressState,
   ConnectionStatus,
   ModelPerformanceSummary,
+  PromptInfo,
+  PromptDetail,
 } from "./types";
 
 /** Poll interval in ms — 100ms = responsive without hammering */
@@ -37,6 +39,10 @@ interface PyWebViewAPI {
   get_all_logs(): Promise<LogEntry[]>;
   get_work_item(): Promise<WorkItem | null>;
   get_stats(): Promise<SessionStats | null>;
+  list_prompts(): Promise<PromptInfo[]>;
+  get_prompt(name: string): Promise<PromptDetail>;
+  save_prompt(name: string, content: string): Promise<{ path: string; saved: boolean }>;
+  reset_prompt(name: string): Promise<{ reset: boolean; had_override: boolean }>;
 }
 
 declare global {
@@ -57,6 +63,10 @@ export interface BridgeState {
   progress: ProgressState;
   modelLeaderboard: Record<string, ModelPerformanceSummary>;
   clearLogs: (target: "orchestrator" | "agent" | "all") => void;
+  listPrompts: () => Promise<PromptInfo[]>;
+  getPrompt: (name: string) => Promise<PromptDetail | null>;
+  savePrompt: (name: string, content: string) => Promise<boolean>;
+  resetPrompt: (name: string) => Promise<boolean>;
 }
 
 /**
@@ -85,6 +95,28 @@ export function useBridge(): BridgeState {
     },
     []
   );
+
+  const listPrompts = useCallback(async (): Promise<PromptInfo[]> => {
+    if (!window.pywebview?.api) return [];
+    return window.pywebview.api.list_prompts();
+  }, []);
+
+  const getPrompt = useCallback(async (name: string): Promise<PromptDetail | null> => {
+    if (!window.pywebview?.api) return null;
+    return window.pywebview.api.get_prompt(name);
+  }, []);
+
+  const savePrompt = useCallback(async (name: string, content: string): Promise<boolean> => {
+    if (!window.pywebview?.api) return false;
+    const result = await window.pywebview.api.save_prompt(name, content);
+    return result.saved;
+  }, []);
+
+  const resetPrompt = useCallback(async (name: string): Promise<boolean> => {
+    if (!window.pywebview?.api) return false;
+    const result = await window.pywebview.api.reset_prompt(name);
+    return result.reset;
+  }, []);
 
   const appendLogs = useCallback((entries: LogEntry[]) => {
     if (entries.length === 0) return;
@@ -193,5 +225,9 @@ export function useBridge(): BridgeState {
     progress,
     modelLeaderboard,
     clearLogs,
+    listPrompts,
+    getPrompt,
+    savePrompt,
+    resetPrompt,
   };
 }

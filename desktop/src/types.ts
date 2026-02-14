@@ -64,6 +64,20 @@ export interface ProgressState {
   status: string;
 }
 
+/** Prompt template metadata from the Python PromptService */
+export interface PromptInfo {
+  name: string;
+  is_override: boolean;
+  has_builtin: boolean;
+  source: "user" | "builtin";
+}
+
+/** Full prompt detail including content and template variables */
+export interface PromptDetail extends PromptInfo {
+  content: string;
+  template_variables: string[];
+}
+
 /** Connection status of the pywebview bridge */
 export type ConnectionStatus = "connecting" | "connected" | "disconnected";
 

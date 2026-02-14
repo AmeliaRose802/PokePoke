@@ -11,6 +11,7 @@ import { WorkItemHeader } from "./components/WorkItemHeader";
 import { LogPanel } from "./components/LogPanel";
 import { StatsBar } from "./components/StatsBar";
 import { ConnectionIndicator } from "./components/ConnectionIndicator";
+import { PromptEditor } from "./components/PromptEditor";
 import "./App.css";
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
   const [activePanel, setActivePanel] = useState<"orchestrator" | "agent">(
     "agent"
   );
+  const [showPrompts, setShowPrompts] = useState(false);
 
   return (
     <div className="app">
@@ -28,6 +30,13 @@ function App() {
           PokePoke
         </div>
         <ConnectionIndicator status={bridge.connectionStatus} />
+        <button
+          className="prompt-editor-toggle"
+          onClick={() => setShowPrompts(true)}
+          title="Edit prompt templates"
+        >
+          📝
+        </button>
       </div>
 
       {/* Work item header */}
@@ -58,6 +67,17 @@ function App() {
 
       {/* Stats footer */}
       <StatsBar stats={bridge.stats} modelLeaderboard={bridge.modelLeaderboard} />
+
+      {/* Prompt editor overlay */}
+      {showPrompts && (
+        <PromptEditor
+          listPrompts={bridge.listPrompts}
+          getPrompt={bridge.getPrompt}
+          savePrompt={bridge.savePrompt}
+          resetPrompt={bridge.resetPrompt}
+          onClose={() => setShowPrompts(false)}
+        />
+      )}
     </div>
   );
 }

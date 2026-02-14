@@ -304,3 +304,63 @@ def test_push_stats_with_model_completions() -> None:
     ))
     api.push_stats(stats_obj, elapsed_time=1.0)
     assert len(api._current_stats["model_completions"]) == 1
+
+
+# ─── Prompt management tests ─────────────────────────────────────────────
+
+
+def test_list_prompts_returns_list() -> None:
+    """list_prompts should return a non-empty list of prompt templates."""
+    from unittest.mock import patch, MagicMock
+    api = DesktopAPI()
+    mock_service = MagicMock()
+    mock_service.list_prompts.return_value = [
+        {"name": "work-item", "is_override": False, "has_builtin": True, "source": "builtin"},
+    ]
+    with patch("pokepoke.prompts.get_prompt_service", return_value=mock_service):
+        result = api.list_prompts()
+    assert len(result) == 1
+    assert result[0]["name"] == "work-item"
+
+
+def test_get_prompt_returns_metadata() -> None:
+    """get_prompt should return prompt content and metadata."""
+    from unittest.mock import patch, MagicMock
+    api = DesktopAPI()
+    mock_service = MagicMock()
+    mock_service.get_prompt_metadata.return_value = {
+        "name": "work-item",
+        "content": "Hello {{name}}",
+        "is_override": False,
+        "has_builtin": True,
+        "source": "builtin",
+        "template_variables": ["name"],
+    }
+    with patch("pokepoke.prompts.get_prompt_service", return_value=mock_service):
+        result = api.get_prompt("work-item")
+    assert result["name"] == "work-item"
+    assert "name" in result["template_variables"]
+
+
+def test_save_prompt_delegates() -> None:
+    """save_prompt should delegate to PromptService."""
+    from unittest.mock import patch, MagicMock
+    api = DesktopAPI()
+    mock_service = MagicMock()
+    mock_service.save_prompt.return_value = {"path": "/tmp/test.md", "saved": True}
+    with patch("pokepoke.prompts.get_prompt_service", return_value=mock_service):
+        result = api.save_prompt("test", "new content")
+    assert result["saved"]
+    mock_service.save_prompt.assert_called_once_with("test", "new content")
+
+
+def test_reset_prompt_delegates() -> None:
+    """reset_prompt should delegate to PromptService."""
+    from unittest.mock import patch, MagicMock
+    api = DesktopAPI()
+    mock_service = MagicMock()
+    mock_service.reset_prompt.return_value = {"reset": True, "had_override": True}
+    with patch("pokepoke.prompts.get_prompt_service", return_value=mock_service):
+        result = api.reset_prompt("test")
+    assert result["reset"]
+    mock_service.reset_prompt.assert_called_once_with("test")
