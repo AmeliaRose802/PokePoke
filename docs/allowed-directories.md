@@ -28,10 +28,10 @@ These are added to the `--add-dir` flags when invoking Copilot CLI.
 
 ## Usage
 
-### Using the Template Function
+### Using the SDK Prompt Builder
 
 ```python
-from pokepoke.copilot import build_prompt_from_template
+from pokepoke.copilot_sdk import build_prompt_from_work_item
 from pokepoke.types import BeadsWorkItem
 
 # Create a work item
@@ -45,20 +45,9 @@ item = BeadsWorkItem(
 )
 
 # Build prompt with allowed directories injected
-prompt = build_prompt_from_template(item, template_name="beads-item")
+prompt = build_prompt_from_work_item(item)
 
 # The prompt will include the allowed directories automatically
-```
-
-### Manual Directory List
-
-You can also get the allowed directories independently:
-
-```python
-from pokepoke.copilot import get_allowed_directories
-
-allowed = get_allowed_directories()
-# Returns: ['C:\\Users\\username\\PokePoke\\worktrees\\task-123', 'C:\\Users\\username\\PokePoke']
 ```
 
 ## Template Syntax
@@ -96,15 +85,9 @@ YOU MUST NEVER ATTEMPT TO ACCESS ANY DIRECTORY OUTSIDE THE ALLOWED DIRECTORIES!
 3. **Dynamic** - Automatically adapts to worktree vs main repo context
 4. **Safe** - Matches the directories passed to `--add-dir` in Copilot CLI invocation
 
-## Integration with Copilot CLI
+## Integration with Copilot SDK
 
-The `invoke_copilot_cli` function in [copilot.py](c:\Users\ameliapayne\PokePoke\src\pokepoke\copilot.py#L184-L192) automatically:
-
-1. Detects current directory (worktree)
-2. Detects main repository root
-3. Passes both as `--add-dir` arguments to Copilot CLI
-
-This ensures consistency between what the prompt says and what Copilot CLI enforces.
+The `invoke_copilot_sdk` function in `copilot_sdk.py` automatically handles directory context when invoking Copilot through the SDK.
 
 ## Testing
 
