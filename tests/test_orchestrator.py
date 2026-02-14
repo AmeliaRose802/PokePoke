@@ -454,11 +454,50 @@ class TestRunOrchestrator:
         result = run_orchestrator(interactive=False, continuous=False)
         
         # Verify agent name was initialized
-        mock_init_agent_name.assert_called_once()
+        mock_init_agent_name.assert_called_once_with(custom_name=None)
         
         # Verify AGENT_NAME env var was set
         assert os.environ.get('AGENT_NAME') == test_agent_name
         
+        assert result == 0
+
+    @patch('subprocess.run')  # Mock git status check
+    @patch('pokepoke.agent_runner.run_worktree_cleanup')
+    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.initialize_agent_name')
+    @patch('pokepoke.orchestrator.process_work_item')
+    @patch('pokepoke.orchestrator.select_work_item')
+    @patch('pokepoke.orchestrator.get_ready_work_items')
+    def test_run_orchestrator_respects_custom_agent_name(
+        self,
+        mock_get_items: Mock,
+        mock_select: Mock,
+        mock_process: Mock,
+        mock_init_agent_name: Mock,
+        mock_beta: Mock,
+        mock_worktree_cleanup: Mock,
+        mock_subprocess_run: Mock
+    ) -> None:
+        """Test that orchestrator uses custom agent name when provided."""
+        import os
+
+        custom_agent_name = "Janitor"
+
+        mock_beta.return_value = None
+        mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
+
+        mock_init_agent_name.return_value = custom_agent_name
+        mock_get_items.return_value = []
+        mock_select.return_value = None
+
+        result = run_orchestrator(
+            interactive=False,
+            continuous=False,
+            agent_name_override=custom_agent_name
+        )
+
+        mock_init_agent_name.assert_called_once_with(custom_name=custom_agent_name)
+        assert os.environ.get('AGENT_NAME') == custom_agent_name
         assert result == 0
     
     @patch('subprocess.run')  # Mock git status check
@@ -990,7 +1029,12 @@ class TestOrchestratorMain:
         result = main()
         
         assert result == 0
-        mock_run.assert_called_once_with(interactive=False, continuous=False, run_beta_first=False)
+        mock_run.assert_called_once_with(
+            interactive=False,
+            continuous=False,
+            run_beta_first=False,
+            agent_name_override=None,
+        )
     
     @patch('pokepoke.orchestrator._check_beads_available', return_value=True)
     @patch('pokepoke.orchestrator.run_orchestrator')
@@ -1006,7 +1050,12 @@ class TestOrchestratorMain:
         result = main()
         
         assert result == 0
-        mock_run.assert_called_once_with(interactive=True, continuous=True, run_beta_first=False)
+        mock_run.assert_called_once_with(
+            interactive=True,
+            continuous=True,
+            run_beta_first=False,
+            agent_name_override=None,
+        )
     
     @patch('pokepoke.orchestrator._check_beads_available', return_value=True)
     @patch('pokepoke.orchestrator.run_orchestrator')
@@ -1022,7 +1071,12 @@ class TestOrchestratorMain:
         result = main()
         
         assert result == 0
-        mock_run.assert_called_once_with(interactive=False, continuous=True, run_beta_first=False)
+        mock_run.assert_called_once_with(
+            interactive=False,
+            continuous=True,
+            run_beta_first=False,
+            agent_name_override=None,
+        )
 
     @patch('pokepoke.orchestrator._check_beads_available', return_value=False)
     @patch('sys.argv', ['pokepoke', '--autonomous'])
@@ -1048,7 +1102,12 @@ class TestOrchestratorMain:
         result = main()
 
         assert result == 0
-        mock_run.assert_called_once_with(interactive=False, continuous=False, run_beta_first=True)
+        mock_run.assert_called_once_with(
+            interactive=False,
+            continuous=False,
+            run_beta_first=True,
+            agent_name_override=None,
+        )
 
     @patch('pokepoke.init.init_project', return_value=True)
     @patch('sys.argv', ['pokepoke', '--init'])
@@ -1936,7 +1995,12 @@ class TestMainWorktreeCoverage:
 
         result = main()
         assert result == 0
-        mock_run.assert_called_once_with(interactive=False, continuous=False, run_beta_first=True)
+        mock_run.assert_called_once_with(
+            interactive=False,
+            continuous=False,
+            run_beta_first=True,
+            agent_name_override=None,
+        )
 
     @patch('src.pokepoke.orchestrator._check_beads_available', return_value=False)
     @patch('sys.argv', ['pokepoke', '--autonomous'])
@@ -1969,7 +2033,12 @@ class TestMainWorktreeCoverage:
 
         result = main()
         assert result == 0
-        mock_run.assert_called_once_with(interactive=False, continuous=True, run_beta_first=False)
+        mock_run.assert_called_once_with(
+            interactive=False,
+            continuous=True,
+            run_beta_first=False,
+            agent_name_override=None,
+        )
 
 
 class TestOrchestratorCleanupDetection:

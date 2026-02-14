@@ -149,6 +149,7 @@ def init_project(
     print("  1. Edit .pokepoke/config.yaml to customize settings")
     print("  2. Add prompt templates in .pokepoke/prompts/")
     print("  3. Run: python -m pokepoke.orchestrator --interactive")
+    print("     (Add --agent-name Janitor to pin a custom agent name)")
     return True
 
 
