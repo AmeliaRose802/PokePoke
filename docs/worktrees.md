@@ -148,7 +148,7 @@ else:
 3. **Use meaningful IDs**: Work item IDs become part of paths and branch names
 4. **Source branch**: Ensure source branch is up to date before creating worktrees
 5. **Parallel work**: Each agent should have unique work item IDs
-6. **Agent names**: Each PokePoke instance automatically generates a unique agent name to avoid conflicts
+6. **Agent names**: Each PokePoke instance automatically generates a unique agent name (or you can pin one via `--agent-name`) to avoid conflicts
 
 ## Agent Naming for Parallel Instances
 
@@ -180,12 +180,13 @@ The naming scheme provides:
 
 ### Manual Agent Names
 
-If you need to set a custom agent name, you can set the `AGENT_NAME` environment variable before starting PokePoke:
+If you want to pin a specific name for a run, pass it directly to the orchestrator:
 
 ```powershell
-$env:AGENT_NAME = "my_custom_agent"
-python -m pokepoke.orchestrator --autonomous
+python -m pokepoke.orchestrator --interactive --agent-name Janitor
 ```
+
+(You can still set the `AGENT_NAME` environment variable before launch if you prefer.)
 
 Otherwise, PokePoke will automatically generate a unique name for you.
 

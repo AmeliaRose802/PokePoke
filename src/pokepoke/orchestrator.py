@@ -81,13 +81,19 @@ def _finalize_session(
     clear_terminal_banner()
 
 
-def run_orchestrator(interactive: bool = True, continuous: bool = False, run_beta_first: bool = False) -> int:
+def run_orchestrator(
+    interactive: bool = True,
+    continuous: bool = False,
+    run_beta_first: bool = False,
+    agent_name_override: str | None = None,
+) -> int:
     """Main orchestrator loop.
     
     Args:
         interactive: If True, prompt for user input at decision points
         continuous: If True, loop continuously; if False, process one item and exit
         run_beta_first: If True, run beta tester at startup before processing work items
+        agent_name_override: Optional custom agent name supplied via CLI
         
     Returns:
         Exit code (0 for success, 1 for failure)
@@ -97,7 +103,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
 
     try:
         # Initialize unique agent name for this run
-        agent_name = initialize_agent_name()
+        agent_name = initialize_agent_name(custom_name=agent_name_override)
         os.environ['AGENT_NAME'] = agent_name
         
         mode_name = "Interactive" if interactive else "Autonomous"
@@ -333,6 +339,12 @@ def main() -> int:
         help="Run beta tester at startup before processing work items",
     )
     parser.add_argument(
+        "--agent-name",
+        type=str,
+        default=None,
+        help="Custom agent name to use instead of auto-generating one",
+    )
+    parser.add_argument(
         "--init",
         action="store_true",
         help="Initialize .pokepoke/ directory with sample config and templates",
@@ -359,7 +371,8 @@ def main() -> int:
         return run_orchestrator(
             interactive=interactive,
             continuous=args.continuous,
-            run_beta_first=args.beta_first
+            run_beta_first=args.beta_first,
+            agent_name_override=args.agent_name,
         )
     
     return active_ui.run_with_orchestrator(orchestrator_func)
