@@ -2,23 +2,8 @@
 
 from pathlib import Path
 
-from pokepoke.config import get_config
 from pokepoke.types import AgentStats, SessionStats
-from pokepoke.agent_runner import run_maintenance_agent
 from pokepoke.logging_utils import RunLogger
-
-# Agents that have special runner functions instead of the generic one
-_SPECIAL_AGENTS = {"Beta Tester", "Worktree Cleanup"}
-
-# Map of agent stat attribute names by agent name
-_AGENT_STAT_ATTRS = {
-    "Tech Debt": "tech_debt_agent_runs",
-    "Janitor": "janitor_agent_runs",
-    "Backlog Cleanup": "backlog_cleanup_agent_runs",
-    "Beta Tester": "beta_tester_agent_runs",
-    "Code Review": "code_review_agent_runs",
-    "Worktree Cleanup": "worktree_cleanup_agent_runs",
-}
 
 
 def aggregate_stats(session_stats: SessionStats, item_stats: AgentStats) -> None:

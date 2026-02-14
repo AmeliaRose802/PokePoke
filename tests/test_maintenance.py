@@ -547,8 +547,7 @@ class TestRunPeriodicMaintenance:
 class TestRunSpecialAgent:
     """Test _run_special_agent function."""
 
-    @patch('pokepoke.maintenance.run_maintenance_agent')
-    def test_beta_tester(self, _mock: Mock) -> None:
+    def test_beta_tester(self) -> None:
         """Test that Beta Tester delegates to run_beta_tester."""
         from pathlib import Path
         with patch('pokepoke.agent_runner.run_beta_tester', return_value=AgentStats()) as mock_bt:
@@ -556,8 +555,7 @@ class TestRunSpecialAgent:
             mock_bt.assert_called_once_with(repo_root=Path("/repo"))
             assert isinstance(result, AgentStats)
 
-    @patch('pokepoke.maintenance.run_maintenance_agent')
-    def test_worktree_cleanup(self, _mock: Mock) -> None:
+    def test_worktree_cleanup(self) -> None:
         """Test that Worktree Cleanup delegates to run_worktree_cleanup."""
         from pathlib import Path
         with patch('pokepoke.agent_runner.run_worktree_cleanup', return_value=AgentStats()) as mock_wc:
