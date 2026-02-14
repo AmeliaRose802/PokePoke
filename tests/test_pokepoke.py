@@ -2,7 +2,7 @@
 """Quick test of PokePoke functionality."""
 
 from src.pokepoke.beads import get_ready_work_items, get_issue_dependencies
-from src.pokepoke.copilot import build_prompt
+from src.pokepoke.copilot_sdk import build_prompt_from_work_item
 
 
 def main():
@@ -53,7 +53,7 @@ def main():
     if items:
         print("\n📋 Test 3: Building Copilot CLI prompt...")
         try:
-            prompt = build_prompt(items[0])
+            prompt = build_prompt_from_work_item(items[0])
             print("✅ SUCCESS: Prompt generated")
             print(f"   Prompt length: {len(prompt)} characters")
             print("\n   Preview (first 200 chars):")

@@ -1,10 +1,8 @@
 """Tests for copilot_sdk.py module (direct SDK integration)."""
 
 import pytest
-import subprocess
 from unittest.mock import patch, MagicMock, AsyncMock
 
-from pokepoke.copilot import get_allowed_directories
 from pokepoke.copilot_sdk import (
     build_prompt_from_work_item,
     invoke_copilot_sdk_sync
@@ -24,52 +22,6 @@ def sample_work_item():
         issue_type="task",
         labels=["testing", "coverage"]
     )
-
-
-class TestGetAllowedDirectoriesSDK:
-    """Tests for get_allowed_directories function in SDK module."""
-    
-    @patch('pokepoke.copilot.subprocess.run')
-    @patch('pokepoke.copilot.os.getcwd')
-    def test_allowed_directories_with_git(self, mock_getcwd, mock_run):
-        """Test allowed directories when git command succeeds."""
-        mock_getcwd.return_value = "/current/dir"
-        mock_run.return_value = MagicMock(
-            stdout=".git\n",
-            returncode=0
-        )
-        
-        result = get_allowed_directories()
-        
-        assert "/current/dir" in result
-        assert len(result) >= 1
-    
-    @patch('pokepoke.copilot.subprocess.run')
-    @patch('pokepoke.copilot.os.getcwd')
-    def test_allowed_directories_git_fails(self, mock_getcwd, mock_run):
-        """Test allowed directories when git command fails."""
-        mock_getcwd.return_value = "/current/dir"
-        mock_run.side_effect = subprocess.CalledProcessError(1, "git")
-        
-        result = get_allowed_directories()
-        
-        # Should still return current directory
-        assert result == ["/current/dir"]
-    
-    @patch('pokepoke.copilot.subprocess.run')
-    @patch('pokepoke.copilot.os.getcwd')
-    def test_allowed_directories_different_root(self, mock_getcwd, mock_run):
-        """Test when worktree directory differs from repo root."""
-        mock_getcwd.return_value = "/worktree/dir"
-        mock_run.return_value = MagicMock(
-            stdout="/repo/.git\n",
-            returncode=0
-        )
-        
-        result = get_allowed_directories()
-        
-        # Should contain both worktree and repo root
-        assert "/worktree/dir" in result
 
 
 class TestBuildPromptFromWorkItem:
