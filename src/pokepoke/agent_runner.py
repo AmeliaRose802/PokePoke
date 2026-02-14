@@ -9,13 +9,13 @@ from typing import Optional
 
 from pokepoke.config import get_config
 from pokepoke.copilot import invoke_copilot
-from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
+from pokepoke.types import BeadsWorkItem, AgentStats
 from pokepoke.stats import parse_agent_stats
 from pokepoke.worktrees import create_worktree, merge_worktree, cleanup_worktree
 from pokepoke.prompts import PromptService
 from pokepoke import terminal_ui
 from pokepoke.cleanup_agents import (
-    invoke_cleanup_agent, invoke_merge_conflict_cleanup_agent, 
+    invoke_cleanup_agent, invoke_merge_conflict_cleanup_agent,
     get_pokepoke_prompts_dir, run_cleanup_loop, aggregate_cleanup_stats
 )
 
@@ -91,7 +91,14 @@ def run_gate_agent(item: BeadsWorkItem, cwd: Optional[str] = None) -> tuple[bool
     return False, "Gate Agent did not explicitly approve the fix. Check logs.", stats
 
 
-def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional[Path] = None, needs_worktree: bool = True, merge_changes: bool = True, model: Optional[str] = None) -> Optional[AgentStats]:
+def run_maintenance_agent(
+    agent_name: str,
+    prompt_file: str,
+    repo_root: Optional[Path] = None,
+    needs_worktree: bool = True,
+    merge_changes: bool = True,
+    model: Optional[str] = None
+) -> Optional[AgentStats]:
     """Run a maintenance agent with optional worktree isolation."""
     terminal_ui.ui.set_current_agent(f"{agent_name} Agent")
     print(f"\n{'='*60}\n🔧 Running {agent_name} Agent\n{'='*60}")
@@ -131,10 +138,20 @@ def run_maintenance_agent(agent_name: str, prompt_file: str, repo_root: Optional
     if repo_root is None:
         repo_root = Path.cwd()
     
-    return _run_worktree_agent(agent_name, agent_id, agent_item, agent_prompt, repo_root, merge_changes=merge_changes, model=model)
+    return _run_worktree_agent(
+        agent_name, agent_id, agent_item, agent_prompt, repo_root,
+        merge_changes=merge_changes, model=model
+    )
 
 
-def _run_simple_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, deny_write: bool = True, model: Optional[str] = None, cwd: Optional[str] = None) -> Optional[AgentStats]:
+def _run_simple_agent(
+    agent_name: str,
+    agent_item: BeadsWorkItem,
+    agent_prompt: str,
+    deny_write: bool = True,
+    model: Optional[str] = None,
+    cwd: Optional[str] = None
+) -> Optional[AgentStats]:
     """Run a simple agent in the main repo with configurable write access."""
     print(f"\n📋 Running {agent_name} ({'no write' if deny_write else 'write enabled'}){f', model={model}' if model else ''}")
     result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=deny_write, model=model, cwd=cwd)
@@ -145,11 +162,23 @@ def _run_simple_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: 
     return None
 
 # Backward-compatible aliases
-def _run_beads_only_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: Optional[str] = None, cwd: Optional[str] = None) -> Optional[AgentStats]:
+def _run_beads_only_agent(
+    agent_name: str,
+    agent_item: BeadsWorkItem,
+    agent_prompt: str,
+    model: Optional[str] = None,
+    cwd: Optional[str] = None
+) -> Optional[AgentStats]:
     """Run a beads-only maintenance agent in the main repo."""
     return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=True, model=model, cwd=cwd)
 
-def _run_main_repo_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: Optional[str] = None, cwd: Optional[str] = None) -> Optional[AgentStats]:
+def _run_main_repo_agent(
+    agent_name: str,
+    agent_item: BeadsWorkItem,
+    agent_prompt: str,
+    model: Optional[str] = None,
+    cwd: Optional[str] = None
+) -> Optional[AgentStats]:
     """Run a maintenance agent in the main repo WITH write access."""
     return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=False, model=model, cwd=cwd)
 
@@ -188,7 +217,15 @@ def run_worktree_cleanup(repo_root: Optional[Path] = None) -> Optional[AgentStat
     return _run_main_repo_agent("Worktree Cleanup", cleanup_item, cleanup_prompt, cwd=cwd)
 
 
-def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkItem, agent_prompt: str, repo_root: Path, merge_changes: bool = True, model: Optional[str] = None) -> Optional[AgentStats]:
+def _run_worktree_agent(
+    agent_name: str,
+    agent_id: str,
+    agent_item: BeadsWorkItem,
+    agent_prompt: str,
+    repo_root: Path,
+    merge_changes: bool = True,
+    model: Optional[str] = None
+) -> Optional[AgentStats]:
     """Run a code-modifying maintenance agent in a worktree."""
     print(f"\n🌳 Creating worktree for {agent_id}...")
     try:
@@ -203,126 +240,175 @@ def _run_worktree_agent(agent_name: str, agent_id: str, agent_item: BeadsWorkIte
     if model:
         print(f"   Model: {model}")
     
+    # Flag to track if worktree has been cleaned up
+    worktree_cleaned = False
+    
     try:
-        result = invoke_copilot(agent_item, prompt=agent_prompt, model=model, cwd=worktree_cwd)
-    except Exception as e:
-        print(f"❌ Error invoking Copilot: {e}")
-        from pokepoke.types import CopilotResult
-        result = CopilotResult(
-            work_item_id=agent_item.id,
-            success=False,
-            output="",
-            error=str(e),
-            attempt_count=1
-        )
-    
-    cleanup_success, _ = run_cleanup_loop(agent_item, result, repo_root, cwd=worktree_cwd)
-    
-    if not cleanup_success:
-        result.success = False
-    
-    if result.success:
-        print(f"\n✅ {agent_name} agent completed successfully!")
-        
-        if not merge_changes:
-            print("   Discarding worktree (merge_changes=False)")
-            cleanup_worktree(agent_id, force=True)
-            return parse_agent_stats(result.output) if result.output else None
-
-        print("   All changes committed and validated")
-        
-        agent_stats = parse_agent_stats(result.output) if result.output else None
-        
-        # Check if main repo is ready for merge
-        from pokepoke.git_operations import check_main_repo_ready_for_merge
-        
-        print(f"\n🔍 Checking if main repo is ready for merge...")
-        is_ready, error_msg = check_main_repo_ready_for_merge()
-        
-        if not is_ready:
-            print(f"\n⚠️  Cannot merge: {error_msg}")
-            print(f"   Worktree preserved at worktrees/task-{agent_id} for manual intervention")
-            
-            print(f"   Invoking cleanup agent to resolve uncommitted changes before merge...")
-            # We use agent_item as context
-            cleanup_success, _ = invoke_cleanup_agent(agent_item, repo_root)
-            
-            if cleanup_success:
-                 print("   Cleanup successful, retrying merge check...")
-                 is_ready, error_msg = check_main_repo_ready_for_merge()
-                 if not is_ready:
-                     print(f"   Still failing after cleanup: {error_msg}")
-                     return None
-            else:
-                 print("   Cleanup failed.")
-                 return None
-
-            return None
-        
-        print(f"\n🔀 Merging worktree for {agent_id}...")
-        from pokepoke.git_operations import is_merge_in_progress, get_unmerged_files, abort_merge
-        
-        merge_success, unmerged_files = merge_worktree(agent_id, cleanup=True)
-        
-        if not merge_success:
-            print(f"\n❌ Worktree merge failed!")
-            if unmerged_files:
-                print(f"   Conflicted files ({len(unmerged_files)}):")
-                for f in unmerged_files[:5]:
-                    print(f"      - {f}")
-                if len(unmerged_files) > 5:
-                    print(f"      ... and {len(unmerged_files) - 5} more")
-            print(f"   Worktree preserved at worktrees/task-{agent_id} for manual intervention")
-            
-            print(f"   Invoking cleanup agent to resolve conflicts...")
-            
-            # Get fresh unmerged files if not provided
-            if not unmerged_files:
-                unmerged_files = get_unmerged_files()
-            
-            success, _ = invoke_merge_conflict_cleanup_agent(
-                agent_item, 
-                repo_root, 
-                f"Merge conflict detected in {len(unmerged_files)} file(s)",
-                unmerged_files=unmerged_files
+        # Main agent execution block
+        try:
+            result = invoke_copilot(agent_item, prompt=agent_prompt, model=model, cwd=worktree_cwd)
+        except Exception as e:
+            print(f"❌ Error invoking Copilot: {e}")
+            from pokepoke.types import CopilotResult
+            result = CopilotResult(
+                work_item_id=agent_item.id,
+                success=False,
+                output="",
+                error=str(e),
+                attempt_count=1
             )
-            
-            if success:
-                print("   Cleanup successful, retrying merge...")
-                # Check if merge is still in progress (agent may have completed it)
-                if is_merge_in_progress():
-                    print("   ⚠️  Merge still in progress after cleanup - aborting to reset state")
-                    abort_success, abort_error = abort_merge()
-                    if not abort_success:
-                        print(f"   ❌ Failed to abort merge: {abort_error}")
-                        return None
-                    print("   ✅ Merge aborted, will retry")
-                
-                merge_success, _ = merge_worktree(agent_id, cleanup=True)
-                if merge_success:
-                     print("   Merged and cleaned up worktree")
-                     return agent_stats
-                else:
-                     print("   Merge failed again after cleanup.")
-                     # Abort the merge to leave clean state
-                     if is_merge_in_progress():
-                         abort_merge()
-                     return None
-            else:
-                 print("   Cleanup failed.")
-                 # Abort the merge to leave clean state
-                 if is_merge_in_progress():
-                     print("   Aborting merge to reset state...")
-                     abort_merge()
-                 return None
         
-        print("   Merged and cleaned up worktree")
-        return agent_stats
-    else:
-        print(f"\n❌ {agent_name} agent failed: {result.error}")
-        print(f"\n🧹 Cleaning up worktree...")
-        cleanup_worktree(agent_id, force=True)
-        return None
+        cleanup_success, _ = run_cleanup_loop(agent_item, result, repo_root, cwd=worktree_cwd)
+        
+        if not cleanup_success:
+            result.success = False
+        
+        if result.success:
+            print(f"\n✅ {agent_name} agent completed successfully!")
+            
+            if not merge_changes:
+                print("   Discarding worktree (merge_changes=False)")
+                cleanup_worktree(agent_id, force=True)
+                worktree_cleaned = True
+                return parse_agent_stats(result.output) if result.output else None
+
+            print("   All changes committed and validated")
+            
+            agent_stats = parse_agent_stats(result.output) if result.output else None
+            
+            # Check if main repo is ready for merge
+            from pokepoke.git_operations import check_main_repo_ready_for_merge
+            
+            print("\n🔍 Checking if main repo is ready for merge...")
+            is_ready, error_msg = check_main_repo_ready_for_merge()
+
+            if not is_ready:
+                print(f"\n⚠️  Cannot merge: {error_msg}")
+                print(f"   Worktree preserved at worktrees/task-{agent_id} for manual intervention")
+                
+                # Track preserved worktree in manifest
+                from pokepoke.worktree_cleanup import add_uncleaned_worktree
+                add_uncleaned_worktree(
+                    agent_id,
+                    str(worktree_path),
+                    f"Main repo not ready for merge: {error_msg}"
+                )
+                
+                print("   Invoking cleanup agent to resolve uncommitted changes before merge...")
+                # We use agent_item as context
+                cleanup_success, _ = invoke_cleanup_agent(agent_item, repo_root)
+
+                if cleanup_success:
+                    print("   Cleanup successful, retrying merge check...")
+                    is_ready, error_msg = check_main_repo_ready_for_merge()
+                    if not is_ready:
+                        print(f"   Still failing after cleanup: {error_msg}")
+                        return None
+                else:
+                    print("   Cleanup failed.")
+                    return None
+
+                return None
+            
+            print(f"\n🔀 Merging worktree for {agent_id}...")
+            from pokepoke.git_operations import is_merge_in_progress, get_unmerged_files, abort_merge
+            
+            merge_success, unmerged_files = merge_worktree(agent_id, cleanup=True)
+            
+            if not merge_success:
+                print("\n❌ Worktree merge failed!")
+                if unmerged_files:
+                    print(f"   Conflicted files ({len(unmerged_files)}):")
+                    for f in unmerged_files[:5]:
+                        print(f"      - {f}")
+                    if len(unmerged_files) > 5:
+                        print(f"      ... and {len(unmerged_files) - 5} more")
+                print(f"   Worktree preserved at worktrees/task-{agent_id} for manual intervention")
+                
+                # Track preserved worktree in manifest
+                from pokepoke.worktree_cleanup import add_uncleaned_worktree
+                add_uncleaned_worktree(
+                    agent_id,
+                    str(worktree_path),
+                    f"Merge conflict in {len(unmerged_files) if unmerged_files else 0} file(s)"
+                )
+                
+                print("   Invoking cleanup agent to resolve conflicts...")
+
+                # Get fresh unmerged files if not provided
+                if not unmerged_files:
+                    unmerged_files = get_unmerged_files()
+
+                success, _ = invoke_merge_conflict_cleanup_agent(
+                    agent_item,
+                    repo_root,
+                    f"Merge conflict detected in {len(unmerged_files)} file(s)",
+                    unmerged_files=unmerged_files
+                )
+
+                if success:
+                    print("   Cleanup successful, retrying merge...")
+                    # Check if merge is still in progress (agent may have completed it)
+                    if is_merge_in_progress():
+                        print("   ⚠️  Merge still in progress after cleanup - aborting to reset state")
+                        abort_success, abort_error = abort_merge()
+                        if not abort_success:
+                            print(f"   ❌ Failed to abort merge: {abort_error}")
+                            return None
+                        print("   ✅ Merge aborted, will retry")
+
+                    merge_success, _ = merge_worktree(agent_id, cleanup=True)
+                    if merge_success:
+                        # Successful merge - remove from manifest and mark as cleaned
+                        from pokepoke.worktree_cleanup import remove_from_manifest
+                        remove_from_manifest(agent_id)
+                        worktree_cleaned = True
+                        print("   Merged and cleaned up worktree")
+                        return agent_stats
+                    else:
+                        print("   Merge failed again after cleanup.")
+                        # Abort the merge to leave clean state
+                        if is_merge_in_progress():
+                            abort_merge()
+                        return None
+                else:
+                    print("   Cleanup failed.")
+                    # Abort the merge to leave clean state
+                    if is_merge_in_progress():
+                        print("   Aborting merge to reset state...")
+                        abort_merge()
+                    return None
+            else:
+                # Successful merge - worktree already cleaned by merge_worktree
+                worktree_cleaned = True
+            
+            print("   Merged and cleaned up worktree")
+            return agent_stats
+        else:
+            print(f"\n❌ {agent_name} agent failed: {result.error}")
+            print("\n🧹 Cleaning up worktree...")
+            cleanup_worktree(agent_id, force=True)
+            worktree_cleaned = True
+            return None
+    
+    finally:
+        # Ensure worktree is cleaned up if not already done
+        if not worktree_cleaned:
+            print(f"\n🧹 Final cleanup: removing worktree {agent_id}...")
+            try:
+                cleanup_worktree(agent_id, force=True)
+                # Remove from manifest if it was added
+                from pokepoke.worktree_cleanup import remove_from_manifest
+                remove_from_manifest(agent_id)
+            except Exception as cleanup_error:
+                print(f"⚠️  Final cleanup failed: {cleanup_error}")
+                # Track failed cleanup in manifest
+                from pokepoke.worktree_cleanup import add_uncleaned_worktree
+                add_uncleaned_worktree(
+                    agent_id,
+                    str(worktree_path),
+                    f"Failed final cleanup: {cleanup_error}"
+                )
 
 
 def run_beta_tester(repo_root: Optional[Path] = None) -> Optional[AgentStats]:

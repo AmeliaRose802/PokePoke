@@ -673,7 +673,8 @@ class TestRunWorktreeAgent:
         assert stats is None
         # Verify cleanup invoked
         mock_invoke_merge_cleanup.assert_called_once()
-        mock_cleanup.assert_not_called()
+        # With our new try-finally pattern, cleanup should be called in finally block
+        mock_cleanup.assert_called_once_with("maintenance-test", force=True)
     
     @patch('pokepoke.git_operations.is_merge_in_progress')
     @patch('pokepoke.agent_runner.invoke_merge_conflict_cleanup_agent')
