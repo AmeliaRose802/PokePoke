@@ -14,6 +14,8 @@ from .prompts import PromptService
 from . import terminal_ui
 from .shutdown import is_shutting_down
 
+from .process_utils import wait_for_process_cleanup
+
 if TYPE_CHECKING:
     from .logging_utils import ItemLogger
 
@@ -303,12 +305,21 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             )
         
         if interrupted:
-            return CopilotResult(
-                work_item_id=work_item.id,
-                success=False,
-                error="Interrupted by user",
-                attempt_count=1
-            )
+            # Distinguish between user interruption and internal shutdown
+            if is_shutting_down():
+                return CopilotResult(
+                    work_item_id=work_item.id,
+                    success=False,
+                    error="Session aborted due to application shutdown",
+                    attempt_count=1
+                )
+            else:
+                return CopilotResult(
+                    work_item_id=work_item.id,
+                    success=False,
+                    error="Interrupted by user",
+                    attempt_count=1
+                )
         
         await session.destroy()
         
@@ -339,13 +350,23 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         )
         
     except KeyboardInterrupt:
-        print(f"\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")
-        return CopilotResult(
-            work_item_id=work_item.id,
-            success=False,
-            error="Interrupted by user",
-            attempt_count=1
-        )
+        # Distinguish between user Ctrl+C and internal shutdown
+        if is_shutting_down():
+            print(f"\n[SDK] ⚠️  Session aborted due to application shutdown")
+            return CopilotResult(
+                work_item_id=work_item.id,
+                success=False,
+                error="Session aborted due to application shutdown",
+                attempt_count=1
+            )
+        else:
+            print(f"\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")
+            return CopilotResult(
+                work_item_id=work_item.id,
+                success=False,
+                error="Interrupted by user",
+                attempt_count=1
+            )
         
     except Exception as e:
         print(f"\n[SDK] Exception: {e}")
@@ -357,17 +378,43 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         )
         
     finally:
-        # Always stop the client
+        # Always stop the client with graceful shutdown for Chromium cleanup
         try:
-            await client.stop()
-            print("\n[SDK] Client stopped")
+            print("\n[SDK] Initiating graceful client shutdown...")
+            
+            # Give Chromium subprocess time to clean up UI windows before forcing stop
+            # This prevents Chrome_WidgetWin_0 unregister failures (Error 1411)
+            await asyncio.sleep(0.5)
+            
+            # Stop the client with timeout to prevent hanging
+            try:
+                await asyncio.wait_for(client.stop(), timeout=10.0)
+                print("[SDK] Client stopped gracefully")
+                
+                # Wait for Windows processes to fully terminate
+                # This helps prevent Chrome_WidgetWin_0 class unregister errors
+                if os.name == 'nt':
+                    print("[SDK] Waiting for process cleanup...")
+                    wait_for_process_cleanup(max_wait=2.0)
+                    
+            except asyncio.TimeoutError:
+                print("[SDK] Client stop timed out after 10s - forcing shutdown")
+                # Force stop if graceful shutdown hangs
+                try:
+                    await client.stop()
+                    # Still wait a bit for process cleanup even after force stop
+                    if os.name == 'nt':
+                        wait_for_process_cleanup(max_wait=1.0)
+                except Exception:
+                    pass  # Best effort
+                    
         except UnicodeDecodeError:
             # The Copilot subprocess may emit non-UTF-8 bytes when killed
             # during shutdown.  Swallow the encoding error so we get a
             # clean exit with stats printed.
-            print("\n[SDK] Client stopped (encoding error suppressed)")
+            print("[SDK] Client stopped (encoding error suppressed)")
         except Exception as e:
-            print(f"\n[SDK] Error stopping client: {e}")
+            print(f"[SDK] Error stopping client: {e}")
         
         # Restore original encoding setting
         if original_pythonioencoding is not None:
