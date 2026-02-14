@@ -111,6 +111,13 @@
       "duration_seconds": 7283.412474155426,
       "gate_passed": true,
       "timestamp": "2026-02-14T14:39:05.116901+00:00"
+    },
+    {
+      "item_id": "PokePoke-9bl1",
+      "model": "claude-sonnet-4.5",
+      "duration_seconds": 7211.781927347183,
+      "gate_passed": false,
+      "timestamp": "2026-02-14T16:51:30.517404+00:00"
     }
   ],
   "summary": {
@@ -203,6 +210,16 @@
       "average_duration": 4792.81,
       "success_rate": 0.5,
       "last_used": "2026-02-14T08:41:27.167775+00:00"
+    },
+    "claude-sonnet-4.5": {
+      "total_items_attempted": 1,
+      "total_items_succeeded": 0,
+      "total_items_failed": 1,
+      "total_duration_seconds": 7211.781927347183,
+      "total_retries": 0,
+      "average_duration": 7211.78,
+      "success_rate": 0.0,
+      "last_used": "2026-02-14T16:51:30.517404+00:00"
     }
   }
 }
