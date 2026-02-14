@@ -1,5 +1,7 @@
 """Tests for git worktree management."""
+import json
 import subprocess
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch, call
 
@@ -25,7 +27,12 @@ from pokepoke.worktrees import (
     list_worktrees,
 )
 from pokepoke.worktree_cleanup import (
+    add_uncleaned_worktree,
     force_remove_directory,
+    get_stale_worktrees,
+    load_worktree_manifest,
+    remove_from_manifest,
+    save_worktree_manifest,
     _handle_remove_readonly,
 )
 
@@ -1054,6 +1061,91 @@ class TestForceRemoveDirectory:
             
             mock_chmod.assert_called_once_with('/some/path', 0o200)
             mock_func.assert_called_once_with('/some/path')
+
+
+class TestWorktreeManifest:
+    """Tests for worktree cleanup manifest helpers."""
+
+    def test_load_manifest_returns_empty_for_missing_file(self, tmp_path: Path) -> None:
+        """Missing manifest file should return empty dict."""
+        manifest_path = tmp_path / "uncleaned_worktrees.json"
+        with patch(
+            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+            return_value=manifest_path,
+        ):
+            assert load_worktree_manifest() == {}
+
+    def test_load_manifest_returns_empty_for_non_dict(self, tmp_path: Path) -> None:
+        """Non-dict manifest data should be treated as empty."""
+        manifest_path = tmp_path / "uncleaned_worktrees.json"
+        manifest_path.write_text(json.dumps(["not", "a", "dict"]), encoding="utf-8")
+        with patch(
+            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+            return_value=manifest_path,
+        ):
+            assert load_worktree_manifest() == {}
+
+    def test_add_and_remove_manifest_entry(self, tmp_path: Path) -> None:
+        """Add/remove should update manifest on disk."""
+        manifest_path = tmp_path / "uncleaned_worktrees.json"
+        with patch(
+            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+            return_value=manifest_path,
+        ):
+            add_uncleaned_worktree("task-1", "worktrees/task-1", "reason")
+            data = load_worktree_manifest()
+            assert data["task-1"]["path"] == "worktrees/task-1"
+            remove_from_manifest("task-1")
+            assert load_worktree_manifest() == {}
+
+    def test_save_manifest_writes_data(self, tmp_path: Path) -> None:
+        """save_worktree_manifest should persist JSON."""
+        manifest_path = tmp_path / "uncleaned_worktrees.json"
+        manifest = {
+            "task-2": {
+                "path": "worktrees/task-2",
+                "reason": "cleanup",
+                "timestamp": "2026-02-14T00:00:00",
+            }
+        }
+        with patch(
+            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+            return_value=manifest_path,
+        ):
+            save_worktree_manifest(manifest)
+            raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+            assert raw["task-2"]["reason"] == "cleanup"
+
+    def test_get_stale_worktrees_filters_entries(self, tmp_path: Path) -> None:
+        """Stale and invalid timestamps should be returned."""
+        manifest_path = tmp_path / "uncleaned_worktrees.json"
+        now = datetime.now()
+        data = {
+            "stale": {
+                "path": "worktrees/stale",
+                "reason": "old",
+                "timestamp": (now - timedelta(days=10)).isoformat(),
+            },
+            "fresh": {
+                "path": "worktrees/fresh",
+                "reason": "new",
+                "timestamp": now.isoformat(),
+            },
+            "invalid": {
+                "path": "worktrees/invalid",
+                "reason": "bad",
+                "timestamp": "not-a-time",
+            },
+        }
+        manifest_path.write_text(json.dumps(data), encoding="utf-8")
+        with patch(
+            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+            return_value=manifest_path,
+        ):
+            stale = get_stale_worktrees(max_age_days=7)
+            assert "stale" in stale
+            assert "invalid" in stale
+            assert "fresh" not in stale
 
 
 class TestCleanupAfterMergePermissionDenied:

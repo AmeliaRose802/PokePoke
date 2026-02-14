@@ -217,8 +217,7 @@ def run_orchestrator(interactive: bool = True, continuous: bool = False, run_bet
             
             # Increment counter on successful processing
             if success:
-                items_completed += 1
-                session_stats.record_completion(selected_item, items_completed)
+                items_completed = session_stats.record_completion(selected_item)
                 total_persistent_count = increment_items_completed()
                 print(f"\n📈 Items completed this session: {items_completed}")
                 print(f"📈 Total items completed (lifetime): {total_persistent_count}")

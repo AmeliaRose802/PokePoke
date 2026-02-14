@@ -8,7 +8,7 @@ import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict
+from typing import Dict, cast
 
 # Retry settings for worktree removal on Windows
 _CLEANUP_MAX_RETRIES = 3
@@ -69,7 +69,10 @@ def load_worktree_manifest() -> Dict[str, Dict[str, str]]:
 
     try:
         with open(manifest_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            raw = json.load(f)
+            if isinstance(raw, dict):
+                return cast(Dict[str, Dict[str, str]], raw)
+            return {}
     except (json.JSONDecodeError, IOError):
         return {}
 
