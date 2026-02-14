@@ -246,6 +246,54 @@ def test_get_state_includes_model_leaderboard() -> None:
     assert "model_leaderboard" in state
 
 
+def test_get_config_reads_yaml() -> None:
+    from unittest.mock import patch
+
+    api = DesktopAPI()
+    with patch("pokepoke.config._find_repo_root") as mock_root:
+        # Create a fake repo root with .pokepoke/config.yaml
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / ".pokepoke").mkdir(parents=True, exist_ok=True)
+            (root / ".pokepoke" / "config.yaml").write_text(
+                "project_name: TestProject\nmodels:\n  default: gpt-5\n",
+                encoding="utf-8",
+            )
+            mock_root.return_value = root
+
+            result = api.get_config()
+
+    assert result["exists"] is True
+    assert result["config"]["project_name"] == "TestProject"
+    assert result["config"]["models"]["default"] == "gpt-5"
+
+
+def test_save_config_writes_yaml() -> None:
+    from unittest.mock import patch
+    import yaml
+
+    api = DesktopAPI()
+    with patch("pokepoke.config._find_repo_root") as mock_root:
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            mock_root.return_value = root
+
+            save_result = api.save_config({"project_name": "X", "git": {"fallback_branch": "main"}})
+            assert save_result["saved"] is True
+
+            cfg_path = root / ".pokepoke" / "config.yaml"
+            loaded = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+
+    assert loaded["project_name"] == "X"
+    assert loaded["git"]["fallback_branch"] == "main"
+
+
 def test_push_stats_with_model_completions() -> None:
     """push_stats should serialize model completions via snapshot."""
     from pokepoke.types import ModelCompletionRecord

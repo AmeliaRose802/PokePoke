@@ -13,6 +13,12 @@ import time
 from dataclasses import asdict
 from typing import Any, Optional, TYPE_CHECKING
 
+try:
+    import yaml  # type: ignore[import-untyped]
+    HAS_YAML = True
+except ImportError:
+    HAS_YAML = False
+
 if TYPE_CHECKING:
     from pokepoke.types import SessionStats
 
@@ -160,6 +166,74 @@ class DesktopAPI:
         """
         from pokepoke.model_stats_store import get_model_summary
         return get_model_summary()
+
+    def get_config(self) -> dict[str, Any]:
+        """Load the project config file as a JSON-serializable dict.
+
+        The desktop UI uses this to populate the Settings page.
+        """
+        from pokepoke.config import _find_repo_root
+
+        config_path = _find_repo_root() / ".pokepoke" / "config.yaml"
+        if not config_path.exists():
+            return {"path": str(config_path), "config": {}, "exists": False}
+
+        if not HAS_YAML:
+            raise ImportError(
+                "PyYAML is required to load .yaml config files. Install it with: pip install pyyaml"
+            )
+
+        raw = config_path.read_text(encoding="utf-8")
+        data = yaml.safe_load(raw)
+        return {
+            "path": str(config_path),
+            "config": data if isinstance(data, dict) else {},
+            "exists": True,
+        }
+
+    def save_config(self, config: Any) -> dict[str, Any]:
+        """Persist a new project config to `.pokepoke/config.yaml`.
+
+        Args:
+            config: Typically a JS object passed via pywebview (dict-like).
+        """
+        from pokepoke.config import _find_repo_root, reset_config
+
+        if not HAS_YAML:
+            raise ImportError(
+                "PyYAML is required to save .yaml config files. Install it with: pip install pyyaml"
+            )
+
+        # pywebview usually passes a dict, but allow YAML string for convenience.
+        if isinstance(config, str):
+            parsed = yaml.safe_load(config)
+            if not isinstance(parsed, dict):
+                raise ValueError("Config YAML must parse to an object")
+            config_dict: dict[str, Any] = parsed
+        elif isinstance(config, dict):
+            config_dict = config
+        else:
+            raise ValueError("Config must be a dict or YAML string")
+
+        config_path = _find_repo_root() / ".pokepoke" / "config.yaml"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+
+        dumped = yaml.safe_dump(
+            config_dict,
+            sort_keys=False,
+            allow_unicode=True,
+            default_flow_style=False,
+        )
+        if not dumped.endswith("\n"):
+            dumped += "\n"
+
+        with self._lock:
+            config_path.write_text(dumped, encoding="utf-8")
+
+        # Ensure subsequent orchestrator reads see the new values.
+        reset_config()
+
+        return {"path": str(config_path), "saved": True}
 
     # ─── Python → State: Called by the orchestrator ───────────────────
 
