@@ -717,12 +717,13 @@ class TestInvokeCopilotSDKAsync:
     @patch('pokepoke.copilot_sdk.CopilotClient')
     @patch('pokepoke.copilot_sdk.os.environ', new_callable=dict)
     async def test_invoke_copilot_sdk_environment_handling(self, mock_environ, mock_client_class, sample_work_item):
-        """Test SDK invocation handles PYTHONIOENCODING environment variable."""
+        """Test SDK invocation passes PYTHONIOENCODING via client options without mutating global os.environ."""
         from pokepoke.copilot_sdk import invoke_copilot_sdk
         import asyncio
         
         # Start with original value
         mock_environ['PYTHONIOENCODING'] = 'utf-8'
+        original_value = mock_environ['PYTHONIOENCODING']
         
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -758,8 +759,15 @@ class TestInvokeCopilotSDKAsync:
         )
         
         assert result.success
-        # Environment should be restored to original value
-        assert mock_environ.get('PYTHONIOENCODING') == 'utf-8'
+        
+        # Verify os.environ was never mutated (remains at original value)
+        assert mock_environ.get('PYTHONIOENCODING') == original_value
+        
+        # Verify CopilotClient was called with env parameter containing PYTHONIOENCODING
+        mock_client_class.assert_called_once()
+        call_args = mock_client_class.call_args[0][0]
+        assert 'env' in call_args
+        assert call_args['env']['PYTHONIOENCODING'] == 'utf-8:replace'
     
     @patch('pokepoke.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_tool_requests(self, mock_client_class, sample_work_item):
@@ -831,3 +839,164 @@ class TestInvokeCopilotSDKAsync:
         
         assert not result.success
         assert "Interrupted by user" in result.error
+
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_invoke_copilot_sdk_with_cwd(self, mock_client_class, sample_work_item):
+        """Test SDK invocation passes cwd to client options."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        import asyncio
+
+        mock_client = AsyncMock()
+        mock_session = AsyncMock()
+        mock_session.session_id = "test-session-cwd"
+        mock_client.start = AsyncMock()
+        mock_client.create_session = AsyncMock(return_value=mock_session)
+        mock_client.stop = AsyncMock()
+        mock_client_class.return_value = mock_client
+
+        stored_handler = None
+        def mock_on(handler):
+            nonlocal stored_handler
+            stored_handler = handler
+        mock_session.on = mock_on
+
+        async def mock_send(message):
+            async def send_events():
+                await asyncio.sleep(0.01)
+                if stored_handler:
+                    event = MagicMock()
+                    event.type.value = "session.idle"
+                    stored_handler(event)
+            asyncio.create_task(send_events())
+        mock_session.send = mock_send
+        mock_session.destroy = AsyncMock()
+
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item,
+            cwd="/tmp/test-worktree",
+            idle_timeout=0.01
+        )
+
+        assert result.success
+        call_args = mock_client_class.call_args[0][0]
+        assert call_args["cwd"] == "/tmp/test-worktree"
+
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_invoke_copilot_sdk_unicode_decode_error_in_stop(self, mock_client_class, sample_work_item):
+        """Test SDK handles UnicodeDecodeError during client.stop()."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        import asyncio
+
+        mock_client = AsyncMock()
+        mock_session = AsyncMock()
+        mock_session.session_id = "test-session-unicode"
+        mock_client.start = AsyncMock()
+        mock_client.create_session = AsyncMock(return_value=mock_session)
+        mock_client.stop = AsyncMock(side_effect=UnicodeDecodeError('utf-8', b'\xff', 0, 1, 'invalid'))
+        mock_client_class.return_value = mock_client
+
+        stored_handler = None
+        def mock_on(handler):
+            nonlocal stored_handler
+            stored_handler = handler
+        mock_session.on = mock_on
+
+        async def mock_send(message):
+            async def send_events():
+                await asyncio.sleep(0.01)
+                if stored_handler:
+                    event = MagicMock()
+                    event.type.value = "session.idle"
+                    stored_handler(event)
+            asyncio.create_task(send_events())
+        mock_session.send = mock_send
+        mock_session.destroy = AsyncMock()
+
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item,
+            idle_timeout=0.01
+        )
+
+        assert result.success
+
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_invoke_copilot_sdk_general_exception(self, mock_client_class, sample_work_item):
+        """Test SDK handles general exceptions during execution."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+
+        mock_client = AsyncMock()
+        mock_client.start = AsyncMock(side_effect=RuntimeError("Connection failed"))
+        mock_client.stop = AsyncMock()
+        mock_client_class.return_value = mock_client
+
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item,
+            idle_timeout=0.01
+        )
+
+        assert not result.success
+        assert "SDK exception: Connection failed" in result.error
+
+    @patch('pokepoke.copilot_sdk.is_shutting_down', return_value=True)
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_invoke_copilot_sdk_keyboard_interrupt_during_shutdown(self, mock_client_class, mock_shutting_down, sample_work_item):
+        """Test SDK reports shutdown error when KeyboardInterrupt occurs during shutdown."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+
+        mock_client = AsyncMock()
+        mock_client.start = AsyncMock(side_effect=KeyboardInterrupt("shutdown"))
+        mock_client.stop = AsyncMock()
+        mock_client_class.return_value = mock_client
+
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item,
+            idle_timeout=0.01
+        )
+
+        assert not result.success
+        assert "shutdown" in result.error.lower()
+
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_invoke_copilot_sdk_stop_timeout(self, mock_client_class, sample_work_item):
+        """Test SDK handles timeout during client.stop() in finally block."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        import asyncio
+
+        mock_client = AsyncMock()
+        mock_session = AsyncMock()
+        mock_session.session_id = "test-session-stop-timeout"
+        mock_client.start = AsyncMock()
+        mock_client.create_session = AsyncMock(return_value=mock_session)
+
+        stop_call_count = 0
+        async def mock_stop():
+            nonlocal stop_call_count
+            stop_call_count += 1
+            if stop_call_count == 1:
+                raise asyncio.TimeoutError()
+        mock_client.stop = mock_stop
+        mock_client_class.return_value = mock_client
+
+        stored_handler = None
+        def mock_on(handler):
+            nonlocal stored_handler
+            stored_handler = handler
+        mock_session.on = mock_on
+
+        async def mock_send(message):
+            async def send_events():
+                await asyncio.sleep(0.01)
+                if stored_handler:
+                    event = MagicMock()
+                    event.type.value = "session.idle"
+                    stored_handler(event)
+            asyncio.create_task(send_events())
+        mock_session.send = mock_send
+        mock_session.destroy = AsyncMock()
+
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item,
+            idle_timeout=0.01
+        )
+
+        assert result.success
