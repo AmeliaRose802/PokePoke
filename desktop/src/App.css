@@ -247,6 +247,7 @@
   border: 1px solid #292e42;
   border-radius: 6px;
   padding: 8px;
+  cursor: pointer;
   transition: border-color 0.15s;
 }
 
@@ -349,6 +350,101 @@
 .agent-card-no-logs {
   font-style: italic;
   color: #3b4261;
+}
+
+.agent-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.agent-detail-header {
+  gap: 8px;
+}
+
+.agent-back-btn {
+  background: none;
+  border: 1px solid #3b4261;
+  border-radius: 4px;
+  color: #a9b1d6;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 8px;
+}
+
+.agent-back-btn:hover {
+  border-color: #7aa2f7;
+  color: #7aa2f7;
+}
+
+.agent-detail-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-detail-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agent-status-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #292e42;
+  color: #a9b1d6;
+}
+
+.agent-status-chip.status-running {
+  color: #7aa2f7;
+}
+
+.agent-status-chip.status-success {
+  color: #9ece6a;
+}
+
+.agent-status-chip.status-failed {
+  color: #f7768e;
+}
+
+.agent-detail-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: #565f89;
+  border-bottom: 1px solid #292e42;
+}
+
+.agent-meta-item strong {
+  color: #a9b1d6;
+}
+
+.agent-detail-logs {
+  flex: 1;
+  background: #14151d;
+  border: 1px solid #292e42;
+  border-radius: 6px;
+  margin: 6px;
+  padding: 8px;
+  overflow-y: auto;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.agent-detail-log-line {
+  padding: 2px 0;
+  color: #c0caf5;
+}
+
+.agent-detail-empty {
+  color: #565f89;
+  font-style: italic;
 }
 
 /* ── Log Panel ─────────────────────────────────────────────────────────── */

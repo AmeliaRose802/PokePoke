@@ -6,10 +6,14 @@
  * a live preview of recent log lines.
  */
 
+import { useEffect, useMemo, useRef } from "react";
 import type { AgentInfo } from "../types";
 
 interface Props {
   agents: AgentInfo[];
+  selectedAgentId?: string | null;
+  selectedAgentDetail?: AgentInfo | null;
+  onSelectAgent?: (agentId: string | null) => void;
 }
 
 const ROBOT_AVATARS = [
@@ -32,7 +36,71 @@ const STATUS_INDICATOR: Record<string, { dot: string; label: string }> = {
   failed: { dot: "agent-dot-failed", label: "Failed" },
 };
 
-export function AgentsPanel({ agents }: Props) {
+function formatTimestamp(ts?: number | null): string {
+  if (!ts) return "—";
+  return new Date(ts * 1000).toLocaleTimeString("en-US", { hour12: false });
+}
+
+function AgentDetailView({ agent, onBack }: { agent: AgentInfo; onBack: () => void }) {
+  const statusInfo = STATUS_INDICATOR[agent.status] ?? STATUS_INDICATOR.running;
+  const logLines = useMemo(
+    () => (agent.log_lines && agent.log_lines.length > 0 ? agent.log_lines : agent.recent_logs),
+    [agent.log_lines, agent.recent_logs]
+  );
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "auto" });
+  }, [logLines]);
+
+  return (
+    <div className="agent-detail">
+      <div className="agents-panel-header agent-detail-header">
+        <button className="agent-back-btn" onClick={onBack}>
+          ← Agents
+        </button>
+        <div className="agent-detail-title">
+          <span className="agent-card-avatar">{getAvatar(agent.agent_id)}</span>
+          <div className="agent-card-info">
+            <span className="agent-card-name">{agent.name}</span>
+            <span className="agent-card-iter">v{agent.iteration}</span>
+          </div>
+        </div>
+        <div className="agent-detail-status">
+          <span className={`agent-dot ${statusInfo.dot}`} title={statusInfo.label} />
+          <span className={`agent-status-chip status-${agent.status}`}>{statusInfo.label}</span>
+        </div>
+      </div>
+      <div className="agent-detail-meta">
+        <span className="agent-meta-item">
+          <strong>ID:</strong> {agent.agent_id}
+        </span>
+        <span className="agent-meta-item">
+          <strong>Last log:</strong> {formatTimestamp(agent.last_log_at ?? agent.last_updated)}
+        </span>
+      </div>
+      <div className="agent-detail-logs">
+        {logLines.length === 0 ? (
+          <div className="agent-detail-empty">Waiting for output…</div>
+        ) : (
+          logLines.map((line, i) => (
+            <div key={`${agent.agent_id}-log-${i}`} className="agent-detail-log-line">
+              {line}
+            </div>
+          ))
+        )}
+        <div ref={bottomRef} />
+      </div>
+    </div>
+  );
+}
+
+export function AgentsPanel({
+  agents,
+  selectedAgentId,
+  selectedAgentDetail,
+  onSelectAgent,
+}: Props) {
   if (agents.length === 0) {
     return (
       <aside className="agents-panel">
@@ -41,6 +109,19 @@ export function AgentsPanel({ agents }: Props) {
           <span className="agents-count">0</span>
         </div>
         <div className="agents-empty">No agents running</div>
+      </aside>
+    );
+  }
+
+  const detailAgent =
+    selectedAgentId != null
+      ? selectedAgentDetail ?? agents.find((agent) => agent.agent_id === selectedAgentId) ?? null
+      : null;
+
+  if (detailAgent) {
+    return (
+      <aside className="agents-panel">
+        <AgentDetailView agent={detailAgent} onBack={() => onSelectAgent?.(null)} />
       </aside>
     );
   }
@@ -55,7 +136,19 @@ export function AgentsPanel({ agents }: Props) {
         {agents.map((agent) => {
           const statusInfo = STATUS_INDICATOR[agent.status] ?? STATUS_INDICATOR.running;
           return (
-            <div key={agent.agent_id} className={`agent-card agent-card-${agent.status}`}>
+            <div
+              key={agent.agent_id}
+              className={`agent-card agent-card-${agent.status}`}
+              role={onSelectAgent ? "button" : undefined}
+              tabIndex={onSelectAgent ? 0 : undefined}
+              onClick={() => onSelectAgent?.(agent.agent_id)}
+              onKeyDown={(evt) => {
+                if (evt.key === "Enter" || evt.key === " ") {
+                  evt.preventDefault();
+                  onSelectAgent?.(agent.agent_id);
+                }
+              }}
+            >
               <div className="agent-card-top">
                 <span className="agent-card-avatar">{getAvatar(agent.agent_id)}</span>
                 <div className="agent-card-info">
