@@ -421,12 +421,14 @@ def test_push_agent_log_trims_excess() -> None:
     """push_agent_log should trim to max log lines."""
     api = DesktopAPI()
     api._agent_max_log_lines = 3
+    api._agent_detail_max_log_lines = 4
     api.push_agent_status("agent-1", "Worker")
     for i in range(5):
         api.push_agent_log("agent-1", f"line-{i}")
 
     agents = api.get_agents()
     assert agents[0]["recent_logs"] == ["line-2", "line-3", "line-4"]
+    assert agents[0]["log_lines"] == ["line-1", "line-2", "line-3", "line-4"]
 
 
 def test_push_agent_log_ignores_unknown_agent() -> None:
@@ -465,3 +467,21 @@ def test_get_state_includes_agents() -> None:
     assert len(state["agents"]) == 1
     assert state["agents"][0]["name"] == "Worker"
     assert state["agents"][0]["recent_logs"] == ["doing work"]
+    assert state["agents"][0]["log_lines"] == ["doing work"]
+
+
+def test_get_agent_detail_includes_full_logs_and_timestamps() -> None:
+    """get_agent_detail should return deep copies with trimmed logs and metadata."""
+    api = DesktopAPI()
+    api._agent_max_log_lines = 2
+    api._agent_detail_max_log_lines = 3
+    api.push_agent_status("agent-1", "Worker", iteration=1, status="running")
+    for line in ("one", "two", "three", "four"):
+        api.push_agent_log("agent-1", line)
+
+    detail = api.get_agent_detail("agent-1")
+    assert detail is not None
+    assert detail["recent_logs"] == ["three", "four"]
+    assert detail["log_lines"] == ["two", "three", "four"]
+    assert detail["last_log_at"] is not None
+    assert detail["last_updated"] is not None

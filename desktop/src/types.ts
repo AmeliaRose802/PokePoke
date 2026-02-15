@@ -141,4 +141,8 @@ export interface AgentInfo {
   iteration: number;
   status: "running" | "success" | "failed";
   recent_logs: string[];
+  log_lines?: string[];
+  started_at?: number;
+  last_updated?: number;
+  last_log_at?: number | null;
 }

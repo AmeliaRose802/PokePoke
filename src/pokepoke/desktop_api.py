@@ -5,13 +5,14 @@ Every public method on DesktopAPI is callable from JavaScript as:
 
 This is NOT a server. pywebview calls these methods directly in-process.
 """
-
 from __future__ import annotations
 
 import threading
 import time
 from dataclasses import asdict
 from typing import Any, Optional, TYPE_CHECKING
+
+from pokepoke.agent_registry import AgentRegistry
 
 try:
     import yaml  # type: ignore[import-untyped]
@@ -32,7 +33,7 @@ class DesktopAPI:
 
     def __init__(self) -> None:
         self._window: Optional[Any] = None
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
         # Buffered state — frontend can poll or get pushed updates
         self._log_buffer: list[dict[str, Any]] = []
@@ -57,14 +58,17 @@ class DesktopAPI:
         self._leaderboard_cache_time: float = 0.0
 
         # Running agents — keyed by agent_id
-        self._agents: dict[str, dict[str, Any]] = {}
-        self._agent_max_log_lines: int = 20
+        self._agent_max_log_lines_internal = 20
+        self._agent_detail_max_log_lines_internal = 200
+        self._agent_registry = AgentRegistry(
+            self._lock,
+            preview_limit=self._agent_max_log_lines_internal,
+            detail_limit=self._agent_detail_max_log_lines_internal,
+        )
 
     def set_window(self, window: Any) -> None:
         """Called once after pywebview creates the window."""
         self._window = window
-
-    # ─── JS → Python: Query methods ──────────────────────────────────
 
     @staticmethod
     def _snapshot_to_dict(snapshot: Any) -> dict[str, Any]:
@@ -116,7 +120,7 @@ class DesktopAPI:
                 "progress": self._current_progress,
                 "log_count": len(self._log_buffer),
                 "model_leaderboard": self._get_cached_leaderboard(),
-                "agents": list(self._agents.values()),
+                "agents": self._agent_registry.serialize_all(),
             }
 
     def _get_cached_leaderboard(self) -> dict[str, Any]:
@@ -300,45 +304,45 @@ class DesktopAPI:
             self._log_buffer.clear()
             self._log_read_index = 0
 
-    # ─── Agent tracking ──────────────────────────────────────────────
+    @property
+    def _agent_max_log_lines(self) -> int:
+        return self._agent_max_log_lines_internal
+
+    @_agent_max_log_lines.setter
+    def _agent_max_log_lines(self, value: int) -> None:
+        self._agent_max_log_lines_internal = value
+        self._agent_registry.set_limits(value, self._agent_detail_max_log_lines_internal)
+
+    @property
+    def _agent_detail_max_log_lines(self) -> int:
+        return self._agent_detail_max_log_lines_internal
+
+    @_agent_detail_max_log_lines.setter
+    def _agent_detail_max_log_lines(self, value: int) -> None:
+        self._agent_detail_max_log_lines_internal = value
+        self._agent_registry.set_limits(self._agent_max_log_lines_internal, value)
 
     def push_agent_status(
         self, agent_id: str, name: str, iteration: int = 1, status: str = "running",
     ) -> None:
         """Register or update a running agent."""
-        with self._lock:
-            existing = self._agents.get(agent_id)
-            recent_logs: list[str] = existing["recent_logs"] if existing else []
-            self._agents[agent_id] = {
-                "agent_id": agent_id,
-                "name": name,
-                "iteration": iteration,
-                "status": status,
-                "recent_logs": recent_logs,
-            }
+        self._agent_registry.update_status(agent_id, name, iteration, status)
 
     def push_agent_log(self, agent_id: str, line: str) -> None:
         """Append a log line to an agent's recent log preview."""
-        with self._lock:
-            agent = self._agents.get(agent_id)
-            if agent is None:
-                return
-            logs = agent["recent_logs"]
-            logs.append(line)
-            if len(logs) > self._agent_max_log_lines:
-                agent["recent_logs"] = logs[-self._agent_max_log_lines:]
+        self._agent_registry.append_log(agent_id, line)
 
     def remove_agent(self, agent_id: str) -> None:
         """Remove a finished agent from the tracked set."""
-        with self._lock:
-            self._agents.pop(agent_id, None)
+        self._agent_registry.remove(agent_id)
 
     def get_agents(self) -> list[dict[str, Any]]:
         """Return the list of currently tracked agents."""
-        with self._lock:
-            return list(self._agents.values())
+        return self._agent_registry.serialize_all()
 
-    # ─── Prompt management ────────────────────────────────────────────
+    def get_agent_detail(self, agent_id: str) -> Optional[dict[str, Any]]:
+        """Return a deep copy of a single agent's detail state (logs included)."""
+        return self._agent_registry.get_detail(agent_id)
 
     def list_prompts(self) -> list[dict[str, Any]]:
         """List all prompt templates with override metadata.

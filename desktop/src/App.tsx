@@ -23,6 +23,16 @@ function App() {
   );
   const [showPrompts, setShowPrompts] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+
+  const hasSelectedAgent =
+    selectedAgentId !== null &&
+    bridge.agents.some((agent) => agent.agent_id === selectedAgentId);
+  const displayedAgentId = hasSelectedAgent ? selectedAgentId : null;
+  const selectedAgentDetail =
+    displayedAgentId !== null
+      ? bridge.agents.find((agent) => agent.agent_id === displayedAgentId) ?? null
+      : null;
 
   return (
     <div className="app">
@@ -78,7 +88,12 @@ function App() {
         </div>
 
         {/* Agents panel */}
-        <AgentsPanel agents={bridge.agents} />
+        <AgentsPanel
+          agents={bridge.agents}
+          selectedAgentId={displayedAgentId}
+          selectedAgentDetail={selectedAgentDetail}
+          onSelectAgent={setSelectedAgentId}
+        />
       </div>
 
       {/* Stats footer */}
