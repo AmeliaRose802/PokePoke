@@ -181,6 +181,13 @@
       "duration_seconds": 7206.345753908157,
       "gate_passed": false,
       "timestamp": "2026-02-15T17:35:47.186765+00:00"
+    },
+    {
+      "item_id": "PokePoke-lvlc",
+      "model": "gpt-5.1-codex-max",
+      "duration_seconds": 7222.490545749664,
+      "gate_passed": false,
+      "timestamp": "2026-02-15T23:12:13.557386+00:00"
     }
   ],
   "summary": {
@@ -205,14 +212,14 @@
       "last_used": "2026-02-15T09:11:19.367239+00:00"
     },
     "gpt-5.1-codex-max": {
-      "total_items_attempted": 1,
+      "total_items_attempted": 2,
       "total_items_succeeded": 1,
-      "total_items_failed": 0,
-      "total_duration_seconds": 494.318222284317,
+      "total_items_failed": 1,
+      "total_duration_seconds": 7716.808768033981,
       "total_retries": 0,
-      "average_duration": 494.32,
-      "success_rate": 1.0,
-      "last_used": "2026-02-12T19:42:06.052353+00:00"
+      "average_duration": 3858.4,
+      "success_rate": 0.5,
+      "last_used": "2026-02-15T23:12:13.557386+00:00"
     },
     "gpt-5-codex": {
       "total_items_attempted": 3,
