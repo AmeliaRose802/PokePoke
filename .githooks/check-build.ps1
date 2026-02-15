@@ -27,6 +27,13 @@ if ($LASTEXITCODE -ne 0) {
     $repoRoot = $PSScriptRoot | Split-Path -Parent
 }
 
+# Load shared warning detection helpers
+$warningHelper = Join-Path $PSScriptRoot "warning-utils.ps1"
+if (-not (Test-Path $warningHelper)) {
+    throw "warning-utils.ps1 not found at $warningHelper"
+}
+. $warningHelper
+
 # Get staged desktop files that should trigger a build
 function Get-StagedDesktopBuildFiles {
     try {
@@ -63,8 +70,8 @@ else {
     $errors = @()
     
     foreach ($file in $pythonFiles) {
-        # Check syntax using Python's compile
-        $result = python -m py_compile "$file" 2>&1
+        # Check syntax using Python's compile (warnings treated as errors)
+        $result = python -W error -m py_compile "$file" 2>&1
         
         if ($LASTEXITCODE -ne 0) {
             $errors += @{
@@ -108,10 +115,11 @@ if ($stagedDesktopFiles.Count -eq 0) {
 Write-Host "🛠  Building desktop app (npm run build) for $($stagedDesktopFiles.Count) staged file(s)..." -ForegroundColor Cyan
 
 $desktopDir = Join-Path $repoRoot "desktop"
+$buildOutputLines = @()
 
 Push-Location $desktopDir
 try {
-    npm run build
+    npm run build 2>&1 | Tee-Object -Variable buildOutputLines | Out-Default
     $buildExitCode = $LASTEXITCODE
 }
 finally {
@@ -121,6 +129,17 @@ finally {
 if ($buildExitCode -ne 0) {
     Write-Host ""
     Write-Host "❌ Desktop build failed. Fix build errors before committing." -ForegroundColor Red
+    exit 1
+}
+
+$warningLines = Get-WarningMatches -Lines $buildOutputLines
+if ($warningLines.Count -gt 0) {
+    Write-Host ""
+    Write-Host "❌ Desktop build emitted warnings. Warnings must be resolved before committing." -ForegroundColor Red
+    Write-Host ""
+    foreach ($line in $warningLines) {
+        Write-Host "  $line" -ForegroundColor Yellow
+    }
     exit 1
 }
 
