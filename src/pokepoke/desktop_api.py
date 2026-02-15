@@ -56,41 +56,40 @@ class DesktopAPI:
         self._leaderboard_cache: dict[str, Any] = {}
         self._leaderboard_cache_time: float = 0.0
 
+        # Running agents — keyed by agent_id
+        self._agents: dict[str, dict[str, Any]] = {}
+        self._agent_max_log_lines: int = 20
+
     def set_window(self, window: Any) -> None:
         """Called once after pywebview creates the window."""
         self._window = window
 
     # ─── JS → Python: Query methods ──────────────────────────────────
 
-    def _serialize_live_stats(self) -> Optional[dict[str, Any]]:
-        """Serialize session stats fresh on every poll.
+    @staticmethod
+    def _snapshot_to_dict(snapshot: Any) -> dict[str, Any]:
+        """Convert a SessionStatsSnapshot to a JSON-serializable dict."""
+        return {
+            "agent_stats": asdict(snapshot.agent_stats),
+            "items_completed": snapshot.items_completed,
+            "work_agent_runs": snapshot.work_agent_runs,
+            "gate_agent_runs": snapshot.gate_agent_runs,
+            "tech_debt_agent_runs": snapshot.tech_debt_agent_runs,
+            "janitor_agent_runs": snapshot.janitor_agent_runs,
+            "backlog_cleanup_agent_runs": snapshot.backlog_cleanup_agent_runs,
+            "cleanup_agent_runs": snapshot.cleanup_agent_runs,
+            "beta_tester_agent_runs": snapshot.beta_tester_agent_runs,
+            "code_review_agent_runs": snapshot.code_review_agent_runs,
+            "worktree_cleanup_agent_runs": snapshot.worktree_cleanup_agent_runs,
+            "model_completions": [asdict(mc) for mc in snapshot.model_completions],
+        }
 
-        If a live SessionStats reference is stored, it is serialized
-        on each call so agent run counts, token stats, retries, etc.
-        update in real-time without needing explicit push_stats() calls.
-        elapsed_time is also recomputed dynamically from session start.
-        """
+    def _serialize_live_stats(self) -> Optional[dict[str, Any]]:
+        """Serialize session stats fresh on every poll."""
         stats: dict[str, Any] | None = None
         live = self._live_session_stats
         if live is not None:
-            snapshot = live.snapshot()
-            stats = {
-                "agent_stats": asdict(snapshot.agent_stats),
-                "items_completed": snapshot.items_completed,
-                "work_agent_runs": snapshot.work_agent_runs,
-                "gate_agent_runs": snapshot.gate_agent_runs,
-                "tech_debt_agent_runs": snapshot.tech_debt_agent_runs,
-                "janitor_agent_runs": snapshot.janitor_agent_runs,
-                "backlog_cleanup_agent_runs": snapshot.backlog_cleanup_agent_runs,
-                "cleanup_agent_runs": snapshot.cleanup_agent_runs,
-                "beta_tester_agent_runs": snapshot.beta_tester_agent_runs,
-                "code_review_agent_runs": snapshot.code_review_agent_runs,
-                "worktree_cleanup_agent_runs": snapshot.worktree_cleanup_agent_runs,
-                "model_completions": [
-                    asdict(mc) for mc in snapshot.model_completions
-                ],
-            }
-            # Carry forward elapsed_time from last push_stats snapshot
+            stats = self._snapshot_to_dict(live.snapshot())
             cached = self._current_stats
             if cached is not None and "elapsed_time" in cached:
                 stats["elapsed_time"] = cached["elapsed_time"]
@@ -117,6 +116,7 @@ class DesktopAPI:
                 "progress": self._current_progress,
                 "log_count": len(self._log_buffer),
                 "model_leaderboard": self._get_cached_leaderboard(),
+                "agents": list(self._agents.values()),
             }
 
     def _get_cached_leaderboard(self) -> dict[str, Any]:
@@ -158,20 +158,12 @@ class DesktopAPI:
             return self._serialize_live_stats()
 
     def get_model_leaderboard(self) -> dict[str, Any]:
-        """Get all-time model performance stats from persistent storage.
-
-        Returns the per-model summary from .pokepoke/model_stats.json,
-        enabling the desktop UI to show a historical leaderboard alongside
-        the current session's model comparison row.
-        """
+        """Get all-time model performance stats from persistent storage."""
         from pokepoke.model_stats_store import get_model_summary
         return get_model_summary()
 
     def get_config(self) -> dict[str, Any]:
-        """Load the project config file as a JSON-serializable dict.
-
-        The desktop UI uses this to populate the Settings page.
-        """
+        """Load the project config file as a JSON-serializable dict."""
         from pokepoke.config import _find_repo_root
 
         config_path = _find_repo_root() / ".pokepoke" / "config.yaml"
@@ -286,28 +278,12 @@ class DesktopAPI:
         """Update session statistics (snapshot fallback).
 
         Prefer set_live_session_stats() for real-time updates.
-        This method is kept for backwards compatibility and is used
-        as a fallback when no live reference is set.
         """
         if session_stats:
             self._live_session_stats = session_stats
         stats_data: dict[str, Any] = {"elapsed_time": elapsed_time}
         if session_stats:
-            snapshot = session_stats.snapshot()
-            stats_data["agent_stats"] = asdict(snapshot.agent_stats)
-            stats_data["items_completed"] = snapshot.items_completed
-            stats_data["work_agent_runs"] = snapshot.work_agent_runs
-            stats_data["gate_agent_runs"] = snapshot.gate_agent_runs
-            stats_data["tech_debt_agent_runs"] = snapshot.tech_debt_agent_runs
-            stats_data["janitor_agent_runs"] = snapshot.janitor_agent_runs
-            stats_data["backlog_cleanup_agent_runs"] = snapshot.backlog_cleanup_agent_runs
-            stats_data["cleanup_agent_runs"] = snapshot.cleanup_agent_runs
-            stats_data["beta_tester_agent_runs"] = snapshot.beta_tester_agent_runs
-            stats_data["code_review_agent_runs"] = snapshot.code_review_agent_runs
-            stats_data["worktree_cleanup_agent_runs"] = snapshot.worktree_cleanup_agent_runs
-            stats_data["model_completions"] = [
-                asdict(mc) for mc in snapshot.model_completions
-            ]
+            stats_data.update(self._snapshot_to_dict(session_stats.snapshot()))
         self._current_stats = stats_data
 
     def push_agent_name(self, name: str) -> None:
@@ -323,6 +299,44 @@ class DesktopAPI:
         with self._lock:
             self._log_buffer.clear()
             self._log_read_index = 0
+
+    # ─── Agent tracking ──────────────────────────────────────────────
+
+    def push_agent_status(
+        self, agent_id: str, name: str, iteration: int = 1, status: str = "running",
+    ) -> None:
+        """Register or update a running agent."""
+        with self._lock:
+            existing = self._agents.get(agent_id)
+            recent_logs: list[str] = existing["recent_logs"] if existing else []
+            self._agents[agent_id] = {
+                "agent_id": agent_id,
+                "name": name,
+                "iteration": iteration,
+                "status": status,
+                "recent_logs": recent_logs,
+            }
+
+    def push_agent_log(self, agent_id: str, line: str) -> None:
+        """Append a log line to an agent's recent log preview."""
+        with self._lock:
+            agent = self._agents.get(agent_id)
+            if agent is None:
+                return
+            logs = agent["recent_logs"]
+            logs.append(line)
+            if len(logs) > self._agent_max_log_lines:
+                agent["recent_logs"] = logs[-self._agent_max_log_lines:]
+
+    def remove_agent(self, agent_id: str) -> None:
+        """Remove a finished agent from the tracked set."""
+        with self._lock:
+            self._agents.pop(agent_id, None)
+
+    def get_agents(self) -> list[dict[str, Any]]:
+        """Return the list of currently tracked agents."""
+        with self._lock:
+            return list(self._agents.values())
 
     # ─── Prompt management ────────────────────────────────────────────
 

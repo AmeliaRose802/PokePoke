@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useBridge } from "./useBridge";
 import { WorkItemHeader } from "./components/WorkItemHeader";
 import { LogPanel } from "./components/LogPanel";
+import { AgentsPanel } from "./components/AgentsPanel";
 import { StatsBar } from "./components/StatsBar";
 import { ConnectionIndicator } from "./components/ConnectionIndicator";
 import { PromptEditor } from "./components/PromptEditor";
@@ -54,24 +55,30 @@ function App() {
         agentName={bridge.agentName}
       />
 
-      {/* Log panels */}
-      <div className="log-container">
-        <LogPanel
-          title="Orchestrator"
-          icon="🔧"
-          logs={bridge.orchestratorLogs}
-          accentColor="#f0ad4e"
-          focused={activePanel === "orchestrator"}
-          onFocus={() => setActivePanel("orchestrator")}
-        />
-        <LogPanel
-          title="Agent"
-          icon="🤖"
-          logs={bridge.agentLogs}
-          accentColor="#5cb85c"
-          focused={activePanel === "agent"}
-          onFocus={() => setActivePanel("agent")}
-        />
+      {/* Main content area with logs and agents panel */}
+      <div className="main-content">
+        {/* Log panels */}
+        <div className="log-container">
+          <LogPanel
+            title="Orchestrator"
+            icon="🔧"
+            logs={bridge.orchestratorLogs}
+            accentColor="#f0ad4e"
+            focused={activePanel === "orchestrator"}
+            onFocus={() => setActivePanel("orchestrator")}
+          />
+          <LogPanel
+            title="Agent"
+            icon="🤖"
+            logs={bridge.agentLogs}
+            accentColor="#5cb85c"
+            focused={activePanel === "agent"}
+            onFocus={() => setActivePanel("agent")}
+          />
+        </div>
+
+        {/* Agents panel */}
+        <AgentsPanel agents={bridge.agents} />
       </div>
 
       {/* Stats footer */}

@@ -164,6 +164,26 @@ class TestDesktopUIStateUpdates:
         ui.set_session_start_time(1000.0)
         ui._api.set_session_start_time.assert_called_once_with(1000.0)
 
+    def test_push_agent_status(self) -> None:
+        ui = DesktopUI()
+        ui._api = MagicMock()
+        ui.push_agent_status("agent-1", "Gate Agent", iteration=2, status="running")
+        ui._api.push_agent_status.assert_called_once_with(
+            "agent-1", "Gate Agent", 2, "running"
+        )
+
+    def test_push_agent_log(self) -> None:
+        ui = DesktopUI()
+        ui._api = MagicMock()
+        ui.push_agent_log("agent-1", "test line")
+        ui._api.push_agent_log.assert_called_once_with("agent-1", "test line")
+
+    def test_remove_agent(self) -> None:
+        ui = DesktopUI()
+        ui._api = MagicMock()
+        ui.remove_agent("agent-1")
+        ui._api.remove_agent.assert_called_once_with("agent-1")
+
 
 class TestDesktopUILifecycle:
     def test_start_stop_and_exit(self) -> None:

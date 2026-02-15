@@ -162,12 +162,193 @@
 
 /* ── Log Container ─────────────────────────────────────────────────────── */
 
+.main-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
 .log-container {
   display: flex;
   flex: 1;
   gap: 8px;
   padding: 8px 12px;
   overflow: hidden;
+}
+
+/* ── Agents Panel ──────────────────────────────────────────────────────── */
+
+.agents-panel {
+  width: 260px;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  background: #16161e;
+  border-left: 1px solid #292e42;
+  overflow: hidden;
+}
+
+.agents-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: #1a1b26;
+  border-bottom: 1px solid #292e42;
+  font-size: 12px;
+  font-weight: 600;
+  color: #a9b1d6;
+  user-select: none;
+}
+
+.agents-count {
+  font-size: 10px;
+  color: #565f89;
+  background: #292e42;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 400;
+}
+
+.agents-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agents-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.agents-scroll::-webkit-scrollbar-track {
+  background: #16161e;
+}
+
+.agents-scroll::-webkit-scrollbar-thumb {
+  background: #3b4261;
+  border-radius: 3px;
+}
+
+.agents-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  color: #565f89;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.agent-card {
+  background: #1a1b26;
+  border: 1px solid #292e42;
+  border-radius: 6px;
+  padding: 8px;
+  transition: border-color 0.15s;
+}
+
+.agent-card:hover {
+  border-color: #3b4261;
+}
+
+.agent-card-running {
+  border-left: 3px solid #7aa2f7;
+}
+
+.agent-card-success {
+  border-left: 3px solid #9ece6a;
+}
+
+.agent-card-failed {
+  border-left: 3px solid #f7768e;
+}
+
+.agent-card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.agent-card-avatar {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.agent-card-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.agent-card-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #c0caf5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-card-iter {
+  font-size: 10px;
+  color: #565f89;
+}
+
+.agent-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.agent-dot-running {
+  background: #7aa2f7;
+  animation: pulse 1.5s infinite;
+}
+
+.agent-dot-success {
+  background: #9ece6a;
+}
+
+.agent-dot-failed {
+  background: #f7768e;
+}
+
+.agent-card-logs {
+  background: #14151d;
+  border-radius: 4px;
+  padding: 4px 6px;
+  max-height: 80px;
+  overflow-y: auto;
+  font-size: 10px;
+  line-height: 1.5;
+  color: #565f89;
+}
+
+.agent-card-logs::-webkit-scrollbar {
+  width: 4px;
+}
+
+.agent-card-logs::-webkit-scrollbar-thumb {
+  background: #3b4261;
+  border-radius: 2px;
+}
+
+.agent-card-log-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-card-no-logs {
+  font-style: italic;
+  color: #3b4261;
 }
 
 /* ── Log Panel ─────────────────────────────────────────────────────────── */

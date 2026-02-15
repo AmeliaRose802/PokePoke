@@ -364,3 +364,104 @@ def test_reset_prompt_delegates() -> None:
         result = api.reset_prompt("test")
     assert result["reset"]
     mock_service.reset_prompt.assert_called_once_with("test")
+
+
+# ─── Agent tracking tests ────────────────────────────────────────────────
+
+
+def test_initial_state_has_empty_agents() -> None:
+    """get_state should include an empty agents list initially."""
+    api = DesktopAPI()
+    state = api.get_state()
+    assert state["agents"] == []
+
+
+def test_push_agent_status_registers_agent() -> None:
+    """push_agent_status should add an agent to the tracked set."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Gate Agent", iteration=2, status="running")
+
+    agents = api.get_agents()
+    assert len(agents) == 1
+    assert agents[0]["agent_id"] == "agent-1"
+    assert agents[0]["name"] == "Gate Agent"
+    assert agents[0]["iteration"] == 2
+    assert agents[0]["status"] == "running"
+    assert agents[0]["recent_logs"] == []
+
+
+def test_push_agent_status_updates_existing() -> None:
+    """push_agent_status should update an existing agent's fields."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Gate Agent", iteration=1)
+    api.push_agent_log("agent-1", "line 1")
+
+    # Update iteration and status — logs should be preserved
+    api.push_agent_status("agent-1", "Gate Agent", iteration=2, status="success")
+
+    agents = api.get_agents()
+    assert len(agents) == 1
+    assert agents[0]["iteration"] == 2
+    assert agents[0]["status"] == "success"
+    assert agents[0]["recent_logs"] == ["line 1"]
+
+
+def test_push_agent_log_appends_lines() -> None:
+    """push_agent_log should append lines to the agent's recent logs."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Work Agent")
+    api.push_agent_log("agent-1", "Starting tests...")
+    api.push_agent_log("agent-1", "Tests passed")
+
+    agents = api.get_agents()
+    assert agents[0]["recent_logs"] == ["Starting tests...", "Tests passed"]
+
+
+def test_push_agent_log_trims_excess() -> None:
+    """push_agent_log should trim to max log lines."""
+    api = DesktopAPI()
+    api._agent_max_log_lines = 3
+    api.push_agent_status("agent-1", "Worker")
+    for i in range(5):
+        api.push_agent_log("agent-1", f"line-{i}")
+
+    agents = api.get_agents()
+    assert agents[0]["recent_logs"] == ["line-2", "line-3", "line-4"]
+
+
+def test_push_agent_log_ignores_unknown_agent() -> None:
+    """push_agent_log should silently ignore unknown agent IDs."""
+    api = DesktopAPI()
+    api.push_agent_log("nonexistent", "should not crash")
+    assert api.get_agents() == []
+
+
+def test_remove_agent() -> None:
+    """remove_agent should remove the agent from tracked set."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Agent A")
+    api.push_agent_status("agent-2", "Agent B")
+    api.remove_agent("agent-1")
+
+    agents = api.get_agents()
+    assert len(agents) == 1
+    assert agents[0]["agent_id"] == "agent-2"
+
+
+def test_remove_agent_ignores_unknown() -> None:
+    """remove_agent should silently ignore unknown agent IDs."""
+    api = DesktopAPI()
+    api.remove_agent("nonexistent")
+    assert api.get_agents() == []
+
+
+def test_get_state_includes_agents() -> None:
+    """get_state should include agents in the returned state."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", iteration=3, status="running")
+    api.push_agent_log("agent-1", "doing work")
+
+    state = api.get_state()
+    assert len(state["agents"]) == 1
+    assert state["agents"][0]["name"] == "Worker"
+    assert state["agents"][0]["recent_logs"] == ["doing work"]

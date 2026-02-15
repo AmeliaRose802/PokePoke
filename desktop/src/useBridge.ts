@@ -17,6 +17,7 @@ import type {
   ProgressState,
   ConnectionStatus,
   ModelPerformanceSummary,
+  AgentInfo,
   PromptInfo,
   PromptDetail,
   ConfigResponse,
@@ -36,6 +37,7 @@ interface PyWebViewAPI {
     progress: ProgressState;
     log_count: number;
     model_leaderboard: Record<string, ModelPerformanceSummary>;
+    agents: AgentInfo[];
   }>;
   get_new_logs(): Promise<LogEntry[]>;
   get_all_logs(): Promise<LogEntry[]>;
@@ -66,6 +68,7 @@ export interface BridgeState {
   stats: SessionStats | null;
   progress: ProgressState;
   modelLeaderboard: Record<string, ModelPerformanceSummary>;
+  agents: AgentInfo[];
   clearLogs: (target: "orchestrator" | "agent" | "all") => void;
   listPrompts: () => Promise<PromptInfo[]>;
   getPrompt: (name: string) => Promise<PromptDetail | null>;
@@ -92,6 +95,7 @@ export function useBridge(): BridgeState {
     status: "",
   });
   const [modelLeaderboard, setModelLeaderboard] = useState<Record<string, ModelPerformanceSummary>>({});
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
 
   const clearLogs = useCallback(
     (target: "orchestrator" | "agent" | "all") => {
@@ -191,6 +195,7 @@ export function useBridge(): BridgeState {
         if (state.stats) setStats(state.stats);
         if (state.progress) setProgress(state.progress);
         if (state.model_leaderboard) setModelLeaderboard(state.model_leaderboard);
+        if (state.agents) setAgents(state.agents);
 
         const allLogs = await api.get_all_logs();
         appendLogs(allLogs);
@@ -216,6 +221,7 @@ export function useBridge(): BridgeState {
           if (state.stats) setStats(state.stats);
           if (state.progress) setProgress(state.progress);
           if (state.model_leaderboard) setModelLeaderboard(state.model_leaderboard);
+          if (state.agents) setAgents(state.agents);
 
           setConnectionStatus("connected");
         } catch {
@@ -241,6 +247,7 @@ export function useBridge(): BridgeState {
     stats,
     progress,
     modelLeaderboard,
+    agents,
     clearLogs,
     listPrompts,
     getPrompt,

@@ -133,3 +133,12 @@ export interface ModelPerformanceSummary {
   success_rate: number;
   last_used: string;
 }
+
+/** Running agent info from the orchestrator */
+export interface AgentInfo {
+  agent_id: string;
+  name: string;
+  iteration: number;
+  status: "running" | "success" | "failed";
+  recent_logs: string[];
+}

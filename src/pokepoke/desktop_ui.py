@@ -303,3 +303,21 @@ class DesktopUI:
     def log_agent(self, message: str, style: Optional[str] = None) -> None:
         self._api.push_log(message, "agent", style)
 
+    def push_agent_status(
+        self,
+        agent_id: str,
+        name: str,
+        iteration: int = 1,
+        status: str = "running",
+    ) -> None:
+        """Register or update a running agent card."""
+        self._api.push_agent_status(agent_id, name, iteration, status)
+
+    def push_agent_log(self, agent_id: str, line: str) -> None:
+        """Append a log line to an agent's recent log preview."""
+        self._api.push_agent_log(agent_id, line)
+
+    def remove_agent(self, agent_id: str) -> None:
+        """Remove a finished agent from the tracked set."""
+        self._api.remove_agent(agent_id)
+
