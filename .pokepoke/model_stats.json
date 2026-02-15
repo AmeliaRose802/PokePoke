@@ -139,6 +139,13 @@
       "duration_seconds": 418.610399723053,
       "gate_passed": true,
       "timestamp": "2026-02-14T21:37:06.559960+00:00"
+    },
+    {
+      "item_id": "PokePoke-3f87",
+      "model": "gemini-3-pro",
+      "duration_seconds": 7211.375122308731,
+      "gate_passed": false,
+      "timestamp": "2026-02-15T02:06:18.816946+00:00"
     }
   ],
   "summary": {
@@ -241,6 +248,16 @@
       "average_duration": 7211.78,
       "success_rate": 0.0,
       "last_used": "2026-02-14T16:51:30.517404+00:00"
+    },
+    "gemini-3-pro": {
+      "total_items_attempted": 1,
+      "total_items_succeeded": 0,
+      "total_items_failed": 1,
+      "total_duration_seconds": 7211.375122308731,
+      "total_retries": 0,
+      "average_duration": 7211.38,
+      "success_rate": 0.0,
+      "last_used": "2026-02-15T02:06:18.816946+00:00"
     }
   }
 }

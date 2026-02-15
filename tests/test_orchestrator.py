@@ -2008,7 +2008,7 @@ class TestMainWorktreeCoverage:
             max_parallel_agents=1,
         )
 
-    @patch('pokepoke.orchestrator.check_beads_available', return_value=False)
+    @patch('src.pokepoke.orchestrator.check_beads_available', return_value=False)
     @patch('sys.argv', ['pokepoke', '--autonomous'])
     def test_main_beads_unavailable(self, _mock_beads: Mock) -> None:
         """Test main returns 1 when beads unavailable."""
