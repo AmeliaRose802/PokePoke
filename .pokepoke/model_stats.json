@@ -153,6 +153,13 @@
       "duration_seconds": 7218.756322860718,
       "gate_passed": false,
       "timestamp": "2026-02-15T04:18:40.512173+00:00"
+    },
+    {
+      "item_id": "PokePoke-c30u",
+      "model": "claude-opus-4.6",
+      "duration_seconds": 7216.144446372986,
+      "gate_passed": false,
+      "timestamp": "2026-02-15T09:11:19.367239+00:00"
     }
   ],
   "summary": {
@@ -167,14 +174,14 @@
       "last_used": "2026-02-15T04:18:40.512173+00:00"
     },
     "claude-opus-4.6": {
-      "total_items_attempted": 2,
+      "total_items_attempted": 3,
       "total_items_succeeded": 2,
-      "total_items_failed": 0,
-      "total_duration_seconds": 2831.4621279239655,
+      "total_items_failed": 1,
+      "total_duration_seconds": 10047.606574296951,
       "total_retries": 0,
-      "average_duration": 1415.73,
-      "success_rate": 1.0,
-      "last_used": "2026-02-12T20:34:52.643990+00:00"
+      "average_duration": 3349.2,
+      "success_rate": 0.6667,
+      "last_used": "2026-02-15T09:11:19.367239+00:00"
     },
     "gpt-5.1-codex-max": {
       "total_items_attempted": 1,
