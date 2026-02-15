@@ -51,7 +51,8 @@ def create_worktree(item_id: str, base_branch: Optional[str] = None) -> Path:
             check=True,
             capture_output=True,
             text=True,
-            encoding='utf-8'
+            encoding='utf-8',
+            timeout=30
         )
     except subprocess.CalledProcessError as e:
         # Log the actual error for debugging
@@ -72,6 +73,8 @@ def create_worktree(item_id: str, base_branch: Optional[str] = None) -> Path:
         
         # If we couldn't recover, re-raise the error with more context
         raise RuntimeError(f"Failed to create worktree: {e.stderr if e.stderr else str(e)}") from e
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(f"Timed out creating worktree after {e.timeout}s") from e
     
     return worktree_path
 
@@ -85,7 +88,8 @@ def is_worktree_merged(item_id: str, target_branch: Optional[str] = None) -> boo
     try:
         result = subprocess.run(
             ["git", "branch", "--merged", target_branch],
-            check=True, capture_output=True, text=True, encoding='utf-8'
+            check=True, capture_output=True, text=True, encoding='utf-8',
+            timeout=30
         )
         return any(branch_name in branch for branch in result.stdout.splitlines())
     except subprocess.CalledProcessError:
@@ -141,7 +145,7 @@ def merge_worktree(item_id: str, target_branch: Optional[str] = None, cleanup: b
     print(f"✅ Post-merge validation passed: {target_branch} is clean")
     
     try:
-        subprocess.run(["git", "push"], check=True, capture_output=True, text=True, encoding='utf-8')
+        subprocess.run(["git", "push"], check=True, capture_output=True, text=True, encoding='utf-8', timeout=120)
         print(f"✅ Pushed {target_branch} to remote")
     except subprocess.CalledProcessError as e:
         print(f"❌ Push failed: {e.stderr if e.stderr else str(e)}")
@@ -205,7 +209,8 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
                 check=True,
                 capture_output=True,
                 text=True,
-                encoding='utf-8'
+                encoding='utf-8',
+                timeout=30
             )
         except subprocess.CalledProcessError as e:
             # Check if error is because worktree doesn't exist
@@ -230,7 +235,8 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
             check=True,
             capture_output=True,
             text=True,
-            encoding='utf-8'
+            encoding='utf-8',
+            timeout=30
         )
     except subprocess.CalledProcessError as e:
         # Try unsanitized branch name as fallback
@@ -241,7 +247,8 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
                 check=True,
                 capture_output=True,
                 text=True,
-                encoding='utf-8'
+                encoding='utf-8',
+                timeout=30
             )
         except subprocess.CalledProcessError as e2:
             # Check if branch doesn't exist
@@ -265,7 +272,8 @@ def list_worktrees() -> list[dict[str, str]]:
             check=True,
             capture_output=True,
             text=True,
-            encoding='utf-8'
+            encoding='utf-8',
+            timeout=30
         )
         
         worktrees = []
@@ -286,7 +294,7 @@ def list_worktrees() -> list[dict[str, str]]:
         
         return worktrees
         
-    except subprocess.CalledProcessError:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return []
 
 def _sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
@@ -309,7 +317,8 @@ def _sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         ).stdout.strip()
         
         if main_status:
@@ -328,20 +337,20 @@ def _sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
             
             if changes['beads']:
                 print("🔧 Committing beads database changes...")
-                subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8', errors='replace')
+                subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8', errors='replace', timeout=30)
                 subprocess.run(["git", "commit", "-m", f"chore: sync beads before merge of {branch_name}"],
-                             check=True, encoding='utf-8', errors='replace')
+                             check=True, encoding='utf-8', errors='replace', timeout=60)
                 print("✅ Beads changes committed")
             
             if changes['worktree']:
                 print("🧹 Committing worktree cleanup changes...")
-                subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8', errors='replace')
+                subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8', errors='replace', timeout=30)
                 subprocess.run(["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
-                             check=True, encoding='utf-8', errors='replace')
+                             check=True, encoding='utf-8', errors='replace', timeout=60)
                 print("✅ Worktree cleanup committed")
                 
         return True
-    except subprocess.CalledProcessError as e:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         print(f"❌ Failed to check/clean main repo: {e}")
         return False
 
@@ -351,7 +360,8 @@ def _cleanup_after_merge(worktree_path: Path, branch_name: str) -> None:
         try:
             subprocess.run(
                 ["git", "worktree", "remove", str(worktree_path)],
-                check=True, capture_output=True, text=True, encoding='utf-8'
+                check=True, capture_output=True, text=True, encoding='utf-8',
+                timeout=30
             )
             print(f"✅ Removed worktree at {worktree_path}")
         except subprocess.CalledProcessError as e:
@@ -370,7 +380,8 @@ def _cleanup_after_merge(worktree_path: Path, branch_name: str) -> None:
     try:
         subprocess.run(
             ["git", "branch", "-d", branch_name],
-            check=True, capture_output=True, text=True, encoding='utf-8'
+            check=True, capture_output=True, text=True, encoding='utf-8',
+            timeout=30
         )
         print(f"✅ Deleted branch {branch_name}")
     except subprocess.CalledProcessError as e:

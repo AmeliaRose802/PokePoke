@@ -81,7 +81,8 @@ def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
         
         # Parse current item state
@@ -113,7 +114,8 @@ def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
         print(f"✅ Assigned {item_id} to {agent_name} and marked in_progress")
         
@@ -149,7 +151,8 @@ def close_item(item_id: str, message: str = "Completed") -> bool:
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
         print(f"✅ Closed {item_id}")
         return True
@@ -174,7 +177,8 @@ def add_comment(item_id: str, comment: str) -> bool:
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
         print(f"💬 Added comment to {item_id}")
         return True
@@ -220,7 +224,8 @@ def create_issue(
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
         
         if not result.stdout:
@@ -243,7 +248,8 @@ def create_issue(
                     ['bd', 'label', 'add', issue_id] + labels + ['--json'],
                     capture_output=True,
                     text=True,
-                    encoding='utf-8'
+                    encoding='utf-8',
+                    timeout=30
                 )
             
             return issue_id

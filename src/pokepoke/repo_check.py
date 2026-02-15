@@ -63,7 +63,8 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
             text=True,
             encoding='utf-8',
             check=True,
-            cwd=str(repo_path)
+            cwd=str(repo_path),
+            timeout=30
         )
     except subprocess.CalledProcessError as e:
         # Handle git errors gracefully
@@ -133,14 +134,15 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
         # Auto-resolve worktree cleanup deletions
         if changes['worktree']:
             print("🧹 Committing worktree cleanup changes...")
-            subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8', errors='replace', cwd=str(repo_path))
+            subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=30)
             subprocess.run(
                 ["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
                 check=True,
                 capture_output=True,
                 encoding='utf-8',
                 errors='replace',
-                cwd=str(repo_path)
+                cwd=str(repo_path),
+                timeout=60
             )
             print("✅ Worktree cleanup committed")
     

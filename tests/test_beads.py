@@ -28,7 +28,8 @@ class TestBeadsIntegration:
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
     
     @patch('src.pokepoke.beads_query.subprocess.run')
@@ -618,7 +619,8 @@ class TestCloseItem:
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
 
     @patch('src.pokepoke.beads_management.subprocess.run')
@@ -653,7 +655,8 @@ class TestAddComment:
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
 
     @patch('src.pokepoke.beads_management.subprocess.run')

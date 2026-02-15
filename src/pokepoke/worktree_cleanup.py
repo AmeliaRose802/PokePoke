@@ -32,7 +32,8 @@ def force_remove_directory(dir_path: Path) -> bool:
         try:
             subprocess.run(
                 ["git", "worktree", "remove", "--force", str(dir_path)],
-                check=True, capture_output=True, text=True, encoding='utf-8'
+                check=True, capture_output=True, text=True, encoding='utf-8',
+                timeout=30
             )
             return True
         except subprocess.CalledProcessError:
@@ -44,7 +45,8 @@ def force_remove_directory(dir_path: Path) -> bool:
             # Clean up git worktree bookkeeping after manual removal
             subprocess.run(
                 ["git", "worktree", "prune"],
-                check=False, capture_output=True, text=True, encoding='utf-8'
+                check=False, capture_output=True, text=True, encoding='utf-8',
+                timeout=30
             )
             return True
         except (OSError, PermissionError):

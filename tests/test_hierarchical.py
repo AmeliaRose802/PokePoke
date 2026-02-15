@@ -324,7 +324,8 @@ class TestHierarchicalWorkAssignment:
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
     
     @patch('pokepoke.beads_hierarchy.subprocess.run')
@@ -340,7 +341,8 @@ class TestHierarchicalWorkAssignment:
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
     
     @patch('pokepoke.beads_hierarchy.subprocess.run')
