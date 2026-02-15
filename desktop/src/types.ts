@@ -81,6 +81,31 @@ export interface PromptDetail extends PromptInfo {
 /** Connection status of the pywebview bridge */
 export type ConnectionStatus = "connecting" | "connected" | "disconnected";
 
+/** Project configuration from .pokepoke/config.yaml */
+export interface ProjectConfig {
+  project_name?: string;
+  models?: ModelsConfig;
+  git?: Record<string, unknown>;
+  mcp_server?: Record<string, unknown>;
+  maintenance?: Record<string, unknown>;
+  test_data?: Record<string, string>;
+  [key: string]: unknown;
+}
+
+/** Model configuration section of project config */
+export interface ModelsConfig {
+  default?: string;
+  fallback?: string;
+  candidate_models?: string[];
+}
+
+/** Response from get_config API */
+export interface ConfigResponse {
+  path: string;
+  config: ProjectConfig;
+  exists: boolean;
+}
+
 /** All-time per-model performance summary from persistent storage */
 export interface ModelPerformanceSummary {
   total_items_attempted: number;

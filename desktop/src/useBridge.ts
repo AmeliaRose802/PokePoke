@@ -19,6 +19,8 @@ import type {
   ModelPerformanceSummary,
   PromptInfo,
   PromptDetail,
+  ConfigResponse,
+  ProjectConfig,
 } from "./types";
 
 /** Poll interval in ms — 100ms = responsive without hammering */
@@ -43,6 +45,8 @@ interface PyWebViewAPI {
   get_prompt(name: string): Promise<PromptDetail>;
   save_prompt(name: string, content: string): Promise<{ path: string; saved: boolean }>;
   reset_prompt(name: string): Promise<{ reset: boolean; had_override: boolean }>;
+  get_config(): Promise<ConfigResponse>;
+  save_config(config: ProjectConfig): Promise<{ path: string; saved: boolean }>;
 }
 
 declare global {
@@ -67,6 +71,8 @@ export interface BridgeState {
   getPrompt: (name: string) => Promise<PromptDetail | null>;
   savePrompt: (name: string, content: string) => Promise<boolean>;
   resetPrompt: (name: string) => Promise<boolean>;
+  getConfig: () => Promise<ConfigResponse | null>;
+  saveConfig: (config: ProjectConfig) => Promise<boolean>;
 }
 
 /**
@@ -116,6 +122,17 @@ export function useBridge(): BridgeState {
     if (!window.pywebview?.api) return false;
     const result = await window.pywebview.api.reset_prompt(name);
     return result.reset;
+  }, []);
+
+  const getConfig = useCallback(async (): Promise<ConfigResponse | null> => {
+    if (!window.pywebview?.api) return null;
+    return window.pywebview.api.get_config();
+  }, []);
+
+  const saveConfig = useCallback(async (config: ProjectConfig): Promise<boolean> => {
+    if (!window.pywebview?.api) return false;
+    const result = await window.pywebview.api.save_config(config);
+    return result.saved;
   }, []);
 
   const appendLogs = useCallback((entries: LogEntry[]) => {
@@ -229,5 +246,7 @@ export function useBridge(): BridgeState {
     getPrompt,
     savePrompt,
     resetPrompt,
+    getConfig,
+    saveConfig,
   };
 }

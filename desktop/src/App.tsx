@@ -12,6 +12,7 @@ import { LogPanel } from "./components/LogPanel";
 import { StatsBar } from "./components/StatsBar";
 import { ConnectionIndicator } from "./components/ConnectionIndicator";
 import { PromptEditor } from "./components/PromptEditor";
+import { SettingsPage } from "./components/SettingsPage";
 import "./App.css";
 
 function App() {
@@ -20,6 +21,7 @@ function App() {
     "agent"
   );
   const [showPrompts, setShowPrompts] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   return (
     <div className="app">
@@ -36,6 +38,13 @@ function App() {
           title="Edit prompt templates"
         >
           📝
+        </button>
+        <button
+          className="prompt-editor-toggle"
+          onClick={() => setShowSettings(true)}
+          title="Settings"
+        >
+          ⚙
         </button>
       </div>
 
@@ -76,6 +85,15 @@ function App() {
           savePrompt={bridge.savePrompt}
           resetPrompt={bridge.resetPrompt}
           onClose={() => setShowPrompts(false)}
+        />
+      )}
+
+      {/* Settings overlay */}
+      {showSettings && (
+        <SettingsPage
+          getConfig={bridge.getConfig}
+          saveConfig={bridge.saveConfig}
+          onClose={() => setShowSettings(false)}
         />
       )}
     </div>
