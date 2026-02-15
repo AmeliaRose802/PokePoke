@@ -81,13 +81,29 @@ export interface PromptDetail extends PromptInfo {
 /** Connection status of the pywebview bridge */
 export type ConnectionStatus = "connecting" | "connected" | "disconnected";
 
+/** Maintenance agent configuration */
+export interface MaintenanceAgent {
+  name: string;
+  prompt_file: string;
+  frequency: number;
+  enabled: boolean;
+  needs_worktree: boolean;
+  merge_changes?: boolean;
+  model?: string;
+}
+
+/** Maintenance configuration section */
+export interface MaintenanceConfig {
+  agents: MaintenanceAgent[];
+}
+
 /** Project configuration from .pokepoke/config.yaml */
 export interface ProjectConfig {
   project_name?: string;
   models?: ModelsConfig;
   git?: Record<string, unknown>;
   mcp_server?: Record<string, unknown>;
-  maintenance?: Record<string, unknown>;
+  maintenance?: MaintenanceConfig;
   test_data?: Record<string, string>;
   [key: string]: unknown;
 }

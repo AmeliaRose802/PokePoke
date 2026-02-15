@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { ConfigResponse, ProjectConfig, ModelsConfig } from "../types";
+import type { ConfigResponse, ProjectConfig, ModelsConfig, MaintenanceAgent } from "../types";
 
 /** Well-known model names for dropdown suggestions */
 const KNOWN_MODELS = [
@@ -36,6 +36,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
   const [fallbackModel, setFallbackModel] = useState("");
   const [candidateModels, setCandidateModels] = useState<string[]>([]);
   const [chipInput, setChipInput] = useState("");
+  const [maintenanceAgents, setMaintenanceAgents] = useState<MaintenanceAgent[]>([]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -53,6 +54,12 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
       setDefaultModel(models.default ?? "");
       setFallbackModel(models.fallback ?? "");
       setCandidateModels(models.candidate_models ?? []);
+      
+      // Load maintenance agents
+      const maintenance = resp.config.maintenance;
+      if (maintenance && Array.isArray(maintenance.agents)) {
+        setMaintenanceAgents(maintenance.agents);
+      }
     });
     return () => {
       active = false;
@@ -76,6 +83,10 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
         candidate_models:
           candidateModels.length > 0 ? candidateModels : undefined,
       } as ModelsConfig,
+      maintenance: {
+        ...config.maintenance,
+        agents: maintenanceAgents,
+      },
     };
     const ok = await saveConfig(updated);
     setSaving(false);
@@ -86,7 +97,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
     } else {
       setMessage("Save failed");
     }
-  }, [config, defaultModel, fallbackModel, candidateModels, saveConfig]);
+  }, [config, defaultModel, fallbackModel, candidateModels, maintenanceAgents, saveConfig]);
 
   const handleReset = useCallback(() => {
     if (!config) return;
@@ -94,6 +105,15 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
     setDefaultModel(models.default ?? "");
     setFallbackModel(models.fallback ?? "");
     setCandidateModels(models.candidate_models ?? []);
+    
+    // Reset maintenance agents
+    const maintenance = config.maintenance;
+    if (maintenance && Array.isArray(maintenance.agents)) {
+      setMaintenanceAgents(maintenance.agents);
+    } else {
+      setMaintenanceAgents([]);
+    }
+    
     setDirty(false);
     setMessage("Reset to saved values");
   }, [config]);
@@ -131,6 +151,19 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
       }
     },
     [chipInput, candidateModels, addChip, removeChip]
+  );
+
+  // Maintenance agent handlers
+  const updateMaintenanceAgent = useCallback(
+    (index: number, updates: Partial<MaintenanceAgent>) => {
+      setMaintenanceAgents((prev) =>
+        prev.map((agent, i) => 
+          i === index ? { ...agent, ...updates } : agent
+        )
+      );
+      markDirty();
+    },
+    [markDirty]
   );
 
   // Filter suggestions: known models not already in the candidate list
@@ -258,6 +291,95 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
                   Models to rotate through for A/B performance testing
                 </span>
               </div>
+            </div>
+
+            {/* Section: Maintenance Agents Configuration */}
+            <div className="settings-section">
+              <h3 className="settings-section-title">🔧 Maintenance Agents</h3>
+
+              {maintenanceAgents.length === 0 ? (
+                <div className="settings-no-agents">
+                  No maintenance agents configured
+                </div>
+              ) : (
+                <div className="agents-list">
+                  {maintenanceAgents.map((agent, index) => (
+                    <div key={agent.name} className="agent-config">
+                      <div className="agent-header">
+                        <span className="agent-name">{agent.name}</span>
+                        <label className="agent-toggle">
+                          <input
+                            type="checkbox"
+                            checked={agent.enabled}
+                            onChange={(e) =>
+                              updateMaintenanceAgent(index, { enabled: e.target.checked })
+                            }
+                          />
+                          <span className="toggle-slider"></span>
+                        </label>
+                      </div>
+
+                      <div className="agent-details">
+                        <div className="agent-field">
+                          <label className="settings-label">
+                            Run every N work items
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="100"
+                            className="settings-input number-input"
+                            value={agent.frequency}
+                            onChange={(e) =>
+                              updateMaintenanceAgent(index, {
+                                frequency: parseInt(e.target.value) || 1,
+                              })
+                            }
+                          />
+                        </div>
+
+                        <div className="agent-field">
+                          <label className="settings-label">
+                            Model Override (optional)
+                          </label>
+                          <input
+                            className="settings-input"
+                            list="model-override-suggestions"
+                            value={agent.model || ""}
+                            onChange={(e) =>
+                              updateMaintenanceAgent(index, {
+                                model: e.target.value || undefined,
+                              })
+                            }
+                            placeholder="Use default model"
+                          />
+                          <datalist id="model-override-suggestions">
+                            {KNOWN_MODELS.map((m) => (
+                              <option key={m} value={m} />
+                            ))}
+                          </datalist>
+                        </div>
+
+                        <div className="agent-metadata">
+                          <span className="metadata-item">
+                            📄 {agent.prompt_file}
+                          </span>
+                          {agent.needs_worktree && (
+                            <span className="metadata-item">
+                              🌳 Needs worktree
+                            </span>
+                          )}
+                          {agent.merge_changes && (
+                            <span className="metadata-item">
+                              🔀 Merges changes
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Footer actions */}
