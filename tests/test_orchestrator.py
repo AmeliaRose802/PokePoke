@@ -1,5 +1,6 @@
 """Unit tests for orchestrator module."""
 
+import pytest
 from unittest.mock import Mock, patch
 
 from pokepoke.orchestrator import run_orchestrator
@@ -1015,7 +1016,7 @@ class TestOrchestratorHelperFunctions:
 class TestOrchestratorMain:
     """Test main entry point."""
     
-    @patch('pokepoke.orchestrator._check_beads_available', return_value=True)
+    @patch('pokepoke.orchestrator.check_beads_available', return_value=True)
     @patch('pokepoke.orchestrator.run_orchestrator')
     @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke', '--autonomous'])
@@ -1034,9 +1035,10 @@ class TestOrchestratorMain:
             continuous=False,
             run_beta_first=False,
             agent_name_override=None,
+            max_parallel_agents=1,
         )
     
-    @patch('pokepoke.orchestrator._check_beads_available', return_value=True)
+    @patch('pokepoke.orchestrator.check_beads_available', return_value=True)
     @patch('pokepoke.orchestrator.run_orchestrator')
     @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke', '--continuous'])
@@ -1055,9 +1057,10 @@ class TestOrchestratorMain:
             continuous=True,
             run_beta_first=False,
             agent_name_override=None,
+            max_parallel_agents=1,
         )
     
-    @patch('pokepoke.orchestrator._check_beads_available', return_value=True)
+    @patch('pokepoke.orchestrator.check_beads_available', return_value=True)
     @patch('pokepoke.orchestrator.run_orchestrator')
     @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke', '--autonomous', '--continuous'])
@@ -1076,9 +1079,10 @@ class TestOrchestratorMain:
             continuous=True,
             run_beta_first=False,
             agent_name_override=None,
+            max_parallel_agents=1,
         )
 
-    @patch('pokepoke.orchestrator._check_beads_available', return_value=False)
+    @patch('pokepoke.orchestrator.check_beads_available', return_value=False)
     @patch('sys.argv', ['pokepoke', '--autonomous'])
     def test_main_exits_when_beads_unavailable(self, _mock_beads: Mock) -> None:
         """Test main exits with code 1 when beads is not available."""
@@ -1088,7 +1092,7 @@ class TestOrchestratorMain:
 
         assert result == 1
 
-    @patch('pokepoke.orchestrator._check_beads_available', return_value=True)
+    @patch('pokepoke.orchestrator.check_beads_available', return_value=True)
     @patch('pokepoke.orchestrator.run_orchestrator')
     @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke', '--autonomous', '--beta-first'])
@@ -1107,6 +1111,7 @@ class TestOrchestratorMain:
             continuous=False,
             run_beta_first=True,
             agent_name_override=None,
+            max_parallel_agents=1,
         )
 
     @patch('pokepoke.init.init_project', return_value=True)
@@ -1132,63 +1137,63 @@ class TestOrchestratorMain:
 
 
 class TestCheckBeadsAvailable:
-    """Test _check_beads_available function."""
+    """Test check_beads_available function."""
 
-    @patch('src.pokepoke.orchestrator.shutil.which', return_value=None)
+    @patch('pokepoke.repo_check.shutil.which', return_value=None)
     def test_bd_not_installed(self, mock_which: Mock) -> None:
         """Test returns False when bd command not found."""
-        from src.pokepoke.orchestrator import _check_beads_available
+        from pokepoke.repo_check import check_beads_available
 
-        result = _check_beads_available()
+        result = check_beads_available()
 
         assert result is False
 
-    @patch('src.pokepoke.orchestrator.subprocess.run')
-    @patch('src.pokepoke.orchestrator.shutil.which', return_value='/usr/bin/bd')
+    @patch('subprocess.run')
+    @patch('pokepoke.repo_check.shutil.which', return_value='/usr/bin/bd')
     def test_bd_info_succeeds(self, mock_which: Mock, mock_run: Mock) -> None:
         """Test returns True when bd is installed and initialized."""
-        from src.pokepoke.orchestrator import _check_beads_available
+        from pokepoke.repo_check import check_beads_available
 
         mock_run.return_value = Mock(returncode=0)
 
-        result = _check_beads_available()
+        result = check_beads_available()
 
         assert result is True
 
-    @patch('src.pokepoke.orchestrator.subprocess.run')
-    @patch('src.pokepoke.orchestrator.shutil.which', return_value='/usr/bin/bd')
+    @patch('subprocess.run')
+    @patch('pokepoke.repo_check.shutil.which', return_value='/usr/bin/bd')
     def test_bd_not_initialized(self, mock_which: Mock, mock_run: Mock) -> None:
         """Test returns False when bd info fails (not initialized)."""
-        from src.pokepoke.orchestrator import _check_beads_available
+        from pokepoke.repo_check import check_beads_available
 
         mock_run.return_value = Mock(returncode=1)
 
-        result = _check_beads_available()
+        result = check_beads_available()
 
         assert result is False
 
-    @patch('src.pokepoke.orchestrator.subprocess.run')
-    @patch('src.pokepoke.orchestrator.shutil.which', return_value='/usr/bin/bd')
+    @patch('subprocess.run')
+    @patch('pokepoke.repo_check.shutil.which', return_value='/usr/bin/bd')
     def test_bd_info_timeout(self, mock_which: Mock, mock_run: Mock) -> None:
         """Test returns False when bd info times out."""
         import subprocess as sp
-        from src.pokepoke.orchestrator import _check_beads_available
+        from pokepoke.repo_check import check_beads_available
 
         mock_run.side_effect = sp.TimeoutExpired('bd', 10)
 
-        result = _check_beads_available()
+        result = check_beads_available()
 
         assert result is False
 
-    @patch('src.pokepoke.orchestrator.subprocess.run')
-    @patch('src.pokepoke.orchestrator.shutil.which', return_value='/usr/bin/bd')
+    @patch('subprocess.run')
+    @patch('pokepoke.repo_check.shutil.which', return_value='/usr/bin/bd')
     def test_bd_info_exception(self, mock_which: Mock, mock_run: Mock) -> None:
         """Test returns False on unexpected exception."""
-        from src.pokepoke.orchestrator import _check_beads_available
+        from pokepoke.repo_check import check_beads_available
 
         mock_run.side_effect = OSError("Permission denied")
 
-        result = _check_beads_available()
+        result = check_beads_available()
 
         assert result is False
 
@@ -1968,7 +1973,7 @@ class TestRunOrchestratorWorktreeCoverage:
 class TestMainWorktreeCoverage:
     """Tests for main() using src.pokepoke.orchestrator for coverage."""
 
-    @patch('src.pokepoke.orchestrator._check_beads_available', return_value=True)
+    @patch('pokepoke.orchestrator.check_beads_available', return_value=True)
     @patch('src.pokepoke.orchestrator.run_orchestrator')
     @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke', '--autonomous'])
@@ -1982,7 +1987,7 @@ class TestMainWorktreeCoverage:
         result = main()
         assert result == 0
 
-    @patch('src.pokepoke.orchestrator._check_beads_available', return_value=True)
+    @patch('pokepoke.orchestrator.check_beads_available', return_value=True)
     @patch('src.pokepoke.orchestrator.run_orchestrator')
     @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke', '--autonomous', '--beta-first'])
@@ -2000,9 +2005,10 @@ class TestMainWorktreeCoverage:
             continuous=False,
             run_beta_first=True,
             agent_name_override=None,
+            max_parallel_agents=1,
         )
 
-    @patch('src.pokepoke.orchestrator._check_beads_available', return_value=False)
+    @patch('pokepoke.orchestrator.check_beads_available', return_value=False)
     @patch('sys.argv', ['pokepoke', '--autonomous'])
     def test_main_beads_unavailable(self, _mock_beads: Mock) -> None:
         """Test main returns 1 when beads unavailable."""
@@ -2020,7 +2026,7 @@ class TestMainWorktreeCoverage:
         result = main()
         assert result == 0
 
-    @patch('src.pokepoke.orchestrator._check_beads_available', return_value=True)
+    @patch('pokepoke.orchestrator.check_beads_available', return_value=True)
     @patch('src.pokepoke.orchestrator.run_orchestrator')
     @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke', '--autonomous', '--continuous'])
@@ -2038,6 +2044,7 @@ class TestMainWorktreeCoverage:
             continuous=True,
             run_beta_first=False,
             agent_name_override=None,
+            max_parallel_agents=1,
         )
 
 
@@ -2109,4 +2116,198 @@ class TestOrchestratorCleanupDetection:
         
         mock_get_items.assert_called_once()
         assert result == 0
+
+
+class TestSelectMultipleItems:
+    """Tests for select_multiple_items helper."""
+
+    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
+    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    def test_returns_up_to_count_items(self, mock_hier, mock_deps):
+        from pokepoke.work_item_selection import select_multiple_items
+
+        items = [
+            BeadsWorkItem(id="t1", title="T1", status="open", priority=1, issue_type="task"),
+            BeadsWorkItem(id="t2", title="T2", status="open", priority=2, issue_type="task"),
+            BeadsWorkItem(id="t3", title="T3", status="open", priority=3, issue_type="task"),
+        ]
+        # hierarchical selection returns first available each call
+        mock_hier.side_effect = lambda lst: lst[0] if lst else None
+
+        result = select_multiple_items(items, count=2)
+        assert len(result) == 2
+        assert result[0].id == "t1"
+        assert result[1].id == "t2"
+
+    def test_returns_empty_for_empty_list(self):
+        from pokepoke.work_item_selection import select_multiple_items
+
+        assert select_multiple_items([], count=3) == []
+
+    def test_returns_empty_for_zero_count(self):
+        from pokepoke.work_item_selection import select_multiple_items
+
+        items = [BeadsWorkItem(id="t1", title="T1", status="open", priority=1, issue_type="task")]
+        assert select_multiple_items(items, count=0) == []
+
+    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
+    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    def test_skips_claimed_ids(self, mock_hier, mock_deps):
+        from pokepoke.work_item_selection import select_multiple_items
+
+        items = [
+            BeadsWorkItem(id="t1", title="T1", status="open", priority=1, issue_type="task"),
+            BeadsWorkItem(id="t2", title="T2", status="open", priority=2, issue_type="task"),
+        ]
+        mock_hier.side_effect = lambda lst: lst[0] if lst else None
+
+        result = select_multiple_items(items, count=2, claimed_ids={"t1"})
+        assert len(result) == 1
+        assert result[0].id == "t2"
+
+    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
+    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    def test_skips_failed_ids(self, mock_hier, mock_deps):
+        from pokepoke.work_item_selection import select_multiple_items
+
+        items = [
+            BeadsWorkItem(id="t1", title="T1", status="open", priority=1, issue_type="task"),
+            BeadsWorkItem(id="t2", title="T2", status="open", priority=2, issue_type="task"),
+        ]
+        mock_hier.side_effect = lambda lst: lst[0] if lst else None
+
+        result = select_multiple_items(items, count=5, skip_ids={"t1"})
+        assert len(result) == 1
+        assert result[0].id == "t2"
+
+
+class TestRecordItemResult:
+    """Tests for _record_item_result helper."""
+
+    @patch('pokepoke.orchestrator.run_periodic_maintenance')
+    @patch('pokepoke.orchestrator.increment_items_completed', return_value=5)
+    @patch('pokepoke.orchestrator.append_model_history_entry')
+    @patch('pokepoke.orchestrator.record_completion')
+    def test_records_success(self, mock_record, mock_hist, mock_inc, mock_maint):
+        from pokepoke.orchestrator import _record_item_result
+        from pokepoke.types import AgentStats, SessionStats, ModelCompletionRecord
+
+        stats = SessionStats(agent_stats=AgentStats())
+        item = BeadsWorkItem(id="t1", title="T1", status="open", priority=1, issue_type="task")
+        logger = Mock()
+        mc = ModelCompletionRecord(item_id="t1", model="m", duration_seconds=1.0)
+
+        success, completed = _record_item_result(
+            item, True, 1, AgentStats(), 0, 1, mc, stats, logger,
+        )
+
+        assert success is True
+        assert completed == 1
+        mock_record.assert_called_once_with(mc)
+        mock_maint.assert_called_once()
+
+    @patch('pokepoke.orchestrator.run_periodic_maintenance')
+    @patch('pokepoke.orchestrator.increment_items_completed')
+    @patch('pokepoke.orchestrator.append_model_history_entry')
+    @patch('pokepoke.orchestrator.record_completion')
+    def test_records_failure(self, mock_record, mock_hist, mock_inc, mock_maint):
+        from pokepoke.orchestrator import _record_item_result
+        from pokepoke.types import AgentStats, SessionStats
+
+        stats = SessionStats(agent_stats=AgentStats())
+        item = BeadsWorkItem(id="t1", title="T1", status="open", priority=1, issue_type="task")
+        logger = Mock()
+
+        success, completed = _record_item_result(
+            item, False, 0, None, 0, 0, None, stats, logger,
+        )
+
+        assert success is False
+        assert completed == 0
+        mock_maint.assert_not_called()
+
+    @patch('pokepoke.orchestrator.run_periodic_maintenance')
+    @patch('pokepoke.orchestrator.increment_items_completed', return_value=1)
+    @patch('pokepoke.orchestrator.append_model_history_entry')
+    @patch('pokepoke.orchestrator.record_completion')
+    def test_records_retries(self, mock_record, mock_hist, mock_inc, mock_maint):
+        from pokepoke.orchestrator import _record_item_result
+        from pokepoke.types import AgentStats, SessionStats
+
+        stats = SessionStats(agent_stats=AgentStats())
+        item = BeadsWorkItem(id="t1", title="T1", status="open", priority=1, issue_type="task")
+        logger = Mock()
+
+        _record_item_result(item, True, 3, AgentStats(), 2, 1, None, stats, logger)
+        # 3 requests => 2 retries recorded
+        assert stats.agent_stats.retries == 2
+
+
+class TestParallelProcessItem:
+    """Tests for _parallel_process_item."""
+
+    @patch('pokepoke.parallel.process_work_item')
+    def test_releases_semaphore_on_success(self, mock_pwi):
+        import threading
+        from pokepoke.parallel import _parallel_process_item
+
+        mock_pwi.return_value = (True, 1, None, 0, 0, None)
+        sem = threading.Semaphore(1)
+        ids = {"t1"}
+        lock = threading.Lock()
+        item = BeadsWorkItem(id="t1", title="T", status="o", priority=1, issue_type="task")
+        logger = Mock()
+
+        result = _parallel_process_item(item, logger, sem, ids, lock)
+
+        assert result == (True, 1, None, 0, 0, None)
+        assert "t1" not in ids
+        # Semaphore should have been released (can acquire again)
+        assert sem.acquire(blocking=False)
+
+    @patch('pokepoke.parallel.process_work_item', side_effect=RuntimeError("boom"))
+    def test_releases_semaphore_on_exception(self, mock_pwi):
+        import threading
+        from pokepoke.parallel import _parallel_process_item
+
+        sem = threading.Semaphore(1)
+        ids = {"t1"}
+        lock = threading.Lock()
+        item = BeadsWorkItem(id="t1", title="T", status="o", priority=1, issue_type="task")
+        logger = Mock()
+
+        with pytest.raises(RuntimeError):
+            _parallel_process_item(item, logger, sem, ids, lock)
+
+        assert "t1" not in ids
+        assert sem.acquire(blocking=False)
+
+
+class TestMaxParallelAgentsConfig:
+    """Tests for max_parallel_agents in ProjectConfig."""
+
+    def test_default_value(self):
+        from pokepoke.config import ProjectConfig
+        config = ProjectConfig()
+        assert config.max_parallel_agents == 1
+
+    def test_from_dict_explicit(self):
+        from pokepoke.config import ProjectConfig
+        config = ProjectConfig.from_dict({"max_parallel_agents": 4})
+        assert config.max_parallel_agents == 4
+
+    def test_from_dict_missing(self):
+        from pokepoke.config import ProjectConfig
+        config = ProjectConfig.from_dict({})
+        assert config.max_parallel_agents == 1
+
+    def test_from_dict_clamped_to_one(self):
+        from pokepoke.config import ProjectConfig
+        config = ProjectConfig.from_dict({"max_parallel_agents": 0})
+        assert config.max_parallel_agents == 1
+
+    def test_from_dict_negative_clamped(self):
+        from pokepoke.config import ProjectConfig
+        config = ProjectConfig.from_dict({"max_parallel_agents": -5})
+        assert config.max_parallel_agents == 1
 

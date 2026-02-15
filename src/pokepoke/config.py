@@ -134,6 +134,7 @@ class ProjectConfig:
     git: GitConfig = field(default_factory=GitConfig)
     test_data: Dict[str, str] = field(default_factory=dict)
     work_artifacts_dir: Optional[str] = None
+    max_parallel_agents: int = 1
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> 'ProjectConfig':
@@ -170,6 +171,9 @@ class ProjectConfig:
 
         # Work artifacts directory
         config.work_artifacts_dir = data.get("work_artifacts_dir")
+
+        # Max parallel agents
+        config.max_parallel_agents = max(1, int(data.get("max_parallel_agents", 1)))
 
         # Maintenance agents
         maint_data = data.get("maintenance", {})

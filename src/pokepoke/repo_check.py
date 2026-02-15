@@ -1,6 +1,8 @@
 """Repository status check and maintenance utilities."""
 
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -8,6 +10,40 @@ from pokepoke.git_operations import categorize_git_changes
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import RunLogger
+
+
+def check_beads_available() -> bool:
+    """Check that beads (bd) is installed and initialized in the current directory.
+
+    Returns:
+        True if beads is available and initialized, False otherwise.
+    """
+    if not shutil.which('bd'):
+        print("\nError: 'bd' (beads) command not found.", file=sys.stderr)
+        print("   PokePoke requires beads for work item tracking.", file=sys.stderr)
+        print("   Install beads: pip install beads", file=sys.stderr)
+        print("   Then initialize: bd init", file=sys.stderr)
+        return False
+
+    try:
+        result = subprocess.run(
+            ['bd', 'info', '--json'],
+            capture_output=True, text=True, encoding='utf-8',
+            timeout=10
+        )
+        if result.returncode != 0:
+            print("\nError: This directory is not a beads repository.", file=sys.stderr)
+            print("   Run 'bd init' to set up beads tracking.", file=sys.stderr)
+            return False
+    except subprocess.TimeoutExpired:
+        print("\nError: 'bd info' timed out. Beads may not be configured correctly.", file=sys.stderr)
+        return False
+    except Exception as e:
+        print(f"\nError: Failed to check beads status: {e}", file=sys.stderr)
+        print("   Ensure beads is installed and initialized: bd init", file=sys.stderr)
+        return False
+
+    return True
 
 
 def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool:

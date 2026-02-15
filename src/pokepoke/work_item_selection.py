@@ -132,3 +132,60 @@ def autonomous_selection(ready_items: list[BeadsWorkItem]) -> Optional[BeadsWork
         print(f"🤖 Hierarchically selected item: {selected.id}")
         print(f"   Type: {selected.issue_type} | Priority: {selected.priority}")
     return selected
+
+
+def select_multiple_items(
+    ready_items: list[BeadsWorkItem],
+    count: int,
+    skip_ids: Optional[set[str]] = None,
+    claimed_ids: Optional[set[str]] = None,
+) -> list[BeadsWorkItem]:
+    """Select up to *count* work items for parallel processing.
+
+    Uses the same filtering as ``select_work_item`` (skips human-required,
+    other-agent-assigned, and previously-failed items) then returns the top
+    *count* items via hierarchical selection.
+
+    Args:
+        ready_items: List of available work items from beads.
+        count: Maximum number of items to return.
+        skip_ids: IDs to skip (e.g. failed claims).
+        claimed_ids: IDs already being processed in the thread pool.
+
+    Returns:
+        List of selected items (may be shorter than *count*).
+    """
+    if not ready_items or count <= 0:
+        return []
+
+    excluded: set[str] = set()
+    if skip_ids:
+        excluded.update(skip_ids)
+    if claimed_ids:
+        excluded.update(claimed_ids)
+
+    # Apply the same filters as select_work_item
+    filtered = [item for item in ready_items if item.id not in excluded]
+    filtered = [item for item in filtered if is_assigned_to_current_user(item)]
+    filtered = [item for item in filtered if not _is_human_required(item)]
+    filtered = [
+        item for item in filtered
+        if not has_unmet_blocking_dependencies(item.id)
+    ]
+
+    if not filtered:
+        return []
+
+    # Use hierarchical selection repeatedly to pick up to `count` items
+    selected: list[BeadsWorkItem] = []
+    remaining = list(filtered)
+    for _ in range(count):
+        if not remaining:
+            break
+        item = select_next_hierarchical_item(remaining)
+        if item is None:
+            break
+        selected.append(item)
+        remaining = [i for i in remaining if i.id != item.id]
+
+    return selected

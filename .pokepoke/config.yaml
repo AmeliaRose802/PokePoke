@@ -90,3 +90,7 @@ test_data:
 # Work artifacts directory (optional)
 # If set, agents can store artifacts here. If not set, no artifacts directory is created.
 # work_artifacts_dir: work_artifacts
+
+# Maximum concurrent work-item agents (default: 1 = sequential).
+# Requires autonomous + continuous mode. CLI: --max-agents N
+# max_parallel_agents: 1
