@@ -146,18 +146,25 @@
       "duration_seconds": 7211.375122308731,
       "gate_passed": false,
       "timestamp": "2026-02-15T02:06:18.816946+00:00"
+    },
+    {
+      "item_id": "PokePoke-ul6o",
+      "model": "claude-opus-4.5",
+      "duration_seconds": 7218.756322860718,
+      "gate_passed": false,
+      "timestamp": "2026-02-15T04:18:40.512173+00:00"
     }
   ],
   "summary": {
     "claude-opus-4.5": {
-      "total_items_attempted": 2,
+      "total_items_attempted": 3,
       "total_items_succeeded": 1,
-      "total_items_failed": 1,
-      "total_duration_seconds": 611.493255853653,
+      "total_items_failed": 2,
+      "total_duration_seconds": 7830.249578714371,
       "total_retries": 0,
-      "average_duration": 305.75,
-      "success_rate": 0.5,
-      "last_used": "2026-02-14T21:37:06.559960+00:00"
+      "average_duration": 2610.08,
+      "success_rate": 0.3333,
+      "last_used": "2026-02-15T04:18:40.512173+00:00"
     },
     "claude-opus-4.6": {
       "total_items_attempted": 2,
