@@ -13,15 +13,16 @@ function Get-WarningMatches {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
         [string[]]$Lines
     )
 
     $warningPatterns = @(
-        '(?i)^\s*(?:warn(?:ing)?|npm\s+warn|\(!\))\b',
+        '(?i)^\s*(?:warn(?:ing)?\b|npm\s+warn\b|\(!\)(?:\b|(?<=\))))',
         '(?i)\b\w*warning(?!s):'
     )
 
-    $matches = @()
+    $results = @()
 
     foreach ($line in $Lines) {
         if ($null -eq $line) {
@@ -30,12 +31,12 @@ function Get-WarningMatches {
 
         $text = [string]$line
         foreach ($pattern in $warningPatterns) {
-            if ($text -match $pattern) {
-                $matches += $text.TrimEnd()
-                break
+                if ($text -match $pattern) {
+                    $results += $text.TrimEnd()
+                    break
+                }
             }
         }
-    }
 
-    return $matches
+    return $results
 }
