@@ -14,6 +14,7 @@ function Get-WarningMatches {
     param(
         [Parameter(Mandatory = $true)]
         [AllowEmptyCollection()]
+        [AllowEmptyString()]
         [string[]]$Lines
     )
 
