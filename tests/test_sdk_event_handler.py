@@ -16,6 +16,9 @@ class DummyLogger:
     def log_copilot_output(self, text: str) -> None:
         self.lines.append(text)
 
+    def log_error(self, error_msg: str) -> None:
+        self.lines.append(error_msg)
+
 
 class DummyEventFlag:
     def __init__(self) -> None:
@@ -173,3 +176,16 @@ def test_tool_call_tracking_and_usage_updates(monkeypatch: pytest.MonkeyPatch) -
     assert stats['total_cache_read_tokens'] == 2
     assert stats['total_cache_write_tokens'] == 1
     assert stats['turn_count'] == 1
+
+
+def test_error_event_logs_to_item_logger() -> None:
+    done = DummyEventFlag()
+    output: List[str] = []
+    errors: List[str] = []
+    logger = DummyLogger()
+    handler, _ = sdk_event_handler.create_event_handler(done, output, errors, logger)
+
+    handler(make_event("assistant.error", data=make_data(error="Something broke")))
+
+    assert "Something broke" in errors
+    assert logger.lines == ["Something broke"]

@@ -221,7 +221,43 @@ class ItemLogger:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(f"[{timestamp}] [{level}] {message}\n")
-    
+
+    def log_copilot_output(self, text: str) -> None:
+        """Log streamed agent output text (message deltas/content).
+
+        Args:
+            text: Raw text chunk from the agent stream.
+        """
+        with open(self.log_path, 'a', encoding='utf-8') as f:
+            f.write(text)
+
+    def log_tool_call(self, tool_name: str, args: str, result: Optional[str] = None,
+                      success: bool = True) -> None:
+        """Log a tool invocation and optional result.
+
+        Args:
+            tool_name: Name of the tool invoked.
+            args: Stringified arguments.
+            result: Optional result text.
+            success: Whether the tool succeeded.
+        """
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        status = "✅" if success else "❌"
+        with open(self.log_path, 'a', encoding='utf-8') as f:
+            f.write(f"\n[{timestamp}] [TOOL] {status} {tool_name}({args})\n")
+            if result is not None:
+                f.write(f"[{timestamp}] [RESULT] {result}\n")
+
+    def log_error(self, error_msg: str) -> None:
+        """Log an error event from the agent session.
+
+        Args:
+            error_msg: Error message to log.
+        """
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(self.log_path, 'a', encoding='utf-8') as f:
+            f.write(f"\n[{timestamp}] [ERROR] {error_msg}\n")
+
     def log_summary(self, success: bool, request_count: int) -> None:
         """Log summary information for the work item.
         

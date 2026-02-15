@@ -169,3 +169,92 @@ def test_multiple_item_logs():
             content2 = f.read()
         assert "Second item output" in content2
         assert "FAILURE" in content2
+
+
+def test_item_logger_log_copilot_output():
+    """Test that log_copilot_output writes streamed text to log."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logs_dir = Path(tmpdir)
+        item_logger = ItemLogger(logs_dir, "test-stream", "Stream Test")
+
+        item_logger.log_copilot_output("Hello ")
+        item_logger.log_copilot_output("world!")
+
+        with open(item_logger.log_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        assert "Hello world!" in content
+
+
+def test_item_logger_log_tool_call():
+    """Test that log_tool_call writes tool invocation details."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logs_dir = Path(tmpdir)
+        item_logger = ItemLogger(logs_dir, "test-tool", "Tool Test")
+
+        item_logger.log_tool_call("read_file", "path=src/main.py")
+        item_logger.log_tool_call(
+            "write_file", "path=out.py",
+            result="File written", success=True
+        )
+        item_logger.log_tool_call(
+            "compile", "target=all",
+            result="Compilation error", success=False
+        )
+
+        with open(item_logger.log_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        assert "[TOOL]" in content
+        assert "read_file" in content
+        assert "write_file" in content
+        assert "File written" in content
+        assert "[RESULT]" in content
+        assert "✅" in content
+        assert "❌" in content
+
+
+def test_item_logger_log_error():
+    """Test that log_error writes error messages."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logs_dir = Path(tmpdir)
+        item_logger = ItemLogger(logs_dir, "test-error", "Error Test")
+
+        item_logger.log_error("Something went wrong")
+
+        with open(item_logger.log_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        assert "[ERROR]" in content
+        assert "Something went wrong" in content
+
+
+def test_item_logger_full_agent_session():
+    """Test a realistic sequence: output, tool calls, errors, summary."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logs_dir = Path(tmpdir)
+        item_logger = ItemLogger(logs_dir, "full-session", "Full Session")
+
+        # Streamed agent output
+        item_logger.log_copilot_output("I will fix the bug.\n")
+        # Tool call
+        item_logger.log_tool_call("grep", "pattern=TODO")
+        item_logger.log_tool_call("grep", "pattern=TODO",
+                                  result="src/main.py:10: TODO fix", success=True)
+        # More output
+        item_logger.log_copilot_output("Found the issue, applying fix.\n")
+        # Error
+        item_logger.log_error("Rate limit exceeded")
+        # Summary
+        item_logger.log_summary(success=True, request_count=3)
+
+        with open(item_logger.log_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        assert "I will fix the bug." in content
+        assert "grep" in content
+        assert "TODO fix" in content
+        assert "Found the issue" in content
+        assert "Rate limit exceeded" in content
+        assert "SUCCESS" in content
+        assert "Agent requests: 3" in content

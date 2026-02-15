@@ -108,6 +108,8 @@ def create_event_handler(
                 
             print(f"\n[SDK] ERROR: {error_msg}")
             errors.append(error_msg)
+            if item_logger:
+                item_logger.log_error(error_msg)
             
             # Check for rate limit and try fallback
             if "rate limit" in error_msg.lower() or "too many requests" in error_msg.lower():

@@ -104,6 +104,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                 if delta:
                     print(delta, end="", flush=True)
                     output_lines.append(delta)
+                    if item_logger:
+                        item_logger.log_copilot_output(delta)
                     
             elif event_type == "assistant.message":
                 terminal_ui.ui.set_style("green")
@@ -112,6 +114,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                 if content:
                     print(content)
                     output_lines.append(content)
+                    if item_logger:
+                        item_logger.log_copilot_output(content)
                 terminal_ui.ui.set_style(None)
                 if tool_requests and len(tool_requests) > 0:
                     print(f"\n[Copilot] Calling {len(tool_requests)} tool(s)...")
@@ -128,6 +132,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     args_str = str(getattr(event.data, 'arguments', {}))
                     print(f"  🔧 {tool_name}({args_str})")
                     output_lines.append(f"\n[Tool] {tool_name}({args_str})\n")
+                    if item_logger:
+                        item_logger.log_tool_call(tool_name, args_str)
 
             elif event_type == "tool.execution_complete":
                 terminal_ui.ui.set_style(None)
@@ -140,6 +146,11 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                         status = "✅" if success else "❌"
                         print(f"  {status} Result: {result_content}")
                         output_lines.append(f"[Result] {result_content}\n")
+                        if item_logger:
+                            item_logger.log_tool_call(
+                                getattr(event.data, 'tool_name', 'unknown'),
+                                '', result=result_content, success=success
+                            )
 
             elif event_type == "assistant.usage":
                 terminal_ui.ui.set_style(None)
@@ -173,6 +184,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                 nonlocal tried_fallback, current_model
                 error_msg = getattr(event.data, 'message', 'Unknown error') if hasattr(event, 'data') else 'Unknown error'
                 print(f"\n[SDK] ERROR: {error_msg}")
+                if item_logger:
+                    item_logger.log_error(error_msg)
                 if not tried_fallback and current_model == DEFAULT_MODEL:
                     error_lower = error_msg.lower()
                     if 'rate' in error_lower and 'limit' in error_lower:
