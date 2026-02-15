@@ -54,6 +54,8 @@ class MaintenanceScheduler:
         # In-process locks for thread coordination
         self._locks: Dict[str, threading.Lock] = {}
         self._lock_creation_lock = threading.Lock()
+        # Lock for thread-safe stat updates
+        self._stats_lock = threading.Lock()
         
     def _get_agent_lock(self, agent_name: str) -> threading.Lock:
         """Get or create a threading lock for the given agent."""
@@ -186,12 +188,9 @@ class MaintenanceScheduler:
 
         # Update run count on session stats if attribute exists (thread-safe)
         stat_attr = _AGENT_STAT_ATTRS.get(agent_name)
-        if stat_attr and hasattr(session_stats, 'record_agent_run'):
-            try:
+        if stat_attr and hasattr(session_stats, stat_attr):
+            with self._stats_lock:
                 session_stats.record_agent_run(agent_name)
-            except (AttributeError, ValueError):
-                # Silently skip if method doesn't exist or agent name not recognized
-                pass
 
         # Run the agent
         if agent_name in _SPECIAL_AGENTS:
@@ -207,9 +206,10 @@ class MaintenanceScheduler:
             )
 
         if result:
-            session_stats.record_agent_stats(result)
-            if agent_name == "Janitor":
-                session_stats.record_janitor_lines_removed(result.lines_removed)
+            with self._stats_lock:
+                session_stats.record_agent_stats(result)
+                if agent_name == "Janitor":
+                    session_stats.record_janitor_lines_removed(result.lines_removed)
             run_logger.log_maintenance(log_key, f"{agent_name} Agent completed successfully")
         else:
             run_logger.log_maintenance(log_key, f"{agent_name} Agent failed")

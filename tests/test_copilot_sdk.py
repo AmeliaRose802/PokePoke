@@ -94,7 +94,12 @@ class TestInvokeCopilotSDKSync:
         mock_result = MagicMock()
         mock_result.success = True
         mock_result.output = "Test output"
-        mock_asyncio_run.return_value = mock_result
+
+        def _fake_run(coro):
+            coro.close()
+            return mock_result
+
+        mock_asyncio_run.side_effect = _fake_run
         
         # Create a mock logger
         mock_logger = MagicMock()
@@ -121,7 +126,11 @@ class TestInvokeCopilotSDKSync:
             success=True,
             output="Custom prompt result"
         )
-        mock_asyncio_run.return_value = mock_result
+        def _fake_run(coro):
+            coro.close()
+            return mock_result
+
+        mock_asyncio_run.side_effect = _fake_run
         
         result = invoke_copilot_sdk_sync(
             work_item=sample_work_item,
@@ -175,14 +184,21 @@ class TestInvokeCopilotSDKAsync:
         mock_session.send = mock_send
         mock_session.destroy = AsyncMock()
         
-        result = await invoke_copilot_sdk(
-            work_item=sample_work_item,
-            prompt="Test prompt",
-            idle_timeout=0.01
-        )
-        
+        with patch(
+            "pokepoke.copilot_sdk._monotonic",
+            side_effect=[0.0, 10.0, 12.5, 15.0],
+        ):
+            result = await invoke_copilot_sdk(
+                work_item=sample_work_item,
+                prompt="Test prompt",
+                idle_timeout=0.01,
+            )
+
         assert result.work_item_id == sample_work_item.id
         assert result.success
+        assert result.stats is not None
+        assert result.stats.api_duration == pytest.approx(2.5)
+        assert result.stats.wall_duration == pytest.approx(15.0)
         mock_client.start.assert_called_once()
         mock_client.create_session.assert_called_once()
         mock_client.stop.assert_called_once()
