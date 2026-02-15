@@ -172,7 +172,8 @@ def branch_exists(branch_name: str) -> bool:
             ["git", "show-ref", "--verify", f"refs/heads/{branch_name}"],
             capture_output=True,
             text=True,
-            encoding='utf-8'
+            encoding='utf-8',
+            timeout=30
         )
         return result.returncode == 0
     except subprocess.CalledProcessError:
@@ -202,7 +203,8 @@ def get_default_branch(preferred: Optional[str] = None, fallback: Optional[str] 
             subprocess.run(
                 ["git", "show-ref", "--verify", f"refs/remotes/origin/{preferred}"],
                 capture_output=True,
-                check=True
+                check=True,
+                timeout=30
             )
             
             # Found on remote, create local tracking branch
@@ -210,7 +212,8 @@ def get_default_branch(preferred: Optional[str] = None, fallback: Optional[str] 
             subprocess.run(
                 ["git", "branch", "--track", preferred, f"origin/{preferred}"],
                 capture_output=True,
-                check=True
+                check=True,
+                timeout=30
             )
             return preferred
         except subprocess.CalledProcessError:
@@ -222,7 +225,8 @@ def get_default_branch(preferred: Optional[str] = None, fallback: Optional[str] 
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
         ref = result.stdout.strip()
         if ref.startswith("origin/"):
@@ -236,7 +240,8 @@ def get_default_branch(preferred: Optional[str] = None, fallback: Optional[str] 
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
         branch = result.stdout.strip()
         if branch:
@@ -252,7 +257,8 @@ def get_main_repo_root() -> Path:
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--git-common-dir"],
-            capture_output=True, text=True, encoding='utf-8', check=True
+            capture_output=True, text=True, encoding='utf-8', check=True,
+            timeout=30
         )
         git_common_dir = Path(result.stdout.strip())
         return git_common_dir.parent
@@ -268,7 +274,8 @@ def is_worktree_clean(worktree_path: Path) -> bool:
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
         # Empty output means clean status
         return not bool(result.stdout.strip())
@@ -286,7 +293,8 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> Tuple[bool, 
     """
     try:
         subprocess.run(["git", "checkout", target_branch],
-                     check=True, capture_output=True, text=True, encoding='utf-8')
+                     check=True, capture_output=True, text=True, encoding='utf-8',
+                     timeout=30)
     except subprocess.CalledProcessError as e:
         return False, f"Failed to checkout {target_branch}: {e.stderr or str(e)}", []
     
@@ -297,12 +305,14 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> Tuple[bool, 
     try:
         status = subprocess.run(
             ["git", "status", "--porcelain", ".beads/"],
-            capture_output=True, text=True, encoding='utf-8', check=True
+            capture_output=True, text=True, encoding='utf-8', check=True,
+            timeout=30
         ).stdout.strip()
         if status:
             subprocess.run(
                 ["git", "stash", "push", "-m", "beads-daemon-changes-during-merge", "--", ".beads/"],
-                check=True, capture_output=True, text=True, encoding='utf-8'
+                check=True, capture_output=True, text=True, encoding='utf-8',
+                timeout=30
             )
             stashed = True
     except subprocess.CalledProcessError:
@@ -310,7 +320,8 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> Tuple[bool, 
     
     try:
         subprocess.run(["git", "pull", "--rebase"],
-                     check=True, capture_output=True, text=True, encoding='utf-8')
+                     check=True, capture_output=True, text=True, encoding='utf-8',
+                     timeout=120)
     except subprocess.CalledProcessError as e:
         # Restore stash if we had one
         if stashed:
@@ -323,7 +334,8 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> Tuple[bool, 
     
     try:
         subprocess.run(["git", "merge", "--no-ff", branch_name, "-m", f"Merge {branch_name}"],
-                     check=True, capture_output=True, text=True, encoding='utf-8')
+                     check=True, capture_output=True, text=True, encoding='utf-8',
+                     timeout=60)
         return True, "", []
     except subprocess.CalledProcessError as e:
         # Check if this is a merge conflict
@@ -339,7 +351,8 @@ def validate_post_merge(target_branch: str) -> bool:
     """Validate repository state after merge."""
     current_branch = subprocess.run(
         ["git", "branch", "--show-current"],
-        capture_output=True, text=True, encoding='utf-8', check=True
+        capture_output=True, text=True, encoding='utf-8', check=True,
+        timeout=30
     ).stdout.strip()
     
     if current_branch != target_branch:
@@ -348,7 +361,8 @@ def validate_post_merge(target_branch: str) -> bool:
     
     status_result = subprocess.run(
         ["git", "status", "--porcelain"],
-        capture_output=True, text=True, encoding='utf-8', check=True
+        capture_output=True, text=True, encoding='utf-8', check=True,
+        timeout=30
     )
     
     if status_result.stdout.strip():

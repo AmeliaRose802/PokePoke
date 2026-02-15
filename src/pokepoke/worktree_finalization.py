@@ -38,7 +38,8 @@ def check_and_merge_worktree(item: BeadsWorkItem, worktree_path: Path) -> bool:
             capture_output=True,
             text=True,
             check=True,
-            cwd=str(worktree_path)
+            cwd=str(worktree_path),
+            timeout=30
         )
         commit_count = int(check_result.stdout.strip())
         
@@ -187,7 +188,8 @@ def close_work_item_and_parents(item: BeadsWorkItem) -> None:
             ["bd", "show", item.id, "--json"],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
+            timeout=30
         )
         # bd show --json returns a list, not a dict - get first element
         items_data = json.loads(check_result.stdout)

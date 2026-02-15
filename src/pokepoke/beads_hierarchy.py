@@ -281,7 +281,8 @@ def close_parent_if_complete(parent_id: str) -> bool:
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
         print(f"✅ Auto-closed parent {parent_id} - all children complete")
         return True

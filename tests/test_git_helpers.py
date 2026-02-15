@@ -21,7 +21,8 @@ class TestVerifyBranchPushed:
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=120
         )
 
     @patch('src.pokepoke.git_helpers.subprocess.run')
