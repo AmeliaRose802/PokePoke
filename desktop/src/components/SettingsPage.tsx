@@ -6,7 +6,8 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { ConfigResponse, ProjectConfig, ModelsConfig, MaintenanceAgent } from "../types";
+import type { ConfigResponse, ProjectConfig, ModelsConfig, McpServerConfig, MaintenanceAgent } from "../types";
+import { McpServerSection } from "./McpServerSection";
 
 /** Well-known model names for dropdown suggestions */
 const KNOWN_MODELS = [
@@ -37,6 +38,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
   const [candidateModels, setCandidateModels] = useState<string[]>([]);
   const [chipInput, setChipInput] = useState("");
   const [maintenanceAgents, setMaintenanceAgents] = useState<MaintenanceAgent[]>([]);
+  const [mcpConfig, setMcpConfig] = useState<McpServerConfig>({ enabled: false });
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -59,6 +61,12 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
       const maintenance = resp.config.maintenance;
       if (maintenance && Array.isArray(maintenance.agents)) {
         setMaintenanceAgents(maintenance.agents);
+      }
+      
+      // Load MCP server config
+      const mcp = resp.config.mcp_server;
+      if (mcp) {
+        setMcpConfig(mcp);
       }
     });
     return () => {
@@ -87,6 +95,11 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
         ...config.maintenance,
         agents: maintenanceAgents,
       },
+      mcp_server: {
+        enabled: mcpConfig.enabled ?? false,
+        name: mcpConfig.name || undefined,
+        restart_script: mcpConfig.restart_script || undefined,
+      } as McpServerConfig,
     };
     const ok = await saveConfig(updated);
     setSaving(false);
@@ -97,7 +110,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
     } else {
       setMessage("Save failed");
     }
-  }, [config, defaultModel, fallbackModel, candidateModels, maintenanceAgents, saveConfig]);
+  }, [config, defaultModel, fallbackModel, candidateModels, maintenanceAgents, mcpConfig, saveConfig]);
 
   const handleReset = useCallback(() => {
     if (!config) return;
@@ -113,6 +126,9 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
     } else {
       setMaintenanceAgents([]);
     }
+    
+    // Reset MCP server config
+    setMcpConfig(config.mcp_server ?? { enabled: false });
     
     setDirty(false);
     setMessage("Reset to saved values");
@@ -292,6 +308,15 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
                 </span>
               </div>
             </div>
+
+            {/* Section: MCP Server Configuration */}
+            <McpServerSection
+              mcpConfig={mcpConfig}
+              onChange={(updates) => {
+                setMcpConfig((prev) => ({ ...prev, ...updates }));
+                markDirty();
+              }}
+            />
 
             {/* Section: Maintenance Agents Configuration */}
             <div className="settings-section">

@@ -97,12 +97,19 @@ export interface MaintenanceConfig {
   agents: MaintenanceAgent[];
 }
 
+/** MCP server configuration section */
+export interface McpServerConfig {
+  enabled?: boolean;
+  name?: string;
+  restart_script?: string;
+}
+
 /** Project configuration from .pokepoke/config.yaml */
 export interface ProjectConfig {
   project_name?: string;
   models?: ModelsConfig;
   git?: Record<string, unknown>;
-  mcp_server?: Record<string, unknown>;
+  mcp_server?: McpServerConfig;
   maintenance?: MaintenanceConfig;
   test_data?: Record<string, string>;
   [key: string]: unknown;

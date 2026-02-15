@@ -978,3 +978,15 @@
   border-radius: 3px;
   white-space: nowrap;
 }
+
+/* MCP server section */
+.mcp-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.file-path-input {
+  font-family: "Fira Code", "Cascadia Code", "Consolas", monospace;
+  font-size: 12px;
+}
