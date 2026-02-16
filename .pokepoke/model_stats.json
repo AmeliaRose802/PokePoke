@@ -209,6 +209,13 @@
       "duration_seconds": 802.9806413650513,
       "gate_passed": true,
       "timestamp": "2026-02-16T06:29:39.102933+00:00"
+    },
+    {
+      "item_id": "PokePoke-b709",
+      "model": "gpt-5.2-codex",
+      "duration_seconds": 27519.574836730957,
+      "gate_passed": false,
+      "timestamp": "2026-02-16T15:14:34.682918+00:00"
     }
   ],
   "summary": {
@@ -293,14 +300,14 @@
       "last_used": "2026-02-14T18:54:30.987319+00:00"
     },
     "gpt-5.2-codex": {
-      "total_items_attempted": 3,
+      "total_items_attempted": 4,
       "total_items_succeeded": 1,
-      "total_items_failed": 2,
-      "total_duration_seconds": 16810.680946350098,
+      "total_items_failed": 3,
+      "total_duration_seconds": 44330.255783081055,
       "total_retries": 0,
-      "average_duration": 5603.56,
-      "success_rate": 0.3333,
-      "last_used": "2026-02-15T11:14:26.418703+00:00"
+      "average_duration": 11082.56,
+      "success_rate": 0.25,
+      "last_used": "2026-02-16T15:14:34.682918+00:00"
     },
     "claude-sonnet-4.5": {
       "total_items_attempted": 1,
