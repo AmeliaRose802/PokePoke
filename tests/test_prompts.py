@@ -419,3 +419,25 @@ def test_save_prompt_creates_user_dir(tmp_path):
     service.save_prompt("test", "new content")
     assert user_dir.exists()
     assert (user_dir / "test.md").read_text(encoding="utf-8") == "new content"
+
+
+def test_default_prompts_dir_uses_repo_root(monkeypatch, tmp_path):
+    """Default prompts_dir should resolve from the target repo root, not package path."""
+    # Simulate a repo root with .pokepoke/prompts and a built-in fallback
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    (repo_root / ".git").mkdir()
+    user_dir = repo_root / ".pokepoke" / "prompts"
+    builtin_dir = repo_root / "builtin"
+    builtin_dir.mkdir(parents=True)
+    (builtin_dir / "test.md").write_text("builtin", encoding="utf-8")
+
+    monkeypatch.setattr("pokepoke.prompts.BUILTIN_PROMPTS_DIR", builtin_dir)
+    monkeypatch.setattr("pokepoke.prompts._find_repo_root", lambda: repo_root)
+
+    service = PromptService()
+    result = service.save_prompt("test", "override")
+
+    assert service.prompts_dir == user_dir
+    assert result["saved"]
+    assert (user_dir / "test.md").read_text(encoding="utf-8") == "override"
