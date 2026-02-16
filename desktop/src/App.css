@@ -113,6 +113,12 @@
   white-space: nowrap;
 }
 
+.repository-name {
+  color: #7aa2f7;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
 .work-item-meta-line {
   display: flex;
   align-items: center;

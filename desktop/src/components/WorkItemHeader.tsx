@@ -2,7 +2,7 @@
  * Work item header component.
  *
  * Displays the current work item ID, title, status badge,
- * and active agent name with an animated spinner.
+ * repository name, and active agent name with an animated spinner.
  */
 
 import { useEffect, useState } from "react";
@@ -13,9 +13,10 @@ const SPINNER_FRAMES = ["◐", "◓", "◑", "◒"];
 interface Props {
   workItem: WorkItem | null;
   agentName: string;
+  repositoryName: string;
 }
 
-export function WorkItemHeader({ workItem, agentName }: Props) {
+export function WorkItemHeader({ workItem, agentName, repositoryName }: Props) {
   const [frame, setFrame] = useState(0);
 
   useEffect(() => {
@@ -39,6 +40,12 @@ export function WorkItemHeader({ workItem, agentName }: Props) {
         <span className="item-title">
           {workItem?.title ?? "Waiting for orchestrator..."}
         </span>
+        {repositoryName && (
+          <>
+            <span className="separator">│</span>
+            <span className="repository-name">📁 {repositoryName}</span>
+          </>
+        )}
       </div>
       <div className="work-item-meta-line">
         {workItem?.status && (

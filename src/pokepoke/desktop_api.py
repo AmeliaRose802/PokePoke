@@ -13,6 +13,7 @@ from dataclasses import asdict
 from typing import Any, Optional, TYPE_CHECKING
 
 from pokepoke.agent_registry import AgentRegistry
+from pokepoke.repo_utils import get_repository_name
 
 try:
     import yaml  # type: ignore[import-untyped]
@@ -42,6 +43,7 @@ class DesktopAPI:
         self._current_agent_name: str = ""
         self._current_stats: Optional[dict[str, Any]] = None
         self._current_progress: dict[str, Any] = {"active": False, "status": ""}
+        self._repository_name: str = ""
 
         # Session start time for dynamic elapsed_time computation
         self._session_start_time: Optional[float] = None
@@ -65,6 +67,9 @@ class DesktopAPI:
             preview_limit=self._agent_max_log_lines_internal,
             detail_limit=self._agent_detail_max_log_lines_internal,
         )
+
+        # Extract repository name at initialization
+        self._repository_name = get_repository_name()
 
     def set_window(self, window: Any) -> None:
         """Called once after pywebview creates the window."""
@@ -116,6 +121,7 @@ class DesktopAPI:
             return {
                 "work_item": self._current_work_item,
                 "agent_name": self._current_agent_name,
+                "repository_name": self._repository_name,
                 "stats": self._serialize_live_stats(),
                 "progress": self._current_progress,
                 "log_count": len(self._log_buffer),
@@ -155,6 +161,10 @@ class DesktopAPI:
     def get_work_item(self) -> Optional[dict[str, str]]:
         """Get the current work item."""
         return self._current_work_item
+
+    def get_repository_name(self) -> str:
+        """Get the repository name."""
+        return self._repository_name
 
     def get_stats(self) -> Optional[dict[str, Any]]:
         """Get the current session stats."""
@@ -345,55 +355,21 @@ class DesktopAPI:
         return self._agent_registry.get_detail(agent_id)
 
     def list_prompts(self) -> list[dict[str, Any]]:
-        """List all prompt templates with override metadata.
-
-        Returns a list of dicts with keys: name, is_override, has_builtin, source.
-        """
-        from pokepoke.prompts import get_prompt_service
-
-        service = get_prompt_service()
-        return service.list_prompts()
+        """List all prompt templates with override metadata."""
+        from pokepoke.prompt_operations import list_prompts
+        return list_prompts()
 
     def get_prompt(self, name: str) -> dict[str, Any]:
-        """Get a prompt template's content and metadata.
-
-        Args:
-            name: Template name (without .md extension).
-
-        Returns:
-            Dict with name, content, is_override, has_builtin, source,
-            and template_variables.
-        """
-        from pokepoke.prompts import get_prompt_service
-
-        service = get_prompt_service()
-        return service.get_prompt_metadata(name)
+        """Get a prompt template's content and metadata."""
+        from pokepoke.prompt_operations import get_prompt
+        return get_prompt(name)
 
     def save_prompt(self, name: str, content: str) -> dict[str, Any]:
-        """Save a prompt override to the user prompts directory.
-
-        Args:
-            name: Template name (without .md extension).
-            content: New template content.
-
-        Returns:
-            Dict with path and saved status.
-        """
-        from pokepoke.prompts import get_prompt_service
-
-        service = get_prompt_service()
-        return service.save_prompt(name, content)
+        """Save a prompt override to the user prompts directory."""
+        from pokepoke.prompt_operations import save_prompt
+        return save_prompt(name, content)
 
     def reset_prompt(self, name: str) -> dict[str, Any]:
-        """Reset a prompt to the built-in default by removing the user override.
-
-        Args:
-            name: Template name (without .md extension).
-
-        Returns:
-            Dict with reset and had_override status.
-        """
-        from pokepoke.prompts import get_prompt_service
-
-        service = get_prompt_service()
-        return service.reset_prompt(name)
+        """Reset a prompt to the built-in default by removing the user override."""
+        from pokepoke.prompt_operations import reset_prompt
+        return reset_prompt(name)
