@@ -5,7 +5,7 @@
  * Connects to the Python orchestrator via the pywebview API.
  */
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useBridge } from "./useBridge";
 import { WorkItemHeader } from "./components/WorkItemHeader";
 import { LogPanel } from "./components/LogPanel";
@@ -14,6 +14,8 @@ import { StatsBar } from "./components/StatsBar";
 import { ConnectionIndicator } from "./components/ConnectionIndicator";
 import { PromptEditor } from "./components/PromptEditor";
 import { SettingsPage } from "./components/SettingsPage";
+import { StatsPage } from "./components/StatsPage";
+import type { ModelHistoryEntry } from "./types";
 import "./App.css";
 
 function App() {
@@ -23,7 +25,11 @@ function App() {
   );
   const [showPrompts, setShowPrompts] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showStatsPage, setShowStatsPage] = useState(false);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [modelHistory, setModelHistory] = useState<ModelHistoryEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   const hasSelectedAgent =
     selectedAgentId !== null &&
@@ -34,6 +40,29 @@ function App() {
       ? bridge.agents.find((agent) => agent.agent_id === displayedAgentId) ?? null
       : null;
 
+  const { getModelHistory } = bridge;
+
+  const loadModelHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const history = await getModelHistory(200);
+      setModelHistory(history);
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [getModelHistory]);
+
+  useEffect(() => {
+    if (showStatsPage && !historyLoading && modelHistory.length === 0) {
+      loadModelHistory().catch(() => {
+        // error already captured inside loadModelHistory
+      });
+    }
+  }, [showStatsPage, historyLoading, modelHistory.length, loadModelHistory]);
+
   return (
     <div className="app">
       {/* Title bar */}
@@ -43,6 +72,13 @@ function App() {
           PokePoke
         </div>
         <ConnectionIndicator status={bridge.connectionStatus} />
+        <button
+          className="prompt-editor-toggle"
+          onClick={() => setShowStatsPage(true)}
+          title="Open stats"
+        >
+          📈
+        </button>
         <button
           className="prompt-editor-toggle"
           onClick={() => setShowPrompts(true)}
@@ -98,7 +134,11 @@ function App() {
       </div>
 
       {/* Stats footer */}
-      <StatsBar stats={bridge.stats} modelLeaderboard={bridge.modelLeaderboard} />
+      <StatsBar
+        stats={bridge.stats}
+        modelLeaderboard={bridge.modelLeaderboard}
+        onOpenStats={() => setShowStatsPage(true)}
+      />
 
       {/* Prompt editor overlay */}
       {showPrompts && (
@@ -117,6 +157,18 @@ function App() {
           getConfig={bridge.getConfig}
           saveConfig={bridge.saveConfig}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {showStatsPage && (
+        <StatsPage
+          stats={bridge.stats}
+          modelLeaderboard={bridge.modelLeaderboard}
+          modelHistory={modelHistory}
+          historyLoading={historyLoading}
+          historyError={historyError}
+          onRefreshHistory={loadModelHistory}
+          onClose={() => setShowStatsPage(false)}
         />
       )}
     </div>

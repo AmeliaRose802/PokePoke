@@ -15,11 +15,7 @@ from typing import Any, Optional, TYPE_CHECKING
 from pokepoke.agent_registry import AgentRegistry
 from pokepoke.repo_utils import get_repository_name
 
-try:
-    import yaml  # type: ignore[import-untyped]
-    HAS_YAML = True
-except ImportError:
-    HAS_YAML = False
+from pokepoke import desktop_api_ext as _ext
 
 if TYPE_CHECKING:
     from pokepoke.types import SessionStats
@@ -58,6 +54,9 @@ class DesktopAPI:
         # Leaderboard cache for model performance stats
         self._leaderboard_cache: dict[str, Any] = {}
         self._leaderboard_cache_time: float = 0.0
+        self._history_cache: list[dict[str, Any]] = []
+        self._history_cache_limit: int = 200
+        self._history_cache_time: float = 0.0
 
         # Running agents — keyed by agent_id
         self._agent_max_log_lines_internal = 20
@@ -176,70 +175,28 @@ class DesktopAPI:
         from pokepoke.model_stats_store import get_model_summary
         return get_model_summary()
 
-    def get_config(self) -> dict[str, Any]:
-        """Load the project config file as a JSON-serializable dict."""
-        from pokepoke.config import _find_repo_root
+    def get_model_history(self, limit: int = 200) -> list[dict[str, Any]]:
+        """Return recent model completion history for trend charts."""
+        if limit <= 0:
+            return []
+        now = time.time()
+        if (
+            self._history_cache
+            and limit == self._history_cache_limit
+            and now - self._history_cache_time <= 5.0
+        ):
+            return list(self._history_cache)
 
-        config_path = _find_repo_root() / ".pokepoke" / "config.yaml"
-        if not config_path.exists():
-            return {"path": str(config_path), "config": {}, "exists": False}
+        from pokepoke.model_stats_store import get_model_history as _get_model_history
 
-        if not HAS_YAML:
-            raise ImportError(
-                "PyYAML is required to load .yaml config files. Install it with: pip install pyyaml"
-            )
+        history = list(_get_model_history(limit=limit))
+        self._history_cache = history
+        self._history_cache_limit = limit
+        self._history_cache_time = now
+        return list(history)
 
-        raw = config_path.read_text(encoding="utf-8")
-        data = yaml.safe_load(raw)
-        return {
-            "path": str(config_path),
-            "config": data if isinstance(data, dict) else {},
-            "exists": True,
-        }
-
-    def save_config(self, config: Any) -> dict[str, Any]:
-        """Persist a new project config to `.pokepoke/config.yaml`.
-
-        Args:
-            config: Typically a JS object passed via pywebview (dict-like).
-        """
-        from pokepoke.config import _find_repo_root, reset_config
-
-        if not HAS_YAML:
-            raise ImportError(
-                "PyYAML is required to save .yaml config files. Install it with: pip install pyyaml"
-            )
-
-        # pywebview usually passes a dict, but allow YAML string for convenience.
-        if isinstance(config, str):
-            parsed = yaml.safe_load(config)
-            if not isinstance(parsed, dict):
-                raise ValueError("Config YAML must parse to an object")
-            config_dict: dict[str, Any] = parsed
-        elif isinstance(config, dict):
-            config_dict = config
-        else:
-            raise ValueError("Config must be a dict or YAML string")
-
-        config_path = _find_repo_root() / ".pokepoke" / "config.yaml"
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-
-        dumped = yaml.safe_dump(
-            config_dict,
-            sort_keys=False,
-            allow_unicode=True,
-            default_flow_style=False,
-        )
-        if not dumped.endswith("\n"):
-            dumped += "\n"
-
-        with self._lock:
-            config_path.write_text(dumped, encoding="utf-8")
-
-        # Ensure subsequent orchestrator reads see the new values.
-        reset_config()
-
-        return {"path": str(config_path), "saved": True}
+    get_config = _ext.get_config
+    save_config = _ext.save_config
 
     # ─── Python → State: Called by the orchestrator ───────────────────
 
@@ -354,22 +311,7 @@ class DesktopAPI:
         """Return a deep copy of a single agent's detail state (logs included)."""
         return self._agent_registry.get_detail(agent_id)
 
-    def list_prompts(self) -> list[dict[str, Any]]:
-        """List all prompt templates with override metadata."""
-        from pokepoke.prompt_operations import list_prompts
-        return list_prompts()
-
-    def get_prompt(self, name: str) -> dict[str, Any]:
-        """Get a prompt template's content and metadata."""
-        from pokepoke.prompt_operations import get_prompt
-        return get_prompt(name)
-
-    def save_prompt(self, name: str, content: str) -> dict[str, Any]:
-        """Save a prompt override to the user prompts directory."""
-        from pokepoke.prompt_operations import save_prompt
-        return save_prompt(name, content)
-
-    def reset_prompt(self, name: str) -> dict[str, Any]:
-        """Reset a prompt to the built-in default by removing the user override."""
-        from pokepoke.prompt_operations import reset_prompt
-        return reset_prompt(name)
+    list_prompts = _ext.list_prompts
+    get_prompt = _ext.get_prompt
+    save_prompt = _ext.save_prompt
+    reset_prompt = _ext.reset_prompt

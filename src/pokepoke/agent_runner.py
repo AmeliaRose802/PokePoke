@@ -5,7 +5,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from pokepoke.config import get_config
 from pokepoke.copilot import invoke_copilot
@@ -18,6 +18,9 @@ from pokepoke.cleanup_agents import (
     invoke_cleanup_agent, invoke_merge_conflict_cleanup_agent,
     get_pokepoke_prompts_dir, run_cleanup_loop, aggregate_cleanup_stats
 )
+
+if TYPE_CHECKING:
+    from pokepoke.logging_utils import ItemLogger
 
 # Re-export cleanup agent functions for backward compatibility
 __all__ = ['invoke_cleanup_agent', 'invoke_merge_conflict_cleanup_agent',
@@ -117,7 +120,8 @@ def run_maintenance_agent(
     repo_root: Optional[Path] = None,
     needs_worktree: bool = True,
     merge_changes: bool = True,
-    model: Optional[str] = None
+    model: Optional[str] = None,
+    item_logger: Optional['ItemLogger'] = None
 ) -> Optional[AgentStats]:
     """Run a maintenance agent with optional worktree isolation."""
     terminal_ui.ui.set_current_agent(f"{agent_name} Agent")
@@ -151,7 +155,7 @@ def run_maintenance_agent(
     
     # Beads-only agents run in main repo without worktree
     if not needs_worktree:
-        return _run_beads_only_agent(agent_name, agent_item, agent_prompt, model=model)
+        return _run_beads_only_agent(agent_name, agent_item, agent_prompt, model=model, item_logger=item_logger)
     
     # Code-modifying agents need worktree isolation
     # Ensure repo_root has a value
@@ -160,7 +164,7 @@ def run_maintenance_agent(
     
     return _run_worktree_agent(
         agent_name, agent_id, agent_item, agent_prompt, repo_root,
-        merge_changes=merge_changes, model=model
+        merge_changes=merge_changes, model=model, item_logger=item_logger
     )
 
 
@@ -170,27 +174,28 @@ def _run_simple_agent(
     agent_prompt: str,
     deny_write: bool = True,
     model: Optional[str] = None,
-    cwd: Optional[str] = None
+    cwd: Optional[str] = None,
+    item_logger: Optional['ItemLogger'] = None
 ) -> Optional[AgentStats]:
     """Run a simple agent in the main repo with configurable write access."""
     print(f"\n📋 Running {agent_name} ({'no write' if deny_write else 'write enabled'}){f', model={model}' if model else ''}")
-    result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=deny_write, model=model, cwd=cwd)
+    result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=deny_write, model=model, cwd=cwd, item_logger=item_logger)
     if result.success:
         print(f"✅ {agent_name} completed")
         return parse_agent_stats(result.output) if result.output else None
     print(f"❌ {agent_name} failed: {result.error}")
     return None
 
-def _run_beads_only_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: Optional[str] = None, cwd: Optional[str] = None) -> Optional[AgentStats]:
+def _run_beads_only_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: Optional[str] = None, cwd: Optional[str] = None, item_logger: Optional['ItemLogger'] = None) -> Optional[AgentStats]:
     """Run a beads-only maintenance agent in the main repo."""
-    return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=True, model=model, cwd=cwd)
+    return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=True, model=model, cwd=cwd, item_logger=item_logger)
 
-def _run_main_repo_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: Optional[str] = None, cwd: Optional[str] = None) -> Optional[AgentStats]:
+def _run_main_repo_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: Optional[str] = None, cwd: Optional[str] = None, item_logger: Optional['ItemLogger'] = None) -> Optional[AgentStats]:
     """Run a maintenance agent in the main repo WITH write access."""
-    return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=False, model=model, cwd=cwd)
+    return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=False, model=model, cwd=cwd, item_logger=item_logger)
 
 
-def run_worktree_cleanup(repo_root: Optional[Path] = None) -> Optional[AgentStats]:
+def run_worktree_cleanup(repo_root: Optional[Path] = None, item_logger: Optional['ItemLogger'] = None) -> Optional[AgentStats]:
     """Run worktree cleanup agent to merge/delete stale worktrees."""
     terminal_ui.ui.set_current_agent("Worktree Cleanup")
     print(f"\n{'='*60}\n🌳 Running Worktree Cleanup Agent\n{'='*60}")
@@ -221,7 +226,7 @@ def run_worktree_cleanup(repo_root: Optional[Path] = None) -> Optional[AgentStat
     
     # Pass repo_root as cwd to the agent instead of changing process directory
     cwd = str(repo_root) if repo_root is not None else None
-    return _run_main_repo_agent("Worktree Cleanup", cleanup_item, cleanup_prompt, cwd=cwd)
+    return _run_main_repo_agent("Worktree Cleanup", cleanup_item, cleanup_prompt, cwd=cwd, item_logger=item_logger)
 
 
 def _run_worktree_agent(
@@ -231,7 +236,8 @@ def _run_worktree_agent(
     agent_prompt: str,
     repo_root: Path,
     merge_changes: bool = True,
-    model: Optional[str] = None
+    model: Optional[str] = None,
+    item_logger: Optional['ItemLogger'] = None
 ) -> Optional[AgentStats]:
     """Run a code-modifying maintenance agent in a worktree."""
     print(f"\n🌳 Creating worktree for {agent_id}...")
@@ -253,7 +259,7 @@ def _run_worktree_agent(
     try:
         # Main agent execution block
         try:
-            result = invoke_copilot(agent_item, prompt=agent_prompt, model=model, cwd=worktree_cwd)
+            result = invoke_copilot(agent_item, prompt=agent_prompt, model=model, cwd=worktree_cwd, item_logger=item_logger)
         except Exception as e:
             print(f"❌ Error invoking Copilot: {e}")
             from pokepoke.types import CopilotResult
@@ -321,7 +327,7 @@ def _run_worktree_agent(
                 )
 
 
-def run_beta_tester(repo_root: Optional[Path] = None) -> Optional[AgentStats]:
+def run_beta_tester(repo_root: Optional[Path] = None, item_logger: Optional['ItemLogger'] = None) -> Optional[AgentStats]:
     """Run beta tester agent to test all MCP tools. Restarts MCP server first."""
     config = get_config()
 
@@ -389,4 +395,4 @@ def run_beta_tester(repo_root: Optional[Path] = None) -> Optional[AgentStats]:
     print("\n🧪 Invoking beta tester agent in isolated worktree (will be discarded)...")
     if repo_root is None:
         repo_root = Path.cwd()
-    return _run_worktree_agent("Beta Tester", agent_id, beta_item, beta_prompt, repo_root, merge_changes=False)
+    return _run_worktree_agent("Beta Tester", agent_id, beta_item, beta_prompt, repo_root, merge_changes=False, item_logger=item_logger)

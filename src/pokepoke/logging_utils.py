@@ -34,6 +34,8 @@ class RunLogger:
         self.orchestrator_log_path = self.run_dir / "orchestrator.log"
         self.item_logs_dir = self.run_dir / "items"
         self.item_logs_dir.mkdir(exist_ok=True)
+        self.maintenance_logs_dir = self.run_dir / "maintenance"
+        self.maintenance_logs_dir.mkdir(exist_ok=True)
         
         # Track current item logger
         self._current_item_logger: Optional['ItemLogger'] = None
@@ -120,7 +122,26 @@ class RunLogger:
             message: Message to log
         """
         self.log_orchestrator(f"[MAINTENANCE:{agent_type}] {message}")
-    
+
+    def start_maintenance_log(self, agent_name: str) -> 'ItemLogger':
+        """Start logging for a maintenance agent.
+
+        Creates a dedicated log file under the maintenance/ subdirectory
+        so that maintenance agent output is persisted alongside work item logs.
+
+        Args:
+            agent_name: Human-readable agent name (e.g. "Janitor")
+
+        Returns:
+            ItemLogger instance for capturing agent output.
+        """
+        safe_name = agent_name.lower().replace(' ', '_')
+        return ItemLogger(
+            self.maintenance_logs_dir,
+            safe_name,
+            f"{agent_name} Maintenance Agent"
+        )
+
     def finalize(self, items_completed: int, total_requests: int, elapsed: float,
                  session_stats: Optional['SessionStats'] = None) -> None:
         """Write final summary to orchestrator log and persist stats to disk.

@@ -192,9 +192,12 @@ class MaintenanceScheduler:
             with self._stats_lock:
                 session_stats.record_agent_run(agent_name)
 
+        # Create a dedicated log file for the maintenance agent output
+        maint_logger = run_logger.start_maintenance_log(agent_name)
+
         # Run the agent
         if agent_name in _SPECIAL_AGENTS:
-            result = _run_special_agent(agent_name, pokepoke_repo)
+            result = _run_special_agent(agent_name, pokepoke_repo, item_logger=maint_logger)
         else:
             result = run_maintenance_agent(
                 agent_name,
@@ -203,7 +206,11 @@ class MaintenanceScheduler:
                 needs_worktree=agent_cfg.needs_worktree,
                 merge_changes=agent_cfg.merge_changes,
                 model=agent_cfg.model,
+                item_logger=maint_logger,
             )
+
+        success = result is not None
+        maint_logger.log_summary(success, request_count=0)
 
         if result:
             with self._stats_lock:

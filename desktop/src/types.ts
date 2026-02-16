@@ -41,6 +41,11 @@ export interface ModelCompletionRecord {
   gate_passed: boolean | null;
 }
 
+/** Historical model completion record with timestamp (from persistent store) */
+export interface ModelHistoryEntry extends ModelCompletionRecord {
+  timestamp: string;
+}
+
 /** Session-level statistics from the orchestrator */
 export interface SessionStats {
   elapsed_time: number;

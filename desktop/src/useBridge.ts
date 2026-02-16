@@ -16,8 +16,9 @@ import type {
   SessionStats,
   ProgressState,
   ConnectionStatus,
-  ModelPerformanceSummary,
-  AgentInfo,
+   ModelPerformanceSummary,
+   ModelHistoryEntry,
+   AgentInfo,
   PromptInfo,
   PromptDetail,
   ConfigResponse,
@@ -45,6 +46,7 @@ interface PyWebViewAPI {
   get_work_item(): Promise<WorkItem | null>;
   get_repository_name(): Promise<string>;
   get_stats(): Promise<SessionStats | null>;
+  get_model_history(limit?: number): Promise<ModelHistoryEntry[]>;
   list_prompts(): Promise<PromptInfo[]>;
   get_prompt(name: string): Promise<PromptDetail>;
   save_prompt(name: string, content: string): Promise<{ path: string; saved: boolean }>;
@@ -79,6 +81,7 @@ export interface BridgeState {
   resetPrompt: (name: string) => Promise<boolean>;
   getConfig: () => Promise<ConfigResponse | null>;
   saveConfig: (config: ProjectConfig) => Promise<boolean>;
+  getModelHistory: (limit?: number) => Promise<ModelHistoryEntry[]>;
 }
 
 /**
@@ -142,6 +145,18 @@ export function useBridge(): BridgeState {
     const result = await window.pywebview.api.save_config(config);
     return result.saved;
   }, []);
+
+  const getModelHistory = useCallback(
+    async (limit = 200): Promise<ModelHistoryEntry[]> => {
+      if (!window.pywebview?.api) return [];
+      try {
+        return await window.pywebview.api.get_model_history(limit);
+      } catch {
+        return [];
+      }
+    },
+    []
+  );
 
   const appendLogs = useCallback((entries: LogEntry[]) => {
     if (entries.length === 0) return;
@@ -262,5 +277,6 @@ export function useBridge(): BridgeState {
     resetPrompt,
     getConfig,
     saveConfig,
+    getModelHistory,
   };
 }

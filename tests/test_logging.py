@@ -123,6 +123,53 @@ def test_run_logger_maintenance_logging():
         assert "Janitor Agent completed successfully" in content
 
 
+def test_run_logger_creates_maintenance_dir():
+    """Test that RunLogger creates a maintenance logs directory."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir)
+        assert (logger.get_run_dir() / "maintenance").exists()
+
+
+def test_start_maintenance_log_creates_log_file():
+    """Test that start_maintenance_log creates a log file under maintenance/."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir)
+
+        maint_logger = logger.start_maintenance_log("Janitor")
+
+        # Log file should exist under maintenance/
+        expected_path = logger.maintenance_logs_dir / "janitor.log"
+        assert expected_path.exists()
+        assert maint_logger.log_path == expected_path
+
+        # Header should contain agent name
+        with open(expected_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        assert "Janitor Maintenance Agent" in content
+
+
+def test_maintenance_log_captures_output():
+    """Test that maintenance log captures copilot output and tool calls."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir)
+
+        maint_logger = logger.start_maintenance_log("Tech Debt")
+        maint_logger.log_copilot_output("Analyzing codebase...\n")
+        maint_logger.log_tool_call("grep", "pattern=TODO", result="Found 3", success=True)
+        maint_logger.log_error("Rate limit hit")
+        maint_logger.log_summary(success=True, request_count=2)
+
+        with open(maint_logger.log_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        assert "Analyzing codebase..." in content
+        assert "grep" in content
+        assert "Found 3" in content
+        assert "Rate limit hit" in content
+        assert "SUCCESS" in content
+        assert "Agent requests: 2" in content
+
+
 def test_item_logger_sanitizes_filenames():
     """Test that ItemLogger sanitizes item IDs for filenames."""
     with tempfile.TemporaryDirectory() as tmpdir:

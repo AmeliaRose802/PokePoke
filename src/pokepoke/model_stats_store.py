@@ -164,6 +164,19 @@ def get_model_summary(path: Optional[Path] = None) -> Dict[str, Dict[str, Any]]:
     return summary
 
 
+def get_model_history(path: Optional[Path] = None, limit: int = 200) -> List[Dict[str, Any]]:
+    """Return the most recent completion log entries up to ``limit``."""
+    capped_limit = int(limit)
+    if capped_limit <= 0:
+        return []
+    data = load_model_stats(path)
+    log = data.get("log", [])
+    if not isinstance(log, list):
+        return []
+    slice_start = max(0, len(log) - capped_limit)
+    return list(log[slice_start:])
+
+
 def get_model_weights(path: Optional[Path] = None, min_attempts: int = 3) -> Dict[str, float]:
     """Compute selection weights based on historical success rate.
 
