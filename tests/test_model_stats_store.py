@@ -24,6 +24,7 @@ from pokepoke.model_stats_store import (
     record_completions,
     get_model_summary,
     get_model_weights,
+    get_model_history,
     print_model_leaderboard,
     _rebuild_summary,
     _empty_store,
@@ -269,6 +270,33 @@ class TestGetModelSummary:
         summary = get_model_summary(path)
         assert "gpt-4o" in summary
         assert summary["gpt-4o"]["total_items_attempted"] == 1
+
+
+# ── get_model_history ──────────────────────────────────────────────────
+
+
+class TestGetModelHistory:
+    def test_empty_when_no_file(self, tmp_path: Path):
+        assert get_model_history(tmp_path / "missing.json") == []
+
+    def test_returns_last_n_entries(self, tmp_path: Path):
+        path = _tmp_stats_path(tmp_path)
+        records = [
+            _make_record(item_id="A", model="m1"),
+            _make_record(item_id="B", model="m2"),
+            _make_record(item_id="C", model="m3"),
+        ]
+        record_completions(records, path)
+
+        history = get_model_history(path, limit=2)
+        assert len(history) == 2
+        assert history[0]["item_id"] == "B"
+        assert history[1]["item_id"] == "C"
+
+    def test_limit_zero_returns_empty(self, tmp_path: Path):
+        path = _tmp_stats_path(tmp_path)
+        record_completion(_make_record(item_id="only"), path)
+        assert get_model_history(path, limit=0) == []
 
 
 # ── get_model_weights ────────────────────────────────────────────────

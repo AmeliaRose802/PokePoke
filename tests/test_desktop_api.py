@@ -237,6 +237,23 @@ def test_get_model_leaderboard() -> None:
     assert result == {"test": 1}
 
 
+def test_get_model_history_delegates() -> None:
+    """get_model_history should proxy to model_stats_store."""
+    from unittest.mock import patch
+
+    api = DesktopAPI()
+    with patch("pokepoke.model_stats_store.get_model_history", return_value=[{"item_id": "A"}]) as mock_history:
+        history = api.get_model_history(limit=5)
+    mock_history.assert_called_once_with(limit=5)
+    assert history == [{"item_id": "A"}]
+
+
+def test_get_model_history_empty_for_non_positive_limit() -> None:
+    """get_model_history should return [] when limit <= 0."""
+    api = DesktopAPI()
+    assert api.get_model_history(limit=0) == []
+
+
 def test_get_state_includes_model_leaderboard() -> None:
     """get_state should include model_leaderboard field."""
     from unittest.mock import patch
@@ -292,6 +309,52 @@ def test_save_config_writes_yaml() -> None:
 
     assert loaded["project_name"] == "X"
     assert loaded["git"]["fallback_branch"] == "main"
+
+
+def test_save_config_with_yaml_string() -> None:
+    """save_config should accept a YAML string and parse it."""
+    from unittest.mock import patch
+    import yaml
+
+    api = DesktopAPI()
+    with patch("pokepoke.config._find_repo_root") as mock_root:
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            mock_root.return_value = root
+
+            yaml_str = "project_name: Y\ngit:\n  fallback_branch: dev\n"
+            save_result = api.save_config(yaml_str)
+            assert save_result["saved"] is True
+
+            cfg_path = root / ".pokepoke" / "config.yaml"
+            loaded = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+
+    assert loaded["project_name"] == "Y"
+
+
+def test_save_config_rejects_invalid_type() -> None:
+    """save_config should reject non-dict/non-string input."""
+    from unittest.mock import patch
+    import pytest
+
+    api = DesktopAPI()
+    with patch("pokepoke.config._find_repo_root"):
+        with pytest.raises(ValueError, match="Config must be a dict or YAML string"):
+            api.save_config(42)
+
+
+def test_save_config_rejects_non_dict_yaml() -> None:
+    """save_config should reject YAML strings that don't parse to a dict."""
+    from unittest.mock import patch
+    import pytest
+
+    api = DesktopAPI()
+    with patch("pokepoke.config._find_repo_root"):
+        with pytest.raises(ValueError, match="Config YAML must parse to an object"):
+            api.save_config("- item1\n- item2\n")
 
 
 def test_push_stats_with_model_completions() -> None:

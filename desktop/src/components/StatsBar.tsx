@@ -5,180 +5,53 @@
  * API duration, items completed, retries, and agent run counts.
  */
 
-import type { SessionStats, ModelCompletionRecord, ModelPerformanceSummary } from "../types";
+import type { SessionStats, ModelPerformanceSummary } from "../types";
+import { formatElapsed, formatPercent, inferCurrentModel } from "../utils/stats";
 
 interface Props {
   stats: SessionStats | null;
   modelLeaderboard: Record<string, ModelPerformanceSummary>;
+  onOpenStats: () => void;
 }
 
-function formatTokens(count: number): string {
-  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
-  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
-  return String(count);
-}
-
-function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds.toFixed(0)}s`;
-  if (seconds < 3600) return `${(seconds / 60).toFixed(1)}m`;
-  return `${(seconds / 3600).toFixed(1)}h`;
-}
-
-function formatElapsed(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
-
-/** Summarize model completions into per-model aggregates. */
-function summarizeModels(
-  completions: ModelCompletionRecord[]
-): { model: string; count: number; avgTime: number; passRate: number | null }[] {
-  const byModel = new Map<string, ModelCompletionRecord[]>();
-  for (const rec of completions) {
-    const list = byModel.get(rec.model) ?? [];
-    list.push(rec);
-    byModel.set(rec.model, list);
-  }
-  return Array.from(byModel.entries()).map(([model, recs]) => {
-    const avgTime = recs.reduce((s, r) => s + r.duration_seconds, 0) / recs.length;
-    const gated = recs.filter((r) => r.gate_passed !== null);
-    const passRate =
-      gated.length > 0
-        ? Math.round((gated.filter((r) => r.gate_passed).length / gated.length) * 100)
-        : null;
-    return { model, count: recs.length, avgTime, passRate };
-  });
-}
-
-export function StatsBar({ stats, modelLeaderboard }: Props) {
-  const agent = stats?.agent_stats;
+export function StatsBar({ stats, modelLeaderboard, onOpenStats }: Props) {
   const elapsed = stats?.elapsed_time ?? 0;
-  const modelSummary = summarizeModels(stats?.model_completions ?? []);
+  const doneCount = stats?.items_completed ?? 0;
+  const currentModel = inferCurrentModel(stats, modelLeaderboard);
 
-  // Build leaderboard rows sorted by success rate descending
-  const leaderboardEntries = Object.entries(modelLeaderboard ?? {})
-    .sort(([, a], [, b]) => b.success_rate - a.success_rate);
+  const modelStatusClass =
+    currentModel.gatePassed === true
+      ? "model-pass"
+      : currentModel.gatePassed === false
+        ? "model-fail"
+        : "model-neutral";
 
   return (
-    <footer className="stats-bar">
-      {/* Row 1: Time and API stats */}
-      <div className="stats-row">
-        <span className="stat">
-          <span className="stat-icon">⏱️</span>
-          <span className="stat-value elapsed">{formatElapsed(elapsed)}</span>
-        </span>
-        <span className="stat">
-          <span className="stat-icon">⚡</span>
-          <span className="stat-label">API:</span>
-          <span className="stat-value api">
-            {formatDuration(agent?.api_duration ?? 0)}
-          </span>
-        </span>
-        <span className="stat">
-          <span className="stat-icon">📥</span>
-          <span className="stat-value input-tokens">
-            {formatTokens(agent?.input_tokens ?? 0)}
-          </span>
-        </span>
-        <span className="stat">
-          <span className="stat-icon">📤</span>
-          <span className="stat-value output-tokens">
-            {formatTokens(agent?.output_tokens ?? 0)}
-          </span>
-        </span>
-        <span className="stat">
-          <span className="stat-icon">🔧</span>
-          <span className="stat-value">{agent?.tool_calls ?? 0}</span>
-        </span>
-      </div>
-
-      {/* Row 2: Completion stats */}
-      <div className="stats-row">
-        <span className="stat">
-          <span className="stat-icon">✅</span>
-          <span className="stat-label">Done:</span>
-          <span className="stat-value done">
-            {stats?.items_completed ?? 0}
-          </span>
-        </span>
-        <span className="stat">
-          <span className="stat-icon">🔄</span>
-          <span className="stat-label">Retries:</span>
-          <span
-            className={`stat-value ${
-              (agent?.retries ?? 0) > 3
-                ? "retries-high"
-                : (agent?.retries ?? 0) > 0
-                  ? "retries-warn"
-                  : ""
-            }`}
-          >
-            {agent?.retries ?? 0}
-          </span>
-        </span>
-      </div>
-
-      {/* Row 3: Agent run counts */}
-      <div className="stats-row agent-runs">
-        <span className="stat">
-          👷 Work:{stats?.work_agent_runs ?? 0}
-        </span>
-        <span className="stat">
-          🚪 Gate:{stats?.gate_agent_runs ?? 0}
-        </span>
-        <span className="stat">
-          💸 Debt:{stats?.tech_debt_agent_runs ?? 0}
-        </span>
-        <span className="stat">
-          🧹 Janitor:{stats?.janitor_agent_runs ?? 0}
-        </span>
-        <span className="stat">
-          🗄️ Backlog:{stats?.backlog_cleanup_agent_runs ?? 0}
-        </span>
-        <span className="stat">
-          🧼 Cleanup:{stats?.cleanup_agent_runs ?? 0}
-        </span>
-        <span className="stat">
-          🧪 Beta:{stats?.beta_tester_agent_runs ?? 0}
-        </span>
-        <span className="stat">
-          🔍 Review:{stats?.code_review_agent_runs ?? 0}
-        </span>
-      </div>
-
-      {/* Row 4: Model comparison (A/B testing) - current session */}
-      {modelSummary.length > 0 && (
-        <div className="stats-row model-comparison">
-          <span className="stat-icon">🔬</span>
-          {modelSummary.map(({ model, count, avgTime, passRate }) => (
-            <span key={model} className="stat model-stat">
-              <span className="stat-label">{model}:</span>
-              <span className="stat-value">
-                {count}× {formatDuration(avgTime)}
-                {passRate !== null && ` (${passRate}%)`}
-              </span>
-            </span>
-          ))}
+    <footer className="stats-bar compact">
+      <div className="stats-summary">
+        <div className="summary-block">
+          <span className="summary-label">Uptime</span>
+          <span className="summary-value">{formatElapsed(elapsed)}</span>
         </div>
-      )}
-
-      {/* Row 5: All-time model leaderboard from persistent storage */}
-      {leaderboardEntries.length > 0 && (
-        <div className="stats-row model-leaderboard">
-          <span className="stat-icon">📊</span>
-          <span className="stat-label all-time-label">All-time:</span>
-          {leaderboardEntries.map(([model, s]) => (
-            <span key={model} className="stat model-stat">
-              <span className="stat-label">{model}:</span>
-              <span className="stat-value">
-                {s.total_items_attempted}× {Math.round(s.success_rate * 100)}%
-              </span>
-            </span>
-          ))}
+        <div className="summary-block">
+          <span className="summary-label">Done</span>
+          <span className="summary-value">{doneCount}</span>
         </div>
-      )}
+        <div className="summary-block model-block">
+          <span className="summary-label">Active model</span>
+          <span className={`summary-value ${modelStatusClass}`}>
+            {currentModel.model ?? "—"}
+          </span>
+          {currentModel.successRate !== null && (
+            <span className="summary-subtext">
+              {formatPercent(currentModel.successRate)}
+            </span>
+          )}
+        </div>
+      </div>
+      <button className="stats-link" onClick={onOpenStats} title="Open detailed stats">
+        View full stats →
+      </button>
     </footer>
   );
 }
