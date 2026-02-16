@@ -195,6 +195,13 @@
       "duration_seconds": 7212.221847772598,
       "gate_passed": false,
       "timestamp": "2026-02-16T01:16:14.083422+00:00"
+    },
+    {
+      "item_id": "PokePoke-kxfq",
+      "model": "claude-sonnet-4",
+      "duration_seconds": 3116.9423639774323,
+      "gate_passed": true,
+      "timestamp": "2026-02-16T02:13:17.356475+00:00"
     }
   ],
   "summary": {
@@ -239,14 +246,14 @@
       "last_used": "2026-02-15T17:35:47.186765+00:00"
     },
     "claude-sonnet-4": {
-      "total_items_attempted": 3,
-      "total_items_succeeded": 3,
+      "total_items_attempted": 4,
+      "total_items_succeeded": 4,
       "total_items_failed": 0,
-      "total_duration_seconds": 11216.036355257034,
+      "total_duration_seconds": 14332.978719234467,
       "total_retries": 0,
-      "average_duration": 3738.68,
+      "average_duration": 3583.24,
       "success_rate": 1.0,
-      "last_used": "2026-02-14T14:39:05.116901+00:00"
+      "last_used": "2026-02-16T02:13:17.356475+00:00"
     },
     "gpt-5.1-codex": {
       "total_items_attempted": 2,
