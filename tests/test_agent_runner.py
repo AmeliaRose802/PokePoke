@@ -484,7 +484,8 @@ class TestRunBeadsOnlyAgent:
             prompt="Test prompt", 
             deny_write=True,
             model=None,
-            cwd=None
+            cwd=None,
+            item_logger=None
         )
     
     @patch('pokepoke.agent_runner.invoke_copilot')
@@ -1231,7 +1232,7 @@ class TestRunMainRepoAgent:
         assert stats.wall_duration == 15.0
         # Verify deny_write=False (write access enabled)
         mock_invoke.assert_called_once_with(
-            agent_item, prompt="cleanup prompt", deny_write=False, model=None, cwd=None
+            agent_item, prompt="cleanup prompt", deny_write=False, model=None, cwd=None, item_logger=None
         )
 
     @patch('pokepoke.agent_runner.invoke_copilot')

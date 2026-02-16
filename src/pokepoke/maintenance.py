@@ -1,9 +1,13 @@
 """Periodic maintenance agent orchestration."""
 
 from pathlib import Path
+from typing import Optional, TYPE_CHECKING
 
 from pokepoke.types import AgentStats, SessionStats
 from pokepoke.logging_utils import RunLogger
+
+if TYPE_CHECKING:
+    from pokepoke.logging_utils import ItemLogger
 
 
 def aggregate_stats(session_stats: SessionStats, item_stats: AgentStats) -> None:
@@ -11,14 +15,14 @@ def aggregate_stats(session_stats: SessionStats, item_stats: AgentStats) -> None
     session_stats.agent_stats.accumulate(item_stats)
 
 
-def _run_special_agent(name: str, repo_root: Path) -> AgentStats | None:
+def _run_special_agent(name: str, repo_root: Path, item_logger: Optional['ItemLogger'] = None) -> AgentStats | None:
     """Run a special agent that has its own runner function."""
     if name == "Beta Tester":
         from pokepoke.agent_runner import run_beta_tester
-        return run_beta_tester(repo_root=repo_root)
+        return run_beta_tester(repo_root=repo_root, item_logger=item_logger)
     if name == "Worktree Cleanup":
         from pokepoke.agent_runner import run_worktree_cleanup
-        return run_worktree_cleanup(repo_root=repo_root)
+        return run_worktree_cleanup(repo_root=repo_root, item_logger=item_logger)
     return None
 
 
