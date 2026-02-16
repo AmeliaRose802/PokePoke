@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 import re
 
+from pokepoke.config import _find_repo_root
+
 
 # Built-in prompts ship with the package
 BUILTIN_PROMPTS_DIR = Path(__file__).parent / "builtin_prompts"
@@ -48,15 +50,18 @@ class PromptService:
                          Defaults to ``src/pokepoke/builtin_prompts/``.
         """
         if prompts_dir is None:
-            current = Path(__file__).parent
-            while current != current.parent:
-                if (current / ".git").exists():
-                    prompts_dir = current / ".pokepoke" / "prompts"
-                    break
-                current = current.parent
-            if prompts_dir is None:
+            try:
+                repo_root = _find_repo_root()
+            except Exception:
+                repo_root = None
+
+            if repo_root is not None:
+                prompts_dir = repo_root / ".pokepoke" / "prompts"
+            else:
                 prompts_dir = (
-                    Path(__file__).parent.parent.parent / ".pokepoke" / "prompts"
+                    Path(__file__).resolve().parent.parent.parent
+                    / ".pokepoke"
+                    / "prompts"
                 )
 
         self.prompts_dir = Path(prompts_dir)
