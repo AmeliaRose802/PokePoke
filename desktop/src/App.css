@@ -559,6 +559,40 @@
   background: #14151d;
 }
 
+.log-accordion.nested {
+  margin-left: 10px;
+}
+
+.log-tool-batch {
+  margin: 4px 0;
+  border-radius: 6px;
+  border: 1px solid #3b4261;
+  background: #14151d;
+}
+
+.log-tool-batch .log-accordion-summary {
+  border-left: 3px solid var(--accent);
+}
+
+.log-tool-group {
+  margin: 2px 0;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: #14151d;
+}
+
+.log-tool-group > summary {
+  padding-left: 10px;
+  border-left: 2px solid rgba(255, 255, 255, 0.08);
+}
+
+.log-narration {
+  margin: 4px 0;
+  border-radius: 6px;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  background: rgba(20, 21, 29, 0.7);
+}
+
 .log-accordion[open] {
   border-color: #3b4261;
   background: #1f2335;

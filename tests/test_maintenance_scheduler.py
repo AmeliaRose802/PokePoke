@@ -371,34 +371,39 @@ class TestConcurrentExecution:
         
         results = []
         errors = []
-        
-        def run_agent(agent_name: str):
-            try:
-                with patch('pokepoke.maintenance_scheduler.run_maintenance_agent') as mock_run:
-                    with patch('pokepoke.maintenance_scheduler.set_terminal_banner'):
-                        with patch('pokepoke.maintenance_scheduler.terminal_ui'):
-                            mock_run.return_value = AgentStats()
-                            
-                            agent_cfg = MaintenanceAgentConfig(name=agent_name, prompt_file=f"{agent_name.lower().replace(' ', '-')}.md", frequency=1)
+
+        # Patch once at the test level so multiple threads don't race patch/unpatch.
+        with patch('pokepoke.maintenance_scheduler.run_maintenance_agent') as mock_run:
+            with patch('pokepoke.maintenance_scheduler.set_terminal_banner'):
+                with patch('pokepoke.maintenance_scheduler.terminal_ui'):
+                    mock_run.return_value = AgentStats()
+
+                    def run_agent(agent_name: str):
+                        try:
+                            agent_cfg = MaintenanceAgentConfig(
+                                name=agent_name,
+                                prompt_file=f"{agent_name.lower().replace(' ', '-')}.md",
+                                frequency=1,
+                            )
                             session_stats = SessionStats(agent_stats=AgentStats())
                             run_logger = Mock()
-                            
+
                             scheduler._maybe_run_agent(agent_name, agent_cfg, Mock(), session_stats, run_logger)
                             results.append(f"{agent_name}_completed")
-            except Exception as e:
-                errors.append(str(e))
-        
-        # Start multiple Tech Debt agents simultaneously  
-        threads = []
-        for i in range(3):
-            t = threading.Thread(target=run_agent, args=("Tech Debt",))
-            threads.append(t)
-            t.start()
-        
-        # Wait for completion
-        for t in threads:
-            t.join()
-        
+                        except Exception as e:
+                            errors.append(str(e))
+
+                    # Start multiple Tech Debt agents simultaneously
+                    threads = []
+                    for i in range(3):
+                        t = threading.Thread(target=run_agent, args=("Tech Debt",))
+                        threads.append(t)
+                        t.start()
+
+                    # Wait for completion
+                    for t in threads:
+                        t.join(timeout=1.0)
+
         # All should complete successfully
         assert len(errors) == 0
         assert len(results) == 3
