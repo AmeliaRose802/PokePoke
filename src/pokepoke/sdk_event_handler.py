@@ -25,8 +25,9 @@ def create_event_handler(
     done: asyncio.Event,
     output_lines: List[str],
     errors: List[str],
-    item_logger: Optional[Any] = None
-) -> Tuple[Callable[[Any], bool], SessionStats]:
+    item_logger: Optional[Any] = None,
+    idle_timeout: float = 10.0
+) -> Tuple[Callable[[Any], None], SessionStats]:
     """Create an event handler for SDK session events.
     
     Returns:
@@ -46,21 +47,19 @@ def create_event_handler(
         'current_model': DEFAULT_MODEL
     }
     
-    def handle_event(event: Any) -> bool:
-        """Handle SDK session events. Returns True if rate limit retry needed."""
+    def handle_event(event: Any) -> None:
+        """Handle SDK session events."""
         nonlocal stats
         
         event_type = event.type.value if hasattr(event.type, 'value') else str(event.type)
         
         if event_type == "assistant.message_delta":
             terminal_ui.ui.set_style("green")
-            # Streaming message chunk
             delta = None
             if hasattr(event, 'data'):
                 delta = getattr(event.data, 'delta_content', None) or \
                         getattr(event.data, 'delta', None) or \
                         getattr(event.data, 'content', None)
-            
             if delta:
                 print(delta, end="", flush=True)
                 output_lines.append(delta)
@@ -69,78 +68,90 @@ def create_event_handler(
                     
         elif event_type == "assistant.message":
             terminal_ui.ui.set_style("green")
-            # Non-streaming message content
-            if hasattr(event, 'data') and hasattr(event.data, 'content'):
-                content = event.data.content
+            content = getattr(event.data, 'content', None) if hasattr(event, 'data') else None
+            tool_requests = getattr(event.data, 'tool_requests', None) if hasattr(event, 'data') else None
+            if content:
                 print(content)
                 output_lines.append(content)
                 if item_logger:
                     item_logger.log_copilot_output(content)
-                    
-        elif event_type == "assistant.message_complete":
-            # Complete message received - start waiting for idle
-            if stats['idle_task']:
-                stats['idle_task'].cancel()
-                
-            async def wait_for_idle() -> None:
-                await asyncio.sleep(1.0)  # Wait 1 second for idle
-                if stats['pending_tool_calls'] > 0:
-                    print(f"\n[SDK] Session idle but {stats['pending_tool_calls']} tool(s) still executing - continuing...")
-                else:
-                    print("\n[SDK] Session idle - waiting to confirm completion...")
-                    await asyncio.sleep(2.0)  # Wait another 2 seconds
-                    try:
-                        if stats['pending_tool_calls'] == 0:
-                            print("[SDK] Session confirmed idle - processing complete")
-                            done.set()
-                    except Exception:
-                        pass  # In case event loop is shutting down
-                        
-            stats['idle_task'] = asyncio.create_task(wait_for_idle())
-            
-        elif event_type == "assistant.error":
-            terminal_ui.ui.set_style("red")
-            error_msg = "Unknown error"
-            if hasattr(event, 'data') and hasattr(event.data, 'error'):
-                error_msg = event.data.error
-            elif hasattr(event, 'error'):
-                error_msg = str(event.error)
-                
-            print(f"\n[SDK] ERROR: {error_msg}")
-            errors.append(error_msg)
-            if item_logger:
-                item_logger.log_error(error_msg)
-            
-            # Check for rate limit and try fallback
-            if "rate limit" in error_msg.lower() or "too many requests" in error_msg.lower():
-                if not stats['tried_fallback']:
-                    print(f"\n[SDK] Rate limit detected on {stats['current_model']}, will retry with {FALLBACK_MODEL}...")
-                    return True  # Signal rate limit for retry
-            done.set()
-            
-        elif event_type == "assistant.tool_calls":
-            stats['pending_tool_calls'] += 1
+            terminal_ui.ui.set_style(None)
+            if tool_requests and len(tool_requests) > 0:
+                print(f"\n[Copilot] Calling {len(tool_requests)} tool(s)...")
+
+        elif event_type == "tool.execution_start":
+            terminal_ui.ui.set_style(None)
             stats['total_tool_calls'] += 1
-            terminal_ui.ui.set_style("blue")
-            
-        elif event_type == "assistant.tool_execution_complete":
-            stats['pending_tool_calls'] = max(0, stats['pending_tool_calls'] - 1)
-            
-        elif event_type in ["assistant.usage", "usage"]:
-            # Track token usage
+            stats['pending_tool_calls'] += 1
+            if stats['idle_task'] and not stats['idle_task'].done():
+                stats['idle_task'].cancel()
+                stats['idle_task'] = None
             if hasattr(event, 'data'):
-                usage_data = event.data
-                if hasattr(usage_data, 'input_tokens'):
-                    stats['total_input_tokens'] += usage_data.input_tokens
-                if hasattr(usage_data, 'output_tokens'):
-                    stats['total_output_tokens'] += usage_data.output_tokens
-                if hasattr(usage_data, 'cache_read_tokens'):
-                    stats['total_cache_read_tokens'] += usage_data.cache_read_tokens
-                if hasattr(usage_data, 'cache_write_tokens'):
-                    stats['total_cache_write_tokens'] += usage_data.cache_write_tokens
-                    
+                tool_name = getattr(event.data, 'tool_name', 'unknown')
+                args_str = str(getattr(event.data, 'arguments', {}))
+                print(f"  🔧 {tool_name}({args_str})")
+                output_lines.append(f"\n[Tool] {tool_name}({args_str})\n")
+                if item_logger:
+                    item_logger.log_tool_call(tool_name, args_str)
+
+        elif event_type == "tool.execution_complete":
+            terminal_ui.ui.set_style(None)
+            stats['pending_tool_calls'] = max(0, stats['pending_tool_calls'] - 1)
+            if hasattr(event, 'data'):
+                result = getattr(event.data, 'result', None)
+                success = getattr(event.data, 'success', True)
+                if result:
+                    result_content = getattr(result, 'content', str(result)) if hasattr(result, 'content') else str(result)
+                    status = "✅" if success else "❌"
+                    print(f"  {status} Result: {result_content}")
+                    output_lines.append(f"[Result] {result_content}\n")
+                    if item_logger:
+                        item_logger.log_tool_call(
+                            getattr(event.data, 'tool_name', 'unknown'),
+                            '', result=result_content, success=success
+                        )
+
+        elif event_type == "assistant.usage":
+            terminal_ui.ui.set_style(None)
+            if hasattr(event, 'data'):
+                stats['total_input_tokens'] += getattr(event.data, 'input_tokens', 0) or 0
+                stats['total_output_tokens'] += getattr(event.data, 'output_tokens', 0) or 0
+                stats['total_cache_read_tokens'] += getattr(event.data, 'cache_read_tokens', 0) or 0
+                stats['total_cache_write_tokens'] += getattr(event.data, 'cache_write_tokens', 0) or 0
+
+        elif event_type == "assistant.turn_end":
             stats['turn_count'] += 1
             
-        return False  # No rate limit retry needed
+        elif event_type == "session.idle":
+            if stats['idle_task'] and not stats['idle_task'].done():
+                stats['idle_task'].cancel()
+            if stats['pending_tool_calls'] > 0:
+                print(f"\n[SDK] Session idle but {stats['pending_tool_calls']} tool(s) still executing - continuing...")
+            else:
+                print("\n[SDK] Session idle - waiting to confirm completion...")
+                async def check_still_idle() -> None:
+                    try:
+                        await asyncio.sleep(idle_timeout)
+                        if not done.is_set() and stats['pending_tool_calls'] == 0:
+                            print("[SDK] Session confirmed idle - processing complete")
+                            done.set()
+                    except asyncio.CancelledError:
+                        pass
+                stats['idle_task'] = asyncio.create_task(check_still_idle())
+
+        elif event_type == "session.error":
+            error_msg = getattr(event.data, 'message', 'Unknown error') if hasattr(event, 'data') else 'Unknown error'
+            print(f"\n[SDK] ERROR: {error_msg}")
+            if item_logger:
+                item_logger.log_error(error_msg)
+            if not stats['tried_fallback'] and stats['current_model'] == DEFAULT_MODEL:
+                error_lower = error_msg.lower()
+                if 'rate' in error_lower and 'limit' in error_lower:
+                    print(f"\n[SDK] Rate limit detected, will retry with {FALLBACK_MODEL}...")
+                    stats['tried_fallback'] = True
+                    stats['current_model'] = FALLBACK_MODEL
+                    return
+            errors.append(error_msg)
+            done.set()
     
     return handle_event, stats
