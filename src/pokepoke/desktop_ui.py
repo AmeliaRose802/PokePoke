@@ -59,11 +59,35 @@ _original_excepthook: Optional[Callable[..., Any]] = None
 
 def _find_frontend_dist() -> Optional[Path]:
     """Locate the pre-built React frontend dist/ directory."""
+    import subprocess
+    
     # Look relative to this file: src/pokepoke/desktop_ui.py → ../../desktop/dist
     src_root = Path(__file__).resolve().parent.parent.parent
     dist = src_root / "desktop" / "dist"
     if dist.is_dir() and (dist / "index.html").exists():
         return dist
+    
+    # If in a git worktree, the desktop build is in the main repo
+    # Try to find the main worktree via git
+    try:
+        result = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            cwd=src_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        # First worktree in the list is the main repo
+        for line in result.stdout.splitlines():
+            if line.startswith("worktree "):
+                main_repo = Path(line.split(None, 1)[1])
+                dist = main_repo / "desktop" / "dist"
+                if dist.is_dir() and (dist / "index.html").exists():
+                    return dist
+                break
+    except Exception:
+        pass
+    
     return None
 
 
