@@ -319,7 +319,7 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> Tuple[bool, 
         pass  # Stash failed, will try pull anyway
     
     try:
-        subprocess.run(["git", "pull", "--rebase"],
+        subprocess.run(["git", "pull", "--rebase", "origin", target_branch],
                      check=True, capture_output=True, text=True, encoding='utf-8',
                      timeout=120)
     except subprocess.CalledProcessError as e:

@@ -19,6 +19,7 @@ from pathlib import Path
 from queue import Empty, Queue
 from typing import Optional
 
+from .git_operations import get_default_branch
 from .shutdown import is_shutting_down
 from .types import BeadsWorkItem
 
@@ -165,7 +166,8 @@ class MergeQueue:
         logger.info("Processing merge for %s from %s", item.id, worktree_path)
 
         # Rebase worktree against target branch to incorporate any previous merges
-        rebase_ok = _rebase_worktree(worktree_path)
+        target_branch = get_default_branch()
+        rebase_ok = _rebase_worktree(worktree_path, target_branch=target_branch)
         if not rebase_ok:
             logger.warning(
                 "Rebase failed for %s - attempting merge anyway", item.id
@@ -214,8 +216,14 @@ class MergeQueue:
             request.future.set_result(result)
 
 
-def _rebase_worktree(worktree_path: Path) -> bool:
-    """Run git pull --rebase in a worktree to incorporate previous merges.
+def _rebase_worktree(worktree_path: Path, target_branch: Optional[str] = None) -> bool:
+    """Rebase a worktree onto the latest target branch.
+
+    Uses explicit ``git fetch origin`` + ``git rebase origin/<target>``
+    instead of ``git pull --rebase`` to avoid the
+    "Cannot rebase onto multiple branches" error that occurs when
+    FETCH_HEAD contains multiple merge entries (common when beads-sync
+    or other branches are being pushed concurrently).
 
     Returns True if rebase succeeded or was unnecessary, False on failure.
     """
@@ -223,9 +231,21 @@ def _rebase_worktree(worktree_path: Path) -> bool:
         logger.warning("Worktree path does not exist: %s", worktree_path)
         return False
 
+    if target_branch is None:
+        target_branch = get_default_branch()
+
     try:
         subprocess.run(
-            ["git", "pull", "--rebase"],
+            ["git", "fetch", "origin", target_branch],
+            cwd=str(worktree_path),
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=60,
+        )
+        subprocess.run(
+            ["git", "rebase", f"origin/{target_branch}"],
             cwd=str(worktree_path),
             check=True,
             capture_output=True,
@@ -233,7 +253,7 @@ def _rebase_worktree(worktree_path: Path) -> bool:
             encoding="utf-8",
             timeout=120,
         )
-        logger.info("Rebased worktree %s successfully", worktree_path)
+        logger.info("Rebased worktree %s onto origin/%s successfully", worktree_path, target_branch)
         return True
     except subprocess.CalledProcessError as exc:
         logger.warning(
