@@ -33,6 +33,7 @@ interface PyWebViewAPI {
   get_state(): Promise<{
     work_item: WorkItem | null;
     agent_name: string;
+    repository_name: string;
     stats: SessionStats | null;
     progress: ProgressState;
     log_count: number;
@@ -42,6 +43,7 @@ interface PyWebViewAPI {
   get_new_logs(): Promise<LogEntry[]>;
   get_all_logs(): Promise<LogEntry[]>;
   get_work_item(): Promise<WorkItem | null>;
+  get_repository_name(): Promise<string>;
   get_stats(): Promise<SessionStats | null>;
   list_prompts(): Promise<PromptInfo[]>;
   get_prompt(name: string): Promise<PromptDetail>;
@@ -65,6 +67,7 @@ export interface BridgeState {
   agentLogs: LogEntry[];
   workItem: WorkItem | null;
   agentName: string;
+  repositoryName: string;
   stats: SessionStats | null;
   progress: ProgressState;
   modelLeaderboard: Record<string, ModelPerformanceSummary>;
@@ -89,6 +92,7 @@ export function useBridge(): BridgeState {
   const [agentLogs, setAgentLogs] = useState<LogEntry[]>([]);
   const [workItem, setWorkItem] = useState<WorkItem | null>(null);
   const [agentName, setAgentName] = useState("");
+  const [repositoryName, setRepositoryName] = useState("");
   const [stats, setStats] = useState<SessionStats | null>(null);
   const [progress, setProgress] = useState<ProgressState>({
     active: false,
@@ -192,6 +196,7 @@ export function useBridge(): BridgeState {
         const state = await api.get_state();
         if (state.work_item) setWorkItem(state.work_item);
         if (state.agent_name) setAgentName(state.agent_name);
+        if (state.repository_name) setRepositoryName(state.repository_name);
         if (state.stats) setStats(state.stats);
         if (state.progress) setProgress(state.progress);
         if (state.model_leaderboard) setModelLeaderboard(state.model_leaderboard);
@@ -218,6 +223,7 @@ export function useBridge(): BridgeState {
           const state = await api.get_state();
           setWorkItem(state.work_item);
           setAgentName(state.agent_name);
+          setRepositoryName(state.repository_name);
           if (state.stats) setStats(state.stats);
           if (state.progress) setProgress(state.progress);
           if (state.model_leaderboard) setModelLeaderboard(state.model_leaderboard);
@@ -244,6 +250,7 @@ export function useBridge(): BridgeState {
     agentLogs,
     workItem,
     agentName,
+    repositoryName,
     stats,
     progress,
     modelLeaderboard,

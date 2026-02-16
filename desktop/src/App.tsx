@@ -63,6 +63,7 @@ function App() {
       <WorkItemHeader
         workItem={bridge.workItem}
         agentName={bridge.agentName}
+        repositoryName={bridge.repositoryName}
       />
 
       {/* Main content area with logs and agents panel */}
