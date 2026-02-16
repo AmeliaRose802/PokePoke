@@ -48,6 +48,15 @@ class TestFindFrontendDist:
 
         monkeypatch.setattr(desktop_ui_module, "__file__", str(fake_file))
 
+        # Mock subprocess.run so git worktree fallback cannot find real dist
+        import subprocess as _sp
+        orig_run = _sp.run
+        def _mock_run(*a, **kw):
+            if a and a[0] and "worktree" in str(a[0]):
+                raise FileNotFoundError("mocked")
+            return orig_run(*a, **kw)
+        monkeypatch.setattr(_sp, "run", _mock_run)
+
         assert desktop_ui_module._find_frontend_dist() is None
 
     def test_returns_dist_when_present(self, monkeypatch, tmp_path) -> None:
