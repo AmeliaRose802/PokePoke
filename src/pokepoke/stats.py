@@ -79,19 +79,7 @@ def print_stats(items_completed: int, total_requests: int, elapsed_seconds: floa
     print(f"✅ Items completed:     {items_completed}")
     print(f"🔄 Total API requests:  {total_requests}")
     
-    # Format elapsed time
-    hours = int(elapsed_seconds // 3600)
-    minutes = int((elapsed_seconds % 3600) // 60)
-    seconds = int(elapsed_seconds % 60)
-    
-    if hours > 0:
-        time_str = f"{hours}h {minutes}m {seconds}s"
-    elif minutes > 0:
-        time_str = f"{minutes}m {seconds}s"
-    else:
-        time_str = f"{seconds}s"
-    
-    print(f"⏱️  Total time:         {time_str}")
+    print(f"⏱️  Total time:         {_format_duration(elapsed_seconds)}")
     
     # Print beads statistics if available
     if session_stats and session_stats.starting_beads_stats and session_stats.ending_beads_stats:
@@ -159,14 +147,7 @@ def print_stats(items_completed: int, total_requests: int, elapsed_seconds: floa
     
     # Calculate average time per item if any completed
     if items_completed > 0:
-        avg_seconds = elapsed_seconds / items_completed
-        avg_minutes = int(avg_seconds // 60)
-        avg_secs = int(avg_seconds % 60)
-        if avg_minutes > 0:
-            avg_str = f"{avg_minutes}m {avg_secs}s"
-        else:
-            avg_str = f"{avg_secs}s"
-        print(f"📈 Avg time per item:  {avg_str}")
+        print(f"📈 Avg time per item:  {_format_duration(elapsed_seconds / items_completed)}")
     
     # Print list of completed items
     if session_stats and session_stats.completed_items_list:
@@ -189,8 +170,11 @@ def print_stats(items_completed: int, total_requests: int, elapsed_seconds: floa
 
 def _format_duration(seconds: float) -> str:
     """Format a duration in seconds to a human-readable string."""
-    minutes = int(seconds // 60)
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
     secs = int(seconds % 60)
+    if hours > 0:
+        return f"{hours}h {minutes}m {secs}s"
     if minutes > 0:
         return f"{minutes}m {secs}s"
     return f"{secs}s"
