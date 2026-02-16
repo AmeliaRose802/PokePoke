@@ -5,6 +5,8 @@ import threading
 import time
 from typing import Any
 
+from pokepoke.agent_names import generate_agent_name
+from pokepoke.agent_context import get_agent_name, set_agent_name, clear_agent_name
 from pokepoke.beads import get_ready_work_items
 from pokepoke.types import AgentStats, BeadsWorkItem, ModelCompletionRecord, SessionStats
 from pokepoke.workflow import process_work_item
@@ -26,14 +28,22 @@ def _parallel_process_item(
     semaphore: threading.Semaphore,
     active_ids: set[str],
     active_ids_lock: threading.Lock,
+    worker_agent_name: str | None = None,
 ) -> tuple[bool, int, AgentStats | None, int, int, ModelCompletionRecord | None]:
     """Wrapper for process_work_item used by the thread pool.
 
+    Sets a per-thread agent name so that beads management / hierarchy
+    code resolves the correct identity for this worker instead of the
+    process-global ``os.environ['AGENT_NAME']``.
+
     Releases the semaphore and removes the item from active_ids when done.
     """
+    if worker_agent_name:
+        set_agent_name(worker_agent_name)
     try:
         return process_work_item(item, interactive=False, run_logger=run_logger)
     finally:
+        clear_agent_name()
         with active_ids_lock:
             active_ids.discard(item.id)
         semaphore.release()
@@ -119,6 +129,8 @@ def run_parallel_loop(
     )
     set_executor(executor)
 
+    _worker_counter = 0
+
     try:
         while not is_shutting_down():
             print("\n\ud83d\udd0d Checking main repository status...")
@@ -141,13 +153,20 @@ def run_parallel_loop(
                     skip_ids=failed_claim_ids, claimed_ids=current_active,
                 )
                 for item in selected_items:
-                    run_logger.log_orchestrator(f"Submitting item: {item.id} - {item.title}")
+                    _worker_counter += 1
+                    # Derive a per-worker agent name from the main agent name
+                    base_name = get_agent_name(default="pokepoke")
+                    worker_name = f"{base_name}-worker-{_worker_counter}"
+                    run_logger.log_orchestrator(
+                        f"Submitting item: {item.id} - {item.title} (worker: {worker_name})"
+                    )
                     with active_ids_lock:
                         active_ids.add(item.id)
                     semaphore.acquire()
                     fut = executor.submit(
                         _parallel_process_item,
                         item, run_logger, semaphore, active_ids, active_ids_lock,
+                        worker_name,
                     )
                     futures[fut] = item
 

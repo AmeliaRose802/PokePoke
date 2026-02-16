@@ -120,6 +120,9 @@ def run_orchestrator(
     try:
         agent_name = initialize_agent_name(custom_name=agent_name_override)
         os.environ['AGENT_NAME'] = agent_name
+        # Also set thread-local so the main thread resolves correctly
+        from pokepoke.agent_context import set_agent_name
+        set_agent_name(agent_name)
         mode_name = "Interactive" if interactive else "Autonomous"
         print(f"🎯 PokePoke {mode_name} Mode | 🤖 Agent: {agent_name}")
         print("=" * 50)

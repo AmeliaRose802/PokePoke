@@ -76,7 +76,8 @@ def is_assigned_to_current_user(item: BeadsWorkItem) -> bool:
         True if item is unassigned or assigned to THIS agent, False otherwise.
     """
     assignee = getattr(item, 'assignee', None) or ''
-    agent_name = os.environ.get('AGENT_NAME', '')
+    from pokepoke.agent_context import get_agent_name as _get_agent_name
+    agent_name = _get_agent_name(default='')
     
     if assignee:
         # Has an assignee - check if it's THIS agent

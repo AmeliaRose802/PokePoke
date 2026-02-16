@@ -6,6 +6,7 @@ import subprocess
 import time
 from typing import List, Optional
 
+from .agent_context import get_agent_name
 from .types import BeadsWorkItem
 from .beads_hierarchy import has_feature_parent, get_next_child_task, close_parent_if_complete, get_children, resolve_to_leaf_task, HUMAN_REQUIRED_LABEL
 from .beads_query import _parse_beads_json
@@ -71,7 +72,7 @@ def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool
         True if successful, False if already claimed or failed.
     """
     if agent_name is None:
-        agent_name = os.environ.get('AGENT_NAME', 'agent')
+        agent_name = get_agent_name()
     
     # CRITICAL: Check current ownership RIGHT BEFORE claiming
     # This catches race conditions where another agent claimed between fetch and now
