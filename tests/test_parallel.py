@@ -27,8 +27,9 @@ def _make_item(item_id: str = "t1") -> BeadsWorkItem:
 class TestParallelProcessItem:
     """Tests for _parallel_process_item wrapper."""
 
+    @patch("pokepoke.parallel.terminal_ui")
     @patch("pokepoke.parallel.process_work_item")
-    def test_success_releases_resources(self, mock_pwi: Mock) -> None:
+    def test_success_releases_resources(self, mock_pwi: Mock, mock_ui: Mock) -> None:
         mock_pwi.return_value = (True, 1, None, 0, 0, None)
         sem = threading.Semaphore(1)
         ids = {"t1"}
@@ -39,9 +40,13 @@ class TestParallelProcessItem:
         assert result == (True, 1, None, 0, 0, None)
         assert "t1" not in ids
         assert sem.acquire(blocking=False)
+        # Agent status should be registered and updated
+        mock_ui.ui.push_agent_status.assert_any_call("t1", "agent", iteration=1, status="running")
+        mock_ui.ui.push_agent_status.assert_any_call("t1", "agent", iteration=1, status="success")
 
+    @patch("pokepoke.parallel.terminal_ui")
     @patch("pokepoke.parallel.process_work_item", side_effect=RuntimeError("boom"))
-    def test_exception_releases_resources(self, mock_pwi: Mock) -> None:
+    def test_exception_releases_resources(self, mock_pwi: Mock, mock_ui: Mock) -> None:
         sem = threading.Semaphore(1)
         ids = {"t1"}
         lock = threading.Lock()
@@ -51,6 +56,36 @@ class TestParallelProcessItem:
 
         assert "t1" not in ids
         assert sem.acquire(blocking=False)
+        # Agent status should be set to failed on exception
+        mock_ui.ui.push_agent_status.assert_any_call("t1", "agent", iteration=1, status="failed")
+
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.process_work_item")
+    def test_failure_sets_agent_failed_status(self, mock_pwi: Mock, mock_ui: Mock) -> None:
+        """A work item that returns success=False should set agent status to failed."""
+        mock_pwi.return_value = (False, 1, None, 0, 0, None)
+        sem = threading.Semaphore(1)
+        ids = {"t1"}
+        lock = threading.Lock()
+
+        result = _parallel_process_item(_make_item(), Mock(), sem, ids, lock)
+
+        assert result[0] is False
+        mock_ui.ui.push_agent_status.assert_any_call("t1", "agent", iteration=1, status="failed")
+
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.process_work_item")
+    def test_output_routed_via_agent_output_for(self, mock_pwi: Mock, mock_ui: Mock) -> None:
+        """Verify that agent_output_for context manager is used for output routing."""
+        mock_pwi.return_value = (True, 1, None, 0, 0, None)
+        sem = threading.Semaphore(1)
+        ids = {"t1"}
+        lock = threading.Lock()
+
+        _parallel_process_item(_make_item(), Mock(), sem, ids, lock)
+
+        # Should use agent_output_for to route output
+        mock_ui.ui.agent_output_for.assert_called_once_with("t1")
 
 
 # ── _collect_done_futures ─────────────────────────────────────

@@ -1,6 +1,5 @@
 """Cleanup agent invocation utilities."""
 
-import os
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -13,13 +12,7 @@ from pokepoke import terminal_ui
 def aggregate_cleanup_stats(result_stats: Optional[AgentStats], cleanup_stats: Optional[AgentStats]) -> None:
     """Aggregate cleanup agent stats into result stats."""
     if cleanup_stats and result_stats:
-        result_stats.wall_duration += cleanup_stats.wall_duration
-        result_stats.api_duration += cleanup_stats.api_duration
-        result_stats.input_tokens += cleanup_stats.input_tokens
-        result_stats.output_tokens += cleanup_stats.output_tokens
-        result_stats.lines_added += cleanup_stats.lines_added
-        result_stats.lines_removed += cleanup_stats.lines_removed
-        result_stats.premium_requests += cleanup_stats.premium_requests
+        result_stats.accumulate(cleanup_stats)
 
 
 def run_cleanup_loop(item: BeadsWorkItem, result: CopilotResult, repo_root: Path, cwd: Optional[str] = None) -> tuple[bool, int]:
@@ -89,9 +82,29 @@ def get_pokepoke_prompts_dir() -> Path:
     return prompts_dir
 
 
+def load_prompt_file(filename: str) -> Optional[str]:
+    """Load a prompt file from the PokePoke prompts directory.
+
+    Returns the file contents, or None if the file cannot be found
+    (prints an error message in that case).
+    """
+    try:
+        prompts_dir = get_pokepoke_prompts_dir()
+    except FileNotFoundError as e:
+        print(f"❌ {e}")
+        return None
+
+    prompt_path = prompts_dir / filename
+    if not prompt_path.exists():
+        print(f"❌ Prompt not found at {prompt_path}")
+        return None
+
+    return prompt_path.read_text(encoding='utf-8')
+
+
 def _get_current_git_context(cwd: Optional[str] = None) -> tuple[str, str, bool]:
     """Get current git context (directory, branch, is_worktree)."""
-    current_dir = cwd or os.getcwd()
+    current_dir = cwd or str(Path.cwd())
     
     # Get current branch
     try:
@@ -127,18 +140,9 @@ def _get_current_git_context(cwd: Optional[str] = None) -> tuple[str, str, bool]
 def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path, cwd: Optional[str] = None) -> tuple[bool, Optional[AgentStats]]:
     """Invoke cleanup agent to commit uncommitted changes."""
     terminal_ui.ui.set_current_agent("Cleanup Agent")
-    try:
-        prompts_dir = get_pokepoke_prompts_dir()
-        cleanup_prompt_path = prompts_dir / "cleanup.md"
-    except FileNotFoundError as e:
-        print(f"❌ {e}")
+    cleanup_prompt_template = load_prompt_file("cleanup.md")
+    if cleanup_prompt_template is None:
         return False, None
-    
-    if not cleanup_prompt_path.exists():
-        print(f"❌ Cleanup prompt not found at {cleanup_prompt_path}")
-        return False, None
-    
-    cleanup_prompt_template = cleanup_prompt_path.read_text(encoding='utf-8')
     
     # Get current context information
     current_dir, current_branch, is_worktree = _get_current_git_context(cwd=cwd)
@@ -201,19 +205,11 @@ def invoke_merge_conflict_cleanup_agent(
     terminal_ui.ui.set_current_agent("Merge Conflict Cleanup")
     from pokepoke.git_operations import is_merge_in_progress, get_unmerged_files as git_get_unmerged
     
-    try:
-        prompts_dir = get_pokepoke_prompts_dir()
-        cleanup_prompt_path = prompts_dir / "merge-conflict-cleanup.md"
-    except FileNotFoundError as e:
-        print(f"❌ {e}")
-        return False, None
-    
-    if not cleanup_prompt_path.exists():
+    cleanup_prompt_template = load_prompt_file("merge-conflict-cleanup.md")
+    if cleanup_prompt_template is None:
         # Fallback to standard cleanup
-        print(f"⚠️ Merge conflict cleanup prompt not found at {cleanup_prompt_path}, falling back to standard cleanup")
+        print("⚠️ Falling back to standard cleanup agent")
         return invoke_cleanup_agent(item, repo_root)
-    
-    cleanup_prompt_template = cleanup_prompt_path.read_text(encoding='utf-8')
     
     # Get current context information
     current_dir, current_branch, is_worktree = _get_current_git_context(cwd=cwd)

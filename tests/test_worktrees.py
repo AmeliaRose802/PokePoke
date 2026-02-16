@@ -122,7 +122,8 @@ class TestGetMainRepoRoot:
                 capture_output=True,
                 text=True,
                 encoding='utf-8',
-                check=True
+                check=True,
+                timeout=30
             )
     
     def test_get_main_repo_root_in_worktree(self):
@@ -170,7 +171,8 @@ class TestIsWorktreeClean:
                 capture_output=True,
                 text=True,
                 encoding='utf-8',
-                check=True
+                check=True,
+                timeout=30
             )
     
     def test_is_worktree_clean_false(self):
@@ -220,7 +222,8 @@ class TestVerifyBranchPushed:
                 capture_output=True,
                 text=True,
                 encoding='utf-8',
-                check=True
+                check=True,
+                timeout=120
             )
     
     def test_verify_branch_pushed_not_exists(self):
@@ -385,7 +388,8 @@ class TestIsWorktreeMerged:
                 check=True,
                 capture_output=True,
                 text=True,
-                encoding='utf-8'
+                encoding='utf-8',
+                timeout=30
             )
     
     def test_is_worktree_merged_false(self):
@@ -416,7 +420,8 @@ class TestIsWorktreeMerged:
                 check=True,
                 capture_output=True,
                 text=True,
-                encoding='utf-8'
+                encoding='utf-8',
+                timeout=30
             )
     
     def test_is_worktree_merged_subprocess_error(self):
@@ -1243,7 +1248,8 @@ class TestListWorktrees:
                 check=True,
                 capture_output=True,
                 text=True,
-                encoding='utf-8'
+                encoding='utf-8',
+                timeout=30
             )
     
     def test_list_worktrees_empty(self):

@@ -430,6 +430,7 @@ class TestExecuteMergeSequence:
             if cmd[:2] == ["git", "stash"] and "push" in cmd:
                 return Mock(returncode=0)
             if cmd[:3] == ["git", "pull", "--rebase"]:
+                assert cmd[3:] == ["origin", "main"], f"Expected origin main but got {cmd[3:]}"
                 raise subprocess.CalledProcessError(1, cmd, stderr="conflict")
             raise AssertionError(f"Unexpected command: {cmd}")
 
@@ -459,6 +460,7 @@ class TestExecuteMergeSequence:
             if cmd[:2] == ["git", "stash"] and "push" in cmd:
                 return Mock(returncode=0)
             if cmd[:3] == ["git", "pull", "--rebase"]:
+                assert cmd[3:] == ["origin", "main"], f"Expected origin main but got {cmd[3:]}"
                 return Mock(returncode=0)
             if cmd[:2] == ["git", "merge"]:
                 return Mock(returncode=0)

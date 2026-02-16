@@ -16,13 +16,19 @@ class DummyLogger:
     def log_copilot_output(self, text: str) -> None:
         self.lines.append(text)
 
+    def log_error(self, error_msg: str) -> None:
+        self.lines.append(error_msg)
+
 
 class DummyEventFlag:
     def __init__(self) -> None:
-        self.is_set = False
+        self._is_set = False
+
+    def is_set(self) -> bool:
+        return self._is_set
 
     def set(self) -> None:
-        self.is_set = True
+        self._is_set = True
 
 
 @pytest.fixture(autouse=True)
@@ -55,9 +61,9 @@ def test_message_delta_logs_output(monkeypatch: pytest.MonkeyPatch) -> None:
     handler, stats = sdk_event_handler.create_event_handler(done, output, errors, logger)
     event = make_event("assistant.message_delta", data=make_data(delta_content="hello "))
 
-    needs_retry = handler(event)
+    result = handler(event)
 
-    assert needs_retry is False
+    assert result is None  # Handler now returns None instead of bool
     assert output == ["hello "]
     assert logger.lines == ["hello "]
     assert stats['turn_count'] == 0
@@ -90,6 +96,9 @@ def test_message_complete_reschedules_idle_task(monkeypatch: pytest.MonkeyPatch)
         def cancel(self) -> None:
             self.cancel_called = True
 
+        def done(self) -> bool:
+            return False
+
     created_tasks: List[DummyTask] = []
 
     def fake_create_task(coro):
@@ -100,10 +109,10 @@ def test_message_complete_reschedules_idle_task(monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr(sdk_event_handler.asyncio, "create_task", fake_create_task)
 
-    handler(make_event("assistant.message_complete"))
+    handler(make_event("session.idle"))  # Changed event type
     assert stats['idle_task'] is created_tasks[0]
 
-    handler(make_event("assistant.message_complete"))
+    handler(make_event("session.idle"))  # Changed event type
     assert created_tasks[0].cancel_called is True
     assert stats['idle_task'] is created_tasks[1]
 
@@ -126,9 +135,9 @@ def test_idle_task_completes_without_pending_tools(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(sdk_event_handler.asyncio, "sleep", immediate_sleep)
     monkeypatch.setattr(sdk_event_handler.asyncio, "create_task", lambda coro: ImmediateTask(coro))
 
-    handler(make_event("assistant.message_complete"))
+    handler(make_event("session.idle"))  # Changed event type
 
-    assert done.is_set is True
+    assert done.is_set() is True
     assert isinstance(stats['idle_task'], ImmediateTask)
 
 
@@ -136,26 +145,30 @@ def test_rate_limit_error_requests_retry(monkeypatch: pytest.MonkeyPatch) -> Non
     done = DummyEventFlag()
     handler, stats = sdk_event_handler.create_event_handler(done, [], [], None)
 
-    retry = handler(make_event("assistant.error", data=make_data(error="Rate limit exceeded")))
-    assert retry is True
+    # Reset to use DEFAULT_MODEL to enable fallback logic
+    stats['current_model'] = sdk_event_handler.DEFAULT_MODEL
+    stats['tried_fallback'] = False
+
+    handler(make_event("session.error", data=make_data(message="Rate limit exceeded")))  # Changed event type and attr
+    # Handler no longer returns retry flag, check stats instead
+    assert stats['tried_fallback'] is True
+    assert done.is_set() is False
 
     # Second error completes the session
-    retry_second = handler(make_event("assistant.error", data=make_data(error="Other failure")))
-    assert retry_second is False
-    assert done.is_set is True
-    assert stats['tried_fallback'] is False  # Not flipped inside handler
+    handler(make_event("session.error", data=make_data(message="Other failure")))  # Changed event type and attr
+    assert done.is_set() is True
 
 
 def test_tool_call_tracking_and_usage_updates(monkeypatch: pytest.MonkeyPatch) -> None:
     done = DummyEventFlag()
     handler, stats = sdk_event_handler.create_event_handler(done, [], [])
 
-    handler(make_event("assistant.tool_calls"))
-    handler(make_event("assistant.tool_calls"))
+    handler(make_event("tool.execution_start", data=make_data(tool_name="test_tool", arguments={})))  # Changed event type
+    handler(make_event("tool.execution_start", data=make_data(tool_name="test_tool2", arguments={})))  # Changed event type
     assert stats['pending_tool_calls'] == 2
     assert stats['total_tool_calls'] == 2
 
-    handler(make_event("assistant.tool_execution_complete"))
+    handler(make_event("tool.execution_complete", data=make_data(result="success", success=True)))  # Changed event type
     assert stats['pending_tool_calls'] == 1
 
     usage_event = make_event(
@@ -172,4 +185,20 @@ def test_tool_call_tracking_and_usage_updates(monkeypatch: pytest.MonkeyPatch) -
     assert stats['total_output_tokens'] == 3
     assert stats['total_cache_read_tokens'] == 2
     assert stats['total_cache_write_tokens'] == 1
+
+    # Add turn_end event to increment turn count
+    handler(make_event("assistant.turn_end"))
     assert stats['turn_count'] == 1
+
+
+def test_error_event_logs_to_item_logger() -> None:
+    done = DummyEventFlag()
+    output: List[str] = []
+    errors: List[str] = []
+    logger = DummyLogger()
+    handler, _ = sdk_event_handler.create_event_handler(done, output, errors, logger)
+
+    handler(make_event("session.error", data=make_data(message="Something broke")))  # Changed event type and attr
+
+    assert "Something broke" in errors
+    assert logger.lines == ["Something broke"]

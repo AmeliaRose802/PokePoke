@@ -237,20 +237,23 @@ class TestMergeQueue:
 class TestRebaseWorktree:
     """Tests for _rebase_worktree helper."""
 
+    @patch("pokepoke.merge_queue.get_default_branch", return_value="main")
     @patch("subprocess.run")
-    def test_success(self, mock_run):
+    def test_success(self, mock_run, mock_branch):
         mock_run.return_value = MagicMock(returncode=0)
         with patch.object(Path, "exists", return_value=True):
             assert _rebase_worktree(Path("worktrees/task-X")) is True
 
-        mock_run.assert_called_once()
-        args = mock_run.call_args
-        assert args[0][0] == ["git", "pull", "--rebase"]
+        assert mock_run.call_count == 2
+        fetch_call = mock_run.call_args_list[0]
+        assert fetch_call[0][0] == ["git", "fetch", "origin", "main"]
+        rebase_call = mock_run.call_args_list[1]
+        assert rebase_call[0][0] == ["git", "rebase", "origin/main"]
 
     @patch("subprocess.run")
     def test_nonexistent_path(self, mock_run):
         with patch.object(Path, "exists", return_value=False):
-            assert _rebase_worktree(Path("nonexistent")) is False
+            assert _rebase_worktree(Path("nonexistent"), target_branch="main") is False
         mock_run.assert_not_called()
 
     @patch("subprocess.run")
@@ -259,15 +262,16 @@ class TestRebaseWorktree:
         import subprocess as sp
 
         mock_run.side_effect = [
-            sp.CalledProcessError(1, "git", stderr="conflict"),
+            MagicMock(returncode=0),  # git fetch origin main
+            sp.CalledProcessError(1, "git", stderr="conflict"),  # git rebase
             MagicMock(returncode=0),  # rebase --abort
         ]
         with patch.object(Path, "exists", return_value=True):
-            assert _rebase_worktree(Path("worktrees/task-X")) is False
+            assert _rebase_worktree(Path("worktrees/task-X"), target_branch="main") is False
 
-        # Should have called rebase --abort
-        assert mock_run.call_count == 2
-        abort_call = mock_run.call_args_list[1]
+        # Should have called fetch, rebase (failed), rebase --abort
+        assert mock_run.call_count == 3
+        abort_call = mock_run.call_args_list[2]
         assert "rebase" in abort_call[0][0]
         assert "--abort" in abort_call[0][0]
 
@@ -277,7 +281,20 @@ class TestRebaseWorktree:
 
         mock_run.side_effect = sp.TimeoutExpired("git", 120)
         with patch.object(Path, "exists", return_value=True):
-            assert _rebase_worktree(Path("worktrees/task-X")) is False
+            assert _rebase_worktree(Path("worktrees/task-X"), target_branch="main") is False
+
+    @patch("subprocess.run")
+    def test_explicit_target_branch(self, mock_run):
+        """When target_branch is passed, it should be used directly."""
+        mock_run.return_value = MagicMock(returncode=0)
+        with patch.object(Path, "exists", return_value=True):
+            assert _rebase_worktree(Path("worktrees/task-X"), target_branch="develop") is True
+
+        assert mock_run.call_count == 2
+        fetch_call = mock_run.call_args_list[0]
+        assert fetch_call[0][0] == ["git", "fetch", "origin", "develop"]
+        rebase_call = mock_run.call_args_list[1]
+        assert rebase_call[0][0] == ["git", "rebase", "origin/develop"]
 
 
 class TestSingleton:

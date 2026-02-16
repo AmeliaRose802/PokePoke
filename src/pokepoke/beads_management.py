@@ -6,6 +6,7 @@ import subprocess
 import time
 from typing import List, Optional
 
+from .agent_context import get_agent_name
 from .types import BeadsWorkItem
 from .beads_hierarchy import has_feature_parent, get_next_child_task, close_parent_if_complete, get_children, resolve_to_leaf_task, HUMAN_REQUIRED_LABEL
 from .beads_query import _parse_beads_json
@@ -71,7 +72,7 @@ def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool
         True if successful, False if already claimed or failed.
     """
     if agent_name is None:
-        agent_name = os.environ.get('AGENT_NAME', 'agent')
+        agent_name = get_agent_name()
     
     # CRITICAL: Check current ownership RIGHT BEFORE claiming
     # This catches race conditions where another agent claimed between fetch and now
@@ -81,7 +82,8 @@ def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
         
         # Parse current item state
@@ -113,7 +115,8 @@ def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
         print(f"✅ Assigned {item_id} to {agent_name} and marked in_progress")
         
@@ -149,7 +152,8 @@ def close_item(item_id: str, message: str = "Completed") -> bool:
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
         print(f"✅ Closed {item_id}")
         return True
@@ -174,7 +178,8 @@ def add_comment(item_id: str, comment: str) -> bool:
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
         print(f"💬 Added comment to {item_id}")
         return True
@@ -220,7 +225,8 @@ def create_issue(
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
         
         if not result.stdout:
@@ -243,7 +249,8 @@ def create_issue(
                     ['bd', 'label', 'add', issue_id] + labels + ['--json'],
                     capture_output=True,
                     text=True,
-                    encoding='utf-8'
+                    encoding='utf-8',
+                    timeout=30
                 )
             
             return issue_id

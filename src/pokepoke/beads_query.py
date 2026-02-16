@@ -58,7 +58,8 @@ def get_ready_work_items() -> List[BeadsWorkItem]:
         capture_output=True,
         text=True,
         encoding='utf-8',
-        check=True
+        check=True,
+        timeout=30
     )
     
     if not result.stdout:
@@ -96,7 +97,8 @@ def get_issue_dependencies(issue_id: str) -> Optional[IssueWithDependencies]:
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=30
         )
     except subprocess.CalledProcessError:
         return None
@@ -185,7 +187,8 @@ def get_beads_stats() -> Optional[BeadsStats]:
             text=True,
             encoding='utf-8',
             check=True,
-            cwd=cwd
+            cwd=cwd,
+            timeout=30
         )
         
         data = json.loads(result.stdout)

@@ -16,7 +16,8 @@ def verify_branch_pushed(branch_name: str) -> bool:
             capture_output=True,
             text=True,
             encoding='utf-8',
-            check=True
+            check=True,
+            timeout=120
         )
         return bool(result.stdout.strip())
     except subprocess.CalledProcessError:
@@ -38,7 +39,8 @@ def restore_beads_stash(context: str) -> None:
             check=True,
             capture_output=True,
             text=True,
-            encoding='utf-8'
+            encoding='utf-8',
+            timeout=30
         )
     except subprocess.CalledProcessError as pop_error:
         print(f"⚠️ Failed to re-apply beads stash after {context}. Inspect .beads/ changes manually.")
@@ -49,7 +51,8 @@ def restore_beads_stash(context: str) -> None:
                 check=True,
                 capture_output=True,
                 text=True,
-                encoding='utf-8'
+                encoding='utf-8',
+                timeout=30
             )
             print("⚠️ Dropped beads stash entry to avoid accumulation.")
         except subprocess.CalledProcessError as drop_error:

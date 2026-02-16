@@ -679,10 +679,12 @@ class TestMergeWorktreeToDev:
         assert result is False
         mock_cleanup.assert_called_once()
 
+    @patch('pokepoke.git_operations.abort_merge', return_value=(True, ""))
+    @patch('pokepoke.git_operations.is_merge_in_progress', side_effect=[True, True, False])
     @patch('pokepoke.cleanup_agents.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.worktree_finalization.merge_worktree')
     @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
-    def test_merge_fails_autofix_succeeds(self, mock_check: Mock, mock_merge: Mock, mock_cleanup: Mock) -> None:
+    def test_merge_fails_autofix_succeeds(self, mock_check: Mock, mock_merge: Mock, mock_cleanup: Mock, mock_in_progress: Mock, mock_abort: Mock) -> None:
         """Test when merge fails, cleanup succeeds, retry works."""
         item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
 

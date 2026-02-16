@@ -48,6 +48,15 @@ class TestFindFrontendDist:
 
         monkeypatch.setattr(desktop_ui_module, "__file__", str(fake_file))
 
+        # Mock subprocess.run so git worktree fallback cannot find real dist
+        import subprocess as _sp
+        orig_run = _sp.run
+        def _mock_run(*a, **kw):
+            if a and a[0] and "worktree" in str(a[0]):
+                raise FileNotFoundError("mocked")
+            return orig_run(*a, **kw)
+        monkeypatch.setattr(_sp, "run", _mock_run)
+
         assert desktop_ui_module._find_frontend_dist() is None
 
     def test_returns_dist_when_present(self, monkeypatch, tmp_path) -> None:
@@ -67,11 +76,16 @@ class TestFindFrontendDist:
 
 class TestDesktopUIOutputRouting:
     def test_output_contexts(self) -> None:
+        """agent_output and orchestrator_output set thread-local target."""
         ui = DesktopUI()
-        assert ui._target_buffer == "orchestrator"
+        # Thread-local should not be set initially
+        assert getattr(desktop_ui_module._thread_output, "target", None) is None
         with ui.agent_output():
-            assert ui._target_buffer == "agent"
-        assert ui._target_buffer == "orchestrator"
+            assert getattr(desktop_ui_module._thread_output, "target", None) == "agent"
+        assert getattr(desktop_ui_module._thread_output, "target", None) is None
+        with ui.orchestrator_output():
+            assert getattr(desktop_ui_module._thread_output, "target", None) == "orchestrator"
+        assert getattr(desktop_ui_module._thread_output, "target", None) is None
 
     def test_styled_output_context(self) -> None:
         ui = DesktopUI()
@@ -98,10 +112,13 @@ class TestDesktopUIOutputRouting:
     def test_print_redirect_respects_target_and_style(self) -> None:
         ui = DesktopUI()
         ui._api = MagicMock()
-        ui._target_buffer = "agent"
+        desktop_ui_module._thread_output.target = "agent"
         ui._current_style = "bold red"
-        ui._print_redirect("boom")
-        ui._api.push_log.assert_called_once_with("boom", "agent", "bold red")
+        try:
+            ui._print_redirect("boom")
+            ui._api.push_log.assert_called_once_with("boom", "agent", "bold red")
+        finally:
+            desktop_ui_module._thread_output.target = None
 
     def test_print_redirect_passes_through_stderr(self) -> None:
         ui = DesktopUI()
@@ -124,6 +141,66 @@ class TestDesktopUIOutputRouting:
         ui._api.push_log.assert_called_once_with(
             "partial", "orchestrator", None
         )
+
+    def test_agent_output_for_routes_to_agent_log(self) -> None:
+        """agent_output_for should route print output to the agent's log buffer."""
+        ui = DesktopUI()
+        ui._api = MagicMock()
+        ui._api.push_agent_log = MagicMock()
+        ui._api.push_log = MagicMock()
+
+        with ui.agent_output_for("agent-42"):
+            ui._print_redirect("hello from agent")
+
+        # Output should go to agent log, NOT the shared log
+        ui._api.push_agent_log.assert_called_once_with("agent-42", "hello from agent")
+        ui._api.push_log.assert_not_called()
+
+    def test_agent_output_for_restores_context(self) -> None:
+        """agent_output_for should restore previous agent_id on exit."""
+        ui = DesktopUI()
+        assert getattr(desktop_ui_module._thread_output, "agent_id", None) is None
+        with ui.agent_output_for("agent-1"):
+            assert desktop_ui_module._thread_output.agent_id == "agent-1"
+        assert getattr(desktop_ui_module._thread_output, "agent_id", None) is None
+
+    def test_agent_output_for_nested(self) -> None:
+        """Nested agent_output_for should restore correctly."""
+        ui = DesktopUI()
+        with ui.agent_output_for("outer"):
+            assert desktop_ui_module._thread_output.agent_id == "outer"
+            with ui.agent_output_for("inner"):
+                assert desktop_ui_module._thread_output.agent_id == "inner"
+            assert desktop_ui_module._thread_output.agent_id == "outer"
+        assert getattr(desktop_ui_module._thread_output, "agent_id", None) is None
+
+    def test_parallel_threads_get_isolated_output(self) -> None:
+        """Two threads using agent_output_for should not cross-contaminate."""
+        ui = DesktopUI()
+        ui._api = MagicMock()
+        results: dict[str, list[str]] = {"agent-a": [], "agent-b": []}
+
+        def capture_push_agent_log(agent_id: str, line: str) -> None:
+            results[agent_id].append(line)
+
+        ui._api.push_agent_log = MagicMock(side_effect=capture_push_agent_log)
+
+        barrier = threading.Barrier(2)
+
+        def worker(agent_id: str, msg: str) -> None:
+            with ui.agent_output_for(agent_id):
+                barrier.wait(timeout=5)
+                ui._print_redirect(msg)
+
+        t1 = threading.Thread(target=worker, args=("agent-a", "hello-a"))
+        t2 = threading.Thread(target=worker, args=("agent-b", "hello-b"))
+        t1.start()
+        t2.start()
+        t1.join(timeout=5)
+        t2.join(timeout=5)
+
+        assert results["agent-a"] == ["hello-a"]
+        assert results["agent-b"] == ["hello-b"]
 
 
 class TestDesktopUIStateUpdates:
@@ -163,6 +240,26 @@ class TestDesktopUIStateUpdates:
         ui._api = MagicMock()
         ui.set_session_start_time(1000.0)
         ui._api.set_session_start_time.assert_called_once_with(1000.0)
+
+    def test_push_agent_status(self) -> None:
+        ui = DesktopUI()
+        ui._api = MagicMock()
+        ui.push_agent_status("agent-1", "Gate Agent", iteration=2, status="running")
+        ui._api.push_agent_status.assert_called_once_with(
+            "agent-1", "Gate Agent", 2, "running"
+        )
+
+    def test_push_agent_log(self) -> None:
+        ui = DesktopUI()
+        ui._api = MagicMock()
+        ui.push_agent_log("agent-1", "test line")
+        ui._api.push_agent_log.assert_called_once_with("agent-1", "test line")
+
+    def test_remove_agent(self) -> None:
+        ui = DesktopUI()
+        ui._api = MagicMock()
+        ui.remove_agent("agent-1")
+        ui._api.remove_agent.assert_called_once_with("agent-1")
 
 
 class TestDesktopUILifecycle:

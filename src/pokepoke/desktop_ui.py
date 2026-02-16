@@ -59,12 +59,40 @@ _original_excepthook: Optional[Callable[..., Any]] = None
 
 def _find_frontend_dist() -> Optional[Path]:
     """Locate the pre-built React frontend dist/ directory."""
+    import subprocess
+    
     # Look relative to this file: src/pokepoke/desktop_ui.py → ../../desktop/dist
     src_root = Path(__file__).resolve().parent.parent.parent
     dist = src_root / "desktop" / "dist"
     if dist.is_dir() and (dist / "index.html").exists():
         return dist
+    
+    # If in a git worktree, the desktop build is in the main repo
+    # Try to find the main worktree via git
+    try:
+        result = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            cwd=src_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        # First worktree in the list is the main repo
+        for line in result.stdout.splitlines():
+            if line.startswith("worktree "):
+                main_repo = Path(line.split(None, 1)[1])
+                dist = main_repo / "desktop" / "dist"
+                if dist.is_dir() and (dist / "index.html").exists():
+                    return dist
+                break
+    except Exception:
+        pass
+    
     return None
+
+
+# Thread-local storage for per-thread output routing.
+_thread_output = threading.local()
 
 
 class DesktopUI:
@@ -206,7 +234,15 @@ class DesktopUI:
     # ─── Print Redirect ───────────────────────────────────────────────
 
     def _print_redirect(self, *args: Any, **kwargs: Any) -> None:
-        """Redirect print calls to the desktop API log buffer."""
+        """Redirect print calls to the desktop API log buffer.
+
+        When a thread has set a thread-local agent_id (via
+        :meth:`agent_output_for`), output is routed to that agent's
+        per-agent log buffer in the :class:`AgentRegistry` instead of
+        the shared orchestrator/agent log stream.  This prevents
+        interleaving of output from parallel agents (dtqz) and ensures
+        the Agents panel has live log data (ukr0).
+        """
         file = kwargs.get("file", sys.stdout)
         if file not in (sys.stdout, None):
             self._original_print(*args, **kwargs)
@@ -217,23 +253,42 @@ class DesktopUI:
         flush = kwargs.get("flush", False)
         msg = sep.join(str(arg) for arg in args) + end
 
-        with self._buffer_lock:
-            self._line_buffer += msg
+        # Resolve per-thread overrides (set by context managers)
+        target: str = getattr(_thread_output, "target", None) or self._target_buffer
+        style: Optional[str] = getattr(_thread_output, "style", None) or self._current_style
+        agent_id: Optional[str] = getattr(_thread_output, "agent_id", None)
 
-            while "\n" in self._line_buffer:
-                line, self._line_buffer = self._line_buffer.split("\n", 1)
+        # Use per-thread line buffer to avoid interleaving partial lines
+        # across parallel agents.  The main thread (no agent_id) still
+        # uses the shared instance buffer for backward compatibility.
+        if agent_id:
+            line_buf: str = getattr(_thread_output, "line_buffer", "")
+            line_buf += msg
+
+            while "\n" in line_buf:
+                line, line_buf = line_buf.split("\n", 1)
                 if line:
-                    self._api.push_log(line, self._target_buffer, self._current_style)
-                if self._flush_timer:
-                    self._flush_timer.cancel()
-                    self._flush_timer = None
+                    self._api.push_agent_log(agent_id, line)
 
-            if flush and self._line_buffer:
-                if self._flush_timer:
-                    self._flush_timer.cancel()
-                self._flush_timer = threading.Timer(0.1, self._deferred_flush)
-                self._flush_timer.daemon = True
-                self._flush_timer.start()
+            _thread_output.line_buffer = line_buf
+        else:
+            with self._buffer_lock:
+                self._line_buffer += msg
+
+                while "\n" in self._line_buffer:
+                    line, self._line_buffer = self._line_buffer.split("\n", 1)
+                    if line:
+                        self._api.push_log(line, target, style)
+                    if self._flush_timer:
+                        self._flush_timer.cancel()
+                        self._flush_timer = None
+
+                if flush and self._line_buffer:
+                    if self._flush_timer:
+                        self._flush_timer.cancel()
+                    self._flush_timer = threading.Timer(0.1, self._deferred_flush)
+                    self._flush_timer.daemon = True
+                    self._flush_timer.start()
 
     def _deferred_flush(self) -> None:
         with self._buffer_lock:
@@ -248,21 +303,39 @@ class DesktopUI:
 
     @contextmanager
     def orchestrator_output(self) -> Iterator[None]:
-        prev = self._target_buffer
-        self._target_buffer = "orchestrator"
+        prev = getattr(_thread_output, "target", None)
+        _thread_output.target = "orchestrator"
         try:
             yield
         finally:
-            self._target_buffer = prev
+            _thread_output.target = prev
 
     @contextmanager
     def agent_output(self) -> Iterator[None]:
-        prev = self._target_buffer
-        self._target_buffer = "agent"
+        prev = getattr(_thread_output, "target", None)
+        _thread_output.target = "agent"
         try:
             yield
         finally:
-            self._target_buffer = prev
+            _thread_output.target = prev
+
+    @contextmanager
+    def agent_output_for(self, agent_id: str) -> Iterator[None]:
+        """Route all print output on this thread to a specific agent's log buffer.
+
+        While this context is active, print() calls on the current thread
+        will be captured into the named agent's log ring in the
+        :class:`AgentRegistry` and will NOT appear in the shared
+        orchestrator/agent console log.  This is the key mechanism for
+        isolating parallel agent output (dtqz) and populating the Agents
+        panel with live log data (ukr0).
+        """
+        prev_agent_id = getattr(_thread_output, "agent_id", None)
+        _thread_output.agent_id = agent_id
+        try:
+            yield
+        finally:
+            _thread_output.agent_id = prev_agent_id
 
     @contextmanager
     def styled_output(self, style: str) -> Iterator[None]:
@@ -302,4 +375,22 @@ class DesktopUI:
 
     def log_agent(self, message: str, style: Optional[str] = None) -> None:
         self._api.push_log(message, "agent", style)
+
+    def push_agent_status(
+        self,
+        agent_id: str,
+        name: str,
+        iteration: int = 1,
+        status: str = "running",
+    ) -> None:
+        """Register or update a running agent card."""
+        self._api.push_agent_status(agent_id, name, iteration, status)
+
+    def push_agent_log(self, agent_id: str, line: str) -> None:
+        """Append a log line to an agent's recent log preview."""
+        self._api.push_agent_log(agent_id, line)
+
+    def remove_agent(self, agent_id: str) -> None:
+        """Remove a finished agent from the tracked set."""
+        self._api.remove_agent(agent_id)
 

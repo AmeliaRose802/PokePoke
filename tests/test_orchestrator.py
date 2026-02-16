@@ -1,11 +1,12 @@
 """Unit tests for orchestrator module."""
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, ANY, call
 
 from pokepoke.orchestrator import run_orchestrator
 from pokepoke.workflow import select_work_item, process_work_item
 from pokepoke.types import BeadsWorkItem, BeadsStats, CopilotResult
+from pokepoke import terminal_ui
 
 
 class TestSelectWorkItem:
@@ -2310,4 +2311,108 @@ class TestMaxParallelAgentsConfig:
         from pokepoke.config import ProjectConfig
         config = ProjectConfig.from_dict({"max_parallel_agents": -5})
         assert config.max_parallel_agents == 1
+
+
+class TestSingleAgentPanelRegistration:
+    """Test that the single-agent orchestrator path registers agents in the panel."""
+
+    @patch('subprocess.run')
+    @patch('pokepoke.agent_runner.run_worktree_cleanup')
+    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_periodic_maintenance')
+    @patch('pokepoke.orchestrator.process_work_item')
+    @patch('pokepoke.orchestrator.select_work_item')
+    @patch('pokepoke.orchestrator.get_ready_work_items')
+    def test_single_agent_registers_in_agents_panel(
+        self,
+        mock_get_items: Mock,
+        mock_select: Mock,
+        mock_process: Mock,
+        mock_maintenance: Mock,
+        mock_beta: Mock,
+        mock_worktree_cleanup: Mock,
+        mock_subprocess_run: Mock,
+    ) -> None:
+        """Single-agent mode should call push_agent_status and agent_output_for."""
+        from pokepoke.types import AgentStats
+        mock_beta.return_value = None
+        mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
+        mock_maintenance.return_value = None
+
+        item = BeadsWorkItem(
+            id="task-42",
+            title="Fix bug",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task",
+        )
+        mock_get_items.return_value = [item]
+        mock_select.return_value = item
+        mock_process.return_value = (True, 1, AgentStats(), 0, 0, None)
+
+        with patch.object(terminal_ui.ui, 'push_agent_status') as mock_push, \
+             patch.object(terminal_ui.ui, 'agent_output_for') as mock_output_for:
+            mock_output_for.return_value.__enter__ = Mock(return_value=None)
+            mock_output_for.return_value.__exit__ = Mock(return_value=False)
+
+            run_orchestrator(interactive=False, continuous=False)
+
+            # Should register agent as running, then update to success
+            assert mock_push.call_count == 2
+            first_call = mock_push.call_args_list[0]
+            assert first_call[1].get("status", first_call[0][3] if len(first_call[0]) > 3 else "running") == "running" or \
+                   first_call == call("task-42", ANY, iteration=1, status="running")
+            second_call = mock_push.call_args_list[1]
+            assert second_call == call("task-42", ANY, iteration=1, status="success")
+
+            # Should wrap process_work_item with agent_output_for
+            mock_output_for.assert_called_once_with("task-42")
+
+    @patch('subprocess.run')
+    @patch('pokepoke.agent_runner.run_worktree_cleanup')
+    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_periodic_maintenance')
+    @patch('pokepoke.orchestrator.process_work_item')
+    @patch('pokepoke.orchestrator.select_work_item')
+    @patch('pokepoke.orchestrator.get_ready_work_items')
+    def test_single_agent_registers_failed_status(
+        self,
+        mock_get_items: Mock,
+        mock_select: Mock,
+        mock_process: Mock,
+        mock_maintenance: Mock,
+        mock_beta: Mock,
+        mock_worktree_cleanup: Mock,
+        mock_subprocess_run: Mock,
+    ) -> None:
+        """Single-agent mode should set 'failed' status when processing fails."""
+        from pokepoke.types import AgentStats
+        mock_beta.return_value = None
+        mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
+        mock_maintenance.return_value = None
+
+        item = BeadsWorkItem(
+            id="task-99",
+            title="Failing task",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task",
+        )
+        mock_get_items.return_value = [item]
+        mock_select.return_value = item
+        mock_process.return_value = (False, 1, None, 0, 0, None)
+
+        with patch.object(terminal_ui.ui, 'push_agent_status') as mock_push, \
+             patch.object(terminal_ui.ui, 'agent_output_for') as mock_output_for:
+            mock_output_for.return_value.__enter__ = Mock(return_value=None)
+            mock_output_for.return_value.__exit__ = Mock(return_value=False)
+
+            run_orchestrator(interactive=False, continuous=False)
+
+            # Should register as running then update to failed
+            assert mock_push.call_count == 2
+            second_call = mock_push.call_args_list[1]
+            assert second_call == call("task-99", ANY, iteration=1, status="failed")
 

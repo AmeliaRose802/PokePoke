@@ -142,15 +142,7 @@ def process_work_item(
             # Aggregate stats
             current_stats = result.stats if result.stats else (parse_agent_stats(result.output) if result.output else None)
             if current_stats:
-                accumulated_stats.wall_duration += current_stats.wall_duration
-                accumulated_stats.api_duration += current_stats.api_duration
-                accumulated_stats.input_tokens += current_stats.input_tokens
-                accumulated_stats.output_tokens += current_stats.output_tokens
-                accumulated_stats.lines_added += current_stats.lines_added
-                accumulated_stats.lines_removed += current_stats.lines_removed
-                accumulated_stats.premium_requests += current_stats.premium_requests
-                accumulated_stats.tool_calls += current_stats.tool_calls
-                accumulated_stats.retries += current_stats.retries
+                accumulated_stats.accumulate(current_stats)
 
             # If work agent failed, break
             if not result.success:
@@ -209,12 +201,7 @@ def process_work_item(
                 set_terminal_banner(format_work_item_banner(item.id, item.title, "Beta Testing"))
                 beta_stats = run_beta_tester()
                 if beta_stats and item_stats:
-                    # Aggregate beta tester stats
-                    item_stats.wall_duration += beta_stats.wall_duration
-                    item_stats.api_duration += beta_stats.api_duration
-                    item_stats.input_tokens += beta_stats.input_tokens
-                    item_stats.output_tokens += beta_stats.output_tokens
-                    item_stats.premium_requests += beta_stats.premium_requests
+                    item_stats.accumulate(beta_stats)
                 set_terminal_banner(format_work_item_banner(item.id, item.title, "Completed"))
 
             if run_logger:
