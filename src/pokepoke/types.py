@@ -86,6 +86,18 @@ class AgentStats:
     retries: int = 0
     tool_calls: int = 0
 
+    def accumulate(self, other: 'AgentStats') -> None:
+        """Add all fields from another AgentStats into this one."""
+        self.wall_duration += other.wall_duration
+        self.api_duration += other.api_duration
+        self.input_tokens += other.input_tokens
+        self.output_tokens += other.output_tokens
+        self.lines_added += other.lines_added
+        self.lines_removed += other.lines_removed
+        self.premium_requests += other.premium_requests
+        self.retries += other.retries
+        self.tool_calls += other.tool_calls
+
 
 @dataclass
 class BeadsStats:
@@ -193,15 +205,7 @@ class SessionStats:
     def record_agent_stats(self, item_stats: AgentStats) -> None:
         """Aggregate per-item stats into the session totals."""
         with self._lock:
-            self.agent_stats.wall_duration += item_stats.wall_duration
-            self.agent_stats.api_duration += item_stats.api_duration
-            self.agent_stats.input_tokens += item_stats.input_tokens
-            self.agent_stats.output_tokens += item_stats.output_tokens
-            self.agent_stats.lines_added += item_stats.lines_added
-            self.agent_stats.lines_removed += item_stats.lines_removed
-            self.agent_stats.premium_requests += item_stats.premium_requests
-            self.agent_stats.tool_calls += item_stats.tool_calls
-            self.agent_stats.retries += item_stats.retries
+            self.agent_stats.accumulate(item_stats)
 
     def record_retries(self, retries: int) -> None:
         """Track extra retries for a work item."""

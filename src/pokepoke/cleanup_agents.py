@@ -13,13 +13,7 @@ from pokepoke import terminal_ui
 def aggregate_cleanup_stats(result_stats: Optional[AgentStats], cleanup_stats: Optional[AgentStats]) -> None:
     """Aggregate cleanup agent stats into result stats."""
     if cleanup_stats and result_stats:
-        result_stats.wall_duration += cleanup_stats.wall_duration
-        result_stats.api_duration += cleanup_stats.api_duration
-        result_stats.input_tokens += cleanup_stats.input_tokens
-        result_stats.output_tokens += cleanup_stats.output_tokens
-        result_stats.lines_added += cleanup_stats.lines_added
-        result_stats.lines_removed += cleanup_stats.lines_removed
-        result_stats.premium_requests += cleanup_stats.premium_requests
+        result_stats.accumulate(cleanup_stats)
 
 
 def run_cleanup_loop(item: BeadsWorkItem, result: CopilotResult, repo_root: Path, cwd: Optional[str] = None) -> tuple[bool, int]:

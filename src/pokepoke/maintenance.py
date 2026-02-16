@@ -8,15 +8,7 @@ from pokepoke.logging_utils import RunLogger
 
 def aggregate_stats(session_stats: SessionStats, item_stats: AgentStats) -> None:
     """Aggregate item statistics into session statistics."""
-    session_stats.agent_stats.wall_duration += item_stats.wall_duration
-    session_stats.agent_stats.api_duration += item_stats.api_duration
-    session_stats.agent_stats.input_tokens += item_stats.input_tokens
-    session_stats.agent_stats.output_tokens += item_stats.output_tokens
-    session_stats.agent_stats.lines_added += item_stats.lines_added
-    session_stats.agent_stats.lines_removed += item_stats.lines_removed
-    session_stats.agent_stats.premium_requests += item_stats.premium_requests
-    session_stats.agent_stats.tool_calls += item_stats.tool_calls
-    session_stats.agent_stats.retries += item_stats.retries
+    session_stats.agent_stats.accumulate(item_stats)
 
 
 def _run_special_agent(name: str, repo_root: Path) -> AgentStats | None:
