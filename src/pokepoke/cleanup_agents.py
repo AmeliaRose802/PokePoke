@@ -1,6 +1,5 @@
 """Cleanup agent invocation utilities."""
 
-import os
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -85,7 +84,7 @@ def get_pokepoke_prompts_dir() -> Path:
 
 def _get_current_git_context(cwd: Optional[str] = None) -> tuple[str, str, bool]:
     """Get current git context (directory, branch, is_worktree)."""
-    current_dir = cwd or os.getcwd()
+    current_dir = cwd or str(Path.cwd())
     
     # Get current branch
     try:
