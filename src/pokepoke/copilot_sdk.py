@@ -1,7 +1,7 @@
 """GitHub Copilot SDK integration."""
 import asyncio
 import os
-from typing import Optional, TYPE_CHECKING, Any
+from typing import Optional, TYPE_CHECKING, Any, List
 from copilot import CopilotClient  # type: ignore
 from .config import get_config
 from .types import BeadsWorkItem, CopilotResult, RetryConfig, AgentStats
@@ -9,6 +9,7 @@ from .prompts import PromptService
 from . import terminal_ui
 from .shutdown import is_shutting_down
 from .process_utils import wait_for_process_cleanup
+from .sdk_event_handler import create_event_handler
 
 DEFAULT_MODEL = "claude-opus-4.6"
 FALLBACK_MODEL = "claude-sonnet-4.5"
@@ -62,7 +63,6 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     final_prompt = prompt or build_prompt_from_work_item(work_item)
     max_timeout = timeout or 7200.0
     current_model = model or DEFAULT_MODEL
-    tried_fallback = False
     # Pass PYTHONIOENCODING via subprocess env (thread-safe, no global os.environ mutation)
     client_opts: dict[str, Any] = {"cli_path": "copilot.cmd", "log_level": "info", "env": {**os.environ, "PYTHONIOENCODING": "utf-8:replace"}}
     if cwd:
@@ -83,118 +83,11 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         session = await client.create_session(session_config)  # type: ignore[arg-type]
         print(f"[SDK] Session created: {session.session_id}\n")
         
-        done, output_lines, errors = asyncio.Event(), [], []
-        pending_tool_calls, idle_task = 0, None
-        total_input_tokens = total_output_tokens = total_cache_read_tokens = 0
-        total_cache_write_tokens = turn_count = total_tool_calls = 0
-
-        def handle_event(event: Any) -> None:
-            nonlocal total_input_tokens, total_output_tokens, total_cache_read_tokens
-            nonlocal total_cache_write_tokens, turn_count, total_tool_calls
-            nonlocal pending_tool_calls, idle_task
-            event_type = event.type.value if hasattr(event.type, 'value') else str(event.type)
-
-            if event_type == "assistant.message_delta":
-                terminal_ui.ui.set_style("green")
-                delta = None
-                if hasattr(event, 'data'):
-                    delta = getattr(event.data, 'delta_content', None) or \
-                            getattr(event.data, 'delta', None) or \
-                            getattr(event.data, 'content', None)
-                if delta:
-                    print(delta, end="", flush=True)
-                    output_lines.append(delta)
-                    if item_logger:
-                        item_logger.log_copilot_output(delta)
-                    
-            elif event_type == "assistant.message":
-                terminal_ui.ui.set_style("green")
-                content = getattr(event.data, 'content', None) if hasattr(event, 'data') else None
-                tool_requests = getattr(event.data, 'tool_requests', None) if hasattr(event, 'data') else None
-                if content:
-                    print(content)
-                    output_lines.append(content)
-                    if item_logger:
-                        item_logger.log_copilot_output(content)
-                terminal_ui.ui.set_style(None)
-                if tool_requests and len(tool_requests) > 0:
-                    print(f"\n[Copilot] Calling {len(tool_requests)} tool(s)...")
-
-            elif event_type == "tool.execution_start":
-                terminal_ui.ui.set_style(None)
-                total_tool_calls += 1
-                pending_tool_calls += 1
-                if idle_task and not idle_task.done():
-                    idle_task.cancel()
-                    idle_task = None
-                if hasattr(event, 'data'):
-                    tool_name = getattr(event.data, 'tool_name', 'unknown')
-                    args_str = str(getattr(event.data, 'arguments', {}))
-                    print(f"  🔧 {tool_name}({args_str})")
-                    output_lines.append(f"\n[Tool] {tool_name}({args_str})\n")
-                    if item_logger:
-                        item_logger.log_tool_call(tool_name, args_str)
-
-            elif event_type == "tool.execution_complete":
-                terminal_ui.ui.set_style(None)
-                pending_tool_calls = max(0, pending_tool_calls - 1)
-                if hasattr(event, 'data'):
-                    result = getattr(event.data, 'result', None)
-                    success = getattr(event.data, 'success', True)
-                    if result:
-                        result_content = getattr(result, 'content', str(result)) if hasattr(result, 'content') else str(result)
-                        status = "✅" if success else "❌"
-                        print(f"  {status} Result: {result_content}")
-                        output_lines.append(f"[Result] {result_content}\n")
-                        if item_logger:
-                            item_logger.log_tool_call(
-                                getattr(event.data, 'tool_name', 'unknown'),
-                                '', result=result_content, success=success
-                            )
-
-            elif event_type == "assistant.usage":
-                terminal_ui.ui.set_style(None)
-                if hasattr(event, 'data'):
-                    total_input_tokens += getattr(event.data, 'input_tokens', 0) or 0
-                    total_output_tokens += getattr(event.data, 'output_tokens', 0) or 0
-                    total_cache_read_tokens += getattr(event.data, 'cache_read_tokens', 0) or 0
-                    total_cache_write_tokens += getattr(event.data, 'cache_write_tokens', 0) or 0
-
-            elif event_type == "assistant.turn_end":
-                turn_count += 1
-                
-            elif event_type == "session.idle":
-                if idle_task and not idle_task.done():
-                    idle_task.cancel()
-                if pending_tool_calls > 0:
-                    print(f"\n[SDK] Session idle but {pending_tool_calls} tool(s) still executing - continuing...")
-                else:
-                    print("\n[SDK] Session idle - waiting to confirm completion...")
-                    async def check_still_idle() -> None:
-                        try:
-                            await asyncio.sleep(idle_timeout)
-                            if not done.is_set() and pending_tool_calls == 0:
-                                print("[SDK] Session confirmed idle - processing complete")
-                                done.set()
-                        except asyncio.CancelledError:
-                            pass
-                    idle_task = asyncio.create_task(check_still_idle())
-
-            elif event_type == "session.error":
-                nonlocal tried_fallback, current_model
-                error_msg = getattr(event.data, 'message', 'Unknown error') if hasattr(event, 'data') else 'Unknown error'
-                print(f"\n[SDK] ERROR: {error_msg}")
-                if item_logger:
-                    item_logger.log_error(error_msg)
-                if not tried_fallback and current_model == DEFAULT_MODEL:
-                    error_lower = error_msg.lower()
-                    if 'rate' in error_lower and 'limit' in error_lower:
-                        print(f"\n[SDK] Rate limit detected, will retry with {FALLBACK_MODEL}...")
-                        tried_fallback = True
-                        current_model = FALLBACK_MODEL
-                        return
-                errors.append(error_msg)
-                done.set()
+        done = asyncio.Event()
+        output_lines: List[str] = []
+        errors: List[str] = []
+        handle_event, stats = create_event_handler(done, output_lines, errors, item_logger, idle_timeout)
+        stats['current_model'] = current_model
         
         session.on(handle_event)
         timed_out = False
@@ -202,7 +95,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
 
         async def send_with_retry() -> bool:
             """Send message, returns True if should retry with fallback model."""
-            nonlocal session, session_config, tried_fallback, current_model, timed_out, interrupted
+            nonlocal session, session_config, current_model, timed_out, interrupted
             print("[SDK] Sending message...\n")
             await session.send({"prompt": final_prompt})
             try:
@@ -232,7 +125,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                 interrupted = True
                 return False
             # Check if we need to retry with fallback model
-            if tried_fallback and current_model == FALLBACK_MODEL and not done.is_set():
+            if stats['tried_fallback'] and stats['current_model'] == FALLBACK_MODEL and not done.is_set():
                 print(f"\n[SDK] Retrying with fallback model: {FALLBACK_MODEL}")
                 try:
                     await session.destroy()
@@ -264,17 +157,17 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         output_text = "".join(output_lines)
         success = len(errors) == 0
         print(f"\n{'='*60}\n[SDK] Result: {'SUCCESS' if success else 'FAILURE'}\n{'='*60}")
-        if turn_count > 0 or total_input_tokens > 0:
-            print(f"\n📊 Stats: {turn_count} turns, {total_input_tokens:,}+{total_output_tokens:,} tokens")
-        stats = AgentStats(
-            input_tokens=total_input_tokens, output_tokens=total_output_tokens,
-            premium_requests=turn_count, tool_calls=total_tool_calls,
+        if stats['turn_count'] > 0 or stats['total_input_tokens'] > 0:
+            print(f"\n📊 Stats: {stats['turn_count']} turns, {stats['total_input_tokens']:,}+{stats['total_output_tokens']:,} tokens")
+        agent_stats = AgentStats(
+            input_tokens=stats['total_input_tokens'], output_tokens=stats['total_output_tokens'],
+            premium_requests=stats['turn_count'], tool_calls=stats['total_tool_calls'],
             api_duration=0.0, wall_duration=0.0,
         )
         return CopilotResult(
             work_item_id=work_item.id, success=success, output=output_text,
             error="; ".join(errors) if errors else None,
-            attempt_count=1, stats=stats, model=current_model,
+            attempt_count=1, stats=agent_stats, model=current_model,
         )
 
     except KeyboardInterrupt:
