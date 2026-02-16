@@ -1,7 +1,7 @@
 """GitHub Copilot SDK integration."""
 import asyncio
 import os
-from typing import Optional, TYPE_CHECKING, Any
+from typing import Optional, TYPE_CHECKING, Any, List
 from copilot import CopilotClient  # type: ignore
 from .config import get_config
 from .types import BeadsWorkItem, CopilotResult, RetryConfig, AgentStats
@@ -83,7 +83,9 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         session = await client.create_session(session_config)  # type: ignore[arg-type]
         print(f"[SDK] Session created: {session.session_id}\n")
         
-        done, output_lines, errors = asyncio.Event(), [], []
+        done = asyncio.Event()
+        output_lines: List[str] = []
+        errors: List[str] = []
         handle_event, stats = create_event_handler(done, output_lines, errors, item_logger, idle_timeout)
         stats['current_model'] = current_model
         
