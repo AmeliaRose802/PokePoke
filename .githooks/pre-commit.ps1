@@ -100,6 +100,7 @@ $failed = @()
 
 # Checks that don't depend on build artifacts - can run in parallel
 $staticChecks = @(
+    @{ Name = "Pokepoke Boot"; Script = "check-pokepoke-import.ps1" }
     @{ Name = "Code Quality"; Script = "check-code-quality.ps1" }
     @{ Name = "Skipped Tests"; Script = "check-skipped-tests.ps1" }
     @{ Name = "File Length"; Script = "check-file-length.ps1" }

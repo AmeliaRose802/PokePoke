@@ -43,6 +43,7 @@ This repository uses a **multi-layered defense-in-depth approach** to prevent AI
   - `check-coverage.ps1`
   - `check-file-length.ps1`
   - `check-mcp-health.ps1`
+  - `check-pokepoke-import.ps1`
   - `check-skipped-tests.ps1`
   - `pre-commit.ps1`
   - `run-tests.ps1`
