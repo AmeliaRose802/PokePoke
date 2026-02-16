@@ -14,6 +14,7 @@ from pokepoke.workflow import process_work_item
 from pokepoke.work_item_selection import select_work_item
 from pokepoke.logging_utils import RunLogger
 from pokepoke.agent_names import initialize_agent_name
+from pokepoke.agent_context import get_agent_name
 from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner, clear_terminal_banner
 from pokepoke import terminal_ui
 from pokepoke.maintenance_state import increment_items_completed
@@ -26,11 +27,8 @@ from pokepoke.config import load_config
 
 
 def _finalize_session(
-    session_stats: SessionStats,
-    start_time: float,
-    items_completed: int,
-    total_requests: int,
-    run_logger: RunLogger,
+    session_stats: SessionStats, start_time: float,
+    items_completed: int, total_requests: int, run_logger: RunLogger,
 ) -> None:
     """Collect ending stats, print summary, and clean up UI."""
     try:
@@ -45,15 +43,10 @@ def _finalize_session(
 
 
 def _record_item_result(
-    selected_item: BeadsWorkItem,
-    success: bool,
-    requests: int,
-    item_stats: AgentStats | None,
-    cleanup_runs: int,
-    gate_runs: int,
+    selected_item: BeadsWorkItem, success: bool, requests: int,
+    item_stats: AgentStats | None, cleanup_runs: int, gate_runs: int,
     model_completion: ModelCompletionRecord | None,
-    session_stats: SessionStats,
-    run_logger: RunLogger,
+    session_stats: SessionStats, run_logger: RunLogger,
 ) -> tuple[bool, int]:
     """Record the result of processing a single work item.
 
@@ -96,21 +89,19 @@ def _record_item_result(
 
 
 def run_orchestrator(
-    interactive: bool = True,
-    continuous: bool = False,
-    run_beta_first: bool = False,
-    agent_name_override: str | None = None,
+    interactive: bool = True, continuous: bool = False,
+    run_beta_first: bool = False, agent_name_override: str | None = None,
     max_parallel_agents: int = 1,
 ) -> int:
     """Main orchestrator loop.
-    
+
     Args:
         interactive: If True, prompt for user input at decision points
         continuous: If True, loop continuously; if False, process one item and exit
-        run_beta_first: If True, run beta tester at startup before processing work items
+        run_beta_first: If True, run beta tester at startup
         agent_name_override: Optional custom agent name supplied via CLI
         max_parallel_agents: Max concurrent work-item agents (default 1 = sequential)
-        
+
     Returns:
         Exit code (0 for success, 1 for failure)
     """
@@ -228,9 +219,22 @@ def run_orchestrator(
                 set_terminal_banner(banner)
                 terminal_ui.ui.update_header(selected_item.id, selected_item.title)
                 
-                success, requests, item_stats, cleanup_runs, gate_runs, model_completion = process_work_item(
-                    selected_item, interactive, run_logger=run_logger
-                )
+                # Register agent in the Agents panel for single-agent mode
+                agent_id = selected_item.id
+                display_name = get_agent_name(default="pokepoke")
+                terminal_ui.ui.push_agent_status(agent_id, display_name, iteration=1, status="running")
+                
+                success = False
+                try:
+                    with terminal_ui.ui.agent_output_for(agent_id):
+                        success, requests, item_stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+                            selected_item, interactive, run_logger=run_logger
+                        )
+                finally:
+                    terminal_ui.ui.push_agent_status(
+                        agent_id, display_name, iteration=1,
+                        status="success" if success else "failed",
+                    )
                 
                 # Track items that failed claiming to avoid re-selecting them
                 if not success and requests == 0:
@@ -317,13 +321,8 @@ def run_orchestrator(
             pass  # Best effort cleanup
 
 
-
 def main() -> int:
-    """Main entry point for PokePoke CLI.
-    
-    Returns:
-        Exit code (0 for success, 1 for failure)
-    """
+    """Main entry point for PokePoke CLI."""
     parser = argparse.ArgumentParser(
         description="PokePoke - Autonomous Beads + Copilot CLI Orchestrator"
     )
