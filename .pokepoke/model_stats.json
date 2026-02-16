@@ -216,6 +216,13 @@
       "duration_seconds": 27519.574836730957,
       "gate_passed": false,
       "timestamp": "2026-02-16T15:14:34.682918+00:00"
+    },
+    {
+      "item_id": "PokePoke-v2b4",
+      "model": "claude-opus-4.6",
+      "duration_seconds": 7207.458575487137,
+      "gate_passed": false,
+      "timestamp": "2026-02-16T21:25:15.305112+00:00"
     }
   ],
   "summary": {
@@ -230,14 +237,14 @@
       "last_used": "2026-02-15T04:18:40.512173+00:00"
     },
     "claude-opus-4.6": {
-      "total_items_attempted": 3,
+      "total_items_attempted": 4,
       "total_items_succeeded": 2,
-      "total_items_failed": 1,
-      "total_duration_seconds": 10047.606574296951,
+      "total_items_failed": 2,
+      "total_duration_seconds": 17255.065149784088,
       "total_retries": 0,
-      "average_duration": 3349.2,
-      "success_rate": 0.6667,
-      "last_used": "2026-02-15T09:11:19.367239+00:00"
+      "average_duration": 4313.77,
+      "success_rate": 0.5,
+      "last_used": "2026-02-16T21:25:15.305112+00:00"
     },
     "gpt-5.1-codex-max": {
       "total_items_attempted": 3,
