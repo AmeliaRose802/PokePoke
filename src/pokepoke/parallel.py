@@ -36,12 +36,40 @@ def _parallel_process_item(
     code resolves the correct identity for this worker instead of the
     process-global ``os.environ['AGENT_NAME']``.
 
+    Registers the agent in the desktop UI agent registry and routes all
+    print output to the agent's own log buffer so parallel output is not
+    interleaved (dtqz) and the Agents panel shows live data (ukr0).
+
     Releases the semaphore and removes the item from active_ids when done.
     """
+    agent_id = item.id  # Use work-item id as unique agent identifier
+    display_name = worker_agent_name or "agent"
+
     if worker_agent_name:
         set_agent_name(worker_agent_name)
+
+    # Register agent in the UI panel
+    terminal_ui.ui.push_agent_status(agent_id, display_name, iteration=1, status="running")
+    terminal_ui.ui.log_orchestrator(f"\U0001f680 Agent {display_name} started item {item.id}: {item.title}")
+
     try:
-        return process_work_item(item, interactive=False, run_logger=run_logger)
+        with terminal_ui.ui.agent_output_for(agent_id):
+            result = process_work_item(item, interactive=False, run_logger=run_logger)
+        # Update agent status based on result
+        success = result[0]
+        terminal_ui.ui.push_agent_status(
+            agent_id, display_name, iteration=1,
+            status="success" if success else "failed",
+        )
+        status_emoji = "\u2705" if success else "\u274c"
+        terminal_ui.ui.log_orchestrator(
+            f"{status_emoji} Agent {display_name} {'completed' if success else 'failed'} item {item.id}"
+        )
+        return result
+    except Exception:
+        terminal_ui.ui.push_agent_status(agent_id, display_name, iteration=1, status="failed")
+        terminal_ui.ui.log_orchestrator(f"\u274c Agent {display_name} raised exception on item {item.id}")
+        raise
     finally:
         clear_agent_name()
         with active_ids_lock:
