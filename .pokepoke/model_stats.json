@@ -223,6 +223,13 @@
       "duration_seconds": 7207.458575487137,
       "gate_passed": false,
       "timestamp": "2026-02-16T21:25:15.305112+00:00"
+    },
+    {
+      "item_id": "PokePoke-4yaq",
+      "model": "gpt-5.1-codex-max",
+      "duration_seconds": 1861.7071468830109,
+      "gate_passed": false,
+      "timestamp": "2026-02-17T23:11:26.383485+00:00"
     }
   ],
   "summary": {
@@ -247,14 +254,14 @@
       "last_used": "2026-02-16T21:25:15.305112+00:00"
     },
     "gpt-5.1-codex-max": {
-      "total_items_attempted": 3,
+      "total_items_attempted": 4,
       "total_items_succeeded": 2,
-      "total_items_failed": 1,
-      "total_duration_seconds": 8519.789409399033,
+      "total_items_failed": 2,
+      "total_duration_seconds": 10381.496556282043,
       "total_retries": 0,
-      "average_duration": 2839.93,
-      "success_rate": 0.6667,
-      "last_used": "2026-02-16T06:29:39.102933+00:00"
+      "average_duration": 2595.37,
+      "success_rate": 0.5,
+      "last_used": "2026-02-17T23:11:26.383485+00:00"
     },
     "gpt-5-codex": {
       "total_items_attempted": 3,
