@@ -115,13 +115,9 @@ def run_gate_agent(
 
 
 def run_maintenance_agent(
-    agent_name: str,
-    prompt_file: str,
-    repo_root: Optional[Path] = None,
-    needs_worktree: bool = True,
-    merge_changes: bool = True,
-    model: Optional[str] = None,
-    item_logger: Optional['ItemLogger'] = None
+    agent_name: str, prompt_file: str, repo_root: Optional[Path] = None,
+    needs_worktree: bool = True, merge_changes: bool = True,
+    model: Optional[str] = None, item_logger: Optional['ItemLogger'] = None
 ) -> Optional[AgentStats]:
     """Run a maintenance agent with optional worktree isolation."""
     terminal_ui.ui.set_current_agent(f"{agent_name} Agent")
@@ -144,12 +140,8 @@ def run_maintenance_agent(
     base_agent_type = f"maintenance-{agent_name.lower().replace(' ', '-')}"
     agent_id = _generate_unique_agent_id(base_agent_type) if needs_worktree else base_agent_type
     agent_item = BeadsWorkItem(
-        id=agent_id,
-        title=f"{agent_name} Maintenance",
-        description=agent_prompt,
-        status="in_progress",
-        priority=0,
-        issue_type="task",
+        id=agent_id, title=f"{agent_name} Maintenance", description=agent_prompt,
+        status="in_progress", priority=0, issue_type="task",
         labels=["maintenance", agent_name.lower()]
     )
     
@@ -169,13 +161,8 @@ def run_maintenance_agent(
 
 
 def _run_simple_agent(
-    agent_name: str,
-    agent_item: BeadsWorkItem,
-    agent_prompt: str,
-    deny_write: bool = True,
-    model: Optional[str] = None,
-    cwd: Optional[str] = None,
-    item_logger: Optional['ItemLogger'] = None
+    agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, deny_write: bool = True,
+    model: Optional[str] = None, cwd: Optional[str] = None, item_logger: Optional['ItemLogger'] = None
 ) -> Optional[AgentStats]:
     """Run a simple agent in the main repo with configurable write access."""
     print(f"\n📋 Running {agent_name} ({'no write' if deny_write else 'write enabled'}){f', model={model}' if model else ''}")
@@ -198,46 +185,50 @@ def _run_main_repo_agent(agent_name: str, agent_item: BeadsWorkItem, agent_promp
 def run_worktree_cleanup(repo_root: Optional[Path] = None, item_logger: Optional['ItemLogger'] = None) -> Optional[AgentStats]:
     """Run worktree cleanup agent to merge/delete stale worktrees."""
     terminal_ui.ui.set_current_agent("Worktree Cleanup")
+    
+    # Register Worktree Cleanup agent in the Agents panel (if not already registered by maintenance)
+    agent_id = "worktree-cleanup"
+    terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="running")
     print(f"\n{'='*60}\n🌳 Running Worktree Cleanup Agent\n{'='*60}")
     
     try:
-        prompts_dir = get_pokepoke_prompts_dir()
-        prompt_path = prompts_dir / "worktree-cleanup.md"
-    except FileNotFoundError as e:
-        print(f"❌ {e}")
-        return None
-    
-    if not prompt_path.exists():
-        print(f"❌ Prompt not found at {prompt_path}")
-        return None
-    
-    cleanup_prompt = prompt_path.read_text(encoding='utf-8')
-    
-    agent_id = "worktree-cleanup"
-    cleanup_item = BeadsWorkItem(
-        id=agent_id,
-        title="Worktree Cleanup and Merge",
-        description=cleanup_prompt,
-        status="in_progress",
-        priority=0,
-        issue_type="task",
-        labels=["maintenance", "worktree-cleanup"]
-    )
-    
-    # Pass repo_root as cwd to the agent instead of changing process directory
-    cwd = str(repo_root) if repo_root is not None else None
-    return _run_main_repo_agent("Worktree Cleanup", cleanup_item, cleanup_prompt, cwd=cwd, item_logger=item_logger)
+        try:
+            prompts_dir = get_pokepoke_prompts_dir()
+            prompt_path = prompts_dir / "worktree-cleanup.md"
+        except FileNotFoundError as e:
+            print(f"❌ {e}")
+            terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed")
+            return None
+        
+        if not prompt_path.exists():
+            print(f"❌ Prompt not found at {prompt_path}")
+            terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed")
+            return None
+        
+        cleanup_prompt = prompt_path.read_text(encoding='utf-8')
+        cleanup_item = BeadsWorkItem(
+            id=agent_id, title="Worktree Cleanup and Merge", description=cleanup_prompt,
+            status="in_progress", priority=0, issue_type="task",
+            labels=["maintenance", "worktree-cleanup"]
+        )
+        
+        # Pass repo_root as cwd to the agent instead of changing process directory
+        cwd = str(repo_root) if repo_root is not None else None
+        agent_result = _run_main_repo_agent("Worktree Cleanup", cleanup_item, cleanup_prompt, cwd=cwd, item_logger=item_logger)
+        
+        # Update agent status based on result
+        status = "success" if agent_result is not None else "failed"
+        terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status=status)
+        return agent_result
+        
+    except Exception:
+        terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed")
+        raise
 
 
 def _run_worktree_agent(
-    agent_name: str,
-    agent_id: str,
-    agent_item: BeadsWorkItem,
-    agent_prompt: str,
-    repo_root: Path,
-    merge_changes: bool = True,
-    model: Optional[str] = None,
-    item_logger: Optional['ItemLogger'] = None
+    agent_name: str, agent_id: str, agent_item: BeadsWorkItem, agent_prompt: str, repo_root: Path,
+    merge_changes: bool = True, model: Optional[str] = None, item_logger: Optional['ItemLogger'] = None
 ) -> Optional[AgentStats]:
     """Run a code-modifying maintenance agent in a worktree."""
     print(f"\n🌳 Creating worktree for {agent_id}...")
@@ -264,11 +255,7 @@ def _run_worktree_agent(
             print(f"❌ Error invoking Copilot: {e}")
             from pokepoke.types import CopilotResult
             result = CopilotResult(
-                work_item_id=agent_item.id,
-                success=False,
-                output="",
-                error=str(e),
-                attempt_count=1
+                work_item_id=agent_item.id, success=False, output="", error=str(e), attempt_count=1
             )
         
         cleanup_success, _ = run_cleanup_loop(agent_item, result, repo_root, cwd=worktree_cwd)
@@ -330,69 +317,80 @@ def _run_worktree_agent(
 def run_beta_tester(repo_root: Optional[Path] = None, item_logger: Optional['ItemLogger'] = None) -> Optional[AgentStats]:
     """Run beta tester agent to test all MCP tools. Restarts MCP server first."""
     config = get_config()
-
     terminal_ui.ui.set_current_agent("Beta Tester")
+    
+    # Register Beta Tester agent in the Agents panel (if not already registered by maintenance)
+    agent_id = "beta-tester"
+    terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="running")
+    
     print(f"\n{'='*60}\n🧪 Running Beta Tester Agent\n{'='*60}")
     
-    # Restart MCP server to load latest code (if configured)
-    if config.mcp_server.enabled and config.mcp_server.restart_script:
-        print("\n🔄 Restarting MCP server...")
-        try:
-            package_root = Path(__file__).resolve().parent.parent.parent
-            restart_script = package_root / config.mcp_server.restart_script
-            
-            if not restart_script.exists():
-                print(f"⚠️  Restart script not found at {restart_script}")
-                print("   Proceeding without restart - server may have stale code")
-            else:
-                result = subprocess.run(
-                    ["pwsh", "-NoProfile", "-File", str(restart_script)],
-                    capture_output=True,
-                    text=True,
-                    encoding='utf-8',
-                    timeout=60
-                )
-                if result.returncode == 0:
-                    print("✓ MCP server restarted successfully")
-                else:
-                    print(f"⚠️  MCP server restart had issues (exit code {result.returncode})")
-                    if result.stdout:
-                        print(f"   Output: {result.stdout[:200]}")
-        except subprocess.TimeoutExpired:
-            print("⚠️  MCP server restart timed out (server may still be starting)")
-        except Exception as e:
-            print(f"⚠️  Could not restart MCP server: {e}")
-            print("   Proceeding anyway - server may have stale code")
-    elif not config.mcp_server.enabled:
-        print("ℹ️  MCP server not enabled in config - skipping restart")
-    
-    # Load beta tester prompt
     try:
-        prompts_dir = get_pokepoke_prompts_dir()
-        prompt_path = prompts_dir / "beta-tester.md"
-    except FileNotFoundError as e:
-        print(f"❌ {e}")
-        return None
-    
-    if not prompt_path.exists():
-        print(f"❌ Prompt not found at {prompt_path}")
-        return None
-    
-    beta_prompt = prompt_path.read_text(encoding='utf-8')
-    
-    # Use unique ID with timestamp to avoid worktree conflicts on multiple runs
-    agent_id = _generate_unique_agent_id("beta-tester")
-    beta_item = BeadsWorkItem(
-        id=agent_id,
-        title="Beta Test All MCP Tools",
-        description=beta_prompt,
-        status="in_progress",
-        priority=2,
-        issue_type="task",
-        labels=["testing", "mcp-server", "automated"]
-    )
-    
-    print("\n🧪 Invoking beta tester agent in isolated worktree (will be discarded)...")
-    if repo_root is None:
-        repo_root = Path.cwd()
-    return _run_worktree_agent("Beta Tester", agent_id, beta_item, beta_prompt, repo_root, merge_changes=False, item_logger=item_logger)
+        # Restart MCP server to load latest code (if configured)
+        if config.mcp_server.enabled and config.mcp_server.restart_script:
+            print("\n🔄 Restarting MCP server...")
+            try:
+                package_root = Path(__file__).resolve().parent.parent.parent
+                restart_script = package_root / config.mcp_server.restart_script
+                
+                if not restart_script.exists():
+                    print(f"⚠️  Restart script not found at {restart_script}")
+                    print("   Proceeding without restart - server may have stale code")
+                else:
+                    result = subprocess.run(
+                        ["pwsh", "-NoProfile", "-File", str(restart_script)],
+                        capture_output=True, text=True, encoding='utf-8', timeout=60
+                    )
+                    if result.returncode == 0:
+                        print("✓ MCP server restarted successfully")
+                    else:
+                        print(f"⚠️  MCP server restart had issues (exit code {result.returncode})")
+                        if result.stdout:
+                            print(f"   Output: {result.stdout[:200]}")
+            except subprocess.TimeoutExpired:
+                print("⚠️  MCP server restart timed out (server may still be starting)")
+            except Exception as e:
+                print(f"⚠️  Could not restart MCP server: {e}")
+                print("   Proceeding anyway - server may have stale code")
+        elif not config.mcp_server.enabled:
+            print("ℹ️  MCP server not enabled in config - skipping restart")
+        
+        # Load beta tester prompt
+        try:
+            prompts_dir = get_pokepoke_prompts_dir()
+            prompt_path = prompts_dir / "beta-tester.md"
+        except FileNotFoundError as e:
+            print(f"❌ {e}")
+            terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed")
+            return None
+        
+        if not prompt_path.exists():
+            print(f"❌ Prompt not found at {prompt_path}")
+            terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed")
+            return None
+        
+        beta_prompt = prompt_path.read_text(encoding='utf-8')
+        
+        # Use unique ID with timestamp to avoid worktree conflicts on multiple runs
+        worktree_agent_id = _generate_unique_agent_id("beta-tester")
+        beta_item = BeadsWorkItem(
+            id=worktree_agent_id, title="Beta Test All MCP Tools", description=beta_prompt,
+            status="in_progress", priority=2, issue_type="task",
+            labels=["testing", "mcp-server", "automated"]
+        )
+        
+        print("\n🧪 Invoking beta tester agent in isolated worktree (will be discarded)...")
+        if repo_root is None:
+            repo_root = Path.cwd()
+        
+        agent_result = _run_worktree_agent("Beta Tester", worktree_agent_id, beta_item, beta_prompt, repo_root, merge_changes=False, item_logger=item_logger)
+        
+        # Update agent status based on result
+        status = "success" if agent_result is not None else "failed"
+        terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status=status)
+        
+        return agent_result
+        
+    except Exception:
+        terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed")
+        raise

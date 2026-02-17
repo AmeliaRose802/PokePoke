@@ -140,8 +140,14 @@ def _get_current_git_context(cwd: Optional[str] = None) -> tuple[str, str, bool]
 def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path, cwd: Optional[str] = None) -> tuple[bool, Optional[AgentStats]]:
     """Invoke cleanup agent to commit uncommitted changes."""
     terminal_ui.ui.set_current_agent("Cleanup Agent")
+    
+    # Register cleanup agent in the Agents panel
+    agent_id = f"{item.id}-cleanup"
+    terminal_ui.ui.push_agent_status(agent_id, "Cleanup Agent", iteration=1, status="running")
+    
     cleanup_prompt_template = load_prompt_file("cleanup.md")
     if cleanup_prompt_template is None:
+        terminal_ui.ui.push_agent_status(agent_id, "Cleanup Agent", iteration=1, status="failed")
         return False, None
     
     # Get current context information
@@ -181,9 +187,20 @@ def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path, cwd: Optional[str
     )
     
     print("\n🧹 Invoking cleanup agent...")
-    copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd)
     
-    return copilot_result.success, copilot_result.stats
+    # Route all output to the cleanup agent's log buffer
+    try:
+        with terminal_ui.ui.agent_output_for(agent_id):
+            copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd)
+        
+        # Update agent status based on result
+        status = "success" if copilot_result.success else "failed"
+        terminal_ui.ui.push_agent_status(agent_id, "Cleanup Agent", iteration=1, status=status)
+        
+        return copilot_result.success, copilot_result.stats
+    except Exception:
+        terminal_ui.ui.push_agent_status(agent_id, "Cleanup Agent", iteration=1, status="failed")
+        raise
 
 
 def invoke_merge_conflict_cleanup_agent(
@@ -203,12 +220,18 @@ def invoke_merge_conflict_cleanup_agent(
         cwd: Optional working directory for the Copilot process.
     """
     terminal_ui.ui.set_current_agent("Merge Conflict Cleanup")
+    
+    # Register merge conflict cleanup agent in the Agents panel
+    agent_id = f"{item.id}-merge-fix"
+    terminal_ui.ui.push_agent_status(agent_id, "Merge Conflict Cleanup", iteration=1, status="running")
+    
     from pokepoke.git_operations import is_merge_in_progress, get_unmerged_files as git_get_unmerged
     
     cleanup_prompt_template = load_prompt_file("merge-conflict-cleanup.md")
     if cleanup_prompt_template is None:
         # Fallback to standard cleanup
         print("⚠️ Falling back to standard cleanup agent")
+        terminal_ui.ui.push_agent_status(agent_id, "Merge Conflict Cleanup", iteration=1, status="failed")
         return invoke_cleanup_agent(item, repo_root)
     
     # Get current context information
@@ -280,6 +303,16 @@ def invoke_merge_conflict_cleanup_agent(
         if len(unmerged_files) > 5:
             print(f"      ... and {len(unmerged_files) - 5} more")
     
-    copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd)
-    
-    return copilot_result.success, copilot_result.stats
+    # Route all output to the merge conflict cleanup agent's log buffer
+    try:
+        with terminal_ui.ui.agent_output_for(agent_id):
+            copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd)
+        
+        # Update agent status based on result
+        status = "success" if copilot_result.success else "failed"
+        terminal_ui.ui.push_agent_status(agent_id, "Merge Conflict Cleanup", iteration=1, status=status)
+        
+        return copilot_result.success, copilot_result.stats
+    except Exception:
+        terminal_ui.ui.push_agent_status(agent_id, "Merge Conflict Cleanup", iteration=1, status="failed")
+        raise
