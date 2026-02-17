@@ -17,6 +17,7 @@ interface Props {
 export function StatsBar({ stats, modelLeaderboard, onOpenStats }: Props) {
   const elapsed = stats?.elapsed_time ?? 0;
   const doneCount = stats?.items_completed ?? 0;
+  const apiDuration = stats?.agent_stats?.api_duration ?? 0;
   const currentModel = inferCurrentModel(stats, modelLeaderboard);
 
   const modelStatusClass =
@@ -36,6 +37,10 @@ export function StatsBar({ stats, modelLeaderboard, onOpenStats }: Props) {
         <div className="summary-block">
           <span className="summary-label">Done</span>
           <span className="summary-value">{doneCount}</span>
+        </div>
+        <div className="summary-block">
+          <span className="summary-label">API</span>
+          <span className="summary-value">{apiDuration > 0 ? `${apiDuration.toFixed(1)}s` : "—"}</span>
         </div>
         <div className="summary-block model-block">
           <span className="summary-label">Active model</span>

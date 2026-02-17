@@ -1092,3 +1092,56 @@ class TestInvokeCopilotSDKAsync:
         )
 
         assert result.success
+
+@pytest.mark.asyncio
+class TestAPIStatsIntegration:
+    """Tests for API duration stats integration."""
+    
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.copilot_sdk.parse_agent_stats')
+    async def test_api_duration_parsed_from_output(self, mock_parse_stats, mock_client_class, sample_work_item):
+        """Test that API duration is parsed from Copilot output and included in stats."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.types import AgentStats
+        import asyncio
+        
+        # Mock parse_agent_stats to return stats with API duration
+        mock_parsed_stats = AgentStats(api_duration=12.5, wall_duration=30.0)
+        mock_parse_stats.return_value = mock_parsed_stats
+        
+        mock_client = AsyncMock()
+        mock_session = AsyncMock()
+        mock_client.start = AsyncMock()
+        mock_client.create_session = AsyncMock(return_value=mock_session)
+        mock_client.stop = AsyncMock()
+        mock_client_class.return_value = mock_client
+        
+        stored_handler = None
+        def mock_on(handler):
+            nonlocal stored_handler
+            stored_handler = handler
+        mock_session.on = mock_on
+        
+        async def mock_send(message):
+            if stored_handler:
+                event = MagicMock()
+                event.type.value = "session.idle"
+                stored_handler(event)
+        mock_session.send = mock_send
+        mock_session.destroy = AsyncMock()
+        
+        result = await invoke_copilot_sdk(work_item=sample_work_item, idle_timeout=0.01)
+        assert result.stats.api_duration == 12.5
+
+    def test_parse_agent_stats_import(self):
+        """Test that parse_agent_stats is properly imported and accessible."""
+        from pokepoke.copilot_sdk import parse_agent_stats
+        from pokepoke.types import AgentStats
+        
+        # Test with sample output
+        output = "Total duration (API): 5.0s\nTotal duration (wall): 10.0s"
+        result = parse_agent_stats(output)
+        
+        assert isinstance(result, AgentStats)
+        assert result.api_duration == 5.0
+        assert result.wall_duration == 10.0
