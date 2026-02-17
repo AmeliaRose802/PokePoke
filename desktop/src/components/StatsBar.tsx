@@ -6,7 +6,12 @@
  */
 
 import type { SessionStats, ModelPerformanceSummary } from "../types";
-import { formatElapsed, formatPercent, inferCurrentModel } from "../utils/stats";
+import {
+  formatDurationShort,
+  formatElapsed,
+  formatPercent,
+  inferCurrentModel,
+} from "../utils/stats";
 
 interface Props {
   stats: SessionStats | null;
@@ -17,6 +22,9 @@ interface Props {
 export function StatsBar({ stats, modelLeaderboard, onOpenStats }: Props) {
   const elapsed = stats?.elapsed_time ?? 0;
   const doneCount = stats?.items_completed ?? 0;
+  const apiDurationSeconds = stats?.agent_stats?.api_duration ?? 0;
+  const apiDurationLabel =
+    apiDurationSeconds > 0 ? formatDurationShort(apiDurationSeconds) : "—";
   const currentModel = inferCurrentModel(stats, modelLeaderboard);
 
   const modelStatusClass =
@@ -36,6 +44,10 @@ export function StatsBar({ stats, modelLeaderboard, onOpenStats }: Props) {
         <div className="summary-block">
           <span className="summary-label">Done</span>
           <span className="summary-value">{doneCount}</span>
+        </div>
+        <div className="summary-block">
+          <span className="summary-label">API</span>
+          <span className="summary-value">{apiDurationLabel}</span>
         </div>
         <div className="summary-block model-block">
           <span className="summary-label">Active model</span>

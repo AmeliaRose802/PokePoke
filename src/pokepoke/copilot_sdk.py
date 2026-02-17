@@ -92,13 +92,16 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         session.on(handle_event)
         timed_out = False
         interrupted = False
+        total_wall_duration = 0.0
+        total_api_duration = 0.0
 
         async def send_with_retry() -> bool:
             """Send message, returns True if should retry with fallback model."""
-            nonlocal session, session_config, current_model, timed_out, interrupted
+            nonlocal session, session_config, current_model, timed_out, interrupted, total_wall_duration, total_api_duration
             print("[SDK] Sending message...\n")
-            await session.send({"prompt": final_prompt})
+            attempt_start = asyncio.get_event_loop().time()
             try:
+                await session.send({"prompt": final_prompt})
                 deadline = asyncio.get_event_loop().time() + max_timeout
                 while not done.is_set():
                     if is_shutting_down():
@@ -124,6 +127,11 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     pass
                 interrupted = True
                 return False
+            finally:
+                attempt_elapsed = asyncio.get_event_loop().time() - attempt_start
+                total_wall_duration += attempt_elapsed
+                # Copilot SDK does not emit separate API timing, so treat session time as API time.
+                total_api_duration += attempt_elapsed
             # Check if we need to retry with fallback model
             if stats['tried_fallback'] and stats['current_model'] == FALLBACK_MODEL and not done.is_set():
                 print(f"\n[SDK] Retrying with fallback model: {FALLBACK_MODEL}")
@@ -162,7 +170,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         agent_stats = AgentStats(
             input_tokens=stats['total_input_tokens'], output_tokens=stats['total_output_tokens'],
             premium_requests=stats['turn_count'], tool_calls=stats['total_tool_calls'],
-            api_duration=0.0, wall_duration=0.0,
+            api_duration=total_api_duration, wall_duration=total_wall_duration,
         )
         return CopilotResult(
             work_item_id=work_item.id, success=success, output=output_text,

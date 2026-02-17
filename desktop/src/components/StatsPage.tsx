@@ -59,6 +59,7 @@ export function StatsPage({
     { label: "Done", value: stats?.items_completed ?? 0, icon: "✅" },
     { label: "Retries", value: agent?.retries ?? 0, icon: "🔁" },
     { label: "API Calls", value: agent?.premium_requests ?? 0, icon: "📡" },
+    { label: "API seconds", value: (agent?.api_duration ?? 0) > 0 ? formatDurationShort(agent?.api_duration) : "—", icon: "⚡" },
     {
       label: "Tokens",
       value: formatTokens((agent?.input_tokens ?? 0) + (agent?.output_tokens ?? 0)),
