@@ -10,6 +10,7 @@ import { useBridge } from "./useBridge";
 import { WorkItemHeader } from "./components/WorkItemHeader";
 import { LogPanel } from "./components/LogPanel";
 import { AgentsPanel } from "./components/AgentsPanel";
+import { AgentLogPanel } from "./components/AgentLogPanel";
 import { StatsBar } from "./components/StatsBar";
 import { ConnectionIndicator } from "./components/ConnectionIndicator";
 import { PromptEditor } from "./components/PromptEditor";
@@ -103,31 +104,39 @@ function App() {
 
       {/* Main content area with logs and agents panel */}
       <div className="main-content">
-        {/* Log panels */}
+        {/* Log panels or selected agent log panel */}
         <div className="log-container">
-          <LogPanel
-            title="Orchestrator"
-            icon="🔧"
-            logs={bridge.orchestratorLogs}
-            accentColor="#f0ad4e"
-            focused={activePanel === "orchestrator"}
-            onFocus={() => setActivePanel("orchestrator")}
-          />
-          <LogPanel
-            title="Agent"
-            icon="🤖"
-            logs={bridge.agentLogs}
-            accentColor="#5cb85c"
-            focused={activePanel === "agent"}
-            onFocus={() => setActivePanel("agent")}
-          />
+          {selectedAgentDetail ? (
+            <AgentLogPanel
+              agent={selectedAgentDetail}
+              onClose={() => setSelectedAgentId(null)}
+            />
+          ) : (
+            <>
+              <LogPanel
+                title="Orchestrator"
+                icon="🔧"
+                logs={bridge.orchestratorLogs}
+                accentColor="#f0ad4e"
+                focused={activePanel === "orchestrator"}
+                onFocus={() => setActivePanel("orchestrator")}
+              />
+              <LogPanel
+                title="Agent"
+                icon="🤖"
+                logs={bridge.agentLogs}
+                accentColor="#5cb85c"
+                focused={activePanel === "agent"}
+                onFocus={() => setActivePanel("agent")}
+              />
+            </>
+          )}
         </div>
 
         {/* Agents panel */}
         <AgentsPanel
           agents={bridge.agents}
           selectedAgentId={displayedAgentId}
-          selectedAgentDetail={selectedAgentDetail}
           onSelectAgent={setSelectedAgentId}
         />
       </div>
