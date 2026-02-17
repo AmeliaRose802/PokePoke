@@ -10,6 +10,8 @@ import {
   formatDurationShort,
   formatElapsed,
   formatPercent,
+  getCompletedItems,
+  getDoneCount,
   inferCurrentModel,
 } from "../utils/stats";
 
@@ -21,11 +23,16 @@ interface Props {
 
 export function StatsBar({ stats, modelLeaderboard, onOpenStats }: Props) {
   const elapsed = stats?.elapsed_time ?? 0;
-  const doneCount = stats?.items_completed ?? 0;
+  const completedItems = getCompletedItems(stats);
+  const doneCount = getDoneCount(stats);
   const apiDurationSeconds = stats?.agent_stats?.api_duration ?? 0;
   const apiDurationLabel =
-    apiDurationSeconds > 0 ? formatDurationShort(apiDurationSeconds) : "—";
+    apiDurationSeconds > 0 ? formatDurationShort(apiDurationSeconds) : "\u2014";
   const currentModel = inferCurrentModel(stats, modelLeaderboard);
+  const doneTooltip =
+    completedItems.length > 0
+      ? `Completed this session: ${completedItems.map((item) => item.id).join(", ")}`
+      : "Counts items merged during this session";
 
   const modelStatusClass =
     currentModel.gatePassed === true
@@ -43,7 +50,9 @@ export function StatsBar({ stats, modelLeaderboard, onOpenStats }: Props) {
         </div>
         <div className="summary-block">
           <span className="summary-label">Done</span>
-          <span className="summary-value">{doneCount}</span>
+          <span className="summary-value" title={doneTooltip}>
+            {doneCount}
+          </span>
         </div>
         <div className="summary-block">
           <span className="summary-label">API</span>

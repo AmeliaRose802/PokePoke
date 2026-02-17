@@ -3,7 +3,7 @@
 import time
 
 from pokepoke.desktop_api import DesktopAPI
-from pokepoke.types import SessionStats, AgentStats
+from pokepoke.types import SessionStats, AgentStats, BeadsWorkItem
 
 
 def test_initial_state_defaults() -> None:
@@ -50,7 +50,10 @@ def test_push_state_updates() -> None:
 
     stats = SessionStats(
         agent_stats=AgentStats(input_tokens=10, output_tokens=5),
-        items_completed=2,
+        items_completed=1,
+        completed_items_list=[
+            BeadsWorkItem(id="item-1", title="Title", status="closed", priority=1, issue_type="task")
+        ],
     )
     api.push_stats(stats, elapsed_time=12.5)
     api.push_progress(True, "Working")
@@ -60,6 +63,8 @@ def test_push_state_updates() -> None:
     assert state["agent_name"] == "agent-1"
     assert state["stats"]["elapsed_time"] == 12.5
     assert state["stats"]["agent_stats"]["input_tokens"] == 10
+    assert state["stats"]["items_completed"] == 1
+    assert state["stats"]["completed_items"][0]["id"] == "item-1"
     assert state["progress"] == {"active": True, "status": "Working"}
 
 

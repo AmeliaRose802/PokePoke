@@ -77,6 +77,15 @@ class DesktopAPI:
         return {
             "agent_stats": asdict(snapshot.agent_stats),
             "items_completed": snapshot.items_completed,
+            "completed_items": [
+                {
+                    "id": item.id,
+                    "title": item.title,
+                    "status": item.status,
+                    "issue_type": item.issue_type,
+                }
+                for item in snapshot.completed_items_list
+            ],
             "work_agent_runs": snapshot.work_agent_runs,
             "gate_agent_runs": snapshot.gate_agent_runs,
             "tech_debt_agent_runs": snapshot.tech_debt_agent_runs,

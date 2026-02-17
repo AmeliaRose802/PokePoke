@@ -41,6 +41,14 @@ export interface ModelCompletionRecord {
   gate_passed: boolean | null;
 }
 
+/** Work item completed during the current session */
+export interface CompletedItem {
+  id: string;
+  title?: string;
+  status?: string;
+  issue_type?: string;
+}
+
 /** Historical model completion record with timestamp (from persistent store) */
 export interface ModelHistoryEntry extends ModelCompletionRecord {
   timestamp: string;
@@ -51,6 +59,7 @@ export interface SessionStats {
   elapsed_time: number;
   agent_stats?: AgentStats;
   items_completed?: number;
+  completed_items?: CompletedItem[];
   work_agent_runs?: number;
   gate_agent_runs?: number;
   tech_debt_agent_runs?: number;

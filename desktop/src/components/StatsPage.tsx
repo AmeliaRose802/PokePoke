@@ -10,6 +10,8 @@ import {
   formatPercent,
   formatTokens,
   inferCurrentModel,
+  getCompletedItems,
+  getDoneCount,
 } from "../utils/stats";
 
 interface StatsPageProps {
@@ -55,8 +57,9 @@ export function StatsPage({
   onClose,
 }: StatsPageProps) {
   const agent = stats?.agent_stats;
+  const [completedItems, doneCount] = [getCompletedItems(stats), getDoneCount(stats)];
   const sessionCards = [
-    { label: "Done", value: stats?.items_completed ?? 0, icon: "✅" },
+    { label: "Done", value: doneCount, icon: "✅" },
     { label: "Retries", value: agent?.retries ?? 0, icon: "🔁" },
     { label: "API Calls", value: agent?.premium_requests ?? 0, icon: "📡" },
     { label: "API seconds", value: (agent?.api_duration ?? 0) > 0 ? formatDurationShort(agent?.api_duration) : "—", icon: "⚡" },
@@ -153,6 +156,19 @@ export function StatsPage({
                   </div>
                 </div>
               ))}
+            </div>
+          </section>
+
+          <section>
+            <div className="stats-panel-card">
+              <h3>Completed this session <span className="stats-panel-subtitle">Gate-passed and merged</span></h3>
+              {completedItems.length > 0 ? (
+                <ul className="completed-items-list">
+                  {completedItems.map((ci) => (
+                    <li key={ci.id}><strong>{ci.id}</strong>{ci.title ? ` — ${ci.title}` : ""}</li>
+                  ))}
+                </ul>
+              ) : <p className="stats-empty">No completed items yet.</p>}
             </div>
           </section>
 
@@ -438,27 +454,14 @@ function TrendChart({
   );
 }
 
-function SortableHead({
-  label,
-  field,
-  activeField,
-  asc,
-  onSort,
-}: {
-  label: string;
-  field: SortField;
-  activeField: SortField;
-  asc: boolean;
+function SortableHead({ label, field, activeField, asc, onSort }: {
+  label: string; field: SortField; activeField: SortField; asc: boolean;
   onSort: (field: SortField) => void;
 }) {
   const isActive = activeField === field;
   return (
     <th>
-      <button
-        type="button"
-        className={`sort-head ${isActive ? "active" : ""}`}
-        onClick={() => onSort(field)}
-      >
+      <button type="button" className={`sort-head ${isActive ? "active" : ""}`} onClick={() => onSort(field)}>
         {label}
         {isActive && <span className="sort-indicator">{asc ? "↑" : "↓"}</span>}
       </button>
@@ -487,14 +490,8 @@ function SuccessBar({ value, label }: { value: number; label: string }) {
   );
 }
 
-function gateStatusText(value: boolean | null): string {
-  if (value === true) return "Passed gate";
-  if (value === false) return "Failed gate";
-  return "Pending";
-}
+const gateStatusText = (v: boolean | null) =>
+  v === true ? "Passed gate" : v === false ? "Failed gate" : "Pending";
 
-function statusClass(value: boolean | null): string {
-  if (value === true) return "status-pass";
-  if (value === false) return "status-fail";
-  return "status-neutral";
-}
+const statusClass = (v: boolean | null) =>
+  v === true ? "status-pass" : v === false ? "status-fail" : "status-neutral";

@@ -1,4 +1,5 @@
 import type {
+  CompletedItem,
   ModelPerformanceSummary,
   SessionStats,
 } from "../types";
@@ -68,4 +69,26 @@ export function inferCurrentModel(
   }
 
   return { model: null, gatePassed: null, successRate: null };
+}
+
+export function getCompletedItems(stats: SessionStats | null): CompletedItem[] {
+  const items = stats?.completed_items ?? [];
+  const seen = new Set<string>();
+  const deduped: CompletedItem[] = [];
+
+  for (const item of items) {
+    const id = item.id?.trim();
+    if (!id) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    deduped.push({ ...item, id });
+  }
+
+  return deduped;
+}
+
+export function getDoneCount(stats: SessionStats | null): number {
+  const completed = getCompletedItems(stats);
+  if (completed.length > 0) return completed.length;
+  return stats?.items_completed ?? 0;
 }

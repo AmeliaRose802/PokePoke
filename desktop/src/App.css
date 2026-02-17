@@ -1000,6 +1000,20 @@
   gap: 12px;
 }
 
+.completed-items-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.completed-items-list li {
+  color: #c0caf5;
+  font-size: 13px;
+}
+
 .stats-panel-card-header h3 {
   margin: 0;
   font-size: 16px;
