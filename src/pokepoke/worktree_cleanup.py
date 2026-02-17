@@ -24,7 +24,7 @@ def _handle_remove_readonly(func: object, path: str, exc_info: object) -> None:
 def force_remove_directory(dir_path: Path) -> bool:
     """Force-remove a directory, handling Windows permission issues.
 
-    Retries with delays to allow file handles to be released,
+    Retries with backoff to allow file handles to be released,
     then falls back to shutil.rmtree with read-only flag clearing.
     Returns True if the directory was removed.
     """
@@ -36,7 +36,7 @@ def force_remove_directory(dir_path: Path) -> bool:
                 timeout=30
             )
             return True
-        except subprocess.CalledProcessError:
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             pass
 
         # Fallback: direct directory removal
@@ -51,15 +51,14 @@ def force_remove_directory(dir_path: Path) -> bool:
             return True
         except (OSError, PermissionError):
             if attempt < _CLEANUP_MAX_RETRIES - 1:
-                time.sleep(_CLEANUP_RETRY_DELAY_SECONDS)
-
+                time.sleep(_CLEANUP_RETRY_DELAY_SECONDS * (2 ** attempt))
+
     return False
 
 
 def get_worktree_manifest_path() -> Path:
     """Get the path to the uncleaned worktrees manifest file."""
     pokepoke_dir = Path(".pokepoke")
-    pokepoke_dir.mkdir(exist_ok=True)
     return pokepoke_dir / "uncleaned_worktrees.json"
 
 
@@ -83,6 +82,7 @@ def save_worktree_manifest(manifest: Dict[str, Dict[str, str]]) -> None:
     """Save the uncleaned worktrees manifest."""
     manifest_path = get_worktree_manifest_path()
     try:
+        manifest_path.parent.mkdir(exist_ok=True)
         with open(manifest_path, 'w', encoding='utf-8') as f:
             json.dump(manifest, f, indent=2, ensure_ascii=False)
     except IOError:
@@ -106,6 +106,52 @@ def remove_from_manifest(worktree_id: str) -> None:
     if worktree_id in manifest:
         del manifest[worktree_id]
         save_worktree_manifest(manifest)
+
+
+def cleanup_after_merge(worktree_path: Path, branch_name: str) -> None:
+    """Cleanup worktree and branch after successful merge."""
+    if worktree_path.exists():
+        try:
+            subprocess.run(
+                ["git", "worktree", "remove", str(worktree_path)],
+                check=True, capture_output=True, text=True, encoding='utf-8',
+                timeout=30
+            )
+            print(f"\u2705 Removed worktree at {worktree_path}")
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            stderr = getattr(e, 'stderr', None) or str(e)
+            stderr_lower = stderr.lower()
+
+            if any(s in stderr_lower for s in [
+                "permission denied",
+                "being used by another process",
+                "invalid argument",
+            ]):
+                print("\u26a0\ufe0f  Worktree removal failed (likely locked). Retrying with force removal...")
+                if force_remove_directory(worktree_path):
+                    print(f"\u2705 Force-removed worktree at {worktree_path}")
+                    if branch_name.startswith("task/"):
+                        remove_from_manifest(branch_name.split("/", 1)[1])
+                else:
+                    print(f"\u26a0\ufe0f  Could not remove worktree after retries: {worktree_path}")
+                    print("   Merge successful - worktree cleanup can be done later")
+                    worktree_id = branch_name.split("/", 1)[1] if branch_name.startswith("task/") else worktree_path.name
+                    add_uncleaned_worktree(worktree_id, str(worktree_path), f"Post-merge cleanup failed: {stderr}")
+            else:
+                print(f"\u26a0\ufe0f  Could not remove worktree: {stderr}")
+                print("   Merge successful - worktree cleanup can be done later")
+                worktree_id = branch_name.split("/", 1)[1] if branch_name.startswith("task/") else worktree_path.name
+                add_uncleaned_worktree(worktree_id, str(worktree_path), f"Post-merge cleanup warning: {stderr}")
+
+    try:
+        subprocess.run(
+            ["git", "branch", "-d", branch_name],
+            check=True, capture_output=True, text=True, encoding='utf-8',
+            timeout=30
+        )
+        print(f"\u2705 Deleted branch {branch_name}")
+    except subprocess.CalledProcessError as e:
+        print(f"\u26a0\ufe0f  Could not delete branch: {e.stderr or e}")
 
 
 def get_stale_worktrees(max_age_days: int = 7) -> Dict[str, Dict[str, str]]:
