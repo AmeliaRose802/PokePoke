@@ -1,7 +1,0 @@
-{
-  "PokePoke-aa7y": {
-    "path": "worktrees\\task-PokePoke-aa7y",
-    "reason": "Post-merge cleanup failed: error: failed to delete 'C:/Users/ameliapayne/PokePoke/worktrees/task-PokePoke-aa7y': Permission denied\n",
-    "timestamp": "2026-02-18T08:33:14.375265"
-  }
-}
