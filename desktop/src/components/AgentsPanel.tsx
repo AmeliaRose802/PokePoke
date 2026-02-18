@@ -30,6 +30,15 @@ function getAvatar(agentId: string): string {
   return ROBOT_AVATARS[Math.abs(hash) % ROBOT_AVATARS.length];
 }
 
+function getAgentPrimaryLabel(agent: AgentInfo): string {
+  if (agent.work_item_id) {
+    return agent.work_item_title
+      ? `${agent.work_item_id}: ${agent.work_item_title}`
+      : agent.work_item_id;
+  }
+  return agent.name;
+}
+
 const STATUS_INDICATOR: Record<string, { dot: string; label: string }> = {
   running: { dot: "agent-dot-running", label: "Running" },
   success: { dot: "agent-dot-success", label: "Done" },
@@ -60,6 +69,8 @@ export function AgentsPanel({
     const statusInfo = STATUS_INDICATOR[agent.status] ?? STATUS_INDICATOR.running;
     const isSelected = selectedAgentId === agent.agent_id;
     const depthClass = depth > 0 ? " agent-card-child" : "";
+    const label = getAgentPrimaryLabel(agent);
+    const roleLabel = agent.work_item_id ? agent.name : null;
 
     return (
       <div
@@ -78,8 +89,11 @@ export function AgentsPanel({
         <div className="agent-card-top">
           <span className="agent-card-avatar">{getAvatar(agent.agent_id)}</span>
           <div className="agent-card-info">
-            <span className="agent-card-name">{agent.name}</span>
+            <span className="agent-card-name">{label}</span>
             <span className="agent-card-iter">v{agent.iteration}</span>
+            {roleLabel ? (
+              <span className="agent-card-subtitle">{roleLabel}</span>
+            ) : null}
           </div>
           <span className={`agent-dot ${statusInfo.dot}`} title={statusInfo.label} />
         </div>

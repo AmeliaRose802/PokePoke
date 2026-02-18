@@ -34,6 +34,8 @@ class AgentRegistry:
         status: str,
         model: str | None = None,
         parent_agent_id: str | None = None,
+        work_item_id: str | None = None,
+        work_item_title: str | None = None,
     ) -> None:
         now = time.time()
         with self._lock:
@@ -48,6 +50,16 @@ class AgentRegistry:
                 if parent_agent_id is not None
                 else (existing.get("parent_agent_id") if existing else None)
             )
+            current_work_item_id = (
+                work_item_id
+                if work_item_id is not None
+                else (existing.get("work_item_id") if existing else None)
+            )
+            current_work_item_title = (
+                work_item_title
+                if work_item_title is not None
+                else (existing.get("work_item_title") if existing else None)
+            )
             self._agents[agent_id] = {
                 "agent_id": agent_id,
                 "name": name,
@@ -55,6 +67,8 @@ class AgentRegistry:
                 "status": status,
                 "model": current_model,
                 "parent_agent_id": current_parent,
+                "work_item_id": current_work_item_id,
+                "work_item_title": current_work_item_title,
                 "recent_logs": recent_logs,
                 "log_lines": log_lines,
                 "started_at": existing.get("started_at", now) if existing else now,
@@ -109,6 +123,8 @@ class AgentRegistry:
             "status": agent.get("status", "running"),
             "model": agent.get("model"),
             "parent_agent_id": agent.get("parent_agent_id"),
+            "work_item_id": agent.get("work_item_id"),
+            "work_item_title": agent.get("work_item_title"),
             "recent_logs": list(agent.get("recent_logs", [])),
             "log_lines": list(agent.get("log_lines", [])),
             "started_at": agent.get("started_at"),

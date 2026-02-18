@@ -158,6 +158,8 @@ export interface AgentInfo {
   status: "running" | "success" | "failed";
   model?: string | null;
   parent_agent_id?: string | null;
+   work_item_id?: string | null;
+   work_item_title?: string | null;
   recent_logs: string[];
   log_lines?: string[];
   started_at?: number;

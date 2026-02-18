@@ -30,6 +30,15 @@ const ROBOT_AVATARS = [
   "🚀", "🎯", "⚡", "🔮", "🌀", "🏗️", "🧩", "🎲",
 ];
 
+function getAgentPrimaryLabel(agent: AgentInfo): string {
+  if (agent.work_item_id) {
+    return agent.work_item_title
+      ? `${agent.work_item_id}: ${agent.work_item_title}`
+      : agent.work_item_id;
+  }
+  return agent.name;
+}
+
 function getAvatar(agentId: string): string {
   let hash = 0;
   for (let i = 0; i < agentId.length; i++) {
@@ -48,6 +57,8 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
   const logLines = agent.log_lines && agent.log_lines.length > 0
     ? agent.log_lines
     : agent.recent_logs;
+  const primaryLabel = getAgentPrimaryLabel(agent);
+  const roleLabel = agent.work_item_id ? agent.name : null;
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isUserScrolledUp = useRef(false);
@@ -86,8 +97,11 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
         )}
         <span className="agent-log-panel-avatar">{getAvatar(agent.agent_id)}</span>
         <div className="agent-log-panel-info">
-          <span className="agent-log-panel-name">{agent.name}</span>
+          <span className="agent-log-panel-name">{primaryLabel}</span>
           <span className="agent-log-panel-iter">v{agent.iteration}</span>
+          {roleLabel ? (
+            <span className="agent-log-panel-role">{roleLabel}</span>
+          ) : null}
         </div>
         <div className="agent-log-panel-status">
           <span className={`agent-dot ${statusInfo.dot}`} title={statusInfo.label} />

@@ -85,8 +85,6 @@ def _find_frontend_dist() -> Optional[Path]:
         pass
     
     return None
-
-
 # Thread-local storage for per-thread output routing.
 _thread_output = threading.local()
 
@@ -383,10 +381,12 @@ class DesktopUI:
         status: str = "running",
         model: str | None = None,
         parent_agent_id: str | None = None,
+        work_item_id: str | None = None,
+        work_item_title: str | None = None,
     ) -> None:
         """Register or update a running agent card."""
         self._api.push_agent_status(
-            agent_id, name, iteration, status, model, parent_agent_id
+            agent_id, name, iteration, status, model, parent_agent_id, work_item_id, work_item_title
         )
 
     def push_agent_log(self, agent_id: str, line: str) -> None:
