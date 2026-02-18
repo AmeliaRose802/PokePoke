@@ -282,3 +282,41 @@ class TestRunParallelLoop:
         finalize_fn.assert_called_once()
         # record_fn should be called at least once (from collect or drain)
         assert record_fn.call_count >= 1
+
+    @patch("pokepoke.parallel.time.sleep")
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.set_executor")
+    @patch("pokepoke.parallel.is_shutting_down", return_value=False)
+    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.parallel.get_ready_work_items")
+    @patch("pokepoke.parallel.select_multiple_items")
+    def test_submit_exception_releases_resources(
+        self, mock_sel, mock_ready, mock_repo,
+        mock_shut, mock_set_exec, mock_ui, mock_sleep,
+    ) -> None:
+        """executor.submit failures should release semaphore and active IDs."""
+        item = _make_item("xfail")
+        mock_ready.return_value = [item]
+        mock_sel.return_value = [item]
+
+        sem = threading.Semaphore(1)
+        mock_executor = MagicMock()
+        mock_executor.submit.side_effect = RuntimeError("submit failed")
+        mock_executor.shutdown = MagicMock()
+
+        with patch("pokepoke.parallel.threading.Semaphore", return_value=sem), \
+             patch("pokepoke.parallel.concurrent.futures.ThreadPoolExecutor", return_value=mock_executor):
+            stats = SessionStats(agent_stats=AgentStats())
+            logger = Mock()
+
+            with pytest.raises(RuntimeError):
+                run_parallel_loop(
+                    effective_parallel=1, mode_name="Autonomous",
+                    main_repo_path="/repo", failed_claim_ids=set(),
+                    session_stats=stats, start_time=time.time(),
+                    run_logger=logger, continuous=True,
+                    record_fn=Mock(), finalize_fn=Mock(),
+                )
+
+        assert sem.acquire(blocking=False)
+        mock_executor.shutdown.assert_called_once()

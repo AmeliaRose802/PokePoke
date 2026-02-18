@@ -209,11 +209,17 @@ def run_parallel_loop(
                     with active_ids_lock:
                         active_ids.add(item.id)
                     semaphore.acquire()
-                    fut = executor.submit(
-                        _parallel_process_item,
-                        item, run_logger, semaphore, active_ids, active_ids_lock,
-                        worker_name,
-                    )
+                    try:
+                        fut = executor.submit(
+                            _parallel_process_item,
+                            item, run_logger, semaphore, active_ids, active_ids_lock,
+                            worker_name,
+                        )
+                    except Exception:
+                        semaphore.release()
+                        with active_ids_lock:
+                            active_ids.discard(item.id)
+                        raise
                     futures[fut] = item
 
             total_requests, any_success = _collect_done_futures(
