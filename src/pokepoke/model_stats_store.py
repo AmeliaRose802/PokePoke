@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import os
+import statistics
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -63,37 +64,50 @@ def _record_to_dict(record: ModelCompletionRecord) -> Dict[str, Any]:
 
 def _rebuild_summary(log: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     """Recompute per-model summary from the raw log entries."""
-    summary: Dict[str, Dict[str, Any]] = {}
+    # First pass: collect per-model data
+    buckets: Dict[str, Dict[str, Any]] = {}
     for entry in log:
         model = entry.get("model", "unknown")
-        if model not in summary:
-            summary[model] = {
+        if model not in buckets:
+            buckets[model] = {
                 "total_items_attempted": 0,
                 "total_items_succeeded": 0,
                 "total_items_failed": 0,
                 "total_duration_seconds": 0.0,
                 "total_retries": 0,
                 "average_duration": 0.0,
+                "median_duration": 0.0,
+                "stddev_duration": 0.0,
                 "success_rate": 0.0,
                 "last_used": "",
+                "_durations": [],
             }
-        s = summary[model]
+        s = buckets[model]
         s["total_items_attempted"] += 1
         gp = entry.get("gate_passed")
         if gp is True:
             s["total_items_succeeded"] += 1
         elif gp is False:
             s["total_items_failed"] += 1
-        # If gate_passed is None the item is neither success nor failure
-        s["total_duration_seconds"] += entry.get("duration_seconds", 0.0)
+        dur = entry.get("duration_seconds", 0.0)
+        s["total_duration_seconds"] += dur
+        s["_durations"].append(dur)
         ts = entry.get("timestamp", "")
         if ts and ts > s["last_used"]:
             s["last_used"] = ts
-        # Recompute derived fields
+
+    # Second pass: compute derived fields
+    summary: Dict[str, Dict[str, Any]] = {}
+    for model, s in buckets.items():
         attempted = s["total_items_attempted"]
+        durations = s["_durations"]
         s["average_duration"] = round(s["total_duration_seconds"] / attempted, 2) if attempted else 0.0
+        s["median_duration"] = round(statistics.median(durations), 2) if durations else 0.0
+        s["stddev_duration"] = round(statistics.pstdev(durations), 2) if len(durations) >= 2 else 0.0
         decided = s["total_items_succeeded"] + s["total_items_failed"]
         s["success_rate"] = round(s["total_items_succeeded"] / decided, 4) if decided else 0.0
+        del s["_durations"]
+        summary[model] = s
     return summary
 
 
@@ -214,6 +228,8 @@ def print_model_leaderboard(path: Optional[Path] = None) -> None:
         succeeded = s.get("total_items_succeeded", 0)
         failed = s.get("total_items_failed", 0)
         avg_dur = s.get("average_duration", 0.0)
+        median_dur = s.get("median_duration", avg_dur)
+        stddev_dur = s.get("stddev_duration", 0.0)
         rate = s.get("success_rate", 0.0)
         last = s.get("last_used", "never")
 
@@ -222,6 +238,6 @@ def print_model_leaderboard(path: Optional[Path] = None) -> None:
 
         print(f"\n  #{i} {display_name}")
         print(f"     Attempted: {attempted}  |  ✅ {succeeded}  ❌ {failed}  |  Rate: {rate:.0%}")
-        print(f"     Avg time:  {avg_dur:.1f}s  |  Last used: {last[:19]}")
+        print(f"     Median:    {median_dur:.1f}s ±{stddev_dur:.1f}s  |  Avg: {avg_dur:.1f}s  |  Last: {last[:19]}")
 
     print("\n" + "=" * 70)
