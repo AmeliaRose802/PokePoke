@@ -3,9 +3,14 @@ import asyncio
 from typing import Any, Callable, List, Optional, Tuple, TypedDict
 
 from . import terminal_ui
+from .hung_command_detector import HungCommandDetector
+from .config import get_config
 
 DEFAULT_MODEL = "claude-opus-4.6"
 FALLBACK_MODEL = "claude-sonnet-4.5"
+
+# Default hung command detection settings
+DEFAULT_MAX_READ_RETRIES = 3  # After 3 reads with no new output, consider hung
 
 
 class SessionStats(TypedDict):
@@ -26,13 +31,31 @@ def create_event_handler(
     output_lines: List[str],
     errors: List[str],
     item_logger: Optional[Any] = None,
-    idle_timeout: float = 10.0
+    idle_timeout: float = 10.0,
+    hung_command_detector: Optional[HungCommandDetector] = None,
 ) -> Tuple[Callable[[Any], None], SessionStats]:
     """Create an event handler for SDK session events.
+    
+    Args:
+        done: Event to signal session completion.
+        output_lines: List to append output to.
+        errors: List to append errors to.
+        item_logger: Optional logger for item-specific logging.
+        idle_timeout: Seconds to wait before confirming session is idle.
+        hung_command_detector: Optional detector for hung commands. If None,
+            a default one is created using config settings.
     
     Returns:
         tuple: (event_handler_function, stats_dict)
     """
+    # Initialize hung command detector with config settings
+    if hung_command_detector is None:
+        config = get_config()
+        hung_command_detector = HungCommandDetector(
+            max_retries=DEFAULT_MAX_READ_RETRIES,
+            cumulative_timeout=float(config.command_timeout),
+        )
+    
     # Shared state for event handler
     stats: SessionStats = {
         'pending_tool_calls': 0,
@@ -46,6 +69,9 @@ def create_event_handler(
         'tried_fallback': False,
         'current_model': DEFAULT_MODEL
     }
+    
+    # Track pending tool calls by name for hung detection
+    pending_tools: dict[str, dict[str, Any]] = {}
     
     def handle_event(event: Any) -> None:
         """Handle SDK session events."""
@@ -88,18 +114,36 @@ def create_event_handler(
                 stats['idle_task'] = None
             if hasattr(event, 'data'):
                 tool_name = getattr(event.data, 'tool_name', 'unknown')
-                args_str = str(getattr(event.data, 'arguments', {}))
+                tool_args = getattr(event.data, 'arguments', {}) or {}
+                args_str = str(tool_args)
                 print(f"  🔧 {tool_name}({args_str})")
                 output_lines.append(f"\n[Tool] {tool_name}({args_str})\n")
                 if item_logger:
                     item_logger.log_tool_call(tool_name, args_str)
+                
+                # Track tool call for hung command detection
+                tool_id = getattr(event.data, 'tool_call_id', None) or id(event)
+                pending_tools[str(tool_id)] = {'name': tool_name, 'args': tool_args}
+                
+                # Track powershell tool starts for new shell sessions
+                if tool_name == 'powershell':
+                    shell_id = tool_args.get('shellId')
+                    if shell_id:
+                        hung_command_detector.record_powershell_start(shell_id)
 
         elif event_type == "tool.execution_complete":
             terminal_ui.ui.set_style(None)
             stats['pending_tool_calls'] = max(0, stats['pending_tool_calls'] - 1)
             if hasattr(event, 'data'):
+                tool_name = getattr(event.data, 'tool_name', 'unknown')
                 result = getattr(event.data, 'result', None)
                 success = getattr(event.data, 'success', True)
+                
+                # Get the tool args from pending_tools
+                tool_id = getattr(event.data, 'tool_call_id', None)
+                tool_info = pending_tools.pop(str(tool_id), {}) if tool_id else {}
+                tool_args = tool_info.get('args', {})
+                
                 if result:
                     result_content = getattr(result, 'content', str(result)) if hasattr(result, 'content') else str(result)
                     status = "✅" if success else "❌"
@@ -107,9 +151,29 @@ def create_event_handler(
                     output_lines.append(f"[Result] {result_content}\n")
                     if item_logger:
                         item_logger.log_tool_call(
-                            getattr(event.data, 'tool_name', 'unknown'),
+                            tool_name,
                             '', result=result_content, success=success
                         )
+                    
+                    # Check for hung commands on read_powershell completion
+                    if tool_name == 'read_powershell':
+                        shell_id = tool_args.get('shellId', '')
+                        delay = float(tool_args.get('delay', 30))
+                        is_hung, corrective_msg = hung_command_detector.record_read_powershell(
+                            shell_id, delay, result_content
+                        )
+                        if is_hung and corrective_msg:
+                            # Inject corrective feedback into output
+                            print(f"\n{corrective_msg}")
+                            output_lines.append(f"\n{corrective_msg}\n")
+                            if item_logger:
+                                item_logger.log_error(f"Hung command detected for shell {shell_id}")
+                    
+                    # Clear state when shell is stopped
+                    elif tool_name == 'stop_powershell':
+                        shell_id = tool_args.get('shellId', '')
+                        if shell_id:
+                            hung_command_detector.record_stop_powershell(shell_id)
 
         elif event_type == "assistant.usage":
             terminal_ui.ui.set_style(None)
