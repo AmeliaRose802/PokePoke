@@ -520,7 +520,6 @@ class TestRunWorktreeAgent:
     @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')  # Mock the extracted function
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')  # Patch at module level
     @patch('pokepoke.agent_runner.cleanup_worktree')
-    @patch('pokepoke.agent_runner.merge_worktree')
     @patch('pokepoke.agent_runner.parse_agent_stats')
     @patch('pokepoke.agent_runner.run_cleanup_loop')
     @patch('os.chdir')
@@ -535,7 +534,6 @@ class TestRunWorktreeAgent:
         mock_chdir: Mock,
         mock_cleanup_loop: Mock,
         mock_parse: Mock,
-        mock_merge: Mock,
         mock_cleanup: Mock,
         mock_check_ready: Mock,
         mock_handle_merge: Mock
@@ -570,7 +568,6 @@ class TestRunWorktreeAgent:
             premium_requests=1
         )
         mock_check_ready.return_value = (True, "")
-        mock_merge.return_value = (True, [])  # Updated to return tuple
         mock_handle_merge.return_value = (True, True)  # Mock successful merge
         
         stats = _run_worktree_agent(
@@ -661,7 +658,6 @@ class TestRunWorktreeAgent:
     @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
     @patch('pokepoke.agent_runner.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.agent_runner.cleanup_worktree')
-    @patch('pokepoke.agent_runner.merge_worktree')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
     @patch('os.chdir')
     @patch('os.getcwd')
@@ -676,7 +672,6 @@ class TestRunWorktreeAgent:
         mock_getcwd: Mock,
         mock_chdir: Mock,
         mock_check_ready: Mock,
-        mock_merge: Mock,
         mock_cleanup: Mock,
         mock_invoke_merge_cleanup: Mock,
         mock_handle_merge: Mock
@@ -723,7 +718,6 @@ class TestRunWorktreeAgent:
     @patch('pokepoke.git_operations.is_merge_in_progress')
     @patch('pokepoke.agent_runner.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.agent_runner.cleanup_worktree')
-    @patch('pokepoke.agent_runner.merge_worktree')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
     @patch('pokepoke.agent_runner.parse_agent_stats')
     @patch('os.chdir')
@@ -740,7 +734,6 @@ class TestRunWorktreeAgent:
         mock_chdir: Mock,
         mock_parse: Mock,
         mock_check_ready: Mock,
-        mock_merge: Mock,
         mock_cleanup: Mock,
         mock_invoke_merge_cleanup: Mock,
         mock_is_merge: Mock,
@@ -787,7 +780,6 @@ class TestRunWorktreeAgent:
     @patch('pokepoke.git_operations.is_merge_in_progress')
     @patch('pokepoke.agent_runner.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.agent_runner.cleanup_worktree')
-    @patch('pokepoke.agent_runner.merge_worktree')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
     @patch('pokepoke.agent_runner.parse_agent_stats')
     @patch('os.chdir')
@@ -804,7 +796,6 @@ class TestRunWorktreeAgent:
         mock_chdir: Mock,
         mock_parse: Mock,
         mock_check_ready: Mock,
-        mock_merge: Mock,
         mock_cleanup: Mock,
         mock_invoke_merge_cleanup: Mock,
         mock_is_merge: Mock,
@@ -899,7 +890,6 @@ class TestRunWorktreeAgent:
         assert stats is None
     
     @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
-    @patch('pokepoke.agent_runner.merge_worktree')
     @patch('pokepoke.agent_runner.invoke_cleanup_agent')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
     @patch('pokepoke.agent_runner.parse_agent_stats')
@@ -918,7 +908,6 @@ class TestRunWorktreeAgent:
         mock_parse: Mock,
         mock_check_ready: Mock,
         mock_invoke_cleanup: Mock,
-        mock_merge: Mock,
         mock_handle_merge: Mock
     ) -> None:
         """Test when main repo not ready, cleanup succeeds, but still fails."""

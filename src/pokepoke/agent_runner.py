@@ -11,7 +11,7 @@ from pokepoke.config import get_config
 from pokepoke.copilot import invoke_copilot
 from pokepoke.types import BeadsWorkItem, AgentStats
 from pokepoke.stats import parse_agent_stats
-from pokepoke.worktrees import create_worktree, merge_worktree, cleanup_worktree
+from pokepoke.worktrees import create_worktree, cleanup_worktree
 from pokepoke.prompts import PromptService
 from pokepoke import terminal_ui
 from pokepoke.cleanup_agents import (
