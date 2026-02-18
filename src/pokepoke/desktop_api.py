@@ -14,6 +14,12 @@ from typing import Any, Optional, TYPE_CHECKING
 
 from pokepoke.agent_registry import AgentRegistry
 
+from pokepoke.shutdown import (
+    request_stop_after_current as _request_stop_after_current,
+    cancel_stop_after_current as _cancel_stop_after_current,
+    should_stop_after_current as _should_stop_after_current,
+)
+
 from pokepoke import desktop_api_ext as _ext
 
 if TYPE_CHECKING:
@@ -137,6 +143,7 @@ class DesktopAPI:
                 "log_count": len(self._log_buffer),
                 "model_leaderboard": self._get_cached_leaderboard(),
                 "agents": self._agent_registry.serialize_all(),
+                "stop_after_current": _should_stop_after_current(),
             }
 
     def _get_cached_leaderboard(self) -> dict[str, Any]:
@@ -326,6 +333,18 @@ class DesktopAPI:
     def get_agent_detail(self, agent_id: str) -> Optional[dict[str, Any]]:
         """Return a deep copy of a single agent's detail state (logs included)."""
         return self._agent_registry.get_detail(agent_id)
+
+    def request_stop_after_current(self) -> dict[str, bool]:
+        """Request that the orchestrator stop after the current item completes."""
+        _request_stop_after_current()
+        self.push_log("⏸️  Stop after current item requested", "orchestrator", "yellow")
+        return {"stop_after_current": True}
+
+    def cancel_stop_after_current(self) -> dict[str, bool]:
+        """Cancel a pending stop-after-current request."""
+        _cancel_stop_after_current()
+        self.push_log("▶️  Stop after current item cancelled", "orchestrator")
+        return {"stop_after_current": False}
 
     list_prompts = _ext.list_prompts
     get_prompt = _ext.get_prompt

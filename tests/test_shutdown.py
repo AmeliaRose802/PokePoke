@@ -11,6 +11,9 @@ from pokepoke.shutdown import (
     is_shutting_down,
     wait_for_shutdown,
     reset,
+    request_stop_after_current,
+    cancel_stop_after_current,
+    should_stop_after_current,
     _shutdown_event,
 )
 
@@ -96,3 +99,35 @@ class TestReset:
         _shutdown_event.set()
         reset()
         assert is_shutting_down() is False
+
+    def test_clears_stop_after_current(self):
+        request_stop_after_current()
+        reset()
+        assert should_stop_after_current() is False
+
+
+class TestStopAfterCurrent:
+    """Tests for stop-after-current flag."""
+
+    def test_initially_false(self):
+        assert should_stop_after_current() is False
+
+    def test_true_after_request(self):
+        request_stop_after_current()
+        assert should_stop_after_current() is True
+
+    def test_cancel_clears_flag(self):
+        request_stop_after_current()
+        cancel_stop_after_current()
+        assert should_stop_after_current() is False
+
+    def test_cancel_when_not_set_is_safe(self):
+        cancel_stop_after_current()
+        assert should_stop_after_current() is False
+
+    def test_request_is_idempotent(self):
+        request_stop_after_current()
+        request_stop_after_current()
+        assert should_stop_after_current() is True
+        cancel_stop_after_current()
+        assert should_stop_after_current() is False

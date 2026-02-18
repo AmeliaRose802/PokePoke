@@ -1236,6 +1236,39 @@
 
 /* ── Prompt Editor Toggle ──────────────────────────────────────────────── */
 
+/* ── Finish After Current Button ──────────────────────────────────────── */
+
+.finish-after-current-btn {
+  background: none;
+  border: 1px solid #3b4261;
+  border-radius: 4px;
+  color: #a9b1d6;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 10px;
+  -webkit-app-region: no-drag;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+
+.finish-after-current-btn:hover {
+  border-color: #e0af68;
+  color: #e0af68;
+}
+
+.finish-after-current-btn.stopping {
+  border-color: #e0af68;
+  color: #e0af68;
+  background: rgba(224, 175, 104, 0.1);
+  animation: pulse 1.5s infinite;
+}
+
+.finish-after-current-btn.stopping:hover {
+  border-color: #9ece6a;
+  color: #9ece6a;
+  background: rgba(158, 206, 106, 0.1);
+}
+
 .prompt-editor-toggle {
   background: none;
   border: 1px solid #3b4261;

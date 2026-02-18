@@ -614,3 +614,42 @@ def test_get_agent_detail_includes_full_logs_and_timestamps() -> None:
     assert detail["log_lines"] == ["two", "three", "four"]
     assert detail["last_log_at"] is not None
     assert detail["last_updated"] is not None
+
+
+# ─── Stop-after-current API tests ────────────────────────────────────────
+
+
+def test_get_state_includes_stop_after_current() -> None:
+    """get_state should include stop_after_current flag."""
+    from pokepoke.shutdown import reset as shutdown_reset
+    shutdown_reset()
+    api = DesktopAPI()
+    state = api.get_state()
+    assert "stop_after_current" in state
+    assert state["stop_after_current"] is False
+
+
+def test_request_stop_after_current_sets_flag() -> None:
+    """request_stop_after_current should set the flag and log a message."""
+    from pokepoke.shutdown import reset as shutdown_reset
+    shutdown_reset()
+    api = DesktopAPI()
+    result = api.request_stop_after_current()
+    assert result["stop_after_current"] is True
+    state = api.get_state()
+    assert state["stop_after_current"] is True
+    assert any("Stop after current" in log["message"] for log in api.get_all_logs())
+    shutdown_reset()
+
+
+def test_cancel_stop_after_current_clears_flag() -> None:
+    """cancel_stop_after_current should clear the flag and log a message."""
+    from pokepoke.shutdown import reset as shutdown_reset
+    shutdown_reset()
+    api = DesktopAPI()
+    api.request_stop_after_current()
+    result = api.cancel_stop_after_current()
+    assert result["stop_after_current"] is False
+    state = api.get_state()
+    assert state["stop_after_current"] is False
+    shutdown_reset()

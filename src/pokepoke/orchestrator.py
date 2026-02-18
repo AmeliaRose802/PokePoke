@@ -20,7 +20,7 @@ from pokepoke import terminal_ui
 from pokepoke.maintenance_state import increment_items_completed
 from pokepoke.repo_check import check_and_commit_main_repo, check_beads_available
 from pokepoke.maintenance import run_periodic_maintenance
-from pokepoke.shutdown import is_shutting_down, request_shutdown
+from pokepoke.shutdown import is_shutting_down, request_shutdown, should_stop_after_current, cancel_stop_after_current
 from pokepoke.model_stats_store import record_completion, print_model_leaderboard
 from pokepoke.model_history import append_model_history_entry
 from pokepoke.config import load_config
@@ -188,7 +188,6 @@ def run_orchestrator(
         # ── Sequential orchestrator loop (original behaviour) ──────
         else:
             while not is_shutting_down():
-                # Check main repo status before processing
                 print("\n\ud83d\udd0d Checking main repository status...")
                 run_logger.log_orchestrator("Checking main repository status")
                 if not check_and_commit_main_repo(main_repo_path, run_logger):
@@ -197,34 +196,29 @@ def run_orchestrator(
                 print("\nFetching ready work from beads...")
                 run_logger.log_orchestrator("Fetching ready work from beads")
                 ready_items = get_ready_work_items()
-                
-                # Pause UI for interactive selection
+
                 if interactive:
                     terminal_ui.ui.stop()
                 selected_item = select_work_item(ready_items, interactive, skip_ids=failed_claim_ids)
                 if interactive:
                     terminal_ui.ui.start()
-                
+
                 if selected_item is None:
                     terminal_ui.ui.stop_and_capture()
                     print("\n👋 Exiting PokePoke - no work items available.")
                     run_logger.log_orchestrator("No work items available - exiting")
                     _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
                     return 0
-                
-                # Process the selected item
+
                 run_logger.log_orchestrator(f"Selected item: {selected_item.id} - {selected_item.title}")
-                
-                # Update terminal banner and UI header
                 banner = format_work_item_banner(selected_item.id, selected_item.title)
                 set_terminal_banner(banner)
                 terminal_ui.ui.update_header(selected_item.id, selected_item.title)
-                
-                # Register agent in the Agents panel for single-agent mode
+
                 agent_id = selected_item.id
                 display_name = get_agent_name(default="pokepoke")
                 terminal_ui.ui.push_agent_status(agent_id, display_name, iteration=1, status="running")
-                
+
                 success = False
                 try:
                     with terminal_ui.ui.agent_output_for(agent_id):
@@ -236,8 +230,7 @@ def run_orchestrator(
                         agent_id, display_name, iteration=1,
                         status="success" if success else "failed",
                     )
-                
-                # Track items that failed claiming to avoid re-selecting them
+
                 if not success and requests == 0:
                     failed_claim_ids.add(selected_item.id)
                     run_logger.log_orchestrator(
@@ -245,9 +238,8 @@ def run_orchestrator(
                         f"({len(failed_claim_ids)} skipped)"
                     )
                 elif success:
-                    # Clear the skip list on success - stale claims may have been released
                     failed_claim_ids.clear()
-                
+
                 total_requests += requests
                 _record_item_result(
                     selected_item, success, requests, item_stats,
@@ -255,11 +247,17 @@ def run_orchestrator(
                     session_stats, run_logger,
                 )
                 items_completed = session_stats.items_completed
-
-                # Update UI stats with current runtime
                 terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
-                
-                # Decide whether to continue
+
+                # Check if user requested stop after current item
+                if should_stop_after_current():
+                    cancel_stop_after_current()
+                    terminal_ui.ui.stop_and_capture()
+                    print("\n⏸️  Stopping after current item (user requested).")
+                    run_logger.log_orchestrator("Stop after current item requested - exiting")
+                    _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
+                    return 0
+
                 if not continuous:
                     terminal_ui.ui.stop_and_capture()
                     _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)

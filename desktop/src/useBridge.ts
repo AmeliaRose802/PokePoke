@@ -39,6 +39,7 @@ interface PyWebViewAPI {
     log_count: number;
     model_leaderboard: Record<string, ModelPerformanceSummary>;
     agents: AgentInfo[];
+    stop_after_current: boolean;
   }>;
   get_new_logs(): Promise<LogEntry[]>;
   get_all_logs(): Promise<LogEntry[]>;
@@ -51,6 +52,8 @@ interface PyWebViewAPI {
   reset_prompt(name: string): Promise<{ reset: boolean; had_override: boolean }>;
   get_config(): Promise<ConfigResponse>;
   save_config(config: ProjectConfig): Promise<{ path: string; saved: boolean }>;
+  request_stop_after_current(): Promise<{ stop_after_current: boolean }>;
+  cancel_stop_after_current(): Promise<{ stop_after_current: boolean }>;
 }
 
 declare global {
@@ -71,6 +74,7 @@ export interface BridgeState {
   progress: ProgressState;
   modelLeaderboard: Record<string, ModelPerformanceSummary>;
   agents: AgentInfo[];
+  stopAfterCurrent: boolean;
   clearLogs: (target: "orchestrator" | "agent" | "all") => void;
   listPrompts: () => Promise<PromptInfo[]>;
   getPrompt: (name: string) => Promise<PromptDetail | null>;
@@ -79,6 +83,8 @@ export interface BridgeState {
   getConfig: () => Promise<ConfigResponse | null>;
   saveConfig: (config: ProjectConfig) => Promise<boolean>;
   getModelHistory: (limit?: number) => Promise<ModelHistoryEntry[]>;
+  requestStopAfterCurrent: () => Promise<void>;
+  cancelStopAfterCurrent: () => Promise<void>;
 }
 
 /**
@@ -99,6 +105,7 @@ export function useBridge(): BridgeState {
   });
   const [modelLeaderboard, setModelLeaderboard] = useState<Record<string, ModelPerformanceSummary>>({});
   const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [stopAfterCurrent, setStopAfterCurrent] = useState(false);
 
   const clearLogs = useCallback(
     (target: "orchestrator" | "agent" | "all") => {
@@ -153,6 +160,18 @@ export function useBridge(): BridgeState {
     },
     []
   );
+
+  const requestStopAfterCurrent = useCallback(async (): Promise<void> => {
+    if (!window.pywebview?.api) return;
+    await window.pywebview.api.request_stop_after_current();
+    setStopAfterCurrent(true);
+  }, []);
+
+  const cancelStopAfterCurrent = useCallback(async (): Promise<void> => {
+    if (!window.pywebview?.api) return;
+    await window.pywebview.api.cancel_stop_after_current();
+    setStopAfterCurrent(false);
+  }, []);
 
   const appendLogs = useCallback((entries: LogEntry[]) => {
     if (entries.length === 0) return;
@@ -211,6 +230,7 @@ export function useBridge(): BridgeState {
         if (state.progress) setProgress(state.progress);
         if (state.model_leaderboard) setModelLeaderboard(state.model_leaderboard);
         if (state.agents) setAgents(state.agents);
+        setStopAfterCurrent(!!state.stop_after_current);
 
         const allLogs = await api.get_all_logs();
         appendLogs(allLogs);
@@ -237,6 +257,7 @@ export function useBridge(): BridgeState {
           if (state.progress) setProgress(state.progress);
           if (state.model_leaderboard) setModelLeaderboard(state.model_leaderboard);
           if (state.agents) setAgents(state.agents);
+          setStopAfterCurrent(!!state.stop_after_current);
 
           setConnectionStatus("connected");
         } catch {
@@ -263,6 +284,7 @@ export function useBridge(): BridgeState {
     progress,
     modelLeaderboard,
     agents,
+    stopAfterCurrent,
     clearLogs,
     listPrompts,
     getPrompt,
@@ -271,5 +293,7 @@ export function useBridge(): BridgeState {
     getConfig,
     saveConfig,
     getModelHistory,
+    requestStopAfterCurrent,
+    cancelStopAfterCurrent,
   };
 }

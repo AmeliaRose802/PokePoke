@@ -89,6 +89,21 @@ function App() {
         </div>
         <ConnectionIndicator status={bridge.connectionStatus} />
         <button
+          className={`finish-after-current-btn${bridge.stopAfterCurrent ? " stopping" : ""}`}
+          onClick={() =>
+            bridge.stopAfterCurrent
+              ? bridge.cancelStopAfterCurrent()
+              : bridge.requestStopAfterCurrent()
+          }
+          title={
+            bridge.stopAfterCurrent
+              ? "Cancel — continue processing items"
+              : "Finish after current item completes"
+          }
+        >
+          {bridge.stopAfterCurrent ? "⏸ Stopping…" : "⏸ Finish after current"}
+        </button>
+        <button
           className="prompt-editor-toggle"
           onClick={() => setShowStatsPage(true)}
           title="Open stats"

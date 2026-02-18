@@ -14,7 +14,7 @@ from pokepoke.work_item_selection import select_multiple_items
 from pokepoke.logging_utils import RunLogger
 from pokepoke import terminal_ui
 from pokepoke.repo_check import check_and_commit_main_repo
-from pokepoke.shutdown import is_shutting_down, set_executor
+from pokepoke.shutdown import is_shutting_down, set_executor, should_stop_after_current, cancel_stop_after_current
 
 # Type alias to satisfy mypy strict generics
 _Future = concurrent.futures.Future[
@@ -175,7 +175,7 @@ def run_parallel_loop(
                 current_active = set(active_ids)
             slots = effective_parallel - len(current_active)
 
-            if slots > 0:
+            if slots > 0 and not should_stop_after_current():
                 selected_items = select_multiple_items(
                     ready_items, count=slots,
                     skip_ids=failed_claim_ids, claimed_ids=current_active,
@@ -205,6 +205,15 @@ def run_parallel_loop(
             items_completed = session_stats.items_completed
 
             terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
+
+            # Check if user requested stop after current item
+            if should_stop_after_current() and not futures:
+                cancel_stop_after_current()
+                terminal_ui.ui.stop_and_capture()
+                print("\n⏸️  Stopping after current item (user requested).")
+                run_logger.log_orchestrator("Stop after current item requested - exiting")
+                finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
+                return 0
 
             if not continuous and (any_success or not futures):
                 # Drain remaining futures
