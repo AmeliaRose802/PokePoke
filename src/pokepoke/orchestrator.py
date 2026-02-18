@@ -150,7 +150,6 @@ def run_orchestrator(
             if beta_stats:
                 session_stats.record_agent_stats(beta_stats)
             print("✅ Beta Tester completed\n")
-            
         failed_claim_ids: set[str] = set()
 
         # Resolve effective parallelism: CLI arg > config > 1
@@ -163,7 +162,6 @@ def run_orchestrator(
         if effective_parallel > 1:
             print(f"🔀 Parallel mode: up to {effective_parallel} concurrent agents")
             run_logger.log_orchestrator(f"Parallel mode enabled: max_parallel_agents={effective_parallel}")
-
         # ── Parallel orchestrator loop ──────────────────────────────
         if effective_parallel > 1:
             from pokepoke.parallel import run_parallel_loop
@@ -184,7 +182,6 @@ def run_orchestrator(
             terminal_ui.ui.stop_and_capture()
             if exit_code is not None:
                 return exit_code
-
         # ── Sequential orchestrator loop (original behaviour) ──────
         else:
             while not is_shutting_down():
@@ -217,8 +214,14 @@ def run_orchestrator(
 
                 agent_id = selected_item.id
                 display_name = get_agent_name(default="pokepoke")
-                terminal_ui.ui.push_agent_status(agent_id, display_name, iteration=1, status="running")
-
+                terminal_ui.ui.push_agent_status(
+                    agent_id,
+                    display_name,
+                    iteration=1,
+                    status="running",
+                    work_item_id=selected_item.id,
+                    work_item_title=selected_item.title,
+                )
                 success = False
                 try:
                     with terminal_ui.ui.agent_output_for(agent_id):
@@ -227,8 +230,12 @@ def run_orchestrator(
                         )
                 finally:
                     terminal_ui.ui.push_agent_status(
-                        agent_id, display_name, iteration=1,
+                        agent_id,
+                        display_name,
+                        iteration=1,
                         status="success" if success else "failed",
+                        work_item_id=selected_item.id,
+                        work_item_title=selected_item.title,
                     )
 
                 if not success and requests == 0:
@@ -248,7 +255,6 @@ def run_orchestrator(
                 )
                 items_completed = session_stats.items_completed
                 terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
-
                 # Check if user requested stop after current item
                 if should_stop_after_current():
                     cancel_stop_after_current()
@@ -267,11 +273,9 @@ def run_orchestrator(
                     # Clear banner between items
                     set_terminal_banner(f"PokePoke {mode_name} - {agent_name}")
                     terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", "Waiting...")
-                    
                     terminal_ui.ui.stop()
                     cont = input("\nProcess another item? [Y/n]: ").strip().lower()
                     terminal_ui.ui.start()
-                    
                     if cont and cont != 'y':
                         terminal_ui.ui.stop_and_capture()
                         print("\n👋 Exiting PokePoke.")
@@ -284,13 +288,11 @@ def run_orchestrator(
                         if is_shutting_down():
                             break
                         time.sleep(0.5)
-
         # Shutdown requested - clean exit
         terminal_ui.ui.stop_and_capture()
         print("\n\ud83d\udc4b Shutdown requested - exiting PokePoke.")
         _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
         return 0
-    
     except KeyboardInterrupt:
         # Clean shutdown on Ctrl+C
         request_shutdown()

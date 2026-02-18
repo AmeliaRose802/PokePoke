@@ -65,6 +65,8 @@ def process_work_item(
             iteration=1,
             status="running",
             model=selected_model,
+            work_item_id=item.id,
+            work_item_title=item.title,
         )
 
         print(f"\n🚀 Processing work item: {item.id}")
@@ -196,6 +198,8 @@ def process_work_item(
                 iteration=gate_iteration,
                 status="running",
                 parent_agent_id=item.id,
+                work_item_id=item.id,
+                work_item_title=item.title,
             )
             try:
                 with terminal_ui.ui.agent_output_for(gate_agent_id):
@@ -210,6 +214,8 @@ def process_work_item(
                     iteration=gate_agent_runs,
                     status="failed",
                     parent_agent_id=item.id,
+                    work_item_id=item.id,
+                    work_item_title=item.title,
                 )
                 raise
             gate_agent_runs += 1
@@ -219,6 +225,8 @@ def process_work_item(
                 iteration=gate_agent_runs,
                 status="success" if gate_success else "failed",
                 parent_agent_id=item.id,
+                work_item_id=item.id,
+                work_item_title=item.title,
             )
 
             if gate_success:
