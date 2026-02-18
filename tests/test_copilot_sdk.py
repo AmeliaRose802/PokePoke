@@ -1,11 +1,14 @@
 """Tests for copilot_sdk.py module (direct SDK integration)."""
 
+import asyncio
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 
 from pokepoke.copilot_sdk import (
     build_prompt_from_work_item,
-    invoke_copilot_sdk_sync
+    invoke_copilot_sdk_sync,
+    _fail_result,
+    _activity_watchdog,
 )
 from pokepoke.types import BeadsWorkItem
 
@@ -1001,3 +1004,60 @@ class TestInvokeCopilotSDKAsync:
 
         assert result.success
 
+
+
+class TestFailResult:
+    """Tests for _fail_result helper."""
+
+    def test_fail_result_returns_failed_copilot_result(self):
+        result = _fail_result("item-123", "something broke")
+        assert result.work_item_id == "item-123"
+        assert result.success is False
+        assert result.error == "something broke"
+        assert result.attempt_count == 1
+
+    def test_fail_result_with_empty_error(self):
+        result = _fail_result("x", "")
+        assert result.success is False
+        assert result.error == ""
+
+
+class TestActivityWatchdog:
+    """Tests for _activity_watchdog."""
+
+    @pytest.mark.asyncio
+    async def test_watchdog_cancellation_returns_false(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        log_file.write_text("initial")
+        abort = asyncio.Event()
+
+        task = asyncio.create_task(
+            _activity_watchdog(log_file, timeout_seconds=60, check_interval_seconds=0.05, abort_event=abort)
+        )
+        await asyncio.sleep(0.02)
+        task.cancel()
+        result = await task
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_watchdog_triggers_on_idle(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        log_file.write_text("initial")
+        abort = asyncio.Event()
+
+        result = await _activity_watchdog(
+            log_file, timeout_seconds=0.05, check_interval_seconds=0.02, abort_event=abort
+        )
+        assert result is True
+        assert abort.is_set()
+
+    @pytest.mark.asyncio
+    async def test_watchdog_handles_missing_log_file(self, tmp_path):
+        log_file = tmp_path / "nonexistent.log"
+        abort = asyncio.Event()
+
+        result = await _activity_watchdog(
+            log_file, timeout_seconds=0.05, check_interval_seconds=0.02, abort_event=abort
+        )
+        assert result is True
+        assert abort.is_set()

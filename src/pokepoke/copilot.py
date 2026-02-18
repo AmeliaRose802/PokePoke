@@ -3,7 +3,7 @@
 This module provides SDK-based Copilot integration.
 """
 
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from .types import BeadsWorkItem, CopilotResult, RetryConfig
 from .copilot_sdk import invoke_copilot_sdk_sync
@@ -18,7 +18,7 @@ def invoke_copilot(
     retry_config: RetryConfig | None = None,
     timeout: float | None = None,
     deny_write: bool = False,
-    item_logger: Optional['ItemLogger'] = None,
+    item_logger: 'ItemLogger | None' = None,
     model: str | None = None,
     cwd: str | None = None
 ) -> CopilotResult:

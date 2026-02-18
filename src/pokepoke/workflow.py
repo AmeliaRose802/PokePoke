@@ -2,7 +2,7 @@
 
 import time
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from pokepoke.copilot import invoke_copilot
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, ModelCompletionRecord
@@ -28,7 +28,7 @@ def process_work_item(
     interactive: bool, 
     timeout_hours: float = 2.0, 
     run_beta_test: bool = False,
-    run_logger: Optional['RunLogger'] = None,
+    run_logger: 'RunLogger | None' = None,
     max_timeout_restarts: int = 3
 ) -> tuple[bool, int, AgentStats | None, int, int, ModelCompletionRecord | None]:
     """Process a single work item with timeout protection.

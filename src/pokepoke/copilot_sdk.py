@@ -2,7 +2,7 @@
 import asyncio
 import os
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING, Any, List
+from typing import TYPE_CHECKING, Any
 from copilot import CopilotClient  # type: ignore
 from .config import get_config
 from .types import BeadsWorkItem, CopilotResult, RetryConfig, AgentStats
@@ -100,21 +100,21 @@ def _fail_result(work_item_id: str, error: str) -> CopilotResult:
 
 async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     work_item: BeadsWorkItem,
-    prompt: Optional[str] = None,
-    retry_config: Optional[RetryConfig] = None,
-    timeout: Optional[float] = None,
+    prompt: str | None = None,
+    retry_config: RetryConfig | None = None,
+    timeout: float | None = None,
     deny_write: bool = False,
-    item_logger: Optional['ItemLogger'] = None,
+    item_logger: 'ItemLogger | None' = None,
     idle_timeout: float = 10.0,
-    model: Optional[str] = None,
-    cwd: Optional[str] = None
+    model: str | None = None,
+    cwd: str | None = None
 ) -> CopilotResult:
     """Invoke GitHub Copilot using the SDK. Falls back to Sonnet on rate limit."""
     config = retry_config or RetryConfig()
     final_prompt = prompt or build_prompt_from_work_item(work_item)
     max_timeout = timeout or 7200.0
     current_model = model or DEFAULT_MODEL
-    watchdog_task: Optional[asyncio.Task[bool]] = None  # Initialize early for finally block
+    watchdog_task: asyncio.Task[bool] | None = None  # Initialize early for finally block
     
     # Pass PYTHONIOENCODING via subprocess env (thread-safe, no global os.environ mutation)
     client_opts: dict[str, Any] = {"cli_path": "copilot.cmd", "log_level": "info", "env": {**os.environ, "PYTHONIOENCODING": "utf-8:replace"}}
@@ -137,8 +137,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         print(f"[SDK] Session created: {session.session_id}\n")
         
         done = asyncio.Event()
-        output_lines: List[str] = []
-        errors: List[str] = []
+        output_lines: list[str] = []
+        errors: list[str] = []
         handle_event, stats = create_event_handler(done, output_lines, errors, item_logger, idle_timeout)
         stats['current_model'] = current_model
         
@@ -303,13 +303,13 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
 
 def invoke_copilot_sdk_sync(  # type: ignore[no-any-unimported]
     work_item: BeadsWorkItem,
-    prompt: Optional[str] = None,
-    retry_config: Optional[RetryConfig] = None,
-    timeout: Optional[float] = None,
+    prompt: str | None = None,
+    retry_config: RetryConfig | None = None,
+    timeout: float | None = None,
     deny_write: bool = False,
-    item_logger: Optional['ItemLogger'] = None,
-    model: Optional[str] = None,
-    cwd: Optional[str] = None
+    item_logger: 'ItemLogger | None' = None,
+    model: str | None = None,
+    cwd: str | None = None
 ) -> CopilotResult:
     """Synchronous wrapper around invoke_copilot_sdk."""
     return asyncio.run(invoke_copilot_sdk(

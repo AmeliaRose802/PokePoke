@@ -4,7 +4,7 @@ These are mixed in by DesktopAPI at import time.
 """
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 try:
     import yaml  # type: ignore[import-untyped]

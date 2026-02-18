@@ -5,7 +5,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from pokepoke.config import get_config
 from pokepoke.copilot import invoke_copilot
@@ -117,7 +117,7 @@ def run_gate_agent(
 def run_maintenance_agent(
     agent_name: str, prompt_file: str, repo_root: Path | None = None,
     needs_worktree: bool = True, merge_changes: bool = True,
-    model: str | None = None, item_logger: Optional['ItemLogger'] = None
+    model: str | None = None, item_logger: 'ItemLogger | None' = None
 ) -> AgentStats | None:
     """Run a maintenance agent with optional worktree isolation."""
     terminal_ui.ui.set_current_agent(f"{agent_name} Agent")
@@ -162,7 +162,7 @@ def run_maintenance_agent(
 
 def _run_simple_agent(
     agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, deny_write: bool = True,
-    model: str | None = None, cwd: str | None = None, item_logger: Optional['ItemLogger'] = None
+    model: str | None = None, cwd: str | None = None, item_logger: 'ItemLogger | None' = None
 ) -> AgentStats | None:
     """Run a simple agent in the main repo with configurable write access."""
     print(f"\n📋 Running {agent_name} ({'no write' if deny_write else 'write enabled'}){f', model={model}' if model else ''}")
@@ -173,16 +173,16 @@ def _run_simple_agent(
     print(f"❌ {agent_name} failed: {result.error}")
     return None
 
-def _run_beads_only_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: str | None = None, cwd: str | None = None, item_logger: Optional['ItemLogger'] = None) -> AgentStats | None:
+def _run_beads_only_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: str | None = None, cwd: str | None = None, item_logger: 'ItemLogger | None' = None) -> AgentStats | None:
     """Run a beads-only maintenance agent in the main repo."""
     return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=True, model=model, cwd=cwd, item_logger=item_logger)
 
-def _run_main_repo_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: str | None = None, cwd: str | None = None, item_logger: Optional['ItemLogger'] = None) -> AgentStats | None:
+def _run_main_repo_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: str | None = None, cwd: str | None = None, item_logger: 'ItemLogger | None' = None) -> AgentStats | None:
     """Run a maintenance agent in the main repo WITH write access."""
     return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=False, model=model, cwd=cwd, item_logger=item_logger)
 
 
-def run_worktree_cleanup(repo_root: Path | None = None, item_logger: Optional['ItemLogger'] = None) -> AgentStats | None:
+def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger | None' = None) -> AgentStats | None:
     """Run worktree cleanup agent to merge/delete stale worktrees."""
     terminal_ui.ui.set_current_agent("Worktree Cleanup")
     
@@ -228,7 +228,7 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: Optional['I
 
 def _run_worktree_agent(
     agent_name: str, agent_id: str, agent_item: BeadsWorkItem, agent_prompt: str, repo_root: Path,
-    merge_changes: bool = True, model: str | None = None, item_logger: Optional['ItemLogger'] = None
+    merge_changes: bool = True, model: str | None = None, item_logger: 'ItemLogger | None' = None
 ) -> AgentStats | None:
     """Run a code-modifying maintenance agent in a worktree."""
     print(f"\n🌳 Creating worktree for {agent_id}...")
@@ -314,7 +314,7 @@ def _run_worktree_agent(
                 )
 
 
-def run_beta_tester(repo_root: Path | None = None, item_logger: Optional['ItemLogger'] = None) -> AgentStats | None:
+def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | None' = None) -> AgentStats | None:
     """Run beta tester agent to test all MCP tools. Restarts MCP server first."""
     config = get_config()
     terminal_ui.ui.set_current_agent("Beta Tester")

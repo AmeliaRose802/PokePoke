@@ -3,7 +3,7 @@
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 import uuid
 
 if TYPE_CHECKING:
@@ -38,7 +38,7 @@ class RunLogger:
         self.maintenance_logs_dir.mkdir(exist_ok=True)
         
         # Track current item logger
-        self._current_item_logger: Optional['ItemLogger'] = None
+        self._current_item_logger: 'ItemLogger | None' = None
         
         # Write initial orchestrator log entry
         self._init_orchestrator_log()
@@ -159,7 +159,7 @@ class RunLogger:
         )
 
     def finalize(self, items_completed: int, total_requests: int, elapsed: float,
-                 session_stats: Optional['SessionStats'] = None) -> None:
+                 session_stats: 'SessionStats | None' = None) -> None:
         """Write final summary to orchestrator log and persist stats to disk.
         
         Args:
