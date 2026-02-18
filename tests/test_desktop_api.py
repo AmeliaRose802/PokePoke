@@ -508,7 +508,7 @@ def test_initial_state_has_empty_agents() -> None:
 def test_push_agent_status_registers_agent() -> None:
     """push_agent_status should add an agent to the tracked set."""
     api = DesktopAPI()
-    api.push_agent_status("agent-1", "Gate Agent", iteration=2, status="running")
+    api.push_agent_status("agent-1", "Gate Agent", iteration=2, status="running", model="gpt-5.1")
 
     agents = api.get_agents()
     assert len(agents) == 1
@@ -516,22 +516,24 @@ def test_push_agent_status_registers_agent() -> None:
     assert agents[0]["name"] == "Gate Agent"
     assert agents[0]["iteration"] == 2
     assert agents[0]["status"] == "running"
+    assert agents[0]["model"] == "gpt-5.1"
     assert agents[0]["recent_logs"] == []
 
 
 def test_push_agent_status_updates_existing() -> None:
     """push_agent_status should update an existing agent's fields."""
     api = DesktopAPI()
-    api.push_agent_status("agent-1", "Gate Agent", iteration=1)
+    api.push_agent_status("agent-1", "Gate Agent", iteration=1, model="gpt-5")
     api.push_agent_log("agent-1", "line 1")
 
-    # Update iteration and status — logs should be preserved
+    # Update iteration and status — logs + model should be preserved
     api.push_agent_status("agent-1", "Gate Agent", iteration=2, status="success")
 
     agents = api.get_agents()
     assert len(agents) == 1
     assert agents[0]["iteration"] == 2
     assert agents[0]["status"] == "success"
+    assert agents[0]["model"] == "gpt-5"
     assert agents[0]["recent_logs"] == ["line 1"]
 
 

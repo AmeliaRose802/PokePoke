@@ -27,7 +27,12 @@ class AgentRegistry:
             self._detail_limit = detail_limit
 
     def update_status(
-        self, agent_id: str, name: str, iteration: int, status: str
+        self,
+        agent_id: str,
+        name: str,
+        iteration: int,
+        status: str,
+        model: str | None = None,
     ) -> None:
         now = time.time()
         with self._lock:
@@ -36,11 +41,13 @@ class AgentRegistry:
             log_lines: list[str] = (
                 list(existing.get("log_lines", recent_logs)) if existing else []
             )
+            current_model = model if model is not None else (existing.get("model") if existing else None)
             self._agents[agent_id] = {
                 "agent_id": agent_id,
                 "name": name,
                 "iteration": iteration,
                 "status": status,
+                "model": current_model,
                 "recent_logs": recent_logs,
                 "log_lines": log_lines,
                 "started_at": existing.get("started_at", now) if existing else now,
@@ -93,6 +100,7 @@ class AgentRegistry:
             "name": agent.get("name"),
             "iteration": agent.get("iteration", 1),
             "status": agent.get("status", "running"),
+            "model": agent.get("model"),
             "recent_logs": list(agent.get("recent_logs", [])),
             "log_lines": list(agent.get("log_lines", [])),
             "started_at": agent.get("started_at"),

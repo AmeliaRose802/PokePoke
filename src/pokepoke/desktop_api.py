@@ -313,10 +313,15 @@ class DesktopAPI:
         self._agent_registry.set_limits(self._agent_max_log_lines_internal, value)
 
     def push_agent_status(
-        self, agent_id: str, name: str, iteration: int = 1, status: str = "running",
+        self,
+        agent_id: str,
+        name: str,
+        iteration: int = 1,
+        status: str = "running",
+        model: str | None = None,
     ) -> None:
         """Register or update a running agent."""
-        self._agent_registry.update_status(agent_id, name, iteration, status)
+        self._agent_registry.update_status(agent_id, name, iteration, status, model=model)
 
     def push_agent_log(self, agent_id: str, line: str) -> None:
         """Append a log line to an agent's recent log preview."""

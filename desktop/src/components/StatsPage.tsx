@@ -17,6 +17,7 @@ import {
 interface StatsPageProps {
   stats: SessionStats | null;
   modelLeaderboard: Record<string, ModelPerformanceSummary>;
+  activeAgentModel?: string | null;
   modelHistory: ModelHistoryEntry[];
   historyLoading: boolean;
   historyError: string | null;
@@ -50,6 +51,7 @@ interface NormalizedAgentSegment extends AgentSegment {
 export function StatsPage({
   stats,
   modelLeaderboard,
+  activeAgentModel,
   modelHistory,
   historyLoading,
   historyError,
@@ -74,7 +76,7 @@ export function StatsPage({
 
   const agentActivity = buildAgentActivity(stats);
   const normalizedSegments = normalizeAgentSegments(agentActivity);
-  const currentModel = inferCurrentModel(stats, modelLeaderboard);
+  const currentModel = inferCurrentModel(stats, modelLeaderboard, activeAgentModel);
 
   const [sortField, setSortField] = useState<SortField>("success");
   const [sortAsc, setSortAsc] = useState(false);

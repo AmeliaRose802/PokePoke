@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import type { SessionStats } from '../types';
-import { getCompletedItems, getDoneCount } from './stats';
+import type { ModelPerformanceSummary, SessionStats } from '../types';
+import { getCompletedItems, getDoneCount, inferCurrentModel } from './stats';
 
 describe('stats helpers', () => {
   describe('getCompletedItems', () => {
@@ -51,6 +51,47 @@ describe('stats helpers', () => {
 
       expect(getDoneCount(withEmptyItems)).toBe(3);
       expect(getDoneCount(withoutItems)).toBe(5);
+    });
+  });
+
+  describe('inferCurrentModel', () => {
+    const leaderboard: Record<string, ModelPerformanceSummary> = {
+      'gemini-3-pro': { success_rate: 0.9 } as ModelPerformanceSummary,
+      'gpt-5.1': { success_rate: 0.75 } as ModelPerformanceSummary,
+    };
+
+    it('prefers the live active agent model when provided', () => {
+      const stats: SessionStats = { elapsed_time: 0 };
+
+      const result = inferCurrentModel(stats, leaderboard, 'gpt-5.1');
+
+      expect(result).toEqual({
+        model: 'gpt-5.1',
+        gatePassed: null,
+        successRate: 0.75,
+      });
+    });
+
+    it('falls back to latest completion when no active agent model is provided', () => {
+      const stats: SessionStats = {
+        elapsed_time: 0,
+        model_completions: [
+          {
+            item_id: 'AA7Y',
+            model: 'gemini-3-pro',
+            duration_seconds: 123,
+            gate_passed: true,
+          },
+        ],
+      };
+
+      const result = inferCurrentModel(stats, leaderboard);
+
+      expect(result).toEqual({
+        model: 'gemini-3-pro',
+        gatePassed: true,
+        successRate: 0.9,
+      });
     });
   });
 });

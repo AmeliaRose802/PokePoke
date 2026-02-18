@@ -43,8 +43,15 @@ export interface CurrentModelInfo {
 
 export function inferCurrentModel(
   stats: SessionStats | null,
-  leaderboard: Record<string, ModelPerformanceSummary>
+  leaderboard: Record<string, ModelPerformanceSummary>,
+  activeAgentModel?: string | null
 ): CurrentModelInfo {
+  const normalizedActive = activeAgentModel?.trim();
+  if (normalizedActive) {
+    const successRate = leaderboard[normalizedActive]?.success_rate ?? null;
+    return { model: normalizedActive, gatePassed: null, successRate };
+  }
+
   const completions = stats?.model_completions ?? [];
   const latest = completions[completions.length - 1];
   if (latest) {
