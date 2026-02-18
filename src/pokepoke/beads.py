@@ -27,8 +27,6 @@ from .beads_hierarchy import (
 
 from .beads_management import (
     close_item,
-    create_issue,
-    filter_work_items,
     select_next_hierarchical_item,
     assign_and_sync_item,
     add_comment
@@ -52,8 +50,6 @@ __all__ = [
     
     # Management operations
     'close_item',
-    'create_issue',
-    'filter_work_items',
     'select_next_hierarchical_item',
     'assign_and_sync_item',
     'add_comment',

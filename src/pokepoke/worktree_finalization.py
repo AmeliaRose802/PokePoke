@@ -8,7 +8,7 @@ from .types import BeadsWorkItem
 from .worktrees import merge_worktree, cleanup_worktree
 from .git_operations import check_main_repo_ready_for_merge, get_default_branch
 from .beads_hierarchy import get_parent_id, close_parent_if_complete
-from .beads_management import close_item, create_cleanup_delegation_issue
+from .beads_management import close_item
 
 
 def finalize_work_item(item: BeadsWorkItem, worktree_path: Path) -> bool:
