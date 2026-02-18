@@ -1,6 +1,7 @@
 """Test configuration for PokePoke tests."""
 import sys
 import os
+import importlib.util
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -14,9 +15,49 @@ if sys.platform == 'win32':
     # Set console code page to UTF-8 for Windows
     os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
 
+# Fail fast if pytest-timeout is not installed.  The timeout=10 setting in
+# pyproject.toml is silently ignored without this plugin, which lets the full
+# suite hang indefinitely in agent/CI contexts.
+if importlib.util.find_spec("pytest_timeout") is None:
+    raise RuntimeError(
+        "pytest-timeout is required but not installed. "
+        "Install it with: pip install pytest-timeout"
+    )
+
 import pytest
+from unittest.mock import patch
 
 from pokepoke.types import BeadsWorkItem
+
+
+@pytest.fixture(autouse=True)
+def _suppress_terminal_banner(request):
+    """Suppress SetConsoleTitleW during tests.
+
+    The real call leaks emoji-laden title text into the agent's output
+    stream, which floods the buffered pipe and makes the suite appear to
+    hang.  Mocking it globally removes ~100 KB of noise per run.
+
+    Tests in test_terminal_ui.py that directly test set_terminal_banner
+    opt out via the ``real_terminal_banner`` marker.
+    """
+    if request.node.get_closest_marker("real_terminal_banner"):
+        yield
+    else:
+        with patch("pokepoke.terminal_ui.set_terminal_banner"):
+            yield
+
+
+@pytest.fixture(autouse=True)
+def _suppress_atexit():
+    """Prevent tests from registering atexit handlers.
+
+    Orchestrator tests register atexit handlers that print log paths.
+    When many tests run, dozens of handlers fire at exit, producing
+    large bursts of output that contribute to the perceived hang.
+    """
+    with patch("atexit.register"):
+        yield
 
 
 @pytest.fixture
