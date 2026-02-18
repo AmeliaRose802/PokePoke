@@ -4,7 +4,6 @@ Covers:
 - load_model_stats: reading from disk, handling missing/corrupt files
 - save_model_stats: atomic write
 - record_completion: single-record append + summary update
-- record_completions: batch append
 - get_model_summary: read-only summary access
 - get_model_weights: performance-weighted selection weights
 - print_model_leaderboard: human-readable output
@@ -24,7 +23,6 @@ from pokepoke.model_stats_store import (
     load_model_stats,
     save_model_stats,
     record_completion,
-    record_completions,
     get_model_summary,
     get_model_weights,
     get_model_history,
@@ -238,29 +236,6 @@ class TestRecordCompletion:
         assert summary["gpt-4o"]["success_rate"] == 0.5
 
 
-# ── record_completions (batch) ───────────────────────────────────────
-
-class TestRecordCompletions:
-    def test_empty_list_is_noop(self, tmp_path: Path):
-        path = _tmp_stats_path(tmp_path)
-        record_completions([], path)
-        assert not path.exists()
-
-    def test_batch_of_three(self, tmp_path: Path):
-        path = _tmp_stats_path(tmp_path)
-        records = [
-            _make_record(item_id="A", model="m1", gate_passed=True),
-            _make_record(item_id="B", model="m2", gate_passed=False),
-            _make_record(item_id="C", model="m1", gate_passed=True),
-        ]
-        record_completions(records, path)
-
-        data = load_model_stats(path)
-        assert len(data["log"]) == 3
-        assert data["summary"]["m1"]["total_items_attempted"] == 2
-        assert data["summary"]["m2"]["total_items_attempted"] == 1
-
-
 # ── get_model_summary ────────────────────────────────────────────────
 
 class TestGetModelSummary:
@@ -284,12 +259,12 @@ class TestGetModelHistory:
 
     def test_returns_last_n_entries(self, tmp_path: Path):
         path = _tmp_stats_path(tmp_path)
-        records = [
+        for rec in [
             _make_record(item_id="A", model="m1"),
             _make_record(item_id="B", model="m2"),
             _make_record(item_id="C", model="m3"),
-        ]
-        record_completions(records, path)
+        ]:
+            record_completion(rec, path)
 
         history = get_model_history(path, limit=2)
         assert len(history) == 2
