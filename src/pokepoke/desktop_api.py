@@ -134,7 +134,10 @@ class DesktopAPI:
 
     def get_state(self) -> dict[str, Any]:
         """Get the full current state snapshot. Called on frontend init."""
+        from pokepoke.config import get_config
+
         with self._lock:
+            config = get_config()
             return {
                 "work_item": self._current_work_item,
                 "agent_name": self._current_agent_name,
@@ -144,6 +147,7 @@ class DesktopAPI:
                 "model_leaderboard": self._get_cached_leaderboard(),
                 "agents": self._agent_registry.serialize_all(),
                 "stop_after_current": _should_stop_after_current(),
+                "project_name": config.project_name,
             }
 
     def _get_cached_leaderboard(self) -> dict[str, Any]:

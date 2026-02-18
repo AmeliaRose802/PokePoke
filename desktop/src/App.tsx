@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useBridge } from "./useBridge";
+import { useDocumentTitle } from "./useDocumentTitle";
 import { WorkItemHeader } from "./components/WorkItemHeader";
 import { LogPanel } from "./components/LogPanel";
 import { AgentsPanel } from "./components/AgentsPanel";
@@ -31,6 +32,9 @@ function App() {
   const [modelHistory, setModelHistory] = useState<ModelHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+
+  // Update browser tab title with current agent and project name
+  useDocumentTitle(bridge.agentName, bridge.projectName);
 
   const hasSelectedAgent =
     selectedAgentId !== null &&
