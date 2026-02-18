@@ -40,6 +40,7 @@ interface PyWebViewAPI {
     model_leaderboard: Record<string, ModelPerformanceSummary>;
     agents: AgentInfo[];
     stop_after_current: boolean;
+    project_name: string;
   }>;
   get_new_logs(): Promise<LogEntry[]>;
   get_all_logs(): Promise<LogEntry[]>;
@@ -70,6 +71,7 @@ export interface BridgeState {
   agentLogs: LogEntry[];
   workItem: WorkItem | null;
   agentName: string;
+  projectName: string;
   stats: SessionStats | null;
   progress: ProgressState;
   modelLeaderboard: Record<string, ModelPerformanceSummary>;
@@ -98,6 +100,7 @@ export function useBridge(): BridgeState {
   const [agentLogs, setAgentLogs] = useState<LogEntry[]>([]);
   const [workItem, setWorkItem] = useState<WorkItem | null>(null);
   const [agentName, setAgentName] = useState("");
+  const [projectName, setProjectName] = useState("");
   const [stats, setStats] = useState<SessionStats | null>(null);
   const [progress, setProgress] = useState<ProgressState>({
     active: false,
@@ -226,6 +229,7 @@ export function useBridge(): BridgeState {
         const state = await api.get_state();
         if (state.work_item) setWorkItem(state.work_item);
         if (state.agent_name) setAgentName(state.agent_name);
+        if (state.project_name) setProjectName(state.project_name);
         if (state.stats) setStats(state.stats);
         if (state.progress) setProgress(state.progress);
         if (state.model_leaderboard) setModelLeaderboard(state.model_leaderboard);
@@ -253,6 +257,7 @@ export function useBridge(): BridgeState {
           const state = await api.get_state();
           setWorkItem(state.work_item);
           setAgentName(state.agent_name);
+          if (state.project_name !== undefined) setProjectName(state.project_name);
           if (state.stats) setStats(state.stats);
           if (state.progress) setProgress(state.progress);
           if (state.model_leaderboard) setModelLeaderboard(state.model_leaderboard);
@@ -280,6 +285,7 @@ export function useBridge(): BridgeState {
     agentLogs,
     workItem,
     agentName,
+    projectName,
     stats,
     progress,
     modelLeaderboard,
