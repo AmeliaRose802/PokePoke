@@ -1,10 +1,10 @@
-"""Beads integration - query and filter work items.
+"""Beads integration - query and manage work items.
 
 This module provides a unified interface to beads operations.
 Implementation is split across:
 - beads_query: Query operations
 - beads_hierarchy: Parent-child relationships
-- beads_management: Item management and filtering
+- beads_management: Item management (assign, close, select)
 """
 
 # Re-export all public functions for backward compatibility

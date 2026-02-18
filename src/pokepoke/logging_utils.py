@@ -262,17 +262,6 @@ class ItemLogger:
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(message)
             # Don't add newline - let caller control formatting
-    
-    def log_with_timestamp(self, message: str, level: str = "INFO") -> None:
-        """Log a message with timestamp.
-        
-        Args:
-            message: Message to log
-            level: Log level
-        """
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open(self.log_path, 'a', encoding='utf-8') as f:
-            f.write(f"[{timestamp}] [{level}] {message}\n")
 
     def log_copilot_output(self, text: str) -> None:
         """Log streamed agent output text (message deltas/content).

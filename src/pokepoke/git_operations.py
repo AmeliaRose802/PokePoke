@@ -13,7 +13,7 @@ from .merge_conflict import (
     get_merge_conflict_details,
 )
 
-from .git_helpers import restore_beads_stash, verify_branch_pushed
+from .git_helpers import restore_beads_stash
 
 __all__ = [
     'is_merge_in_progress', 'get_unmerged_files', 'abort_merge',

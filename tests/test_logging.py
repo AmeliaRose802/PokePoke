@@ -66,7 +66,6 @@ def test_run_logger_item_logging():
         
         # Log some content
         item_logger.log("Test agent output\n")
-        item_logger.log_with_timestamp("Test timestamped message")
         
         # End item log
         logger.end_item_log(success=True, request_count=5)
@@ -84,7 +83,6 @@ def test_run_logger_item_logging():
         assert "Test Item Title" in content
         assert "Agent: pokepoke_unit_agent" in content
         assert "Test agent output" in content
-        assert "Test timestamped message" in content
         assert "SUCCESS" in content
         assert "Agent requests: 5" in content
 

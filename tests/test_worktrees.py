@@ -1,7 +1,7 @@
 """Tests for git worktree management."""
 import json
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import Mock, patch, call
 
@@ -14,10 +14,11 @@ import pokepoke.git_operations
 from pokepoke.git_operations import (
     get_main_repo_root,
     is_worktree_clean,
-    verify_branch_pushed,
     sanitize_branch_name,
     get_default_branch
 )
+
+from pokepoke.git_helpers import verify_branch_pushed
 
 from pokepoke.worktrees import (
     create_worktree,
@@ -29,7 +30,6 @@ from pokepoke.worktrees import (
 from pokepoke.worktree_cleanup import (
     add_uncleaned_worktree,
     force_remove_directory,
-    get_stale_worktrees,
     load_worktree_manifest,
     remove_from_manifest,
     save_worktree_manifest,
@@ -1157,37 +1157,6 @@ class TestWorktreeManifest:
             save_worktree_manifest(manifest)
             raw = json.loads(manifest_path.read_text(encoding="utf-8"))
             assert raw["task-2"]["reason"] == "cleanup"
-
-    def test_get_stale_worktrees_filters_entries(self, tmp_path: Path) -> None:
-        """Stale and invalid timestamps should be returned."""
-        manifest_path = tmp_path / "uncleaned_worktrees.json"
-        now = datetime.now()
-        data = {
-            "stale": {
-                "path": "worktrees/stale",
-                "reason": "old",
-                "timestamp": (now - timedelta(days=10)).isoformat(),
-            },
-            "fresh": {
-                "path": "worktrees/fresh",
-                "reason": "new",
-                "timestamp": now.isoformat(),
-            },
-            "invalid": {
-                "path": "worktrees/invalid",
-                "reason": "bad",
-                "timestamp": "not-a-time",
-            },
-        }
-        manifest_path.write_text(json.dumps(data), encoding="utf-8")
-        with patch(
-            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
-            return_value=manifest_path,
-        ):
-            stale = get_stale_worktrees(max_age_days=7)
-            assert "stale" in stale
-            assert "invalid" in stale
-            assert "fresh" not in stale
 
 
 class TestCleanupAfterMergePermissionDenied:
