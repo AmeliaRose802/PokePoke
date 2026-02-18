@@ -1,8 +1,11 @@
 """Git operations utilities for status checks, commits, and repository management."""
 
+import logging
 import re
 import subprocess
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Re-export merge conflict utilities for backward compatibility
 from .merge_conflict import (
@@ -38,7 +41,12 @@ def categorize_git_changes(lines: list[str]) -> dict[str, list[str]]:
     }
 
 def has_uncommitted_changes(cwd: str | None = None) -> bool:
-    """Check if there are uncommitted changes in the given directory."""
+    """Check if there are uncommitted changes in the given directory.
+    
+    Returns True if changes exist OR if git status cannot be verified.
+    Returns False only if git successfully reports a clean working directory.
+    Assumes dirty state on failure to prevent data loss during merge operations.
+    """
     try:
         result = subprocess.run(
             ["git", "status", "--porcelain"],
@@ -46,8 +54,9 @@ def has_uncommitted_changes(cwd: str | None = None) -> bool:
             errors='replace', check=True, timeout=10, cwd=cwd
         )
         return bool(result.stdout.strip())
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        return False
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        logger.warning('Could not check uncommitted changes: %s', e)
+        return True  # Assume dirty to prevent data loss
 
 
 def commit_all_changes(message: str = "Auto-commit by PokePoke", cwd: str | None = None) -> tuple[bool, str]:
