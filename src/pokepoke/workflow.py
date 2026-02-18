@@ -116,6 +116,14 @@ def process_work_item(
         gate_success = False  # Track last gate result for model completion record
         timeout_restart_count = 0
 
+        # Ensure result is always defined even if shutdown happens before the first loop iteration.
+        result = CopilotResult(
+            work_item_id=item.id,
+            success=False,
+            error="Session aborted due to application shutdown",
+            attempt_count=0,
+        )
+
         while not is_shutting_down():
             # Check timeout before invoking Copilot
             elapsed = time.time() - start_time
