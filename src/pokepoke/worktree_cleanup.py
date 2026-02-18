@@ -8,7 +8,7 @@ import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, cast
+from typing import cast
 
 # Retry settings for worktree removal on Windows
 _CLEANUP_MAX_RETRIES = 3
@@ -62,30 +62,30 @@ def get_worktree_manifest_path() -> Path:
     return pokepoke_dir / "uncleaned_worktrees.json"
 
 
-def load_worktree_manifest() -> Dict[str, Dict[str, str]]:
+def load_worktree_manifest() -> dict[str, dict[str, str]]:
     """Load the uncleaned worktrees manifest."""
     manifest_path = get_worktree_manifest_path()
     if not manifest_path.exists():
         return {}
 
     try:
-        with open(manifest_path, 'r', encoding='utf-8') as f:
+        with open(manifest_path, encoding='utf-8') as f:
             raw = json.load(f)
             if isinstance(raw, dict):
-                return cast(Dict[str, Dict[str, str]], raw)
+                return cast(dict[str, dict[str, str]], raw)
             return {}
-    except (json.JSONDecodeError, IOError):
+    except (json.JSONDecodeError, OSError):
         return {}
 
 
-def save_worktree_manifest(manifest: Dict[str, Dict[str, str]]) -> None:
+def save_worktree_manifest(manifest: dict[str, dict[str, str]]) -> None:
     """Save the uncleaned worktrees manifest."""
     manifest_path = get_worktree_manifest_path()
     try:
         manifest_path.parent.mkdir(exist_ok=True)
         with open(manifest_path, 'w', encoding='utf-8') as f:
             json.dump(manifest, f, indent=2, ensure_ascii=False)
-    except IOError:
+    except OSError:
         pass  # Silently fail to avoid disrupting main operations
 
 

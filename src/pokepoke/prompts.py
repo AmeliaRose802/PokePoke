@@ -1,7 +1,7 @@
 """Prompt template loading and rendering service."""
 
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any
 import re
 
 from pokepoke.config import _find_repo_root
@@ -13,7 +13,7 @@ BUILTIN_PROMPTS_DIR = (Path(__file__).parent / "builtin_prompts").resolve(
 )
 
 # Template variables used across prompts
-TEMPLATE_VARIABLES: Dict[str, str] = {
+TEMPLATE_VARIABLES: dict[str, str] = {
     "id": "Work item ID (e.g. PokePoke-123)",
     "item_id": "Beads item ID",
     "title": "Work item title",
@@ -42,8 +42,8 @@ class PromptService:
 
     def __init__(
         self,
-        prompts_dir: Optional[Path] = None,
-        builtin_dir: Optional[Path] = None,
+        prompts_dir: Path | None = None,
+        builtin_dir: Path | None = None,
     ):
         """Initialize the prompt service.
 
@@ -114,14 +114,14 @@ class PromptService:
             f"(checked {user_path} and {builtin_path})"
         )
 
-    def list_prompts(self) -> List[Dict[str, Any]]:
+    def list_prompts(self) -> list[dict[str, Any]]:
         """List all available prompt templates with metadata.
 
         Returns:
             List of dicts with keys: name, is_override, has_builtin,
             source ('user' | 'builtin').
         """
-        prompts: Dict[str, Dict[str, Any]] = {}
+        prompts: dict[str, dict[str, Any]] = {}
 
         # Collect built-in prompts
         if self.builtin_dir.exists():
@@ -155,7 +155,7 @@ class PromptService:
 
         return sorted(prompts.values(), key=lambda p: p["name"])
 
-    def get_prompt_metadata(self, template_name: str) -> Dict[str, Any]:
+    def get_prompt_metadata(self, template_name: str) -> dict[str, Any]:
         """Get metadata for a prompt template.
 
         Args:
@@ -186,7 +186,7 @@ class PromptService:
             "template_variables": found_vars,
         }
 
-    def save_prompt(self, template_name: str, content: str) -> Dict[str, Any]:
+    def save_prompt(self, template_name: str, content: str) -> dict[str, Any]:
         """Save a prompt override to the user directory.
 
         Args:
@@ -202,7 +202,7 @@ class PromptService:
         target.write_text(content, encoding="utf-8")
         return {"path": str(target), "saved": True}
 
-    def reset_prompt(self, template_name: str) -> Dict[str, Any]:
+    def reset_prompt(self, template_name: str) -> dict[str, Any]:
         """Remove a user override so the built-in default is used.
 
         Args:
@@ -227,7 +227,7 @@ class PromptService:
             return {"reset": True, "had_override": True}
         return {"reset": True, "had_override": False}
     
-    def render_prompt(self, template: str, variables: Dict[str, Any]) -> str:
+    def render_prompt(self, template: str, variables: dict[str, Any]) -> str:
         """Render a prompt template with variables.
         
         Supports Mustache-like syntax:
@@ -281,7 +281,7 @@ class PromptService:
         
         return result
     
-    def _substitute_variables(self, text: str, variables: Dict[str, Any]) -> str:
+    def _substitute_variables(self, text: str, variables: dict[str, Any]) -> str:
         """Substitute {{variable}} patterns with values.
         
         Args:
@@ -297,7 +297,7 @@ class PromptService:
         
         return re.sub(r'\{\{(\w+|\.)\}\}', replace_var, text)
     
-    def load_and_render(self, template_name: str, variables: Dict[str, Any]) -> str:
+    def load_and_render(self, template_name: str, variables: dict[str, Any]) -> str:
         """Load and render a template in one call.
         
         Args:
@@ -332,7 +332,7 @@ class PromptService:
 
 
 # Singleton instance for easy access
-_default_service: Optional[PromptService] = None
+_default_service: PromptService | None = None
 
 
 def get_prompt_service() -> PromptService:

@@ -4,11 +4,10 @@ Loads project-specific settings from .pokepoke/config.yaml, allowing PokePoke
 to be used generically on any project without hardcoded values.
 """
 
-import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 try:
     import yaml  # type: ignore[import-untyped]
@@ -24,7 +23,7 @@ class ModelConfig:
     """LLM model configuration."""
     default: str = "claude-opus-4.6"
     fallback: str = "claude-sonnet-4.5"
-    candidate_models: List[str] = field(default_factory=list)
+    candidate_models: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -35,14 +34,14 @@ class MaintenanceAgentConfig:
     frequency: int = 5
     needs_worktree: bool = False
     merge_changes: bool = True
-    model: Optional[str] = None
+    model: str | None = None
     enabled: bool = True
 
 
 @dataclass
 class MaintenanceConfig:
     """Maintenance agent scheduling configuration."""
-    agents: List[MaintenanceAgentConfig] = field(default_factory=list)
+    agents: list[MaintenanceAgentConfig] = field(default_factory=list)
 
     @staticmethod
     def defaults() -> 'MaintenanceConfig':
@@ -95,17 +94,17 @@ class MaintenanceConfig:
 class MpcServerConfig:
     """MCP server configuration."""
     enabled: bool = False
-    restart_script: Optional[str] = None
-    name: Optional[str] = None
+    restart_script: str | None = None
+    name: str | None = None
 
 
 @dataclass
 class GitConfig:
     """Git-related configuration."""
-    default_branch: Optional[str] = None
+    default_branch: str | None = None
     fallback_branch: str = "master"
 
-    def get_preferred_branch(self) -> Optional[str]:
+    def get_preferred_branch(self) -> str | None:
         """Get the preferred branch, auto-detecting from environment if not set."""
         if self.default_branch:
             return self.default_branch
@@ -140,14 +139,14 @@ class ProjectConfig:
     maintenance: MaintenanceConfig = field(default_factory=MaintenanceConfig.defaults)
     mcp_server: MpcServerConfig = field(default_factory=MpcServerConfig)
     git: GitConfig = field(default_factory=GitConfig)
-    test_data: Dict[str, str] = field(default_factory=dict)
-    work_artifacts_dir: Optional[str] = None
+    test_data: dict[str, str] = field(default_factory=dict)
+    work_artifacts_dir: str | None = None
     max_parallel_agents: int = 1
     command_timeout: int = 300  # Default 5 minutes for long-running commands
     activity_watchdog: ActivityWatchdogConfig = field(default_factory=ActivityWatchdogConfig)
 
     @staticmethod
-    def from_dict(data: Dict[str, Any]) -> 'ProjectConfig':
+    def from_dict(data: dict[str, Any]) -> 'ProjectConfig':
         """Create a ProjectConfig from a dictionary (parsed YAML/JSON)."""
         config = ProjectConfig()
 
@@ -217,7 +216,7 @@ class ProjectConfig:
         return config
 
 
-def _detect_git_username() -> Optional[str]:
+def _detect_git_username() -> str | None:
     """Try to detect the git username from git config."""
     try:
         result = subprocess.run(
@@ -248,7 +247,7 @@ def _find_repo_root() -> Path:
     return Path.cwd()
 
 
-def _load_config_file(config_path: Path) -> Dict[str, Any]:
+def _load_config_file(config_path: Path) -> dict[str, Any]:
     """Load a config file (YAML or JSON).
 
     Args:
@@ -276,10 +275,10 @@ def _load_config_file(config_path: Path) -> Dict[str, Any]:
 
 
 # Module-level cached config
-_cached_config: Optional[ProjectConfig] = None
+_cached_config: ProjectConfig | None = None
 
 
-def load_config(config_path: Optional[Path] = None) -> ProjectConfig:
+def load_config(config_path: Path | None = None) -> ProjectConfig:
     """Load the project configuration.
 
     Searches for config in this order:

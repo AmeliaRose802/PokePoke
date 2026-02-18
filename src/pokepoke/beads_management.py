@@ -3,7 +3,6 @@
 import json
 import subprocess
 import time
-from typing import List, Optional
 
 from .agent_context import get_agent_name
 from .types import BeadsWorkItem
@@ -21,10 +20,10 @@ def _is_transient_jsonl_sync_error(output: str) -> bool:
 def run_bd_sync_with_retry(
     max_attempts: int = 3,
     base_delay: float = 0.5,
-    timeout: Optional[int] = None
+    timeout: int | None = None
 ) -> subprocess.CompletedProcess[str]:
     """Run bd sync with retries for transient JSONL lock errors."""
-    last_result: Optional[subprocess.CompletedProcess[str]] = None
+    last_result: subprocess.CompletedProcess[str] | None = None
     for attempt in range(1, max_attempts + 1):
         result = subprocess.run(
             ['bd', 'sync'],
@@ -54,7 +53,7 @@ def run_bd_sync_with_retry(
     return last_result
 
 
-def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool:
+def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
     """Assign a work item to an agent and sync to prevent parallel conflicts.
     
     This should be called BEFORE creating a worktree to ensure other parallel
@@ -187,7 +186,7 @@ def add_comment(item_id: str, comment: str) -> bool:
         return False
 
 
-def select_next_hierarchical_item(items: List[BeadsWorkItem]) -> Optional[BeadsWorkItem]:
+def select_next_hierarchical_item(items: list[BeadsWorkItem]) -> BeadsWorkItem | None:
     """Select next work item using hierarchical assignment strategy.
     
     Core rule: NEVER directly assign an epic/feature that has children.

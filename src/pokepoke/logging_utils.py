@@ -78,7 +78,7 @@ class RunLogger:
         self,
         item_id: str,
         item_title: str,
-        agent_name: Optional[str] = None,
+        agent_name: str | None = None,
     ) -> 'ItemLogger':
         """Start logging for a specific work item.
         
@@ -216,7 +216,7 @@ class ItemLogger:
         logs_dir: Path,
         item_id: str,
         item_title: str,
-        agent_name: Optional[str] = None,
+        agent_name: str | None = None,
     ):
         """Initialize the item logger.
         
@@ -251,7 +251,7 @@ class ItemLogger:
             f.write("=" * 80 + "\n\n")
         
         # Track whether file is open
-        self._file_handle: Optional[object] = None
+        self._file_handle: object | None = None
     
     def log(self, message: str) -> None:
         """Log a message to the item log.
@@ -272,7 +272,7 @@ class ItemLogger:
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(text)
 
-    def log_tool_call(self, tool_name: str, args: str, result: Optional[str] = None,
+    def log_tool_call(self, tool_name: str, args: str, result: str | None = None,
                       success: bool = True) -> None:
         """Log a tool invocation and optional result.
 

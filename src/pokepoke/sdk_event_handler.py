@@ -1,6 +1,8 @@
 """Event handler utilities for SDK client sessions."""
 import asyncio
-from typing import Any, Callable, List, Optional, Tuple, TypedDict
+from typing import Any, TypedDict
+
+from collections.abc import Callable
 
 from . import terminal_ui
 
@@ -10,7 +12,7 @@ FALLBACK_MODEL = "claude-sonnet-4.5"
 
 class SessionStats(TypedDict):
     pending_tool_calls: int
-    idle_task: Optional[asyncio.Task[None]]
+    idle_task: asyncio.Task[None] | None
     total_input_tokens: int
     total_output_tokens: int
     total_cache_read_tokens: int
@@ -23,11 +25,11 @@ class SessionStats(TypedDict):
 
 def create_event_handler(
     done: asyncio.Event,
-    output_lines: List[str],
-    errors: List[str],
-    item_logger: Optional[Any] = None,
+    output_lines: list[str],
+    errors: list[str],
+    item_logger: Any | None = None,
     idle_timeout: float = 10.0
-) -> Tuple[Callable[[Any], None], SessionStats]:
+) -> tuple[Callable[[Any], None], SessionStats]:
     """Create an event handler for SDK session events.
     
     Returns:

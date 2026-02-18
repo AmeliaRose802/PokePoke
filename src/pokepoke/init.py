@@ -7,7 +7,6 @@ to help new projects adopt PokePoke quickly.
 import argparse
 import sys
 from pathlib import Path
-from typing import Optional
 
 
 _SAMPLE_CONFIG = """\
@@ -102,8 +101,8 @@ ensure all tests pass before finishing.
 
 
 def init_project(
-    target_dir: Optional[Path] = None,
-    project_name: Optional[str] = None,
+    target_dir: Path | None = None,
+    project_name: str | None = None,
     force: bool = False,
 ) -> bool:
     """Initialize a .pokepoke directory with sample config and templates.

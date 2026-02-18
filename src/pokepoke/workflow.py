@@ -30,7 +30,7 @@ def process_work_item(
     run_beta_test: bool = False,
     run_logger: Optional['RunLogger'] = None,
     max_timeout_restarts: int = 3
-) -> tuple[bool, int, Optional[AgentStats], int, int, Optional[ModelCompletionRecord]]:
+) -> tuple[bool, int, AgentStats | None, int, int, ModelCompletionRecord | None]:
     """Process a single work item with timeout protection.
     
     Args:
@@ -46,7 +46,7 @@ def process_work_item(
     """
     # Register this agent for shutdown coordination
     register_agent()
-    worktree_path: Optional[Path] = None
+    worktree_path: Path | None = None
     
     try:
         start_time = time.time()
@@ -306,7 +306,7 @@ def process_work_item(
         unregister_agent()
 
 
-def _setup_worktree(item: BeadsWorkItem) -> Optional[Path]:
+def _setup_worktree(item: BeadsWorkItem) -> Path | None:
     """Create worktree for work item processing."""
     print(f"\n🌳 Creating worktree for {item.id}...")
     try:
@@ -318,7 +318,7 @@ def _setup_worktree(item: BeadsWorkItem) -> Optional[Path]:
         return None
 
 
-def _run_cleanup_with_timeout(item: BeadsWorkItem, result: CopilotResult, repo_root: Path, start_time: float, timeout_seconds: float, timeout_hours: float, cwd: Optional[str] = None) -> tuple[bool, int]:
+def _run_cleanup_with_timeout(item: BeadsWorkItem, result: CopilotResult, repo_root: Path, start_time: float, timeout_seconds: float, timeout_hours: float, cwd: str | None = None) -> tuple[bool, int]:
     """Run cleanup loop with timeout checking."""
     cleanup_agent_runs = 0
     cleanup_attempt = 0

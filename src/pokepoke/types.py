@@ -2,7 +2,6 @@
 
 import threading
 from dataclasses import dataclass, field, replace, is_dataclass
-from typing import Optional, List
 
 
 @dataclass
@@ -13,16 +12,16 @@ class BeadsWorkItem:
     status: str
     priority: int
     issue_type: str
-    description: Optional[str] = None
-    owner: Optional[str] = None
-    assignee: Optional[str] = None  # Agent actively working on it (pokepoke_agent_123)
-    created_at: Optional[str] = None
-    created_by: Optional[str] = None
-    updated_at: Optional[str] = None
-    labels: Optional[List[str]] = None
-    dependency_count: Optional[int] = None
-    dependent_count: Optional[int] = None
-    notes: Optional[str] = None
+    description: str | None = None
+    owner: str | None = None
+    assignee: str | None = None  # Agent actively working on it (pokepoke_agent_123)
+    created_at: str | None = None
+    created_by: str | None = None
+    updated_at: str | None = None
+    labels: list[str] | None = None
+    dependency_count: int | None = None
+    dependent_count: int | None = None
+    notes: str | None = None
 
 
 @dataclass
@@ -32,15 +31,15 @@ class Dependency:
     title: str
     issue_type: str
     dependency_type: str  # parent, blocks, related, discovered-from
-    status: Optional[str] = None
-    priority: Optional[int] = None
-    description: Optional[str] = None
-    owner: Optional[str] = None
-    created_at: Optional[str] = None
-    created_by: Optional[str] = None
-    updated_at: Optional[str] = None
-    labels: Optional[List[str]] = None
-    notes: Optional[str] = None
+    status: str | None = None
+    priority: int | None = None
+    description: str | None = None
+    owner: str | None = None
+    created_at: str | None = None
+    created_by: str | None = None
+    updated_at: str | None = None
+    labels: list[str] | None = None
+    notes: str | None = None
 
 
 @dataclass
@@ -51,16 +50,16 @@ class IssueWithDependencies:
     status: str
     priority: int
     issue_type: str
-    description: Optional[str] = None
-    dependencies: Optional[List[Dependency]] = None
-    dependents: Optional[List[Dependency]] = None
-    owner: Optional[str] = None
-    assignee: Optional[str] = None  # Agent actively working on it (pokepoke_agent_123)
-    created_at: Optional[str] = None
-    created_by: Optional[str] = None
-    updated_at: Optional[str] = None
-    labels: Optional[List[str]] = None
-    notes: Optional[str] = None
+    description: str | None = None
+    dependencies: list[Dependency] | None = None
+    dependents: list[Dependency] | None = None
+    owner: str | None = None
+    assignee: str | None = None  # Agent actively working on it (pokepoke_agent_123)
+    created_at: str | None = None
+    created_by: str | None = None
+    updated_at: str | None = None
+    labels: list[str] | None = None
+    notes: str | None = None
 
 
 @dataclass
@@ -115,7 +114,7 @@ class ModelCompletionRecord:
     item_id: str
     model: str
     duration_seconds: float
-    gate_passed: Optional[bool] = None  # None = gate not run
+    gate_passed: bool | None = None  # None = gate not run
 
 
 _AGENT_RUN_ATTRS = {
@@ -147,8 +146,8 @@ class SessionStatsSnapshot:
     beta_tester_agent_runs: int = 0
     code_review_agent_runs: int = 0
     worktree_cleanup_agent_runs: int = 0
-    starting_beads_stats: Optional[BeadsStats] = None
-    ending_beads_stats: Optional[BeadsStats] = None
+    starting_beads_stats: BeadsStats | None = None
+    ending_beads_stats: BeadsStats | None = None
     model_completions: tuple[ModelCompletionRecord, ...] = ()
 
 
@@ -157,7 +156,7 @@ class SessionStats:
     """Combined session statistics including agent stats and run counts."""
     agent_stats: AgentStats
     items_completed: int = 0  # Number of items successfully completed in this session
-    completed_items_list: List[BeadsWorkItem] = field(default_factory=list)  # List of items successfully completed
+    completed_items_list: list[BeadsWorkItem] = field(default_factory=list)  # List of items successfully completed
     work_agent_runs: int = 0
     gate_agent_runs: int = 0
     tech_debt_agent_runs: int = 0
@@ -168,15 +167,15 @@ class SessionStats:
     beta_tester_agent_runs: int = 0
     code_review_agent_runs: int = 0
     worktree_cleanup_agent_runs: int = 0
-    starting_beads_stats: Optional[BeadsStats] = None
-    ending_beads_stats: Optional[BeadsStats] = None
-    model_completions: List[ModelCompletionRecord] = field(default_factory=list)
+    starting_beads_stats: BeadsStats | None = None
+    ending_beads_stats: BeadsStats | None = None
+    model_completions: list[ModelCompletionRecord] = field(default_factory=list)
     _lock: threading.Lock = field(
         default_factory=threading.Lock, init=False, repr=False, compare=False
     )
 
     def record_completion(
-        self, item: BeadsWorkItem, items_completed: Optional[int] = None
+        self, item: BeadsWorkItem, items_completed: int | None = None
     ) -> int:
         """Record a completed work item in a thread-safe way."""
         with self._lock:
@@ -226,7 +225,7 @@ class SessionStats:
         with self._lock:
             self.janitor_lines_removed += lines_removed
 
-    def set_starting_beads_stats(self, stats: Optional[BeadsStats]) -> None:
+    def set_starting_beads_stats(self, stats: BeadsStats | None) -> None:
         """Set starting beads statistics safely."""
         with self._lock:
             if stats is None:
@@ -236,7 +235,7 @@ class SessionStats:
             else:
                 self.starting_beads_stats = stats
 
-    def set_ending_beads_stats(self, stats: Optional[BeadsStats]) -> None:
+    def set_ending_beads_stats(self, stats: BeadsStats | None) -> None:
         """Set ending beads statistics safely."""
         with self._lock:
             if stats is None:
@@ -282,10 +281,10 @@ class CopilotResult:
     """Result from invoking Copilot CLI."""
     work_item_id: str
     success: bool
-    output: Optional[str] = None
-    error: Optional[str] = None
-    validation_errors: Optional[List[str]] = None
+    output: str | None = None
+    error: str | None = None
+    validation_errors: list[str] | None = None
     attempt_count: int = 1
     is_rate_limited: bool = False  # True if error was due to rate limiting
-    stats: Optional[AgentStats] = None
-    model: Optional[str] = None  # Model used for this invocation
+    stats: AgentStats | None = None
+    model: str | None = None  # Model used for this invocation
