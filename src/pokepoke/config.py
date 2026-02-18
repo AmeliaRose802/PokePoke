@@ -125,6 +125,14 @@ class TestDataEntry:
 
 
 @dataclass
+class ActivityWatchdogConfig:
+    """Configuration for the activity watchdog that detects hung Copilot sessions."""
+    enabled: bool = True
+    timeout_seconds: int = 600  # 10 minutes
+    check_interval_seconds: int = 30
+
+
+@dataclass
 class ProjectConfig:
     """Top-level project configuration."""
     project_name: str = ""
@@ -136,6 +144,7 @@ class ProjectConfig:
     work_artifacts_dir: Optional[str] = None
     max_parallel_agents: int = 1
     command_timeout: int = 300  # Default 5 minutes for long-running commands
+    activity_watchdog: ActivityWatchdogConfig = field(default_factory=ActivityWatchdogConfig)
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> 'ProjectConfig':
@@ -178,6 +187,14 @@ class ProjectConfig:
 
         # Command timeout (default 300 seconds)
         config.command_timeout = max(30, int(data.get("command_timeout", 300)))
+
+        # Activity watchdog
+        watchdog_data = data.get("activity_watchdog", {})
+        config.activity_watchdog = ActivityWatchdogConfig(
+            enabled=watchdog_data.get("enabled", True),
+            timeout_seconds=max(60, int(watchdog_data.get("timeout_seconds", 600))),
+            check_interval_seconds=max(10, int(watchdog_data.get("check_interval_seconds", 30))),
+        )
 
         # Maintenance agents
         maint_data = data.get("maintenance", {})
