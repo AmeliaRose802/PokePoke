@@ -74,27 +74,43 @@ class RunLogger:
         with open(self.orchestrator_log_path, 'a', encoding='utf-8') as f:
             f.write(f"[{timestamp}] [{level}] {message}\n")
     
-    def start_item_log(self, item_id: str, item_title: str) -> 'ItemLogger':
+    def start_item_log(
+        self,
+        item_id: str,
+        item_title: str,
+        agent_name: Optional[str] = None,
+    ) -> 'ItemLogger':
         """Start logging for a specific work item.
         
         Args:
             item_id: Work item ID
             item_title: Work item title
-            
+            agent_name: Name of the agent handling this item (defaults to current agent)
+             
         Returns:
             ItemLogger instance for the work item
         """
         # Close previous item logger if exists
         if self._current_item_logger:
             self._current_item_logger.close()
-        
+
+        if agent_name is None:
+            # Defer import to avoid circular dependency at module load
+            from pokepoke.agent_context import get_agent_name
+
+            agent_name = get_agent_name(default="agent")
+
         self._current_item_logger = ItemLogger(
             self.item_logs_dir,
             item_id,
-            item_title
+            item_title,
+            agent_name=agent_name,
         )
         
-        self.log_orchestrator(f"Started processing work item: {item_id} - {item_title}")
+        agent_suffix = f" (agent: {agent_name})" if agent_name else ""
+        self.log_orchestrator(
+            f"Started processing work item: {item_id} - {item_title}{agent_suffix}"
+        )
         return self._current_item_logger
     
     def end_item_log(self, success: bool, request_count: int) -> None:
@@ -195,20 +211,32 @@ class RunLogger:
 class ItemLogger:
     """Manages logging for a single work item's agent interactions."""
     
-    def __init__(self, logs_dir: Path, item_id: str, item_title: str):
+    def __init__(
+        self,
+        logs_dir: Path,
+        item_id: str,
+        item_title: str,
+        agent_name: Optional[str] = None,
+    ):
         """Initialize the item logger.
         
         Args:
             logs_dir: Directory to store item logs
             item_id: Work item ID
             item_title: Work item title
+            agent_name: Name of the agent generating this log
         """
         self.item_id = item_id
         self.item_title = item_title
+        self.agent_name = agent_name
         
         # Create log file with sanitized filename
         safe_id = item_id.replace('/', '_').replace('\\', '_')
-        self.log_path = logs_dir / f"{safe_id}.log"
+        filename = safe_id
+        if agent_name:
+            safe_agent = self._sanitize_agent_component(agent_name)
+            filename = f"{filename}_{safe_agent}"
+        self.log_path = logs_dir / f"{filename}.log"
         
         # Initialize log file
         with open(self.log_path, 'w', encoding='utf-8') as f:
@@ -216,6 +244,9 @@ class ItemLogger:
             f.write(f"Work Item: {item_id}\n")
             f.write(f"Title: {item_title}\n")
             f.write("=" * 80 + "\n")
+            if agent_name:
+                f.write(f"Agent: {agent_name}\n")
+                f.write("=" * 80 + "\n")
             f.write(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write("=" * 80 + "\n\n")
         
@@ -299,3 +330,15 @@ class ItemLogger:
         """Close the item logger."""
         # Nothing to do - we use context managers for writes
         pass
+
+    @staticmethod
+    def _sanitize_agent_component(agent_name: str) -> str:
+        """Sanitize agent name for safe filename usage."""
+        sanitized_chars: list[str] = []
+        for ch in agent_name.lower():
+            if ch.isalnum() or ch in {'-', '_'}:
+                sanitized_chars.append(ch)
+            else:
+                sanitized_chars.append('_')
+        sanitized = ''.join(sanitized_chars).strip('_')
+        return sanitized or "agent"
