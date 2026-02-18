@@ -385,3 +385,35 @@ class TestMaintenanceAgentDefaults:
         }
         config = ProjectConfig.from_dict(data)
         assert config.maintenance.agents[0].enabled is False
+
+
+class TestCommandTimeout:
+    """Tests for command_timeout configuration."""
+
+    def test_default_value(self):
+        """Test that command_timeout has a default value of 300."""
+        config = ProjectConfig()
+        assert config.command_timeout == 300
+
+    def test_from_dict_default(self):
+        """Test that command_timeout defaults to 300 when not specified."""
+        config = ProjectConfig.from_dict({})
+        assert config.command_timeout == 300
+
+    def test_from_dict_custom_value(self):
+        """Test that command_timeout can be set via config dict."""
+        data = {"command_timeout": 600}
+        config = ProjectConfig.from_dict(data)
+        assert config.command_timeout == 600
+
+    def test_from_dict_minimum_enforcement(self):
+        """Test that command_timeout enforces minimum of 30 seconds."""
+        data = {"command_timeout": 10}  # Below minimum
+        config = ProjectConfig.from_dict(data)
+        assert config.command_timeout == 30  # Should be clamped to minimum
+
+    def test_from_dict_zero_clamped(self):
+        """Test that zero command_timeout is clamped to minimum."""
+        data = {"command_timeout": 0}
+        config = ProjectConfig.from_dict(data)
+        assert config.command_timeout == 30

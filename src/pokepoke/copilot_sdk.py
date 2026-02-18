@@ -37,6 +37,7 @@ def build_prompt_from_work_item(work_item: BeadsWorkItem) -> str:
         "labels": ", ".join(work_item.labels) if work_item.labels else None,
         "mcp_enabled": config.mcp_server.enabled,
         "test_data_section": test_data_section,
+        "command_timeout": config.command_timeout,
     }
     
     return service.load_and_render("beads-item", variables)
