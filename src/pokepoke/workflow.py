@@ -188,8 +188,38 @@ def process_work_item(
                 return False, request_count, accumulated_stats, cleanup_agent_runs, gate_agent_runs, None
 
             # --- GATE AGENT CHECK ---
-            gate_success, gate_reason, gate_stats = run_gate_agent(item, cwd=worktree_cwd, work_model=selected_model)
+            gate_agent_id = f"{item.id}-gate"
+            gate_iteration = gate_agent_runs + 1
+            terminal_ui.ui.push_agent_status(
+                gate_agent_id,
+                "Gate Agent",
+                iteration=gate_iteration,
+                status="running",
+                parent_agent_id=item.id,
+            )
+            try:
+                with terminal_ui.ui.agent_output_for(gate_agent_id):
+                    gate_success, gate_reason, gate_stats = run_gate_agent(
+                        item, cwd=worktree_cwd, work_model=selected_model
+                    )
+            except Exception:
+                gate_agent_runs += 1
+                terminal_ui.ui.push_agent_status(
+                    gate_agent_id,
+                    "Gate Agent",
+                    iteration=gate_agent_runs,
+                    status="failed",
+                    parent_agent_id=item.id,
+                )
+                raise
             gate_agent_runs += 1
+            terminal_ui.ui.push_agent_status(
+                gate_agent_id,
+                "Gate Agent",
+                iteration=gate_agent_runs,
+                status="success" if gate_success else "failed",
+                parent_agent_id=item.id,
+            )
 
             if gate_success:
                 print("\n✅ Gate Agent signed off!")

@@ -323,9 +323,17 @@ class DesktopAPI:
         iteration: int = 1,
         status: str = "running",
         model: str | None = None,
+        parent_agent_id: str | None = None,
     ) -> None:
         """Register or update a running agent."""
-        self._agent_registry.update_status(agent_id, name, iteration, status, model=model)
+        self._agent_registry.update_status(
+            agent_id,
+            name,
+            iteration,
+            status,
+            model=model,
+            parent_agent_id=parent_agent_id,
+        )
 
     def push_agent_log(self, agent_id: str, line: str) -> None:
         """Append a log line to an agent's recent log preview."""

@@ -537,6 +537,27 @@ def test_push_agent_status_updates_existing() -> None:
     assert agents[0]["recent_logs"] == ["line 1"]
 
 
+def test_push_agent_status_preserves_parent() -> None:
+    """parent_agent_id should be stored and preserved across updates."""
+    api = DesktopAPI()
+    api.push_agent_status(
+        "agent-1",
+        "Gate Agent",
+        iteration=1,
+        status="running",
+        parent_agent_id="work-1",
+    )
+
+    agents = api.get_agents()
+    assert agents[0]["parent_agent_id"] == "work-1"
+
+    api.push_agent_status("agent-1", "Gate Agent", iteration=2, status="success")
+    agents = api.get_agents()
+    assert agents[0]["parent_agent_id"] == "work-1"
+    assert agents[0]["iteration"] == 2
+    assert agents[0]["status"] == "success"
+
+
 def test_push_agent_log_appends_lines() -> None:
     """push_agent_log should append lines to the agent's recent logs."""
     api = DesktopAPI()

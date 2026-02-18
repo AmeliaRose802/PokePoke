@@ -1,17 +1,13 @@
 """Desktop UI adapter for PokePoke orchestrator using pywebview.
 
 Opens a native OS window (via Edge WebView2 on Windows) and runs the
-React frontend inside it. Communication is direct in-process method
+React frontend inside it.  Communication is direct in-process method
 calls — no WebSocket, no server, no port.
 
 Architecture:
-    - pywebview creates a native window that renders the React app
-    - DesktopAPI class exposes Python methods to JavaScript directly
-    - The frontend polls for new logs / state via window.pywebview.api
-    - The orchestrator runs on a background thread
-
-Usage:
-    python -m pokepoke.orchestrator --autonomous --continuous
+    pywebview creates a native window, DesktopAPI exposes Python methods
+    to JavaScript directly, and the frontend polls via window.pywebview.api.
+    The orchestrator runs on a background thread.
 """
 
 from __future__ import annotations
@@ -386,9 +382,12 @@ class DesktopUI:
         iteration: int = 1,
         status: str = "running",
         model: str | None = None,
+        parent_agent_id: str | None = None,
     ) -> None:
         """Register or update a running agent card."""
-        self._api.push_agent_status(agent_id, name, iteration, status, model)
+        self._api.push_agent_status(
+            agent_id, name, iteration, status, model, parent_agent_id
+        )
 
     def push_agent_log(self, agent_id: str, line: str) -> None:
         """Append a log line to an agent's recent log preview."""
