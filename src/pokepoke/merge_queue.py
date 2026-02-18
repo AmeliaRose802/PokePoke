@@ -273,6 +273,18 @@ def _rebase_worktree(worktree_path: Path, target_branch: str | None = None) -> b
         return False
     except subprocess.TimeoutExpired:
         logger.warning("Rebase timed out in %s", worktree_path)
+        # Abort the rebase to leave worktree in a clean state
+        try:
+            subprocess.run(
+                ["git", "rebase", "--abort"],
+                cwd=str(worktree_path),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=30,
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            pass
         return False
 
 
