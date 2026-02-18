@@ -1,5 +1,5 @@
 # PokePoke Dependencies
-# Python 3.8+ required for dataclasses and typing features
+# Python 3.12+ required (see pyproject.toml)
 
 # GitHub Copilot SDK for programmatic CLI integration
 github-copilot-sdk>=0.1.0
