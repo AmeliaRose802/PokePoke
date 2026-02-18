@@ -13,6 +13,9 @@ import {
   getCompletedItems,
   getDoneCount,
   inferCurrentModel,
+  formatTotalTokens,
+  getAgentRunCounts,
+  formatAgentRuns,
 } from "../utils/stats";
 
 interface Props {
@@ -42,6 +45,11 @@ export function StatsBar({ stats, modelLeaderboard, activeAgentModel, onOpenStat
         ? "model-fail"
         : "model-neutral";
 
+  // New token and agent run metrics
+  const totalTokens = formatTotalTokens(stats);
+  const agentRunCounts = getAgentRunCounts(stats);
+  const agentRunsDisplay = formatAgentRuns(agentRunCounts);
+
   return (
     <footer className="stats-bar compact">
       <div className="stats-summary">
@@ -69,6 +77,14 @@ export function StatsBar({ stats, modelLeaderboard, activeAgentModel, onOpenStat
               {formatPercent(currentModel.successRate)}
             </span>
           )}
+        </div>
+        <div className="summary-block">
+          <span className="summary-label">Tokens</span>
+          <span className="summary-value">{totalTokens}</span>
+        </div>
+        <div className="summary-block">
+          <span className="summary-label">Runs</span>
+          <span className="summary-value">{agentRunsDisplay}</span>
         </div>
       </div>
       <button className="stats-link" onClick={onOpenStats} title="Open detailed stats">

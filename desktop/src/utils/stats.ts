@@ -12,6 +12,14 @@ export function formatTokens(count: number | undefined): string {
   return value.toFixed(0);
 }
 
+export function formatTotalTokens(stats: SessionStats | null): string {
+  if (!stats?.agent_stats) return "0";
+  const inputTokens = stats.agent_stats.input_tokens || 0;
+  const outputTokens = stats.agent_stats.output_tokens || 0;
+  const totalTokens = inputTokens + outputTokens;
+  return formatTokens(totalTokens);
+}
+
 export function formatDurationShort(seconds: number | undefined): string {
   if (!Number.isFinite(seconds ?? 0)) return "0s";
   const value = Math.max(0, seconds ?? 0);
@@ -108,4 +116,49 @@ export function getDoneCount(stats: SessionStats | null): number {
   const completed = getCompletedItems(stats);
   if (completed.length > 0) return completed.length;
   return stats?.items_completed ?? 0;
+}
+
+export interface AgentRunCounts {
+  work: number;
+  cleanup: number; 
+  other: number;
+}
+
+export function getAgentRunCounts(stats: SessionStats | null): AgentRunCounts {
+  if (!stats) return { work: 0, cleanup: 0, other: 0 };
+
+  // Work: productive development work
+  const work = (stats.work_agent_runs ?? 0);
+
+  // Cleanup: maintenance and cleanup activities  
+  const cleanup = 
+    (stats.cleanup_agent_runs ?? 0) +
+    (stats.janitor_agent_runs ?? 0) +
+    (stats.backlog_cleanup_agent_runs ?? 0) +
+    (stats.worktree_cleanup_agent_runs ?? 0);
+
+  // Other: specialized tasks like gates, reviews, etc.
+  const other =
+    (stats.gate_agent_runs ?? 0) +
+    (stats.tech_debt_agent_runs ?? 0) +
+    (stats.beta_tester_agent_runs ?? 0) +
+    (stats.code_review_agent_runs ?? 0);
+
+  return { work, cleanup, other };
+}
+
+export function formatAgentRuns(counts: AgentRunCounts): string {
+  const parts: string[] = [];
+  
+  if (counts.work > 0) {
+    parts.push(`Work ${counts.work}`);
+  }
+  if (counts.cleanup > 0) {
+    parts.push(`Cleanup ${counts.cleanup}`);
+  }
+  if (counts.other > 0) {
+    parts.push(`Other ${counts.other}`);
+  }
+  
+  return parts.length > 0 ? parts.join(" · ") : "—";
 }
