@@ -47,6 +47,18 @@ def create_event_handler(
         'current_model': DEFAULT_MODEL
     }
     
+    def _iter_streaming_chunks(event_obj: Any) -> list[tuple[str, str]]:
+        """Extract text chunks from tool streaming/progress events."""
+        data = getattr(event_obj, "data", None)
+        if data is None:
+            return []
+        chunks: list[tuple[str, str]] = []
+        for attr in ("stdout", "stderr", "output", "chunk", "delta", "delta_content", "content", "message", "text"):
+            val = getattr(data, attr, None)
+            if isinstance(val, str) and val:
+                chunks.append((attr, val))
+        return chunks
+    
     def handle_event(event: Any) -> None:
         """Handle SDK session events."""
         nonlocal stats
@@ -110,6 +122,17 @@ def create_event_handler(
                             getattr(event.data, 'tool_name', 'unknown'),
                             '', result=result_content, success=success
                         )
+
+        elif event_type.startswith("tool.") and event_type not in ("tool.execution_start", "tool.execution_complete"):
+            stream_chunks = _iter_streaming_chunks(event)
+            if not stream_chunks:
+                return
+            for source, text in stream_chunks:
+                prefix = "[stderr] " if source == "stderr" else ""
+                print(f"{prefix}{text}", end="" if text.endswith("\n") else "\n")
+                output_lines.append(text)
+                if item_logger:
+                    item_logger.log_copilot_output(text)
 
         elif event_type == "assistant.usage":
             terminal_ui.ui.set_style(None)
