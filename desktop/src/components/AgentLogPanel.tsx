@@ -1,11 +1,17 @@
 /**
  * Agent Log Panel - displays selected agent's logs in the main content area.
  *
- * Renders full log output with scrollback, similar to LogPanel but for agent details.
+ * Renders full log output with scrollback and collapsible tool/code blocks,
+ * matching the main LogPanel's interactive UI.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentInfo } from "../types";
+import {
+  processLogsToRenderItems,
+  stringsToLogEntries,
+} from "../utils/logProcessor";
+import { RenderLogItems } from "./LogComponents";
 
 interface Props {
   agent: AgentInfo;
@@ -53,6 +59,16 @@ export function AgentLogPanel({ agent, onClose }: Props) {
     isUserScrolledUp.current = !atBottom;
   };
 
+  // Capture the fallback timestamp once on mount (avoids Date.now() in render)
+  const [fallbackTimestamp] = useState(() => Math.floor(Date.now() / 1000));
+
+  // Convert string log lines to LogEntry format and process for rendering
+  const renderItems = useMemo(() => {
+    const baseTimestamp = agent.started_at ?? fallbackTimestamp;
+    const logEntries = stringsToLogEntries(logLines, baseTimestamp);
+    return processLogsToRenderItems(logEntries);
+  }, [logLines, agent.started_at, fallbackTimestamp]);
+
   useEffect(() => {
     if (!isUserScrolledUp.current) {
       bottomRef.current?.scrollIntoView({ behavior: "auto" });
@@ -84,15 +100,11 @@ export function AgentLogPanel({ agent, onClose }: Props) {
         </div>
         <span className="log-count">{logLines.length} lines</span>
       </div>
-      <div className="agent-log-panel-content" ref={containerRef} onScroll={handleScroll}>
+      <div className="agent-log-panel-content log-entries" ref={containerRef} onScroll={handleScroll}>
         {logLines.length === 0 ? (
           <div className="agent-log-panel-empty">Waiting for output…</div>
         ) : (
-          logLines.map((line, i) => (
-            <div key={`${agent.agent_id}-log-${i}`} className="agent-log-panel-line">
-              {line}
-            </div>
-          ))
+          <RenderLogItems items={renderItems} />
         )}
         <div ref={bottomRef} />
       </div>
