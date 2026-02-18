@@ -1,6 +1,7 @@
 """GitHub Copilot SDK integration."""
 import asyncio
 import os
+from pathlib import Path
 from typing import Optional, TYPE_CHECKING, Any, List
 from copilot import CopilotClient  # type: ignore
 from .config import get_config
@@ -16,6 +17,55 @@ FALLBACK_MODEL = "claude-sonnet-4.5"
 
 if TYPE_CHECKING:
     from .logging_utils import ItemLogger
+
+
+async def _activity_watchdog(
+    log_path: Path,
+    timeout_seconds: float,
+    check_interval_seconds: float,
+    abort_event: asyncio.Event
+) -> bool:
+    """Monitor log file activity and detect hung sessions.
+    
+    Args:
+        log_path: Path to the item log file to monitor
+        timeout_seconds: How long to wait with no activity before aborting
+        check_interval_seconds: How often to check for activity
+        abort_event: Event to signal when session should abort
+        
+    Returns:
+        True if watchdog triggered abort, False if cancelled normally
+    """
+    try:
+        last_mtime = log_path.stat().st_mtime if log_path.exists() else 0.0
+        last_activity_time = asyncio.get_event_loop().time()
+        
+        while True:
+            await asyncio.sleep(check_interval_seconds)
+            
+            # Check if log file was modified
+            current_mtime = log_path.stat().st_mtime if log_path.exists() else 0.0
+            current_time = asyncio.get_event_loop().time()
+            
+            if current_mtime > last_mtime:
+                # Activity detected - reset timer
+                last_mtime = current_mtime
+                last_activity_time = current_time
+            else:
+                # No activity - check if we've exceeded threshold
+                idle_duration = current_time - last_activity_time
+                if idle_duration >= timeout_seconds:
+                    print(f"\n⚠️  ACTIVITY WATCHDOG: No output for {int(idle_duration)}s (threshold: {int(timeout_seconds)}s)")
+                    print("   Aborting hung session...")
+                    abort_event.set()
+                    return True
+            
+    except asyncio.CancelledError:
+        # Normal cancellation - session completed
+        return False
+    except Exception as e:
+        print(f"\n⚠️  Activity watchdog error: {e}")
+        return False
 
 
 def build_prompt_from_work_item(work_item: BeadsWorkItem) -> str:
@@ -64,6 +114,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     final_prompt = prompt or build_prompt_from_work_item(work_item)
     max_timeout = timeout or 7200.0
     current_model = model or DEFAULT_MODEL
+    watchdog_task: Optional[asyncio.Task[bool]] = None  # Initialize early for finally block
+    
     # Pass PYTHONIOENCODING via subprocess env (thread-safe, no global os.environ mutation)
     client_opts: dict[str, Any] = {"cli_path": "copilot.cmd", "log_level": "info", "env": {**os.environ, "PYTHONIOENCODING": "utf-8:replace"}}
     if cwd:
@@ -93,12 +145,29 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         session.on(handle_event)
         timed_out = False
         interrupted = False
+        activity_timeout = False
         total_wall_duration = 0.0
         total_api_duration = 0.0
+        
+        # Setup activity watchdog
+        watchdog_abort = asyncio.Event()
+        proj_config = get_config()
+        
+        if item_logger and proj_config.activity_watchdog.enabled:
+            log_path = Path(item_logger.log_path)
+            watchdog_task = asyncio.create_task(
+                _activity_watchdog(
+                    log_path,
+                    float(proj_config.activity_watchdog.timeout_seconds),
+                    float(proj_config.activity_watchdog.check_interval_seconds),
+                    watchdog_abort
+                )
+            )
+            print(f"[SDK] Activity watchdog enabled (timeout: {proj_config.activity_watchdog.timeout_seconds}s)\n")
 
         async def send_with_retry() -> bool:
             """Send message, returns True if should retry with fallback model."""
-            nonlocal session, session_config, current_model, timed_out, interrupted, total_wall_duration, total_api_duration
+            nonlocal session, session_config, current_model, timed_out, interrupted, activity_timeout, total_wall_duration, total_api_duration
             print("[SDK] Sending message...\n")
             attempt_start = asyncio.get_event_loop().time()
             try:
@@ -109,6 +178,11 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                         print("\n[SDK] Shutdown requested - aborting session...")
                         await session.abort()
                         interrupted = True
+                        return False
+                    if watchdog_abort.is_set():
+                        print("\n[SDK] Activity watchdog triggered - aborting session...")
+                        await session.abort()
+                        activity_timeout = True
                         return False
                     remaining = deadline - asyncio.get_event_loop().time()
                     if remaining <= 0:
@@ -155,7 +229,17 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             if needs_retry:
                 await send_with_retry()
         
+        # Cancel watchdog if it's still running
+        if watchdog_task and not watchdog_task.done():
+            watchdog_task.cancel()
+            try:
+                await watchdog_task
+            except asyncio.CancelledError:
+                pass
+        
         # Handle timeout/interrupt cases
+        if activity_timeout:
+            return _fail_result(work_item.id, f"Activity timeout: no output for {proj_config.activity_watchdog.timeout_seconds}s")
         if timed_out:
             return _fail_result(work_item.id, f"SDK timeout after {max_timeout}s")
         if interrupted:
@@ -187,6 +271,14 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         print(f"\n[SDK] Exception: {e}")
         return _fail_result(work_item.id, f"SDK exception: {e}")
     finally:
+        # Ensure watchdog is cancelled
+        if watchdog_task and not watchdog_task.done():
+            watchdog_task.cancel()
+            try:
+                await watchdog_task
+            except asyncio.CancelledError:
+                pass
+        
         try:
             print("\n[SDK] Initiating graceful client shutdown...")
             await asyncio.sleep(0.5)

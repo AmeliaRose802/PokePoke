@@ -1000,3 +1000,4 @@ class TestInvokeCopilotSDKAsync:
         )
 
         assert result.success
+
