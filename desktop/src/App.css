@@ -453,6 +453,133 @@
   font-style: italic;
 }
 
+/* ── Agent Card Selected State ────────────────────────────────────────── */
+
+.agent-card-selected {
+  border-color: #7aa2f7;
+  background: #1f2335;
+  box-shadow: 0 0 0 1px #7aa2f7;
+}
+
+/* ── Agent Log Panel (main content area) ──────────────────────────────── */
+
+.agent-log-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #16161e;
+  border: 1px solid #292e42;
+  border-radius: 6px;
+  border-left: 3px solid #7aa2f7;
+  overflow: hidden;
+}
+
+.agent-log-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #1a1b26;
+  border-bottom: 1px solid #292e42;
+  flex-wrap: wrap;
+}
+
+.agent-log-panel-close {
+  background: transparent;
+  border: none;
+  color: #565f89;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.agent-log-panel-close:hover {
+  background: #292e42;
+  color: #c0caf5;
+}
+
+.agent-log-panel-avatar {
+  font-size: 24px;
+}
+
+.agent-log-panel-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agent-log-panel-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #c0caf5;
+}
+
+.agent-log-panel-iter {
+  font-size: 11px;
+  color: #565f89;
+}
+
+.agent-log-panel-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agent-log-panel-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 11px;
+  color: #565f89;
+  margin-left: auto;
+}
+
+.agent-log-panel-meta .agent-meta-item {
+  display: flex;
+  gap: 4px;
+}
+
+.agent-log-panel-meta strong {
+  color: #7aa2f7;
+}
+
+.agent-log-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px;
+  font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.agent-log-panel-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.agent-log-panel-content::-webkit-scrollbar-track {
+  background: #16161e;
+}
+
+.agent-log-panel-content::-webkit-scrollbar-thumb {
+  background: #3b4261;
+  border-radius: 4px;
+}
+
+.agent-log-panel-line {
+  color: #a9b1d6;
+  padding: 1px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.agent-log-panel-empty {
+  color: #565f89;
+  font-style: italic;
+  text-align: center;
+  padding: 24px;
+}
+
 /* ── Log Panel ─────────────────────────────────────────────────────────── */
 
 .log-panel {
@@ -877,6 +1004,20 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.completed-items-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.completed-items-list li {
+  color: #c0caf5;
+  font-size: 13px;
 }
 
 .stats-panel-card-header h3 {

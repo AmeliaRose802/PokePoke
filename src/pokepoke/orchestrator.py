@@ -31,12 +31,13 @@ def _finalize_session(
     items_completed: int, total_requests: int, run_logger: RunLogger,
 ) -> None:
     """Collect ending stats, print summary, and clean up UI."""
+    end_time = time.time(); terminal_ui.ui.set_session_end_time(end_time)  # Stop desktop UI clock
     try:
         session_stats.set_ending_beads_stats(get_beads_stats())
     except KeyboardInterrupt:
         print("⚠️  Stats collection interrupted, skipping...")
         session_stats.set_ending_beads_stats(None)
-    elapsed = time.time() - start_time
+    elapsed = end_time - start_time
     print_stats(items_completed, total_requests, elapsed, session_stats)
     run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
     clear_terminal_banner()

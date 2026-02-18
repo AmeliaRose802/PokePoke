@@ -135,6 +135,7 @@ class ProjectConfig:
     test_data: Dict[str, str] = field(default_factory=dict)
     work_artifacts_dir: Optional[str] = None
     max_parallel_agents: int = 1
+    command_timeout: int = 300  # Default 5 minutes for long-running commands
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> 'ProjectConfig':
@@ -174,6 +175,9 @@ class ProjectConfig:
 
         # Max parallel agents
         config.max_parallel_agents = max(1, int(data.get("max_parallel_agents", 1)))
+
+        # Command timeout (default 300 seconds)
+        config.command_timeout = max(30, int(data.get("command_timeout", 300)))
 
         # Maintenance agents
         maint_data = data.get("maintenance", {})

@@ -54,8 +54,6 @@ class MaintenanceScheduler:
         # In-process locks for thread coordination
         self._locks: Dict[str, threading.Lock] = {}
         self._lock_creation_lock = threading.Lock()
-        # Lock for thread-safe stat updates
-        self._stats_lock = threading.Lock()
         
     def _get_agent_lock(self, agent_name: str) -> threading.Lock:
         """Get or create a threading lock for the given agent."""
@@ -181,6 +179,10 @@ class MaintenanceScheduler:
         """
         log_key = agent_name.lower().replace(" ", "_")
         
+        # Register maintenance agent in the Agents panel
+        agent_id = f"maintenance-{log_key}"
+        terminal_ui.ui.push_agent_status(agent_id, f"{agent_name} Agent", iteration=1, status="running")
+        
         set_terminal_banner(f"PokePoke - Synced {agent_name} Agent")
         terminal_ui.ui.update_header("MAINTENANCE", f"{agent_name} Agent", "Running")
         print(f"\n🔧 Running {agent_name} Agent...")
@@ -188,38 +190,52 @@ class MaintenanceScheduler:
 
         # Update run count on session stats if attribute exists (thread-safe)
         stat_attr = _AGENT_STAT_ATTRS.get(agent_name)
-        if stat_attr and hasattr(session_stats, stat_attr):
-            with self._stats_lock:
+        if stat_attr and hasattr(session_stats, 'record_agent_run'):
+            try:
                 session_stats.record_agent_run(agent_name)
+            except (AttributeError, ValueError):
+                # Silently skip if method doesn't exist or agent name not recognized
+                pass
 
         # Create a dedicated log file for the maintenance agent output
         maint_logger = run_logger.start_maintenance_log(agent_name)
 
-        # Run the agent
-        if agent_name in _SPECIAL_AGENTS:
-            result = _run_special_agent(agent_name, pokepoke_repo, item_logger=maint_logger)
-        else:
-            result = run_maintenance_agent(
-                agent_name,
-                agent_cfg.prompt_file,
-                repo_root=pokepoke_repo,
-                needs_worktree=agent_cfg.needs_worktree,
-                merge_changes=agent_cfg.merge_changes,
-                model=agent_cfg.model,
-                item_logger=maint_logger,
-            )
+        # Run the agent with proper output routing
+        try:
+            with terminal_ui.ui.agent_output_for(agent_id):
+                if agent_name in _SPECIAL_AGENTS:
+                    result = _run_special_agent(agent_name, pokepoke_repo, item_logger=maint_logger)
+                else:
+                    result = run_maintenance_agent(
+                        agent_name,
+                        agent_cfg.prompt_file,
+                        repo_root=pokepoke_repo,
+                        needs_worktree=agent_cfg.needs_worktree,
+                        merge_changes=agent_cfg.merge_changes,
+                        model=agent_cfg.model,
+                        item_logger=maint_logger,
+                    )
+            
+            success = result is not None
+            
+            # Update agent status based on result
+            status = "success" if success else "failed"
+            terminal_ui.ui.push_agent_status(agent_id, f"{agent_name} Agent", iteration=1, status=status)
+            
+            maint_logger.log_summary(success, request_count=0)
 
-        success = result is not None
-        maint_logger.log_summary(success, request_count=0)
-
-        if result:
-            with self._stats_lock:
+            if result:
                 session_stats.record_agent_stats(result)
                 if agent_name == "Janitor":
                     session_stats.record_janitor_lines_removed(result.lines_removed)
-            run_logger.log_maintenance(log_key, f"{agent_name} Agent completed successfully")
-        else:
-            run_logger.log_maintenance(log_key, f"{agent_name} Agent failed")
+                run_logger.log_maintenance(log_key, f"{agent_name} Agent completed successfully")
+            else:
+                run_logger.log_maintenance(log_key, f"{agent_name} Agent failed")
+                
+        except Exception:
+            terminal_ui.ui.push_agent_status(agent_id, f"{agent_name} Agent", iteration=1, status="failed")
+            run_logger.log_maintenance(log_key, f"{agent_name} Agent raised exception")
+            raise
 
 
 # Global scheduler instance and initialization lock

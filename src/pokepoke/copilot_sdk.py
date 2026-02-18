@@ -10,7 +10,6 @@ from . import terminal_ui
 from .shutdown import is_shutting_down
 from .process_utils import wait_for_process_cleanup
 from .sdk_event_handler import create_event_handler
-from .stats import parse_agent_stats
 
 DEFAULT_MODEL = "claude-opus-4.6"
 FALLBACK_MODEL = "claude-sonnet-4.5"
@@ -38,6 +37,7 @@ def build_prompt_from_work_item(work_item: BeadsWorkItem) -> str:
         "labels": ", ".join(work_item.labels) if work_item.labels else None,
         "mcp_enabled": config.mcp_server.enabled,
         "test_data_section": test_data_section,
+        "command_timeout": config.command_timeout,
     }
     
     return service.load_and_render("beads-item", variables)
@@ -93,13 +93,16 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         session.on(handle_event)
         timed_out = False
         interrupted = False
+        total_wall_duration = 0.0
+        total_api_duration = 0.0
 
         async def send_with_retry() -> bool:
             """Send message, returns True if should retry with fallback model."""
-            nonlocal session, session_config, current_model, timed_out, interrupted
+            nonlocal session, session_config, current_model, timed_out, interrupted, total_wall_duration, total_api_duration
             print("[SDK] Sending message...\n")
-            await session.send({"prompt": final_prompt})
+            attempt_start = asyncio.get_event_loop().time()
             try:
+                await session.send({"prompt": final_prompt})
                 deadline = asyncio.get_event_loop().time() + max_timeout
                 while not done.is_set():
                     if is_shutting_down():
@@ -125,6 +128,11 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     pass
                 interrupted = True
                 return False
+            finally:
+                attempt_elapsed = asyncio.get_event_loop().time() - attempt_start
+                total_wall_duration += attempt_elapsed
+                # Copilot SDK does not emit separate API timing, so treat session time as API time.
+                total_api_duration += attempt_elapsed
             # Check if we need to retry with fallback model
             if stats['tried_fallback'] and stats['current_model'] == FALLBACK_MODEL and not done.is_set():
                 print(f"\n[SDK] Retrying with fallback model: {FALLBACK_MODEL}")
@@ -160,33 +168,11 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         print(f"\n{'='*60}\n[SDK] Result: {'SUCCESS' if success else 'FAILURE'}\n{'='*60}")
         if stats['turn_count'] > 0 or stats['total_input_tokens'] > 0:
             print(f"\n📊 Stats: {stats['turn_count']} turns, {stats['total_input_tokens']:,}+{stats['total_output_tokens']:,} tokens")
-        
-        # Parse agent stats from output text (includes API duration, wall duration, etc.)
-        parsed_stats = parse_agent_stats(output_text)
-        if parsed_stats:
-            # Merge SDK stats with parsed stats from output
-            agent_stats = AgentStats(
-                input_tokens=stats['total_input_tokens'], 
-                output_tokens=stats['total_output_tokens'],
-                premium_requests=stats['turn_count'], 
-                tool_calls=stats['total_tool_calls'],
-                api_duration=parsed_stats.api_duration,
-                wall_duration=parsed_stats.wall_duration,
-                lines_added=parsed_stats.lines_added,
-                lines_removed=parsed_stats.lines_removed,
-                retries=parsed_stats.retries
-            )
-        else:
-            # Fallback if no stats parsed from output
-            agent_stats = AgentStats(
-                input_tokens=stats['total_input_tokens'], 
-                output_tokens=stats['total_output_tokens'],
-                premium_requests=stats['turn_count'], 
-                tool_calls=stats['total_tool_calls'],
-                api_duration=0.0, 
-                wall_duration=0.0,
-            )
-        
+        agent_stats = AgentStats(
+            input_tokens=stats['total_input_tokens'], output_tokens=stats['total_output_tokens'],
+            premium_requests=stats['turn_count'], tool_calls=stats['total_tool_calls'],
+            api_duration=total_api_duration, wall_duration=total_wall_duration,
+        )
         return CopilotResult(
             work_item_id=work_item.id, success=success, output=output_text,
             error="; ".join(errors) if errors else None,
