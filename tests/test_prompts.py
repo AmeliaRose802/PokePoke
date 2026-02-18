@@ -274,6 +274,56 @@ def test_load_prompt_not_found_in_either(tmp_path):
         service.load_prompt("missing")
 
 
+@pytest.mark.parametrize(
+    "bad_name",
+    [
+        "../evil",
+        "..\\evil",
+        "bad/name",
+        "bad\\name",
+        "bad..name",
+        "bad\x00name",
+        "",
+    ],
+)
+def test_save_prompt_rejects_invalid_template_name(tmp_path, bad_name):
+    """save_prompt should reject names that could escape the prompts directory."""
+    user_dir = tmp_path / "user"
+    builtin_dir = tmp_path / "builtin"
+    builtin_dir.mkdir()
+    (builtin_dir / "valid.md").write_text("ok", encoding="utf-8")
+
+    service = PromptService(prompts_dir=user_dir, builtin_dir=builtin_dir)
+
+    with pytest.raises(ValueError, match="Template name"):
+        service.save_prompt(bad_name, "content")
+
+
+@pytest.mark.parametrize(
+    "bad_name",
+    [
+        "../evil",
+        "..\\evil",
+        "bad/name",
+        "bad\\name",
+        "bad..name",
+        "bad\x00name",
+        "",
+    ],
+)
+def test_load_prompt_rejects_invalid_template_name(tmp_path, bad_name):
+    """load_prompt should reject names that could escape the prompts directory."""
+    user_dir = tmp_path / "user"
+    builtin_dir = tmp_path / "builtin"
+    builtin_dir.mkdir()
+    (builtin_dir / "valid.md").write_text("ok", encoding="utf-8")
+
+    service = PromptService(prompts_dir=user_dir, builtin_dir=builtin_dir)
+
+    with pytest.raises(ValueError, match="Template name"):
+        service.load_prompt(bad_name)
+
+
 def test_list_prompts_merges_sources(tmp_path):
     """list_prompts should merge builtin and user prompts."""
     user_dir = tmp_path / "user"

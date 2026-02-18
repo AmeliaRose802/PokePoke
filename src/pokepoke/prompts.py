@@ -8,7 +8,9 @@ from pokepoke.config import _find_repo_root
 
 
 # Built-in prompts ship with the package
-BUILTIN_PROMPTS_DIR = Path(__file__).parent / "builtin_prompts"
+BUILTIN_PROMPTS_DIR = (Path(__file__).parent / "builtin_prompts").resolve(
+    strict=False
+)
 
 # Template variables used across prompts
 TEMPLATE_VARIABLES: Dict[str, str] = {
@@ -26,6 +28,17 @@ TEMPLATE_VARIABLES: Dict[str, str] = {
     "mcp_enabled": "Boolean to show MCP server section",
     "test_data_section": "Rendered test data for the prompt",
 }
+
+_TEMPLATE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _is_relative_to(path: Path, base: Path) -> bool:
+    """Backport Path.is_relative_to for older Python versions."""
+    try:
+        path.relative_to(base)
+        return True
+    except ValueError:
+        return False
 
 
 class PromptService:
@@ -64,8 +77,13 @@ class PromptService:
                     / "prompts"
                 )
 
-        self.prompts_dir = Path(prompts_dir)
-        self.builtin_dir = Path(builtin_dir) if builtin_dir else BUILTIN_PROMPTS_DIR
+        self.prompts_dir = Path(prompts_dir).resolve(strict=False)
+        builtin_path = (
+            Path(builtin_dir).resolve(strict=False)
+            if builtin_dir
+            else BUILTIN_PROMPTS_DIR
+        )
+        self.builtin_dir = builtin_path
 
         # At least one directory must exist
         if not self.prompts_dir.exists() and not self.builtin_dir.exists():
@@ -88,13 +106,15 @@ class PromptService:
         Raises:
             FileNotFoundError: If template doesn't exist in either location
         """
+        safe_name = self._validate_template_name(template_name)
+
         # User override takes priority
-        user_path = self.prompts_dir / f"{template_name}.md"
+        user_path = self._resolve_template_path(self.prompts_dir, safe_name)
         if user_path.exists():
             return user_path.read_text(encoding="utf-8")
 
         # Fall back to built-in
-        builtin_path = self.builtin_dir / f"{template_name}.md"
+        builtin_path = self._resolve_template_path(self.builtin_dir, safe_name)
         if builtin_path.exists():
             return builtin_path.read_text(encoding="utf-8")
 
@@ -154,9 +174,10 @@ class PromptService:
             Dict with name, content, is_override, has_builtin, source,
             and template_variables found in the content.
         """
-        content = self.load_prompt(template_name)
-        user_path = self.prompts_dir / f"{template_name}.md"
-        builtin_path = self.builtin_dir / f"{template_name}.md"
+        safe_name = self._validate_template_name(template_name)
+        content = self.load_prompt(safe_name)
+        user_path = self._resolve_template_path(self.prompts_dir, safe_name)
+        builtin_path = self._resolve_template_path(self.builtin_dir, safe_name)
 
         is_override = user_path.exists() and builtin_path.exists()
         has_builtin = builtin_path.exists()
@@ -184,8 +205,9 @@ class PromptService:
         Returns:
             Dict with path and saved status.
         """
-        self.prompts_dir.mkdir(parents=True, exist_ok=True)
-        target = self.prompts_dir / f"{template_name}.md"
+        safe_name = self._validate_template_name(template_name)
+        target = self._resolve_template_path(self.prompts_dir, safe_name)
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
         return {"path": str(target), "saved": True}
 
@@ -201,13 +223,14 @@ class PromptService:
         Raises:
             FileNotFoundError: If no built-in default exists to fall back to.
         """
-        builtin_path = self.builtin_dir / f"{template_name}.md"
+        safe_name = self._validate_template_name(template_name)
+        builtin_path = self._resolve_template_path(self.builtin_dir, safe_name)
         if not builtin_path.exists():
             raise FileNotFoundError(
                 f"Cannot reset '{template_name}': no built-in default exists"
             )
 
-        user_path = self.prompts_dir / f"{template_name}.md"
+        user_path = self._resolve_template_path(self.prompts_dir, safe_name)
         if user_path.exists():
             user_path.unlink()
             return {"reset": True, "had_override": True}
@@ -295,6 +318,26 @@ class PromptService:
         """
         template = self.load_prompt(template_name)
         return self.render_prompt(template, variables)
+
+    def _validate_template_name(self, template_name: str) -> str:
+        """Ensure template names cannot perform path traversal."""
+        if not template_name:
+            raise ValueError("Template name is required.")
+        if not _TEMPLATE_NAME_PATTERN.fullmatch(template_name):
+            raise ValueError(
+                "Template name may only contain letters, numbers, dashes, and underscores."
+            )
+        return template_name
+
+    def _resolve_template_path(self, base_dir: Path, safe_name: str) -> Path:
+        """Resolve template path and ensure it stays within the base directory."""
+        candidate = (base_dir / f"{safe_name}.md").resolve(strict=False)
+        base_resolved = base_dir.resolve(strict=False)
+        if not _is_relative_to(candidate, base_resolved):
+            raise ValueError(
+                f"Resolved template path '{candidate}' escapes base directory '{base_resolved}'"
+            )
+        return candidate
 
 
 # Singleton instance for easy access
