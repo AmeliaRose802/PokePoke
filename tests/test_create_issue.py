@@ -3,7 +3,6 @@
 import subprocess
 import json
 from unittest.mock import Mock, patch
-import pytest
 
 from src.pokepoke.beads import create_issue
 
