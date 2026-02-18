@@ -2,10 +2,9 @@
 
 import subprocess
 from pathlib import Path
-from typing import Optional, Tuple, List
 
 
-def is_merge_in_progress(repo_path: Optional[Path] = None) -> bool:
+def is_merge_in_progress(repo_path: Path | None = None) -> bool:
     """Check if a merge is currently in progress (unfinished merge).
     
     A merge is in progress when MERGE_HEAD exists, meaning we're between
@@ -28,7 +27,7 @@ def is_merge_in_progress(repo_path: Optional[Path] = None) -> bool:
         return False
 
 
-def get_unmerged_files(repo_path: Optional[Path] = None) -> List[str]:
+def get_unmerged_files(repo_path: Path | None = None) -> list[str]:
     """Get list of files with merge conflicts (unmerged entries).
     
     Uses git status --porcelain to find files with merge conflict indicators:
@@ -74,7 +73,7 @@ def get_unmerged_files(repo_path: Optional[Path] = None) -> List[str]:
         return []
 
 
-def abort_merge(repo_path: Optional[Path] = None) -> Tuple[bool, str]:
+def abort_merge(repo_path: Path | None = None) -> tuple[bool, str]:
     """Abort an in-progress merge, returning to the state before the merge started.
     
     Returns:
@@ -102,7 +101,7 @@ def abort_merge(repo_path: Optional[Path] = None) -> Tuple[bool, str]:
         return False, str(e)
 
 
-def get_merge_conflict_details(repo_path: Optional[Path] = None) -> dict[str, object]:
+def get_merge_conflict_details(repo_path: Path | None = None) -> dict[str, object]:
     """Get detailed information about the current merge conflict state.
     
     Returns a dictionary with:

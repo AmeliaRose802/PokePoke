@@ -7,7 +7,6 @@ or could produce duplicate work (like Beta Tester filing the same issues twice).
 
 import threading
 from pathlib import Path
-from typing import Dict, Optional, Set
 
 from pokepoke.config import get_config, MaintenanceAgentConfig
 from pokepoke.coordination import try_lock
@@ -20,7 +19,7 @@ from pokepoke import terminal_ui
 
 
 # Agents that require singleton guard (modify shared state or produce duplicates)
-_SINGLETON_AGENTS: Set[str] = {
+_SINGLETON_AGENTS: set[str] = {
     "Beta Tester", 
     "Janitor", 
     "Backlog Cleanup", 
@@ -28,7 +27,7 @@ _SINGLETON_AGENTS: Set[str] = {
 }
 
 # Agents that can safely run in parallel (beads-only, no conflicts)
-_PARALLEL_SAFE_AGENTS: Set[str] = {
+_PARALLEL_SAFE_AGENTS: set[str] = {
     "Tech Debt", 
     "Code Review"
 }
@@ -52,7 +51,7 @@ class MaintenanceScheduler:
     
     def __init__(self) -> None:
         # In-process locks for thread coordination
-        self._locks: Dict[str, threading.Lock] = {}
+        self._locks: dict[str, threading.Lock] = {}
         self._lock_creation_lock = threading.Lock()
         
     def _get_agent_lock(self, agent_name: str) -> threading.Lock:
@@ -213,7 +212,7 @@ class MaintenanceScheduler:
 
 
 # Global scheduler instance and initialization lock
-_scheduler: Optional[MaintenanceScheduler] = None
+_scheduler: MaintenanceScheduler | None = None
 _scheduler_lock = threading.Lock()
 
 

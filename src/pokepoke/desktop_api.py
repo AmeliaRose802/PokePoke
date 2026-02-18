@@ -10,7 +10,7 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import asdict
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 from pokepoke.agent_registry import AgentRegistry
 
@@ -34,25 +34,25 @@ class DesktopAPI:
     """
 
     def __init__(self) -> None:
-        self._window: Optional[Any] = None
+        self._window: Any | None = None
         self._lock = threading.RLock()
 
         # Buffered state — frontend can poll or get pushed updates
         self._log_buffer: list[dict[str, Any]] = []
         self._max_log_buffer = 2000
-        self._current_work_item: Optional[dict[str, str]] = None
+        self._current_work_item: dict[str, str] | None = None
         self._current_agent_name: str = ""
-        self._current_stats: Optional[dict[str, Any]] = None
+        self._current_stats: dict[str, Any] | None = None
         self._current_progress: dict[str, Any] = {"active": False, "status": ""}
 
         # Session start time for dynamic elapsed_time computation
-        self._session_start_time: Optional[float] = None
+        self._session_start_time: float | None = None
         # Session end time to freeze the clock when agents complete
-        self._session_end_time: Optional[float] = None
+        self._session_end_time: float | None = None
 
         # Live reference to SessionStats — serialized fresh on each poll
         # so agent run counts, token stats, etc. update in real-time
-        self._live_session_stats: Optional["SessionStats"] = None
+        self._live_session_stats: SessionStats | None = None
 
         # Read index for incremental log fetching
         self._log_read_index: int = 0
@@ -104,7 +104,7 @@ class DesktopAPI:
             "model_completions": [asdict(mc) for mc in snapshot.model_completions],
         }
 
-    def _serialize_live_stats(self) -> Optional[dict[str, Any]]:
+    def _serialize_live_stats(self) -> dict[str, Any] | None:
         """Serialize session stats fresh on every poll."""
         stats: dict[str, Any] | None = None
         live = self._live_session_stats
@@ -179,11 +179,11 @@ class DesktopAPI:
             self._log_read_index = len(self._log_buffer)
             return list(self._log_buffer)
 
-    def get_work_item(self) -> Optional[dict[str, str]]:
+    def get_work_item(self) -> dict[str, str] | None:
         """Get the current work item."""
         return self._current_work_item
 
-    def get_stats(self) -> Optional[dict[str, Any]]:
+    def get_stats(self) -> dict[str, Any] | None:
         """Get the current session stats."""
         with self._lock:
             return self._serialize_live_stats()
@@ -219,7 +219,7 @@ class DesktopAPI:
     # ─── Python → State: Called by the orchestrator ───────────────────
 
     def push_log(
-        self, message: str, target: str = "orchestrator", style: Optional[str] = None
+        self, message: str, target: str = "orchestrator", style: str | None = None
     ) -> None:
         """Add a log entry to the buffer."""
         entry = {
@@ -261,7 +261,7 @@ class DesktopAPI:
         """
         self._session_end_time = end_time
 
-    def set_live_session_stats(self, session_stats: "SessionStats") -> None:
+    def set_live_session_stats(self, session_stats: SessionStats) -> None:
         """Store a live reference to SessionStats for real-time polling.
 
         The live object is serialized fresh on every get_state()/get_stats()
@@ -271,7 +271,7 @@ class DesktopAPI:
         self._live_session_stats = session_stats
 
     def push_stats(
-        self, session_stats: Optional["SessionStats"], elapsed_time: float = 0.0
+        self, session_stats: SessionStats | None, elapsed_time: float = 0.0
     ) -> None:
         """Update session statistics (snapshot fallback).
 
@@ -347,7 +347,7 @@ class DesktopAPI:
         """Return the list of currently tracked agents."""
         return self._agent_registry.serialize_all()
 
-    def get_agent_detail(self, agent_id: str) -> Optional[dict[str, Any]]:
+    def get_agent_detail(self, agent_id: str) -> dict[str, Any] | None:
         """Return a deep copy of a single agent's detail state (logs included)."""
         return self._agent_registry.get_detail(agent_id)
 

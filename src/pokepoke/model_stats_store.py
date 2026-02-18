@@ -31,7 +31,7 @@ import statistics
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pokepoke.coordination import acquire_lock
 from pokepoke.types import ModelCompletionRecord
@@ -46,12 +46,12 @@ _STATS_FILE_LOCK = "model-stats-file"
 
 # ── Data helpers ─────────────────────────────────────────────────────
 
-def _empty_store() -> Dict[str, Any]:
+def _empty_store() -> dict[str, Any]:
     """Return an empty store structure."""
     return {"log": [], "summary": {}}
 
 
-def _record_to_dict(record: ModelCompletionRecord) -> Dict[str, Any]:
+def _record_to_dict(record: ModelCompletionRecord) -> dict[str, Any]:
     """Serialise a ModelCompletionRecord to a plain dict."""
     return {
         "item_id": record.item_id,
@@ -62,10 +62,10 @@ def _record_to_dict(record: ModelCompletionRecord) -> Dict[str, Any]:
     }
 
 
-def _rebuild_summary(log: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+def _rebuild_summary(log: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """Recompute per-model summary from the raw log entries."""
     # First pass: collect per-model data
-    buckets: Dict[str, Dict[str, Any]] = {}
+    buckets: dict[str, dict[str, Any]] = {}
     for entry in log:
         model = entry.get("model", "unknown")
         if model not in buckets:
@@ -97,7 +97,7 @@ def _rebuild_summary(log: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
             s["last_used"] = ts
 
     # Second pass: compute derived fields
-    summary: Dict[str, Dict[str, Any]] = {}
+    summary: dict[str, dict[str, Any]] = {}
     for model, s in buckets.items():
         attempted = s["total_items_attempted"]
         durations = s["_durations"]
@@ -113,7 +113,7 @@ def _rebuild_summary(log: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
 
 # ── Public API ───────────────────────────────────────────────────────
 
-def load_model_stats(path: Optional[Path] = None) -> Dict[str, Any]:
+def load_model_stats(path: Path | None = None) -> dict[str, Any]:
     """Load the persistent model stats from disk.
 
     Returns an empty store if the file does not exist or is corrupt.
@@ -122,7 +122,7 @@ def load_model_stats(path: Optional[Path] = None) -> Dict[str, Any]:
     if not stats_path.exists():
         return _empty_store()
     try:
-        with open(stats_path, "r", encoding="utf-8") as f:
+        with open(stats_path, encoding="utf-8") as f:
             data = json.load(f)
         # Basic validation
         if not isinstance(data, dict) or "log" not in data:
@@ -132,7 +132,7 @@ def load_model_stats(path: Optional[Path] = None) -> Dict[str, Any]:
         return _empty_store()
 
 
-def save_model_stats(data: Dict[str, Any], path: Optional[Path] = None) -> None:
+def save_model_stats(data: dict[str, Any], path: Path | None = None) -> None:
     """Atomically persist model stats to disk.
 
     Writes to a temporary file first then renames, to avoid corruption
@@ -147,7 +147,7 @@ def save_model_stats(data: Dict[str, Any], path: Optional[Path] = None) -> None:
     os.replace(str(tmp_path), str(stats_path))
 
 
-def record_completion(record: ModelCompletionRecord, path: Optional[Path] = None) -> None:
+def record_completion(record: ModelCompletionRecord, path: Path | None = None) -> None:
     """Append a completion record and update the summary.
 
     Thread-safe and process-safe: uses both a thread lock (fast path) and
@@ -162,14 +162,14 @@ def record_completion(record: ModelCompletionRecord, path: Optional[Path] = None
             save_model_stats(data, path)
 
 
-def get_model_summary(path: Optional[Path] = None) -> Dict[str, Dict[str, Any]]:
+def get_model_summary(path: Path | None = None) -> dict[str, dict[str, Any]]:
     """Return the per-model summary dict (read-only)."""
     data = load_model_stats(path)
-    summary: Dict[str, Dict[str, Any]] = data.get("summary", {})
+    summary: dict[str, dict[str, Any]] = data.get("summary", {})
     return summary
 
 
-def get_model_history(path: Optional[Path] = None, limit: int = 200) -> List[Dict[str, Any]]:
+def get_model_history(path: Path | None = None, limit: int = 200) -> list[dict[str, Any]]:
     """Return the most recent completion log entries up to ``limit``."""
     capped_limit = int(limit)
     if capped_limit <= 0:
@@ -182,7 +182,7 @@ def get_model_history(path: Optional[Path] = None, limit: int = 200) -> List[Dic
     return list(log[slice_start:])
 
 
-def get_model_weights(path: Optional[Path] = None, min_attempts: int = 3) -> Dict[str, float]:
+def get_model_weights(path: Path | None = None, min_attempts: int = 3) -> dict[str, float]:
     """Compute selection weights based on historical success rate.
 
     Models with fewer than ``min_attempts`` completions get a neutral
@@ -194,7 +194,7 @@ def get_model_weights(path: Optional[Path] = None, min_attempts: int = 3) -> Dic
         Mapping of model name → weight (higher = more likely to be selected).
     """
     summary = get_model_summary(path)
-    weights: Dict[str, float] = {}
+    weights: dict[str, float] = {}
     for model, stats in summary.items():
         attempted = stats.get("total_items_attempted", 0)
         if attempted < min_attempts:
@@ -205,7 +205,7 @@ def get_model_weights(path: Optional[Path] = None, min_attempts: int = 3) -> Dic
     return weights
 
 
-def print_model_leaderboard(path: Optional[Path] = None) -> None:
+def print_model_leaderboard(path: Path | None = None) -> None:
     """Print a human-readable leaderboard of model performance."""
     summary = get_model_summary(path)
     if not summary:

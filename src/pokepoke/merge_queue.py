@@ -17,7 +17,6 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from queue import Empty, Queue
-from typing import Optional
 
 from .git_operations import get_default_branch
 from .shutdown import is_shutting_down
@@ -62,8 +61,8 @@ class MergeQueue:
     """
 
     def __init__(self) -> None:
-        self._queue: Queue[Optional[_MergeRequest]] = Queue()
-        self._worker: Optional[threading.Thread] = None
+        self._queue: Queue[_MergeRequest | None] = Queue()
+        self._worker: threading.Thread | None = None
         self._started = False
         self._shutdown_event = threading.Event()
         self._lock = threading.Lock()
@@ -216,7 +215,7 @@ class MergeQueue:
             request.future.set_result(result)
 
 
-def _rebase_worktree(worktree_path: Path, target_branch: Optional[str] = None) -> bool:
+def _rebase_worktree(worktree_path: Path, target_branch: str | None = None) -> bool:
     """Rebase a worktree onto the latest target branch.
 
     Uses explicit ``git fetch origin`` + ``git rebase origin/<target>``
@@ -278,7 +277,7 @@ def _rebase_worktree(worktree_path: Path, target_branch: Optional[str] = None) -
 
 
 # Module-level singleton
-_merge_queue: Optional[MergeQueue] = None
+_merge_queue: MergeQueue | None = None
 _singleton_lock = threading.Lock()
 
 

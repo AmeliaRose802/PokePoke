@@ -16,9 +16,9 @@ import builtins
 import os
 import sys
 import threading
-import time
 from pathlib import Path
-from typing import Optional, Any, Iterator, Callable, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
+from collections.abc import Iterator, Callable
 from contextlib import contextmanager
 
 from pokepoke.desktop_api import DesktopAPI
@@ -50,10 +50,10 @@ def _shutdown_threading_excepthook(args: threading.ExceptHookArgs) -> None:
 
 
 # Saved so we can delegate non-shutdown exceptions.
-_original_excepthook: Optional[Callable[..., Any]] = None
+_original_excepthook: Callable[..., Any] | None = None
 
 
-def _find_frontend_dist() -> Optional[Path]:
+def _find_frontend_dist() -> Path | None:
     """Locate the pre-built React frontend dist/ directory."""
     import subprocess
     
@@ -105,10 +105,10 @@ class DesktopUI:
         self._api = DesktopAPI()
         self._is_running = False
         self._original_print = builtins.print
-        self._current_style: Optional[str] = None
+        self._current_style: str | None = None
         self._target_buffer: str = "orchestrator"
         self._line_buffer: str = ""
-        self._flush_timer: Optional[threading.Timer] = None
+        self._flush_timer: threading.Timer | None = None
         self._buffer_lock = threading.Lock()
 
     @property
@@ -251,8 +251,8 @@ class DesktopUI:
 
         # Resolve per-thread overrides (set by context managers)
         target: str = getattr(_thread_output, "target", None) or self._target_buffer
-        style: Optional[str] = getattr(_thread_output, "style", None) or self._current_style
-        agent_id: Optional[str] = getattr(_thread_output, "agent_id", None)
+        style: str | None = getattr(_thread_output, "style", None) or self._current_style
+        agent_id: str | None = getattr(_thread_output, "agent_id", None)
 
         # Use per-thread line buffer to avoid interleaving partial lines
         # across parallel agents.  The main thread (no agent_id) still
@@ -342,19 +342,19 @@ class DesktopUI:
         finally:
             self._current_style = prev_style
 
-    def set_style(self, style: Optional[str]) -> None:
+    def set_style(self, style: str | None) -> None:
         self._current_style = style
 
     # ─── State Updates ────────────────────────────────────────────────
 
-    def set_current_agent(self, agent_name: Optional[str]) -> None:
+    def set_current_agent(self, agent_name: str | None) -> None:
         self._api.push_agent_name(agent_name or "")
 
     def update_header(self, item_id: str, title: str, status: str = "") -> None:
         self._api.push_work_item(item_id, title, status)
 
     def update_stats(
-        self, session_stats: Optional["SessionStats"], elapsed_time: float = 0.0
+        self, session_stats: SessionStats | None, elapsed_time: float = 0.0
     ) -> None:
         self._api.push_stats(session_stats, elapsed_time)
 
@@ -365,14 +365,14 @@ class DesktopUI:
         self._api.set_session_end_time(end_time)
 
     def log_message(
-        self, message: str, target: str = "orchestrator", style: Optional[str] = None
+        self, message: str, target: str = "orchestrator", style: str | None = None
     ) -> None:
         self._api.push_log(message, target, style)
 
-    def log_orchestrator(self, message: str, style: Optional[str] = None) -> None:
+    def log_orchestrator(self, message: str, style: str | None = None) -> None:
         self._api.push_log(message, "orchestrator", style)
 
-    def log_agent(self, message: str, style: Optional[str] = None) -> None:
+    def log_agent(self, message: str, style: str | None = None) -> None:
         self._api.push_log(message, "agent", style)
 
     def push_agent_status(

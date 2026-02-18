@@ -4,12 +4,12 @@ import json
 import re
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Optional, Dict, List
+from typing import Any
 
 from pokepoke.types import AgentStats, SessionStats, ModelCompletionRecord
 
 
-def parse_agent_stats(output: str) -> Optional[AgentStats]:
+def parse_agent_stats(output: str) -> AgentStats | None:
     """Parse agent statistics from copilot CLI output.
     
     Args:
@@ -64,7 +64,7 @@ def parse_agent_stats(output: str) -> Optional[AgentStats]:
         return None
 
 
-def print_stats(items_completed: int, total_requests: int, elapsed_seconds: float, session_stats: Optional[SessionStats] = None) -> None:
+def print_stats(items_completed: int, total_requests: int, elapsed_seconds: float, session_stats: SessionStats | None = None) -> None:
     """Print session statistics in a formatted way.
     
     Args:
@@ -180,7 +180,7 @@ def _format_duration(seconds: float) -> str:
     return f"{secs}s"
 
 
-def _print_model_comparison(completions: List[ModelCompletionRecord]) -> None:
+def _print_model_comparison(completions: list[ModelCompletionRecord]) -> None:
     """Print per-model comparison statistics for A/B testing.
 
     Groups completions by model and displays:
@@ -192,7 +192,7 @@ def _print_model_comparison(completions: List[ModelCompletionRecord]) -> None:
         completions: List of ModelCompletionRecord from the session.
     """
     # Group by model
-    by_model: Dict[str, List[ModelCompletionRecord]] = {}
+    by_model: dict[str, list[ModelCompletionRecord]] = {}
     for rec in completions:
         by_model.setdefault(rec.model, []).append(rec)
 
@@ -231,7 +231,7 @@ def serialize_session_stats(
     elapsed_seconds: float,
     items_completed: int,
     total_requests: int,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Serialize SessionStats into a JSON-compatible dictionary.
 
     Includes all agent stats, run counts, beads deltas, model completions,
@@ -247,7 +247,7 @@ def serialize_session_stats(
     Returns:
         A plain dict suitable for ``json.dumps``.
     """
-    data: Dict[str, Any] = {
+    data: dict[str, Any] = {
         "items_completed": items_completed,
         "total_requests": total_requests,
         "elapsed_seconds": round(elapsed_seconds, 2),

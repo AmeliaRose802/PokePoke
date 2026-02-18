@@ -2,13 +2,11 @@
 
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from pokepoke.git_operations import (
     sanitize_branch_name,
     get_default_branch,
     is_worktree_clean,
-    branch_exists,
     execute_merge_sequence,
     validate_post_merge,
     categorize_git_changes,
@@ -22,7 +20,7 @@ from pokepoke.worktree_cleanup import (
 )
 
 
-def create_worktree(item_id: str, base_branch: Optional[str] = None) -> Path:
+def create_worktree(item_id: str, base_branch: str | None = None) -> Path:
     """Create a git worktree for a work item. Returns existing path if already exists."""
     # Sanitize the item_id for use in branch names
     sanitized_id = sanitize_branch_name(item_id)
@@ -84,7 +82,7 @@ def create_worktree(item_id: str, base_branch: Optional[str] = None) -> Path:
     return worktree_path
 
 
-def is_worktree_merged(item_id: str, target_branch: Optional[str] = None) -> bool:
+def is_worktree_merged(item_id: str, target_branch: str | None = None) -> bool:
     """Check if a worktree's branch has been merged into the target branch."""
     sanitized_id = sanitize_branch_name(item_id)
     branch_name = f"task/{sanitized_id}"
@@ -101,7 +99,7 @@ def is_worktree_merged(item_id: str, target_branch: Optional[str] = None) -> boo
         return False
 
 
-def merge_worktree(item_id: str, target_branch: Optional[str] = None, cleanup: bool = True) -> tuple[bool, list[str]]:
+def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool = True) -> tuple[bool, list[str]]:
     """Merge a worktree's branch into the target branch and optionally clean up.
     
     Returns:

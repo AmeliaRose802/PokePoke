@@ -1,7 +1,6 @@
 """Beads hierarchy operations - parent-child relationships."""
 
 import subprocess
-from typing import List, Optional
 
 from .types import BeadsWorkItem
 from .beads_query import get_issue_dependencies
@@ -13,7 +12,7 @@ HUMAN_REQUIRED_LABEL = 'human-required'
 COMPLETED_STATUSES = ('done', 'closed', 'resolved')
 
 
-def get_children(parent_id: str) -> List[BeadsWorkItem]:
+def get_children(parent_id: str) -> list[BeadsWorkItem]:
     """Get all child items for a parent issue (epic or feature).
     
     Args:
@@ -94,7 +93,7 @@ def is_assigned_to_current_user(item: BeadsWorkItem) -> bool:
     return True
 
 
-def get_next_child_task(parent_id: str) -> Optional[BeadsWorkItem]:
+def get_next_child_task(parent_id: str) -> BeadsWorkItem | None:
     """Get the next ready child task for a parent epic or feature.
     
     Returns the highest priority open child, or None if all children are complete.
@@ -174,7 +173,7 @@ def _get_available_children(parent_id: str) -> tuple[list[BeadsWorkItem], list[B
     return available, children
 
 
-def resolve_to_leaf_task(item: BeadsWorkItem, _depth: int = 0) -> Optional[BeadsWorkItem]:
+def resolve_to_leaf_task(item: BeadsWorkItem, _depth: int = 0) -> BeadsWorkItem | None:
     """Recursively resolve an epic/feature to an assignable leaf task.
     
     Core rule: NEVER directly assign an epic/feature that has children.
@@ -291,7 +290,7 @@ def close_parent_if_complete(parent_id: str) -> bool:
         return False
 
 
-def get_parent_id(child_id: str) -> Optional[str]:
+def get_parent_id(child_id: str) -> str | None:
     """Get the parent ID of a child item.
     
     Args:
