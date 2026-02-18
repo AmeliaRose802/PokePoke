@@ -158,6 +158,8 @@ class TestRebuildSummary:
         assert s["total_items_failed"] == 0
         assert s["success_rate"] == 1.0
         assert s["average_duration"] == 60.0
+        assert s["median_duration"] == 60.0
+        assert s["stddev_duration"] == 0.0  # single entry → 0
 
     def test_mixed_results(self):
         log = [
@@ -172,6 +174,8 @@ class TestRebuildSummary:
         assert s["total_items_failed"] == 1
         assert s["success_rate"] == pytest.approx(0.6667, abs=0.01)
         assert s["average_duration"] == pytest.approx(66.67, abs=0.01)
+        assert s["median_duration"] == 70.0
+        assert s["stddev_duration"] == pytest.approx(12.47, abs=0.1)
 
     def test_none_gate_not_counted(self):
         log = [
@@ -201,6 +205,22 @@ class TestRebuildSummary:
         ]
         summary = _rebuild_summary(log)
         assert summary["m1"]["last_used"] == "2026-02-15T12:00:00"
+
+    def test_median_robust_to_outlier(self):
+        """Median should not be skewed by a single very long run."""
+        log = [
+            {"model": "m1", "duration_seconds": 40.0, "gate_passed": True, "timestamp": "2026-01-01T00:00:00"},
+            {"model": "m1", "duration_seconds": 42.0, "gate_passed": True, "timestamp": "2026-01-01T00:01:00"},
+            {"model": "m1", "duration_seconds": 44.0, "gate_passed": True, "timestamp": "2026-01-01T00:02:00"},
+            {"model": "m1", "duration_seconds": 46.0, "gate_passed": True, "timestamp": "2026-01-01T00:03:00"},
+            {"model": "m1", "duration_seconds": 5000.0, "gate_passed": True, "timestamp": "2026-01-01T00:04:00"},
+        ]
+        summary = _rebuild_summary(log)
+        s = summary["m1"]
+        # Median should be 44, not the mean of ~1034.4
+        assert s["median_duration"] == 44.0
+        assert s["average_duration"] == pytest.approx(1034.4, abs=1.0)
+        assert s["stddev_duration"] > 0
 
 
 # ── record_completion ────────────────────────────────────────────────
@@ -327,6 +347,7 @@ class TestPrintModelLeaderboard:
         assert "Leaderboard" in captured.out
         assert "m1" in captured.out
         assert "m2" in captured.out
+        assert "Median" in captured.out
 
     def test_sorted_by_success_rate(self, tmp_path: Path, capsys):
         path = _tmp_stats_path(tmp_path)

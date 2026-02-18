@@ -20,6 +20,16 @@ export function formatDurationShort(seconds: number | undefined): string {
   return `${(value / 3600).toFixed(1)}h`;
 }
 
+export function formatDurationWithSpread(
+  median: number | undefined,
+  stddev: number | undefined
+): string {
+  const med = formatDurationShort(median);
+  if (!Number.isFinite(stddev ?? 0) || (stddev ?? 0) === 0) return med;
+  const dev = formatDurationShort(stddev);
+  return `${med} ±${dev}`;
+}
+
 export function formatElapsed(seconds: number | undefined): string {
   const value = Math.max(0, seconds ?? 0);
   const h = Math.floor(value / 3600);

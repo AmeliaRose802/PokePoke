@@ -1,8 +1,35 @@
 import { describe, it, expect } from 'vitest';
 import type { ModelPerformanceSummary, SessionStats } from '../types';
-import { getCompletedItems, getDoneCount, inferCurrentModel } from './stats';
+import { formatDurationWithSpread, getCompletedItems, getDoneCount, inferCurrentModel } from './stats';
 
 describe('stats helpers', () => {
+  describe('formatDurationWithSpread', () => {
+    it('shows median ±stddev when stddev is non-zero', () => {
+      // 2610s = 43.5m, 720s = 12.0m
+      expect(formatDurationWithSpread(2610, 720)).toBe('43.5m ±12.0m');
+    });
+
+    it('shows only median when stddev is zero', () => {
+      expect(formatDurationWithSpread(59, 0)).toBe('59s');
+    });
+
+    it('shows only median when stddev is undefined', () => {
+      expect(formatDurationWithSpread(120, undefined)).toBe('2.0m');
+    });
+
+    it('handles seconds-range values', () => {
+      expect(formatDurationWithSpread(30, 5)).toBe('30s ±5s');
+    });
+
+    it('handles hours-range values', () => {
+      expect(formatDurationWithSpread(7200, 3600)).toBe('2.0h ±1.0h');
+    });
+
+    it('handles undefined median', () => {
+      expect(formatDurationWithSpread(undefined, 10)).toBe('0s ±10s');
+    });
+  });
+
   describe('getCompletedItems', () => {
     it('dedupes by id and ignores missing ids', () => {
       const stats: SessionStats = {
