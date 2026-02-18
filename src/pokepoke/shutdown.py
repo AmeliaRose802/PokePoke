@@ -12,10 +12,12 @@ Multi-agent shutdown coordination:
 - Future: Will coordinate with ThreadPoolExecutor
 """
 
+from __future__ import annotations
+
+import concurrent.futures
 import os
 import threading
 import time
-from typing import Optional
 
 # Global shutdown event - checked by all loops
 _shutdown_event = threading.Event()
@@ -36,7 +38,7 @@ _active_agent_count = 0
 _agent_count_lock = threading.Lock()
 
 # Future: ThreadPoolExecutor for parallel agents (set by orchestrator)
-_executor: Optional['concurrent.futures.ThreadPoolExecutor'] = None  # type: ignore[name-defined]
+_executor: concurrent.futures.ThreadPoolExecutor | None = None
 
 
 def request_shutdown() -> None:
@@ -144,7 +146,7 @@ def get_active_agent_count() -> int:
         return _active_agent_count
 
 
-def set_executor(executor: Optional['concurrent.futures.ThreadPoolExecutor']) -> None:  # type: ignore[name-defined]
+def set_executor(executor: concurrent.futures.ThreadPoolExecutor | None) -> None:
     """Set the global ThreadPoolExecutor for shutdown coordination.
     
     Call this from orchestrator when parallel agent mode is enabled.

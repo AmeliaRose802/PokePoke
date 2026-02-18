@@ -2,7 +2,6 @@
 import os
 import subprocess
 import time
-from typing import Optional
 
 
 def check_copilot_processes() -> int:
