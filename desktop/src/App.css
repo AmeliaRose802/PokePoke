@@ -249,6 +249,24 @@
   padding: 8px;
   cursor: pointer;
   transition: border-color 0.15s;
+  position: relative;
+}
+
+.agent-card-child {
+  margin-left: 12px;
+  background: #161621;
+  border-color: #2b3048;
+}
+
+.agent-card-child::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  background: #292e42;
+  border-radius: 2px;
 }
 
 .agent-card:hover {
