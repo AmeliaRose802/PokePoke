@@ -16,6 +16,7 @@ import { RenderLogItems } from "./LogComponents";
 interface Props {
   agent: AgentInfo;
   onClose: () => void;
+  showClose?: boolean;
 }
 
 const STATUS_INDICATOR: Record<string, { dot: string; label: string }> = {
@@ -42,7 +43,7 @@ function formatTimestamp(ts?: number | null): string {
   return new Date(ts * 1000).toLocaleTimeString("en-US", { hour12: false });
 }
 
-export function AgentLogPanel({ agent, onClose }: Props) {
+export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
   const statusInfo = STATUS_INDICATOR[agent.status] ?? STATUS_INDICATOR.running;
   const logLines = agent.log_lines && agent.log_lines.length > 0
     ? agent.log_lines
@@ -78,9 +79,11 @@ export function AgentLogPanel({ agent, onClose }: Props) {
   return (
     <div className="agent-log-panel">
       <div className="agent-log-panel-header">
-        <button className="agent-log-panel-close" onClick={onClose} title="Close agent logs">
-          ✕
-        </button>
+        {showClose && (
+          <button className="agent-log-panel-close" onClick={onClose} title="Close agent logs">
+            ✕
+          </button>
+        )}
         <span className="agent-log-panel-avatar">{getAvatar(agent.agent_id)}</span>
         <div className="agent-log-panel-info">
           <span className="agent-log-panel-name">{agent.name}</span>

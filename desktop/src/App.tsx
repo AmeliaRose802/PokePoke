@@ -41,6 +41,21 @@ function App() {
       ? bridge.agents.find((agent) => agent.agent_id === displayedAgentId) ?? null
       : null;
 
+  // Auto-follow: pick the most recently active agent when none is manually selected
+  const autoFollowAgent = (() => {
+    if (selectedAgentDetail) return null; // manual selection takes priority
+    if (bridge.agents.length === 0) return null;
+    // Prefer running agents, then most recently updated
+    const sorted = [...bridge.agents].sort((a, b) => {
+      if (a.status === "running" && b.status !== "running") return -1;
+      if (b.status === "running" && a.status !== "running") return 1;
+      const aTime = a.last_log_at ?? a.last_updated ?? 0;
+      const bTime = b.last_log_at ?? b.last_updated ?? 0;
+      return bTime - aTime;
+    });
+    return sorted[0] ?? null;
+  })();
+
   const { getModelHistory } = bridge;
 
   const loadModelHistory = useCallback(async () => {
@@ -121,14 +136,22 @@ function App() {
                 focused={activePanel === "orchestrator"}
                 onFocus={() => setActivePanel("orchestrator")}
               />
-              <LogPanel
-                title="Agent"
-                icon="🤖"
-                logs={bridge.agentLogs}
-                accentColor="#5cb85c"
-                focused={activePanel === "agent"}
-                onFocus={() => setActivePanel("agent")}
-              />
+              {autoFollowAgent ? (
+                <AgentLogPanel
+                  agent={autoFollowAgent}
+                  onClose={() => {/* no-op: auto-follow has no manual close */}}
+                  showClose={false}
+                />
+              ) : (
+                <LogPanel
+                  title="Agent"
+                  icon="🤖"
+                  logs={bridge.agentLogs}
+                  accentColor="#5cb85c"
+                  focused={activePanel === "agent"}
+                  onFocus={() => setActivePanel("agent")}
+                />
+              )}
             </>
           )}
         </div>
@@ -136,7 +159,7 @@ function App() {
         {/* Agents panel */}
         <AgentsPanel
           agents={bridge.agents}
-          selectedAgentId={displayedAgentId}
+          selectedAgentId={displayedAgentId ?? autoFollowAgent?.agent_id ?? null}
           onSelectAgent={setSelectedAgentId}
         />
       </div>
