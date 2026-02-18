@@ -132,6 +132,15 @@ code logs/20260123_143052_a3b4c5d6
 notepad logs/20260123_143052_a3b4c5d6/orchestrator.log
 ```
 
+## Desktop UI History Replay
+
+The pywebview desktop app now hydrates the Agents panel with historical runs every time it starts:
+
+- On launch, the UI scans `logs/` (and `.pokepoke/logs/` when present) for prior runs and synthesizes agent cards for every per-item log.
+- Each historical card shows the recorded status plus the last ~200 log lines, so you can drill into the detail panel immediately after opening the UI.
+- Set `POKEPOKE_LOGS_DIR=/custom/path` before launching if your logs live outside the default directory; the loader falls back to `.pokepoke/logs/` and `logs/` automatically.
+- Log excerpts respect the same preview/detail limits as live agents (20 preview lines, 200 detail lines) to keep memory usage predictable.
+
 ## When to Use Which Log
 
 ### Use Orchestrator Log When:

@@ -72,6 +72,7 @@ class DesktopAPI:
             preview_limit=self._agent_max_log_lines_internal,
             detail_limit=self._agent_detail_max_log_lines_internal,
         )
+        _ext.seed_historical_agents(self)
 
     def set_window(self, window: Any) -> None:
         """Called once after pywebview creates the window."""

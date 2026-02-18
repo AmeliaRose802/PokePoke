@@ -1,5 +1,6 @@
 """Tests for DesktopAPI state buffering and retrieval."""
 
+import textwrap
 import time
 
 from pokepoke.desktop_api import DesktopAPI
@@ -14,6 +15,52 @@ def test_initial_state_defaults() -> None:
     assert state["stats"] is None
     assert state["progress"] == {"active": False, "status": ""}
     assert state["log_count"] == 0
+
+
+def test_historical_agent_logs_loaded(tmp_path, monkeypatch) -> None:
+    """DesktopAPI should hydrate agents from persisted log files on startup."""
+    logs_root = tmp_path / "logs"
+    run_dir = logs_root / "20260218_120000_abcdef12"
+    items_dir = run_dir / "items"
+    items_dir.mkdir(parents=True, exist_ok=True)
+
+    log_content = textwrap.dedent(
+        """\
+        ================================================================================
+        Work Item: PokePoke-9ikr
+        Title: Persist and replay agent logs
+        ================================================================================
+        Agent: pokepoke_pro
+        ================================================================================
+        Started: 2026-02-18 12:34:56
+        ================================================================================
+
+        First historical line
+        Second historical line
+
+        ================================================================================
+        Summary
+        ================================================================================
+        Completed: 2026-02-18 13:00:00
+        Status: SUCCESS
+        Agent requests: 2
+        ================================================================================
+        """
+    )
+    log_path = items_dir / "PokePoke-9ikr.log"
+    log_path.write_text(log_content, encoding="utf-8")
+
+    monkeypatch.setenv("POKEPOKE_LOGS_DIR", str(logs_root))
+
+    api = DesktopAPI()
+    agents = api.get_state()["agents"]
+    assert agents, "Expected loaders to surface at least one historical agent"
+    matching = [agent for agent in agents if agent.get("work_item_id") == "PokePoke-9ikr"]
+    assert matching, "Historical agent entry missing"
+    agent = matching[0]
+    assert agent["status"] == "success"
+    assert agent["name"] == "pokepoke_pro"
+    assert len(agent["recent_logs"]) > 0
 
 
 def test_push_log_and_incremental_reads() -> None:
