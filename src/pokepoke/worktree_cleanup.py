@@ -1,6 +1,7 @@
 """Windows-safe directory removal utilities for worktree cleanup."""
 
 import json
+import logging
 import os
 import shutil
 import stat
@@ -9,6 +10,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import cast
+
+logger = logging.getLogger(__name__)
 
 # Retry settings for worktree removal on Windows
 _CLEANUP_MAX_RETRIES = 3
@@ -85,8 +88,15 @@ def save_worktree_manifest(manifest: dict[str, dict[str, str]]) -> None:
         manifest_path.parent.mkdir(exist_ok=True)
         with open(manifest_path, 'w', encoding='utf-8') as f:
             json.dump(manifest, f, indent=2, ensure_ascii=False)
-    except OSError:
-        pass  # Silently fail to avoid disrupting main operations
+    except OSError as e:
+        logger.warning('Failed to save worktree manifest to %s: %s', manifest_path, e)
+        # Extract worktree paths from manifest for diagnostic context
+        worktree_paths = [entry.get('path', 'unknown') for entry in manifest.values()]
+        if worktree_paths:
+            logger.warning(
+                'Worktrees at the following paths may become orphaned (not tracked for cleanup): %s',
+                ', '.join(worktree_paths)
+            )
 
 
 def add_uncleaned_worktree(worktree_id: str, worktree_path: str, reason: str) -> None:
