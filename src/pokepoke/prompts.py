@@ -32,15 +32,6 @@ TEMPLATE_VARIABLES: Dict[str, str] = {
 _TEMPLATE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
-def _is_relative_to(path: Path, base: Path) -> bool:
-    """Backport Path.is_relative_to for older Python versions."""
-    try:
-        path.relative_to(base)
-        return True
-    except ValueError:
-        return False
-
-
 class PromptService:
     """Service for loading and rendering prompt templates.
 
@@ -333,7 +324,7 @@ class PromptService:
         """Resolve template path and ensure it stays within the base directory."""
         candidate = (base_dir / f"{safe_name}.md").resolve(strict=False)
         base_resolved = base_dir.resolve(strict=False)
-        if not _is_relative_to(candidate, base_resolved):
+        if not candidate.is_relative_to(base_resolved):
             raise ValueError(
                 f"Resolved template path '{candidate}' escapes base directory '{base_resolved}'"
             )
