@@ -152,110 +152,9 @@ class TestBeadsIntegration:
         assert result is None
 
 
-class TestFilterWorkItems:
-    """Test work item filtering functions."""
-    
-    @patch('src.pokepoke.beads_management.has_feature_parent')
-    def test_filter_work_items_excludes_epics(self, mock_has_feature_parent: Mock) -> None:
-        """Test that epics are excluded from filtered items."""
-        from src.pokepoke.beads import filter_work_items
-        from src.pokepoke.types import IssueWithDependencies, Dependency
-        
-        items = [
-            BeadsWorkItem(
-                id="epic-1",
-                title="Epic",
-                description="",
-                status="open",
-                priority=1,
-                issue_type="epic"
-            ),
-            BeadsWorkItem(
-                id="task-1",
-                title="Task",
-                description="",
-                status="open",
-                priority=2,
-                issue_type="task"
-            )
-        ]
-        mock_has_feature_parent.return_value = False
-        
-        filtered = filter_work_items(items)
-        
-        assert len(filtered) == 1
-        assert filtered[0].id == "task-1"
-    
-    @patch('src.pokepoke.beads_management.has_feature_parent')
-    def test_filter_work_items_includes_features(self, mock_has_feature_parent: Mock) -> None:
-        """Test that features are included in filtered items."""
-        from src.pokepoke.beads import filter_work_items
-        
-        items = [
-            BeadsWorkItem(
-                id="feature-1",
-                title="Feature",
-                description="",
-                status="open",
-                priority=1,
-                issue_type="feature"
-            )
-        ]
-        
-        filtered = filter_work_items(items)
-        
-        assert len(filtered) == 1
-        assert filtered[0].id == "feature-1"
-    
-    @patch('src.pokepoke.beads_management.has_feature_parent')
-    def test_filter_work_items_excludes_tasks_with_feature_parent(
-        self, 
-        mock_has_feature_parent: Mock
-    ) -> None:
-        """Test that tasks with feature parents are excluded."""
-        from src.pokepoke.beads import filter_work_items
-        
-        items = [
-            BeadsWorkItem(
-                id="task-1",
-                title="Task with feature parent",
-                description="",
-                status="open",
-                priority=1,
-                issue_type="task"
-            )
-        ]
-        mock_has_feature_parent.return_value = True
-        
-        filtered = filter_work_items(items)
-        
-        assert len(filtered) == 0
-    
-    @patch('src.pokepoke.beads_management.has_feature_parent')
-    def test_filter_work_items_includes_standalone_tasks(
-        self, 
-        mock_has_feature_parent: Mock
-    ) -> None:
-        """Test that standalone tasks are included."""
-        from src.pokepoke.beads import filter_work_items
-        
-        items = [
-            BeadsWorkItem(
-                id="task-1",
-                title="Standalone task",
-                description="",
-                status="open",
-                priority=1,
-                issue_type="task"
-            )
-        ]
-        mock_has_feature_parent.return_value = False
-        
-        filtered = filter_work_items(items)
-        
-        assert len(filtered) == 1
-        assert filtered[0].id == "task-1"
-    
+class TestHasFeatureParent:
+    """Test has_feature_parent function."""
+
     @patch('src.pokepoke.beads_hierarchy.get_issue_dependencies')
     def test_has_feature_parent_true(self, mock_get_issue: Mock) -> None:
         """Test has_feature_parent returns True when parent is feature."""
@@ -374,15 +273,9 @@ class TestAssignAndSyncItem:
         assert mock_run.call_count == 3
     
     @patch('src.pokepoke.beads_management.subprocess.run')
-    @patch('src.pokepoke.beads_management.os.environ.get')
-    def test_assign_detects_race_condition(self, mock_env: Mock, mock_run: Mock) -> None:
+    def test_assign_detects_race_condition(self, mock_run: Mock) -> None:
         """Test detection of race condition when another agent claimed item."""
         from src.pokepoke.beads import assign_and_sync_item
-        
-        mock_env.side_effect = lambda key, default='': {
-            'AGENT_NAME': 'my-agent',
-            'USERNAME': 'testuser'
-        }.get(key, default)
         
         # Mock bd show returns item assigned to OTHER agent (via assignee field)
         show_result = Mock(
@@ -404,15 +297,9 @@ class TestAssignAndSyncItem:
         assert mock_run.call_count == 1
     
     @patch('src.pokepoke.beads_management.subprocess.run')
-    @patch('src.pokepoke.beads_management.os.environ.get')
-    def test_assign_allows_claiming_own_item(self, mock_env: Mock, mock_run: Mock) -> None:
+    def test_assign_allows_claiming_own_item(self, mock_run: Mock) -> None:
         """Test that agent can update items already assigned to them."""
         from src.pokepoke.beads import assign_and_sync_item
-        
-        mock_env.side_effect = lambda key, default='': {
-            'AGENT_NAME': 'my-agent',
-            'USERNAME': 'testuser'
-        }.get(key, default)
         
         # Mock bd show returns item already assigned to THIS agent
         show_result = Mock(
@@ -439,15 +326,9 @@ class TestAssignAndSyncItem:
         assert mock_run.call_count == 3
     
     @patch('src.pokepoke.beads_management.subprocess.run')
-    @patch('src.pokepoke.beads_management.os.environ.get')
-    def test_assign_allows_claiming_by_username(self, mock_env: Mock, mock_run: Mock) -> None:
+    def test_assign_allows_claiming_by_username(self, mock_run: Mock) -> None:
         """Test that agent can claim items assigned to their username."""
         from src.pokepoke.beads import assign_and_sync_item
-        
-        mock_env.side_effect = lambda key, default='': {
-            'AGENT_NAME': 'agent-1',
-            'USERNAME': 'ameliapayne'
-        }.get(key, default)
         
         # Mock bd show returns item assigned to username (email format)
         show_result = Mock(
@@ -673,60 +554,6 @@ class TestAddComment:
         assert result is False
 
 
-class TestCreateCleanupDelegationIssue:
-    """Test create_cleanup_delegation_issue function."""
-
-    @patch('src.pokepoke.beads_management.create_issue')
-    def test_create_cleanup_delegation_success(self, mock_create: Mock) -> None:
-        """Test successful cleanup delegation issue creation."""
-        from src.pokepoke.beads_management import create_cleanup_delegation_issue
-
-        mock_create.return_value = "cleanup-1"
-
-        result = create_cleanup_delegation_issue(
-            title="Cleanup needed",
-            description="Fix the mess"
-        )
-
-        assert result == "cleanup-1"
-        mock_create.assert_called_once()
-        call_kwargs = mock_create.call_args[1]
-        assert 'cleanup' in call_kwargs['labels']
-        assert 'delegation' in call_kwargs['labels']
-
-    @patch('src.pokepoke.beads_management.create_issue')
-    def test_create_cleanup_delegation_with_extra_labels(self, mock_create: Mock) -> None:
-        """Test cleanup delegation with additional labels."""
-        from src.pokepoke.beads_management import create_cleanup_delegation_issue
-
-        mock_create.return_value = "cleanup-2"
-
-        result = create_cleanup_delegation_issue(
-            title="Cleanup",
-            description="Desc",
-            labels=["urgent"]
-        )
-
-        assert result == "cleanup-2"
-        call_kwargs = mock_create.call_args[1]
-        assert 'urgent' in call_kwargs['labels']
-        assert 'cleanup' in call_kwargs['labels']
-
-    @patch('src.pokepoke.beads_management.create_issue')
-    def test_create_cleanup_delegation_failure(self, mock_create: Mock) -> None:
-        """Test cleanup delegation returns None when create fails."""
-        from src.pokepoke.beads_management import create_cleanup_delegation_issue
-
-        mock_create.return_value = None
-
-        result = create_cleanup_delegation_issue(
-            title="Cleanup",
-            description="Desc"
-        )
-
-        assert result is None
-
-
 class TestSelectNextHierarchicalItem:
     """Test select_next_hierarchical_item function."""
 
@@ -771,22 +598,3 @@ class TestSelectNextHierarchicalItem:
         result = select_next_hierarchical_item([epic])
 
         assert result is None
-
-
-class TestFilterWorkItemsOtherTypes:
-    """Test filter_work_items with non-standard types."""
-
-    @patch('src.pokepoke.beads_hierarchy.has_feature_parent')
-    def test_unknown_type_included(self, mock_has_parent: Mock) -> None:
-        """Test items with unknown types are included by default."""
-        from src.pokepoke.beads import filter_work_items
-
-        item = BeadsWorkItem(
-            id="other-1", title="Other", description="",
-            status="open", priority=1, issue_type="story"
-        )
-
-        result = filter_work_items([item])
-
-        assert len(result) == 1
-        assert result[0].id == "other-1"

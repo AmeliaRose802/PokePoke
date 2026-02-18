@@ -152,21 +152,3 @@ def cleanup_after_merge(worktree_path: Path, branch_name: str) -> None:
         print(f"\u2705 Deleted branch {branch_name}")
     except subprocess.CalledProcessError as e:
         print(f"\u26a0\ufe0f  Could not delete branch: {e.stderr or e}")
-
-
-def get_stale_worktrees(max_age_days: int = 7) -> Dict[str, Dict[str, str]]:
-    """Get worktrees from manifest that are older than max_age_days."""
-    manifest = load_worktree_manifest()
-    stale_worktrees = {}
-    cutoff_time = datetime.now().timestamp() - (max_age_days * 24 * 60 * 60)
-
-    for worktree_id, info in manifest.items():
-        try:
-            timestamp = datetime.fromisoformat(info["timestamp"]).timestamp()
-            if timestamp < cutoff_time:
-                stale_worktrees[worktree_id] = info
-        except (ValueError, KeyError):
-            # Invalid timestamp or missing field - consider it stale
-            stale_worktrees[worktree_id] = info
-
-    return stale_worktrees

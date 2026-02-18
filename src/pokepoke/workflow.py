@@ -27,7 +27,6 @@ def process_work_item(
     item: BeadsWorkItem, 
     interactive: bool, 
     timeout_hours: float = 2.0, 
-    run_cleanup_agents: bool = False, 
     run_beta_test: bool = False,
     run_logger: Optional['RunLogger'] = None,
     max_timeout_restarts: int = 3
@@ -38,8 +37,7 @@ def process_work_item(
         item: Work item to process
         interactive: If True, prompt for confirmation before proceeding
         timeout_hours: Maximum hours before timing out and restarting (default: 2.0)
-        run_cleanup_agents: If True, run maintenance agents after completion (default: False)
-        run_beta_test: If True, run beta tester after completion (default: True)
+        run_beta_test: If True, run beta tester after completion (default: False)
         run_logger: Optional run logger instance for file logging
         max_timeout_restarts: Maximum number of timeout restarts before failing (default: 3)
         

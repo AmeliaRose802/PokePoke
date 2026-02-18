@@ -148,27 +148,6 @@ def record_completion(record: ModelCompletionRecord, path: Optional[Path] = None
             save_model_stats(data, path)
 
 
-def record_completions(records: List[ModelCompletionRecord], path: Optional[Path] = None) -> None:
-    """Append multiple completion records in a single write.
-
-    More efficient than calling record_completion() in a loop when
-    flushing a batch of session records.
-
-    Thread-safe and process-safe: uses both a thread lock (fast path) and
-    a cross-process file lock to serialize read-modify-write across multiple
-    worker processes in multi-agent mode.
-    """
-    if not records:
-        return
-    with _thread_lock:
-        with acquire_lock(_STATS_FILE_LOCK):
-            data = load_model_stats(path)
-            for rec in records:
-                data["log"].append(_record_to_dict(rec))
-            data["summary"] = _rebuild_summary(data["log"])
-            save_model_stats(data, path)
-
-
 def get_model_summary(path: Optional[Path] = None) -> Dict[str, Dict[str, Any]]:
     """Return the per-model summary dict (read-only)."""
     data = load_model_stats(path)
