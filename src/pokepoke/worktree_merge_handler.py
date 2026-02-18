@@ -61,11 +61,11 @@ def handle_worktree_merge(
             if not is_ready:
                 print(f"   Still failing after cleanup: {error_msg}")
                 return False, False
+            print("   ✅ Repo is ready after cleanup, continuing with merge.")
+            remove_from_manifest(agent_id)
         else:
             print("   Cleanup failed.")
             return False, False
-
-        return False, False
     
     # Attempt merge
     print(f"\n🔀 Merging worktree for {agent_id}...")
