@@ -1,6 +1,5 @@
 """Beads hierarchy operations - parent-child relationships."""
 
-import os
 import subprocess
 from typing import List, Optional
 
