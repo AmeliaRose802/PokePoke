@@ -55,6 +55,7 @@ interface PyWebViewAPI {
   save_config(config: ProjectConfig): Promise<{ path: string; saved: boolean }>;
   request_stop_after_current(): Promise<{ stop_after_current: boolean }>;
   cancel_stop_after_current(): Promise<{ stop_after_current: boolean }>;
+  get_agent_detail(agent_id: string): Promise<AgentInfo | null>;
 }
 
 declare global {
@@ -87,6 +88,7 @@ export interface BridgeState {
   getModelHistory: (limit?: number) => Promise<ModelHistoryEntry[]>;
   requestStopAfterCurrent: () => Promise<void>;
   cancelStopAfterCurrent: () => Promise<void>;
+  getAgentDetail: (agentId: string) => Promise<AgentInfo | null>;
 }
 
 /**
@@ -174,6 +176,15 @@ export function useBridge(): BridgeState {
     if (!window.pywebview?.api) return;
     await window.pywebview.api.cancel_stop_after_current();
     setStopAfterCurrent(false);
+  }, []);
+
+  const getAgentDetail = useCallback(async (agentId: string): Promise<AgentInfo | null> => {
+    if (!window.pywebview?.api) return null;
+    try {
+      return await window.pywebview.api.get_agent_detail(agentId);
+    } catch {
+      return null;
+    }
   }, []);
 
   const appendLogs = useCallback((entries: LogEntry[]) => {
@@ -301,5 +312,6 @@ export function useBridge(): BridgeState {
     getModelHistory,
     requestStopAfterCurrent,
     cancelStopAfterCurrent,
+    getAgentDetail,
   };
 }

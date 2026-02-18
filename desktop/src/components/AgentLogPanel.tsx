@@ -12,6 +12,7 @@ import {
   stringsToLogEntries,
 } from "../utils/logProcessor";
 import { RenderLogItems } from "./LogComponents";
+import { useBridge } from "../useBridge";
 
 interface Props {
   agent: AgentInfo;
@@ -53,15 +54,43 @@ function formatTimestamp(ts?: number | null): string {
 }
 
 export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
+  const { getAgentDetail } = useBridge();
+  const [detailedAgent, setDetailedAgent] = useState<AgentInfo | null>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  
   const statusInfo = STATUS_INDICATOR[agent.status] ?? STATUS_INDICATOR.running;
-  const logLines = agent.log_lines && agent.log_lines.length > 0
-    ? agent.log_lines
-    : agent.recent_logs;
+  
+  // Use detailed agent logs if available, otherwise fall back to basic agent info
+  const agentToUse = detailedAgent || agent;
+  const logLines = agentToUse.log_lines && agentToUse.log_lines.length > 0
+    ? agentToUse.log_lines
+    : agentToUse.recent_logs;
+  
   const primaryLabel = getAgentPrimaryLabel(agent);
   const roleLabel = agent.work_item_id ? agent.name : null;
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isUserScrolledUp = useRef(false);
+
+  // Fetch detailed agent information when agent changes
+  useEffect(() => {
+    async function fetchDetailedAgent() {
+      setIsLoadingDetail(true);
+      setDetailError(null);
+      try {
+        const detailed = await getAgentDetail(agent.agent_id);
+        setDetailedAgent(detailed);
+      } catch (error) {
+        setDetailError(error instanceof Error ? error.message : 'Failed to load detailed logs');
+        console.warn('Failed to fetch agent detail:', error);
+      } finally {
+        setIsLoadingDetail(false);
+      }
+    }
+    
+    fetchDetailedAgent();
+  }, [agent.agent_id, getAgentDetail]);
 
   const handleScroll = () => {
     const el = containerRef.current;
@@ -115,10 +144,15 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
             <strong>Last log:</strong> {formatTimestamp(agent.last_log_at ?? agent.last_updated)}
           </span>
         </div>
-        <span className="log-count">{logLines.length} lines</span>
+        <span className="log-count">
+          {isLoadingDetail ? "Loading detailed logs..." : `${logLines.length} lines`}
+          {detailError && " (Error loading details)"}
+        </span>
       </div>
       <div className="agent-log-panel-content log-entries" ref={containerRef} onScroll={handleScroll}>
-        {logLines.length === 0 ? (
+        {isLoadingDetail && logLines.length === 0 ? (
+          <div className="agent-log-panel-empty">Loading detailed logs…</div>
+        ) : logLines.length === 0 ? (
           <div className="agent-log-panel-empty">Waiting for output…</div>
         ) : (
           <RenderLogItems items={renderItems} />
