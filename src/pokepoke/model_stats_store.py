@@ -32,11 +32,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from pokepoke.coordination import acquire_lock
 from pokepoke.types import ModelCompletionRecord
 
 STATS_FILE = Path(".pokepoke") / "model_stats.json"
 
-_lock = threading.Lock()
+# Thread lock for intra-process serialization (fast path)
+_thread_lock = threading.Lock()
+# Cross-process lock name for file-based coordination
+_STATS_FILE_LOCK = "model-stats-file"
 
 
 # ── Data helpers ─────────────────────────────────────────────────────
@@ -132,13 +136,16 @@ def save_model_stats(data: Dict[str, Any], path: Optional[Path] = None) -> None:
 def record_completion(record: ModelCompletionRecord, path: Optional[Path] = None) -> None:
     """Append a completion record and update the summary.
 
-    Thread-safe: uses a module-level lock to serialize read-modify-write.
+    Thread-safe and process-safe: uses both a thread lock (fast path) and
+    a cross-process file lock to serialize read-modify-write across multiple
+    worker processes in multi-agent mode.
     """
-    with _lock:
-        data = load_model_stats(path)
-        data["log"].append(_record_to_dict(record))
-        data["summary"] = _rebuild_summary(data["log"])
-        save_model_stats(data, path)
+    with _thread_lock:
+        with acquire_lock(_STATS_FILE_LOCK):
+            data = load_model_stats(path)
+            data["log"].append(_record_to_dict(record))
+            data["summary"] = _rebuild_summary(data["log"])
+            save_model_stats(data, path)
 
 
 def record_completions(records: List[ModelCompletionRecord], path: Optional[Path] = None) -> None:
@@ -146,15 +153,20 @@ def record_completions(records: List[ModelCompletionRecord], path: Optional[Path
 
     More efficient than calling record_completion() in a loop when
     flushing a batch of session records.
+
+    Thread-safe and process-safe: uses both a thread lock (fast path) and
+    a cross-process file lock to serialize read-modify-write across multiple
+    worker processes in multi-agent mode.
     """
     if not records:
         return
-    with _lock:
-        data = load_model_stats(path)
-        for rec in records:
-            data["log"].append(_record_to_dict(rec))
-        data["summary"] = _rebuild_summary(data["log"])
-        save_model_stats(data, path)
+    with _thread_lock:
+        with acquire_lock(_STATS_FILE_LOCK):
+            data = load_model_stats(path)
+            for rec in records:
+                data["log"].append(_record_to_dict(rec))
+            data["summary"] = _rebuild_summary(data["log"])
+            save_model_stats(data, path)
 
 
 def get_model_summary(path: Optional[Path] = None) -> Dict[str, Dict[str, Any]]:

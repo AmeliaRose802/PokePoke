@@ -9,9 +9,12 @@ Covers:
 - get_model_weights: performance-weighted selection weights
 - print_model_leaderboard: human-readable output
 - _rebuild_summary: summary recomputation from log
+- cross-process locking: multi-agent safety
 """
 
 import json
+import multiprocessing
+import os
 from pathlib import Path
 
 import pytest
@@ -360,3 +363,75 @@ class TestPrintModelLeaderboard:
         captured = capsys.readouterr()
         # m1 should appear before m2 in output
         assert captured.out.index("m1") < captured.out.index("m2")
+
+
+# ── Cross-process locking ────────────────────────────────────────────
+
+def _worker_record_completion(args):
+    """Worker function for cross-process test. Must be module-level for pickling."""
+    stats_path, item_id, model = args
+    rec = ModelCompletionRecord(
+        item_id=item_id,
+        model=model,
+        duration_seconds=1.0,
+        gate_passed=True,
+    )
+    record_completion(rec, stats_path)
+
+
+class TestCrossProcessLocking:
+    """Test that concurrent writes from multiple processes don't lose records."""
+
+    def test_concurrent_writes_preserve_all_records(self, tmp_path: Path):
+        """Multiple processes writing concurrently should preserve all records.
+
+        This test spawns multiple processes that each write a record. Without
+        proper cross-process locking, some writes would be lost due to
+        read-modify-write races. With filelock-based coordination, all records
+        should be preserved.
+        """
+        # Use a shared path for the stats file
+        stats_path = _tmp_stats_path(tmp_path)
+        # Also need .pokepoke/locks directory for the file locks
+        lock_dir = tmp_path / ".pokepoke" / "locks"
+        lock_dir.mkdir(parents=True, exist_ok=True)
+
+        # Change to tmp_path so that .pokepoke/locks is found
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+
+            num_workers = 5
+            records_per_worker = 4
+            total_records = num_workers * records_per_worker
+
+            # Prepare work items for each worker
+            work_items = [
+                (stats_path, f"item-{w}-{r}", f"model-{w}")
+                for w in range(num_workers)
+                for r in range(records_per_worker)
+            ]
+
+            # Use multiprocessing pool to simulate concurrent agents
+            with multiprocessing.Pool(processes=num_workers) as pool:
+                pool.map(_worker_record_completion, work_items)
+
+            # Verify all records were preserved
+            data = load_model_stats(stats_path)
+            assert len(data["log"]) == total_records, (
+                f"Expected {total_records} records, got {len(data['log'])}. "
+                "Some records were lost due to race conditions."
+            )
+
+            # Verify each model has correct count
+            for w in range(num_workers):
+                model_name = f"model-{w}"
+                model_records = [
+                    e for e in data["log"] if e["model"] == model_name
+                ]
+                assert len(model_records) == records_per_worker, (
+                    f"Model {model_name} should have {records_per_worker} "
+                    f"records, got {len(model_records)}"
+                )
+        finally:
+            os.chdir(original_cwd)
