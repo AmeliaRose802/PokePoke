@@ -1,7 +1,5 @@
 """Work item selection logic for PokePoke."""
 
-pass
-
 from .types import BeadsWorkItem
 from .beads import select_next_hierarchical_item, has_unmet_blocking_dependencies
 from .beads_hierarchy import HUMAN_REQUIRED_LABEL, is_assigned_to_current_user
