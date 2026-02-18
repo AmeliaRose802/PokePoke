@@ -183,6 +183,7 @@ function App() {
       <StatsBar
         stats={bridge.stats}
         modelLeaderboard={bridge.modelLeaderboard}
+        activeAgentModel={(selectedAgentDetail ?? autoFollowAgent)?.model ?? null}
         onOpenStats={() => setShowStatsPage(true)}
       />
 
@@ -210,6 +211,7 @@ function App() {
         <StatsPage
           stats={bridge.stats}
           modelLeaderboard={bridge.modelLeaderboard}
+          activeAgentModel={(selectedAgentDetail ?? autoFollowAgent)?.model ?? null}
           modelHistory={modelHistory}
           historyLoading={historyLoading}
           historyError={historyError}

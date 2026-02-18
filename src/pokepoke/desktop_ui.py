@@ -385,9 +385,10 @@ class DesktopUI:
         name: str,
         iteration: int = 1,
         status: str = "running",
+        model: str | None = None,
     ) -> None:
         """Register or update a running agent card."""
-        self._api.push_agent_status(agent_id, name, iteration, status)
+        self._api.push_agent_status(agent_id, name, iteration, status, model)
 
     def push_agent_log(self, agent_id: str, line: str) -> None:
         """Append a log line to an agent's recent log preview."""

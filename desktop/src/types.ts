@@ -154,6 +154,7 @@ export interface AgentInfo {
   name: string;
   iteration: number;
   status: "running" | "success" | "failed";
+  model?: string | null;
   recent_logs: string[];
   log_lines?: string[];
   started_at?: number;

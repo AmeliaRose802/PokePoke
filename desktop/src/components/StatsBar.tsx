@@ -18,17 +18,18 @@ import {
 interface Props {
   stats: SessionStats | null;
   modelLeaderboard: Record<string, ModelPerformanceSummary>;
+  activeAgentModel?: string | null;
   onOpenStats: () => void;
 }
 
-export function StatsBar({ stats, modelLeaderboard, onOpenStats }: Props) {
+export function StatsBar({ stats, modelLeaderboard, activeAgentModel, onOpenStats }: Props) {
   const elapsed = stats?.elapsed_time ?? 0;
   const completedItems = getCompletedItems(stats);
   const doneCount = getDoneCount(stats);
   const apiDurationSeconds = stats?.agent_stats?.api_duration ?? 0;
   const apiDurationLabel =
     apiDurationSeconds > 0 ? formatDurationShort(apiDurationSeconds) : "\u2014";
-  const currentModel = inferCurrentModel(stats, modelLeaderboard);
+  const currentModel = inferCurrentModel(stats, modelLeaderboard, activeAgentModel);
   const doneTooltip =
     completedItems.length > 0
       ? `Completed this session: ${completedItems.map((item) => item.id).join(", ")}`
