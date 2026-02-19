@@ -87,6 +87,13 @@ class MaintenanceScheduler:
             if items_completed % agent_cfg.frequency != 0:
                 continue
 
+            # Check if agent is paused in the UI
+            log_key = agent_cfg.name.lower().replace(" ", "_")
+            agent_id = f"maintenance-{log_key}"
+            if terminal_ui.ui.is_agent_paused(agent_id) is True:
+                run_logger.log_maintenance(log_key, f"Skipping {agent_cfg.name} Agent - paused by user")
+                continue
+
             # Agent is due to run - try to schedule it
             self._maybe_run_agent(agent_cfg.name, agent_cfg, pokepoke_repo, session_stats, run_logger)
 

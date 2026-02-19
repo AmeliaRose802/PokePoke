@@ -122,6 +122,30 @@ class TestMaintenanceScheduler:
             scheduler.maybe_run_maintenance(2, session_stats, run_logger)
             mock_run.assert_not_called()
 
+    @patch('pokepoke.maintenance_scheduler.terminal_ui')
+    @patch('pokepoke.maintenance_scheduler.get_config')
+    def test_maybe_run_maintenance_skips_paused_agents(self, mock_config, mock_terminal_ui):
+        """Test that paused agents are skipped during scheduling."""
+        config = ProjectConfig()
+        config.maintenance = MaintenanceConfig(agents=[
+            MaintenanceAgentConfig(
+                name="Janitor", prompt_file="janitor.md",
+                frequency=2, enabled=True,
+            ),
+        ])
+        mock_config.return_value = config
+        mock_terminal_ui.ui.is_agent_paused.return_value = True
+        scheduler = MaintenanceScheduler()
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        with patch.object(scheduler, '_maybe_run_agent') as mock_run:
+            scheduler.maybe_run_maintenance(2, session_stats, run_logger)
+            mock_run.assert_not_called()
+            run_logger.log_maintenance.assert_called_with(
+                "janitor", "Skipping Janitor Agent - paused by user"
+            )
+
 
 class TestSingletonCoordination:
     """Test singleton coordination logic."""

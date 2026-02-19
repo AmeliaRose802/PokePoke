@@ -355,6 +355,24 @@ class DesktopAPI:
         """Return a deep copy of a single agent's detail state (logs included)."""
         return self._agent_registry.get_detail(agent_id)
 
+    def pause_agent(self, agent_id: str) -> dict[str, Any]:
+        """Pause an agent, preventing future scheduling."""
+        success = self._agent_registry.pause(agent_id)
+        if success:
+            self.push_log(f"⏸️  Agent {agent_id} paused", "orchestrator", "yellow")
+        return {"agent_id": agent_id, "paused": success}
+
+    def resume_agent(self, agent_id: str) -> dict[str, Any]:
+        """Resume a paused agent, allowing future scheduling."""
+        success = self._agent_registry.resume(agent_id)
+        if success:
+            self.push_log(f"▶️  Agent {agent_id} resumed", "orchestrator")
+        return {"agent_id": agent_id, "resumed": success}
+
+    def is_agent_paused(self, agent_id: str) -> bool:
+        """Check if an agent is paused."""
+        return self._agent_registry.is_paused(agent_id)
+
     def request_stop_after_current(self) -> dict[str, bool]:
         """Request that the orchestrator stop after the current item completes."""
         _request_stop_after_current()

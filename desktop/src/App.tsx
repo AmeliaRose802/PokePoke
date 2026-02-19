@@ -180,6 +180,8 @@ function App() {
           agents={bridge.agents}
           selectedAgentId={displayedAgentId ?? autoFollowAgent?.agent_id ?? null}
           onSelectAgent={setSelectedAgentId}
+          onPauseAgent={bridge.pauseAgent}
+          onResumeAgent={bridge.resumeAgent}
         />
       </div>
 

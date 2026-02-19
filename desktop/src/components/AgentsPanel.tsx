@@ -14,6 +14,8 @@ interface Props {
   agents: AgentInfo[];
   selectedAgentId?: string | null;
   onSelectAgent?: (agentId: string | null) => void;
+  onPauseAgent?: (agentId: string) => void;
+  onResumeAgent?: (agentId: string) => void;
 }
 
 const ROBOT_AVATARS = [
@@ -49,6 +51,8 @@ export function AgentsPanel({
   agents,
   selectedAgentId,
   onSelectAgent,
+  onPauseAgent,
+  onResumeAgent,
 }: Props) {
   const agentIdSet = new Set(agents.map((a) => a.agent_id));
   const childrenByParent = new Map<string, AgentInfo[]>();
@@ -68,14 +72,16 @@ export function AgentsPanel({
   const renderAgentCard = (agent: AgentInfo, depth: number) => {
     const statusInfo = STATUS_INDICATOR[agent.status] ?? STATUS_INDICATOR.running;
     const isSelected = selectedAgentId === agent.agent_id;
+    const isPaused = agent.paused === true;
     const depthClass = depth > 0 ? " agent-card-child" : "";
+    const pausedClass = isPaused ? " agent-card-paused" : "";
     const label = getAgentPrimaryLabel(agent);
     const roleLabel = agent.work_item_id ? agent.name : null;
 
     return (
       <div
         key={agent.agent_id}
-        className={`agent-card agent-card-${agent.status}${isSelected ? " agent-card-selected" : ""}${depthClass}`}
+        className={`agent-card agent-card-${agent.status}${isSelected ? " agent-card-selected" : ""}${depthClass}${pausedClass}`}
         role={onSelectAgent ? "button" : undefined}
         tabIndex={onSelectAgent ? 0 : undefined}
         onClick={() => onSelectAgent?.(isSelected ? null : agent.agent_id)}
@@ -95,11 +101,28 @@ export function AgentsPanel({
               <span className="agent-card-subtitle">{roleLabel}</span>
             ) : null}
           </div>
+          {isPaused && <span className="agent-paused-badge" title="Paused">⏸</span>}
           <span className={`agent-dot ${statusInfo.dot}`} title={statusInfo.label} />
+          {agent.status === "running" && (
+            <button
+              className={`agent-pause-btn${isPaused ? " paused" : ""}`}
+              title={isPaused ? "Resume agent" : "Pause agent"}
+              onClick={(evt) => {
+                evt.stopPropagation();
+                if (isPaused) {
+                  onResumeAgent?.(agent.agent_id);
+                } else {
+                  onPauseAgent?.(agent.agent_id);
+                }
+              }}
+            >
+              {isPaused ? "▶" : "⏸"}
+            </button>
+          )}
         </div>
         <div className="agent-card-logs">
           {agent.recent_logs.length === 0 ? (
-            <span className="agent-card-no-logs">Waiting for output…</span>
+            <span className="agent-card-no-logs">{isPaused ? "Paused" : "Waiting for output…"}</span>
           ) : (
             agent.recent_logs.map((line, i) => (
               <div key={i} className="agent-card-log-line">{line}</div>

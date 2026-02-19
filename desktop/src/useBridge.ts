@@ -56,6 +56,8 @@ interface PyWebViewAPI {
   request_stop_after_current(): Promise<{ stop_after_current: boolean }>;
   cancel_stop_after_current(): Promise<{ stop_after_current: boolean }>;
   get_agent_detail(agent_id: string): Promise<AgentInfo | null>;
+  pause_agent(agent_id: string): Promise<{ agent_id: string; paused: boolean }>;
+  resume_agent(agent_id: string): Promise<{ agent_id: string; resumed: boolean }>;
 }
 
 declare global {
@@ -89,6 +91,8 @@ export interface BridgeState {
   requestStopAfterCurrent: () => Promise<void>;
   cancelStopAfterCurrent: () => Promise<void>;
   getAgentDetail: (agentId: string) => Promise<AgentInfo | null>;
+  pauseAgent: (agentId: string) => Promise<boolean>;
+  resumeAgent: (agentId: string) => Promise<boolean>;
 }
 
 /**
@@ -184,6 +188,26 @@ export function useBridge(): BridgeState {
       return await window.pywebview.api.get_agent_detail(agentId);
     } catch {
       return null;
+    }
+  }, []);
+
+  const pauseAgent = useCallback(async (agentId: string): Promise<boolean> => {
+    if (!window.pywebview?.api) return false;
+    try {
+      const result = await window.pywebview.api.pause_agent(agentId);
+      return result.paused;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const resumeAgent = useCallback(async (agentId: string): Promise<boolean> => {
+    if (!window.pywebview?.api) return false;
+    try {
+      const result = await window.pywebview.api.resume_agent(agentId);
+      return result.resumed;
+    } catch {
+      return false;
     }
   }, []);
 
@@ -313,5 +337,7 @@ export function useBridge(): BridgeState {
     requestStopAfterCurrent,
     cancelStopAfterCurrent,
     getAgentDetail,
+    pauseAgent,
+    resumeAgent,
   };
 }

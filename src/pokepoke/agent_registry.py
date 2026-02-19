@@ -20,6 +20,7 @@ class AgentRegistry:
         self._agents: dict[str, dict[str, Any]] = {}
         self._preview_limit = preview_limit
         self._detail_limit = detail_limit
+        self._paused_agents: set[str] = set()
 
     def set_limits(self, preview_limit: int, detail_limit: int) -> None:
         with self._lock:
@@ -99,23 +100,45 @@ class AgentRegistry:
                 }
             )
 
+    def pause(self, agent_id: str) -> bool:
+        """Mark an agent as paused. Returns True if the agent exists."""
+        with self._lock:
+            if agent_id not in self._agents:
+                return False
+            self._paused_agents.add(agent_id)
+            return True
+
+    def resume(self, agent_id: str) -> bool:
+        """Mark an agent as resumed. Returns True if the agent was paused."""
+        with self._lock:
+            if agent_id in self._paused_agents:
+                self._paused_agents.discard(agent_id)
+                return True
+            return False
+
+    def is_paused(self, agent_id: str) -> bool:
+        """Check if an agent is paused."""
+        with self._lock:
+            return agent_id in self._paused_agents
+
     def remove(self, agent_id: str) -> None:
         with self._lock:
             self._agents.pop(agent_id, None)
+            self._paused_agents.discard(agent_id)
 
     def serialize_all(self) -> list[dict[str, Any]]:
         with self._lock:
-            return [self._copy_agent(agent) for agent in self._agents.values()]
+            return [self._copy_agent(agent, agent.get("agent_id") in self._paused_agents) for agent in self._agents.values()]
 
     def get_detail(self, agent_id: str) -> dict[str, Any] | None:
         with self._lock:
             agent = self._agents.get(agent_id)
             if agent is None:
                 return None
-            return self._copy_agent(agent)
+            return self._copy_agent(agent, agent_id in self._paused_agents)
 
     @staticmethod
-    def _copy_agent(agent: dict[str, Any]) -> dict[str, Any]:
+    def _copy_agent(agent: dict[str, Any], paused: bool = False) -> dict[str, Any]:
         return {
             "agent_id": agent.get("agent_id"),
             "name": agent.get("name"),
@@ -130,4 +153,5 @@ class AgentRegistry:
             "started_at": agent.get("started_at"),
             "last_updated": agent.get("last_updated"),
             "last_log_at": agent.get("last_log_at"),
+            "paused": paused,
         }
