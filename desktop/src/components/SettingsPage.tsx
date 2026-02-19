@@ -6,7 +6,8 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { ConfigResponse, ProjectConfig, ModelsConfig, MaintenanceAgent } from "../types";
+import type { ConfigResponse, ProjectConfig, ModelsConfig, MaintenanceAgent, McpServerConfig } from "../types";
+import { MaintenanceAgentsSection } from "./MaintenanceAgentsSection";
 
 const isAbTestingEnabled = (models?: ModelsConfig): boolean => {
   if (!models) return false;
@@ -46,6 +47,9 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
   const [chipInput, setChipInput] = useState("");
   const [maintenanceAgents, setMaintenanceAgents] = useState<MaintenanceAgent[]>([]);
   const [abTestingEnabled, setAbTestingEnabled] = useState(false);
+  const [mcpEnabled, setMcpEnabled] = useState(false);
+  const [mcpName, setMcpName] = useState("");
+  const [mcpRestartScript, setMcpRestartScript] = useState("");
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -65,6 +69,10 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
       setDefaultModel(models.default ?? "");
       setFallbackModel(models.fallback ?? "");
       setCandidateModels(models.candidate_models ?? []);
+      const mcpServer = resp.config.mcp_server ?? {};
+      setMcpEnabled(mcpServer.enabled ?? false);
+      setMcpName(mcpServer.name ?? "");
+      setMcpRestartScript(mcpServer.restart_script ?? "");
       
       // Load maintenance agents
       const maintenance = resp.config.maintenance;
@@ -103,6 +111,12 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
         candidate_models:
           candidateModels.length > 0 ? candidateModels : undefined,
       } as ModelsConfig,
+      mcp_server: {
+        ...(config.mcp_server ?? {}),
+        enabled: mcpEnabled,
+        name: mcpName || undefined,
+        restart_script: mcpRestartScript || undefined,
+      } as McpServerConfig,
       maintenance: {
         ...config.maintenance,
         agents: maintenanceAgents,
@@ -117,7 +131,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
     } else {
       setMessage("Save failed");
     }
-  }, [config, defaultModel, fallbackModel, candidateModels, maintenanceAgents, abTestingEnabled, saveConfig]);
+  }, [config, defaultModel, fallbackModel, candidateModels, maintenanceAgents, abTestingEnabled, mcpEnabled, mcpName, mcpRestartScript, saveConfig]);
 
   const handleReset = useCallback(() => {
     if (!config) return;
@@ -128,6 +142,10 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
     setFallbackModel(models.fallback ?? "");
     setCandidateModels(models.candidate_models ?? []);
     setChipInput("");
+    const mcpServer = config.mcp_server ?? {};
+    setMcpEnabled(mcpServer.enabled ?? false);
+    setMcpName(mcpServer.name ?? "");
+    setMcpRestartScript(mcpServer.restart_script ?? "");
     
     // Reset maintenance agents
     const maintenance = config.maintenance;
@@ -349,94 +367,75 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
               </div>
             </div>
 
-            {/* Section: Maintenance Agents Configuration */}
+            {/* Section: MCP Server */}
             <div className="settings-section">
-              <h3 className="settings-section-title">🔧 Maintenance Agents</h3>
+              <h3 className="settings-section-title">🖧 MCP Server</h3>
 
-              {maintenanceAgents.length === 0 ? (
-                <div className="settings-no-agents">
-                  No maintenance agents configured
+              <div className="settings-field">
+                <label className="settings-label" htmlFor="mcp-enabled">
+                  Enable MCP server
+                </label>
+                <div className="settings-checkbox-row">
+                  <input
+                    id="mcp-enabled"
+                    type="checkbox"
+                    checked={mcpEnabled}
+                    onChange={(e) => {
+                      setMcpEnabled(e.target.checked);
+                      markDirty();
+                    }}
+                  />
+                  <span className="settings-hint">
+                    Controls MCP server integration and restart script usage.
+                  </span>
                 </div>
-              ) : (
-                <div className="agents-list">
-                  {maintenanceAgents.map((agent, index) => (
-                    <div key={agent.name} className="agent-config">
-                      <div className="agent-header">
-                        <span className="agent-name">{agent.name}</span>
-                        <label className="agent-toggle">
-                          <input
-                            type="checkbox"
-                            checked={agent.enabled}
-                            onChange={(e) =>
-                              updateMaintenanceAgent(index, { enabled: e.target.checked })
-                            }
-                          />
-                          <span className="toggle-slider"></span>
-                        </label>
-                      </div>
+              </div>
 
-                      <div className="agent-details">
-                        <div className="agent-field">
-                          <label className="settings-label">
-                            Run every N work items
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            max="100"
-                            className="settings-input number-input"
-                            value={agent.frequency}
-                            onChange={(e) =>
-                              updateMaintenanceAgent(index, {
-                                frequency: parseInt(e.target.value) || 1,
-                              })
-                            }
-                          />
-                        </div>
+              <div className="settings-field">
+                <label className="settings-label" htmlFor="mcp-name">
+                  MCP server name (optional)
+                </label>
+                <input
+                  id="mcp-name"
+                  className="settings-input"
+                  value={mcpName}
+                  onChange={(e) => {
+                    setMcpName(e.target.value);
+                    markDirty();
+                  }}
+                  placeholder="e.g. My MCP Server"
+                  disabled={!mcpEnabled}
+                />
+                <span className="settings-hint">
+                  Friendly display name for the MCP server.
+                </span>
+              </div>
 
-                        <div className="agent-field">
-                          <label className="settings-label">
-                            Model Override (optional)
-                          </label>
-                          <input
-                            className="settings-input"
-                            list="model-override-suggestions"
-                            value={agent.model || ""}
-                            onChange={(e) =>
-                              updateMaintenanceAgent(index, {
-                                model: e.target.value || undefined,
-                              })
-                            }
-                            placeholder="Use default model"
-                          />
-                          <datalist id="model-override-suggestions">
-                            {KNOWN_MODELS.map((m) => (
-                              <option key={m} value={m} />
-                            ))}
-                          </datalist>
-                        </div>
-
-                        <div className="agent-metadata">
-                          <span className="metadata-item">
-                            📄 {agent.prompt_file}
-                          </span>
-                          {agent.needs_worktree && (
-                            <span className="metadata-item">
-                              🌳 Needs worktree
-                            </span>
-                          )}
-                          {agent.merge_changes && (
-                            <span className="metadata-item">
-                              🔀 Merges changes
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div className="settings-field">
+                <label className="settings-label" htmlFor="mcp-restart-script">
+                  Restart script (optional)
+                </label>
+                <input
+                  id="mcp-restart-script"
+                  className="settings-input"
+                  value={mcpRestartScript}
+                  onChange={(e) => {
+                    setMcpRestartScript(e.target.value);
+                    markDirty();
+                  }}
+                  placeholder="scripts/Restart-MCPServer.ps1"
+                  disabled={!mcpEnabled}
+                />
+                <span className="settings-hint">
+                  Path to restart the MCP server after configuration changes.
+                </span>
+              </div>
             </div>
+
+            <MaintenanceAgentsSection
+              agents={maintenanceAgents}
+              onUpdate={updateMaintenanceAgent}
+            />
 
             {/* Footer actions */}
             <div className="settings-footer">

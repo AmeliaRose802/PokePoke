@@ -21,6 +21,11 @@ describe('SettingsPage', () => {
       candidate_models: ['gpt-5', 'gpt-5-codex'],
       ab_testing_enabled: true,
     },
+    mcp_server: {
+      enabled: true,
+      restart_script: 'scripts/Restart-MCPServer.ps1',
+      name: 'ICM MCP',
+    },
     maintenance: {
       agents: [
         {
@@ -78,6 +83,25 @@ describe('SettingsPage', () => {
     expect(screen.getByLabelText('Fallback Model')).toHaveValue('claude-sonnet-4');
   });
 
+  it('should display MCP server configuration', async () => {
+    render(
+      <SettingsPage
+        getConfig={mockGetConfig}
+        saveConfig={mockSaveConfig}
+        onClose={mockOnClose}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+    });
+
+    const mcpToggle = screen.getByLabelText('Enable MCP server');
+    expect(mcpToggle).toBeChecked();
+    expect(screen.getByLabelText('MCP server name (optional)')).toHaveValue('ICM MCP');
+    expect(screen.getByLabelText('Restart script (optional)')).toHaveValue('scripts/Restart-MCPServer.ps1');
+  });
+
   it('should toggle between single-model and A/B testing modes', async () => {
     const user = userEvent.setup();
     render(
@@ -108,6 +132,40 @@ describe('SettingsPage', () => {
     expect(fallbackInput).not.toBeDisabled();
     expect(screen.queryByPlaceholderText('Add model…')).not.toBeInTheDocument();
     expect(screen.getByText('Enable A/B testing to configure candidate models')).toBeInTheDocument();
+  });
+
+  it('should disable MCP inputs when MCP server disabled', async () => {
+    const disabledMcpConfig: ConfigResponse = {
+      ...defaultConfigResponse,
+      config: {
+        ...defaultConfig,
+        mcp_server: {
+          enabled: false,
+          name: '',
+          restart_script: '',
+        },
+      },
+    };
+    mockGetConfig.mockResolvedValueOnce(disabledMcpConfig);
+
+    render(
+      <SettingsPage
+        getConfig={mockGetConfig}
+        saveConfig={mockSaveConfig}
+        onClose={mockOnClose}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+    });
+
+    const nameInput = screen.getByLabelText('MCP server name (optional)');
+    const scriptInput = screen.getByLabelText('Restart script (optional)');
+
+    expect(screen.getByLabelText('Enable MCP server')).not.toBeChecked();
+    expect(nameInput).toBeDisabled();
+    expect(scriptInput).toBeDisabled();
   });
 
   it('should display error when config fails to load', async () => {
@@ -351,6 +409,7 @@ describe('SettingsPage', () => {
     const savedConfig = mockSaveConfig.mock.calls[0][0];
     expect(savedConfig.models.default).toBe('gpt-5.2');
     expect(savedConfig.models.ab_testing_enabled).toBe(false);
+    expect(savedConfig.mcp_server?.restart_script).toBe('scripts/Restart-MCPServer.ps1');
 
     expect(screen.getByText('Saved')).toBeInTheDocument();
     expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
@@ -578,6 +637,38 @@ describe('SettingsPage', () => {
     const savedConfig = mockSaveConfig.mock.calls[0][0];
     expect(savedConfig.project_name).toBe('TestProject');
     expect(savedConfig.models).toBeDefined();
+    expect(savedConfig.mcp_server?.name).toBe('ICM MCP');
     expect(savedConfig.maintenance).toBeDefined();
+  });
+
+  it('should save updated MCP server fields', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage
+        getConfig={mockGetConfig}
+        saveConfig={mockSaveConfig}
+        onClose={mockOnClose}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+    });
+
+    await user.clear(screen.getByLabelText('MCP server name (optional)'));
+    await user.type(screen.getByLabelText('MCP server name (optional)'), 'New MCP');
+    await user.clear(screen.getByLabelText('Restart script (optional)'));
+    await user.type(screen.getByLabelText('Restart script (optional)'), 'scripts/new-restart.ps1');
+
+    const saveButton = screen.getByText('💾 Save');
+    await user.click(saveButton);
+
+    await waitFor(() => {
+      expect(mockSaveConfig).toHaveBeenCalledTimes(1);
+    });
+
+    const savedConfig = mockSaveConfig.mock.calls[0][0];
+    expect(savedConfig.mcp_server?.name).toBe('New MCP');
+    expect(savedConfig.mcp_server?.restart_script).toBe('scripts/new-restart.ps1');
   });
 });
