@@ -302,7 +302,7 @@ def save_session_stats_to_disk(
     """Persist session statistics as ``stats.json`` in the run log directory.
 
     Args:
-        run_dir: The run-specific log directory (e.g. ``logs/<run-id>/``).
+        run_dir: The run-specific log directory (e.g. ``.pokepoke/logs/<run-id>/``).
         session_stats: The session statistics to persist.
         elapsed_seconds: Total elapsed wall-clock time for the session.
         items_completed: Number of items completed in this session.

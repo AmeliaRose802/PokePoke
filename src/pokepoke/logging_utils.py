@@ -18,11 +18,11 @@ class RunLogger:
     2. Per-item logs - Detailed agent output for each work item processed
     """
     
-    def __init__(self, base_dir: str = "logs"):
+    def __init__(self, base_dir: str = ".pokepoke/logs"):
         """Initialize the run logger.
         
         Args:
-            base_dir: Base directory for all log runs (default: "logs")
+            base_dir: Base directory for all log runs (default: ".pokepoke/logs")
         """
         self.run_id = self._generate_run_id()
         # Use absolute path to avoid issues when CWD changes during workflow

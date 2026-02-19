@@ -16,7 +16,7 @@ worktrees/
 .pokepoke/locks/
 
 # PokePoke logs
-logs/
+.pokepoke/logs/
 
 # Work artifacts (configurable via work_artifacts_dir in .pokepoke/config.yaml)
 ai_incident_reports/
