@@ -1,0 +1,58 @@
+{
+  "items_completed": 0,
+  "total_requests": 1,
+  "elapsed_seconds": 143.61,
+  "agent_stats": {
+    "wall_duration": 0.0,
+    "api_duration": 0.0,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "lines_added": 0,
+    "lines_removed": 0,
+    "premium_requests": 0,
+    "retries": 0,
+    "tool_calls": 0
+  },
+  "run_counts": {
+    "work_agent": 1,
+    "gate_agent": 0,
+    "tech_debt_agent": 0,
+    "janitor_agent": 0,
+    "janitor_lines_removed": 0,
+    "backlog_cleanup_agent": 0,
+    "cleanup_agent": 0,
+    "beta_tester_agent": 0,
+    "code_review_agent": 0,
+    "worktree_cleanup_agent": 0
+  },
+  "completed_items": [],
+  "model_completions": [
+    {
+      "item_id": "PokePoke-c9gr",
+      "model": "claude-opus-4.5",
+      "duration_seconds": 139.5735728740692,
+      "gate_passed": false
+    }
+  ],
+  "beads_start": {
+    "total_issues": 368,
+    "open_issues": 50,
+    "in_progress_issues": 1,
+    "closed_issues": 317,
+    "ready_issues": 31
+  },
+  "beads_end": {
+    "total_issues": 368,
+    "open_issues": 49,
+    "in_progress_issues": 2,
+    "closed_issues": 317,
+    "ready_issues": 30
+  },
+  "beads_delta": {
+    "total_issues": 0,
+    "open_issues": -1,
+    "in_progress_issues": 1,
+    "closed_issues": 0,
+    "ready_issues": -1
+  }
+}
