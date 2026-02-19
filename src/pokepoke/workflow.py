@@ -18,6 +18,7 @@ from pokepoke import terminal_ui
 from pokepoke.shutdown import is_shutting_down, register_agent, unregister_agent
 from pokepoke.model_selection import select_model_for_item
 from pokepoke.agent_context import get_agent_name
+from pokepoke.config import get_config
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import RunLogger
@@ -57,6 +58,7 @@ def process_work_item(
         
         # Select model for this work item (A/B testing)
         selected_model = select_model_for_item(item.id)
+        backend_provider = get_config().ai_backend.provider
 
         # Keep the Desktop UI agent card in sync with the selected model.
         terminal_ui.ui.push_agent_status(
@@ -72,6 +74,7 @@ def process_work_item(
         print(f"\n🚀 Processing work item: {item.id}")
         print(f"   {item.title}")
         print(f"   🤖 Model: {selected_model}")
+        print(f"   🧠 Backend: {backend_provider}")
         print(f"   ⏱️  Timeout: {timeout_hours} hours\n")
         
         # Start item logging
