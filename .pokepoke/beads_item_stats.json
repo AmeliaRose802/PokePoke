@@ -1,0 +1,353 @@
+{
+  "log": [
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:56.673442+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:56.739559+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:56.883308+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-2",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:56.919392+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-0",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:56.990041+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:57.007026+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-2",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:57.043264+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-3",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:57.076466+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-4",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:57.103844+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-5",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:57.139301+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-6",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:57.167864+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-7",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:57.199992+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-8",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:57.228126+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-9",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:57.258818+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:57.311230+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-2",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:57.747380+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:57.807452+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:57.877265+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:57.925290+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:58.017990+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:58.100574+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:58.147444+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:58.348890+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-2",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:58.368256+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:27:58.480287+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "t1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:28:01.668201+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "t1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:28:01.692399+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-42",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:28:01.777402+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:37.541172+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:37.612177+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:37.722181+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-2",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:37.740172+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-0",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:37.795656+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:37.813657+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-2",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:37.841640+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-3",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:37.873388+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-4",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:37.903404+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-5",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:37.934092+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-6",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:37.963762+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-7",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:37.993505+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-8",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:38.020558+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-9",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:38.049722+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:38.106714+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-2",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:38.386085+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:38.437946+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:38.494488+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:38.537495+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:38.631498+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:38.702347+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:38.758524+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:38.936488+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-2",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:38.961651+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:39.060722+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "t1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:41.305120+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "t1",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:41.331389+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "task-42",
+      "agent_type": "work",
+      "timestamp": "2026-02-19T15:34:41.400615+00:00"
+    }
+  ],
+  "summary": {
+    "total_created": 0,
+    "total_completed": 56,
+    "net_delta": -56,
+    "by_agent_type": {
+      "work": {
+        "created": 0,
+        "completed": 56,
+        "net_delta": -56
+      }
+    },
+    "last_updated": "2026-02-19T15:34:41.403613+00:00"
+  }
+}
