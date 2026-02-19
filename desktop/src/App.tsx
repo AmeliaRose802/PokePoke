@@ -187,6 +187,7 @@ function App() {
         {/* Agents panel */}
         <AgentsPanel
           agents={bridge.agents}
+          currentSessionId={bridge.currentSessionId}
           selectedAgentId={displayedAgentId ?? autoFollowAgent?.agent_id ?? null}
           onSelectAgent={setSelectedAgentId}
           onPauseAgent={bridge.pauseAgent}
