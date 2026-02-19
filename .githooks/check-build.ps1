@@ -56,13 +56,30 @@ function Get-StagedDesktopBuildFiles {
 
 $overallPassed = $true
 
-# Find Python files - exclude worktrees directory
-$pythonFiles = Get-ChildItem -Path $repoRoot -Filter "*.py" -Recurse |
-    Where-Object { $_.FullName -notmatch '\\(worktrees|venv|.venv|\.tox|__pycache__|dist|build|.eggs)\\' } |
-    Select-Object -ExpandProperty FullName
+# Get staged Python files only (consistent with other pre-commit checks)
+function Get-StagedPythonFiles {
+    try {
+        $output = git diff --cached --name-only --diff-filter=ACM 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            return @()
+        }
+
+        return $output -split "`n" |
+            Where-Object { $_ -match '\.py$' } |
+            Where-Object { $_ -notmatch '(worktrees|venv|\.venv|\.tox|__pycache__|dist|build|\.eggs)' } |
+            ForEach-Object { Join-Path $repoRoot $_.Trim() } |
+            Where-Object { $_ -ne '' -and (Test-Path $_) }
+    }
+    catch {
+        Write-Error "Failed to get staged Python files: $_"
+        return @()
+    }
+}
+
+$pythonFiles = Get-StagedPythonFiles
 
 if ($pythonFiles.Count -eq 0) {
-    Write-Host "⚠️  No Python files found" -ForegroundColor Yellow
+    Write-Host "No Python files staged for commit; skipping syntax check" -ForegroundColor Gray
 }
 else {
     Write-Host "🔨 Checking Python syntax for $($pythonFiles.Count) files..." -ForegroundColor Cyan
