@@ -905,7 +905,6 @@ class TestProcessWorkItem:
         assert cleanup_runs == 0
         mock_setup.assert_not_called()
     
-    @patch('pokepoke.workflow.unassign_item')
     @patch('pokepoke.workflow._setup_worktree')
     @patch('pokepoke.workflow.assign_and_sync_item')
     @patch('builtins.input')
@@ -916,9 +915,8 @@ class TestProcessWorkItem:
         mock_input: Mock,
         mock_assign: Mock,
         mock_setup: Mock,
-        mock_unassign: Mock,
     ) -> None:
-        """Test when worktree setup fails, item is unassigned and returned to queue."""
+        """Test when worktree setup fails, process returns failure."""
         item = BeadsWorkItem(
             id="task-1",
             title="Task 1",
@@ -931,7 +929,6 @@ class TestProcessWorkItem:
         mock_input.return_value = 'y'
         mock_assign.return_value = True
         mock_setup.return_value = None
-        mock_unassign.return_value = True
         
         success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
             item, interactive=True
@@ -941,8 +938,6 @@ class TestProcessWorkItem:
         assert count == 0
         assert stats is None
         assert cleanup_runs == 0
-        # Must unassign so other agents can pick up the item
-        mock_unassign.assert_called_once_with("task-1")
 
     @patch('pokepoke.workflow.cleanup_worktree')
     @patch('pokepoke.workflow.invoke_copilot')
