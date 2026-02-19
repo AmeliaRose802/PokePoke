@@ -21,7 +21,7 @@ from pokepoke.maintenance_state import increment_items_completed
 from pokepoke.repo_check import check_and_commit_main_repo, check_beads_available
 from pokepoke.maintenance import run_periodic_maintenance
 from pokepoke.shutdown import is_shutting_down, request_shutdown, should_stop_after_current, cancel_stop_after_current
-from pokepoke.model_stats_store import record_completion, print_model_leaderboard
+from pokepoke.model_stats_store import record_completion
 from pokepoke.model_history import append_model_history_entry
 from pokepoke.config import load_config
 

@@ -5,7 +5,6 @@ import threading
 import time
 from typing import Any
 
-from pokepoke.agent_names import generate_agent_name
 from pokepoke.agent_context import get_agent_name, set_agent_name, clear_agent_name
 from pokepoke.beads import get_ready_work_items
 from pokepoke.types import AgentStats, BeadsWorkItem, ModelCompletionRecord, SessionStats

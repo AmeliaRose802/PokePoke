@@ -11,7 +11,7 @@ from pokepoke.git_operations import has_uncommitted_changes, has_commits_ahead
 from pokepoke.beads import assign_and_sync_item, add_comment
 from pokepoke.agent_runner import run_cleanup_loop, run_beta_tester, run_gate_agent
 from pokepoke.worktree_finalization import finalize_work_item
-from pokepoke.work_item_selection import select_work_item
+from pokepoke.work_item_selection import select_work_item  # re-exported
 from pokepoke.stats import parse_agent_stats
 from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner
 from pokepoke import terminal_ui

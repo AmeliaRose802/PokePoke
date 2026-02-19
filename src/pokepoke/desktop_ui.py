@@ -16,7 +16,6 @@ import builtins
 import os
 import sys
 import threading
-from pathlib import Path
 from typing import Any, TYPE_CHECKING
 from collections.abc import Iterator, Callable
 from contextlib import contextmanager
