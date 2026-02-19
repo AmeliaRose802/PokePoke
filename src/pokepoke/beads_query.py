@@ -58,25 +58,43 @@ def get_ready_work_items() -> list[BeadsWorkItem]:
     """Query beads database for ready work items.
     
     Returns:
-        List of ready work items.
+        List of ready work items. Returns empty list if beads command fails.
     """
-    result = subprocess.run(
-        ['bd', 'ready', '--json'],
-        capture_output=True,
-        text=True,
-        encoding='utf-8',
-        check=True,
-        timeout=30
-    )
+    try:
+        result = subprocess.run(
+            ['bd', 'ready', '--json'],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            check=True,
+            timeout=30
+        )
+    except subprocess.CalledProcessError as e:
+        # Log error but don't crash the orchestrator
+        # This can happen when beads database is temporarily unavailable
+        print(f"⚠️  Warning: beads ready command failed (exit code {e.returncode})")
+        if e.stderr:
+            print(f"⚠️  Error output: {e.stderr.strip()}")
+        return []
+    except subprocess.TimeoutExpired:
+        print("⚠️  Warning: beads ready command timed out after 30 seconds")
+        return []
+    except Exception as e:
+        print(f"⚠️  Warning: unexpected error querying beads: {e}")
+        return []
     
     if not result.stdout:
         return []
     
-    items_data = _parse_beads_json(result.stdout)
-    if not items_data:
+    try:
+        items_data = _parse_beads_json(result.stdout)
+        if not items_data:
+            return []
+        
+        return [_filter_to_dataclass(BeadsWorkItem, item) for item in items_data]
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        print(f"⚠️  Warning: failed to parse beads output: {e}")
         return []
-    
-    return [_filter_to_dataclass(BeadsWorkItem, item) for item in items_data]
 
 
 def get_issue_dependencies(issue_id: str) -> IssueWithDependencies | None:

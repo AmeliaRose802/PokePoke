@@ -175,6 +175,8 @@ def run_parallel_loop(
     set_executor(executor)
 
     _worker_counter = 0
+    finalized = False
+    exit_code = 0
 
     try:
         while not is_shutting_down():
@@ -182,11 +184,19 @@ def run_parallel_loop(
             run_logger.log_orchestrator("Checking main repository status")
             if not check_and_commit_main_repo(main_repo_path, run_logger):
                 run_logger.log_orchestrator("Main repo check failed", level="ERROR")
-                return 1
+                exit_code = 1
+                break
 
             print("\nFetching ready work from beads...")
             run_logger.log_orchestrator("Fetching ready work from beads")
-            ready_items = get_ready_work_items()
+            try:
+                ready_items = get_ready_work_items()
+            except Exception as e:
+                # This should not happen now that get_ready_work_items handles errors,
+                # but keep as additional safety measure
+                run_logger.log_orchestrator(f"Failed to fetch ready items: {e}", level="ERROR") 
+                print(f"⚠️  Warning: failed to fetch ready items: {e}")
+                ready_items = []
 
             with active_ids_lock:
                 current_active = set(active_ids)
@@ -236,7 +246,9 @@ def run_parallel_loop(
                 print("\n⏸️  Stopping after current item (user requested).")
                 run_logger.log_orchestrator("Stop after current item requested - exiting")
                 finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
-                return 0
+                finalized = True
+                exit_code = 0
+                break
 
             if not continuous and (any_success or not futures):
                 # Drain remaining futures
@@ -254,14 +266,33 @@ def run_parallel_loop(
                     items_completed = session_stats.items_completed
                 terminal_ui.ui.stop_and_capture()
                 finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
-                return 0 if any_success else 1
+                finalized = True
+                exit_code = 0 if any_success else 1
+                break
 
+            # Only exit if no workers are active AND we have no ready items
+            # This ensures we wait for in-flight workers to complete
             if not futures and not ready_items:
+                # Double-check that we really have no work before exiting
+                # Sometimes beads queries can temporarily fail
+                print("\n🔄 No active workers or ready items - double-checking beads...")
+                run_logger.log_orchestrator("Double-checking beads before exit")
+                try:
+                    final_check = get_ready_work_items()
+                    if final_check:
+                        print(f"📋 Found {len(final_check)} items on final check - continuing...")
+                        run_logger.log_orchestrator(f"Found {len(final_check)} items on final check")
+                        continue  # Go back to main loop to process these items
+                except Exception as e:
+                    run_logger.log_orchestrator(f"Final beads check failed: {e}", level="WARNING")
+                
                 terminal_ui.ui.stop_and_capture()
                 print("\n👋 Exiting PokePoke - no work items available.")
                 run_logger.log_orchestrator("No work items available - exiting")
                 finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
-                return 0
+                finalized = True
+                exit_code = 0
+                break
 
             terminal_ui.ui.update_header(
                 "PokePoke", f"{mode_name} Mode", f"{len(futures)} agents active",
@@ -272,7 +303,47 @@ def run_parallel_loop(
                 time.sleep(0.5)
 
     finally:
-        executor.shutdown(wait=False, cancel_futures=True)
+        # Wait for all workers to complete before shutting down
+        if futures:
+            print(f"\n⏳ Waiting for {len(futures)} active workers to complete...")
+            run_logger.log_orchestrator(f"Waiting for {len(futures)} active workers to complete")
+            
+            # Wait for all remaining futures to complete (with reasonable timeout)
+            remaining = list(futures.keys())
+            try:
+                for fut in concurrent.futures.as_completed(remaining, timeout=300):  # 5 minute timeout
+                    item = futures.pop(fut, BeadsWorkItem(
+                        id="?", title="?", status="?", priority=0, issue_type="?",
+                    ))
+                    try:
+                        s, r, st, cr, gr, mc = fut.result()
+                        print(f"✅ Worker completed item {item.id}")
+                        run_logger.log_orchestrator(f"Worker completed item {item.id}")
+                    except Exception as e:
+                        print(f"❌ Worker failed for item {item.id}: {e}")
+                        run_logger.log_orchestrator(f"Worker failed for item {item.id}: {e}", level="ERROR")
+                        s, r, st, cr, gr, mc = False, 0, None, 0, 0, None
+                    
+                    total_requests += r
+                    record_fn(item, s, r, st, cr, gr, mc, session_stats, run_logger)
+                    items_completed = session_stats.items_completed
+            except concurrent.futures.TimeoutError:
+                print(f"⚠️  Timeout waiting for {len(futures)} workers after 5 minutes")
+                run_logger.log_orchestrator(f"Timeout waiting for workers", level="WARNING")
+            
+            print("✅ All workers completed")
+            run_logger.log_orchestrator("All workers completed")
+        
+        # Now shutdown the executor (no need to wait since we already waited above)
+        executor.shutdown(wait=False, cancel_futures=False)
         set_executor(None)
+        
+        # Call finalize if it hasn't been called yet (e.g., on shutdown or exception)
+        if not finalized:
+            print("\n🏁 Finalizing session...")
+            run_logger.log_orchestrator("Finalizing session on exit")
+            if terminal_ui.ui._is_running:
+                terminal_ui.ui.stop_and_capture()
+            finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
 
-    return 0
+    return exit_code
