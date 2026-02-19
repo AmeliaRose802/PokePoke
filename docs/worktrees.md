@@ -88,7 +88,7 @@ Each worktree creates a new branch: `task/<work-item-id>`
 1. **Work Item Retrieved**: When a work item is selected from beads
 2. **Worktree Created**: A new worktree is created in `./worktrees/task-{id}`
 3. **Branch Created**: A new branch `task/{id}` is created from the source branch
-4. **Execution**: Copilot CLI runs in the worktree directory
+4. **Execution**: The configured AI backend runs in the worktree directory (Copilot by default, Claude Code when configured)
 5. **Cleanup**: After completion, the worktree is removed
 
 ## Benefits
@@ -112,7 +112,7 @@ Each worktree creates a new branch: `task/<work-item-id>`
 
 ## Integration with Orchestrator
 
-The orchestrator automatically uses worktrees when available. The backward-compatible `invoke_copilot_cli` function enables worktrees by default.
+The orchestrator automatically uses worktrees when available. AI backends are selected via `.pokepoke/config.yaml` (`ai_backend.provider`), defaulting to Copilot with a Claude Code adapter available when `provider: claude-code` is set.
 
 ## Listing Worktrees
 
