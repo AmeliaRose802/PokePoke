@@ -14,6 +14,7 @@ from pokepoke.desktop_ui import DesktopUI, _shutdown_threading_excepthook
 class FakeWebviewModule:
     def __init__(self) -> None:
         self.created_kwargs: dict[str, object] = {}
+        self.start_kwargs: dict[str, object] = {}
         self.started = False
         self.window = SimpleNamespace()
 
@@ -21,7 +22,8 @@ class FakeWebviewModule:
         self.created_kwargs = dict(kwargs)
         return self.window
 
-    def start(self, func=None, debug=False):
+    def start(self, func=None, debug=False, **kwargs):
+        self.start_kwargs = dict(kwargs)
         self.started = True
         if func:
             func()
@@ -339,6 +341,7 @@ class TestDesktopUIRunWithOrchestrator:
         dist_dir = tmp_path / "dist"
         dist_dir.mkdir()
         (dist_dir / "index.html").write_text("<html></html>", encoding="utf-8")
+        (dist_dir / "pokepoke.ico").write_bytes(b"")
 
         fake_webview = FakeWebviewModule()
         monkeypatch.setitem(sys.modules, "webview", fake_webview)
@@ -357,7 +360,7 @@ class TestDesktopUIRunWithOrchestrator:
         assert builtins.print is original_print
         assert fake_webview.started is True
         assert fake_webview.created_kwargs["url"].endswith("index.html")
-        assert fake_webview.created_kwargs["icon"].endswith("pokepoke.ico")
+        assert fake_webview.start_kwargs["icon"].endswith("pokepoke.ico")
         assert fake_webview.created_kwargs["js_api"] is ui._api
         ui._api.set_window.assert_called_once_with(fake_webview.window)
 

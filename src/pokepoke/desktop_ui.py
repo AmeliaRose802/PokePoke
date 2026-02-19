@@ -148,7 +148,6 @@ class DesktopUI:
             "title": "PokePoke - Autonomous Workflow Manager",
             "url": str(dist_dir / "index.html"),
             "js_api": self._api,
-            "icon": str(icon_path),
             "width": 1280,
             "height": 800,
             "min_size": (900, 600),
@@ -157,10 +156,13 @@ class DesktopUI:
         window = webview.create_window(**window_kwargs)
 
         # Run pywebview on the main thread (blocks until window closes)
-        webview.start(
-            func=on_window_loaded,
-            debug=(os.environ.get("POKEPOKE_DEBUG", "").lower() in ("1", "true")),
-        )
+        start_kwargs: dict[str, Any] = {
+            "func": on_window_loaded,
+            "debug": os.environ.get("POKEPOKE_DEBUG", "").lower() in ("1", "true"),
+        }
+        if icon_path.exists():
+            start_kwargs["icon"] = str(icon_path)
+        webview.start(**start_kwargs)
 
         # Window closed — tell orchestrator to shut down
         request_shutdown()
