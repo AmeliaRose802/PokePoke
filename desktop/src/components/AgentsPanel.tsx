@@ -12,7 +12,7 @@
 
 import { useState, type ReactElement } from "react";
 import type { AgentInfo } from "../types";
-import { getAgentPrimaryLabel, isGateAgent } from "../utils/agentHelpers";
+import { getAgentPrimaryLabel, isGateAgent, getAgentAvatar } from "../utils/agentHelpers";
 
 interface Props {
   agents: AgentInfo[];
@@ -28,8 +28,8 @@ const ROBOT_AVATARS = [
   "🚀", "🎯", "⚡", "🔮", "🌀", "🏗️", "🧩", "🎲",
 ];
 
-/** Deterministic avatar based on agent_id hash */
-function getAvatar(agentId: string): string {
+/** Deterministic avatar based on agent_id hash (fallback for agents without work items) */
+function getEmojiAvatar(agentId: string): string {
   let hash = 0;
   for (let i = 0; i < agentId.length; i++) {
     hash = ((hash << 5) - hash + agentId.charCodeAt(i)) | 0;
@@ -164,7 +164,28 @@ export function AgentsPanel({
         }}
       >
         <div className="agent-card-top">
-          <span className="agent-card-avatar">{getAvatar(agent.agent_id)}</span>
+          {(() => {
+            const snakeIconPath = getAgentAvatar(agent);
+            if (snakeIconPath) {
+              return (
+                <img 
+                  src={snakeIconPath} 
+                  alt="Snake agent icon"
+                  className="agent-card-avatar agent-card-snake-icon"
+                  onError={(e) => {
+                    // Fallback to emoji if image fails to load
+                    const target = e.target as HTMLImageElement;
+                    const parent = target.parentElement;
+                    if (parent) {
+                      parent.innerHTML = `<span class="agent-card-avatar">${getEmojiAvatar(agent.agent_id)}</span>`;
+                    }
+                  }}
+                />
+              );
+            } else {
+              return <span className="agent-card-avatar">{getEmojiAvatar(agent.agent_id)}</span>;
+            }
+          })()}
           <div className="agent-card-info">
             <span className="agent-card-name">{label}</span>
             <span className="agent-card-iter">v{agent.iteration}</span>

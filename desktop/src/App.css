@@ -366,6 +366,13 @@
   flex-shrink: 0;
 }
 
+.agent-card-snake-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  border-radius: 2px;
+}
+
 .agent-card-info {
   flex: 1;
   min-width: 0;
