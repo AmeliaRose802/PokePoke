@@ -13,6 +13,7 @@ import {
 } from "../utils/logProcessor";
 import { RenderLogItems } from "./LogComponents";
 import { useBridge } from "../useBridge";
+import { getAgentPrimaryLabel, isGateAgent } from "../utils/agentHelpers";
 
 interface Props {
   agent: AgentInfo;
@@ -31,15 +32,6 @@ const ROBOT_AVATARS = [
   "🚀", "🎯", "⚡", "🔮", "🌀", "🏗️", "🧩", "🎲",
 ];
 
-function getAgentPrimaryLabel(agent: AgentInfo): string {
-  if (agent.work_item_id) {
-    return agent.work_item_title
-      ? `${agent.work_item_id}: ${agent.work_item_title}`
-      : agent.work_item_id;
-  }
-  return agent.name;
-}
-
 function getAvatar(agentId: string): string {
   let hash = 0;
   for (let i = 0; i < agentId.length; i++) {
@@ -54,11 +46,19 @@ function formatTimestamp(ts?: number | null): string {
 }
 
 export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
-  const { getAgentDetail } = useBridge();
+  const { getAgentDetail, agents } = useBridge();
   const [detailedAgent, setDetailedAgent] = useState<AgentInfo | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
-  
+  const isGate = isGateAgent(agent);
+  const linkedParent =
+    agent.parent_agent_id && isGate
+      ? agents.find((candidate) => candidate.agent_id === agent.parent_agent_id) ?? null
+      : null;
+  const parentLabel = linkedParent
+    ? getAgentPrimaryLabel(linkedParent)
+    : agent.parent_agent_id ?? null;
+
   const statusInfo = STATUS_INDICATOR[agent.status] ?? STATUS_INDICATOR.running;
   
   // Use detailed agent logs if available, otherwise fall back to basic agent info
@@ -136,6 +136,14 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
           <span className={`agent-dot ${statusInfo.dot}`} title={statusInfo.label} />
           <span className={`agent-status-chip status-${agent.status}`}>{statusInfo.label}</span>
         </div>
+        {isGate && parentLabel ? (
+          <div className="agent-log-panel-link">
+            <span className="agent-card-link-label">Gate for</span>
+            <span className="agent-card-link-target" title={parentLabel}>
+              {parentLabel}
+            </span>
+          </div>
+        ) : null}
         <div className="agent-log-panel-meta">
           <span className="agent-meta-item">
             <strong>ID:</strong> {agent.agent_id}
