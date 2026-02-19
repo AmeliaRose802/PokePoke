@@ -23,6 +23,7 @@ from contextlib import contextmanager
 
 from pokepoke.desktop_api import DesktopAPI
 from pokepoke.shutdown import is_shutting_down, request_shutdown
+from pokepoke.frontend_discovery import find_frontend_dist
 
 if TYPE_CHECKING:
     from pokepoke.types import SessionStats
@@ -53,38 +54,6 @@ def _shutdown_threading_excepthook(args: threading.ExceptHookArgs) -> None:
 _original_excepthook: Callable[..., Any] | None = None
 
 
-def _find_frontend_dist() -> Path | None:
-    """Locate the pre-built React frontend dist/ directory."""
-    import subprocess
-    
-    # Look relative to this file: src/pokepoke/desktop_ui.py → ../../desktop/dist
-    src_root = Path(__file__).resolve().parent.parent.parent
-    dist = src_root / "desktop" / "dist"
-    if dist.is_dir() and (dist / "index.html").exists():
-        return dist
-    
-    # If in a git worktree, the desktop build is in the main repo
-    # Try to find the main worktree via git
-    try:
-        result = subprocess.run(
-            ["git", "worktree", "list", "--porcelain"],
-            cwd=src_root,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        # First worktree in the list is the main repo
-        for line in result.stdout.splitlines():
-            if line.startswith("worktree "):
-                main_repo = Path(line.split(None, 1)[1])
-                dist = main_repo / "desktop" / "dist"
-                if dist.is_dir() and (dist / "index.html").exists():
-                    return dist
-                break
-    except Exception:
-        pass
-    
-    return None
 # Thread-local storage for per-thread output routing.
 _thread_output = threading.local()
 
@@ -139,7 +108,7 @@ class DesktopUI:
         )
 
         # Find the frontend
-        dist_dir = _find_frontend_dist()
+        dist_dir = find_frontend_dist()
         if dist_dir is None:
             builtins.print = self._original_print
             print("❌ Desktop frontend not built. Run:", file=sys.stderr)
