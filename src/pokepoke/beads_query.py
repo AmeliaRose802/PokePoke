@@ -144,12 +144,10 @@ def has_unmet_blocking_dependencies(item_id: str) -> bool:
     if not issue or not issue.dependencies:
         return False
     
-    # Check if any blocking dependencies are not closed
-    for dep in issue.dependencies:
-        if dep.dependency_type == 'blocks' and dep.status != 'closed':
-            return True
-    
-    return False
+    return any(
+        dep.dependency_type == 'blocks' and dep.status != 'closed'
+        for dep in issue.dependencies
+    )
 
 
 def get_beads_stats() -> BeadsStats | None:
