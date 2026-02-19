@@ -166,14 +166,17 @@ def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
                 print("   Merge failed again after cleanup.")
                 # Abort the merge to leave clean state
                 if is_merge_in_progress():
-                    abort_merge()
+                    abort_success, abort_error = abort_merge()
+                    if not abort_success:
+                        print(f"   ❌ Failed to abort merge: {abort_error}")
                 return False
         else:
             print("   Cleanup failed.")
             # Abort the merge to leave clean state
             if is_merge_in_progress():
-                print("   Aborting merge to reset state...")
-                abort_merge()
+                abort_success, abort_error = abort_merge()
+                if not abort_success:
+                    print(f"   ❌ Failed to abort merge: {abort_error}")
             return False
     
     print("   Merged and cleaned up worktree")
