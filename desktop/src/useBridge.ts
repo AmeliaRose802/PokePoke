@@ -40,6 +40,8 @@ interface PyWebViewAPI {
     log_count: number;
     model_leaderboard: Record<string, ModelPerformanceSummary>;
     agents: AgentInfo[];
+    stop_after_current: boolean;
+    project_name: string;
   }>;
   get_new_logs(): Promise<LogEntry[]>;
   get_all_logs(): Promise<LogEntry[]>;
@@ -53,6 +55,9 @@ interface PyWebViewAPI {
   reset_prompt(name: string): Promise<{ reset: boolean; had_override: boolean }>;
   get_config(): Promise<ConfigResponse>;
   save_config(config: ProjectConfig): Promise<{ path: string; saved: boolean }>;
+  request_stop_after_current(): Promise<{ stop_after_current: boolean }>;
+  cancel_stop_after_current(): Promise<{ stop_after_current: boolean }>;
+  get_agent_detail(agent_id: string): Promise<AgentInfo | null>;
 }
 
 declare global {
@@ -70,10 +75,12 @@ export interface BridgeState {
   workItem: WorkItem | null;
   agentName: string;
   repositoryName: string;
+  projectName: string;
   stats: SessionStats | null;
   progress: ProgressState;
   modelLeaderboard: Record<string, ModelPerformanceSummary>;
   agents: AgentInfo[];
+  stopAfterCurrent: boolean;
   clearLogs: (target: "orchestrator" | "agent" | "all") => void;
   listPrompts: () => Promise<PromptInfo[]>;
   getPrompt: (name: string) => Promise<PromptDetail | null>;
@@ -82,6 +89,9 @@ export interface BridgeState {
   getConfig: () => Promise<ConfigResponse | null>;
   saveConfig: (config: ProjectConfig) => Promise<boolean>;
   getModelHistory: (limit?: number) => Promise<ModelHistoryEntry[]>;
+  requestStopAfterCurrent: () => Promise<void>;
+  cancelStopAfterCurrent: () => Promise<void>;
+  getAgentDetail: (agentId: string) => Promise<AgentInfo | null>;
 }
 
 /**
@@ -96,6 +106,7 @@ export function useBridge(): BridgeState {
   const [workItem, setWorkItem] = useState<WorkItem | null>(null);
   const [agentName, setAgentName] = useState("");
   const [repositoryName, setRepositoryName] = useState("");
+  const [projectName, setProjectName] = useState("");
   const [stats, setStats] = useState<SessionStats | null>(null);
   const [progress, setProgress] = useState<ProgressState>({
     active: false,
@@ -103,6 +114,7 @@ export function useBridge(): BridgeState {
   });
   const [modelLeaderboard, setModelLeaderboard] = useState<Record<string, ModelPerformanceSummary>>({});
   const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [stopAfterCurrent, setStopAfterCurrent] = useState(false);
 
   const clearLogs = useCallback(
     (target: "orchestrator" | "agent" | "all") => {
@@ -158,6 +170,27 @@ export function useBridge(): BridgeState {
     []
   );
 
+  const requestStopAfterCurrent = useCallback(async (): Promise<void> => {
+    if (!window.pywebview?.api) return;
+    await window.pywebview.api.request_stop_after_current();
+    setStopAfterCurrent(true);
+  }, []);
+
+  const cancelStopAfterCurrent = useCallback(async (): Promise<void> => {
+    if (!window.pywebview?.api) return;
+    await window.pywebview.api.cancel_stop_after_current();
+    setStopAfterCurrent(false);
+  }, []);
+
+  const getAgentDetail = useCallback(async (agentId: string): Promise<AgentInfo | null> => {
+    if (!window.pywebview?.api) return null;
+    try {
+      return await window.pywebview.api.get_agent_detail(agentId);
+    } catch {
+      return null;
+    }
+  }, []);
+
   const appendLogs = useCallback((entries: LogEntry[]) => {
     if (entries.length === 0) return;
 
@@ -212,10 +245,12 @@ export function useBridge(): BridgeState {
         if (state.work_item) setWorkItem(state.work_item);
         if (state.agent_name) setAgentName(state.agent_name);
         if (state.repository_name) setRepositoryName(state.repository_name);
+        if (state.project_name) setProjectName(state.project_name);
         if (state.stats) setStats(state.stats);
         if (state.progress) setProgress(state.progress);
         if (state.model_leaderboard) setModelLeaderboard(state.model_leaderboard);
         if (state.agents) setAgents(state.agents);
+        setStopAfterCurrent(!!state.stop_after_current);
 
         const allLogs = await api.get_all_logs();
         appendLogs(allLogs);
@@ -239,10 +274,12 @@ export function useBridge(): BridgeState {
           setWorkItem(state.work_item);
           setAgentName(state.agent_name);
           setRepositoryName(state.repository_name);
+          if (state.project_name !== undefined) setProjectName(state.project_name);
           if (state.stats) setStats(state.stats);
           if (state.progress) setProgress(state.progress);
           if (state.model_leaderboard) setModelLeaderboard(state.model_leaderboard);
           if (state.agents) setAgents(state.agents);
+          setStopAfterCurrent(!!state.stop_after_current);
 
           setConnectionStatus("connected");
         } catch {
@@ -266,10 +303,12 @@ export function useBridge(): BridgeState {
     workItem,
     agentName,
     repositoryName,
+    projectName,
     stats,
     progress,
     modelLeaderboard,
     agents,
+    stopAfterCurrent,
     clearLogs,
     listPrompts,
     getPrompt,
@@ -278,5 +317,8 @@ export function useBridge(): BridgeState {
     getConfig,
     saveConfig,
     getModelHistory,
+    requestStopAfterCurrent,
+    cancelStopAfterCurrent,
+    getAgentDetail,
   };
 }

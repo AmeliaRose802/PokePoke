@@ -2,20 +2,19 @@
 
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from pokepoke.copilot import invoke_copilot
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
 from pokepoke.git_operations import verify_main_repo_clean, commit_all_changes
 from pokepoke import terminal_ui
 
-def aggregate_cleanup_stats(result_stats: Optional[AgentStats], cleanup_stats: Optional[AgentStats]) -> None:
+def aggregate_cleanup_stats(result_stats: AgentStats | None, cleanup_stats: AgentStats | None) -> None:
     """Aggregate cleanup agent stats into result stats."""
     if cleanup_stats and result_stats:
         result_stats.accumulate(cleanup_stats)
 
 
-def run_cleanup_loop(item: BeadsWorkItem, result: CopilotResult, repo_root: Path, cwd: Optional[str] = None) -> tuple[bool, int]:
+def run_cleanup_loop(item: BeadsWorkItem, result: CopilotResult, repo_root: Path, cwd: str | None = None) -> tuple[bool, int]:
     """Run cleanup loop to commit changes and fix validation failures."""
     cleanup_agent_runs = 0
     cleanup_attempt = 0
@@ -82,7 +81,7 @@ def get_pokepoke_prompts_dir() -> Path:
     return prompts_dir
 
 
-def load_prompt_file(filename: str) -> Optional[str]:
+def load_prompt_file(filename: str) -> str | None:
     """Load a prompt file from the PokePoke prompts directory.
 
     Returns the file contents, or None if the file cannot be found
@@ -102,7 +101,7 @@ def load_prompt_file(filename: str) -> Optional[str]:
     return prompt_path.read_text(encoding='utf-8')
 
 
-def _get_current_git_context(cwd: Optional[str] = None) -> tuple[str, str, bool]:
+def _get_current_git_context(cwd: str | None = None) -> tuple[str, str, bool]:
     """Get current git context (directory, branch, is_worktree)."""
     current_dir = cwd or str(Path.cwd())
     
@@ -137,7 +136,7 @@ def _get_current_git_context(cwd: Optional[str] = None) -> tuple[str, str, bool]
     return current_dir, current_branch, is_worktree
 
 
-def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path, cwd: Optional[str] = None) -> tuple[bool, Optional[AgentStats]]:
+def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path, cwd: str | None = None) -> tuple[bool, AgentStats | None]:
     """Invoke cleanup agent to commit uncommitted changes."""
     terminal_ui.ui.set_current_agent("Cleanup Agent")
     
@@ -207,9 +206,9 @@ def invoke_merge_conflict_cleanup_agent(
     item: BeadsWorkItem, 
     repo_root: Path, 
     error_msg: str,
-    unmerged_files: Optional[list[str]] = None,
-    cwd: Optional[str] = None
-) -> tuple[bool, Optional[AgentStats]]:
+    unmerged_files: list[str] | None = None,
+    cwd: str | None = None
+) -> tuple[bool, AgentStats | None]:
     """Invoke cleanup agent to resolve merge conflicts.
     
     Args:

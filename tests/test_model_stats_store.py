@@ -4,14 +4,16 @@ Covers:
 - load_model_stats: reading from disk, handling missing/corrupt files
 - save_model_stats: atomic write
 - record_completion: single-record append + summary update
-- record_completions: batch append
 - get_model_summary: read-only summary access
 - get_model_weights: performance-weighted selection weights
 - print_model_leaderboard: human-readable output
 - _rebuild_summary: summary recomputation from log
+- cross-process locking: multi-agent safety
 """
 
 import json
+import multiprocessing
+import os
 from pathlib import Path
 
 import pytest
@@ -21,7 +23,6 @@ from pokepoke.model_stats_store import (
     load_model_stats,
     save_model_stats,
     record_completion,
-    record_completions,
     get_model_summary,
     get_model_weights,
     get_model_history,
@@ -157,6 +158,8 @@ class TestRebuildSummary:
         assert s["total_items_failed"] == 0
         assert s["success_rate"] == 1.0
         assert s["average_duration"] == 60.0
+        assert s["median_duration"] == 60.0
+        assert s["stddev_duration"] == 0.0  # single entry → 0
 
     def test_mixed_results(self):
         log = [
@@ -171,6 +174,8 @@ class TestRebuildSummary:
         assert s["total_items_failed"] == 1
         assert s["success_rate"] == pytest.approx(0.6667, abs=0.01)
         assert s["average_duration"] == pytest.approx(66.67, abs=0.01)
+        assert s["median_duration"] == 70.0
+        assert s["stddev_duration"] == pytest.approx(12.47, abs=0.1)
 
     def test_none_gate_not_counted(self):
         log = [
@@ -200,6 +205,22 @@ class TestRebuildSummary:
         ]
         summary = _rebuild_summary(log)
         assert summary["m1"]["last_used"] == "2026-02-15T12:00:00"
+
+    def test_median_robust_to_outlier(self):
+        """Median should not be skewed by a single very long run."""
+        log = [
+            {"model": "m1", "duration_seconds": 40.0, "gate_passed": True, "timestamp": "2026-01-01T00:00:00"},
+            {"model": "m1", "duration_seconds": 42.0, "gate_passed": True, "timestamp": "2026-01-01T00:01:00"},
+            {"model": "m1", "duration_seconds": 44.0, "gate_passed": True, "timestamp": "2026-01-01T00:02:00"},
+            {"model": "m1", "duration_seconds": 46.0, "gate_passed": True, "timestamp": "2026-01-01T00:03:00"},
+            {"model": "m1", "duration_seconds": 5000.0, "gate_passed": True, "timestamp": "2026-01-01T00:04:00"},
+        ]
+        summary = _rebuild_summary(log)
+        s = summary["m1"]
+        # Median should be 44, not the mean of ~1034.4
+        assert s["median_duration"] == 44.0
+        assert s["average_duration"] == pytest.approx(1034.4, abs=1.0)
+        assert s["stddev_duration"] > 0
 
 
 # ── record_completion ────────────────────────────────────────────────
@@ -235,29 +256,6 @@ class TestRecordCompletion:
         assert summary["gpt-4o"]["success_rate"] == 0.5
 
 
-# ── record_completions (batch) ───────────────────────────────────────
-
-class TestRecordCompletions:
-    def test_empty_list_is_noop(self, tmp_path: Path):
-        path = _tmp_stats_path(tmp_path)
-        record_completions([], path)
-        assert not path.exists()
-
-    def test_batch_of_three(self, tmp_path: Path):
-        path = _tmp_stats_path(tmp_path)
-        records = [
-            _make_record(item_id="A", model="m1", gate_passed=True),
-            _make_record(item_id="B", model="m2", gate_passed=False),
-            _make_record(item_id="C", model="m1", gate_passed=True),
-        ]
-        record_completions(records, path)
-
-        data = load_model_stats(path)
-        assert len(data["log"]) == 3
-        assert data["summary"]["m1"]["total_items_attempted"] == 2
-        assert data["summary"]["m2"]["total_items_attempted"] == 1
-
-
 # ── get_model_summary ────────────────────────────────────────────────
 
 class TestGetModelSummary:
@@ -281,12 +279,12 @@ class TestGetModelHistory:
 
     def test_returns_last_n_entries(self, tmp_path: Path):
         path = _tmp_stats_path(tmp_path)
-        records = [
+        for rec in [
             _make_record(item_id="A", model="m1"),
             _make_record(item_id="B", model="m2"),
             _make_record(item_id="C", model="m3"),
-        ]
-        record_completions(records, path)
+        ]:
+            record_completion(rec, path)
 
         history = get_model_history(path, limit=2)
         assert len(history) == 2
@@ -349,6 +347,7 @@ class TestPrintModelLeaderboard:
         assert "Leaderboard" in captured.out
         assert "m1" in captured.out
         assert "m2" in captured.out
+        assert "Median" in captured.out
 
     def test_sorted_by_success_rate(self, tmp_path: Path, capsys):
         path = _tmp_stats_path(tmp_path)
@@ -360,3 +359,75 @@ class TestPrintModelLeaderboard:
         captured = capsys.readouterr()
         # m1 should appear before m2 in output
         assert captured.out.index("m1") < captured.out.index("m2")
+
+
+# ── Cross-process locking ────────────────────────────────────────────
+
+def _worker_record_completion(args):
+    """Worker function for cross-process test. Must be module-level for pickling."""
+    stats_path, item_id, model = args
+    rec = ModelCompletionRecord(
+        item_id=item_id,
+        model=model,
+        duration_seconds=1.0,
+        gate_passed=True,
+    )
+    record_completion(rec, stats_path)
+
+
+class TestCrossProcessLocking:
+    """Test that concurrent writes from multiple processes don't lose records."""
+
+    def test_concurrent_writes_preserve_all_records(self, tmp_path: Path):
+        """Multiple processes writing concurrently should preserve all records.
+
+        This test spawns multiple processes that each write a record. Without
+        proper cross-process locking, some writes would be lost due to
+        read-modify-write races. With filelock-based coordination, all records
+        should be preserved.
+        """
+        # Use a shared path for the stats file
+        stats_path = _tmp_stats_path(tmp_path)
+        # Also need .pokepoke/locks directory for the file locks
+        lock_dir = tmp_path / ".pokepoke" / "locks"
+        lock_dir.mkdir(parents=True, exist_ok=True)
+
+        # Change to tmp_path so that .pokepoke/locks is found
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+
+            num_workers = 5
+            records_per_worker = 4
+            total_records = num_workers * records_per_worker
+
+            # Prepare work items for each worker
+            work_items = [
+                (stats_path, f"item-{w}-{r}", f"model-{w}")
+                for w in range(num_workers)
+                for r in range(records_per_worker)
+            ]
+
+            # Use multiprocessing pool to simulate concurrent agents
+            with multiprocessing.Pool(processes=num_workers) as pool:
+                pool.map(_worker_record_completion, work_items)
+
+            # Verify all records were preserved
+            data = load_model_stats(stats_path)
+            assert len(data["log"]) == total_records, (
+                f"Expected {total_records} records, got {len(data['log'])}. "
+                "Some records were lost due to race conditions."
+            )
+
+            # Verify each model has correct count
+            for w in range(num_workers):
+                model_name = f"model-{w}"
+                model_records = [
+                    e for e in data["log"] if e["model"] == model_name
+                ]
+                assert len(model_records) == records_per_worker, (
+                    f"Model {model_name} should have {records_per_worker} "
+                    f"records, got {len(model_records)}"
+                )
+        finally:
+            os.chdir(original_cwd)

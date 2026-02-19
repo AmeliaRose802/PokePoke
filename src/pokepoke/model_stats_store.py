@@ -27,26 +27,31 @@ from __future__ import annotations
 
 import json
 import os
+import statistics
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
+from pokepoke.coordination import acquire_lock
 from pokepoke.types import ModelCompletionRecord
 
 STATS_FILE = Path(".pokepoke") / "model_stats.json"
 
-_lock = threading.Lock()
+# Thread lock for intra-process serialization (fast path)
+_thread_lock = threading.Lock()
+# Cross-process lock name for file-based coordination
+_STATS_FILE_LOCK = "model-stats-file"
 
 
 # ── Data helpers ─────────────────────────────────────────────────────
 
-def _empty_store() -> Dict[str, Any]:
+def _empty_store() -> dict[str, Any]:
     """Return an empty store structure."""
     return {"log": [], "summary": {}}
 
 
-def _record_to_dict(record: ModelCompletionRecord) -> Dict[str, Any]:
+def _record_to_dict(record: ModelCompletionRecord) -> dict[str, Any]:
     """Serialise a ModelCompletionRecord to a plain dict."""
     return {
         "item_id": record.item_id,
@@ -57,45 +62,58 @@ def _record_to_dict(record: ModelCompletionRecord) -> Dict[str, Any]:
     }
 
 
-def _rebuild_summary(log: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+def _rebuild_summary(log: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """Recompute per-model summary from the raw log entries."""
-    summary: Dict[str, Dict[str, Any]] = {}
+    # First pass: collect per-model data
+    buckets: dict[str, dict[str, Any]] = {}
     for entry in log:
         model = entry.get("model", "unknown")
-        if model not in summary:
-            summary[model] = {
+        if model not in buckets:
+            buckets[model] = {
                 "total_items_attempted": 0,
                 "total_items_succeeded": 0,
                 "total_items_failed": 0,
                 "total_duration_seconds": 0.0,
                 "total_retries": 0,
                 "average_duration": 0.0,
+                "median_duration": 0.0,
+                "stddev_duration": 0.0,
                 "success_rate": 0.0,
                 "last_used": "",
+                "_durations": [],
             }
-        s = summary[model]
+        s = buckets[model]
         s["total_items_attempted"] += 1
         gp = entry.get("gate_passed")
         if gp is True:
             s["total_items_succeeded"] += 1
         elif gp is False:
             s["total_items_failed"] += 1
-        # If gate_passed is None the item is neither success nor failure
-        s["total_duration_seconds"] += entry.get("duration_seconds", 0.0)
+        dur = entry.get("duration_seconds", 0.0)
+        s["total_duration_seconds"] += dur
+        s["_durations"].append(dur)
         ts = entry.get("timestamp", "")
         if ts and ts > s["last_used"]:
             s["last_used"] = ts
-        # Recompute derived fields
+
+    # Second pass: compute derived fields
+    summary: dict[str, dict[str, Any]] = {}
+    for model, s in buckets.items():
         attempted = s["total_items_attempted"]
+        durations = s["_durations"]
         s["average_duration"] = round(s["total_duration_seconds"] / attempted, 2) if attempted else 0.0
+        s["median_duration"] = round(statistics.median(durations), 2) if durations else 0.0
+        s["stddev_duration"] = round(statistics.pstdev(durations), 2) if len(durations) >= 2 else 0.0
         decided = s["total_items_succeeded"] + s["total_items_failed"]
         s["success_rate"] = round(s["total_items_succeeded"] / decided, 4) if decided else 0.0
+        del s["_durations"]
+        summary[model] = s
     return summary
 
 
 # ── Public API ───────────────────────────────────────────────────────
 
-def load_model_stats(path: Optional[Path] = None) -> Dict[str, Any]:
+def load_model_stats(path: Path | None = None) -> dict[str, Any]:
     """Load the persistent model stats from disk.
 
     Returns an empty store if the file does not exist or is corrupt.
@@ -104,7 +122,7 @@ def load_model_stats(path: Optional[Path] = None) -> Dict[str, Any]:
     if not stats_path.exists():
         return _empty_store()
     try:
-        with open(stats_path, "r", encoding="utf-8") as f:
+        with open(stats_path, encoding="utf-8") as f:
             data = json.load(f)
         # Basic validation
         if not isinstance(data, dict) or "log" not in data:
@@ -114,7 +132,7 @@ def load_model_stats(path: Optional[Path] = None) -> Dict[str, Any]:
         return _empty_store()
 
 
-def save_model_stats(data: Dict[str, Any], path: Optional[Path] = None) -> None:
+def save_model_stats(data: dict[str, Any], path: Path | None = None) -> None:
     """Atomically persist model stats to disk.
 
     Writes to a temporary file first then renames, to avoid corruption
@@ -129,42 +147,29 @@ def save_model_stats(data: Dict[str, Any], path: Optional[Path] = None) -> None:
     os.replace(str(tmp_path), str(stats_path))
 
 
-def record_completion(record: ModelCompletionRecord, path: Optional[Path] = None) -> None:
+def record_completion(record: ModelCompletionRecord, path: Path | None = None) -> None:
     """Append a completion record and update the summary.
 
-    Thread-safe: uses a module-level lock to serialize read-modify-write.
+    Thread-safe and process-safe: uses both a thread lock (fast path) and
+    a cross-process file lock to serialize read-modify-write across multiple
+    worker processes in multi-agent mode.
     """
-    with _lock:
-        data = load_model_stats(path)
-        data["log"].append(_record_to_dict(record))
-        data["summary"] = _rebuild_summary(data["log"])
-        save_model_stats(data, path)
+    with _thread_lock:
+        with acquire_lock(_STATS_FILE_LOCK):
+            data = load_model_stats(path)
+            data["log"].append(_record_to_dict(record))
+            data["summary"] = _rebuild_summary(data["log"])
+            save_model_stats(data, path)
 
 
-def record_completions(records: List[ModelCompletionRecord], path: Optional[Path] = None) -> None:
-    """Append multiple completion records in a single write.
-
-    More efficient than calling record_completion() in a loop when
-    flushing a batch of session records.
-    """
-    if not records:
-        return
-    with _lock:
-        data = load_model_stats(path)
-        for rec in records:
-            data["log"].append(_record_to_dict(rec))
-        data["summary"] = _rebuild_summary(data["log"])
-        save_model_stats(data, path)
-
-
-def get_model_summary(path: Optional[Path] = None) -> Dict[str, Dict[str, Any]]:
+def get_model_summary(path: Path | None = None) -> dict[str, dict[str, Any]]:
     """Return the per-model summary dict (read-only)."""
     data = load_model_stats(path)
-    summary: Dict[str, Dict[str, Any]] = data.get("summary", {})
+    summary: dict[str, dict[str, Any]] = data.get("summary", {})
     return summary
 
 
-def get_model_history(path: Optional[Path] = None, limit: int = 200) -> List[Dict[str, Any]]:
+def get_model_history(path: Path | None = None, limit: int = 200) -> list[dict[str, Any]]:
     """Return the most recent completion log entries up to ``limit``."""
     capped_limit = int(limit)
     if capped_limit <= 0:
@@ -177,7 +182,7 @@ def get_model_history(path: Optional[Path] = None, limit: int = 200) -> List[Dic
     return list(log[slice_start:])
 
 
-def get_model_weights(path: Optional[Path] = None, min_attempts: int = 3) -> Dict[str, float]:
+def get_model_weights(path: Path | None = None, min_attempts: int = 3) -> dict[str, float]:
     """Compute selection weights based on historical success rate.
 
     Models with fewer than ``min_attempts`` completions get a neutral
@@ -189,7 +194,7 @@ def get_model_weights(path: Optional[Path] = None, min_attempts: int = 3) -> Dic
         Mapping of model name → weight (higher = more likely to be selected).
     """
     summary = get_model_summary(path)
-    weights: Dict[str, float] = {}
+    weights: dict[str, float] = {}
     for model, stats in summary.items():
         attempted = stats.get("total_items_attempted", 0)
         if attempted < min_attempts:
@@ -200,7 +205,7 @@ def get_model_weights(path: Optional[Path] = None, min_attempts: int = 3) -> Dic
     return weights
 
 
-def print_model_leaderboard(path: Optional[Path] = None) -> None:
+def print_model_leaderboard(path: Path | None = None) -> None:
     """Print a human-readable leaderboard of model performance."""
     summary = get_model_summary(path)
     if not summary:
@@ -223,6 +228,8 @@ def print_model_leaderboard(path: Optional[Path] = None) -> None:
         succeeded = s.get("total_items_succeeded", 0)
         failed = s.get("total_items_failed", 0)
         avg_dur = s.get("average_duration", 0.0)
+        median_dur = s.get("median_duration", avg_dur)
+        stddev_dur = s.get("stddev_duration", 0.0)
         rate = s.get("success_rate", 0.0)
         last = s.get("last_used", "never")
 
@@ -231,6 +238,6 @@ def print_model_leaderboard(path: Optional[Path] = None) -> None:
 
         print(f"\n  #{i} {display_name}")
         print(f"     Attempted: {attempted}  |  ✅ {succeeded}  ❌ {failed}  |  Rate: {rate:.0%}")
-        print(f"     Avg time:  {avg_dur:.1f}s  |  Last used: {last[:19]}")
+        print(f"     Median:    {median_dur:.1f}s ±{stddev_dur:.1f}s  |  Avg: {avg_dur:.1f}s  |  Last: {last[:19]}")
 
     print("\n" + "=" * 70)

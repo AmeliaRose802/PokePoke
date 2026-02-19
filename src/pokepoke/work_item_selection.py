@@ -1,7 +1,5 @@
 """Work item selection logic for PokePoke."""
 
-from typing import Optional
-
 from .types import BeadsWorkItem
 from .beads import select_next_hierarchical_item, has_unmet_blocking_dependencies
 from .beads_hierarchy import HUMAN_REQUIRED_LABEL, is_assigned_to_current_user
@@ -25,7 +23,7 @@ def _is_human_required(item: BeadsWorkItem) -> bool:
     return HUMAN_REQUIRED_LABEL in item.labels
 
 
-def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool, skip_ids: Optional[set[str]] = None) -> Optional[BeadsWorkItem]:
+def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool, skip_ids: set[str] | None = None) -> BeadsWorkItem | None:
     """Select a work item to process using hierarchical assignment.
     
     Args:
@@ -104,7 +102,7 @@ def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool, skip_i
         return autonomous_selection(ready_items)
 
 
-def interactive_selection(ready_items: list[BeadsWorkItem]) -> Optional[BeadsWorkItem]:
+def interactive_selection(ready_items: list[BeadsWorkItem]) -> BeadsWorkItem | None:
     """Prompt user to select a work item."""
     while not is_shutting_down():
         try:
@@ -125,7 +123,7 @@ def interactive_selection(ready_items: list[BeadsWorkItem]) -> Optional[BeadsWor
             return None
     return None
 
-def autonomous_selection(ready_items: list[BeadsWorkItem]) -> Optional[BeadsWorkItem]:
+def autonomous_selection(ready_items: list[BeadsWorkItem]) -> BeadsWorkItem | None:
     """Use hierarchical selection for autonomous mode."""
     selected = select_next_hierarchical_item(ready_items)
     if selected:
@@ -137,8 +135,8 @@ def autonomous_selection(ready_items: list[BeadsWorkItem]) -> Optional[BeadsWork
 def select_multiple_items(
     ready_items: list[BeadsWorkItem],
     count: int,
-    skip_ids: Optional[set[str]] = None,
-    claimed_ids: Optional[set[str]] = None,
+    skip_ids: set[str] | None = None,
+    claimed_ids: set[str] | None = None,
 ) -> list[BeadsWorkItem]:
     """Select up to *count* work items for parallel processing.
 

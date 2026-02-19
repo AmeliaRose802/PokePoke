@@ -10,10 +10,16 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import asdict
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 from pokepoke.agent_registry import AgentRegistry
 from pokepoke.repo_utils import get_repository_name
+
+from pokepoke.shutdown import (
+    request_stop_after_current as _request_stop_after_current,
+    cancel_stop_after_current as _cancel_stop_after_current,
+    should_stop_after_current as _should_stop_after_current,
+)
 
 from pokepoke import desktop_api_ext as _ext
 
@@ -29,26 +35,26 @@ class DesktopAPI:
     """
 
     def __init__(self) -> None:
-        self._window: Optional[Any] = None
+        self._window: Any | None = None
         self._lock = threading.RLock()
 
         # Buffered state — frontend can poll or get pushed updates
         self._log_buffer: list[dict[str, Any]] = []
         self._max_log_buffer = 2000
-        self._current_work_item: Optional[dict[str, str]] = None
+        self._current_work_item: dict[str, str] | None = None
         self._current_agent_name: str = ""
-        self._current_stats: Optional[dict[str, Any]] = None
+        self._current_stats: dict[str, Any] | None = None
         self._current_progress: dict[str, Any] = {"active": False, "status": ""}
         self._repository_name: str = ""
 
         # Session start time for dynamic elapsed_time computation
-        self._session_start_time: Optional[float] = None
+        self._session_start_time: float | None = None
         # Session end time to freeze the clock when agents complete
-        self._session_end_time: Optional[float] = None
+        self._session_end_time: float | None = None
 
         # Live reference to SessionStats — serialized fresh on each poll
         # so agent run counts, token stats, etc. update in real-time
-        self._live_session_stats: Optional["SessionStats"] = None
+        self._live_session_stats: SessionStats | None = None
 
         # Read index for incremental log fetching
         self._log_read_index: int = 0
@@ -68,6 +74,7 @@ class DesktopAPI:
             preview_limit=self._agent_max_log_lines_internal,
             detail_limit=self._agent_detail_max_log_lines_internal,
         )
+        _ext.seed_historical_agents(self)
 
         # Extract repository name at initialization
         self._repository_name = get_repository_name()
@@ -103,7 +110,7 @@ class DesktopAPI:
             "model_completions": [asdict(mc) for mc in snapshot.model_completions],
         }
 
-    def _serialize_live_stats(self) -> Optional[dict[str, Any]]:
+    def _serialize_live_stats(self) -> dict[str, Any] | None:
         """Serialize session stats fresh on every poll."""
         stats: dict[str, Any] | None = None
         live = self._live_session_stats
@@ -133,7 +140,10 @@ class DesktopAPI:
 
     def get_state(self) -> dict[str, Any]:
         """Get the full current state snapshot. Called on frontend init."""
+        from pokepoke.config import get_config
+
         with self._lock:
+            config = get_config()
             return {
                 "work_item": self._current_work_item,
                 "agent_name": self._current_agent_name,
@@ -143,6 +153,8 @@ class DesktopAPI:
                 "log_count": len(self._log_buffer),
                 "model_leaderboard": self._get_cached_leaderboard(),
                 "agents": self._agent_registry.serialize_all(),
+                "stop_after_current": _should_stop_after_current(),
+                "project_name": config.project_name,
             }
 
     def _get_cached_leaderboard(self) -> dict[str, Any]:
@@ -174,7 +186,7 @@ class DesktopAPI:
             self._log_read_index = len(self._log_buffer)
             return list(self._log_buffer)
 
-    def get_work_item(self) -> Optional[dict[str, str]]:
+    def get_work_item(self) -> dict[str, str] | None:
         """Get the current work item."""
         return self._current_work_item
 
@@ -182,7 +194,7 @@ class DesktopAPI:
         """Get the repository name."""
         return self._repository_name
 
-    def get_stats(self) -> Optional[dict[str, Any]]:
+    def get_stats(self) -> dict[str, Any] | None:
         """Get the current session stats."""
         with self._lock:
             return self._serialize_live_stats()
@@ -218,7 +230,7 @@ class DesktopAPI:
     # ─── Python → State: Called by the orchestrator ───────────────────
 
     def push_log(
-        self, message: str, target: str = "orchestrator", style: Optional[str] = None
+        self, message: str, target: str = "orchestrator", style: str | None = None
     ) -> None:
         """Add a log entry to the buffer."""
         entry = {
@@ -260,7 +272,7 @@ class DesktopAPI:
         """
         self._session_end_time = end_time
 
-    def set_live_session_stats(self, session_stats: "SessionStats") -> None:
+    def set_live_session_stats(self, session_stats: SessionStats) -> None:
         """Store a live reference to SessionStats for real-time polling.
 
         The live object is serialized fresh on every get_state()/get_stats()
@@ -270,7 +282,7 @@ class DesktopAPI:
         self._live_session_stats = session_stats
 
     def push_stats(
-        self, session_stats: Optional["SessionStats"], elapsed_time: float = 0.0
+        self, session_stats: SessionStats | None, elapsed_time: float = 0.0
     ) -> None:
         """Update session statistics (snapshot fallback).
 
@@ -316,10 +328,27 @@ class DesktopAPI:
         self._agent_registry.set_limits(self._agent_max_log_lines_internal, value)
 
     def push_agent_status(
-        self, agent_id: str, name: str, iteration: int = 1, status: str = "running",
+        self,
+        agent_id: str,
+        name: str,
+        iteration: int = 1,
+        status: str = "running",
+        model: str | None = None,
+        parent_agent_id: str | None = None,
+        work_item_id: str | None = None,
+        work_item_title: str | None = None,
     ) -> None:
         """Register or update a running agent."""
-        self._agent_registry.update_status(agent_id, name, iteration, status)
+        self._agent_registry.update_status(
+            agent_id,
+            name,
+            iteration,
+            status,
+            model=model,
+            parent_agent_id=parent_agent_id,
+            work_item_id=work_item_id,
+            work_item_title=work_item_title,
+        )
 
     def push_agent_log(self, agent_id: str, line: str) -> None:
         """Append a log line to an agent's recent log preview."""
@@ -333,9 +362,21 @@ class DesktopAPI:
         """Return the list of currently tracked agents."""
         return self._agent_registry.serialize_all()
 
-    def get_agent_detail(self, agent_id: str) -> Optional[dict[str, Any]]:
+    def get_agent_detail(self, agent_id: str) -> dict[str, Any] | None:
         """Return a deep copy of a single agent's detail state (logs included)."""
         return self._agent_registry.get_detail(agent_id)
+
+    def request_stop_after_current(self) -> dict[str, bool]:
+        """Request that the orchestrator stop after the current item completes."""
+        _request_stop_after_current()
+        self.push_log("⏸️  Stop after current item requested", "orchestrator", "yellow")
+        return {"stop_after_current": True}
+
+    def cancel_stop_after_current(self) -> dict[str, bool]:
+        """Cancel a pending stop-after-current request."""
+        _cancel_stop_after_current()
+        self.push_log("▶️  Stop after current item cancelled", "orchestrator")
+        return {"stop_after_current": False}
 
     list_prompts = _ext.list_prompts
     get_prompt = _ext.get_prompt

@@ -5,13 +5,13 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from pokepoke.config import get_config
 from pokepoke.copilot import invoke_copilot
 from pokepoke.types import BeadsWorkItem, AgentStats
 from pokepoke.stats import parse_agent_stats
-from pokepoke.worktrees import create_worktree, merge_worktree, cleanup_worktree
+from pokepoke.worktrees import create_worktree, cleanup_worktree
 from pokepoke.prompts import PromptService
 from pokepoke import terminal_ui
 from pokepoke.cleanup_agents import (
@@ -35,9 +35,9 @@ def _generate_unique_agent_id(agent_type: str) -> str:
 
 def run_gate_agent(
     item: BeadsWorkItem, 
-    cwd: Optional[str] = None, 
-    work_model: Optional[str] = None
-) -> tuple[bool, str, Optional[AgentStats]]:
+    cwd: str | None = None, 
+    work_model: str | None = None
+) -> tuple[bool, str, AgentStats | None]:
     """Run the Gate Agent to verify a fixed work item.
     
     Args:
@@ -115,10 +115,10 @@ def run_gate_agent(
 
 
 def run_maintenance_agent(
-    agent_name: str, prompt_file: str, repo_root: Optional[Path] = None,
+    agent_name: str, prompt_file: str, repo_root: Path | None = None,
     needs_worktree: bool = True, merge_changes: bool = True,
-    model: Optional[str] = None, item_logger: Optional['ItemLogger'] = None
-) -> Optional[AgentStats]:
+    model: str | None = None, item_logger: 'ItemLogger | None' = None
+) -> AgentStats | None:
     """Run a maintenance agent with optional worktree isolation."""
     terminal_ui.ui.set_current_agent(f"{agent_name} Agent")
     print(f"\n{'='*60}\n🔧 Running {agent_name} Agent\n{'='*60}")
@@ -162,8 +162,8 @@ def run_maintenance_agent(
 
 def _run_simple_agent(
     agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, deny_write: bool = True,
-    model: Optional[str] = None, cwd: Optional[str] = None, item_logger: Optional['ItemLogger'] = None
-) -> Optional[AgentStats]:
+    model: str | None = None, cwd: str | None = None, item_logger: 'ItemLogger | None' = None
+) -> AgentStats | None:
     """Run a simple agent in the main repo with configurable write access."""
     print(f"\n📋 Running {agent_name} ({'no write' if deny_write else 'write enabled'}){f', model={model}' if model else ''}")
     result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=deny_write, model=model, cwd=cwd, item_logger=item_logger)
@@ -173,16 +173,16 @@ def _run_simple_agent(
     print(f"❌ {agent_name} failed: {result.error}")
     return None
 
-def _run_beads_only_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: Optional[str] = None, cwd: Optional[str] = None, item_logger: Optional['ItemLogger'] = None) -> Optional[AgentStats]:
+def _run_beads_only_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: str | None = None, cwd: str | None = None, item_logger: 'ItemLogger | None' = None) -> AgentStats | None:
     """Run a beads-only maintenance agent in the main repo."""
     return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=True, model=model, cwd=cwd, item_logger=item_logger)
 
-def _run_main_repo_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: Optional[str] = None, cwd: Optional[str] = None, item_logger: Optional['ItemLogger'] = None) -> Optional[AgentStats]:
+def _run_main_repo_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: str | None = None, cwd: str | None = None, item_logger: 'ItemLogger | None' = None) -> AgentStats | None:
     """Run a maintenance agent in the main repo WITH write access."""
     return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=False, model=model, cwd=cwd, item_logger=item_logger)
 
 
-def run_worktree_cleanup(repo_root: Optional[Path] = None, item_logger: Optional['ItemLogger'] = None) -> Optional[AgentStats]:
+def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger | None' = None) -> AgentStats | None:
     """Run worktree cleanup agent to merge/delete stale worktrees."""
     terminal_ui.ui.set_current_agent("Worktree Cleanup")
     
@@ -228,8 +228,8 @@ def run_worktree_cleanup(repo_root: Optional[Path] = None, item_logger: Optional
 
 def _run_worktree_agent(
     agent_name: str, agent_id: str, agent_item: BeadsWorkItem, agent_prompt: str, repo_root: Path,
-    merge_changes: bool = True, model: Optional[str] = None, item_logger: Optional['ItemLogger'] = None
-) -> Optional[AgentStats]:
+    merge_changes: bool = True, model: str | None = None, item_logger: 'ItemLogger | None' = None
+) -> AgentStats | None:
     """Run a code-modifying maintenance agent in a worktree."""
     print(f"\n🌳 Creating worktree for {agent_id}...")
     try:
@@ -314,7 +314,7 @@ def _run_worktree_agent(
                 )
 
 
-def run_beta_tester(repo_root: Optional[Path] = None, item_logger: Optional['ItemLogger'] = None) -> Optional[AgentStats]:
+def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | None' = None) -> AgentStats | None:
     """Run beta tester agent to test all MCP tools. Restarts MCP server first."""
     config = get_config()
     terminal_ui.ui.set_current_agent("Beta Tester")

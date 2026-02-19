@@ -280,12 +280,27 @@ class TestHasUncommittedChanges:
     
     @patch('src.pokepoke.git_operations.subprocess.run')
     def test_git_error(self, mock_run: Mock) -> None:
-        """Test error handling when git command fails."""
+        """Test error handling when git command fails.
+        
+        When git fails, assume dirty to prevent data loss during merge operations.
+        """
         mock_run.side_effect = subprocess.CalledProcessError(1, "git status")
         
         result = has_uncommitted_changes()
         
-        assert result is False
+        assert result is True  # Assume dirty when git fails to prevent data loss
+    
+    @patch('src.pokepoke.git_operations.subprocess.run')
+    def test_git_timeout(self, mock_run: Mock) -> None:
+        """Test error handling when git command times out.
+        
+        When git times out, assume dirty to prevent data loss during merge operations.
+        """
+        mock_run.side_effect = subprocess.TimeoutExpired("git status", 10)
+        
+        result = has_uncommitted_changes()
+        
+        assert result is True  # Assume dirty when git times out to prevent data loss
 
 
 class TestCommitAllChanges:

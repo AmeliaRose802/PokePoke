@@ -1,7 +1,7 @@
 """Tests for git worktree management."""
 import json
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import Mock, patch, call
 
@@ -14,10 +14,11 @@ import pokepoke.git_operations
 from pokepoke.git_operations import (
     get_main_repo_root,
     is_worktree_clean,
-    verify_branch_pushed,
     sanitize_branch_name,
     get_default_branch
 )
+
+from pokepoke.git_helpers import verify_branch_pushed
 
 from pokepoke.worktrees import (
     create_worktree,
@@ -29,7 +30,6 @@ from pokepoke.worktrees import (
 from pokepoke.worktree_cleanup import (
     add_uncleaned_worktree,
     force_remove_directory,
-    get_stale_worktrees,
     load_worktree_manifest,
     remove_from_manifest,
     save_worktree_manifest,
@@ -823,6 +823,7 @@ class TestCleanupWorktree:
         """Test successful worktree cleanup."""
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
+             patch('pokepoke.worktrees.remove_from_manifest') as mock_rm_manifest, \
              patch('pathlib.Path.exists', return_value=True):
             
             mock_list.return_value = [
@@ -833,6 +834,7 @@ class TestCleanupWorktree:
             result = cleanup_worktree('incredible_icm-42')
             
             assert result is True
+            mock_rm_manifest.assert_called_once_with('incredible_icm-42')
             # Should call: list_worktrees, worktree remove, branch delete
             assert mock_run.call_count == 2
             
@@ -850,6 +852,7 @@ class TestCleanupWorktree:
         """Test forced worktree cleanup."""
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
+             patch('pokepoke.worktrees.remove_from_manifest') as mock_rm_manifest, \
              patch('pathlib.Path.exists', return_value=True):
             
             mock_list.return_value = [
@@ -860,6 +863,7 @@ class TestCleanupWorktree:
             result = cleanup_worktree('incredible_icm-42', force=True)
             
             assert result is True
+            mock_rm_manifest.assert_called_once_with('incredible_icm-42')
             
             # Check worktree removal includes --force
             call_args = mock_run.call_args_list[0][0][0]
@@ -927,6 +931,7 @@ class TestCleanupWorktree:
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
              patch('pathlib.Path.exists', return_value=True), \
              patch('pokepoke.worktrees.force_remove_directory', return_value=True) as mock_force, \
+             patch('pokepoke.worktrees.remove_from_manifest'), \
              patch('builtins.print'):
             
             mock_list.return_value = [
@@ -950,12 +955,43 @@ class TestCleanupWorktree:
             assert result is True
             mock_force.assert_called_once()
 
+    def test_cleanup_worktree_invalid_argument_retries_with_force(self):
+        """Test that invalid argument triggers force_remove_directory fallback (Windows)."""
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.list_worktrees') as mock_list, \
+             patch('pathlib.Path.exists', return_value=True), \
+             patch('pokepoke.worktrees.force_remove_directory', return_value=True) as mock_force, \
+             patch('pokepoke.worktrees.remove_from_manifest') as mock_rm_manifest, \
+             patch('builtins.print'):
+
+            mock_list.return_value = [
+                {'path': 'worktrees/task-incredible_icm-42', 'branch': 'refs/heads/task/incredible_icm-42'}
+            ]
+
+            def run_side_effect(*args, **kwargs):
+                cmd = args[0]
+                if 'worktree' in cmd and 'remove' in cmd:
+                    raise subprocess.CalledProcessError(
+                        1, cmd,
+                        stderr="error: failed to delete 'worktrees/task-xyz': Invalid argument"
+                    )
+                return Mock(returncode=0, stderr='', stdout='')
+
+            mock_run.side_effect = run_side_effect
+
+            result = cleanup_worktree('incredible_icm-42')
+
+            assert result is True
+            mock_force.assert_called_once()
+            mock_rm_manifest.assert_called_once_with('incredible_icm-42')
+
     def test_cleanup_worktree_being_used_by_another_process(self):
         """Test that 'being used by another process' triggers force removal."""
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
              patch('pathlib.Path.exists', return_value=True), \
              patch('pokepoke.worktrees.force_remove_directory', return_value=False) as mock_force, \
+             patch('pokepoke.worktrees.add_uncleaned_worktree') as mock_manifest, \
              patch('builtins.print') as mock_print:
             
             mock_list.return_value = [
@@ -980,6 +1016,7 @@ class TestCleanupWorktree:
             # Should still return True because branch deletion succeeded
             assert result is True
             mock_force.assert_called_once()
+            mock_manifest.assert_called_once()
             print_calls = [str(c) for c in mock_print.call_args_list]
             assert any('Could not remove worktree directory after retries' in c for c in print_calls)
 
@@ -1121,48 +1158,17 @@ class TestWorktreeManifest:
             raw = json.loads(manifest_path.read_text(encoding="utf-8"))
             assert raw["task-2"]["reason"] == "cleanup"
 
-    def test_get_stale_worktrees_filters_entries(self, tmp_path: Path) -> None:
-        """Stale and invalid timestamps should be returned."""
-        manifest_path = tmp_path / "uncleaned_worktrees.json"
-        now = datetime.now()
-        data = {
-            "stale": {
-                "path": "worktrees/stale",
-                "reason": "old",
-                "timestamp": (now - timedelta(days=10)).isoformat(),
-            },
-            "fresh": {
-                "path": "worktrees/fresh",
-                "reason": "new",
-                "timestamp": now.isoformat(),
-            },
-            "invalid": {
-                "path": "worktrees/invalid",
-                "reason": "bad",
-                "timestamp": "not-a-time",
-            },
-        }
-        manifest_path.write_text(json.dumps(data), encoding="utf-8")
-        with patch(
-            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
-            return_value=manifest_path,
-        ):
-            stale = get_stale_worktrees(max_age_days=7)
-            assert "stale" in stale
-            assert "invalid" in stale
-            assert "fresh" not in stale
-
 
 class TestCleanupAfterMergePermissionDenied:
-    """Tests for _cleanup_after_merge with permission denied errors."""
+    """Tests for cleanup_after_merge with permission denied errors."""
 
     def test_cleanup_after_merge_permission_denied_force_removes(self):
-        """Test that permission denied in _cleanup_after_merge triggers force removal."""
-        from pokepoke.worktrees import _cleanup_after_merge
+        """Test that permission denied in cleanup_after_merge triggers force removal."""
+        from pokepoke.worktree_cleanup import cleanup_after_merge
         
         with patch('subprocess.run') as mock_run, \
              patch('pathlib.Path.exists', return_value=True), \
-             patch('pokepoke.worktrees.force_remove_directory', return_value=True) as mock_force, \
+             patch('pokepoke.worktree_cleanup.force_remove_directory', return_value=True) as mock_force, \
              patch('builtins.print') as mock_print:
             
             def run_side_effect(*args, **kwargs):
@@ -1176,7 +1182,7 @@ class TestCleanupAfterMergePermissionDenied:
             
             mock_run.side_effect = run_side_effect
             
-            _cleanup_after_merge(Path("worktrees/task-test"), "task/test-branch")
+            cleanup_after_merge(Path("worktrees/task-test"), "task/test-branch")
             
             mock_force.assert_called_once()
             print_calls = [str(c) for c in mock_print.call_args_list]
@@ -1184,11 +1190,12 @@ class TestCleanupAfterMergePermissionDenied:
 
     def test_cleanup_after_merge_permission_denied_force_fails(self):
         """Test fallback message when force removal also fails."""
-        from pokepoke.worktrees import _cleanup_after_merge
+        from pokepoke.worktree_cleanup import cleanup_after_merge
         
         with patch('subprocess.run') as mock_run, \
              patch('pathlib.Path.exists', return_value=True), \
-             patch('pokepoke.worktrees.force_remove_directory', return_value=False) as mock_force, \
+             patch('pokepoke.worktree_cleanup.force_remove_directory', return_value=False) as mock_force, \
+             patch('pokepoke.worktree_cleanup.add_uncleaned_worktree') as mock_manifest, \
              patch('builtins.print') as mock_print:
             
             def run_side_effect(*args, **kwargs):
@@ -1202,9 +1209,10 @@ class TestCleanupAfterMergePermissionDenied:
             
             mock_run.side_effect = run_side_effect
             
-            _cleanup_after_merge(Path("worktrees/task-test"), "task/test-branch")
+            cleanup_after_merge(Path("worktrees/task-test"), "task/test-branch")
             
             mock_force.assert_called_once()
+            mock_manifest.assert_called_once()
             print_calls = [str(c) for c in mock_print.call_args_list]
             assert any('Could not remove worktree after retries' in c for c in print_calls)
             assert any('Merge successful' in c for c in print_calls)

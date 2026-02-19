@@ -2,7 +2,6 @@
 
 import random
 import string
-from typing import Optional
 
 
 # Whimsical adjective pool for agent names
@@ -47,7 +46,7 @@ def generate_agent_name(prefix: str = "pokepoke") -> str:
     return f"{prefix}_{adjective}_{creature}_{random_suffix}"
 
 
-def initialize_agent_name(custom_name: Optional[str] = None) -> str:
+def initialize_agent_name(custom_name: str | None = None) -> str:
     """Initialize the agent name for the current run.
     
     If a custom name is provided, use it. Otherwise, generate a random name.

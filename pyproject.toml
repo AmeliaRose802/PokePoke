@@ -21,6 +21,9 @@ testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+markers = [
+    "real_terminal_banner: opt out of the autouse _suppress_terminal_banner fixture",
+]
 
 # Exclude patterns
 norecursedirs = [

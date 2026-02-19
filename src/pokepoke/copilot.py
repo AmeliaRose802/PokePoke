@@ -3,7 +3,7 @@
 This module provides SDK-based Copilot integration.
 """
 
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from .types import BeadsWorkItem, CopilotResult, RetryConfig
 from .copilot_sdk import invoke_copilot_sdk_sync
@@ -14,13 +14,13 @@ if TYPE_CHECKING:
 
 def invoke_copilot(
     work_item: BeadsWorkItem,
-    prompt: Optional[str] = None,
-    retry_config: Optional[RetryConfig] = None,
-    timeout: Optional[float] = None,
+    prompt: str | None = None,
+    retry_config: RetryConfig | None = None,
+    timeout: float | None = None,
     deny_write: bool = False,
-    item_logger: Optional['ItemLogger'] = None,
-    model: Optional[str] = None,
-    cwd: Optional[str] = None
+    item_logger: 'ItemLogger | None' = None,
+    model: str | None = None,
+    cwd: str | None = None
 ) -> CopilotResult:
     """Invoke GitHub Copilot using SDK.
     

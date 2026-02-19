@@ -8,7 +8,7 @@ from .types import BeadsWorkItem
 from .worktrees import merge_worktree, cleanup_worktree
 from .git_operations import check_main_repo_ready_for_merge, get_default_branch
 from .beads_hierarchy import get_parent_id, close_parent_if_complete
-from .beads_management import close_item, create_cleanup_delegation_issue
+from .beads_management import close_item
 
 
 def finalize_work_item(item: BeadsWorkItem, worktree_path: Path) -> bool:
@@ -102,14 +102,14 @@ def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
         cleanup_success, _ = invoke_cleanup_agent(item, Path.cwd())
         
         if cleanup_success:
-             print("   Cleanup successful, retrying merge check...")
-             is_ready, error_msg = check_main_repo_ready_for_merge()
-             if not is_ready:
-                 print(f"   Still failing after cleanup: {error_msg}")
-                 return False
+            print("   Cleanup successful, retrying merge check...")
+            is_ready, error_msg = check_main_repo_ready_for_merge()
+            if not is_ready:
+                print(f"   Still failing after cleanup: {error_msg}")
+                return False
         else:
-             print("   Cleanup failed.")
-             return False
+            print("   Cleanup failed.")
+            return False
 
     print(f"\n🔀 Merging worktree for {item.id}...")
     merge_success, unmerged_files = merge_worktree(item.id, cleanup=True)
@@ -160,21 +160,21 @@ def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
             
             merge_success, _ = merge_worktree(item.id, cleanup=True)
             if merge_success:
-                 print("   Merged and cleaned up worktree")
-                 return True
+                print("   Merged and cleaned up worktree")
+                return True
             else:
-                 print("   Merge failed again after cleanup.")
-                 # Abort the merge to leave clean state
-                 if is_merge_in_progress():
-                     abort_merge()
-                 return False
+                print("   Merge failed again after cleanup.")
+                # Abort the merge to leave clean state
+                if is_merge_in_progress():
+                    abort_merge()
+                return False
         else:
-             print("   Cleanup failed.")
-             # Abort the merge to leave clean state
-             if is_merge_in_progress():
-                 print("   Aborting merge to reset state...")
-                 abort_merge()
-             return False
+            print("   Cleanup failed.")
+            # Abort the merge to leave clean state
+            if is_merge_in_progress():
+                print("   Aborting merge to reset state...")
+                abort_merge()
+            return False
     
     print("   Merged and cleaned up worktree")
     return True

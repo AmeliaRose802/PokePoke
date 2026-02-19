@@ -2360,11 +2360,22 @@ class TestSingleAgentPanelRegistration:
 
             # Should register agent as running, then update to success
             assert mock_push.call_count == 2
-            first_call = mock_push.call_args_list[0]
-            assert first_call[1].get("status", first_call[0][3] if len(first_call[0]) > 3 else "running") == "running" or \
-                   first_call == call("task-42", ANY, iteration=1, status="running")
-            second_call = mock_push.call_args_list[1]
-            assert second_call == call("task-42", ANY, iteration=1, status="success")
+            assert mock_push.call_args_list[0] == call(
+                "task-42",
+                ANY,
+                iteration=1,
+                status="running",
+                work_item_id="task-42",
+                work_item_title="Fix bug",
+            )
+            assert mock_push.call_args_list[1] == call(
+                "task-42",
+                ANY,
+                iteration=1,
+                status="success",
+                work_item_id="task-42",
+                work_item_title="Fix bug",
+            )
 
             # Should wrap process_work_item with agent_output_for
             mock_output_for.assert_called_once_with("task-42")
@@ -2413,6 +2424,20 @@ class TestSingleAgentPanelRegistration:
 
             # Should register as running then update to failed
             assert mock_push.call_count == 2
-            second_call = mock_push.call_args_list[1]
-            assert second_call == call("task-99", ANY, iteration=1, status="failed")
+            assert mock_push.call_args_list[0] == call(
+                "task-99",
+                ANY,
+                iteration=1,
+                status="running",
+                work_item_id="task-99",
+                work_item_title="Failing task",
+            )
+            assert mock_push.call_args_list[1] == call(
+                "task-99",
+                ANY,
+                iteration=1,
+                status="failed",
+                work_item_id="task-99",
+                work_item_title="Failing task",
+            )
 

@@ -11,7 +11,7 @@ import json
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pokepoke.types import AgentStats, BeadsWorkItem, ModelCompletionRecord
 
@@ -28,9 +28,9 @@ def build_model_history_record(
     success: bool,
     request_count: int,
     gate_runs: int,
-    item_stats: Optional[AgentStats] = None,
-    timestamp: Optional[datetime] = None,
-) -> Dict[str, Any]:
+    item_stats: AgentStats | None = None,
+    timestamp: datetime | None = None,
+) -> dict[str, Any]:
     """Build a JSON-serialisable dict for a model history entry.
 
     Args:
@@ -58,7 +58,7 @@ def build_model_history_record(
     # Quality gate metrics
     if gate_runs <= 0:
         quality_gates_ran = False
-        quality_gates_passed_first_try: Optional[bool] = None
+        quality_gates_passed_first_try: bool | None = None
     else:
         quality_gates_ran = True
         if not success or not model_completion.gate_passed:
@@ -68,7 +68,7 @@ def build_model_history_record(
             # Only passes-on-first-try if gate succeeded and ran exactly once
             quality_gates_passed_first_try = gate_runs == 1
 
-    record: Dict[str, Any] = {
+    record: dict[str, Any] = {
         "timestamp": ts.isoformat(),
         "model": model_completion.model,
         "work_item_id": item.id,
@@ -98,8 +98,8 @@ def append_model_history_entry(
     success: bool,
     request_count: int,
     gate_runs: int,
-    item_stats: Optional[AgentStats] = None,
-    path: Optional[Path] = None,
+    item_stats: AgentStats | None = None,
+    path: Path | None = None,
 ) -> None:
     """Append a model history entry to .pokepoke/model_history.jsonl.
 

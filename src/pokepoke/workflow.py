@@ -2,7 +2,7 @@
 
 import time
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from pokepoke.copilot import invoke_copilot
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, ModelCompletionRecord
@@ -17,6 +17,7 @@ from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner
 from pokepoke import terminal_ui
 from pokepoke.shutdown import is_shutting_down, register_agent, unregister_agent
 from pokepoke.model_selection import select_model_for_item
+from pokepoke.agent_context import get_agent_name
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import RunLogger
@@ -26,19 +27,17 @@ def process_work_item(
     item: BeadsWorkItem, 
     interactive: bool, 
     timeout_hours: float = 2.0, 
-    run_cleanup_agents: bool = False, 
     run_beta_test: bool = False,
-    run_logger: Optional['RunLogger'] = None,
+    run_logger: 'RunLogger | None' = None,
     max_timeout_restarts: int = 3
-) -> tuple[bool, int, Optional[AgentStats], int, int, Optional[ModelCompletionRecord]]:
+) -> tuple[bool, int, AgentStats | None, int, int, ModelCompletionRecord | None]:
     """Process a single work item with timeout protection.
     
     Args:
         item: Work item to process
         interactive: If True, prompt for confirmation before proceeding
         timeout_hours: Maximum hours before timing out and restarting (default: 2.0)
-        run_cleanup_agents: If True, run maintenance agents after completion (default: False)
-        run_beta_test: If True, run beta tester after completion (default: True)
+        run_beta_test: If True, run beta tester after completion (default: False)
         run_logger: Optional run logger instance for file logging
         max_timeout_restarts: Maximum number of timeout restarts before failing (default: 3)
         
@@ -47,7 +46,7 @@ def process_work_item(
     """
     # Register this agent for shutdown coordination
     register_agent()
-    worktree_path: Optional[Path] = None
+    worktree_path: Path | None = None
     
     try:
         start_time = time.time()
@@ -58,7 +57,18 @@ def process_work_item(
         
         # Select model for this work item (A/B testing)
         selected_model = select_model_for_item(item.id)
-        
+
+        # Keep the Desktop UI agent card in sync with the selected model.
+        terminal_ui.ui.push_agent_status(
+            item.id,
+            get_agent_name(default="pokepoke"),
+            iteration=1,
+            status="running",
+            model=selected_model,
+            work_item_id=item.id,
+            work_item_title=item.title,
+        )
+
         print(f"\n🚀 Processing work item: {item.id}")
         print(f"   {item.title}")
         print(f"   🤖 Model: {selected_model}")
@@ -105,6 +115,14 @@ def process_work_item(
         accumulated_stats = AgentStats()
         gate_success = False  # Track last gate result for model completion record
         timeout_restart_count = 0
+
+        # Ensure result is always defined even if shutdown happens before the first loop iteration.
+        result = CopilotResult(
+            work_item_id=item.id,
+            success=False,
+            error="Session aborted due to application shutdown",
+            attempt_count=0,
+        )
 
         while not is_shutting_down():
             # Check timeout before invoking Copilot
@@ -172,8 +190,44 @@ def process_work_item(
                 return False, request_count, accumulated_stats, cleanup_agent_runs, gate_agent_runs, None
 
             # --- GATE AGENT CHECK ---
-            gate_success, gate_reason, gate_stats = run_gate_agent(item, cwd=worktree_cwd, work_model=selected_model)
+            gate_agent_id = f"{item.id}-gate"
+            gate_iteration = gate_agent_runs + 1
+            terminal_ui.ui.push_agent_status(
+                gate_agent_id,
+                "Gate Agent",
+                iteration=gate_iteration,
+                status="running",
+                parent_agent_id=item.id,
+                work_item_id=item.id,
+                work_item_title=item.title,
+            )
+            try:
+                with terminal_ui.ui.agent_output_for(gate_agent_id):
+                    gate_success, gate_reason, gate_stats = run_gate_agent(
+                        item, cwd=worktree_cwd, work_model=selected_model
+                    )
+            except Exception:
+                gate_agent_runs += 1
+                terminal_ui.ui.push_agent_status(
+                    gate_agent_id,
+                    "Gate Agent",
+                    iteration=gate_agent_runs,
+                    status="failed",
+                    parent_agent_id=item.id,
+                    work_item_id=item.id,
+                    work_item_title=item.title,
+                )
+                raise
             gate_agent_runs += 1
+            terminal_ui.ui.push_agent_status(
+                gate_agent_id,
+                "Gate Agent",
+                iteration=gate_agent_runs,
+                status="success" if gate_success else "failed",
+                parent_agent_id=item.id,
+                work_item_id=item.id,
+                work_item_title=item.title,
+            )
 
             if gate_success:
                 print("\n✅ Gate Agent signed off!")
@@ -252,7 +306,7 @@ def process_work_item(
         unregister_agent()
 
 
-def _setup_worktree(item: BeadsWorkItem) -> Optional[Path]:
+def _setup_worktree(item: BeadsWorkItem) -> Path | None:
     """Create worktree for work item processing."""
     print(f"\n🌳 Creating worktree for {item.id}...")
     try:
@@ -264,7 +318,7 @@ def _setup_worktree(item: BeadsWorkItem) -> Optional[Path]:
         return None
 
 
-def _run_cleanup_with_timeout(item: BeadsWorkItem, result: CopilotResult, repo_root: Path, start_time: float, timeout_seconds: float, timeout_hours: float, cwd: Optional[str] = None) -> tuple[bool, int]:
+def _run_cleanup_with_timeout(item: BeadsWorkItem, result: CopilotResult, repo_root: Path, start_time: float, timeout_seconds: float, timeout_hours: float, cwd: str | None = None) -> tuple[bool, int]:
     """Run cleanup loop with timeout checking."""
     cleanup_agent_runs = 0
     cleanup_attempt = 0

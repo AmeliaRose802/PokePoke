@@ -7,7 +7,6 @@ or could produce duplicate work (like Beta Tester filing the same issues twice).
 
 import threading
 from pathlib import Path
-from typing import Dict, Optional, Set
 
 from pokepoke.config import get_config, MaintenanceAgentConfig
 from pokepoke.coordination import try_lock
@@ -20,7 +19,7 @@ from pokepoke import terminal_ui
 
 
 # Agents that require singleton guard (modify shared state or produce duplicates)
-_SINGLETON_AGENTS: Set[str] = {
+_SINGLETON_AGENTS: set[str] = {
     "Beta Tester", 
     "Janitor", 
     "Backlog Cleanup", 
@@ -28,7 +27,7 @@ _SINGLETON_AGENTS: Set[str] = {
 }
 
 # Agents that can safely run in parallel (beads-only, no conflicts)
-_PARALLEL_SAFE_AGENTS: Set[str] = {
+_PARALLEL_SAFE_AGENTS: set[str] = {
     "Tech Debt", 
     "Code Review"
 }
@@ -52,7 +51,7 @@ class MaintenanceScheduler:
     
     def __init__(self) -> None:
         # In-process locks for thread coordination
-        self._locks: Dict[str, threading.Lock] = {}
+        self._locks: dict[str, threading.Lock] = {}
         self._lock_creation_lock = threading.Lock()
         
     def _get_agent_lock(self, agent_name: str) -> threading.Lock:
@@ -103,69 +102,43 @@ class MaintenanceScheduler:
         """
         log_key = agent_name.lower().replace(" ", "_")
         
-        # Determine if this agent needs singleton protection
-        if agent_name in _SINGLETON_AGENTS:
-            # Use both file lock (cross-process) and thread lock (in-process)
-            file_lock = None
-            thread_lock = self._get_agent_lock(agent_name)
-            
-            # Try to acquire thread lock first (non-blocking)
-            thread_acquired = thread_lock.acquire(blocking=False)
-            if not thread_acquired:
-                run_logger.log_maintenance(log_key, f"Skipping {agent_name} Agent - already running in this process")
-                return
-            
-            try:
-                # Try to acquire file lock (cross-process)
-                file_lock = try_lock(f"maintenance-{agent_name.lower().replace(' ', '-')}")
-                if file_lock is None:
-                    run_logger.log_maintenance(log_key, f"Skipping {agent_name} Agent - already running in another process")
-                    return
-                
-                # Both locks acquired - run the agent
-                self._run_agent_with_coordination(agent_name, agent_cfg, pokepoke_repo, session_stats, run_logger)
-                
-            finally:
-                # Release file lock
-                if file_lock is not None:
-                    file_lock.release()
-                # Release thread lock
-                thread_lock.release()
-                
-        elif agent_name in _PARALLEL_SAFE_AGENTS:
+        if agent_name in _PARALLEL_SAFE_AGENTS:
             # Parallel-safe agents don't need singleton coordination
             self._run_agent_with_coordination(agent_name, agent_cfg, pokepoke_repo, session_stats, run_logger)
-            
-        else:
-            # Unknown agent - log warning and apply singleton protection as safety measure
+            return
+        
+        # Singleton or unknown agents need lock protection
+        if agent_name not in _SINGLETON_AGENTS:
             run_logger.log_maintenance(log_key, f"WARNING: Unknown agent classification for {agent_name}, applying singleton guard")
-            
-            # Apply singleton protection for unknown agents
-            file_lock = None
-            thread_lock = self._get_agent_lock(agent_name)
-            
-            # Try to acquire thread lock first (non-blocking)
-            thread_acquired = thread_lock.acquire(blocking=False)
-            if not thread_acquired:
-                run_logger.log_maintenance(log_key, f"Skipping {agent_name} Agent - already running in this process")
+        
+        self._run_with_singleton_guard(agent_name, agent_cfg, pokepoke_repo, session_stats, run_logger)
+    
+    def _run_with_singleton_guard(self, agent_name: str, agent_cfg: MaintenanceAgentConfig, pokepoke_repo: Path, session_stats: SessionStats, run_logger: RunLogger) -> None:
+        """Run an agent with both thread and file lock singleton protection."""
+        log_key = agent_name.lower().replace(" ", "_")
+        file_lock = None
+        thread_lock = self._get_agent_lock(agent_name)
+        
+        # Try to acquire thread lock first (non-blocking)
+        thread_acquired = thread_lock.acquire(blocking=False)
+        if not thread_acquired:
+            run_logger.log_maintenance(log_key, f"Skipping {agent_name} Agent - already running in this process")
+            return
+        
+        try:
+            # Try to acquire file lock (cross-process)
+            file_lock = try_lock(f"maintenance-{agent_name.lower().replace(' ', '-')}")
+            if file_lock is None:
+                run_logger.log_maintenance(log_key, f"Skipping {agent_name} Agent - already running in another process")
                 return
             
-            try:
-                # Try to acquire file lock (cross-process)
-                file_lock = try_lock(f"maintenance-{agent_name.lower().replace(' ', '-')}")
-                if file_lock is None:
-                    run_logger.log_maintenance(log_key, f"Skipping {agent_name} Agent - already running in another process")
-                    return
-                
-                # Both locks acquired - run the agent
-                self._run_agent_with_coordination(agent_name, agent_cfg, pokepoke_repo, session_stats, run_logger)
-                
-            finally:
-                # Release file lock
-                if file_lock is not None:
-                    file_lock.release()
-                # Release thread lock
-                thread_lock.release()
+            # Both locks acquired - run the agent
+            self._run_agent_with_coordination(agent_name, agent_cfg, pokepoke_repo, session_stats, run_logger)
+            
+        finally:
+            if file_lock is not None:
+                file_lock.release()
+            thread_lock.release()
 
     def _run_agent_with_coordination(self, agent_name: str, agent_cfg: MaintenanceAgentConfig, pokepoke_repo: Path, session_stats: SessionStats, run_logger: RunLogger) -> None:
         """Run a maintenance agent and handle statistics coordination.
@@ -239,7 +212,7 @@ class MaintenanceScheduler:
 
 
 # Global scheduler instance and initialization lock
-_scheduler: Optional[MaintenanceScheduler] = None
+_scheduler: MaintenanceScheduler | None = None
 _scheduler_lock = threading.Lock()
 
 

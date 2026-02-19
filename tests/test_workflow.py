@@ -940,6 +940,52 @@ class TestProcessWorkItem:
         assert count == 0
         assert stats is None
         assert cleanup_runs == 0
+
+    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('pokepoke.workflow.invoke_copilot')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.workflow.is_shutting_down')
+    @patch('pokepoke.workflow.select_model_for_item')
+    @patch('time.time')
+    def test_shutdown_before_first_iteration_does_not_crash(
+        self,
+        mock_time: Mock,
+        mock_select_model: Mock,
+        mock_is_shutting_down: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
+        mock_invoke: Mock,
+        mock_cleanup_worktree: Mock,
+    ) -> None:
+        """Shutdown before first loop iteration should not raise UnboundLocalError."""
+        item = BeadsWorkItem(
+            id="task-1",
+            title="Task 1",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task",
+        )
+
+        mock_time.return_value = 0.0
+        mock_select_model.return_value = "test-model"
+        mock_is_shutting_down.return_value = True
+        mock_assign.return_value = True
+        mock_setup.return_value = Path("/fake/worktree")
+
+        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+            item, interactive=False
+        )
+
+        assert success is False
+        assert count == 0
+        assert stats is None
+        assert cleanup_runs == 0
+        assert gate_runs == 0
+        assert model_completion is not None
+        mock_invoke.assert_not_called()
+        mock_cleanup_worktree.assert_any_call(item.id, force=True)
     
     @patch('pokepoke.workflow.run_gate_agent')  # Mock gate agent
     @patch('pokepoke.workflow.run_beta_tester')  # Mock beta tester

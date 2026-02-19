@@ -1,14 +1,12 @@
-"""Beads item management - create, close, filter work items."""
+"""Beads item management - close, assign, and select work items."""
 
 import json
-import os
 import subprocess
 import time
-from typing import List, Optional
 
 from .agent_context import get_agent_name
 from .types import BeadsWorkItem
-from .beads_hierarchy import has_feature_parent, get_next_child_task, close_parent_if_complete, get_children, resolve_to_leaf_task, HUMAN_REQUIRED_LABEL
+from .beads_hierarchy import resolve_to_leaf_task, HUMAN_REQUIRED_LABEL
 from .beads_query import _parse_beads_json
 
 
@@ -22,10 +20,10 @@ def _is_transient_jsonl_sync_error(output: str) -> bool:
 def run_bd_sync_with_retry(
     max_attempts: int = 3,
     base_delay: float = 0.5,
-    timeout: Optional[int] = None
+    timeout: int | None = None
 ) -> subprocess.CompletedProcess[str]:
     """Run bd sync with retries for transient JSONL lock errors."""
-    last_result: Optional[subprocess.CompletedProcess[str]] = None
+    last_result: subprocess.CompletedProcess[str] | None = None
     for attempt in range(1, max_attempts + 1):
         result = subprocess.run(
             ['bd', 'sync'],
@@ -55,7 +53,7 @@ def run_bd_sync_with_retry(
     return last_result
 
 
-def assign_and_sync_item(item_id: str, agent_name: Optional[str] = None) -> bool:
+def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
     """Assign a work item to an agent and sync to prevent parallel conflicts.
     
     This should be called BEFORE creating a worktree to ensure other parallel
@@ -188,161 +186,7 @@ def add_comment(item_id: str, comment: str) -> bool:
         return False
 
 
-def create_issue(
-    title: str,
-    issue_type: str = "task",
-    priority: int = 1,
-    description: str = "",
-    labels: Optional[List[str]] = None,
-    parent_id: Optional[str] = None
-) -> Optional[str]:
-    """Create a new beads issue.
-    
-    Args:
-        title: Issue title
-        issue_type: Type of issue (task, bug, feature, epic, chore)
-        priority: Priority (0=critical, 1=high, 2=medium, 3=low, 4=backlog)
-        description: Issue description
-        labels: List of labels to add
-        parent_id: Parent issue ID for dependencies
-        
-    Returns:
-        Created issue ID, or None if creation failed
-    """
-    try:
-        cmd = ['bd', 'create', title, '-t', issue_type, '-p', str(priority)]
-        
-        if description:
-            cmd.extend(['-d', description])
-        
-        if parent_id:
-            cmd.extend(['--deps', f'parent:{parent_id}'])
-        
-        cmd.append('--json')
-        
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True,
-            timeout=30
-        )
-        
-        if not result.stdout:
-            return None
-        
-        # Parse JSON output to get issue ID
-        data = _parse_beads_json(result.stdout, extra_prefixes=('Created',))
-        
-        if data is not None:
-            
-            # Handle both array and single object responses
-            if isinstance(data, list):
-                issue_id = data[0].get('id') if data else None
-            else:
-                issue_id = data.get('id')
-            
-            # Add labels if provided
-            if labels and issue_id:
-                subprocess.run(
-                    ['bd', 'label', 'add', issue_id] + labels + ['--json'],
-                    capture_output=True,
-                    text=True,
-                    encoding='utf-8',
-                    timeout=30
-                )
-            
-            return issue_id
-        
-        return None
-        
-    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError) as e:
-        print(f"⚠️  Failed to create issue: {e}")
-        return None
-
-
-def create_cleanup_delegation_issue(
-    title: str,
-    description: str,
-    labels: Optional[List[str]] = None,
-    parent_id: Optional[str] = None,
-    priority: int = 0
-) -> Optional[str]:
-    """Create a cleanup/delegation issue for agent to handle.
-    
-    Used when automated operations fail and require manual/agent intervention.
-    
-    Args:
-        title: Issue title
-        description: Detailed description of the cleanup needed
-        labels: Labels to add (defaults to ['cleanup', 'delegation'])
-        parent_id: Optional parent issue that this relates to
-        priority: Priority (default 0 = critical, needs immediate attention)
-        
-    Returns:
-        Created issue ID, or None if creation failed
-    """
-    default_labels = ['cleanup', 'delegation']
-    all_labels = list(set(default_labels + (labels or [])))
-    
-    issue_id = create_issue(
-        title=title,
-        issue_type='task',
-        priority=priority,
-        description=description,
-        labels=all_labels,
-        parent_id=parent_id
-    )
-    
-    if issue_id:
-        print(f"\n📋 Created delegation issue: {issue_id}")
-        print("   An agent will handle this cleanup automatically")
-    
-    return issue_id
-
-
-def filter_work_items(items: List[BeadsWorkItem]) -> List[BeadsWorkItem]:
-    """Filter work items based on selection criteria.
-    
-    - Exclude epics (too broad)
-    - Include features
-    - Include tasks/bugs/chores only if NOT parented to a feature
-    
-    Args:
-        items: Array of work items to filter.
-        
-    Returns:
-        Filtered array.
-    """
-    filtered = []
-    
-    for item in items:
-        # Skip epics - too broad
-        if item.issue_type == 'epic':
-            print(f"   ⏭️  Skipping epic: {item.id} - {item.title}")
-            continue
-        
-        # Always include features
-        if item.issue_type == 'feature':
-            filtered.append(item)
-            continue
-        
-        # For tasks, bugs, chores - only include if NOT parented to a feature
-        if item.issue_type in ('task', 'bug', 'chore'):
-            if has_feature_parent(item.id):
-                print(f"   ⏭️  Skipping {item.issue_type} with feature parent: {item.id} - {item.title}")
-                continue
-            filtered.append(item)
-            continue
-        
-        # Include any other types by default
-        filtered.append(item)
-    
-    return filtered
-
-
-def select_next_hierarchical_item(items: List[BeadsWorkItem]) -> Optional[BeadsWorkItem]:
+def select_next_hierarchical_item(items: list[BeadsWorkItem]) -> BeadsWorkItem | None:
     """Select next work item using hierarchical assignment strategy.
     
     Core rule: NEVER directly assign an epic/feature that has children.

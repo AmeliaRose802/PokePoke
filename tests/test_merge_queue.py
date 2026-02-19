@@ -277,11 +277,21 @@ class TestRebaseWorktree:
 
     @patch("subprocess.run")
     def test_timeout(self, mock_run):
+        """On timeout, should abort and return False."""
         import subprocess as sp
 
-        mock_run.side_effect = sp.TimeoutExpired("git", 120)
+        mock_run.side_effect = [
+            MagicMock(returncode=0),  # git fetch origin main
+            sp.TimeoutExpired("git", 120),  # git rebase
+            MagicMock(returncode=0),  # rebase --abort
+        ]
         with patch.object(Path, "exists", return_value=True):
             assert _rebase_worktree(Path("worktrees/task-X"), target_branch="main") is False
+
+        assert mock_run.call_count == 3
+        abort_call = mock_run.call_args_list[2]
+        assert "rebase" in abort_call[0][0]
+        assert "--abort" in abort_call[0][0]
 
     @patch("subprocess.run")
     def test_explicit_target_branch(self, mock_run):

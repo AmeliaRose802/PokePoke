@@ -29,7 +29,7 @@ VERIFY that the work item has been completed successfully and meets all quality 
    - Compare current state vs work item requirements
 
 3. **Run Tests (if changes exist):**
-   - Run relevant unit tests: `pytest tests/path/to/test.py`
+   - Run relevant unit tests: `pytest tests/path/to/test.py --timeout=30`
    - Run integration tests if applicable
    - If a reproduction script exists, run it to ensure the bug is gone
 

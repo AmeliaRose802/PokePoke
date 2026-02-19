@@ -1,9 +1,11 @@
 """Git operations utilities for status checks, commits, and repository management."""
 
+import logging
 import re
 import subprocess
 from pathlib import Path
-from typing import Optional, Tuple, List
+
+logger = logging.getLogger(__name__)
 
 # Re-export merge conflict utilities for backward compatibility
 from .merge_conflict import (
@@ -13,7 +15,7 @@ from .merge_conflict import (
     get_merge_conflict_details,
 )
 
-from .git_helpers import restore_beads_stash, verify_branch_pushed
+from .git_helpers import restore_beads_stash
 
 __all__ = [
     'is_merge_in_progress', 'get_unmerged_files', 'abort_merge',
@@ -38,8 +40,13 @@ def categorize_git_changes(lines: list[str]) -> dict[str, list[str]]:
         ],
     }
 
-def has_uncommitted_changes(cwd: Optional[str] = None) -> bool:
-    """Check if there are uncommitted changes in the given directory."""
+def has_uncommitted_changes(cwd: str | None = None) -> bool:
+    """Check if there are uncommitted changes in the given directory.
+    
+    Returns True if changes exist OR if git status cannot be verified.
+    Returns False only if git successfully reports a clean working directory.
+    Assumes dirty state on failure to prevent data loss during merge operations.
+    """
     try:
         result = subprocess.run(
             ["git", "status", "--porcelain"],
@@ -47,11 +54,12 @@ def has_uncommitted_changes(cwd: Optional[str] = None) -> bool:
             errors='replace', check=True, timeout=10, cwd=cwd
         )
         return bool(result.stdout.strip())
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        return False
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        logger.warning('Could not check uncommitted changes: %s', e)
+        return True  # Assume dirty to prevent data loss
 
 
-def commit_all_changes(message: str = "Auto-commit by PokePoke", cwd: Optional[str] = None) -> tuple[bool, str]:
+def commit_all_changes(message: str = "Auto-commit by PokePoke", cwd: str | None = None) -> tuple[bool, str]:
     """Commit all changes, triggering pre-commit hooks for validation."""
     try:
         subprocess.run(
@@ -84,7 +92,7 @@ def commit_all_changes(message: str = "Auto-commit by PokePoke", cwd: Optional[s
         return False, f"Commit error: {e.stderr if e.stderr else str(e)}"
 
 
-def verify_main_repo_clean(cwd: Optional[str] = None) -> Tuple[bool, str, list[str]]:
+def verify_main_repo_clean(cwd: str | None = None) -> tuple[bool, str, list[str]]:
     """Verify repository has no uncommitted non-beads changes.
     
     Returns (is_clean, uncommitted_output, non_beads_changes).
@@ -136,7 +144,7 @@ def handle_beads_auto_commit() -> None:
         raise RuntimeError(f"Failed to commit beads changes: {e}")
 
 
-def check_main_repo_ready_for_merge() -> Tuple[bool, str]:
+def check_main_repo_ready_for_merge() -> tuple[bool, str]:
     """Check if main repo is ready for worktree merge.
     
     Returns:
@@ -180,7 +188,7 @@ def branch_exists(branch_name: str) -> bool:
         return False
 
 
-def get_default_branch(preferred: Optional[str] = None, fallback: Optional[str] = None) -> str:
+def get_default_branch(preferred: str | None = None, fallback: str | None = None) -> str:
     """Resolve the default branch name for the repo.
 
     Uses project config to determine preferred branch. Falls back to origin/HEAD
@@ -283,7 +291,7 @@ def is_worktree_clean(worktree_path: Path) -> bool:
         return False
 
 
-def execute_merge_sequence(branch_name: str, target_branch: str) -> Tuple[bool, str, List[str]]:
+def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, str, list[str]]:
     """Execute the checkout, pull, and merge sequence.
     
     Returns:
@@ -372,7 +380,7 @@ def validate_post_merge(target_branch: str) -> bool:
     return True
 
 
-def has_commits_ahead(target_branch: Optional[str] = None, cwd: Optional[str] = None) -> int:
+def has_commits_ahead(target_branch: str | None = None, cwd: str | None = None) -> int:
     """Count commits in current branch ahead of the target branch."""
     if target_branch is None:
         target_branch = get_default_branch()

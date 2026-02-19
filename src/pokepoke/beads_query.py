@@ -3,7 +3,7 @@
 import json
 import subprocess
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any
 
 from .types import BeadsWorkItem, IssueWithDependencies, Dependency, BeadsStats
 
@@ -34,7 +34,7 @@ def _parse_beads_json(output: str, extra_prefixes: tuple[str, ...] = ()) -> Any:
     return json.loads(json_text)
 
 
-def _get_main_repo_root() -> Optional[Path]:
+def _get_main_repo_root() -> Path | None:
     """Get the main repository root directory (not a worktree).
     
     Returns:
@@ -47,7 +47,7 @@ def _get_main_repo_root() -> Optional[Path]:
         return None
 
 
-def get_ready_work_items() -> List[BeadsWorkItem]:
+def get_ready_work_items() -> list[BeadsWorkItem]:
     """Query beads database for ready work items.
     
     Returns:
@@ -82,7 +82,7 @@ def get_ready_work_items() -> List[BeadsWorkItem]:
     ]
 
 
-def get_issue_dependencies(issue_id: str) -> Optional[IssueWithDependencies]:
+def get_issue_dependencies(issue_id: str) -> IssueWithDependencies | None:
     """Get detailed issue information including dependencies.
     
     Args:
@@ -167,7 +167,7 @@ def has_unmet_blocking_dependencies(item_id: str) -> bool:
     return False
 
 
-def get_beads_stats() -> Optional[BeadsStats]:
+def get_beads_stats() -> BeadsStats | None:
     """Get current beads database statistics.
     
     Runs from the main repository root to ensure beads database is accessible

@@ -122,7 +122,7 @@ Before merging any worktree, **verify the work is actually good**:
 
 1. **Review the diff** - Does the code actually address what the beads issue describes?
 2. **Read the changed code** - Is it reasonable quality? No obvious bugs or placeholder code?
-3. **Run tests** - `pytest` from the worktree directory. If tests fail, the work is not ready.
+3. **Run tests** - `pytest --timeout=30` from the worktree directory. If tests fail, the work is not ready.
 4. **Check for broken imports** or obvious errors
 5. **Assess completeness** - Does it fully address the issue or is it half-done?
 6. If tests fail, the code doesn't look right, or it doesn't address the problem:

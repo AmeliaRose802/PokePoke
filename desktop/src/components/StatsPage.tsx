@@ -6,6 +6,7 @@ import type {
 } from "../types";
 import {
   formatDurationShort,
+  formatDurationWithSpread,
   formatElapsed,
   formatPercent,
   formatTokens,
@@ -17,6 +18,7 @@ import {
 interface StatsPageProps {
   stats: SessionStats | null;
   modelLeaderboard: Record<string, ModelPerformanceSummary>;
+  activeAgentModel?: string | null;
   modelHistory: ModelHistoryEntry[];
   historyLoading: boolean;
   historyError: string | null;
@@ -25,31 +27,15 @@ interface StatsPageProps {
 }
 
 type SortField = "model" | "runs" | "success" | "duration";
-
-interface TrendPoint {
-  label: string;
-  value: number;
-}
-
-interface AgentSegment {
-  label: string;
-  value: number;
-  color: string;
-}
-
-interface AgentActivity {
-  total: number;
-  segments: AgentSegment[];
-}
-
-interface NormalizedAgentSegment extends AgentSegment {
-  start: number;
-  width: number;
-}
+interface TrendPoint { label: string; value: number; }
+interface AgentSegment { label: string; value: number; color: string; }
+interface AgentActivity { total: number; segments: AgentSegment[]; }
+interface NormalizedAgentSegment extends AgentSegment { start: number; width: number; }
 
 export function StatsPage({
   stats,
   modelLeaderboard,
+  activeAgentModel,
   modelHistory,
   historyLoading,
   historyError,
@@ -74,7 +60,7 @@ export function StatsPage({
 
   const agentActivity = buildAgentActivity(stats);
   const normalizedSegments = normalizeAgentSegments(agentActivity);
-  const currentModel = inferCurrentModel(stats, modelLeaderboard);
+  const currentModel = inferCurrentModel(stats, modelLeaderboard, activeAgentModel);
 
   const [sortField, setSortField] = useState<SortField>("success");
   const [sortAsc, setSortAsc] = useState(false);
@@ -85,6 +71,8 @@ export function StatsPage({
       runs: summary.total_items_attempted ?? 0,
       successRate: summary.success_rate ?? 0,
       avgDuration: summary.average_duration ?? 0,
+      medianDuration: summary.median_duration ?? summary.average_duration ?? 0,
+      stddevDuration: summary.stddev_duration ?? 0,
     }));
 
     const sorted = [...rows].sort((a, b) => {
@@ -97,7 +85,7 @@ export function StatsPage({
           comparison = a.successRate - b.successRate;
           break;
         case "duration":
-          comparison = a.avgDuration - b.avgDuration;
+          comparison = a.medianDuration - b.medianDuration;
           break;
         default:
           comparison = a.model.localeCompare(b.model);
@@ -277,7 +265,7 @@ export function StatsPage({
                           onSort={handleSort}
                         />
                         <SortableHead
-                          label="Avg duration"
+                          label="Duration"
                           field="duration"
                           activeField={sortField}
                           asc={sortAsc}
@@ -296,7 +284,7 @@ export function StatsPage({
                               label={formatPercent(row.successRate, 1)}
                             />
                           </td>
-                          <td>{formatDurationShort(row.avgDuration)}</td>
+                          <td>{formatDurationWithSpread(row.medianDuration, row.stddevDuration)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -492,6 +480,5 @@ function SuccessBar({ value, label }: { value: number; label: string }) {
 
 const gateStatusText = (v: boolean | null) =>
   v === true ? "Passed gate" : v === false ? "Failed gate" : "Pending";
-
 const statusClass = (v: boolean | null) =>
   v === true ? "status-pass" : v === false ? "status-fail" : "status-neutral";

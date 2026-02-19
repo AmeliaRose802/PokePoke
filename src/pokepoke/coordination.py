@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator, Optional
+
+from collections.abc import Generator
 
 from filelock import FileLock, Timeout
 
@@ -29,7 +30,7 @@ def _lock_path(name: str) -> Path:
 def acquire_lock(
     name: str,
     timeout: float = -1,
-) -> Generator[FileLock, None, None]:
+) -> Generator[FileLock]:
     """Blocking context manager that acquires a named file lock.
 
     Args:
@@ -50,7 +51,7 @@ def acquire_lock(
         lock.release()
 
 
-def try_lock(name: str) -> Optional[FileLock]:
+def try_lock(name: str) -> FileLock | None:
     """Non-blocking lock attempt.
 
     Returns:

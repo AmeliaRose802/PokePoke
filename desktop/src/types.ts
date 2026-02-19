@@ -151,6 +151,8 @@ export interface ModelPerformanceSummary {
   total_duration_seconds: number;
   total_retries: number;
   average_duration: number;
+  median_duration?: number;
+  stddev_duration?: number;
   success_rate: number;
   last_used: string;
 }
@@ -161,6 +163,10 @@ export interface AgentInfo {
   name: string;
   iteration: number;
   status: "running" | "success" | "failed";
+  model?: string | null;
+  parent_agent_id?: string | null;
+   work_item_id?: string | null;
+   work_item_title?: string | null;
   recent_logs: string[];
   log_lines?: string[];
   started_at?: number;

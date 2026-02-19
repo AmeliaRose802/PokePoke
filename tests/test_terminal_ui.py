@@ -39,17 +39,20 @@ class TestFormatWorkItemBanner:
 class TestSetTerminalBanner:
     """Test terminal banner setting."""
     
+    @pytest.mark.real_terminal_banner
     def test_set_banner_no_crash(self):
         """Test that setting banner doesn't crash (may not work on all platforms)."""
         # This test just verifies no exceptions are raised
         set_terminal_banner("Test Banner")
         # No assertion needed - we just want to ensure no exception
     
+    @pytest.mark.real_terminal_banner
     def test_clear_banner_no_crash(self):
         """Test that clearing banner doesn't crash."""
         clear_terminal_banner()
         # No assertion needed - we just want to ensure no exception
     
+    @pytest.mark.real_terminal_banner
     def test_set_and_clear(self):
         """Test setting and clearing banner in sequence."""
         set_terminal_banner("Test 1")
@@ -57,6 +60,7 @@ class TestSetTerminalBanner:
         clear_terminal_banner()
         # No assertion needed - we just want to ensure no exceptions
     
+    @pytest.mark.real_terminal_banner
     def test_set_banner_windows(self):
         """Test setting banner on Windows platform."""
         with patch('sys.platform', 'win32'):
@@ -64,6 +68,7 @@ class TestSetTerminalBanner:
                 set_terminal_banner("Test Banner")
                 mock_title.assert_called_with("Test Banner")
     
+    @pytest.mark.real_terminal_banner
     def test_clear_banner_windows(self):
         """Test clearing banner on Windows platform."""
         with patch('sys.platform', 'win32'):

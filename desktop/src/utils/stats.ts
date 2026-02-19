@@ -20,6 +20,16 @@ export function formatDurationShort(seconds: number | undefined): string {
   return `${(value / 3600).toFixed(1)}h`;
 }
 
+export function formatDurationWithSpread(
+  median: number | undefined,
+  stddev: number | undefined
+): string {
+  const med = formatDurationShort(median);
+  if (!Number.isFinite(stddev ?? 0) || (stddev ?? 0) === 0) return med;
+  const dev = formatDurationShort(stddev);
+  return `${med} ±${dev}`;
+}
+
 export function formatElapsed(seconds: number | undefined): string {
   const value = Math.max(0, seconds ?? 0);
   const h = Math.floor(value / 3600);
@@ -43,8 +53,15 @@ export interface CurrentModelInfo {
 
 export function inferCurrentModel(
   stats: SessionStats | null,
-  leaderboard: Record<string, ModelPerformanceSummary>
+  leaderboard: Record<string, ModelPerformanceSummary>,
+  activeAgentModel?: string | null
 ): CurrentModelInfo {
+  const normalizedActive = activeAgentModel?.trim();
+  if (normalizedActive) {
+    const successRate = leaderboard[normalizedActive]?.success_rate ?? null;
+    return { model: normalizedActive, gatePassed: null, successRate };
+  }
+
   const completions = stats?.model_completions ?? [];
   const latest = completions[completions.length - 1];
   if (latest) {

@@ -1,15 +1,23 @@
 /**
  * Agent Log Panel - displays selected agent's logs in the main content area.
  *
- * Renders full log output with scrollback, similar to LogPanel but for agent details.
+ * Renders full log output with scrollback and collapsible tool/code blocks,
+ * matching the main LogPanel's interactive UI.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentInfo } from "../types";
+import {
+  processLogsToRenderItems,
+  stringsToLogEntries,
+} from "../utils/logProcessor";
+import { RenderLogItems } from "./LogComponents";
+import { useBridge } from "../useBridge";
 
 interface Props {
   agent: AgentInfo;
   onClose: () => void;
+  showClose?: boolean;
 }
 
 const STATUS_INDICATOR: Record<string, { dot: string; label: string }> = {
@@ -22,6 +30,15 @@ const ROBOT_AVATARS = [
   "🤖", "🦾", "⚙️", "🔩", "🛠️", "🧠", "💡", "🔬",
   "🚀", "🎯", "⚡", "🔮", "🌀", "🏗️", "🧩", "🎲",
 ];
+
+function getAgentPrimaryLabel(agent: AgentInfo): string {
+  if (agent.work_item_id) {
+    return agent.work_item_title
+      ? `${agent.work_item_id}: ${agent.work_item_title}`
+      : agent.work_item_id;
+  }
+  return agent.name;
+}
 
 function getAvatar(agentId: string): string {
   let hash = 0;
@@ -36,14 +53,44 @@ function formatTimestamp(ts?: number | null): string {
   return new Date(ts * 1000).toLocaleTimeString("en-US", { hour12: false });
 }
 
-export function AgentLogPanel({ agent, onClose }: Props) {
+export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
+  const { getAgentDetail } = useBridge();
+  const [detailedAgent, setDetailedAgent] = useState<AgentInfo | null>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  
   const statusInfo = STATUS_INDICATOR[agent.status] ?? STATUS_INDICATOR.running;
-  const logLines = agent.log_lines && agent.log_lines.length > 0
-    ? agent.log_lines
-    : agent.recent_logs;
+  
+  // Use detailed agent logs if available, otherwise fall back to basic agent info
+  const agentToUse = detailedAgent || agent;
+  const logLines = agentToUse.log_lines && agentToUse.log_lines.length > 0
+    ? agentToUse.log_lines
+    : agentToUse.recent_logs;
+  
+  const primaryLabel = getAgentPrimaryLabel(agent);
+  const roleLabel = agent.work_item_id ? agent.name : null;
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isUserScrolledUp = useRef(false);
+
+  // Fetch detailed agent information when agent changes
+  useEffect(() => {
+    async function fetchDetailedAgent() {
+      setIsLoadingDetail(true);
+      setDetailError(null);
+      try {
+        const detailed = await getAgentDetail(agent.agent_id);
+        setDetailedAgent(detailed);
+      } catch (error) {
+        setDetailError(error instanceof Error ? error.message : 'Failed to load detailed logs');
+        console.warn('Failed to fetch agent detail:', error);
+      } finally {
+        setIsLoadingDetail(false);
+      }
+    }
+    
+    fetchDetailedAgent();
+  }, [agent.agent_id, getAgentDetail]);
 
   const handleScroll = () => {
     const el = containerRef.current;
@@ -52,6 +99,16 @@ export function AgentLogPanel({ agent, onClose }: Props) {
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
     isUserScrolledUp.current = !atBottom;
   };
+
+  // Capture the fallback timestamp once on mount (avoids Date.now() in render)
+  const [fallbackTimestamp] = useState(() => Math.floor(Date.now() / 1000));
+
+  // Convert string log lines to LogEntry format and process for rendering
+  const renderItems = useMemo(() => {
+    const baseTimestamp = agent.started_at ?? fallbackTimestamp;
+    const logEntries = stringsToLogEntries(logLines, baseTimestamp);
+    return processLogsToRenderItems(logEntries);
+  }, [logLines, agent.started_at, fallbackTimestamp]);
 
   useEffect(() => {
     if (!isUserScrolledUp.current) {
@@ -62,13 +119,18 @@ export function AgentLogPanel({ agent, onClose }: Props) {
   return (
     <div className="agent-log-panel">
       <div className="agent-log-panel-header">
-        <button className="agent-log-panel-close" onClick={onClose} title="Close agent logs">
-          ✕
-        </button>
+        {showClose && (
+          <button className="agent-log-panel-close" onClick={onClose} title="Close agent logs">
+            ✕
+          </button>
+        )}
         <span className="agent-log-panel-avatar">{getAvatar(agent.agent_id)}</span>
         <div className="agent-log-panel-info">
-          <span className="agent-log-panel-name">{agent.name}</span>
+          <span className="agent-log-panel-name">{primaryLabel}</span>
           <span className="agent-log-panel-iter">v{agent.iteration}</span>
+          {roleLabel ? (
+            <span className="agent-log-panel-role">{roleLabel}</span>
+          ) : null}
         </div>
         <div className="agent-log-panel-status">
           <span className={`agent-dot ${statusInfo.dot}`} title={statusInfo.label} />
@@ -82,17 +144,18 @@ export function AgentLogPanel({ agent, onClose }: Props) {
             <strong>Last log:</strong> {formatTimestamp(agent.last_log_at ?? agent.last_updated)}
           </span>
         </div>
-        <span className="log-count">{logLines.length} lines</span>
+        <span className="log-count">
+          {isLoadingDetail ? "Loading detailed logs..." : `${logLines.length} lines`}
+          {detailError && " (Error loading details)"}
+        </span>
       </div>
-      <div className="agent-log-panel-content" ref={containerRef} onScroll={handleScroll}>
-        {logLines.length === 0 ? (
+      <div className="agent-log-panel-content log-entries" ref={containerRef} onScroll={handleScroll}>
+        {isLoadingDetail && logLines.length === 0 ? (
+          <div className="agent-log-panel-empty">Loading detailed logs…</div>
+        ) : logLines.length === 0 ? (
           <div className="agent-log-panel-empty">Waiting for output…</div>
         ) : (
-          logLines.map((line, i) => (
-            <div key={`${agent.agent_id}-log-${i}`} className="agent-log-panel-line">
-              {line}
-            </div>
-          ))
+          <RenderLogItems items={renderItems} />
         )}
         <div ref={bottomRef} />
       </div>

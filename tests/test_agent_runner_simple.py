@@ -29,7 +29,6 @@ class TestAgentRunnerSimple:
     @patch('pokepoke.agent_runner.invoke_copilot')
     @patch('pokepoke.agent_runner.run_cleanup_loop')
     @patch('pokepoke.agent_runner.cleanup_worktree')
-    @patch('pokepoke.agent_runner.merge_worktree')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
     @patch('pokepoke.agent_runner.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.agent_runner.parse_agent_stats')
@@ -48,7 +47,6 @@ class TestAgentRunnerSimple:
         mock_parse_stats,
         mock_invoke_cleanup, 
         mock_check_ready,
-        mock_merge, 
         mock_cleanup_wt, 
         mock_loop, 
         mock_invoke, 
@@ -76,34 +74,24 @@ class TestAgentRunnerSimple:
          res = _run_worktree_agent("Agent", "1", item, "Prompt", Path("/repo"))
          
          assert res is not None
+    @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
     @patch('pokepoke.agent_runner.create_worktree')
     @patch('pokepoke.agent_runner.invoke_copilot')
     @patch('pokepoke.agent_runner.run_cleanup_loop')
     @patch('pokepoke.agent_runner.cleanup_worktree')
-    @patch('pokepoke.agent_runner.merge_worktree')
-    @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
-    @patch('pokepoke.agent_runner.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.agent_runner.parse_agent_stats')
-    @patch('pokepoke.git_operations.is_merge_in_progress')
-    @patch('pokepoke.git_operations.get_unmerged_files')
-    @patch('pokepoke.git_operations.abort_merge')
     @patch('os.getcwd')
     @patch('os.chdir')
     def test_run_agent_merge_conflict_cleanup_fails(
         self, 
         mock_chdir, 
         mock_getcwd, 
-        mock_abort,
-        mock_get_unmerged,
-        mock_is_merging,
         mock_parse_stats,
-        mock_invoke_cleanup, 
-        mock_check_ready,
-        mock_merge, 
         mock_cleanup_wt, 
         mock_loop, 
         mock_invoke, 
-        mock_create
+        mock_create,
+        mock_handle_merge
     ):
          """Test merge conflict handling when cleanup fails."""
          mock_create.return_value = Path("/tmp/wt")
@@ -115,17 +103,12 @@ class TestAgentRunnerSimple:
          )
          mock_parse_stats.return_value = AgentStats(wall_duration=1.0)
          mock_loop.return_value = (True, 0)
-         mock_check_ready.return_value = (True, "")
          
-         # Merge FAILS and cleanup also fails
-         mock_merge.return_value = (False, ['file.py'])
-         mock_invoke_cleanup.return_value = (False, None)
-         mock_is_merging.return_value = True
-         mock_abort.return_value = (True, "")
+         # Merge fails via handle_worktree_merge
+         mock_handle_merge.return_value = (False, True)
          
          item = BeadsWorkItem(id="1", title="T", description="D", status="open", priority=1, issue_type="task")
          
          res = _run_worktree_agent("Agent", "1", item, "Prompt", Path("/repo"))
          
          assert res is None  # Should fail
-         mock_abort.assert_called_once()  # Should abort the merge

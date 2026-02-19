@@ -2,22 +2,25 @@
 
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from pokepoke.git_operations import (
     sanitize_branch_name,
     get_default_branch,
     is_worktree_clean,
-    branch_exists,
     execute_merge_sequence,
     validate_post_merge,
     categorize_git_changes,
 )
 from pokepoke.beads_management import run_bd_sync_with_retry
-from pokepoke.worktree_cleanup import force_remove_directory
+from pokepoke.worktree_cleanup import (
+    add_uncleaned_worktree,
+    cleanup_after_merge,
+    force_remove_directory,
+    remove_from_manifest,
+)
 
 
-def create_worktree(item_id: str, base_branch: Optional[str] = None) -> Path:
+def create_worktree(item_id: str, base_branch: str | None = None) -> Path:
     """Create a git worktree for a work item. Returns existing path if already exists."""
     # Sanitize the item_id for use in branch names
     sanitized_id = sanitize_branch_name(item_id)
@@ -79,7 +82,7 @@ def create_worktree(item_id: str, base_branch: Optional[str] = None) -> Path:
     return worktree_path
 
 
-def is_worktree_merged(item_id: str, target_branch: Optional[str] = None) -> bool:
+def is_worktree_merged(item_id: str, target_branch: str | None = None) -> bool:
     """Check if a worktree's branch has been merged into the target branch."""
     sanitized_id = sanitize_branch_name(item_id)
     branch_name = f"task/{sanitized_id}"
@@ -96,7 +99,7 @@ def is_worktree_merged(item_id: str, target_branch: Optional[str] = None) -> boo
         return False
 
 
-def merge_worktree(item_id: str, target_branch: Optional[str] = None, cleanup: bool = True) -> tuple[bool, list[str]]:
+def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool = True) -> tuple[bool, list[str]]:
     """Merge a worktree's branch into the target branch and optionally clean up.
     
     Returns:
@@ -159,7 +162,7 @@ def merge_worktree(item_id: str, target_branch: Optional[str] = None, cleanup: b
     print(f"✅ Merge confirmed: {branch_name} is merged into {target_branch}")
     
     if cleanup:
-        _cleanup_after_merge(worktree_path, branch_name)
+        cleanup_after_merge(worktree_path, branch_name)
     
     return True, []  # Merge completed
 
@@ -212,17 +215,30 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
                 encoding='utf-8',
                 timeout=30
             )
-        except subprocess.CalledProcessError as e:
+            remove_from_manifest(item_id)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            stderr = getattr(e, 'stderr', None) or str(e)
+            stderr_lower = stderr.lower()
+
             # Check if error is because worktree doesn't exist
-            if e.stderr and ("not a working tree" in e.stderr.lower() or "no such file" in e.stderr.lower()):
+            if "not a working tree" in stderr_lower or "no such file" in stderr_lower:
                 # Already gone, that's fine
                 pass
-            elif e.stderr and ("permission denied" in e.stderr.lower() or "being used by another process" in e.stderr.lower()):
-                print(f"⚠️  Worktree locked, retrying with force removal...")
-                if not force_remove_directory(actual_worktree_path):
+            elif any(s in stderr_lower for s in [
+                "permission denied",
+                "being used by another process",
+                "invalid argument",
+            ]):
+                print("⚠️  Worktree removal failed (likely locked). Retrying with force removal...")
+                if force_remove_directory(actual_worktree_path):
+                    remove_from_manifest(item_id)
+                else:
                     print(f"⚠️  Could not remove worktree directory after retries: {actual_worktree_path}")
+                    add_uncleaned_worktree(item_id, str(actual_worktree_path), f"Worktree removal failed: {stderr}")
             else:
-                print(f"⚠️  Worktree removal warning: {e.stderr if e.stderr else str(e)}")
+                print(f"⚠️  Worktree removal warning: {stderr}")
+                if actual_worktree_path.exists():
+                    add_uncleaned_worktree(item_id, str(actual_worktree_path), f"Worktree removal warning: {stderr}")
                 # Continue to try branch deletion
     
     # Delete branch (try both sanitized and unsanitized branch names)
@@ -354,35 +370,3 @@ def _sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
         print(f"❌ Failed to check/clean main repo: {e}")
         return False
 
-def _cleanup_after_merge(worktree_path: Path, branch_name: str) -> None:
-    """Cleanup worktree and branch after successful merge."""
-    if worktree_path.exists():
-        try:
-            subprocess.run(
-                ["git", "worktree", "remove", str(worktree_path)],
-                check=True, capture_output=True, text=True, encoding='utf-8',
-                timeout=30
-            )
-            print(f"✅ Removed worktree at {worktree_path}")
-        except subprocess.CalledProcessError as e:
-            stderr = e.stderr or ""
-            if "permission denied" in stderr.lower() or "being used by another process" in stderr.lower():
-                print(f"⚠️  Worktree locked, retrying with force removal...")
-                if force_remove_directory(worktree_path):
-                    print(f"✅ Force-removed worktree at {worktree_path}")
-                else:
-                    print(f"⚠️  Could not remove worktree after retries: {worktree_path}")
-                    print(f"   Merge successful - worktree cleanup can be done later")
-            else:
-                print(f"⚠️  Could not remove worktree: {stderr or e}")
-                print(f"   Merge successful - worktree cleanup can be done later")
-    
-    try:
-        subprocess.run(
-            ["git", "branch", "-d", branch_name],
-            check=True, capture_output=True, text=True, encoding='utf-8',
-            timeout=30
-        )
-        print(f"✅ Deleted branch {branch_name}")
-    except subprocess.CalledProcessError as e:
-        print(f"⚠️  Could not delete branch: {e.stderr or e}")

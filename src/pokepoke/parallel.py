@@ -14,7 +14,7 @@ from pokepoke.work_item_selection import select_multiple_items
 from pokepoke.logging_utils import RunLogger
 from pokepoke import terminal_ui
 from pokepoke.repo_check import check_and_commit_main_repo
-from pokepoke.shutdown import is_shutting_down, set_executor
+from pokepoke.shutdown import is_shutting_down, set_executor, should_stop_after_current, cancel_stop_after_current
 
 # Type alias to satisfy mypy strict generics
 _Future = concurrent.futures.Future[
@@ -49,7 +49,14 @@ def _parallel_process_item(
         set_agent_name(worker_agent_name)
 
     # Register agent in the UI panel
-    terminal_ui.ui.push_agent_status(agent_id, display_name, iteration=1, status="running")
+    terminal_ui.ui.push_agent_status(
+        agent_id,
+        display_name,
+        iteration=1,
+        status="running",
+        work_item_id=item.id,
+        work_item_title=item.title,
+    )
     terminal_ui.ui.log_orchestrator(f"\U0001f680 Agent {display_name} started item {item.id}: {item.title}")
 
     try:
@@ -58,8 +65,12 @@ def _parallel_process_item(
         # Update agent status based on result
         success = result[0]
         terminal_ui.ui.push_agent_status(
-            agent_id, display_name, iteration=1,
+            agent_id,
+            display_name,
+            iteration=1,
             status="success" if success else "failed",
+            work_item_id=item.id,
+            work_item_title=item.title,
         )
         status_emoji = "\u2705" if success else "\u274c"
         terminal_ui.ui.log_orchestrator(
@@ -67,7 +78,14 @@ def _parallel_process_item(
         )
         return result
     except Exception:
-        terminal_ui.ui.push_agent_status(agent_id, display_name, iteration=1, status="failed")
+        terminal_ui.ui.push_agent_status(
+            agent_id,
+            display_name,
+            iteration=1,
+            status="failed",
+            work_item_id=item.id,
+            work_item_title=item.title,
+        )
         terminal_ui.ui.log_orchestrator(f"\u274c Agent {display_name} raised exception on item {item.id}")
         raise
     finally:
@@ -175,7 +193,7 @@ def run_parallel_loop(
                 current_active = set(active_ids)
             slots = effective_parallel - len(current_active)
 
-            if slots > 0:
+            if slots > 0 and not should_stop_after_current():
                 selected_items = select_multiple_items(
                     ready_items, count=slots,
                     skip_ids=failed_claim_ids, claimed_ids=current_active,
@@ -191,11 +209,17 @@ def run_parallel_loop(
                     with active_ids_lock:
                         active_ids.add(item.id)
                     semaphore.acquire()
-                    fut = executor.submit(
-                        _parallel_process_item,
-                        item, run_logger, semaphore, active_ids, active_ids_lock,
-                        worker_name,
-                    )
+                    try:
+                        fut = executor.submit(
+                            _parallel_process_item,
+                            item, run_logger, semaphore, active_ids, active_ids_lock,
+                            worker_name,
+                        )
+                    except Exception:
+                        semaphore.release()
+                        with active_ids_lock:
+                            active_ids.discard(item.id)
+                        raise
                     futures[fut] = item
 
             total_requests, any_success = _collect_done_futures(
@@ -205,6 +229,15 @@ def run_parallel_loop(
             items_completed = session_stats.items_completed
 
             terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
+
+            # Check if user requested stop after current item
+            if should_stop_after_current() and not futures:
+                cancel_stop_after_current()
+                terminal_ui.ui.stop_and_capture()
+                print("\n⏸️  Stopping after current item (user requested).")
+                run_logger.log_orchestrator("Stop after current item requested - exiting")
+                finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
+                return 0
 
             if not continuous and (any_success or not futures):
                 # Drain remaining futures

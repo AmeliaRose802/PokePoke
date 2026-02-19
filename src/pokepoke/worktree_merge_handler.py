@@ -1,10 +1,9 @@
 """Worktree merge handling for maintenance agents."""
 
 from pathlib import Path
-from typing import Optional
 
 from pokepoke.types import BeadsWorkItem, AgentStats
-from pokepoke.worktrees import merge_worktree, cleanup_worktree
+from pokepoke.worktrees import merge_worktree
 from pokepoke.cleanup_agents import invoke_cleanup_agent, invoke_merge_conflict_cleanup_agent
 
 
@@ -14,7 +13,7 @@ def handle_worktree_merge(
     agent_name: str,
     worktree_path: Path,
     repo_root: Path,
-    agent_stats: Optional[AgentStats]
+    agent_stats: AgentStats | None
 ) -> tuple[bool, bool]:
     """Handle worktree merge with conflict resolution.
     
@@ -61,11 +60,11 @@ def handle_worktree_merge(
             if not is_ready:
                 print(f"   Still failing after cleanup: {error_msg}")
                 return False, False
+            print("   ✅ Repo is ready after cleanup, continuing with merge.")
+            remove_from_manifest(agent_id)
         else:
             print("   Cleanup failed.")
             return False, False
-
-        return False, False
     
     # Attempt merge
     print(f"\n🔀 Merging worktree for {agent_id}...")

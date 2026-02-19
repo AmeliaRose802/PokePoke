@@ -1,9 +1,19 @@
 """Tests for DesktopAPI state buffering and retrieval."""
 
+import textwrap
 import time
+
+import pytest
 
 from pokepoke.desktop_api import DesktopAPI
 from pokepoke.types import SessionStats, AgentStats, BeadsWorkItem
+
+
+@pytest.fixture(autouse=True)
+def _isolate_desktop_api(monkeypatch):
+    """Prevent DesktopAPI from loading real historical agents or calling git."""
+    monkeypatch.setattr("pokepoke.desktop_api_ext._discover_log_roots", lambda: [])
+    monkeypatch.setattr("pokepoke.desktop_api.get_repository_name", lambda: "test-repo")
 
 
 def test_initial_state_defaults() -> None:
@@ -14,6 +24,57 @@ def test_initial_state_defaults() -> None:
     assert state["stats"] is None
     assert state["progress"] == {"active": False, "status": ""}
     assert state["log_count"] == 0
+
+
+def test_historical_agent_logs_loaded(tmp_path, monkeypatch) -> None:
+    """DesktopAPI should hydrate agents from persisted log files on startup."""
+    logs_root = tmp_path / "logs"
+    run_dir = logs_root / "20260218_120000_abcdef12"
+    items_dir = run_dir / "items"
+    items_dir.mkdir(parents=True, exist_ok=True)
+
+    log_content = textwrap.dedent(
+        """\
+        ================================================================================
+        Work Item: PokePoke-9ikr
+        Title: Persist and replay agent logs
+        ================================================================================
+        Agent: pokepoke_pro
+        ================================================================================
+        Started: 2026-02-18 12:34:56
+        ================================================================================
+
+        First historical line
+        Second historical line
+
+        ================================================================================
+        Summary
+        ================================================================================
+        Completed: 2026-02-18 13:00:00
+        Status: SUCCESS
+        Agent requests: 2
+        ================================================================================
+        """
+    )
+    log_path = items_dir / "PokePoke-9ikr.log"
+    log_path.write_text(log_content, encoding="utf-8")
+
+    # Override the autouse fixture's patch to point to our test logs
+    from pathlib import Path
+    monkeypatch.setattr(
+        "pokepoke.desktop_api_ext._discover_log_roots",
+        lambda: [logs_root],
+    )
+
+    api = DesktopAPI()
+    agents = api.get_state()["agents"]
+    assert agents, "Expected loaders to surface at least one historical agent"
+    matching = [agent for agent in agents if agent.get("work_item_id") == "PokePoke-9ikr"]
+    assert matching, "Historical agent entry missing"
+    agent = matching[0]
+    assert agent["status"] == "success"
+    assert agent["name"] == "pokepoke_pro"
+    assert len(agent["recent_logs"]) > 0
 
 
 def test_push_log_and_incremental_reads() -> None:
@@ -498,17 +559,20 @@ def test_reset_prompt_delegates() -> None:
 # ─── Agent tracking tests ────────────────────────────────────────────────
 
 
-def test_initial_state_has_empty_agents() -> None:
+def test_initial_state_has_empty_agents(monkeypatch) -> None:
     """get_state should include an empty agents list initially."""
+    monkeypatch.delenv("POKEPOKE_LOGS_DIR", raising=False)
+    monkeypatch.setattr("pokepoke.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     state = api.get_state()
     assert state["agents"] == []
 
 
-def test_push_agent_status_registers_agent() -> None:
+def test_push_agent_status_registers_agent(monkeypatch) -> None:
     """push_agent_status should add an agent to the tracked set."""
+    monkeypatch.setattr("pokepoke.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
-    api.push_agent_status("agent-1", "Gate Agent", iteration=2, status="running")
+    api.push_agent_status("agent-1", "Gate Agent", iteration=2, status="running", model="gpt-5.1")
 
     agents = api.get_agents()
     assert len(agents) == 1
@@ -516,23 +580,58 @@ def test_push_agent_status_registers_agent() -> None:
     assert agents[0]["name"] == "Gate Agent"
     assert agents[0]["iteration"] == 2
     assert agents[0]["status"] == "running"
+    assert agents[0]["model"] == "gpt-5.1"
+    assert agents[0]["work_item_id"] is None
+    assert agents[0]["work_item_title"] is None
     assert agents[0]["recent_logs"] == []
 
 
-def test_push_agent_status_updates_existing() -> None:
+def test_push_agent_status_updates_existing(monkeypatch) -> None:
     """push_agent_status should update an existing agent's fields."""
+    monkeypatch.setattr("pokepoke.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
-    api.push_agent_status("agent-1", "Gate Agent", iteration=1)
+    api.push_agent_status(
+        "agent-1",
+        "Gate Agent",
+        iteration=1,
+        model="gpt-5",
+        work_item_id="item-123",
+        work_item_title="Title",
+    )
     api.push_agent_log("agent-1", "line 1")
 
-    # Update iteration and status — logs should be preserved
+    # Update iteration and status — logs + model should be preserved
     api.push_agent_status("agent-1", "Gate Agent", iteration=2, status="success")
 
     agents = api.get_agents()
     assert len(agents) == 1
     assert agents[0]["iteration"] == 2
     assert agents[0]["status"] == "success"
+    assert agents[0]["model"] == "gpt-5"
+    assert agents[0]["work_item_id"] == "item-123"
+    assert agents[0]["work_item_title"] == "Title"
     assert agents[0]["recent_logs"] == ["line 1"]
+
+
+def test_push_agent_status_preserves_parent() -> None:
+    """parent_agent_id should be stored and preserved across updates."""
+    api = DesktopAPI()
+    api.push_agent_status(
+        "agent-1",
+        "Gate Agent",
+        iteration=1,
+        status="running",
+        parent_agent_id="work-1",
+    )
+
+    agents = api.get_agents()
+    assert agents[0]["parent_agent_id"] == "work-1"
+
+    api.push_agent_status("agent-1", "Gate Agent", iteration=2, status="success")
+    agents = api.get_agents()
+    assert agents[0]["parent_agent_id"] == "work-1"
+    assert agents[0]["iteration"] == 2
+    assert agents[0]["status"] == "success"
 
 
 def test_push_agent_log_appends_lines() -> None:
@@ -560,15 +659,17 @@ def test_push_agent_log_trims_excess() -> None:
     assert agents[0]["log_lines"] == ["line-1", "line-2", "line-3", "line-4"]
 
 
-def test_push_agent_log_ignores_unknown_agent() -> None:
+def test_push_agent_log_ignores_unknown_agent(monkeypatch) -> None:
     """push_agent_log should silently ignore unknown agent IDs."""
+    monkeypatch.setattr("pokepoke.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     api.push_agent_log("nonexistent", "should not crash")
     assert api.get_agents() == []
 
 
-def test_remove_agent() -> None:
+def test_remove_agent(monkeypatch) -> None:
     """remove_agent should remove the agent from tracked set."""
+    monkeypatch.setattr("pokepoke.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     api.push_agent_status("agent-1", "Agent A")
     api.push_agent_status("agent-2", "Agent B")
@@ -579,15 +680,17 @@ def test_remove_agent() -> None:
     assert agents[0]["agent_id"] == "agent-2"
 
 
-def test_remove_agent_ignores_unknown() -> None:
+def test_remove_agent_ignores_unknown(monkeypatch) -> None:
     """remove_agent should silently ignore unknown agent IDs."""
+    monkeypatch.setattr("pokepoke.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     api.remove_agent("nonexistent")
     assert api.get_agents() == []
 
 
-def test_get_state_includes_agents() -> None:
+def test_get_state_includes_agents(monkeypatch) -> None:
     """get_state should include agents in the returned state."""
+    monkeypatch.setattr("pokepoke.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     api.push_agent_status("agent-1", "Worker", iteration=3, status="running")
     api.push_agent_log("agent-1", "doing work")
@@ -597,6 +700,7 @@ def test_get_state_includes_agents() -> None:
     assert state["agents"][0]["name"] == "Worker"
     assert state["agents"][0]["recent_logs"] == ["doing work"]
     assert state["agents"][0]["log_lines"] == ["doing work"]
+    assert state["agents"][0]["work_item_id"] is None
 
 
 def test_get_agent_detail_includes_full_logs_and_timestamps() -> None:
@@ -614,3 +718,42 @@ def test_get_agent_detail_includes_full_logs_and_timestamps() -> None:
     assert detail["log_lines"] == ["two", "three", "four"]
     assert detail["last_log_at"] is not None
     assert detail["last_updated"] is not None
+
+
+# ─── Stop-after-current API tests ────────────────────────────────────────
+
+
+def test_get_state_includes_stop_after_current() -> None:
+    """get_state should include stop_after_current flag."""
+    from pokepoke.shutdown import reset as shutdown_reset
+    shutdown_reset()
+    api = DesktopAPI()
+    state = api.get_state()
+    assert "stop_after_current" in state
+    assert state["stop_after_current"] is False
+
+
+def test_request_stop_after_current_sets_flag() -> None:
+    """request_stop_after_current should set the flag and log a message."""
+    from pokepoke.shutdown import reset as shutdown_reset
+    shutdown_reset()
+    api = DesktopAPI()
+    result = api.request_stop_after_current()
+    assert result["stop_after_current"] is True
+    state = api.get_state()
+    assert state["stop_after_current"] is True
+    assert any("Stop after current" in log["message"] for log in api.get_all_logs())
+    shutdown_reset()
+
+
+def test_cancel_stop_after_current_clears_flag() -> None:
+    """cancel_stop_after_current should clear the flag and log a message."""
+    from pokepoke.shutdown import reset as shutdown_reset
+    shutdown_reset()
+    api = DesktopAPI()
+    api.request_stop_after_current()
+    result = api.cancel_stop_after_current()
+    assert result["stop_after_current"] is False
+    state = api.get_state()
+    assert state["stop_after_current"] is False
+    shutdown_reset()

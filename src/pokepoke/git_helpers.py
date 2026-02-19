@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import subprocess
-from typing import List
 
 __all__ = ["verify_branch_pushed", "restore_beads_stash"]
 
@@ -24,7 +23,7 @@ def verify_branch_pushed(branch_name: str) -> bool:
         return False
 
 
-def _print_command_output(lines: List[str]) -> None:
+def _print_command_output(lines: list[str]) -> None:
     for line in lines:
         text = line.strip()
         if text:

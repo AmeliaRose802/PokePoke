@@ -58,17 +58,20 @@ def test_run_logger_item_logging():
         logger = RunLogger(base_dir=tmpdir)
         
         # Start item log
-        item_logger = logger.start_item_log("test-item-123", "Test Item Title")
+        item_logger = logger.start_item_log(
+            "test-item-123",
+            "Test Item Title",
+            agent_name="pokepoke_unit_agent",
+        )
         
         # Log some content
         item_logger.log("Test agent output\n")
-        item_logger.log_with_timestamp("Test timestamped message")
         
         # End item log
         logger.end_item_log(success=True, request_count=5)
         
         # Check that item log file exists
-        item_log_path = logger.item_logs_dir / "test-item-123.log"
+        item_log_path = logger.item_logs_dir / "test-item-123_pokepoke_unit_agent.log"
         assert item_log_path.exists()
         
         # Read the log file
@@ -78,8 +81,8 @@ def test_run_logger_item_logging():
         # Check that content is present
         assert "test-item-123" in content
         assert "Test Item Title" in content
+        assert "Agent: pokepoke_unit_agent" in content
         assert "Test agent output" in content
-        assert "Test timestamped message" in content
         assert "SUCCESS" in content
         assert "Agent requests: 5" in content
 
@@ -186,33 +189,59 @@ def test_item_logger_sanitizes_filenames():
         assert expected_path.exists()
 
 
+def test_item_logger_sanitizes_agent_name_in_filename():
+    """Agent names should be appended to filenames after sanitization."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logs_dir = Path(tmpdir)
+        agent_name = "Pokepoke Mighty/Onix D27A"
+        item_logger = ItemLogger(
+            logs_dir,
+            "task-42",
+            "Agent Test",
+            agent_name=agent_name,
+        )
+
+        expected_path = logs_dir / "task-42_pokepoke_mighty_onix_d27a.log"
+        assert item_logger.log_path == expected_path
+        assert expected_path.exists()
+
+        with open(expected_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        assert f"Agent: {agent_name}" in content
+
+
 def test_multiple_item_logs():
     """Test that multiple items can be logged in sequence."""
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = RunLogger(base_dir=tmpdir)
         
         # Process first item
-        item_logger1 = logger.start_item_log("item-1", "First Item")
+        item_logger1 = logger.start_item_log("item-1", "First Item", agent_name="Agent One")
         item_logger1.log("First item output\n")
         logger.end_item_log(success=True, request_count=3)
         
         # Process second item
-        item_logger2 = logger.start_item_log("item-2", "Second Item")
+        item_logger2 = logger.start_item_log(
+            "item-2",
+            "Second Item",
+            agent_name="Agent Two",
+        )
         item_logger2.log("Second item output\n")
         logger.end_item_log(success=False, request_count=5)
         
         # Check that both item logs exist
-        assert (logger.item_logs_dir / "item-1.log").exists()
-        assert (logger.item_logs_dir / "item-2.log").exists()
+        assert (logger.item_logs_dir / "item-1_agent_one.log").exists()
+        assert (logger.item_logs_dir / "item-2_agent_two.log").exists()
         
         # Read first item log
-        with open(logger.item_logs_dir / "item-1.log", 'r', encoding='utf-8') as f:
+        with open(logger.item_logs_dir / "item-1_agent_one.log", 'r', encoding='utf-8') as f:
             content1 = f.read()
         assert "First item output" in content1
         assert "SUCCESS" in content1
         
         # Read second item log
-        with open(logger.item_logs_dir / "item-2.log", 'r', encoding='utf-8') as f:
+        with open(logger.item_logs_dir / "item-2_agent_two.log", 'r', encoding='utf-8') as f:
             content2 = f.read()
         assert "Second item output" in content2
         assert "FAILURE" in content2

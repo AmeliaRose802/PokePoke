@@ -12,13 +12,20 @@ Multi-agent shutdown coordination:
 - Future: Will coordinate with ThreadPoolExecutor
 """
 
+from __future__ import annotations
+
+import concurrent.futures
 import os
 import threading
 import time
-from typing import Optional
 
 # Global shutdown event - checked by all loops
 _shutdown_event = threading.Event()
+
+# "Stop after current item" event — causes the continuous loop to exit
+# cleanly after the currently running work item finishes, without
+# killing in-progress work.
+_stop_after_current_event = threading.Event()
 
 # Base grace period before force-kill (seconds)
 _WATCHDOG_BASE_SECONDS = 5.0
@@ -31,7 +38,7 @@ _active_agent_count = 0
 _agent_count_lock = threading.Lock()
 
 # Future: ThreadPoolExecutor for parallel agents (set by orchestrator)
-_executor: Optional['concurrent.futures.ThreadPoolExecutor'] = None  # type: ignore[name-defined]
+_executor: concurrent.futures.ThreadPoolExecutor | None = None
 
 
 def request_shutdown() -> None:
@@ -109,6 +116,7 @@ def wait_for_shutdown(timeout: float | None = None) -> bool:
 def reset() -> None:
     """Reset the shutdown state. Only for tests."""
     _shutdown_event.clear()
+    _stop_after_current_event.clear()
 
 
 def register_agent() -> None:
@@ -138,7 +146,7 @@ def get_active_agent_count() -> int:
         return _active_agent_count
 
 
-def set_executor(executor: Optional['concurrent.futures.ThreadPoolExecutor']) -> None:  # type: ignore[name-defined]
+def set_executor(executor: concurrent.futures.ThreadPoolExecutor | None) -> None:
     """Set the global ThreadPoolExecutor for shutdown coordination.
     
     Call this from orchestrator when parallel agent mode is enabled.
@@ -146,6 +154,29 @@ def set_executor(executor: Optional['concurrent.futures.ThreadPoolExecutor']) ->
     """
     global _executor
     _executor = executor
+
+
+def request_stop_after_current() -> None:
+    """Signal the orchestrator to stop after the current work item completes.
+
+    Unlike :func:`request_shutdown`, this does NOT interrupt running agents.
+    The current item is allowed to finish fully (including merge) before
+    the continuous loop exits.
+    """
+    _stop_after_current_event.set()
+
+
+def cancel_stop_after_current() -> None:
+    """Cancel a pending stop-after-current request.
+
+    The orchestrator will continue picking up new items as normal.
+    """
+    _stop_after_current_event.clear()
+
+
+def should_stop_after_current() -> bool:
+    """Check whether a stop-after-current has been requested."""
+    return _stop_after_current_event.is_set()
 
 
 def _watchdog_thread(timeout: float) -> None:

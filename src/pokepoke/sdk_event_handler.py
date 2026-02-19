@@ -1,6 +1,8 @@
 """Event handler utilities for SDK client sessions."""
 import asyncio
-from typing import Any, Callable, List, Optional, Tuple, TypedDict
+from typing import Any, TypedDict
+
+from collections.abc import Callable
 
 from . import terminal_ui
 from .hung_command_detector import HungCommandDetector
@@ -15,7 +17,7 @@ DEFAULT_MAX_READ_RETRIES = 3  # After 3 reads with no new output, consider hung
 
 class SessionStats(TypedDict):
     pending_tool_calls: int
-    idle_task: Optional[asyncio.Task[None]]
+    idle_task: asyncio.Task[None] | None
     total_input_tokens: int
     total_output_tokens: int
     total_cache_read_tokens: int
@@ -28,12 +30,12 @@ class SessionStats(TypedDict):
 
 def create_event_handler(
     done: asyncio.Event,
-    output_lines: List[str],
-    errors: List[str],
-    item_logger: Optional[Any] = None,
+    output_lines: list[str],
+    errors: list[str],
+    item_logger: Any | None = None,
     idle_timeout: float = 10.0,
-    hung_command_detector: Optional[HungCommandDetector] = None,
-) -> Tuple[Callable[[Any], None], SessionStats]:
+    hung_command_detector: HungCommandDetector | None = None,
+) -> tuple[Callable[[Any], None], SessionStats]:
     """Create an event handler for SDK session events.
     
     Args:
@@ -72,6 +74,18 @@ def create_event_handler(
     
     # Track pending tool calls by name for hung detection
     pending_tools: dict[str, dict[str, Any]] = {}
+
+    def _iter_streaming_chunks(event_obj: Any) -> list[tuple[str, str]]:
+        """Extract text chunks from tool streaming/progress events."""
+        data = getattr(event_obj, "data", None)
+        if data is None:
+            return []
+        chunks: list[tuple[str, str]] = []
+        for attr in ("stdout", "stderr", "output", "chunk", "delta", "delta_content", "content", "message", "text"):
+            val = getattr(data, attr, None)
+            if isinstance(val, str) and val:
+                chunks.append((attr, val))
+        return chunks
     
     def handle_event(event: Any) -> None:
         """Handle SDK session events."""
@@ -174,6 +188,17 @@ def create_event_handler(
                         shell_id = tool_args.get('shellId', '')
                         if shell_id:
                             hung_command_detector.record_stop_powershell(shell_id)
+
+        elif event_type.startswith("tool.") and event_type not in ("tool.execution_start", "tool.execution_complete"):
+            stream_chunks = _iter_streaming_chunks(event)
+            if not stream_chunks:
+                return
+            for source, text in stream_chunks:
+                prefix = "[stderr] " if source == "stderr" else ""
+                print(f"{prefix}{text}", end="" if text.endswith("\n") else "\n")
+                output_lines.append(text)
+                if item_logger:
+                    item_logger.log_copilot_output(text)
 
         elif event_type == "assistant.usage":
             terminal_ui.ui.set_style(None)

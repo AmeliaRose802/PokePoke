@@ -17,7 +17,6 @@ the process-wide ``os.environ['AGENT_NAME']`` when running sequentially
 
 import os
 import threading
-from typing import Optional
 
 
 _thread_local = threading.local()
@@ -38,7 +37,7 @@ def get_agent_name(default: str = "agent") -> str:
         The agent name string.
     """
     # 1. Thread-local
-    name: Optional[str] = getattr(_thread_local, "agent_name", None)
+    name: str | None = getattr(_thread_local, "agent_name", None)
     if name is not None:
         return name
 
