@@ -9,6 +9,7 @@
 
 import type { ReactElement } from "react";
 import type { AgentInfo } from "../types";
+import { getAgentPrimaryLabel, isGateAgent } from "../utils/agentHelpers";
 
 interface Props {
   agents: AgentInfo[];
@@ -30,19 +31,16 @@ function getAvatar(agentId: string): string {
   return ROBOT_AVATARS[Math.abs(hash) % ROBOT_AVATARS.length];
 }
 
-function getAgentPrimaryLabel(agent: AgentInfo): string {
-  if (agent.work_item_id) {
-    return agent.work_item_title
-      ? `${agent.work_item_id}: ${agent.work_item_title}`
-      : agent.work_item_id;
-  }
-  return agent.name;
-}
-
 const STATUS_INDICATOR: Record<string, { dot: string; label: string }> = {
   running: { dot: "agent-dot-running", label: "Running" },
   success: { dot: "agent-dot-success", label: "Done" },
   failed: { dot: "agent-dot-failed", label: "Failed" },
+};
+
+const GATE_STATUS_COPY: Record<AgentInfo["status"], string> = {
+  running: "Gate running",
+  success: "Gate passed",
+  failed: "Gate failed",
 };
 
 export function AgentsPanel({
@@ -65,17 +63,40 @@ export function AgentsPanel({
     }
   }
 
-  const renderAgentCard = (agent: AgentInfo, depth: number) => {
-    const statusInfo = STATUS_INDICATOR[agent.status] ?? STATUS_INDICATOR.running;
+  const renderAgentCard = (
+    agent: AgentInfo,
+    depth: number,
+    parent?: AgentInfo
+  ) => {
+    const statusInfo =
+      STATUS_INDICATOR[agent.status] ?? STATUS_INDICATOR.running;
     const isSelected = selectedAgentId === agent.agent_id;
     const depthClass = depth > 0 ? " agent-card-child" : "";
-    const label = getAgentPrimaryLabel(agent);
+    const isGate = isGateAgent(agent);
+    const gateClass = isGate ? " agent-card-gate" : "";
+    const parentLabel = parent ? getAgentPrimaryLabel(parent) : null;
+    const baseLabel = getAgentPrimaryLabel(agent);
+    const label = isGate && parentLabel ? `Gate · ${parentLabel}` : baseLabel;
     const roleLabel = agent.work_item_id ? agent.name : null;
+    const gateChildForParent =
+      !isGate
+        ? (childrenByParent.get(agent.agent_id) ?? []).find(isGateAgent) ?? null
+        : null;
+    const gateSummary = gateChildForParent
+      ? GATE_STATUS_COPY[gateChildForParent.status] ??
+        GATE_STATUS_COPY.running
+      : null;
+    const gateTargetSummary =
+      isGate && parent
+        ? `${parent.name}${parent.iteration ? ` · v${parent.iteration}` : ""}`
+        : agent.parent_agent_id ?? null;
 
     return (
       <div
         key={agent.agent_id}
-        className={`agent-card agent-card-${agent.status}${isSelected ? " agent-card-selected" : ""}${depthClass}`}
+        className={`agent-card agent-card-${agent.status}${
+          isSelected ? " agent-card-selected" : ""
+        }${depthClass}${gateClass}`}
         role={onSelectAgent ? "button" : undefined}
         tabIndex={onSelectAgent ? 0 : undefined}
         onClick={() => onSelectAgent?.(isSelected ? null : agent.agent_id)}
@@ -94,9 +115,35 @@ export function AgentsPanel({
             {roleLabel ? (
               <span className="agent-card-subtitle">{roleLabel}</span>
             ) : null}
+            {isGate && gateTargetSummary ? (
+              <span className="agent-card-link-label gate-card-target">
+                {gateTargetSummary}
+              </span>
+            ) : null}
           </div>
-          <span className={`agent-dot ${statusInfo.dot}`} title={statusInfo.label} />
+          <div className="agent-card-status">
+            {gateSummary && gateChildForParent ? (
+              <span
+                className={`agent-gate-chip gate-${gateChildForParent.status}`}
+                title={gateSummary}
+              >
+                {gateSummary}
+              </span>
+            ) : null}
+            <span
+              className={`agent-dot ${statusInfo.dot}`}
+              title={statusInfo.label}
+            />
+          </div>
         </div>
+        {isGate && parentLabel ? (
+          <div className="agent-card-gate-link">
+            <span className="agent-card-link-label">Gate for</span>
+            <span className="agent-card-link-target" title={parentLabel}>
+              {parentLabel}
+            </span>
+          </div>
+        ) : null}
         <div className="agent-card-logs">
           {agent.recent_logs.length === 0 ? (
             <span className="agent-card-no-logs">Waiting for output…</span>
@@ -110,16 +157,22 @@ export function AgentsPanel({
     );
   };
 
-  const renderAgentTree = (agent: AgentInfo, depth: number): ReactElement[] => {
-    const nodes = [renderAgentCard(agent, depth)];
+  const renderAgentTree = (
+    agent: AgentInfo,
+    depth: number,
+    parent?: AgentInfo
+  ): ReactElement[] => {
+    const nodes = [renderAgentCard(agent, depth, parent)];
     const children = childrenByParent.get(agent.agent_id) ?? [];
     children.forEach((child) => {
-      nodes.push(...renderAgentTree(child, depth + 1));
+      nodes.push(...renderAgentTree(child, depth + 1, agent));
     });
     return nodes;
   };
 
-  const renderedAgents = rootAgents.flatMap((agent) => renderAgentTree(agent, 0));
+  const renderedAgents = rootAgents.flatMap((agent) =>
+    renderAgentTree(agent, 0)
+  );
 
   if (agents.length === 0) {
     return (
