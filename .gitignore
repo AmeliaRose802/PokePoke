@@ -18,6 +18,10 @@ worktrees/
 
 # PokePoke logs
 .pokepoke/logs/
+logs/
+
+# Beads daemon logs
+.beads/daemon-*.log.gz
 
 # Work artifacts (configurable via work_artifacts_dir in .pokepoke/config.yaml)
 ai_incident_reports/

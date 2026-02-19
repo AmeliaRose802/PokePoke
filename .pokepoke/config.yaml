@@ -9,10 +9,12 @@ models:
   default: claude-opus-4.6
   fallback: claude-sonnet-4.5
   candidate_models:
+    - claude-haiku-4.5
     - claude-opus-4.5
     - claude-opus-4.6
     - claude-sonnet-4
     - claude-sonnet-4.5
+    - claude-sonnet-4.6
     - gemini-3-pro
     - gpt-5-codex
     - gpt-5.1
