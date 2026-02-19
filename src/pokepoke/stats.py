@@ -77,6 +77,9 @@ def print_stats(items_completed: int, total_requests: int, elapsed_seconds: floa
     print("📊 Session Statistics")
     print("=" * 60)
     print(f"✅ Items completed:     {items_completed}")
+    if session_stats:
+        print(f"➕ Items created:       {session_stats.items_created}")
+        print(f"📈 Net delta:           {session_stats.items_created - items_completed:+d}")
     print(f"🔄 Total API requests:  {total_requests}")
     
     print(f"⏱️  Total time:         {_format_duration(elapsed_seconds)}")
@@ -249,6 +252,8 @@ def serialize_session_stats(
     """
     data: dict[str, Any] = {
         "items_completed": items_completed,
+        "items_created": session_stats.items_created,
+        "net_items_delta": session_stats.items_created - items_completed,
         "total_requests": total_requests,
         "elapsed_seconds": round(elapsed_seconds, 2),
         "agent_stats": asdict(session_stats.agent_stats),
@@ -264,13 +269,19 @@ def serialize_session_stats(
             "code_review_agent": session_stats.code_review_agent_runs,
             "worktree_cleanup_agent": session_stats.worktree_cleanup_agent_runs,
         },
+        "created_counts_by_agent_type": dict(session_stats.created_counts_by_agent_type),
+        "completed_counts_by_agent_type": dict(session_stats.completed_counts_by_agent_type),
+        "lifetime_items_created": session_stats.lifetime_items_created,
+        "lifetime_items_completed": session_stats.lifetime_items_completed,
         "completed_items": [
             {"id": item.id, "title": item.title}
             for item in session_stats.completed_items_list
         ],
-        "model_completions": [
-            asdict(mc) for mc in session_stats.model_completions
+        "created_items": [
+            {"id": item.id, "title": item.title, "agent_type": item.agent_type}
+            for item in session_stats.created_items_list
         ],
+        "model_completions": [asdict(mc) for mc in session_stats.model_completions],
     }
 
     # Beads deltas

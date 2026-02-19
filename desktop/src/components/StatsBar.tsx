@@ -10,8 +10,10 @@ import {
   formatDurationShort,
   formatElapsed,
   formatPercent,
+  getAddedCount,
   getCompletedItems,
   getDoneCount,
+  getNetDelta,
   inferCurrentModel,
 } from "../utils/stats";
 
@@ -26,6 +28,8 @@ export function StatsBar({ stats, modelLeaderboard, activeAgentModel, onOpenStat
   const elapsed = stats?.elapsed_time ?? 0;
   const completedItems = getCompletedItems(stats);
   const doneCount = getDoneCount(stats);
+  const addedCount = getAddedCount(stats);
+  const netDelta = getNetDelta(stats);
   const apiDurationSeconds = stats?.agent_stats?.api_duration ?? 0;
   const apiDurationLabel =
     apiDurationSeconds > 0 ? formatDurationShort(apiDurationSeconds) : "\u2014";
@@ -50,10 +54,18 @@ export function StatsBar({ stats, modelLeaderboard, activeAgentModel, onOpenStat
           <span className="summary-value">{formatElapsed(elapsed)}</span>
         </div>
         <div className="summary-block">
+          <span className="summary-label">Added</span>
+          <span className="summary-value">{addedCount}</span>
+        </div>
+        <div className="summary-block">
           <span className="summary-label">Done</span>
           <span className="summary-value" title={doneTooltip}>
             {doneCount}
           </span>
+        </div>
+        <div className="summary-block">
+          <span className="summary-label">Net</span>
+          <span className="summary-value">{netDelta >= 0 ? `+${netDelta}` : netDelta}</span>
         </div>
         <div className="summary-block">
           <span className="summary-label">API</span>

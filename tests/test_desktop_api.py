@@ -64,7 +64,12 @@ def test_push_state_updates() -> None:
     assert state["stats"]["elapsed_time"] == 12.5
     assert state["stats"]["agent_stats"]["input_tokens"] == 10
     assert state["stats"]["items_completed"] == 1
+    assert state["stats"]["items_created"] == 0
+    assert state["stats"]["net_items_delta"] == -1
+    assert state["stats"]["lifetime_items_created"] == 0
+    assert state["stats"]["lifetime_items_completed"] == 0
     assert state["stats"]["completed_items"][0]["id"] == "item-1"
+    assert state["stats"]["created_items"] == []
     assert state["progress"] == {"active": True, "status": "Working"}
 
 
@@ -181,6 +186,7 @@ def test_live_stats_update_in_realtime() -> None:
     assert state["stats"]["work_agent_runs"] == 0
     assert state["stats"]["gate_agent_runs"] == 0
     assert state["stats"]["items_completed"] == 0
+    assert state["stats"]["items_created"] == 0
 
     # Mutate the live object (as the orchestrator does)
     stats_obj.work_agent_runs += 1
@@ -193,6 +199,7 @@ def test_live_stats_update_in_realtime() -> None:
     assert state["stats"]["work_agent_runs"] == 1
     assert state["stats"]["gate_agent_runs"] == 2
     assert state["stats"]["items_completed"] == 1
+    assert state["stats"]["items_created"] == 0
     assert state["stats"]["agent_stats"]["input_tokens"] == 500
 
 

@@ -49,6 +49,13 @@ export interface CompletedItem {
   issue_type?: string;
 }
 
+/** Work item created during the current session (via bd create) */
+export interface CreatedItem {
+  id: string;
+  title?: string;
+  agent_type?: string;
+}
+
 /** Historical model completion record with timestamp (from persistent store) */
 export interface ModelHistoryEntry extends ModelCompletionRecord {
   timestamp: string;
@@ -58,8 +65,22 @@ export interface ModelHistoryEntry extends ModelCompletionRecord {
 export interface SessionStats {
   elapsed_time: number;
   agent_stats?: AgentStats;
+
+  // Beads throughput (session)
   items_completed?: number;
+  items_created?: number;
+  net_items_delta?: number;
+
+  // Beads throughput (lifetime)
+  lifetime_items_created?: number;
+  lifetime_items_completed?: number;
+
+  created_counts_by_agent_type?: Record<string, number>;
+  completed_counts_by_agent_type?: Record<string, number>;
+
   completed_items?: CompletedItem[];
+  created_items?: CreatedItem[];
+
   work_agent_runs?: number;
   gate_agent_runs?: number;
   tech_debt_agent_runs?: number;

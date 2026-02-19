@@ -157,7 +157,15 @@ def process_work_item(
                 item.description = current_desc
 
             terminal_ui.ui.set_current_agent("Work Agent")
-            result = invoke_copilot(item, timeout=remaining_timeout, item_logger=item_logger, model=selected_model, cwd=worktree_cwd)
+            from pokepoke.metrics_context import agent_type_context
+            with agent_type_context("work"):
+                result = invoke_copilot(
+                    item,
+                    timeout=remaining_timeout,
+                    item_logger=item_logger,
+                    model=selected_model,
+                    cwd=worktree_cwd,
+                )
             request_count += result.attempt_count
 
             # Aggregate stats

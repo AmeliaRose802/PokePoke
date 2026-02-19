@@ -85,6 +85,12 @@ class DesktopAPI:
         return {
             "agent_stats": asdict(snapshot.agent_stats),
             "items_completed": snapshot.items_completed,
+            "items_created": snapshot.items_created,
+            "net_items_delta": snapshot.items_created - snapshot.items_completed,
+            "lifetime_items_created": snapshot.lifetime_items_created,
+            "lifetime_items_completed": snapshot.lifetime_items_completed,
+            "created_counts_by_agent_type": dict(snapshot.created_counts_by_agent_type),
+            "completed_counts_by_agent_type": dict(snapshot.completed_counts_by_agent_type),
             "completed_items": [
                 {
                     "id": item.id,
@@ -93,6 +99,14 @@ class DesktopAPI:
                     "issue_type": item.issue_type,
                 }
                 for item in snapshot.completed_items_list
+            ],
+            "created_items": [
+                {
+                    "id": item.id,
+                    "title": item.title,
+                    "agent_type": item.agent_type,
+                }
+                for item in snapshot.created_items_list
             ],
             "work_agent_runs": snapshot.work_agent_runs,
             "gate_agent_runs": snapshot.gate_agent_runs,
@@ -248,40 +262,22 @@ class DesktopAPI:
         }
 
     def set_session_start_time(self, start_time: float) -> None:
-        """Store the session start time for dynamic elapsed_time computation.
-
-        Once set, every call to get_state()/get_stats() will recompute
-        elapsed_time = now - start_time so the frontend timer ticks live.
-        Also sets the current session ID for agent grouping.
-        """
+        """Store session start time (enables live elapsed_time ticking)."""
         self._session_start_time = start_time
         self._current_session_id = str(start_time)
 
     def set_session_end_time(self, end_time: float) -> None:
-        """Store the session end time to freeze the elapsed_time clock.
-
-        When called, the session clock will stop and show the final
-        session duration instead of continuing to tick. This should
-        be called when all agents have finished and the session is complete.
-        """
+        """Store session end time (freezes elapsed_time)."""
         self._session_end_time = end_time
 
     def set_live_session_stats(self, session_stats: SessionStats) -> None:
-        """Store a live reference to SessionStats for real-time polling.
-
-        The live object is serialized fresh on every get_state()/get_stats()
-        poll, so any mutations (agent run counts, token stats, retries)
-        are reflected immediately without needing explicit push calls.
-        """
+        """Store a live SessionStats reference for real-time polling."""
         self._live_session_stats = session_stats
 
     def push_stats(
         self, session_stats: SessionStats | None, elapsed_time: float = 0.0
     ) -> None:
-        """Update session statistics (snapshot fallback).
-
-        Prefer set_live_session_stats() for real-time updates.
-        """
+        """Update session statistics (snapshot fallback)."""
         if session_stats:
             self._live_session_stats = session_stats
         stats_data: dict[str, Any] = {"elapsed_time": elapsed_time}

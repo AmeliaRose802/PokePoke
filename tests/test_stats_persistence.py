@@ -67,6 +67,8 @@ class TestSerializeSessionStats:
         data = serialize_session_stats(stats, elapsed_seconds=300.0, items_completed=2, total_requests=5)
 
         assert data["items_completed"] == 2
+        assert data["items_created"] == 0
+        assert data["net_items_delta"] == -2
         assert data["total_requests"] == 5
         assert data["elapsed_seconds"] == 300.0
 
@@ -152,6 +154,9 @@ class TestSerializeSessionStats:
         assert data["items_completed"] == 0
         assert data["total_requests"] == 0
         assert data["elapsed_seconds"] == 0.0
+        assert data["items_created"] == 0
+        assert data["net_items_delta"] == 0
+        assert data["created_items"] == []
         assert data["completed_items"] == []
         assert data["model_completions"] == []
 

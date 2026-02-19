@@ -197,8 +197,10 @@ def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path, cwd: str | None =
     
     # Route all output to the cleanup agent's log buffer
     try:
+        from pokepoke.metrics_context import agent_type_context
         with terminal_ui.ui.agent_output_for(agent_id):
-            copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd)
+            with agent_type_context("cleanup"):
+                copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd)
         
         # Update agent status based on result
         status = "success" if copilot_result.success else "failed"
@@ -315,8 +317,10 @@ def invoke_merge_conflict_cleanup_agent(
     
     # Route all output to the merge conflict cleanup agent's log buffer
     try:
+        from pokepoke.metrics_context import agent_type_context
         with terminal_ui.ui.agent_output_for(agent_id):
-            copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd)
+            with agent_type_context("merge_conflict_cleanup"):
+                copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd)
         
         # Update agent status based on result
         status = "success" if copilot_result.success else "failed"

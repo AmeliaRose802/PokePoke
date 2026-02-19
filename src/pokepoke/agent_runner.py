@@ -14,18 +14,13 @@ from pokepoke.stats import parse_agent_stats
 from pokepoke.worktrees import create_worktree, cleanup_worktree
 from pokepoke.prompts import PromptService
 from pokepoke import terminal_ui
-from pokepoke.cleanup_agents import (
-    invoke_cleanup_agent, invoke_merge_conflict_cleanup_agent,
-    get_pokepoke_prompts_dir, run_cleanup_loop, aggregate_cleanup_stats
-)
+from pokepoke.cleanup_agents import invoke_cleanup_agent, invoke_merge_conflict_cleanup_agent, get_pokepoke_prompts_dir, run_cleanup_loop, aggregate_cleanup_stats
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import ItemLogger
 
 # Re-export cleanup agent functions for backward compatibility
-__all__ = ['invoke_cleanup_agent', 'invoke_merge_conflict_cleanup_agent',
-           'aggregate_cleanup_stats', 'run_cleanup_loop', 'run_maintenance_agent',
-           'run_beta_tester', 'run_gate_agent', 'run_worktree_cleanup']
+__all__ = ['invoke_cleanup_agent', 'invoke_merge_conflict_cleanup_agent', 'aggregate_cleanup_stats', 'run_cleanup_loop', 'run_maintenance_agent', 'run_beta_tester', 'run_gate_agent', 'run_worktree_cleanup']
 
 
 def _generate_unique_agent_id(agent_type: str) -> str:
@@ -70,7 +65,9 @@ def run_gate_agent(
 
     # Gate Agent runs in the specified directory (worktree)
     # deny_write=True ensures it only reads/runs tests but doesn't modify code
-    result = invoke_copilot(item, prompt=final_prompt, deny_write=True, cwd=cwd, model=gate_model)
+    from pokepoke.metrics_context import agent_type_context
+    with agent_type_context("gate"):
+        result = invoke_copilot(item, prompt=final_prompt, deny_write=True, cwd=cwd, model=gate_model)
     
     stats = parse_agent_stats(result.output) if result.output else None
     
@@ -166,7 +163,10 @@ def _run_simple_agent(
 ) -> AgentStats | None:
     """Run a simple agent in the main repo with configurable write access."""
     print(f"\n📋 Running {agent_name} ({'no write' if deny_write else 'write enabled'}){f', model={model}' if model else ''}")
-    result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=deny_write, model=model, cwd=cwd, item_logger=item_logger)
+    from pokepoke.metrics_context import agent_type_context
+    normalized = agent_name.lower().replace(" ", "_")
+    with agent_type_context(normalized):
+        result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=deny_write, model=model, cwd=cwd, item_logger=item_logger)
     if result.success:
         print(f"✅ {agent_name} completed")
         return parse_agent_stats(result.output) if result.output else None
@@ -250,7 +250,10 @@ def _run_worktree_agent(
     try:
         # Main agent execution block
         try:
-            result = invoke_copilot(agent_item, prompt=agent_prompt, model=model, cwd=worktree_cwd, item_logger=item_logger)
+            from pokepoke.metrics_context import agent_type_context
+            normalized = agent_name.lower().replace(" ", "_")
+            with agent_type_context(normalized):
+                result = invoke_copilot(agent_item, prompt=agent_prompt, model=model, cwd=worktree_cwd, item_logger=item_logger)
         except Exception as e:
             print(f"❌ Error invoking Copilot: {e}")
             from pokepoke.types import CopilotResult
