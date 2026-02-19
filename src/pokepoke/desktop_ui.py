@@ -144,15 +144,18 @@ class DesktopUI:
             orch_thread.start()
 
         # Create native window pointing at the built React app
-        window = webview.create_window(
-            title="PokePoke - Autonomous Workflow Manager",
-            url=str(dist_dir / "index.html"),
-            js_api=self._api,
-            width=1280,
-            height=800,
-            min_size=(900, 600),
-            text_select=True,
-        )
+        icon_path = dist_dir / "pokepoke.ico"
+        window_kwargs: dict[str, Any] = {
+            "title": "PokePoke - Autonomous Workflow Manager",
+            "url": str(dist_dir / "index.html"),
+            "js_api": self._api,
+            "icon": str(icon_path),
+            "width": 1280,
+            "height": 800,
+            "min_size": (900, 600),
+            "text_select": True,
+        }
+        window = webview.create_window(**window_kwargs)
 
         # Run pywebview on the main thread (blocks until window closes)
         webview.start(

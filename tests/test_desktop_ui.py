@@ -357,6 +357,7 @@ class TestDesktopUIRunWithOrchestrator:
         assert builtins.print is original_print
         assert fake_webview.started is True
         assert fake_webview.created_kwargs["url"].endswith("index.html")
+        assert fake_webview.created_kwargs["icon"].endswith("pokepoke.ico")
         assert fake_webview.created_kwargs["js_api"] is ui._api
         ui._api.set_window.assert_called_once_with(fake_webview.window)
 
