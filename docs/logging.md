@@ -9,7 +9,7 @@ PokePoke now includes comprehensive file-based logging to capture all orchestrat
 Each PokePoke run creates a unique directory with the following structure:
 
 ```
-logs/
+.pokepoke/logs/
 └── YYYYMMDD_HHMMSS_<uuid>/
     ├── orchestrator.log          # High-level orchestrator actions
     └── items/
@@ -102,23 +102,23 @@ Agent requests: 3
 At the end of every run, PokePoke displays:
 ```
 📝 Run ID: 20260123_143052_a3b4c5d6
-📁 Logs saved to: C:\Users\ameliapayne\PokePoke\logs\20260123_143052_a3b4c5d6
+📁 Logs saved to: C:\Users\ameliapayne\PokePoke\.pokepoke\logs\20260123_143052_a3b4c5d6
 ```
 
 ### 2. Browse the Logs Directory
 
 ```powershell
 # List all runs
-ls logs/
+ls .pokepoke/logs/
 
 # Open a specific run's orchestrator log
-cat logs/20260123_143052_a3b4c5d6/orchestrator.log
+cat .pokepoke/logs/20260123_143052_a3b4c5d6/orchestrator.log
 
 # Open a specific item log
-cat logs/20260123_143052_a3b4c5d6/items/PokePoke-6g1.log
+cat .pokepoke/logs/20260123_143052_a3b4c5d6/items/PokePoke-6g1.log
 
 # Open the most recent run
-$latest = Get-ChildItem logs/ | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$latest = Get-ChildItem .pokepoke/logs/ | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 cat "$latest\orchestrator.log"
 ```
 
@@ -126,10 +126,10 @@ cat "$latest\orchestrator.log"
 
 ```powershell
 # Open in VS Code
-code logs/20260123_143052_a3b4c5d6
+code .pokepoke/logs/20260123_143052_a3b4c5d6
 
 # Open in Notepad
-notepad logs/20260123_143052_a3b4c5d6/orchestrator.log
+notepad .pokepoke/logs/20260123_143052_a3b4c5d6/orchestrator.log
 ```
 
 ## When to Use Which Log
@@ -150,7 +150,7 @@ notepad logs/20260123_143052_a3b4c5d6/orchestrator.log
 
 ## Log Retention
 
-Logs are stored in the `logs/` directory and are:
+Logs are stored in the `.pokepoke/logs/` directory and are:
 - **Not committed to git** - Logs are in `.gitignore`
 - **Not automatically cleaned up** - You manage retention
 - **Not size-limited** - Each run creates a new directory
@@ -158,13 +158,13 @@ Logs are stored in the `logs/` directory and are:
 **Cleanup:**
 ```powershell
 # Remove all logs
-rm -r logs/
+rm -r .pokepoke/logs/
 
 # Remove logs older than 7 days
-Get-ChildItem logs/ | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-7) } | Remove-Item -Recurse
+Get-ChildItem .pokepoke/logs/ | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-7) } | Remove-Item -Recurse
 
 # Keep only the 10 most recent runs
-Get-ChildItem logs/ | Sort-Object LastWriteTime -Descending | Select-Object -Skip 10 | Remove-Item -Recurse
+Get-ChildItem .pokepoke/logs/ | Sort-Object LastWriteTime -Descending | Select-Object -Skip 10 | Remove-Item -Recurse
 ```
 
 ## Technical Details
