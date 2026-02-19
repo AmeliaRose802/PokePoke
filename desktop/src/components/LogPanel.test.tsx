@@ -64,4 +64,58 @@ describe('LogPanel', () => {
     expect(screen.getByText('🔧 view')).toBeInTheDocument();
     expect(screen.queryByText(/Tool batch/)).not.toBeInTheDocument();
   });
+
+  it('flattens single-tool batch to simple tool accordion (no extra nesting)', () => {
+    const logs: LogEntry[] = [
+      mk(1, '[Copilot] Calling 1 tool(s)...'),
+      mk(2, "[Tool] report_intent({'intent': 'Testing'})"),
+      mk(3, '✅ Result: Intent logged'),
+    ];
+
+    render(
+      <LogPanel
+        title="Agent"
+        icon="🤖"
+        logs={logs}
+        accentColor="#7dcfff"
+      />
+    );
+
+    // Should NOT show batch wrapper or group wrapper for single tool
+    expect(screen.queryByText(/Tool batch/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/×1/)).not.toBeInTheDocument();
+
+    // Should render as simple tool accordion
+    expect(screen.getByText('🔧 report_intent')).toBeInTheDocument();
+  });
+
+  it('flattens single-item groups to direct tool accordions', () => {
+    const logs: LogEntry[] = [
+      mk(1, '[Copilot] Calling 2 tool(s)...'),
+      mk(2, "[Tool] view({'path': 'a.txt'})"),
+      mk(3, '✅ Result: ok'),
+      mk(4, "[Tool] edit({'path': 'b.txt'})"),
+      mk(5, '✅ Result: Replaced 1 occurrence'),
+    ];
+
+    render(
+      <LogPanel
+        title="Agent"
+        icon="🤖"
+        logs={logs}
+        accentColor="#7dcfff"
+      />
+    );
+
+    // Batch wrapper should exist for multiple tools
+    expect(screen.getByText(/Tool batch \(2 calls\)/)).toBeInTheDocument();
+
+    // But group wrappers (×1) should NOT exist for single-item groups
+    expect(screen.queryByText(/view ×1/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/edit ×1/)).not.toBeInTheDocument();
+
+    // Individual tools should be directly visible within the batch
+    expect(screen.getByText('🔧 view')).toBeInTheDocument();
+    expect(screen.getByText('🔧 edit')).toBeInTheDocument();
+  });
 });
