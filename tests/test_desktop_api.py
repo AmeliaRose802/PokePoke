@@ -688,3 +688,100 @@ def test_cancel_stop_after_current_clears_flag() -> None:
     state = api.get_state()
     assert state["stop_after_current"] is False
     shutdown_reset()
+
+
+# ─── Agent pause/resume tests ───────────────────────────────────────────
+
+
+def test_pause_agent_sets_paused_flag() -> None:
+    """pause_agent should mark agent as paused and reflect in serialization."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+
+    result = api.pause_agent("agent-1")
+    assert result["paused"] is True
+
+    agents = api.get_agents()
+    assert agents[0]["paused"] is True
+
+
+def test_resume_agent_clears_paused_flag() -> None:
+    """resume_agent should clear paused flag."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    api.pause_agent("agent-1")
+
+    result = api.resume_agent("agent-1")
+    assert result["resumed"] is True
+
+    agents = api.get_agents()
+    assert agents[0]["paused"] is False
+
+
+def test_pause_nonexistent_agent_returns_false() -> None:
+    """pause_agent should return paused=False for unknown agent."""
+    api = DesktopAPI()
+    result = api.pause_agent("nonexistent")
+    assert result["paused"] is False
+
+
+def test_resume_non_paused_agent_returns_false() -> None:
+    """resume_agent should return resumed=False when agent is not paused."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    result = api.resume_agent("agent-1")
+    assert result["resumed"] is False
+
+
+def test_is_agent_paused() -> None:
+    """is_agent_paused should reflect pause/resume state."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+
+    assert api.is_agent_paused("agent-1") is False
+    api.pause_agent("agent-1")
+    assert api.is_agent_paused("agent-1") is True
+    api.resume_agent("agent-1")
+    assert api.is_agent_paused("agent-1") is False
+
+
+def test_remove_agent_clears_paused_state() -> None:
+    """remove_agent should also remove paused state."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    api.pause_agent("agent-1")
+    api.remove_agent("agent-1")
+    assert api.is_agent_paused("agent-1") is False
+
+
+def test_get_agent_detail_includes_paused() -> None:
+    """get_agent_detail should include paused field."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    api.pause_agent("agent-1")
+
+    detail = api.get_agent_detail("agent-1")
+    assert detail is not None
+    assert detail["paused"] is True
+
+
+def test_pause_agent_logs_message() -> None:
+    """pause_agent should log a pause message."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    api.pause_agent("agent-1")
+
+    logs = api.get_all_logs()
+    assert any("paused" in log["message"].lower() for log in logs)
+
+
+def test_resume_agent_logs_message() -> None:
+    """resume_agent should log a resume message."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    api.pause_agent("agent-1")
+    api.get_all_logs()  # clear read index
+    api.resume_agent("agent-1")
+
+    logs = api.get_new_logs()
+    assert any("resumed" in log["message"].lower() for log in logs)

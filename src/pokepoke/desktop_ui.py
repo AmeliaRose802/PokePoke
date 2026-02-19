@@ -315,15 +315,7 @@ class DesktopUI:
 
     @contextmanager
     def agent_output_for(self, agent_id: str) -> Iterator[None]:
-        """Route all print output on this thread to a specific agent's log buffer.
-
-        While this context is active, print() calls on the current thread
-        will be captured into the named agent's log ring in the
-        :class:`AgentRegistry` and will NOT appear in the shared
-        orchestrator/agent console log.  This is the key mechanism for
-        isolating parallel agent output (dtqz) and populating the Agents
-        panel with live log data (ukr0).
-        """
+        """Route print output on this thread to a specific agent's log buffer."""
         prev_agent_id = getattr(_thread_output, "agent_id", None)
         _thread_output.agent_id = agent_id
         try:
@@ -390,10 +382,17 @@ class DesktopUI:
         )
 
     def push_agent_log(self, agent_id: str, line: str) -> None:
-        """Append a log line to an agent's recent log preview."""
         self._api.push_agent_log(agent_id, line)
 
     def remove_agent(self, agent_id: str) -> None:
-        """Remove a finished agent from the tracked set."""
         self._api.remove_agent(agent_id)
+
+    def pause_agent(self, agent_id: str) -> bool:
+        return bool(self._api.pause_agent(agent_id).get("paused", False))
+
+    def resume_agent(self, agent_id: str) -> bool:
+        return bool(self._api.resume_agent(agent_id).get("resumed", False))
+
+    def is_agent_paused(self, agent_id: str) -> bool:
+        return self._api.is_agent_paused(agent_id)
 

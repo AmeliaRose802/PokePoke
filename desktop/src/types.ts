@@ -165,4 +165,5 @@ export interface AgentInfo {
   started_at?: number;
   last_updated?: number;
   last_log_at?: number | null;
+  paused?: boolean;
 }

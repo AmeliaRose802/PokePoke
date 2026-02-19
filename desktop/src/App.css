@@ -550,6 +550,41 @@
   color: #a9b1d6;
 }
 
+/* ── Agent Card Paused State ─────────────────────────────────────────── */
+
+.agent-card-paused {
+  opacity: 0.6;
+  border-left-color: #e0af68 !important;
+}
+
+.agent-paused-badge {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.agent-pause-btn {
+  background: none;
+  border: 1px solid #3b4261;
+  border-radius: 4px;
+  color: #a9b1d6;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+  line-height: 1;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.agent-pause-btn:hover {
+  border-color: #e0af68;
+  color: #e0af68;
+}
+
+.agent-pause-btn.paused:hover {
+  border-color: #9ece6a;
+  color: #9ece6a;
+}
+
 /* ── Agent Log Panel (main content area) ──────────────────────────────── */
 
 .agent-log-panel {
