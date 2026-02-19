@@ -1323,12 +1323,14 @@ class TestRunMainRepoAgent:
 class TestRunWorktreeCleanup:
     """Test run_worktree_cleanup function."""
 
+    @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
     def test_worktree_cleanup_success(
         self,
         mock_get_prompts: Mock,
-        mock_main_repo_agent: Mock
+        mock_main_repo_agent: Mock,
+        mock_has_worktrees: Mock
     ) -> None:
         """Test successful worktree cleanup run."""
         mock_dir = MagicMock()
@@ -1358,12 +1360,14 @@ class TestRunWorktreeCleanup:
         args, _ = mock_main_repo_agent.call_args
         assert args[0] == "Worktree Cleanup"
 
+    @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
     def test_worktree_cleanup_failure(
         self,
         mock_get_prompts: Mock,
-        mock_main_repo_agent: Mock
+        mock_main_repo_agent: Mock,
+        mock_has_worktrees: Mock
     ) -> None:
         """Test worktree cleanup returns None on failure."""
         mock_dir = MagicMock()
@@ -1379,10 +1383,12 @@ class TestRunWorktreeCleanup:
         stats = run_worktree_cleanup()
         assert stats is None
 
+    @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
     def test_worktree_cleanup_prompt_missing(
         self,
-        mock_get_prompts: Mock
+        mock_get_prompts: Mock,
+        mock_has_worktrees: Mock
     ) -> None:
         """Test worktree cleanup when prompt file is missing."""
         mock_dir = MagicMock()
@@ -1395,10 +1401,12 @@ class TestRunWorktreeCleanup:
         stats = run_worktree_cleanup()
         assert stats is None
 
+    @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
     def test_worktree_cleanup_prompts_dir_not_found(
         self,
-        mock_get_prompts: Mock
+        mock_get_prompts: Mock,
+        mock_has_worktrees: Mock
     ) -> None:
         """Test worktree cleanup when prompts directory not found."""
         mock_get_prompts.side_effect = FileNotFoundError("Prompts not found")
@@ -1407,12 +1415,14 @@ class TestRunWorktreeCleanup:
         stats = run_worktree_cleanup()
         assert stats is None
 
+    @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
     def test_worktree_cleanup_with_repo_root_passes_cwd(
         self,
         mock_get_prompts: Mock,
-        mock_main_repo_agent: Mock
+        mock_main_repo_agent: Mock,
+        mock_has_worktrees: Mock
     ) -> None:
         """Test worktree cleanup passes repo_root as cwd instead of chdir."""
         mock_dir = MagicMock()
@@ -1432,12 +1442,14 @@ class TestRunWorktreeCleanup:
         _, kwargs = mock_main_repo_agent.call_args
         assert kwargs.get("cwd") == str(Path("/main/repo"))
 
+    @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
     def test_worktree_cleanup_error_propagates(
         self,
         mock_get_prompts: Mock,
-        mock_main_repo_agent: Mock
+        mock_main_repo_agent: Mock,
+        mock_has_worktrees: Mock
     ) -> None:
         """Test worktree cleanup propagates agent errors without chdir."""
         mock_dir = MagicMock()
@@ -1453,12 +1465,14 @@ class TestRunWorktreeCleanup:
         with pytest.raises(RuntimeError, match="Agent exploded"):
             run_worktree_cleanup(repo_root=Path("/main/repo"))
 
+    @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
     def test_worktree_cleanup_no_repo_root_no_chdir(
         self,
         mock_get_prompts: Mock,
-        mock_main_repo_agent: Mock
+        mock_main_repo_agent: Mock,
+        mock_has_worktrees: Mock
     ) -> None:
         """Test worktree cleanup without repo_root doesn't change directory."""
         mock_dir = MagicMock()
@@ -1475,12 +1489,14 @@ class TestRunWorktreeCleanup:
             run_worktree_cleanup()  # No repo_root
             mock_chdir.assert_not_called()
 
+    @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
     def test_worktree_cleanup_loads_correct_prompt_file(
         self,
         mock_get_prompts: Mock,
-        mock_main_repo_agent: Mock
+        mock_main_repo_agent: Mock,
+        mock_has_worktrees: Mock
     ) -> None:
         """Test worktree cleanup loads worktree-cleanup.md prompt."""
         mock_dir = MagicMock()
@@ -1497,3 +1513,55 @@ class TestRunWorktreeCleanup:
 
         # Verify it loads worktree-cleanup.md
         mock_dir.__truediv__.assert_called_with("worktree-cleanup.md")
+
+    @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=False)
+    def test_worktree_cleanup_skipped_when_no_worktrees(
+        self,
+        mock_has_worktrees: Mock
+    ) -> None:
+        """Test worktree cleanup is skipped when no unmerged worktrees detected."""
+        from pokepoke.agent_runner import run_worktree_cleanup
+        stats = run_worktree_cleanup()
+        assert stats is None
+
+    @patch('pokepoke.worktree_cleanup.load_worktree_manifest', return_value={})
+    @patch('pokepoke.worktrees.list_worktrees')
+    def test_has_unmerged_worktrees_with_task_worktree(
+        self,
+        mock_list: Mock,
+        mock_manifest: Mock
+    ) -> None:
+        """Test has_unmerged_worktrees returns True when task worktrees exist."""
+        mock_list.return_value = [
+            {"path": "/repo", "branch": "refs/heads/main"},
+            {"path": "/repo/worktrees/task-abc", "branch": "refs/heads/task/abc"},
+        ]
+        from pokepoke.worktree_cleanup import has_unmerged_worktrees
+        assert has_unmerged_worktrees() is True
+
+    @patch('pokepoke.worktree_cleanup.load_worktree_manifest')
+    @patch('pokepoke.worktrees.list_worktrees', return_value=[
+        {"path": "/repo", "branch": "refs/heads/main"}
+    ])
+    def test_has_unmerged_worktrees_manifest_only(
+        self,
+        mock_list: Mock,
+        mock_manifest: Mock
+    ) -> None:
+        """Test has_unmerged_worktrees returns True when manifest has entries."""
+        mock_manifest.return_value = {"old-task": {"path": "/repo/worktrees/task-old", "reason": "failed"}}
+        from pokepoke.worktree_cleanup import has_unmerged_worktrees
+        assert has_unmerged_worktrees() is True
+
+    @patch('pokepoke.worktree_cleanup.load_worktree_manifest', return_value={})
+    @patch('pokepoke.worktrees.list_worktrees', return_value=[
+        {"path": "/repo", "branch": "refs/heads/main"}
+    ])
+    def test_has_unmerged_worktrees_none_found(
+        self,
+        mock_list: Mock,
+        mock_manifest: Mock
+    ) -> None:
+        """Test has_unmerged_worktrees returns False when nothing to clean."""
+        from pokepoke.worktree_cleanup import has_unmerged_worktrees
+        assert has_unmerged_worktrees() is False

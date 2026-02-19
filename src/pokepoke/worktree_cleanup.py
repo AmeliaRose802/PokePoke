@@ -162,3 +162,17 @@ def cleanup_after_merge(worktree_path: Path, branch_name: str) -> None:
         print(f"\u2705 Deleted branch {branch_name}")
     except subprocess.CalledProcessError as e:
         print(f"\u26a0\ufe0f  Could not delete branch: {e.stderr or e}")
+
+
+def has_unmerged_worktrees() -> bool:
+    """Check if there are any task worktrees or uncleaned manifest entries."""
+    from pokepoke.worktrees import list_worktrees
+    worktrees = list_worktrees()
+    task_worktrees = [
+        wt for wt in worktrees
+        if "worktrees" in wt.get("path", "") and "task-" in wt.get("path", "")
+    ]
+    if task_worktrees:
+        return True
+    manifest = load_worktree_manifest()
+    return len(manifest) > 0
