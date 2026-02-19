@@ -4,16 +4,13 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from copilot import CopilotClient  # type: ignore
-from .config import get_config
+from .config import get_config, DEFAULT_MODEL, FALLBACK_MODEL
 from .types import BeadsWorkItem, CopilotResult, RetryConfig, AgentStats
 from .prompts import PromptService
 from . import terminal_ui
 from .shutdown import is_shutting_down
 from .process_utils import wait_for_process_cleanup
 from .sdk_event_handler import create_event_handler
-
-DEFAULT_MODEL = "claude-opus-4.6"
-FALLBACK_MODEL = "claude-sonnet-4.5"
 
 if TYPE_CHECKING:
     from .logging_utils import ItemLogger

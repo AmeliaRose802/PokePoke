@@ -18,11 +18,16 @@ except ImportError:
 import json
 
 
+# Default model identifiers (single source of truth)
+DEFAULT_MODEL = "claude-opus-4.6"
+FALLBACK_MODEL = "claude-sonnet-4.5"
+
+
 @dataclass
 class ModelConfig:
     """LLM model configuration."""
-    default: str = "claude-opus-4.6"
-    fallback: str = "claude-sonnet-4.5"
+    default: str = DEFAULT_MODEL
+    fallback: str = FALLBACK_MODEL
     candidate_models: list[str] = field(default_factory=list)
 
 
@@ -164,8 +169,8 @@ class ProjectConfig:
         # Models
         models_data = data.get("models", {})
         config.models = ModelConfig(
-            default=models_data.get("default", "claude-opus-4.6"),
-            fallback=models_data.get("fallback", "claude-sonnet-4.5"),
+            default=models_data.get("default", DEFAULT_MODEL),
+            fallback=models_data.get("fallback", FALLBACK_MODEL),
             candidate_models=models_data.get("candidate_models", []),
         )
 

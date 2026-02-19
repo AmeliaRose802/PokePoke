@@ -8,6 +8,7 @@ from typing import Any, TypedDict
 from collections.abc import Callable
 
 from . import terminal_ui
+from .config import DEFAULT_MODEL, FALLBACK_MODEL
 
 
 _BEADS_CREATE_RE = re.compile(r"\bbd\s+create\b", re.IGNORECASE)
@@ -76,9 +77,6 @@ def _record_items_created(items: list[tuple[str, str]]) -> None:
             created=int(latest_summary.get("total_created", 0)),
             completed=int(latest_summary.get("total_completed", 0)),
         )
-
-DEFAULT_MODEL = "claude-opus-4.6"
-FALLBACK_MODEL = "claude-sonnet-4.5"
 
 
 class SessionStats(TypedDict):

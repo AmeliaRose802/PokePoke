@@ -1,11 +1,18 @@
 """Beads query operations - fetch work items and dependencies."""
 
+import dataclasses
 import json
 import subprocess
 from pathlib import Path
 from typing import Any
 
 from .types import BeadsWorkItem, IssueWithDependencies, Dependency, BeadsStats
+
+
+def _filter_to_dataclass(cls: type, data: dict[str, Any]) -> Any:
+    """Construct a dataclass instance, keeping only fields defined on *cls*."""
+    valid = {f.name for f in dataclasses.fields(cls)}
+    return cls(**{k: v for k, v in data.items() if k in valid})
 
 
 def _parse_beads_json(output: str, extra_prefixes: tuple[str, ...] = ()) -> Any:
@@ -69,17 +76,7 @@ def get_ready_work_items() -> list[BeadsWorkItem]:
     if not items_data:
         return []
     
-    # Filter out fields not in BeadsWorkItem dataclass
-    valid_work_item_fields = {
-        'id', 'title', 'status', 'priority', 'issue_type', 'description',
-        'owner', 'assignee', 'created_at', 'created_by', 'updated_at', 'labels',
-        'dependency_count', 'dependent_count', 'notes'
-    }
-    
-    return [
-        BeadsWorkItem(**{k: v for k, v in item.items() if k in valid_work_item_fields})
-        for item in items_data
-    ]
+    return [_filter_to_dataclass(BeadsWorkItem, item) for item in items_data]
 
 
 def get_issue_dependencies(issue_id: str) -> IssueWithDependencies | None:
@@ -112,31 +109,19 @@ def get_issue_dependencies(issue_id: str) -> IssueWithDependencies | None:
     
     issue_dict = issues_data[0]
     
-    # Filter out fields not in IssueWithDependencies dataclass
-    valid_issue_fields = {
-        'id', 'title', 'status', 'priority', 'issue_type', 'description',
-        'dependencies', 'dependents', 'owner', 'assignee', 'created_at', 'created_by',
-        'updated_at', 'labels', 'notes'
-    }
-    filtered_issue = {k: v for k, v in issue_dict.items() if k in valid_issue_fields}
-    
-    # Filter out fields not in Dependency dataclass
-    valid_dep_fields = {
-        'id', 'title', 'issue_type', 'dependency_type', 'status', 'priority',
-        'description', 'owner', 'created_at', 'created_by', 'updated_at',
-        'labels', 'notes'
-    }
+    filtered_issue = {k: v for k, v in issue_dict.items()
+                      if k in {f.name for f in dataclasses.fields(IssueWithDependencies)}}
     
     # Convert dependencies if present
     if 'dependencies' in filtered_issue and filtered_issue['dependencies']:
         filtered_issue['dependencies'] = [
-            Dependency(**{k: v for k, v in dep.items() if k in valid_dep_fields})
+            _filter_to_dataclass(Dependency, dep)
             for dep in filtered_issue['dependencies']
         ]
     
     if 'dependents' in filtered_issue and filtered_issue['dependents']:
         filtered_issue['dependents'] = [
-            Dependency(**{k: v for k, v in dep.items() if k in valid_dep_fields})
+            _filter_to_dataclass(Dependency, dep)
             for dep in filtered_issue['dependents']
         ]
     
@@ -159,12 +144,10 @@ def has_unmet_blocking_dependencies(item_id: str) -> bool:
     if not issue or not issue.dependencies:
         return False
     
-    # Check if any blocking dependencies are not closed
-    for dep in issue.dependencies:
-        if dep.dependency_type == 'blocks' and dep.status != 'closed':
-            return True
-    
-    return False
+    return any(
+        dep.dependency_type == 'blocks' and dep.status != 'closed'
+        for dep in issue.dependencies
+    )
 
 
 def get_beads_stats() -> BeadsStats | None:
