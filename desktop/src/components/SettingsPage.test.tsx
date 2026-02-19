@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SettingsPage } from './SettingsPage';
 import type { ConfigResponse, ProjectConfig } from '../types';
@@ -19,6 +19,7 @@ describe('SettingsPage', () => {
       default: 'claude-sonnet-4.5',
       fallback: 'claude-sonnet-4',
       candidate_models: ['gpt-5', 'gpt-5-codex'],
+      ab_testing_enabled: true,
     },
     maintenance: {
       agents: [
@@ -77,6 +78,38 @@ describe('SettingsPage', () => {
     expect(screen.getByLabelText('Fallback Model')).toHaveValue('claude-sonnet-4');
   });
 
+  it('should toggle between single-model and A/B testing modes', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage
+        getConfig={mockGetConfig}
+        saveConfig={mockSaveConfig}
+        onClose={mockOnClose}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+    });
+
+    const abToggle = screen.getByLabelText('Enable A/B testing mode');
+    const defaultInput = screen.getByLabelText('Default Model');
+    const fallbackInput = screen.getByLabelText('Fallback Model');
+
+    expect(abToggle).toBeChecked();
+    expect(defaultInput).toBeDisabled();
+    expect(fallbackInput).toBeDisabled();
+    expect(screen.getByPlaceholderText('Add model…')).toBeEnabled();
+
+    await user.click(abToggle);
+
+    expect(abToggle).not.toBeChecked();
+    expect(defaultInput).not.toBeDisabled();
+    expect(fallbackInput).not.toBeDisabled();
+    expect(screen.queryByPlaceholderText('Add model…')).not.toBeInTheDocument();
+    expect(screen.getByText('Enable A/B testing to configure candidate models')).toBeInTheDocument();
+  });
+
   it('should display error when config fails to load', async () => {
     mockGetConfig.mockResolvedValue(null);
 
@@ -127,6 +160,8 @@ describe('SettingsPage', () => {
       expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
     });
 
+    await user.click(screen.getByLabelText('Enable A/B testing mode'));
+
     const input = screen.getByLabelText('Default Model');
     await user.clear(input);
     await user.type(input, 'gpt-5.2');
@@ -147,6 +182,8 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
     });
+
+    await user.click(screen.getByLabelText('Enable A/B testing mode'));
 
     const input = screen.getByLabelText('Fallback Model');
     await user.clear(input);
@@ -253,7 +290,9 @@ describe('SettingsPage', () => {
       expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
     });
 
-    const toggle = screen.getByRole('checkbox');
+    const agentCard = screen.getByText('Janitor').closest('.agent-config') as HTMLElement | null;
+    expect(agentCard).toBeTruthy();
+    const toggle = within(agentCard!).getByRole('checkbox');
     expect(toggle).toBeChecked();
 
     await user.click(toggle);
@@ -296,6 +335,8 @@ describe('SettingsPage', () => {
       expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
     });
 
+    await user.click(screen.getByLabelText('Enable A/B testing mode'));
+
     const input = screen.getByLabelText('Default Model');
     await user.clear(input);
     await user.type(input, 'gpt-5.2');
@@ -309,6 +350,7 @@ describe('SettingsPage', () => {
 
     const savedConfig = mockSaveConfig.mock.calls[0][0];
     expect(savedConfig.models.default).toBe('gpt-5.2');
+    expect(savedConfig.models.ab_testing_enabled).toBe(false);
 
     expect(screen.getByText('Saved')).toBeInTheDocument();
     expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
@@ -329,6 +371,8 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
     });
+
+    await user.click(screen.getByLabelText('Enable A/B testing mode'));
 
     const input = screen.getByLabelText('Default Model');
     await user.type(input, 'x');
@@ -354,6 +398,8 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
     });
+
+    await user.click(screen.getByLabelText('Enable A/B testing mode'));
 
     const input = screen.getByLabelText('Default Model');
     await user.clear(input);
@@ -418,6 +464,8 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
     });
+
+    await user.click(screen.getByLabelText('Enable A/B testing mode'));
 
     const input = screen.getByLabelText('Default Model');
     await user.type(input, 'x');
@@ -514,6 +562,8 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
     });
+
+    await user.click(screen.getByLabelText('Enable A/B testing mode'));
 
     const input = screen.getByLabelText('Default Model');
     await user.type(input, 'x');

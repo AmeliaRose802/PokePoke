@@ -147,6 +147,7 @@ export interface ProjectConfig {
 export interface ModelsConfig {
   default?: string;
   fallback?: string;
+  ab_testing_enabled?: boolean;
   candidate_models?: string[];
 }
 

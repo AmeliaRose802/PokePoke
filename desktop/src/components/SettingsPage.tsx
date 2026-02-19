@@ -8,6 +8,14 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ConfigResponse, ProjectConfig, ModelsConfig, MaintenanceAgent } from "../types";
 
+const isAbTestingEnabled = (models?: ModelsConfig): boolean => {
+  if (!models) return false;
+  if (typeof models.ab_testing_enabled === "boolean") {
+    return models.ab_testing_enabled;
+  }
+  return (models.candidate_models?.length ?? 0) > 0;
+};
+
 /** Well-known model names for dropdown suggestions */
 const KNOWN_MODELS = [
   "claude-opus-4.5",
@@ -37,6 +45,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
   const [candidateModels, setCandidateModels] = useState<string[]>([]);
   const [chipInput, setChipInput] = useState("");
   const [maintenanceAgents, setMaintenanceAgents] = useState<MaintenanceAgent[]>([]);
+  const [abTestingEnabled, setAbTestingEnabled] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -51,6 +60,8 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
       if (!resp) return;
       setConfig(resp.config);
       const models = resp.config.models ?? {};
+      const abTesting = isAbTestingEnabled(models);
+      setAbTestingEnabled(abTesting);
       setDefaultModel(models.default ?? "");
       setFallbackModel(models.fallback ?? "");
       setCandidateModels(models.candidate_models ?? []);
@@ -71,6 +82,14 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
     setMessage("");
   }, []);
 
+  const handleAbToggle = useCallback(
+    (enabled: boolean) => {
+      setAbTestingEnabled(enabled);
+      markDirty();
+    },
+    [markDirty]
+  );
+
   const handleSave = useCallback(async () => {
     if (!config) return;
     setSaving(true);
@@ -78,6 +97,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
       ...config,
       models: {
         ...(config.models ?? {}),
+        ab_testing_enabled: abTestingEnabled,
         default: defaultModel || undefined,
         fallback: fallbackModel || undefined,
         candidate_models:
@@ -97,14 +117,17 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
     } else {
       setMessage("Save failed");
     }
-  }, [config, defaultModel, fallbackModel, candidateModels, maintenanceAgents, saveConfig]);
+  }, [config, defaultModel, fallbackModel, candidateModels, maintenanceAgents, abTestingEnabled, saveConfig]);
 
   const handleReset = useCallback(() => {
     if (!config) return;
     const models = config.models ?? {};
+    const abTesting = isAbTestingEnabled(models);
+    setAbTestingEnabled(abTesting);
     setDefaultModel(models.default ?? "");
     setFallbackModel(models.fallback ?? "");
     setCandidateModels(models.candidate_models ?? []);
+    setChipInput("");
     
     // Reset maintenance agents
     const maintenance = config.maintenance;
@@ -120,25 +143,28 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
 
   const addChip = useCallback(
     (value: string) => {
+      if (!abTestingEnabled) return;
       const trimmed = value.trim();
       if (!trimmed || candidateModels.includes(trimmed)) return;
       setCandidateModels((prev) => [...prev, trimmed]);
       setChipInput("");
       markDirty();
     },
-    [candidateModels, markDirty]
+    [abTestingEnabled, candidateModels, markDirty]
   );
 
   const removeChip = useCallback(
     (model: string) => {
+      if (!abTestingEnabled) return;
       setCandidateModels((prev) => prev.filter((m) => m !== model));
       markDirty();
     },
-    [markDirty]
+    [abTestingEnabled, markDirty]
   );
 
   const handleChipKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (!abTestingEnabled) return;
       if (e.key === "Enter" || e.key === ",") {
         e.preventDefault();
         addChip(chipInput);
@@ -150,7 +176,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
         removeChip(candidateModels[candidateModels.length - 1]);
       }
     },
-    [chipInput, candidateModels, addChip, removeChip]
+    [abTestingEnabled, chipInput, candidateModels, addChip, removeChip]
   );
 
   // Maintenance agent handlers
@@ -196,6 +222,24 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
             <div className="settings-section">
               <h3 className="settings-section-title">🤖 Model Configuration</h3>
 
+              {/* A/B Testing toggle */}
+              <div className="settings-field">
+                <label className="settings-label" htmlFor="ab-testing-mode">
+                  Enable A/B testing mode
+                </label>
+                <div className="settings-checkbox-row">
+                  <input
+                    id="ab-testing-mode"
+                    type="checkbox"
+                    checked={abTestingEnabled}
+                    onChange={(e) => handleAbToggle(e.target.checked)}
+                  />
+                  <span className="settings-hint">
+                    Switch between single-model (Default/Fallback) and rotating candidate models.
+                  </span>
+                </div>
+              </div>
+
               {/* Default Model */}
               <div className="settings-field">
                 <label className="settings-label" htmlFor="default-model">
@@ -206,6 +250,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
                   className="settings-input"
                   list="default-model-suggestions"
                   value={defaultModel}
+                  disabled={abTestingEnabled}
                   onChange={(e) => {
                     setDefaultModel(e.target.value);
                     markDirty();
@@ -232,6 +277,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
                   className="settings-input"
                   list="fallback-model-suggestions"
                   value={fallbackModel}
+                  disabled={abTestingEnabled}
                   onChange={(e) => {
                     setFallbackModel(e.target.value);
                     markDirty();
@@ -253,34 +299,42 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
                 <label className="settings-label">
                   A/B Candidate Models
                 </label>
-                <div className="chip-container">
+                <div
+                  className={`chip-container ${
+                    !abTestingEnabled ? "chip-container-disabled" : ""
+                  }`}
+                  aria-disabled={!abTestingEnabled}
+                >
                   {candidateModels.map((m) => (
                     <span key={m} className="chip">
                       {m}
                       <button
                         className="chip-remove"
                         onClick={() => removeChip(m)}
+                        disabled={!abTestingEnabled}
                         aria-label={`Remove ${m}`}
                       >
                         ✕
                       </button>
                     </span>
                   ))}
-                  <input
-                    className="chip-input"
-                    value={chipInput}
-                    onChange={(e) => setChipInput(e.target.value)}
-                    onKeyDown={handleChipKeyDown}
-                    onBlur={() => {
-                      if (chipInput.trim()) addChip(chipInput);
-                    }}
-                    placeholder={
-                      candidateModels.length === 0
-                        ? "Type model name and press Enter"
-                        : "Add model…"
-                    }
-                    list="chip-suggestions"
-                  />
+                  {abTestingEnabled && (
+                    <input
+                      className="chip-input"
+                      value={chipInput}
+                      onChange={(e) => setChipInput(e.target.value)}
+                      onKeyDown={handleChipKeyDown}
+                      onBlur={() => {
+                        if (chipInput.trim()) addChip(chipInput);
+                      }}
+                      placeholder={
+                        candidateModels.length === 0
+                          ? "Type model name and press Enter"
+                          : "Add model…"
+                      }
+                      list="chip-suggestions"
+                    />
+                  )}
                   <datalist id="chip-suggestions">
                     {suggestions.map((m) => (
                       <option key={m} value={m} />
@@ -288,7 +342,9 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
                   </datalist>
                 </div>
                 <span className="settings-hint">
-                  Models to rotate through for A/B performance testing
+                  {abTestingEnabled
+                    ? "Models to rotate through for A/B performance testing"
+                    : "Enable A/B testing to configure candidate models"}
                 </span>
               </div>
             </div>

@@ -1859,6 +1859,12 @@
   margin-bottom: 14px;
 }
 
+.settings-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .settings-label {
   display: block;
   font-size: 12px;
@@ -1909,6 +1915,11 @@
 
 .chip-container:focus-within {
   border-color: #7aa2f7;
+}
+
+.chip-container-disabled {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .chip {
