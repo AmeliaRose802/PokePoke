@@ -29,7 +29,10 @@ def run_cleanup_loop(item: BeadsWorkItem, result: CopilotResult, repo_root: Path
     while result.success and not is_clean:
         cleanup_attempt += 1
         print(f"\n⚠️  Uncommitted non-beads changes detected (cleanup attempt {cleanup_attempt})")
-        print(f"   Files: {', '.join(f.split()[1] if len(f.split()) > 1 else f for f in non_beads_changes[:5])}..." if len(non_beads_changes) > 5 else f"   Files: {', '.join(f.split()[1] if len(f.split()) > 1 else f for f in non_beads_changes)}")
+        names = [f.split()[1] if len(f.split()) > 1 else f for f in non_beads_changes]
+        preview = ", ".join(names[:5])
+        suffix = "..." if len(names) > 5 else ""
+        print(f"   Files: {preview}{suffix}")
         
         commit_success, commit_error = commit_all_changes(f"Work on {item.id}", cwd=cwd)
         
@@ -257,9 +260,8 @@ def invoke_merge_conflict_cleanup_agent(
     # Build conflict files section
     conflict_files_section = ""
     if unmerged_files:
-        conflict_files_section = "\n**Conflicted Files:**\n"
-        for f in unmerged_files:
-            conflict_files_section += f"- `{f}`\n"
+        lines = [f"- `{f}`" for f in unmerged_files]
+        conflict_files_section = "\n**Conflicted Files:**\n" + "\n".join(lines) + "\n"
     
     # Replace placeholders in template
     cleanup_prompt_template = cleanup_prompt_template.replace("{cwd}", current_dir)
