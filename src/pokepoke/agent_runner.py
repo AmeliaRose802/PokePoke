@@ -15,6 +15,7 @@ from pokepoke.worktrees import create_worktree, cleanup_worktree
 from pokepoke.prompts import PromptService
 from pokepoke import terminal_ui
 from pokepoke.cleanup_agents import invoke_cleanup_agent, invoke_merge_conflict_cleanup_agent, get_pokepoke_prompts_dir, run_cleanup_loop, aggregate_cleanup_stats
+from pokepoke.worktree_cleanup import has_unmerged_worktrees
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import ItemLogger
@@ -186,7 +187,10 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
     """Run worktree cleanup agent to merge/delete stale worktrees."""
     terminal_ui.ui.set_current_agent("Worktree Cleanup")
     
-    # Register Worktree Cleanup agent in the Agents panel (if not already registered by maintenance)
+    if not has_unmerged_worktrees():
+        print("\n🌳 No unmerged worktrees detected — skipping Worktree Cleanup Agent")
+        return None
+    
     agent_id = "worktree-cleanup"
     terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="running")
     print(f"\n{'='*60}\n🌳 Running Worktree Cleanup Agent\n{'='*60}")
@@ -212,11 +216,9 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
             labels=["maintenance", "worktree-cleanup"]
         )
         
-        # Pass repo_root as cwd to the agent instead of changing process directory
         cwd = str(repo_root) if repo_root is not None else None
         agent_result = _run_main_repo_agent("Worktree Cleanup", cleanup_item, cleanup_prompt, cwd=cwd, item_logger=item_logger)
         
-        # Update agent status based on result
         status = "success" if agent_result is not None else "failed"
         terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status=status)
         return agent_result
@@ -244,7 +246,6 @@ def _run_worktree_agent(
     if model:
         print(f"   Model: {model}")
     
-    # Flag to track if worktree has been cleaned up
     worktree_cleaned = False
     
     try:
