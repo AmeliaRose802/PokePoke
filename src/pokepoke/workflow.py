@@ -8,7 +8,7 @@ from pokepoke.copilot import invoke_copilot
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, ModelCompletionRecord
 from pokepoke.worktrees import create_worktree, cleanup_worktree
 from pokepoke.git_operations import has_uncommitted_changes, has_commits_ahead
-from pokepoke.beads import assign_and_sync_item, add_comment
+from pokepoke.beads import assign_and_sync_item, unassign_item, add_comment
 from pokepoke.agent_runner import run_cleanup_loop, run_beta_tester, run_gate_agent
 from pokepoke.worktree_finalization import finalize_work_item
 from pokepoke.work_item_selection import select_work_item  # re-exported
@@ -105,6 +105,8 @@ def process_work_item(
         worktree_path = _setup_worktree(item)
         
         if worktree_path is None:
+            print(f"↩️  Returning {item.id} to queue (unassigning due to worktree failure)...")
+            unassign_item(item.id)
             if run_logger:
                 run_logger.end_item_log(False, 0)
             return False, 0, None, 0, 0, None

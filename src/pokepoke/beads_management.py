@@ -134,6 +134,55 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
         return False
 
 
+def unassign_item(item_id: str) -> bool:
+    """Unassign a work item and reset its status to 'new' so other agents can claim it.
+
+    Should be called when a post-assignment step (e.g. worktree creation) fails and
+    the item needs to be returned to the ready queue.
+
+    Args:
+        item_id: The item ID to unassign.
+
+    Returns:
+        True if the item was successfully returned to 'new', False otherwise.
+    """
+    agent_name = get_agent_name()
+    # Try resetting status and clearing the assignee in one command.
+    try:
+        subprocess.run(
+            ['bd', 'update', item_id, '--status', 'new', '-a', ''],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            check=True,
+            timeout=30,
+        )
+        print(f"↩️  Unassigned {item_id} from {agent_name} and reset to 'new'")
+    except subprocess.CalledProcessError:
+        # Some bd versions may not accept an empty -a; fall back to status-only reset.
+        try:
+            subprocess.run(
+                ['bd', 'update', item_id, '--status', 'new'],
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                check=True,
+                timeout=30,
+            )
+            print(f"↩️  Reset {item_id} to 'new' (assignee field may still reference {agent_name})")
+        except subprocess.CalledProcessError as e:
+            print(f"⚠️  Failed to unassign {item_id}: {e.stderr}")
+            return False
+
+    # Best-effort sync so other agents see the item is available again.
+    sync_result = run_bd_sync_with_retry()
+    if sync_result.returncode != 0:
+        print(f"⚠️  bd sync returned non-zero after unassign: {sync_result.returncode}")
+        print(f"   Other agents may not immediately see {item_id} as available")
+
+    return True
+
+
 def close_item(item_id: str, message: str = "Completed") -> bool:
     """Close a beads item with a completion message.
     

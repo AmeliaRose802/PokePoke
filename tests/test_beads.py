@@ -641,3 +641,93 @@ class TestSelectNextHierarchicalItem:
         result = select_next_hierarchical_item([epic])
 
         assert result is None
+
+
+class TestUnassignItem:
+    """Test unassign_item function."""
+
+    @patch('src.pokepoke.beads_management.run_bd_sync_with_retry')
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_unassign_success(self, mock_run: Mock, mock_sync: Mock) -> None:
+        """Test successful unassign resets item to new and syncs."""
+        from src.pokepoke.beads import unassign_item
+
+        mock_run.return_value = Mock(returncode=0)
+        mock_sync.return_value = Mock(returncode=0)
+
+        result = unassign_item("task-1")
+
+        assert result is True
+        # First call should try status new + clear assignee
+        mock_run.assert_called_once_with(
+            ['bd', 'update', 'task-1', '--status', 'new', '-a', ''],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            check=True,
+            timeout=30,
+        )
+        mock_sync.assert_called_once()
+
+    @patch('src.pokepoke.beads_management.run_bd_sync_with_retry')
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_unassign_falls_back_when_empty_assignee_unsupported(
+        self, mock_run: Mock, mock_sync: Mock
+    ) -> None:
+        """Test fallback to status-only reset when -a '' is not supported."""
+        from src.pokepoke.beads import unassign_item
+
+        # First call (with -a '') raises; second call (without -a) succeeds.
+        mock_run.side_effect = [
+            subprocess.CalledProcessError(1, 'bd', stderr="invalid option"),
+            Mock(returncode=0),
+        ]
+        mock_sync.return_value = Mock(returncode=0)
+
+        result = unassign_item("task-1")
+
+        assert result is True
+        assert mock_run.call_count == 2
+        # Second call should omit the -a argument
+        mock_run.assert_called_with(
+            ['bd', 'update', 'task-1', '--status', 'new'],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            check=True,
+            timeout=30,
+        )
+        mock_sync.assert_called_once()
+
+    @patch('src.pokepoke.beads_management.run_bd_sync_with_retry')
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_unassign_returns_false_when_both_commands_fail(
+        self, mock_run: Mock, mock_sync: Mock
+    ) -> None:
+        """Test unassign_item returns False when bd update fails entirely."""
+        from src.pokepoke.beads import unassign_item
+
+        mock_run.side_effect = subprocess.CalledProcessError(1, 'bd', stderr="error")
+        mock_sync.return_value = Mock(returncode=0)
+
+        result = unassign_item("task-1")
+
+        assert result is False
+        mock_sync.assert_not_called()
+
+    @patch('src.pokepoke.beads_management.run_bd_sync_with_retry')
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_unassign_returns_true_even_when_sync_fails(
+        self, mock_run: Mock, mock_sync: Mock
+    ) -> None:
+        """Test unassign_item returns True (best-effort) even when sync fails."""
+        from src.pokepoke.beads import unassign_item
+
+        mock_run.return_value = Mock(returncode=0)
+        mock_sync.return_value = Mock(returncode=1, stdout='', stderr='sync error')
+
+        result = unassign_item("task-1")
+
+        # Status was reset successfully; sync failure is non-fatal
+        assert result is True
+        mock_sync.assert_called_once()
