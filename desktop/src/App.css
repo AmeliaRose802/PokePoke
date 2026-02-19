@@ -176,6 +176,15 @@
   overflow: hidden;
 }
 
+.log-container--single {
+  gap: 0;
+}
+
+.log-container--single > .log-panel,
+.log-container--single > .agent-log-panel {
+  flex-basis: 100%;
+}
+
 /* ── Agents Panel ──────────────────────────────────────────────────────── */
 
 .agents-panel {
