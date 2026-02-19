@@ -166,4 +166,5 @@ export interface AgentInfo {
   last_updated?: number;
   last_log_at?: number | null;
   paused?: boolean;
+  session_id?: string | null;
 }

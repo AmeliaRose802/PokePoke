@@ -5,14 +5,18 @@
  * Each card shows: agent name, iteration, robot avatar, and
  * a live preview of recent log lines.
  * Clicking a card selects it to display full logs in the main panel.
+ *
+ * Agents are grouped by session. Previous sessions are collapsed
+ * by default and can be expanded by clicking the session header.
  */
 
-import type { ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 import type { AgentInfo } from "../types";
 import { getAgentPrimaryLabel, isGateAgent } from "../utils/agentHelpers";
 
 interface Props {
   agents: AgentInfo[];
+  currentSessionId?: string | null;
   selectedAgentId?: string | null;
   onSelectAgent?: (agentId: string | null) => void;
   onPauseAgent?: (agentId: string) => void;
@@ -45,16 +49,64 @@ const GATE_STATUS_COPY: Record<AgentInfo["status"], string> = {
   failed: "Gate failed",
 };
 
+const UNKNOWN_SESSION = "__unknown__";
+
+/** Format a session_id (epoch timestamp string) as a readable label. */
+function formatSessionLabel(sessionId: string): string {
+  const epoch = parseFloat(sessionId);
+  if (isNaN(epoch)) return `Session ${sessionId}`;
+  const date = new Date(epoch * 1000);
+  const ymd = date.toLocaleDateString(undefined, { year: "numeric", month: "2-digit", day: "2-digit" });
+  const hm = date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return `Session ${ymd} ${hm}`;
+}
+
+/** Group agents by session_id, preserving order (most recent last). */
+function groupBySession(
+  agents: AgentInfo[]
+): { sessionId: string; agents: AgentInfo[] }[] {
+  const map = new Map<string, AgentInfo[]>();
+  for (const agent of agents) {
+    const sid = agent.session_id ?? UNKNOWN_SESSION;
+    const group = map.get(sid);
+    if (group) {
+      group.push(agent);
+    } else {
+      map.set(sid, [agent]);
+    }
+  }
+  return Array.from(map.entries()).map(([sessionId, sessionAgents]) => ({
+    sessionId,
+    agents: sessionAgents,
+  }));
+}
+
 export function AgentsPanel({
   agents,
+  currentSessionId,
   selectedAgentId,
   onSelectAgent,
   onPauseAgent,
   onResumeAgent,
 }: Props) {
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(
+    new Set()
+  );
+
+  const toggleSession = (sessionId: string) => {
+    setExpandedSessions((prev) => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+      return next;
+    });
+  };
+
   const agentIdSet = new Set(agents.map((a) => a.agent_id));
   const childrenByParent = new Map<string, AgentInfo[]>();
-  const rootAgents: AgentInfo[] = [];
 
   for (const agent of agents) {
     const parentId = agent.parent_agent_id ?? null;
@@ -62,8 +114,6 @@ export function AgentsPanel({
       const siblings = childrenByParent.get(parentId) ?? [];
       siblings.push(agent);
       childrenByParent.set(parentId, siblings);
-    } else {
-      rootAgents.push(agent);
     }
   }
 
@@ -180,22 +230,76 @@ export function AgentsPanel({
     );
   };
 
-  const renderAgentTree = (
-    agent: AgentInfo,
-    depth: number,
-    parent?: AgentInfo
-  ): ReactElement[] => {
-    const nodes = [renderAgentCard(agent, depth, parent)];
-    const children = childrenByParent.get(agent.agent_id) ?? [];
-    children.forEach((child) => {
-      nodes.push(...renderAgentTree(child, depth + 1, agent));
-    });
-    return nodes;
-  };
+  // Group agents by session
+  const sessionGroups = groupBySession(agents);
+  const hasMultipleSessions = sessionGroups.length > 1;
 
-  const renderedAgents = rootAgents.flatMap((agent) =>
-    renderAgentTree(agent, 0)
-  );
+  const renderSessionGroup = (
+    group: { sessionId: string; agents: AgentInfo[] },
+    isCurrent: boolean
+  ) => {
+    const isExpanded =
+      isCurrent || expandedSessions.has(group.sessionId);
+
+    // Build trees for this session's agents
+    const sessionAgentIdSet = new Set(group.agents.map((a) => a.agent_id));
+    const sessionChildrenByParent = new Map<string, AgentInfo[]>();
+    const sessionRootAgents: AgentInfo[] = [];
+    for (const agent of group.agents) {
+      const parentId = agent.parent_agent_id ?? null;
+      if (parentId && sessionAgentIdSet.has(parentId)) {
+        const siblings = sessionChildrenByParent.get(parentId) ?? [];
+        siblings.push(agent);
+        sessionChildrenByParent.set(parentId, siblings);
+      } else {
+        sessionRootAgents.push(agent);
+      }
+    }
+
+    const renderSessionAgentTree = (
+      agent: AgentInfo,
+      depth: number,
+      parent?: AgentInfo
+    ): ReactElement[] => {
+      const nodes = [renderAgentCard(agent, depth, parent)];
+      const children = sessionChildrenByParent.get(agent.agent_id) ?? [];
+      children.forEach((child) => {
+        nodes.push(...renderSessionAgentTree(child, depth + 1, agent));
+      });
+      return nodes;
+    };
+
+    const renderedAgents = sessionRootAgents.flatMap((agent) =>
+      renderSessionAgentTree(agent, 0)
+    );
+
+    if (!hasMultipleSessions) {
+      return <div key={group.sessionId}>{renderedAgents}</div>;
+    }
+
+    const label = isCurrent
+      ? "Current session"
+      : formatSessionLabel(group.sessionId);
+
+    return (
+      <div key={group.sessionId} className="session-group">
+        <button
+          className={`session-group-header${isCurrent ? " session-group-current" : ""}`}
+          onClick={() => !isCurrent && toggleSession(group.sessionId)}
+          aria-expanded={isExpanded}
+        >
+          <span className="session-group-chevron">
+            {isExpanded ? "▾" : "▸"}
+          </span>
+          <span className="session-group-label">{label}</span>
+          <span className="session-group-count">{group.agents.length}</span>
+        </button>
+        {isExpanded && (
+          <div className="session-group-content">{renderedAgents}</div>
+        )}
+      </div>
+    );
+  };
 
   if (agents.length === 0) {
     return (
@@ -216,7 +320,14 @@ export function AgentsPanel({
         <span className="agents-count">{agents.length}</span>
       </div>
       <div className="agents-scroll">
-        {renderedAgents}
+        {sessionGroups.map((group) =>
+          renderSessionGroup(
+            group,
+            group.sessionId === currentSessionId ||
+              (currentSessionId == null &&
+                group === sessionGroups[sessionGroups.length - 1])
+          )
+        )}
       </div>
     </aside>
   );
