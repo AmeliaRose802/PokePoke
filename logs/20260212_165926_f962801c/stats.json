@@ -1,0 +1,63 @@
+{
+  "items_completed": 1,
+  "total_requests": 4,
+  "elapsed_seconds": 6672.5,
+  "agent_stats": {
+    "wall_duration": 0.0,
+    "api_duration": 0.0,
+    "input_tokens": 17110130.0,
+    "output_tokens": 109065.0,
+    "lines_added": 0,
+    "lines_removed": 0,
+    "premium_requests": 183,
+    "retries": 1,
+    "tool_calls": 306
+  },
+  "run_counts": {
+    "work_agent": 3,
+    "gate_agent": 4,
+    "tech_debt_agent": 0,
+    "janitor_agent": 0,
+    "janitor_lines_removed": 0,
+    "backlog_cleanup_agent": 0,
+    "cleanup_agent": 0,
+    "beta_tester_agent": 0,
+    "code_review_agent": 0,
+    "worktree_cleanup_agent": 0
+  },
+  "completed_items": [
+    {
+      "id": "PokePoke-l0tq",
+      "title": "Worktree cleanup fails with permission denied on Windows"
+    }
+  ],
+  "model_completions": [
+    {
+      "item_id": "PokePoke-l0tq",
+      "model": "gpt-5-codex",
+      "duration_seconds": 1156.0280916690826,
+      "gate_passed": true
+    }
+  ],
+  "beads_start": {
+    "total_issues": 408,
+    "open_issues": 67,
+    "in_progress_issues": 0,
+    "closed_issues": 341,
+    "ready_issues": 51
+  },
+  "beads_end": {
+    "total_issues": 411,
+    "open_issues": 63,
+    "in_progress_issues": 0,
+    "closed_issues": 348,
+    "ready_issues": 46
+  },
+  "beads_delta": {
+    "total_issues": 3,
+    "open_issues": -4,
+    "in_progress_issues": 0,
+    "closed_issues": 7,
+    "ready_issues": -5
+  }
+}
