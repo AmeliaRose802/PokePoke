@@ -70,15 +70,7 @@ def find_frontend_dist() -> Path | None:
                         return temp_dir
                         
             except (ImportError, AttributeError):
-                # Fallback for older Python versions
-                try:
-                    import pkg_resources as pkg_res
-                    static_path = pkg_res.resource_filename('pokepoke.static', '')
-                    static_dir = Path(static_path)
-                    if static_dir.is_dir() and (static_dir / "index.html").exists():
-                        return static_dir
-                except ImportError:
-                    pass
+                pass
     except Exception as e:
         # If package resources fail, fall back to filesystem search
         print(f"Warning: Failed to load embedded frontend assets: {e}")

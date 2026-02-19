@@ -345,7 +345,66 @@ class TestRunGateAgent:
             model="gpt-5.1-codex"
         )
 
+    @patch('pokepoke.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.PromptService')
+    def test_handoff_context_passed_to_prompt(
+        self,
+        mock_service_cls: Mock,
+        mock_invoke: Mock,
+        mock_parse: Mock,
+        work_item: BeadsWorkItem,
+    ) -> None:
+        """Test that handoff_context is passed to the prompt template."""
+        mock_service = Mock()
+        mock_service.load_and_render.return_value = "Gate prompt with handoff"
+        mock_service_cls.return_value = mock_service
 
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="test-123",
+            success=True,
+            output='```json\n{"status": "success", "message": "All tests pass"}\n```',
+            attempt_count=1,
+        )
+        mock_parse.return_value = None
+
+        handoff = "## Work Agent Handoff Context\n### Changed Files\nM\tsrc/foo.py"
+        success, reason, stats = run_gate_agent(work_item, handoff_context=handoff)
+
+        assert success is True
+        # Verify handoff_context was included in template variables
+        call_args = mock_service.load_and_render.call_args
+        template_vars = call_args[0][1]
+        assert template_vars["handoff_context"] == handoff
+
+    @patch('pokepoke.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.PromptService')
+    def test_handoff_context_defaults_to_empty(
+        self,
+        mock_service_cls: Mock,
+        mock_invoke: Mock,
+        mock_parse: Mock,
+        work_item: BeadsWorkItem,
+    ) -> None:
+        """Test that handoff_context defaults to empty string when not provided."""
+        mock_service = Mock()
+        mock_service.load_and_render.return_value = "Gate prompt"
+        mock_service_cls.return_value = mock_service
+
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="test-123",
+            success=True,
+            output='```json\n{"status": "success", "message": "OK"}\n```',
+            attempt_count=1,
+        )
+        mock_parse.return_value = None
+
+        run_gate_agent(work_item)
+
+        call_args = mock_service.load_and_render.call_args
+        template_vars = call_args[0][1]
+        assert template_vars["handoff_context"] == ""
 
 
 class TestRunMaintenanceAgent:
@@ -991,11 +1050,10 @@ def _mcp_disabled_config() -> Mock:
 class TestRunBetaTester:
     """Test run_beta_tester function."""
     
-    @patch('pokepoke.agent_runner.get_config')
+    @patch('pokepoke.beta_tester.get_config')
     @patch('pokepoke.agent_runner._run_worktree_agent')
-    @patch('pokepoke.agent_runner.parse_agent_stats')
-    @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
-    @patch('subprocess.run')
+    @patch('pokepoke.beta_tester.get_pokepoke_prompts_dir')
+    @patch('pokepoke.beta_tester.subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('pathlib.Path.read_text')
     def test_beta_tester_success(
@@ -1004,7 +1062,6 @@ class TestRunBetaTester:
         mock_exists: Mock,
         mock_run: Mock,
         mock_get_prompts: Mock,
-        mock_parse: Mock,
         mock_worktree_agent: Mock,
         mock_get_config: Mock
     ) -> None:
@@ -1043,11 +1100,10 @@ class TestRunBetaTester:
         assert kwargs.get('merge_changes') is False
         mock_run.assert_called()  # Restart script
 
-    @patch('pokepoke.agent_runner.get_config')
+    @patch('pokepoke.beta_tester.get_config')
     @patch('pokepoke.agent_runner._run_worktree_agent')
-    @patch('pokepoke.agent_runner.parse_agent_stats')
-    @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
-    @patch('subprocess.run')
+    @patch('pokepoke.beta_tester.get_pokepoke_prompts_dir')
+    @patch('pokepoke.beta_tester.subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('pathlib.Path.read_text')
     def test_beta_tester_restart_missing_keeps_going(
@@ -1056,7 +1112,6 @@ class TestRunBetaTester:
         mock_exists: Mock, 
         mock_run: Mock, 
         mock_get_prompts: Mock,
-        mock_parse: Mock,
         mock_worktree_agent: Mock,
         mock_get_config: Mock
     ) -> None:
@@ -1090,9 +1145,9 @@ class TestRunBetaTester:
         assert stats is not None # It proceeded!
         mock_run.assert_not_called() # Did not run restart
 
-    @patch('pokepoke.agent_runner.get_config')
-    @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
-    @patch('subprocess.run')
+    @patch('pokepoke.beta_tester.get_config')
+    @patch('pokepoke.beta_tester.get_pokepoke_prompts_dir')
+    @patch('pokepoke.beta_tester.subprocess.run')
     @patch('pathlib.Path.exists')
     def test_beta_tester_prompt_missing(
         self, 
@@ -1118,10 +1173,10 @@ class TestRunBetaTester:
         stats = run_beta_tester()
         assert stats is None
 
-    @patch('pokepoke.agent_runner.get_config')
+    @patch('pokepoke.beta_tester.get_config')
     @patch('pokepoke.agent_runner._run_worktree_agent')
-    @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
-    @patch('subprocess.run')
+    @patch('pokepoke.beta_tester.get_pokepoke_prompts_dir')
+    @patch('pokepoke.beta_tester.subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('pathlib.Path.read_text')
     def test_beta_tester_invoke_failure(
@@ -1153,11 +1208,10 @@ class TestRunBetaTester:
         stats = run_beta_tester()
         assert stats is None
 
-    @patch('pokepoke.agent_runner.get_config')
+    @patch('pokepoke.beta_tester.get_config')
     @patch('pokepoke.agent_runner._run_worktree_agent')
-    @patch('pokepoke.agent_runner.parse_agent_stats')
-    @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
-    @patch('subprocess.run')
+    @patch('pokepoke.beta_tester.get_pokepoke_prompts_dir')
+    @patch('pokepoke.beta_tester.subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('pathlib.Path.read_text')
     def test_beta_tester_restart_failure_keeps_going(
@@ -1166,7 +1220,6 @@ class TestRunBetaTester:
         mock_exists: Mock, 
         mock_run: Mock, 
         mock_get_prompts: Mock,
-        mock_parse: Mock,
         mock_worktree_agent: Mock,
         mock_get_config: Mock
     ) -> None:

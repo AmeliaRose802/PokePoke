@@ -985,6 +985,7 @@ class TestProcessWorkItem:
         mock_invoke.assert_not_called()
         mock_cleanup_worktree.assert_any_call(item.id, force=True)
     
+    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.run_gate_agent')  # Mock gate agent
     @patch('pokepoke.workflow.run_beta_tester')  # Mock beta tester
     @patch('pokepoke.workflow.finalize_work_item')
@@ -1012,7 +1013,8 @@ class TestProcessWorkItem:
         mock_chdir: Mock,
         mock_finalize: Mock,
         mock_beta: Mock,
-        mock_gate_agent: Mock
+        mock_gate_agent: Mock,
+        mock_handoff: Mock
     ) -> None:
         """Test when Copilot makes no changes (no uncommitted and no commits ahead)."""
         item = BeadsWorkItem(
@@ -1051,6 +1053,7 @@ class TestProcessWorkItem:
         # Cleanup is called even with no changes (it just exits early)
         mock_cleanup_timeout.assert_called_once()
     
+    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.run_gate_agent')  # Mock gate agent
     @patch('pokepoke.workflow.run_beta_tester')  # Mock beta tester
     @patch('pokepoke.workflow.finalize_work_item')
@@ -1078,7 +1081,8 @@ class TestProcessWorkItem:
         mock_chdir: Mock,
         mock_finalize: Mock,
         mock_beta: Mock,
-        mock_gate_agent: Mock
+        mock_gate_agent: Mock,
+        mock_handoff: Mock
     ) -> None:
         """Test when Copilot committed changes (clean tree but commits ahead)."""
         item = BeadsWorkItem(
@@ -1179,6 +1183,7 @@ class TestProcessWorkItem:
         assert count == 1
         mock_cleanup.assert_called_with("task-1", force=True)
     
+    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.add_comment')
     @patch('pokepoke.workflow.run_gate_agent')
     @patch('pokepoke.workflow.run_beta_tester')
@@ -1208,7 +1213,8 @@ class TestProcessWorkItem:
         mock_finalize: Mock,
         mock_beta: Mock,
         mock_gate_agent: Mock,
-        mock_add_comment: Mock
+        mock_add_comment: Mock,
+        mock_handoff: Mock
     ) -> None:
         """Test gate agent rejection triggers retry loop."""
         item = BeadsWorkItem(
@@ -1251,6 +1257,7 @@ class TestProcessWorkItem:
         mock_add_comment.assert_called_once()  # Comment added for gate rejection
         assert mock_gate_agent.call_count == 2
     
+    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.add_comment')
     @patch('pokepoke.workflow.run_gate_agent')
     @patch('pokepoke.workflow.run_beta_tester')
@@ -1280,7 +1287,8 @@ class TestProcessWorkItem:
         mock_finalize: Mock,
         mock_beta: Mock,
         mock_gate_agent: Mock,
-        mock_add_comment: Mock
+        mock_add_comment: Mock,
+        mock_handoff: Mock
     ) -> None:
         """Test gate agent stats are aggregated into totals."""
         item = BeadsWorkItem(
@@ -1408,6 +1416,7 @@ class TestProcessWorkItem:
         assert stats is not None  # Stats should be returned even on failure
         assert stats.wall_duration == 10.0
 
+    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.add_comment')
     @patch('pokepoke.workflow.run_gate_agent')
     @patch('pokepoke.workflow.select_model_for_item')
@@ -1433,7 +1442,8 @@ class TestProcessWorkItem:
         mock_cleanup_worktree: Mock,
         mock_select_model: Mock,
         mock_gate_agent: Mock,
-        mock_add_comment: Mock
+        mock_add_comment: Mock,
+        mock_handoff: Mock
     ) -> None:
         """Test that repeated timeouts are bounded by max_timeout_restarts."""
         item = BeadsWorkItem(
@@ -1475,6 +1485,7 @@ class TestProcessWorkItem:
         assert success is False
         mock_cleanup_worktree.assert_called_with(item.id, force=True)
 
+    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.run_gate_agent')
     @patch('pokepoke.workflow.run_beta_tester')
     @patch('pokepoke.workflow.finalize_work_item')
@@ -1498,7 +1509,8 @@ class TestProcessWorkItem:
         mock_cleanup_timeout: Mock,
         mock_finalize: Mock,
         mock_beta: Mock,
-        mock_gate_agent: Mock
+        mock_gate_agent: Mock,
+        mock_handoff: Mock
     ) -> None:
         """Test that a timeout restart followed by success works correctly."""
         item = BeadsWorkItem(

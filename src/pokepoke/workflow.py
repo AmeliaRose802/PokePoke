@@ -203,6 +203,10 @@ def process_work_item(
                 return False, request_count, accumulated_stats, cleanup_agent_runs, gate_agent_runs, None
 
             # --- GATE AGENT CHECK ---
+            # Build handoff context so gate agent skips re-discovering the codebase
+            from pokepoke.git_operations import build_handoff_context
+            handoff_ctx = build_handoff_context(cwd=worktree_cwd)
+
             gate_agent_id = f"{item.id}-gate"
             gate_iteration = gate_agent_runs + 1
             terminal_ui.ui.push_agent_status(
@@ -217,7 +221,8 @@ def process_work_item(
             try:
                 with terminal_ui.ui.agent_output_for(gate_agent_id):
                     gate_success, gate_reason, gate_stats = run_gate_agent(
-                        item, cwd=worktree_cwd, work_model=selected_model
+                        item, cwd=worktree_cwd, work_model=selected_model,
+                        handoff_context=handoff_ctx,
                     )
             except Exception:
                 gate_agent_runs += 1

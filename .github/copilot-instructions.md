@@ -201,7 +201,7 @@ npm test | Select-Object -First 1                # WILL HANG on slow output
 
 ## 🧪 TESTING
 
-**Note:** Pre-commit hooks automatically run tests on every commit.
+**Note:** Pre-commit hooks automatically run tests on every commit. YOU DO NOT NEED TO MANUALLY RUN ALL TESTS! THEY RUN ON COMMIT AND THIS JUST WASTES TIME!
 
 ### Test Strategy
 
