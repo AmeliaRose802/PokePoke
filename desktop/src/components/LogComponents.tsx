@@ -101,10 +101,25 @@ export function ToolBatchAccordion({ batch, keyPrefix }: ToolBatchAccordionProps
   const progress = `${batch.completedCalls}/${total}`;
   const byTool = batch.groups.map((g) => `${g.toolName}×${g.items.length}`).join(", ");
 
+  // Flatten: single group with single tool → render as simple ToolAccordion
+  if (batch.groups.length === 1 && batch.groups[0].items.length === 1) {
+    return (
+      <ToolAccordion
+        key={keyPrefix}
+        tool={batch.groups[0].items[0]}
+        keyPrefix={keyPrefix}
+      />
+    );
+  }
+
+  // Flatten: single group → skip group accordion, render tools directly
+  const singleGroup = batch.groups.length === 1;
+
   return (
     <details
       key={keyPrefix}
       className={`log-tool-batch ${batch.statusClass ?? ""}`.trim()}
+      open={singleGroup}
     >
       <summary className="log-accordion-summary">
         <span className="log-accordion-chevron">▸</span>
@@ -116,31 +131,46 @@ export function ToolBatchAccordion({ batch, keyPrefix }: ToolBatchAccordionProps
         <span className="log-accordion-result">{progress}</span>
       </summary>
       <div className="log-accordion-details">
-        {batch.groups.map((group, gIndex) => (
-          <details
-            key={`${keyPrefix}-group-${gIndex}`}
-            className={`log-tool-group ${group.statusClass ?? ""}`.trim()}
-          >
-            <summary className="log-accordion-summary">
-              <span className="log-accordion-chevron">▸</span>
-              <span className="log-timestamp">{formatTime(group.items[0].entry.timestamp)}</span>
-              <span className="log-message">{group.toolLabel}</span>
-              <span className="log-accordion-result">
-                {group.summaryText ?? `${group.items.filter((t) => Boolean(t.result)).length}/${group.items.length}`}
-              </span>
-            </summary>
-            <div className="log-accordion-details">
-              {group.items.map((tool, tIndex) => (
-                <ToolAccordion
-                  key={`${keyPrefix}-group-${gIndex}-tool-${tIndex}`}
-                  tool={tool}
-                  keyPrefix={`${keyPrefix}-group-${gIndex}-tool-${tIndex}`}
-                  nested
-                />
-              ))}
-            </div>
-          </details>
-        ))}
+        {batch.groups.map((group, gIndex) => {
+          // Flatten: single item in group → render tool directly without group wrapper
+          if (group.items.length === 1) {
+            return (
+              <ToolAccordion
+                key={`${keyPrefix}-group-${gIndex}-tool-0`}
+                tool={group.items[0]}
+                keyPrefix={`${keyPrefix}-group-${gIndex}-tool-0`}
+                nested
+              />
+            );
+          }
+
+          return (
+            <details
+              key={`${keyPrefix}-group-${gIndex}`}
+              className={`log-tool-group ${group.statusClass ?? ""}`.trim()}
+              open={batch.groups.length === 1}
+            >
+              <summary className="log-accordion-summary">
+                <span className="log-accordion-chevron">▸</span>
+                <span className="log-timestamp">{formatTime(group.items[0].entry.timestamp)}</span>
+                <span className="log-message">{group.toolLabel}</span>
+                <span className="log-accordion-result">
+                  {group.summaryText ?? `${group.items.filter((t) => Boolean(t.result)).length}/${group.items.length}`}
+                </span>
+              </summary>
+              <div className="log-accordion-details">
+                {group.items.map((tool, tIndex) => (
+                  <ToolAccordion
+                    key={`${keyPrefix}-group-${gIndex}-tool-${tIndex}`}
+                    tool={tool}
+                    keyPrefix={`${keyPrefix}-group-${gIndex}-tool-${tIndex}`}
+                    nested
+                  />
+                ))}
+              </div>
+            </details>
+          );
+        })}
       </div>
     </details>
   );
