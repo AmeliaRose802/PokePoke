@@ -1,5 +1,5 @@
 /**
- * Tests for AgentsPanel pause/resume buttons.
+ * Tests for AgentsPanel pause/resume buttons and session grouping.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -109,5 +109,95 @@ describe('AgentsPanel', () => {
     fireEvent.click(screen.getByTitle('Pause agent'));
     expect(onPause).toHaveBeenCalled();
     expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  describe('session grouping', () => {
+    it('collapses previous session agents by default', () => {
+      const oldAgent = mkAgent({ agent_id: 'old-1', name: 'OldWorker', session_id: '1000.0', status: 'success' });
+      const newAgent = mkAgent({ agent_id: 'new-1', name: 'NewWorker', session_id: '2000.0' });
+      render(
+        <AgentsPanel
+          agents={[oldAgent, newAgent]}
+          currentSessionId="2000.0"
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+      // Current session agent should be visible
+      expect(screen.getByText('NewWorker')).toBeInTheDocument();
+      // Previous session agent should be collapsed (not visible)
+      expect(screen.queryByText('OldWorker')).not.toBeInTheDocument();
+    });
+
+    it('expands previous session when header is clicked', () => {
+      const oldAgent = mkAgent({ agent_id: 'old-1', name: 'OldWorker', session_id: '1000.0', status: 'success' });
+      const newAgent = mkAgent({ agent_id: 'new-1', name: 'NewWorker', session_id: '2000.0' });
+      render(
+        <AgentsPanel
+          agents={[oldAgent, newAgent]}
+          currentSessionId="2000.0"
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+      // Click the collapsed (non-current) session header
+      const headers = screen.getAllByRole('button', { name: /session/i });
+      const collapsedHeader = headers.find(h => h.getAttribute('aria-expanded') === 'false')!;
+      fireEvent.click(collapsedHeader);
+      // Now old agent should be visible
+      expect(screen.getByText('OldWorker')).toBeInTheDocument();
+    });
+
+    it('does not show session headers for single session', () => {
+      const agent = mkAgent({ session_id: '1000.0' });
+      const { container } = render(
+        <AgentsPanel
+          agents={[agent]}
+          currentSessionId="1000.0"
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+      expect(container.querySelector('.session-group-header')).toBeNull();
+    });
+
+    it('shows agent count in collapsed session header', () => {
+      const agents = [
+        mkAgent({ agent_id: 'old-1', name: 'W1', session_id: '1000.0', status: 'success' }),
+        mkAgent({ agent_id: 'old-2', name: 'W2', session_id: '1000.0', status: 'success' }),
+        mkAgent({ agent_id: 'new-1', name: 'W3', session_id: '2000.0' }),
+      ];
+      render(
+        <AgentsPanel
+          agents={agents}
+          currentSessionId="2000.0"
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+      // The collapsed session header should show count of 2
+      expect(screen.getByText('2')).toBeInTheDocument();
+    });
+
+    it('re-collapses session when header is clicked twice', () => {
+      const oldAgent = mkAgent({ agent_id: 'old-1', name: 'OldWorker', session_id: '1000.0', status: 'success' });
+      const newAgent = mkAgent({ agent_id: 'new-1', name: 'NewWorker', session_id: '2000.0' });
+      render(
+        <AgentsPanel
+          agents={[oldAgent, newAgent]}
+          currentSessionId="2000.0"
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+      const headers = screen.getAllByRole('button', { name: /session/i });
+      const collapsedHeader = headers.find(h => h.getAttribute('aria-expanded') === 'false')!;
+      // Expand
+      fireEvent.click(collapsedHeader);
+      expect(screen.getByText('OldWorker')).toBeInTheDocument();
+      // Collapse again
+      fireEvent.click(collapsedHeader);
+      expect(screen.queryByText('OldWorker')).not.toBeInTheDocument();
+    });
   });
 });

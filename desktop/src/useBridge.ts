@@ -41,6 +41,7 @@ interface PyWebViewAPI {
     agents: AgentInfo[];
     stop_after_current: boolean;
     project_name: string;
+    current_session_id: string | null;
   }>;
   get_new_logs(): Promise<LogEntry[]>;
   get_all_logs(): Promise<LogEntry[]>;
@@ -80,6 +81,7 @@ export interface BridgeState {
   modelLeaderboard: Record<string, ModelPerformanceSummary>;
   agents: AgentInfo[];
   stopAfterCurrent: boolean;
+  currentSessionId: string | null;
   clearLogs: (target: "orchestrator" | "agent" | "all") => void;
   listPrompts: () => Promise<PromptInfo[]>;
   getPrompt: (name: string) => Promise<PromptDetail | null>;
@@ -115,6 +117,7 @@ export function useBridge(): BridgeState {
   const [modelLeaderboard, setModelLeaderboard] = useState<Record<string, ModelPerformanceSummary>>({});
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [stopAfterCurrent, setStopAfterCurrent] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
   const clearLogs = useCallback(
     (target: "orchestrator" | "agent" | "all") => {
@@ -270,6 +273,7 @@ export function useBridge(): BridgeState {
         if (state.model_leaderboard) setModelLeaderboard(state.model_leaderboard);
         if (state.agents) setAgents(state.agents);
         setStopAfterCurrent(!!state.stop_after_current);
+        setCurrentSessionId(state.current_session_id ?? null);
 
         const allLogs = await api.get_all_logs();
         appendLogs(allLogs);
@@ -298,6 +302,7 @@ export function useBridge(): BridgeState {
           if (state.model_leaderboard) setModelLeaderboard(state.model_leaderboard);
           if (state.agents) setAgents(state.agents);
           setStopAfterCurrent(!!state.stop_after_current);
+          setCurrentSessionId(state.current_session_id ?? null);
 
           setConnectionStatus("connected");
         } catch {
@@ -326,6 +331,7 @@ export function useBridge(): BridgeState {
     modelLeaderboard,
     agents,
     stopAfterCurrent,
+    currentSessionId,
     clearLogs,
     listPrompts,
     getPrompt,

@@ -49,6 +49,8 @@ class DesktopAPI:
         self._session_start_time: float | None = None
         # Session end time to freeze the clock when agents complete
         self._session_end_time: float | None = None
+        # Current session identifier for grouping agents
+        self._current_session_id: str | None = None
 
         # Live reference to SessionStats — serialized fresh on each poll
         # so agent run counts, token stats, etc. update in real-time
@@ -148,6 +150,7 @@ class DesktopAPI:
                 "agents": self._agent_registry.serialize_all(),
                 "stop_after_current": _should_stop_after_current(),
                 "project_name": config.project_name,
+                "current_session_id": self._current_session_id,
             }
 
     def _get_cached_leaderboard(self) -> dict[str, Any]:
@@ -249,8 +252,10 @@ class DesktopAPI:
 
         Once set, every call to get_state()/get_stats() will recompute
         elapsed_time = now - start_time so the frontend timer ticks live.
+        Also sets the current session ID for agent grouping.
         """
         self._session_start_time = start_time
+        self._current_session_id = str(start_time)
 
     def set_session_end_time(self, end_time: float) -> None:
         """Store the session end time to freeze the elapsed_time clock.
@@ -337,6 +342,7 @@ class DesktopAPI:
             parent_agent_id=parent_agent_id,
             work_item_id=work_item_id,
             work_item_title=work_item_title,
+            session_id=self._current_session_id,
         )
 
     def push_agent_log(self, agent_id: str, line: str) -> None:
