@@ -89,13 +89,8 @@ Only use these if you truly cannot resolve the conflicts. The goal is always to 
 ### Scenario 1: Both Branches Modified Same Lines
 
 ```python
-<<<<<<< HEAD
 def calculate(x):
     return x * 2
-=======
-def calculate(x, y):
-    return x * y
->>>>>>> task/feature-123
 ```
 
 **Resolution**: Evaluate which version is correct based on the work item requirements.
@@ -103,15 +98,9 @@ def calculate(x, y):
 ### Scenario 2: Both Branches Added Different Features
 
 ```python
-<<<<<<< HEAD
 # Added logging
 logger.info("Processing started")
 process_data()
-=======
-# Added validation
-validate_input(data)
-process_data()
->>>>>>> task/feature-123
 ```
 
 **Resolution**: Keep both features (merge them):
