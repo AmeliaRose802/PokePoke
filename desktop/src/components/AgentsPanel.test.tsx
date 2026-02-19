@@ -200,4 +200,44 @@ describe('AgentsPanel', () => {
       expect(screen.queryByText('OldWorker')).not.toBeInTheDocument();
     });
   });
+
+  describe('modified files display', () => {
+    it('shows file count and list for agents with modified_files', () => {
+      const agent = mkAgent({
+        modified_files: ['src/main.py', 'tests/test_main.py'],
+      });
+      render(
+        <AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />
+      );
+      expect(screen.getByText('📁 2 files')).toBeInTheDocument();
+      expect(screen.getByText('src/main.py, tests/test_main.py')).toBeInTheDocument();
+    });
+
+    it('does not show files section when no modified_files', () => {
+      const agent = mkAgent();
+      const { container } = render(
+        <AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />
+      );
+      expect(container.querySelector('.agent-card-files')).toBeNull();
+    });
+
+    it('truncates file list beyond 3 files', () => {
+      const agent = mkAgent({
+        modified_files: ['a.py', 'b.py', 'c.py', 'd.py', 'e.py'],
+      });
+      render(
+        <AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />
+      );
+      expect(screen.getByText('📁 5 files')).toBeInTheDocument();
+      expect(screen.getByText('a.py, b.py, c.py +2 more')).toBeInTheDocument();
+    });
+
+    it('shows singular "file" for single file', () => {
+      const agent = mkAgent({ modified_files: ['only.py'] });
+      render(
+        <AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />
+      );
+      expect(screen.getByText('📁 1 file')).toBeInTheDocument();
+    });
+  });
 });

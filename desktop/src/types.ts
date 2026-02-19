@@ -160,6 +160,7 @@ export interface AgentInfo {
   parent_agent_id?: string | null;
    work_item_id?: string | null;
    work_item_title?: string | null;
+  modified_files?: string[];
   recent_logs: string[];
   log_lines?: string[];
   started_at?: number;

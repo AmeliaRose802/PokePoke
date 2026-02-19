@@ -42,7 +42,11 @@ def run_cleanup_loop(item: BeadsWorkItem, result: CopilotResult, repo_root: Path
         
         print("\n🧹 Invoking cleanup agent to fix validation errors...")
         cleanup_agent_runs += 1
-        cleanup_success, cleanup_stats = invoke_cleanup_agent(item, repo_root, cwd=cwd)
+        # Extract file paths from status lines (e.g. " M file.py" -> "file.py")
+        file_paths = [f.split()[-1] if f.split() else f for f in non_beads_changes]
+        cleanup_success, cleanup_stats = invoke_cleanup_agent(
+            item, repo_root, cwd=cwd, modified_files=file_paths,
+        )
         
         aggregate_cleanup_stats(result.stats, cleanup_stats)
         
@@ -136,13 +140,17 @@ def _get_current_git_context(cwd: str | None = None) -> tuple[str, str, bool]:
     return current_dir, current_branch, is_worktree
 
 
-def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path, cwd: str | None = None) -> tuple[bool, AgentStats | None]:
+def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path, cwd: str | None = None, modified_files: list[str] | None = None) -> tuple[bool, AgentStats | None]:
     """Invoke cleanup agent to commit uncommitted changes."""
     terminal_ui.ui.set_current_agent("Cleanup Agent")
     
     # Register cleanup agent in the Agents panel
     agent_id = f"{item.id}-cleanup"
-    terminal_ui.ui.push_agent_status(agent_id, "Cleanup Agent", iteration=1, status="running")
+    terminal_ui.ui.push_agent_status(
+        agent_id, "Cleanup Agent", iteration=1, status="running",
+        work_item_id=item.id, work_item_title=item.title,
+        modified_files=modified_files,
+    )
     
     cleanup_prompt_template = load_prompt_file("cleanup.md")
     if cleanup_prompt_template is None:
@@ -222,7 +230,10 @@ def invoke_merge_conflict_cleanup_agent(
     
     # Register merge conflict cleanup agent in the Agents panel
     agent_id = f"{item.id}-merge-fix"
-    terminal_ui.ui.push_agent_status(agent_id, "Merge Conflict Cleanup", iteration=1, status="running")
+    terminal_ui.ui.push_agent_status(
+        agent_id, "Merge Conflict Cleanup", iteration=1, status="running",
+        work_item_id=item.id, work_item_title=item.title,
+    )
     
     from pokepoke.git_operations import is_merge_in_progress, get_unmerged_files as git_get_unmerged
     

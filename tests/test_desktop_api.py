@@ -519,6 +519,7 @@ def test_push_agent_status_registers_agent() -> None:
     assert agents[0]["model"] == "gpt-5.1"
     assert agents[0]["work_item_id"] is None
     assert agents[0]["work_item_title"] is None
+    assert agents[0]["modified_files"] == []
     assert agents[0]["recent_logs"] == []
 
 
@@ -632,6 +633,40 @@ def test_get_state_includes_agents() -> None:
     assert state["agents"][0]["recent_logs"] == ["doing work"]
     assert state["agents"][0]["log_lines"] == ["doing work"]
     assert state["agents"][0]["work_item_id"] is None
+
+
+def test_push_agent_status_with_modified_files() -> None:
+    """push_agent_status should store and return modified_files."""
+    api = DesktopAPI()
+    files = ["src/main.py", "tests/test_main.py"]
+    api.push_agent_status(
+        "cleanup-1", "Cleanup Agent", iteration=1, status="running",
+        work_item_id="item-42", work_item_title="Fix bug",
+        modified_files=files,
+    )
+
+    agents = api.get_agents()
+    assert len(agents) == 1
+    assert agents[0]["work_item_id"] == "item-42"
+    assert agents[0]["work_item_title"] == "Fix bug"
+    assert agents[0]["modified_files"] == files
+
+    # modified_files should be preserved across status updates
+    api.push_agent_status("cleanup-1", "Cleanup Agent", iteration=1, status="success")
+    agents = api.get_agents()
+    assert agents[0]["modified_files"] == files
+
+
+def test_get_agent_detail_includes_modified_files() -> None:
+    """get_agent_detail should include modified_files."""
+    api = DesktopAPI()
+    api.push_agent_status(
+        "cleanup-1", "Cleanup Agent", iteration=1, status="running",
+        modified_files=["file.py"],
+    )
+    detail = api.get_agent_detail("cleanup-1")
+    assert detail is not None
+    assert detail["modified_files"] == ["file.py"]
 
 
 def test_get_agent_detail_includes_full_logs_and_timestamps() -> None:

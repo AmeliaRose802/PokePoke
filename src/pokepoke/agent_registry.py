@@ -38,6 +38,7 @@ class AgentRegistry:
         work_item_id: str | None = None,
         work_item_title: str | None = None,
         session_id: str | None = None,
+        modified_files: list[str] | None = None,
     ) -> None:
         now = time.time()
         with self._lock:
@@ -67,6 +68,11 @@ class AgentRegistry:
                 if session_id is not None
                 else (existing.get("session_id") if existing else None)
             )
+            current_modified_files = (
+                modified_files
+                if modified_files is not None
+                else (existing.get("modified_files") if existing else None)
+            )
             self._agents[agent_id] = {
                 "agent_id": agent_id,
                 "name": name,
@@ -77,6 +83,7 @@ class AgentRegistry:
                 "work_item_id": current_work_item_id,
                 "work_item_title": current_work_item_title,
                 "session_id": current_session_id,
+                "modified_files": current_modified_files,
                 "recent_logs": recent_logs,
                 "log_lines": log_lines,
                 "started_at": existing.get("started_at", now) if existing else now,
@@ -156,6 +163,7 @@ class AgentRegistry:
             "work_item_id": agent.get("work_item_id"),
             "work_item_title": agent.get("work_item_title"),
             "session_id": agent.get("session_id"),
+            "modified_files": list(agent.get("modified_files") or []),
             "recent_logs": list(agent.get("recent_logs", [])),
             "log_lines": list(agent.get("log_lines", [])),
             "started_at": agent.get("started_at"),

@@ -217,6 +217,17 @@ export function AgentsPanel({
             </span>
           </div>
         ) : null}
+        {agent.modified_files && agent.modified_files.length > 0 ? (
+          <div className="agent-card-files">
+            <span className="agent-card-files-label">
+              📁 {agent.modified_files.length} file{agent.modified_files.length !== 1 ? "s" : ""}
+            </span>
+            <span className="agent-card-files-list" title={agent.modified_files.join("\n")}>
+              {agent.modified_files.slice(0, 3).join(", ")}
+              {agent.modified_files.length > 3 ? ` +${agent.modified_files.length - 3} more` : ""}
+            </span>
+          </div>
+        ) : null}
         <div className="agent-card-logs">
           {agent.recent_logs.length === 0 ? (
             <span className="agent-card-no-logs">{isPaused ? "Paused" : "Waiting for output…"}</span>

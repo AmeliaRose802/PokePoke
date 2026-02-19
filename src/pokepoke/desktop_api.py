@@ -331,6 +331,7 @@ class DesktopAPI:
         parent_agent_id: str | None = None,
         work_item_id: str | None = None,
         work_item_title: str | None = None,
+        modified_files: list[str] | None = None,
     ) -> None:
         """Register or update a running agent."""
         self._agent_registry.update_status(
@@ -343,6 +344,7 @@ class DesktopAPI:
             work_item_id=work_item_id,
             work_item_title=work_item_title,
             session_id=self._current_session_id,
+            modified_files=modified_files,
         )
 
     def push_agent_log(self, agent_id: str, line: str) -> None:

@@ -148,10 +148,26 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
           <span className="agent-meta-item">
             <strong>ID:</strong> {agent.agent_id}
           </span>
+          {agent.work_item_id ? (
+            <span className="agent-meta-item">
+              <strong>Work item:</strong> {agent.work_item_id}
+              {agent.work_item_title ? ` — ${agent.work_item_title}` : ""}
+            </span>
+          ) : null}
           <span className="agent-meta-item">
             <strong>Last log:</strong> {formatTimestamp(agent.last_log_at ?? agent.last_updated)}
           </span>
         </div>
+        {agent.modified_files && agent.modified_files.length > 0 ? (
+          <div className="agent-log-panel-files">
+            <strong>Modified files:</strong>
+            <ul className="agent-log-panel-file-list">
+              {agent.modified_files.map((file, i) => (
+                <li key={i}>{file}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <span className="log-count">
           {isLoadingDetail ? "Loading detailed logs..." : `${logLines.length} lines`}
           {detailError && " (Error loading details)"}

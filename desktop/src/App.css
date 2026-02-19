@@ -450,6 +450,27 @@
   color: #3b4261;
 }
 
+.agent-card-files {
+  display: flex;
+  gap: 6px;
+  font-size: 10px;
+  color: #565f89;
+  padding: 2px 0;
+  align-items: baseline;
+}
+
+.agent-card-files-label {
+  color: #7aa2f7;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.agent-card-files-list {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .agent-detail {
   display: flex;
   flex-direction: column;
@@ -745,6 +766,36 @@
 
 .agent-log-panel-meta strong {
   color: #7aa2f7;
+}
+
+.agent-log-panel-files {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  color: #565f89;
+  padding: 4px 0 0;
+  flex-basis: 100%;
+}
+
+.agent-log-panel-files strong {
+  color: #7aa2f7;
+  white-space: nowrap;
+}
+
+.agent-log-panel-file-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.agent-log-panel-file-list li {
+  font-family: "Cascadia Code", "Fira Code", monospace;
+  font-size: 10px;
+  color: #a9b1d6;
 }
 
 .agent-log-panel-content {
