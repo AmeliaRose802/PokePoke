@@ -11,3 +11,16 @@ The GitHub Copilot SDK is a set of libraries and tools that allow developers to 
 ---
 
 *This file was created to fulfill beads item `poc-test-1` (Test SDK Integration).*
+
+## AI backend configuration
+
+PokePoke now supports pluggable AI backends. Configure `.pokepoke/config.yaml`:
+
+```yaml
+ai_backend:
+  provider: copilot        # or claude-code
+  copilot_cli_path: copilot.cmd
+  claude_code_cli_path: claude
+```
+
+The Copilot adapter remains the default; setting `provider: claude-code` switches to the Claude Code CLI adapter. Worktrees and orchestrator workflows automatically honor the selected provider.

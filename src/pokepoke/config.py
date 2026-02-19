@@ -27,6 +27,14 @@ class ModelConfig:
 
 
 @dataclass
+class AIBackendConfig:
+    """AI backend configuration."""
+    provider: str = "copilot"
+    copilot_cli_path: str = "copilot.cmd"
+    claude_code_cli_path: str = "claude"
+
+
+@dataclass
 class MaintenanceAgentConfig:
     """Configuration for a single maintenance agent."""
     name: str = ""
@@ -136,6 +144,7 @@ class ProjectConfig:
     """Top-level project configuration."""
     project_name: str = ""
     models: ModelConfig = field(default_factory=ModelConfig)
+    ai_backend: AIBackendConfig = field(default_factory=AIBackendConfig)
     maintenance: MaintenanceConfig = field(default_factory=MaintenanceConfig.defaults)
     mcp_server: MpcServerConfig = field(default_factory=MpcServerConfig)
     git: GitConfig = field(default_factory=GitConfig)
@@ -158,6 +167,14 @@ class ProjectConfig:
             default=models_data.get("default", "claude-opus-4.6"),
             fallback=models_data.get("fallback", "claude-sonnet-4.5"),
             candidate_models=models_data.get("candidate_models", []),
+        )
+
+        # AI backend
+        backend_data = data.get("ai_backend", {})
+        config.ai_backend = AIBackendConfig(
+            provider=backend_data.get("provider", "copilot"),
+            copilot_cli_path=backend_data.get("copilot_cli_path", "copilot.cmd"),
+            claude_code_cli_path=backend_data.get("claude_code_cli_path", "claude"),
         )
 
         # Git
