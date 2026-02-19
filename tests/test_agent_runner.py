@@ -612,6 +612,29 @@ class TestRunWorktreeAgent:
         assert stats is None
     
     @patch('pokepoke.agent_runner.cleanup_worktree')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.create_worktree')
+    @patch('os.getcwd')
+    @patch('os.chdir')
+    def test_invoke_copilot_exception(
+        self, mock_chdir: Mock, mock_getcwd: Mock,
+        mock_cleanup: Mock, mock_invoke: Mock, mock_create: Mock
+    ) -> None:
+        """Test exception handling when invoke_copilot raises."""
+        mock_create.return_value = Path("/tmp/wt")
+        mock_invoke.side_effect = Exception("Boom")
+
+        item = BeadsWorkItem(
+            id="1", title="T", description="D",
+            status="open", priority=1, issue_type="task"
+        )
+
+        res = _run_worktree_agent("Agent", "1", item, "Prompt", Path("/repo"))
+
+        assert res is None
+        mock_cleanup.assert_called()
+
+    @patch('pokepoke.agent_runner.cleanup_worktree')
     @patch('os.chdir')
     @patch('os.getcwd')
     @patch('pokepoke.agent_runner.run_cleanup_loop')
