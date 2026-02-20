@@ -197,6 +197,44 @@ export function MarkdownBlock({ entries, startedAt, keyPrefix }: MarkdownBlockPr
   );
 }
 
+interface CodeBlockAccordionProps {
+  startedAt: number;
+  keyPrefix: string;
+  markdown: string;
+  lineCount: number;
+  language?: string;
+}
+
+export function CodeBlockAccordion({
+  startedAt,
+  keyPrefix,
+  markdown,
+  lineCount,
+  language,
+}: CodeBlockAccordionProps) {
+  const html = renderMarkdown(markdown);
+  const lineLabel = `${lineCount} line${lineCount === 1 ? "" : "s"}`;
+  const codeLabel = language ? `📄 ${language} code block` : "📄 Code block";
+
+  return (
+    <details key={keyPrefix} className="log-accordion log-code-block">
+      <summary className="log-accordion-summary">
+        <span className="log-accordion-chevron">▸</span>
+        <span className="log-timestamp">{formatTime(startedAt)}</span>
+        <span className="log-message">
+          {codeLabel} — {lineLabel}
+        </span>
+      </summary>
+      <div className="log-accordion-details">
+        <div
+          className="log-message log-markdown-content"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      </div>
+    </details>
+  );
+}
+
 interface RenderLogItemsProps {
   items: RenderLogItem[];
 }
@@ -246,6 +284,19 @@ export function RenderLogItems({ items }: RenderLogItemsProps) {
               entries={item.entries}
               startedAt={item.startedAt}
               keyPrefix={`md-${i}`}
+            />
+          );
+        }
+
+        if (item.type === "code-block") {
+          return (
+            <CodeBlockAccordion
+              key={`code-${i}`}
+              startedAt={item.startedAt}
+              keyPrefix={`code-${i}`}
+              markdown={item.markdown}
+              lineCount={item.codeLineCount}
+              language={item.language}
             />
           );
         }
