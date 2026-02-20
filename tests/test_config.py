@@ -14,7 +14,6 @@ from pokepoke.config import (
     load_config,
     reset_config,
     get_config,
-    _detect_git_username,
     _find_repo_root,  # noqa: F401  # used via patch strings
     _load_config_file,
 )
@@ -109,19 +108,17 @@ class TestGitConfig:
         assert config.default_branch is None
         assert config.fallback_branch == "master"
 
-    @patch("pokepoke.config._detect_git_username", return_value="testuser")
-    def test_get_preferred_branch_auto_detect(self, mock_detect):
+    def test_get_preferred_branch_fallback(self):
         config = GitConfig()
-        assert config.get_preferred_branch() == "testuser/dev"
+        assert config.get_preferred_branch() == "master"
 
     def test_get_preferred_branch_explicit(self):
         config = GitConfig(default_branch="main")
         assert config.get_preferred_branch() == "main"
 
-    @patch("pokepoke.config._detect_git_username", return_value=None)
-    def test_get_preferred_branch_no_user(self, mock_detect):
-        config = GitConfig()
-        assert config.get_preferred_branch() is None
+    def test_get_preferred_branch_custom_fallback(self):
+        config = GitConfig(fallback_branch="develop")
+        assert config.get_preferred_branch() == "develop"
 
 
 class TestProjectConfig:
@@ -219,25 +216,6 @@ class TestProjectConfig:
         config = ProjectConfig.from_dict({"project_name": "test"})
         assert len(config.maintenance.agents) == 6
 
-
-class TestDetectGitUsername:
-    """Tests for _detect_git_username."""
-
-    @patch("subprocess.run")
-    def test_detects_username(self, mock_run):
-        mock_run.return_value = MagicMock(
-            returncode=0, stdout="testuser@example.com\n"
-        )
-        assert _detect_git_username() == "testuser"
-
-    @patch("subprocess.run")
-    def test_returns_none_on_failure(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=1, stdout="")
-        assert _detect_git_username() is None
-
-    @patch("subprocess.run", side_effect=Exception("git not found"))
-    def test_returns_none_on_exception(self, mock_run):
-        assert _detect_git_username() is None
 
 
 class TestLoadConfigFile:
