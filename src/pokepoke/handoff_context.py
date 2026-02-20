@@ -1,24 +1,29 @@
 """Handoff context builder for gate agent verification.
 
 Captures structured information about work-agent changes (changed files,
-diff stats, commit history) so the gate agent can skip re-discovering
-the project structure.
+diff stats, commit history, unified diff) so the gate agent can skip
+re-discovering the project structure and reviewing diffs via git commands.
 """
 
 import subprocess
 
 from .git_operations import get_default_branch
 
+# Truncate unified diff content beyond this limit to avoid token explosion.
+_MAX_DIFF_CHARS = 20_000
+
 
 def build_handoff_context(cwd: str | None = None) -> str:
     """Build a structured context handoff summary for the gate agent.
 
-    Captures the list of changed files (name + status) and a compact diff stat
-    relative to the merge base with the default branch.  Returns an empty string
-    if nothing useful can be gathered (e.g. no commits ahead).
+    Captures the list of changed files (name + status), a compact diff stat,
+    recent commit messages, and the full unified diff relative to the merge
+    base with the default branch.  Returns an empty string if nothing useful
+    can be gathered (e.g. no commits ahead).
 
-    The output is plain-text Markdown suitable for injection into the gate-agent
-    prompt so it can skip re-discovering the project structure.
+    The output is plain-text Markdown suitable for injection into the
+    gate-agent prompt so it can skip re-discovering the project structure
+    and avoid running redundant ``git diff`` / ``git log`` commands.
     """
     target_branch = get_default_branch()
 
@@ -73,7 +78,27 @@ def build_handoff_context(cwd: str | None = None) -> str:
             if line.strip()
         ]
 
-    # 4. Assemble structured handoff block
+    # 4. Unified diff content (actual code changes)
+    try:
+        diff_result = subprocess.run(
+            ["git", "diff", f"{target_branch}...HEAD"],
+            capture_output=True, text=True, encoding="utf-8",
+            timeout=30, cwd=cwd,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        diff_result = None
+
+    diff_content = ""
+    diff_truncated = False
+    if diff_result and diff_result.returncode == 0 and diff_result.stdout.strip():
+        raw = diff_result.stdout.strip()
+        if len(raw) > _MAX_DIFF_CHARS:
+            diff_content = raw[:_MAX_DIFF_CHARS]
+            diff_truncated = True
+        else:
+            diff_content = raw
+
+    # 5. Assemble structured handoff block
     sections: list[str] = []
     sections.append("## Work Agent Handoff Context")
     sections.append("")
@@ -102,7 +127,16 @@ def build_handoff_context(cwd: str | None = None) -> str:
             sections.append(line)
         sections.append("```")
 
+    if diff_content:
+        sections.append("")
+        sections.append("### Diff Content")
+        sections.append("```diff")
+        sections.append(diff_content)
+        sections.append("```")
+        if diff_truncated:
+            sections.append("*(diff truncated — run `git diff` for the full output)*")
+
     sections.append("")
-    sections.append("**Start your verification by reviewing these specific files rather than exploring the full codebase.**")
+    sections.append("**Start your verification by reviewing the diff content above rather than running git commands.**")
 
     return "\n".join(sections)
