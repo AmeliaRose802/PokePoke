@@ -97,6 +97,9 @@ export function AgentsPanel({
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(
     new Set()
   );
+  const [expandedCompletedSections, setExpandedCompletedSections] = useState<Set<string>>(
+    new Set()
+  );
 
   const toggleSession = (sessionId: string) => {
     setExpandedSessions((prev) => {
@@ -109,6 +112,19 @@ export function AgentsPanel({
       return next;
     });
   };
+
+  const toggleCompletedSection = (sessionId: string) => {
+    setExpandedCompletedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+      return next;
+    });
+  };
+
 
   const agentIdSet = new Set(agents.map((a) => a.agent_id));
   const childrenByParent = new Map<string, AgentInfo[]>();
@@ -309,12 +325,78 @@ export function AgentsPanel({
       return nodes;
     };
 
-    const renderedAgents = sessionRootAgents.flatMap((agent) =>
+    const treeHasRunning = (agent: AgentInfo): boolean => {
+      if (agent.status === "running") return true;
+      const children = sessionChildrenByParent.get(agent.agent_id) ?? [];
+      return children.some(treeHasRunning);
+    };
+
+    const treeHasFailure = (agent: AgentInfo): boolean => {
+      if (agent.status === "failed") return true;
+      const children = sessionChildrenByParent.get(agent.agent_id) ?? [];
+      return children.some(treeHasFailure);
+    };
+
+    const activeRootAgents = sessionRootAgents.filter(treeHasRunning);
+    const completedRootAgents = sessionRootAgents.filter(
+      (agent) => !treeHasRunning(agent)
+    );
+
+    const renderedActiveAgents = activeRootAgents.flatMap((agent) =>
+      renderSessionAgentTree(agent, 0)
+    );
+    const renderedCompletedAgents = completedRootAgents.flatMap((agent) =>
       renderSessionAgentTree(agent, 0)
     );
 
+    const completedFailedCount = completedRootAgents.filter(treeHasFailure).length;
+    const completedSuccessCount = completedRootAgents.length - completedFailedCount;
+
+    const isCompletedExpanded = expandedCompletedSections.has(group.sessionId);
+
+    const renderedSections = (
+      <div className="agent-sections">
+        <div className="agent-section agent-section-active">
+          <div className="agent-section-title">
+            <span className="agent-section-label">Active</span>
+            <span className="agent-section-count">{activeRootAgents.length}</span>
+          </div>
+          {renderedActiveAgents.length > 0 ? (
+            <div className="agent-section-content">{renderedActiveAgents}</div>
+          ) : (
+            <div className="agent-section-empty">No active agents</div>
+          )}
+        </div>
+
+        {completedRootAgents.length > 0 ? (
+          <div className="agent-section agent-section-completed">
+            <button
+              className="agent-section-header"
+              onClick={() => toggleCompletedSection(group.sessionId)}
+              aria-expanded={isCompletedExpanded}
+              type="button"
+            >
+              <span className="agent-section-chevron">
+                {isCompletedExpanded ? "▾" : "▸"}
+              </span>
+              <span className="agent-section-label">Completed</span>
+              <span className="agent-section-count">{completedRootAgents.length}</span>
+              <span className="agent-section-summary">
+                {completedFailedCount > 0
+                  ? `${completedSuccessCount} ok · ${completedFailedCount} failed`
+                  : `${completedSuccessCount} ok`}
+              </span>
+            </button>
+            {isCompletedExpanded && (
+              <div className="agent-section-content">{renderedCompletedAgents}</div>
+            )}
+          </div>
+        ) : null}
+      </div>
+    );
+
     if (!hasMultipleSessions) {
-      return <div key={group.sessionId}>{renderedAgents}</div>;
+      return <div key={group.sessionId}>{renderedSections}</div>;
     }
 
     const label = isCurrent
@@ -335,7 +417,7 @@ export function AgentsPanel({
           <span className="session-group-count">{group.agents.length}</span>
         </button>
         {isExpanded && (
-          <div className="session-group-content">{renderedAgents}</div>
+          <div className="session-group-content">{renderedSections}</div>
         )}
       </div>
     );

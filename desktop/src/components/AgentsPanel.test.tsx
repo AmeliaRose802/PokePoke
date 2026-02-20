@@ -55,8 +55,27 @@ describe('AgentsPanel', () => {
     render(
       <AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />
     );
+
+    // Completed section is collapsed by default; expand to ensure card renders
+    fireEvent.click(screen.getByRole('button', { name: /completed/i }));
+
     expect(screen.queryByTitle('Pause agent')).not.toBeInTheDocument();
     expect(screen.queryByTitle('Resume agent')).not.toBeInTheDocument();
+  });
+
+  it('collapses completed agents by default and expands on click', () => {
+    const running = mkAgent({ agent_id: 'running-1', name: 'RunningWorker' });
+    const done = mkAgent({ agent_id: 'done-1', name: 'DoneWorker', status: 'success' });
+
+    render(
+      <AgentsPanel agents={[running, done]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />
+    );
+
+    expect(screen.getByText('RunningWorker')).toBeInTheDocument();
+    expect(screen.queryByText('DoneWorker')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /completed/i }));
+    expect(screen.getByText('DoneWorker')).toBeInTheDocument();
   });
 
   it('calls onPauseAgent when pause button is clicked', () => {
@@ -123,7 +142,7 @@ describe('AgentsPanel', () => {
 
   describe('session grouping', () => {
     it('collapses previous session agents by default', () => {
-      const oldAgent = mkAgent({ agent_id: 'old-1', name: 'OldWorker', session_id: '1000.0', status: 'success' });
+      const oldAgent = mkAgent({ agent_id: 'old-1', name: 'OldWorker', session_id: '1000.0' });
       const newAgent = mkAgent({ agent_id: 'new-1', name: 'NewWorker', session_id: '2000.0' });
       render(
         <AgentsPanel
@@ -140,7 +159,7 @@ describe('AgentsPanel', () => {
     });
 
     it('expands previous session when header is clicked', () => {
-      const oldAgent = mkAgent({ agent_id: 'old-1', name: 'OldWorker', session_id: '1000.0', status: 'success' });
+      const oldAgent = mkAgent({ agent_id: 'old-1', name: 'OldWorker', session_id: '1000.0' });
       const newAgent = mkAgent({ agent_id: 'new-1', name: 'NewWorker', session_id: '2000.0' });
       render(
         <AgentsPanel
@@ -177,7 +196,7 @@ describe('AgentsPanel', () => {
         mkAgent({ agent_id: 'old-2', name: 'W2', session_id: '1000.0', status: 'success' }),
         mkAgent({ agent_id: 'new-1', name: 'W3', session_id: '2000.0' }),
       ];
-      render(
+      const { container } = render(
         <AgentsPanel
           agents={agents}
           currentSessionId="2000.0"
@@ -185,12 +204,16 @@ describe('AgentsPanel', () => {
           onResumeAgent={vi.fn()}
         />
       );
-      // The collapsed session header should show count of 2
-      expect(screen.getByText('2')).toBeInTheDocument();
+
+      const collapsedHeader = container.querySelector(
+        '.session-group-header[aria-expanded="false"]'
+      );
+      const count = collapsedHeader?.querySelector('.session-group-count');
+      expect(count?.textContent).toBe('2');
     });
 
     it('re-collapses session when header is clicked twice', () => {
-      const oldAgent = mkAgent({ agent_id: 'old-1', name: 'OldWorker', session_id: '1000.0', status: 'success' });
+      const oldAgent = mkAgent({ agent_id: 'old-1', name: 'OldWorker', session_id: '1000.0' });
       const newAgent = mkAgent({ agent_id: 'new-1', name: 'NewWorker', session_id: '2000.0' });
       render(
         <AgentsPanel
