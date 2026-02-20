@@ -2,7 +2,6 @@
 
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
-from pathlib import Path
 
 from pokepoke.types import BeadsWorkItem
 

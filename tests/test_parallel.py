@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch, MagicMock
 
 import pytest
 
-from pokepoke.types import AgentStats, BeadsWorkItem, ModelCompletionRecord, SessionStats
+from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats
 from pokepoke.parallel import (
     _parallel_process_item,
     _collect_done_futures,

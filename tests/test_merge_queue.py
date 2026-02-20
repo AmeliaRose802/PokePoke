@@ -4,12 +4,11 @@ import threading
 import time
 from concurrent.futures import Future
 from pathlib import Path
-from queue import Empty
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-import pokepoke.merge_queue
+import pokepoke.merge_queue  # noqa: F401  # imported for coverage tracking
 from pokepoke.merge_queue import (
     MergeQueue,
     MergeResult,

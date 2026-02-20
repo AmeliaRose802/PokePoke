@@ -8,10 +8,7 @@ This module tests the critical merge conflict handling code in worktree_finaliza
 - Retry merge after cleanup success/failure scenarios
 """
 
-from pathlib import Path
 from unittest.mock import Mock, patch
-
-import pytest
 
 from pokepoke.types import BeadsWorkItem
 from pokepoke.worktree_finalization import merge_worktree_to_dev

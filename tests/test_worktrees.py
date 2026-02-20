@@ -1,15 +1,14 @@
 """Tests for git worktree management."""
 import json
 import subprocess
-from datetime import datetime
 from pathlib import Path
-from unittest.mock import Mock, patch, call
+from unittest.mock import Mock, patch
 
 import pytest
 
 # Import the module to ensure coverage tracking works
 import pokepoke.worktrees
-import pokepoke.git_operations
+import pokepoke.git_operations  # noqa: F401  # imported for coverage tracking
 
 from pokepoke.git_operations import (
     get_main_repo_root,

@@ -2,12 +2,11 @@
 
 import subprocess
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from pokepoke.ai_backends import (
     ClaudeCodeBackend,
     CopilotBackend,
-    _BACKENDS,
     get_backend,
 )
 from pokepoke.types import BeadsWorkItem, CopilotResult
