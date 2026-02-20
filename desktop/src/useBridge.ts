@@ -29,6 +29,19 @@ import type {
 const POLL_INTERVAL_MS = 100;
 const MAX_LOG_ENTRIES = 2000;
 
+/** Retry configuration for initial state load */
+const INITIAL_RETRY_CONFIG = {
+  MAX_RETRIES: 10,
+  BASE_DELAY_MS: 200,
+  MAX_DELAY_MS: 2000,
+  BACKOFF_MULTIPLIER: 1.5,
+};
+
+/** Configuration for polling timer resilience */
+const POLL_RESILIENCE_CONFIG = {
+  MAX_CONSECUTIVE_FAILURES: 5,
+};
+
 /** pywebview injects this on the window object */
 interface PyWebViewAPI {
   get_state(): Promise<{
@@ -69,6 +82,43 @@ declare global {
       api: PyWebViewAPI;
     };
   }
+}
+
+/**
+ * Sleeps for the specified number of milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Retries an async function with exponential backoff
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  config = INITIAL_RETRY_CONFIG
+): Promise<T> {
+  let lastError: Error | null = null;
+  let delay = config.BASE_DELAY_MS;
+  
+  for (let attempt = 0; attempt <= config.MAX_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      // If this was our last attempt, throw the error
+      if (attempt === config.MAX_RETRIES) {
+        throw lastError;
+      }
+      
+      // Wait before retrying (exponential backoff with max delay)
+      await sleep(Math.min(delay, config.MAX_DELAY_MS));
+      delay = Math.floor(delay * config.BACKOFF_MULTIPLIER);
+    }
+  }
+  
+  throw lastError || new Error('Retry failed');
 }
 
 export interface BridgeState {
@@ -253,6 +303,7 @@ export function useBridge(): BridgeState {
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | null = null;
     let stopped = false;
+    let consecutiveFailures = 0;
 
     async function waitForApi(): Promise<PyWebViewAPI> {
       // pywebview injects window.pywebview after the page loads
@@ -262,34 +313,46 @@ export function useBridge(): BridgeState {
       return window.pywebview!.api;
     }
 
+    async function loadInitialState(api: PyWebViewAPI): Promise<void> {
+      // Use retry with backoff for the initial state load
+      const state = await retryWithBackoff(async () => {
+        return await api.get_state();
+      });
+      
+      if (state.work_item) setWorkItem(state.work_item);
+      if (state.agent_name) setAgentName(state.agent_name);
+      if (state.repository_name) setRepositoryName(state.repository_name);
+      if (state.project_name) setProjectName(state.project_name);
+      if (state.stats) setStats(state.stats);
+      if (state.progress) setProgress(state.progress);
+      if (state.model_leaderboard) setModelLeaderboard(state.model_leaderboard);
+      if (state.agents) setAgents(state.agents);
+      setStopAfterCurrent(!!state.stop_after_current);
+      setCurrentSessionId(state.current_session_id ?? null);
+
+      // Load initial logs with retry
+      const allLogs = await retryWithBackoff(async () => {
+        return await api.get_all_logs();
+      });
+      appendLogs(allLogs);
+    }
+
     async function start() {
       const api = await waitForApi();
       if (stopped) return;
 
-      // Initial load — get full state + all buffered logs
+      // Initial load with retry logic
       try {
-        const state = await api.get_state();
-        if (state.work_item) setWorkItem(state.work_item);
-        if (state.agent_name) setAgentName(state.agent_name);
-        if (state.repository_name) setRepositoryName(state.repository_name);
-        if (state.project_name) setProjectName(state.project_name);
-        if (state.stats) setStats(state.stats);
-        if (state.progress) setProgress(state.progress);
-        if (state.model_leaderboard) setModelLeaderboard(state.model_leaderboard);
-        if (state.agents) setAgents(state.agents);
-        setStopAfterCurrent(!!state.stop_after_current);
-        setCurrentSessionId(state.current_session_id ?? null);
-
-        const allLogs = await api.get_all_logs();
-        appendLogs(allLogs);
-
+        await loadInitialState(api);
         setConnectionStatus("connected");
-      } catch {
+        consecutiveFailures = 0;
+      } catch (error) {
+        console.error("Failed to load initial state after retries:", error);
         setConnectionStatus("disconnected");
-        return;
+        // Don't return here - still start the polling timer for potential recovery
       }
 
-      // Poll for incremental updates
+      // Poll for incremental updates - now with resilience to transient failures
       timer = setInterval(async () => {
         if (stopped) return;
         try {
@@ -310,9 +373,18 @@ export function useBridge(): BridgeState {
           setStopAfterCurrent(!!state.stop_after_current);
           setCurrentSessionId(state.current_session_id ?? null);
 
+          // Reset consecutive failures on success
+          consecutiveFailures = 0;
           setConnectionStatus("connected");
         } catch {
-          setConnectionStatus("disconnected");
+          consecutiveFailures++;
+          
+          // Only set disconnected after multiple consecutive failures
+          if (consecutiveFailures >= POLL_RESILIENCE_CONFIG.MAX_CONSECUTIVE_FAILURES) {
+            setConnectionStatus("disconnected");
+          }
+          // If we haven't hit the threshold yet, maintain current connection status
+          // This prevents flapping between connected/disconnected on transient issues
         }
       }, POLL_INTERVAL_MS);
     }
