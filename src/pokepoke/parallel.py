@@ -60,7 +60,12 @@ def _parallel_process_item(
 
     try:
         with terminal_ui.ui.agent_output_for(agent_id):
-            result = process_work_item(item, interactive=False, run_logger=run_logger)
+            result = process_work_item(
+                item,
+                interactive=False,
+                run_logger=run_logger,
+                agent_id=agent_id,
+            )
         # Update agent status based on result
         success = result[0]
         terminal_ui.ui.push_agent_status(
