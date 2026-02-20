@@ -573,7 +573,7 @@ class TestCheckAndMergeWorktree:
         result = check_and_merge_worktree(item, worktree_path)
 
         assert result is True
-        mock_merge.assert_called_once_with(item)
+        mock_merge.assert_called_once_with(item, parent_agent_id=None)
 
     @patch('pokepoke.worktree_finalization.merge_worktree_to_dev')
     @patch('subprocess.run')
@@ -600,7 +600,7 @@ class TestCheckAndMergeWorktree:
 
         # Should attempt merge anyway
         assert result is True
-        mock_merge.assert_called_once_with(item)
+        mock_merge.assert_called_once_with(item, parent_agent_id=None)
 
 
 class TestMergeWorktreeToDev:

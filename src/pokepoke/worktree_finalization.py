@@ -16,7 +16,11 @@ from .coordination import merge_lock
 logger = logging.getLogger(__name__)
 
 
-def finalize_work_item(item: BeadsWorkItem, worktree_path: Path) -> bool:
+def finalize_work_item(
+    item: BeadsWorkItem,
+    worktree_path: Path,
+    parent_agent_id: str | None = None
+) -> bool:
     """Finalize work item by merging worktree and closing issue.
 
     Returns:
@@ -25,7 +29,7 @@ def finalize_work_item(item: BeadsWorkItem, worktree_path: Path) -> bool:
     print("\n✅ Successfully completed work item!")
     print("   All changes committed and validated")
 
-    if not check_and_merge_worktree(item, worktree_path):
+    if not check_and_merge_worktree(item, worktree_path, parent_agent_id=parent_agent_id):
         return False
 
     close_work_item_and_parents(item)
@@ -33,7 +37,11 @@ def finalize_work_item(item: BeadsWorkItem, worktree_path: Path) -> bool:
     return True
 
 
-def check_and_merge_worktree(item: BeadsWorkItem, worktree_path: Path) -> bool:
+def check_and_merge_worktree(
+    item: BeadsWorkItem,
+    worktree_path: Path,
+    parent_agent_id: str | None = None
+) -> bool:
     """Check if worktree has commits and merge if needed.
 
     Uses the merge lock to serialize concurrent merge attempts from
@@ -65,7 +73,7 @@ def check_and_merge_worktree(item: BeadsWorkItem, worktree_path: Path) -> bool:
         with merge_lock():
             logger.info("Acquired merge lock for item %s", item.id)
             print("   ✅ Lock acquired, proceeding with merge")
-            return merge_worktree_to_dev(item)
+            return merge_worktree_to_dev(item, parent_agent_id=parent_agent_id)
 
     except Exception as e:
         print(f"\n⚠️  Could not check commit count: {e}")
@@ -76,10 +84,10 @@ def check_and_merge_worktree(item: BeadsWorkItem, worktree_path: Path) -> bool:
         with merge_lock():
             logger.info("Acquired merge lock for item %s (error path)", item.id)
             print("   ✅ Lock acquired, proceeding with merge")
-            return merge_worktree_to_dev(item)
+            return merge_worktree_to_dev(item, parent_agent_id=parent_agent_id)
 
 
-def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
+def merge_worktree_to_dev(item: BeadsWorkItem, parent_agent_id: str | None = None) -> bool:
     """Merge worktree to the default development branch."""
     from .git_operations import is_merge_in_progress, get_unmerged_files, abort_merge
 
@@ -94,7 +102,11 @@ def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
         from .cleanup_agents import invoke_cleanup_agent
 
         with cleanup_lock():
-            cleanup_success, _ = invoke_cleanup_agent(item, Path.cwd())
+            cleanup_success, _ = invoke_cleanup_agent(
+                item,
+                Path.cwd(),
+                parent_agent_id=parent_agent_id,
+            )
 
         if cleanup_success:
             print("   Cleanup successful, retrying merge check...")
@@ -140,7 +152,8 @@ def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
                 item,
                 Path.cwd(),
                 f"Merge conflict detected in {len(unmerged_files)} file(s){conflict_details}",
-                unmerged_files=unmerged_files
+                unmerged_files=unmerged_files,
+                parent_agent_id=parent_agent_id,
             )
 
         if success:

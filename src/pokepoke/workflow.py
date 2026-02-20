@@ -212,7 +212,8 @@ def process_work_item(
 
             # Run cleanup loop with timeout checking
             cleanup_success, cleanup_runs = _run_cleanup_with_timeout(
-                item, result, pokepoke_root, start_time, timeout_seconds, timeout_hours, worktree_cwd
+                item, result, pokepoke_root, start_time, timeout_seconds, timeout_hours, worktree_cwd,
+                parent_agent_id=base_agent_id,
             )
             cleanup_agent_runs += cleanup_runs
 
@@ -281,7 +282,7 @@ def process_work_item(
 
         if result.success:
             set_terminal_banner(format_work_item_banner(item.id, item.title, "Finalizing"))
-            success = finalize_work_item(item, worktree_path)
+            success = finalize_work_item(item, worktree_path, parent_agent_id=base_agent_id)
             # Use accumulated stats
             item_stats = accumulated_stats
 
@@ -361,7 +362,10 @@ def _setup_worktree(item: BeadsWorkItem) -> Path | None:
         return None
 
 
-def _run_cleanup_with_timeout(item: BeadsWorkItem, result: CopilotResult, repo_root: Path, start_time: float, timeout_seconds: float, timeout_hours: float, cwd: str | None = None) -> tuple[bool, int]:
+def _run_cleanup_with_timeout(
+    item: BeadsWorkItem, result: CopilotResult, repo_root: Path, start_time: float,
+    timeout_seconds: float, timeout_hours: float, cwd: str | None = None, parent_agent_id: str | None = None,
+) -> tuple[bool, int]:
     """Run cleanup loop with timeout checking."""
     cleanup_agent_runs = 0
     cleanup_attempt = 0
@@ -375,7 +379,13 @@ def _run_cleanup_with_timeout(item: BeadsWorkItem, result: CopilotResult, repo_r
 
         cleanup_attempt += 1
         set_terminal_banner(format_work_item_banner(item.id, item.title, f"Cleanup #{cleanup_attempt}"))
-        cleanup_success, cleanup_runs = run_cleanup_loop(item, result, repo_root, cwd=cwd)
+        cleanup_success, cleanup_runs = run_cleanup_loop(
+            item,
+            result,
+            repo_root,
+            cwd=cwd,
+            parent_agent_id=parent_agent_id,
+        )
         cleanup_agent_runs += cleanup_runs
 
         if not cleanup_success:
