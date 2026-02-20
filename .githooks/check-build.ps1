@@ -27,56 +27,20 @@ if ($LASTEXITCODE -ne 0) {
     $repoRoot = $PSScriptRoot | Split-Path -Parent
 }
 
-# Load shared warning detection helpers
-$warningHelper = Join-Path $PSScriptRoot "warning-utils.ps1"
-if (-not (Test-Path $warningHelper)) {
-    throw "warning-utils.ps1 not found at $warningHelper"
-}
-. $warningHelper
-
-# Get staged desktop files that should trigger a build
-function Get-StagedDesktopBuildFiles {
-    try {
-        $output = git diff --cached --name-only --diff-filter=ACM 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            return @()
-        }
-        
-        return $output -split "`n" |
-            Where-Object { $_ -match '^desktop/.*\.(ts|tsx|js|jsx|css|html)$' } |
-            Where-Object { $_ -notmatch '(node_modules|dist|build)' } |
-            ForEach-Object { $_.Trim() } |
-            Where-Object { $_ -ne '' }
+# Load shared utilities
+foreach ($util in @("warning-utils.ps1", "staged-files-utils.ps1")) {
+    $utilPath = Join-Path $PSScriptRoot $util
+    if (-not (Test-Path $utilPath)) {
+        throw "$util not found at $utilPath"
     }
-    catch {
-        Write-Error "Failed to get staged files: $_"
-        return @()
-    }
+    . $utilPath
 }
 
 $overallPassed = $true
 
-# Get staged Python files only (consistent with other pre-commit checks)
-function Get-StagedPythonFiles {
-    try {
-        $output = git diff --cached --name-only --diff-filter=ACM 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            return @()
-        }
-
-        return $output -split "`n" |
-            Where-Object { $_ -match '\.py$' } |
-            Where-Object { $_ -notmatch '(worktrees|venv|\.venv|\.tox|__pycache__|dist|build|\.eggs)' } |
-            ForEach-Object { Join-Path $repoRoot $_.Trim() } |
-            Where-Object { $_ -ne '' -and (Test-Path $_) }
-    }
-    catch {
-        Write-Error "Failed to get staged Python files: $_"
-        return @()
-    }
-}
-
-$pythonFiles = Get-StagedPythonFiles
+$pythonFiles = Get-StagedFiles -Pattern '\.py$' `
+    -DenyPatterns @('(worktrees|venv|\.venv|\.tox|__pycache__|dist|build|\.eggs)') `
+    -ResolveFullPath -RepoRoot $repoRoot
 
 if ($pythonFiles.Count -eq 0) {
     Write-Host "No Python files staged for commit; skipping syntax check" -ForegroundColor Gray
@@ -122,7 +86,8 @@ if (-not $overallPassed) {
     exit 1
 }
 
-$stagedDesktopFiles = Get-StagedDesktopBuildFiles
+$stagedDesktopFiles = Get-StagedFiles -Pattern '^desktop/.*\.(ts|tsx|js|jsx|css|html)$' `
+    -DenyPatterns @('(node_modules|dist|build)')
 
 if ($stagedDesktopFiles.Count -eq 0) {
     Write-Host "No staged desktop build files detected; skipping desktop build" -ForegroundColor Gray

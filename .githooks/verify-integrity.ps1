@@ -62,7 +62,8 @@ $scriptsToCheck = @(
     "check-file-length.ps1",
     "check-skipped-tests.ps1",
     "check-build.ps1",
-    "warning-utils.ps1"
+    "warning-utils.ps1",
+    "staged-files-utils.ps1"
     # NOTE: pre-commit.ps1 and verify-integrity.ps1 are excluded as they
     # legitimately contain these patterns for detection purposes
 )

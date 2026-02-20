@@ -27,35 +27,18 @@ if ($LASTEXITCODE -ne 0) {
     $repoRoot = $PSScriptRoot | Split-Path -Parent
 }
 
-# Load shared warning detection helpers
-$warningHelper = Join-Path $PSScriptRoot "warning-utils.ps1"
-if (-not (Test-Path $warningHelper)) {
-    throw "warning-utils.ps1 not found at $warningHelper"
-}
-. $warningHelper
-
-# Get list of staged desktop TypeScript files
-function Get-StagedDesktopTsFiles {
-    try {
-        $output = git diff --cached --name-only --diff-filter=ACM 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            return @()
-        }
-        
-        return $output -split "`n" |
-            Where-Object { $_ -match '^desktop/.*\.(ts|tsx)$' } |
-            Where-Object { $_ -notmatch '(node_modules|dist|build)' } |
-            ForEach-Object { $_.Trim() } |
-            Where-Object { $_ -ne '' }
+# Load shared utilities
+foreach ($util in @("warning-utils.ps1", "staged-files-utils.ps1")) {
+    $utilPath = Join-Path $PSScriptRoot $util
+    if (-not (Test-Path $utilPath)) {
+        throw "$util not found at $utilPath"
     }
-    catch {
-        Write-Error "Failed to get staged files: $_"
-        return @()
-    }
+    . $utilPath
 }
 
 # Main execution
-$stagedFiles = Get-StagedDesktopTsFiles
+$stagedFiles = Get-StagedFiles -Pattern '^desktop/.*\.(ts|tsx)$' `
+    -DenyPatterns @('(node_modules|dist|build)')
 
 if ($stagedFiles.Count -eq 0) {
     Write-Host "No desktop TypeScript files staged for commit" -ForegroundColor Gray

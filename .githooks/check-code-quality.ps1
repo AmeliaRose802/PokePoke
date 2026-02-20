@@ -22,28 +22,16 @@ param()
 
 $ErrorActionPreference = "Stop"
 
-# Get list of staged Python files
-function Get-StagedPythonFiles {
-    try {
-        $output = git diff --cached --name-only --diff-filter=ACM 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            return @()
-        }
-        
-        return $output -split "`n" |
-            Where-Object { $_ -match '\.py$' } |
-            Where-Object { $_ -notmatch '(venv|.venv|__pycache__|dist|build)' } |
-            ForEach-Object { $_.Trim() } |
-            Where-Object { $_ -ne '' }
-    }
-    catch {
-        Write-Error "Failed to get staged files: $_"
-        return @()
-    }
+# Load shared staged-file utilities
+$stagedUtils = Join-Path $PSScriptRoot "staged-files-utils.ps1"
+if (-not (Test-Path $stagedUtils)) {
+    throw "staged-files-utils.ps1 not found at $stagedUtils"
 }
+. $stagedUtils
 
 # Main execution
-$stagedFiles = Get-StagedPythonFiles
+$stagedFiles = Get-StagedFiles -Pattern '\.py$' `
+    -DenyPatterns @('(venv|.venv|__pycache__|dist|build)')
 
 if ($stagedFiles.Count -eq 0) {
     Write-Host "No Python files staged for commit" -ForegroundColor Gray

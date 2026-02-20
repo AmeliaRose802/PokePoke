@@ -25,26 +25,15 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($repoRoot)) {
 
 Set-Location $repoRoot
 
-function Get-StagedDesktopLintFiles {
-    try {
-        $output = git diff --cached --name-only --diff-filter=ACM 2>$null
-        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($output)) {
-            return @()
-        }
-
-        return $output -split "`n" |
-            Where-Object { $_ -match '^desktop/.*\.(ts|tsx|js|jsx|css)$' } |
-            Where-Object { $_ -notmatch '(node_modules|dist|build)' } |
-            ForEach-Object { $_.Trim() } |
-            Where-Object { $_ -ne '' }
-    }
-    catch {
-        Write-Host "Failed to inspect staged files for desktop lint: $_" -ForegroundColor Red
-        return @()
-    }
+# Load shared staged-file utilities
+$stagedUtils = Join-Path $PSScriptRoot "staged-files-utils.ps1"
+if (-not (Test-Path $stagedUtils)) {
+    throw "staged-files-utils.ps1 not found at $stagedUtils"
 }
+. $stagedUtils
 
-$stagedFiles = Get-StagedDesktopLintFiles
+$stagedFiles = Get-StagedFiles -Pattern '^desktop/.*\.(ts|tsx|js|jsx|css)$' `
+    -DenyPatterns @('(node_modules|dist|build)')
 
 if ($stagedFiles.Count -eq 0) {
     Write-Host "No staged desktop files require ESLint" -ForegroundColor Gray

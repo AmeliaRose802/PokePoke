@@ -27,30 +27,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# Get list of staged Python files
-function Get-StagedPythonFiles {
-    try {
-        $output = git diff --cached --name-only --diff-filter=ACM 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "Failed to get staged files"
-            return @()
-        }
-        
-        return $output -split "`n" |
-            Where-Object { $_ -ne '' } |
-            Where-Object { $_ -match '\.py$' } |
-            Where-Object { $_ -notmatch 'node_modules/' } |
-            Where-Object { $_ -notmatch '^tests/' } |
-            Where-Object { $_ -notmatch 'test_.*\.py$' } |
-            Where-Object { $_ -notmatch '/[Tt]ests?/' } |
-            Where-Object { $_ -notmatch '__pycache__/' } |
-            ForEach-Object { $_.Trim() }
-    }
-    catch {
-        Write-Error "Failed to get staged files: $_"
-        return @()
-    }
+# Load shared staged-file utilities
+$stagedUtils = Join-Path $PSScriptRoot "staged-files-utils.ps1"
+if (-not (Test-Path $stagedUtils)) {
+    throw "staged-files-utils.ps1 not found at $stagedUtils"
 }
+. $stagedUtils
 
 # Count lines in a file
 function Get-FileLineCount {
@@ -70,30 +52,11 @@ function Get-FileLineCount {
     }
 }
 
-# Get list of staged desktop JS/TS files
-function Get-StagedDesktopFiles {
-    try {
-        $output = git diff --cached --name-only --diff-filter=ACM 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "Failed to get staged files"
-            return @()
-        }
-        
-        return $output -split "`n" |
-            Where-Object { $_ -ne '' } |
-            Where-Object { $_ -match '^desktop/src/.*\.(ts|tsx|js|jsx)$' } |
-            Where-Object { $_ -notmatch 'node_modules/' } |
-            Where-Object { $_ -notmatch 'dist/' } |
-            Where-Object { $_ -notmatch '\.test\.(ts|tsx|js|jsx)$' } |
-            Where-Object { $_ -notmatch '\.spec\.(ts|tsx|js|jsx)$' } |
-            Where-Object { $_ -notmatch '/__tests__/' } |
-            Where-Object { $_ -notmatch '/[Tt]ests?/' } |
-            ForEach-Object { $_.Trim() }
-    }
-    catch {
-        Write-Error "Failed to get staged files: $_"
-        return @()
-    }
+# Get list of staged desktop JS/TS files (source only, no tests)
+function Get-StagedDesktopFilesForLength {
+    return Get-StagedFiles -Pattern '^desktop/src/.*\.(ts|tsx|js|jsx)$' `
+        -DenyPatterns @('node_modules/', 'dist/') `
+        -ExcludeTests
 }
 
 # Check file lengths
@@ -139,8 +102,10 @@ function Test-FileLengths {
 }
 
 # Main execution
-$stagedPythonFiles = Get-StagedPythonFiles
-$stagedDesktopFiles = Get-StagedDesktopFiles
+$stagedPythonFiles = Get-StagedFiles -Pattern '\.py$' `
+    -DenyPatterns @('node_modules/', '__pycache__/') `
+    -ExcludeTests
+$stagedDesktopFiles = Get-StagedDesktopFilesForLength
 
 if ($stagedPythonFiles.Count -eq 0 -and $stagedDesktopFiles.Count -eq 0) {
     exit 0
