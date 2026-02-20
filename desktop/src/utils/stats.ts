@@ -1,6 +1,7 @@
 import type {
   CompletedItem,
   CreatedItem,
+  ModelHistoryEntry,
   ModelPerformanceSummary,
   SessionStats,
 } from "../types";
@@ -189,4 +190,77 @@ export function getAddedCount(stats: SessionStats | null): number {
 export function getNetDelta(stats: SessionStats | null): number {
   if (typeof stats?.net_items_delta === "number") return stats.net_items_delta;
   return getAddedCount(stats) - getDoneCount(stats);
+}
+
+/**
+ * Calculate average completion time by item type with rolling averages
+ * Groups historical entries by item type and computes mean duration
+ */
+export function buildCompletionTimeByType(
+  history: ModelHistoryEntry[]
+): Record<string, number> {
+  const byType = new Map<string, number[]>();
+
+  for (const entry of history) {
+    const type = entry.item_type || "unknown";
+    const durations = byType.get(type) ?? [];
+    durations.push(entry.duration_seconds);
+    byType.set(type, durations);
+  }
+
+  const result: Record<string, number> = {};
+  for (const [type, durations] of byType.entries()) {
+    const avg = durations.reduce((a, b) => a + b, 0) / durations.length;
+    result[type] = avg;
+  }
+  return result;
+}
+
+/**
+ * Build time series data for completion time trends by item type
+ * Returns data grouped by type for multi-series chart
+ */
+export function buildCompletionTimeSeries(
+  history: ModelHistoryEntry[]
+): Record<
+  string,
+  Array<{ label: string; value: number }>
+> {
+  const byTypeAndDay = new Map<
+    string,
+    Map<string, { durations: number[]; count: number }>
+  >();
+
+  for (const entry of history) {
+    const type = entry.item_type || "unknown";
+    const dateKey = (entry.timestamp ?? "").slice(0, 10) || "unknown";
+
+    if (!byTypeAndDay.has(type)) {
+      byTypeAndDay.set(type, new Map());
+    }
+
+    const typeMap = byTypeAndDay.get(type)!;
+    const bucket = typeMap.get(dateKey) ?? { durations: [], count: 0 };
+    bucket.durations.push(entry.duration_seconds);
+    bucket.count += 1;
+    typeMap.set(dateKey, bucket);
+  }
+
+  const result: Record<string, Array<{ label: string; value: number }>> = {};
+
+  for (const [type, typeMap] of byTypeAndDay.entries()) {
+    const dates = Array.from(typeMap.keys()).sort();
+    const trimmed = dates.slice(-14); // Last 14 days
+
+    result[type] = trimmed.map((date) => {
+      const bucket = typeMap.get(date)!;
+      const avg =
+        bucket.durations.length > 0
+          ? bucket.durations.reduce((a, b) => a + b, 0) / bucket.durations.length
+          : 0;
+      return { label: date, value: avg };
+    });
+  }
+
+  return result;
 }

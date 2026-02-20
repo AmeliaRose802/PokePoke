@@ -6,7 +6,6 @@ import type {
 } from "../types";
 import {
   formatDurationShort,
-  formatDurationWithSpread,
   formatElapsed,
   formatPercent,
   formatTokens,
@@ -15,7 +14,10 @@ import {
   getCompletedItems,
   getDoneCount,
   getNetDelta,
+  buildCompletionTimeSeries,
 } from "../utils/stats";
+import { CompletionTimeChart } from "./CompletionTimeChart";
+import { ModelTable } from "./ModelTable";
 
 interface StatsPageProps {
   stats: SessionStats | null;
@@ -103,6 +105,7 @@ export function StatsPage({
 
   const completionSeries = useMemo(() => buildCompletionSeries(modelHistory), [modelHistory]);
   const successSeries = useMemo(() => buildSuccessRateSeries(modelHistory), [modelHistory]);
+  const completionTimeSeries = useMemo(() => buildCompletionTimeSeries(modelHistory), [modelHistory]);
 
   const handleSort = (field: SortField) => {
     if (field === sortField) {
@@ -268,61 +271,12 @@ export function StatsPage({
                 <h3>All-time model performance</h3>
                 <span className="stats-panel-subtitle">Sortable leaderboard with success bars</span>
               </div>
-              {leaderboardRows.length === 0 ? (
-                <p className="stats-empty">No model history yet.</p>
-              ) : (
-                <div className="model-table-wrapper">
-                  <table className="model-table">
-                    <thead>
-                      <tr>
-                        <SortableHead
-                          label="Model"
-                          field="model"
-                          activeField={sortField}
-                          asc={sortAsc}
-                          onSort={handleSort}
-                        />
-                        <SortableHead
-                          label="Runs"
-                          field="runs"
-                          activeField={sortField}
-                          asc={sortAsc}
-                          onSort={handleSort}
-                        />
-                        <SortableHead
-                          label="Success rate"
-                          field="success"
-                          activeField={sortField}
-                          asc={sortAsc}
-                          onSort={handleSort}
-                        />
-                        <SortableHead
-                          label="Duration"
-                          field="duration"
-                          activeField={sortField}
-                          asc={sortAsc}
-                          onSort={handleSort}
-                        />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leaderboardRows.map((row) => (
-                        <tr key={row.model}>
-                          <td>{row.model}</td>
-                          <td>{row.runs}</td>
-                          <td>
-                            <SuccessBar
-                              value={row.successRate}
-                              label={formatPercent(row.successRate, 1)}
-                            />
-                          </td>
-                          <td>{formatDurationWithSpread(row.medianDuration, row.stddevDuration)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              <ModelTable
+                rows={leaderboardRows}
+                sortField={sortField}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+              />
             </div>
           </section>
 
@@ -340,6 +294,19 @@ export function StatsPage({
               emptyLabel={historyLoading ? "Loading…" : "No history yet"}
               color="#9ece6a"
             />
+          </section>
+
+          <section>
+            <div className="stats-panel-card">
+              <div className="stats-panel-card-header">
+                <h3>Average completion time by type</h3>
+                <span className="stats-panel-subtitle">Trends in item resolution time over last 14 days</span>
+              </div>
+              <CompletionTimeChart
+                data={completionTimeSeries}
+                emptyLabel={historyLoading ? "Loading…" : "No completion time history yet"}
+              />
+            </div>
           </section>
         </div>
       </div>
@@ -458,38 +425,6 @@ function TrendChart({ title, data, color, valueFormatter, emptyLabel }: { title:
           ))}
         </ul>
       </div>
-    </div>
-  );
-}
-function SortableHead({ label, field, activeField, asc, onSort }: { label: string; field: SortField; activeField: SortField; asc: boolean; onSort: (field: SortField) => void; }) {
-  const isActive = activeField === field;
-  return (
-    <th>
-      <button type="button" className={`sort-head ${isActive ? "active" : ""}`} onClick={() => onSort(field)}>
-        {label}
-        {isActive && <span className="sort-indicator">{asc ? "↑" : "↓"}</span>}
-      </button>
-    </th>
-  );
-}
-
-function SuccessBar({ value, label }: { value: number; label: string }) {
-  const percent = Math.max(0, Math.min(1, value)) * 100;
-  return (
-    <div className="success-bar">
-      <svg viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">
-        <rect className="success-bar-track" x={0} y={0} width={100} height={8} rx={4} ry={4} />
-        <rect
-          className="success-bar-progress"
-          x={0}
-          y={0}
-          width={percent}
-          height={8}
-          rx={4}
-          ry={4}
-        />
-      </svg>
-      <span className="success-bar-label">{label}</span>
     </div>
   );
 }
