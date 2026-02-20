@@ -39,7 +39,9 @@ def _parallel_process_item(
 
     Releases the semaphore when done.
     """
-    agent_id = item.id  # Use work-item id as unique agent identifier
+    # Combine item id with worker name so two workers on the same item
+    # get distinct UI slots (PokePoke-kluq).
+    agent_id = f"{item.id}:{worker_agent_name}" if worker_agent_name else item.id
     display_name = worker_agent_name or "agent"
 
     if worker_agent_name:

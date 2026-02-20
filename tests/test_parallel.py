@@ -37,7 +37,8 @@ class TestParallelProcessItem:
 
         assert result == (True, 1, None, 0, 0, None)
         assert sem.acquire(blocking=False)
-        # Agent status should be registered and updated
+        # Agent status should be registered and updated (agent_id is item.id
+        # when no worker_agent_name is provided)
         mock_ui.ui.push_agent_status.assert_any_call(
             "t1",
             "agent",
@@ -104,6 +105,30 @@ class TestParallelProcessItem:
 
         # Should use agent_output_for to route output
         mock_ui.ui.agent_output_for.assert_called_once_with("t1")
+
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.process_work_item")
+    def test_same_item_different_workers_get_unique_agent_ids(
+        self, mock_pwi: Mock, mock_ui: Mock,
+    ) -> None:
+        """Two workers on the same item must use distinct agent_ids (PokePoke-kluq)."""
+        mock_pwi.return_value = (True, 1, None, 0, 0, None)
+
+        item = _make_item("dup-item")
+        sem1 = threading.Semaphore(0)
+        sem2 = threading.Semaphore(0)
+
+        _parallel_process_item(item, Mock(), sem1, worker_agent_name="worker-1")
+        _parallel_process_item(item, Mock(), sem2, worker_agent_name="worker-2")
+
+        # Collect all agent_ids passed to push_agent_status
+        agent_ids = {
+            call.args[0] for call in mock_ui.ui.push_agent_status.call_args_list
+        }
+        # Must have two distinct agent_ids for the two workers
+        assert len(agent_ids) == 2
+        assert "dup-item:worker-1" in agent_ids
+        assert "dup-item:worker-2" in agent_ids
 
 
 # ── _collect_done_futures ─────────────────────────────────────
