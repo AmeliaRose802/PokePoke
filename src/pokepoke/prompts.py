@@ -226,33 +226,33 @@ class PromptService:
             user_path.unlink()
             return {"reset": True, "had_override": True}
         return {"reset": True, "had_override": False}
-    
+
     def render_prompt(self, template: str, variables: dict[str, Any]) -> str:
         """Render a prompt template with variables.
-        
+
         Supports Mustache-like syntax:
         - {{variable}} - Simple substitution
         - {{#section}}...{{/section}} - Conditional sections (if variable is truthy)
         - {{#array}}...{{/array}} - Array iteration ({{.}} for current item)
-        
+
         Args:
             template: Raw template content
             variables: Dictionary of variables to substitute
-            
+
         Returns:
             Rendered prompt
         """
         result = template
-        
+
         # Handle conditional sections and array iteration: {{#key}}...{{/key}}
         def replace_section(match: re.Match[str]) -> str:
             section_name = match.group(1)
             section_content = match.group(2)
-            
+
             # Check if variable exists and is truthy
             if section_name in variables and variables[section_name]:
                 value = variables[section_name]
-                
+
                 # If value is a list/tuple, iterate over it
                 if isinstance(value, (list, tuple)):
                     rendered_parts = []
@@ -267,7 +267,7 @@ class PromptService:
                     return self._substitute_variables(section_content, variables)
             else:
                 return ""
-        
+
         # Process conditional sections and array iterations
         result = re.sub(
             r'\{\{#(\w+)\}\}(.*?)\{\{/\1\}\}',
@@ -275,35 +275,35 @@ class PromptService:
             result,
             flags=re.DOTALL
         )
-        
+
         # Then handle simple variable substitutions
         result = self._substitute_variables(result, variables)
-        
+
         return result
-    
+
     def _substitute_variables(self, text: str, variables: dict[str, Any]) -> str:
         """Substitute {{variable}} patterns with values.
-        
+
         Args:
             text: Text containing {{variable}} patterns
             variables: Dictionary of variables
-            
+
         Returns:
             Text with variables substituted
         """
         def replace_var(match: re.Match[str]) -> str:
             var_name = match.group(1)
             return str(variables.get(var_name, f"{{{{missing:{var_name}}}}}"))
-        
+
         return re.sub(r'\{\{(\w+|\.)\}\}', replace_var, text)
-    
+
     def load_and_render(self, template_name: str, variables: dict[str, Any]) -> str:
         """Load and render a template in one call.
-        
+
         Args:
             template_name: Name of template (without .md extension)
             variables: Dictionary of variables to substitute
-            
+
         Returns:
             Rendered prompt
         """
@@ -337,7 +337,7 @@ _default_service: PromptService | None = None
 
 def get_prompt_service() -> PromptService:
     """Get the default prompt service instance.
-    
+
     Returns:
         Default PromptService instance
     """

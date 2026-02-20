@@ -11,8 +11,9 @@
     3. Code quality check (mypy type checking) [sequential, after build]
     4. Test coverage check (modified files must have 80%+ coverage) [sequential, after mypy]
     5. Skipped tests check (no skipped pytest tests) [parallel]
-    6. File length check [parallel]
-    7. Desktop lint and TypeScript checks [parallel]
+    6. Ruff lint check [parallel]
+    7. File length check [parallel]
+    8. Desktop lint and TypeScript checks [parallel]
 
 .NOTES
     ⚠️  CRITICAL: This file is protected by CODEOWNERS
@@ -103,6 +104,7 @@ $failed = @()
 # Checks that don't depend on build artifacts - can run in parallel
 $staticChecks = @(
     @{ Name = "Pokepoke Boot"; Script = "check-pokepoke-import.ps1" }
+    @{ Name = "Ruff Lint"; Script = "check-ruff.ps1" }
     @{ Name = "Skipped Tests"; Script = "check-skipped-tests.ps1" }
     @{ Name = "File Length"; Script = "check-file-length.ps1" }
     @{ Name = "Desktop ESLint"; Script = "check-desktop-lint.ps1" }

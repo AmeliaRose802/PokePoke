@@ -33,10 +33,10 @@ if importlib.util.find_spec("xdist") is None:
         "Install it with: pip install pytest-xdist"
     )
 
-import pytest
-from unittest.mock import patch
+import pytest  # noqa: E402
+from unittest.mock import patch  # noqa: E402
 
-from pokepoke.types import BeadsWorkItem
+from pokepoke.types import BeadsWorkItem  # noqa: E402
 
 
 @pytest.fixture(autouse=True)

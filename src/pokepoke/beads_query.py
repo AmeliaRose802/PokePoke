@@ -17,11 +17,11 @@ def _filter_to_dataclass(cls: type, data: dict[str, Any]) -> Any:
 
 def _parse_beads_json(output: str, extra_prefixes: tuple[str, ...] = ()) -> Any:
     """Parse JSON from beads CLI output, filtering warning/note lines.
-    
+
     Args:
         output: Raw stdout from a beads command.
         extra_prefixes: Additional line prefixes to filter out (e.g., 'Created').
-        
+
     Returns:
         Parsed JSON data, or None if no JSON found.
     """
@@ -43,7 +43,7 @@ def _parse_beads_json(output: str, extra_prefixes: tuple[str, ...] = ()) -> Any:
 
 def _get_main_repo_root() -> Path | None:
     """Get the main repository root directory (not a worktree).
-    
+
     Returns:
         Path to the main repo root, or None if not in a git repository.
     """
@@ -56,7 +56,7 @@ def _get_main_repo_root() -> Path | None:
 
 def get_ready_work_items() -> list[BeadsWorkItem]:
     """Query beads database for ready work items.
-    
+
     Returns:
         List of ready work items. Returns empty list if beads command fails.
     """
@@ -82,15 +82,15 @@ def get_ready_work_items() -> list[BeadsWorkItem]:
     except Exception as e:
         print(f"⚠️  Warning: unexpected error querying beads: {e}")
         return []
-    
+
     if not result.stdout:
         return []
-    
+
     try:
         items_data = _parse_beads_json(result.stdout)
         if not items_data:
             return []
-        
+
         return [_filter_to_dataclass(BeadsWorkItem, item) for item in items_data]
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         print(f"⚠️  Warning: failed to parse beads output: {e}")
@@ -99,10 +99,10 @@ def get_ready_work_items() -> list[BeadsWorkItem]:
 
 def get_issue_dependencies(issue_id: str) -> IssueWithDependencies | None:
     """Get detailed issue information including dependencies.
-    
+
     Args:
         issue_id: The issue ID to query.
-        
+
     Returns:
         Issue with dependencies, or None if not found.
     """
@@ -117,51 +117,51 @@ def get_issue_dependencies(issue_id: str) -> IssueWithDependencies | None:
         )
     except subprocess.CalledProcessError:
         return None
-    
+
     if not result.stdout:
         return None
-    
+
     issues_data = _parse_beads_json(result.stdout)
     if not issues_data:
         return None
-    
+
     issue_dict = issues_data[0]
-    
+
     filtered_issue = {k: v for k, v in issue_dict.items()
                       if k in {f.name for f in dataclasses.fields(IssueWithDependencies)}}
-    
+
     # Convert dependencies if present
     if 'dependencies' in filtered_issue and filtered_issue['dependencies']:
         filtered_issue['dependencies'] = [
             _filter_to_dataclass(Dependency, dep)
             for dep in filtered_issue['dependencies']
         ]
-    
+
     if 'dependents' in filtered_issue and filtered_issue['dependents']:
         filtered_issue['dependents'] = [
             _filter_to_dataclass(Dependency, dep)
             for dep in filtered_issue['dependents']
         ]
-    
+
     return IssueWithDependencies(**filtered_issue)
 
 
 def has_unmet_blocking_dependencies(item_id: str) -> bool:
     """Check if an item has any unmet blocking dependencies.
-    
+
     An item should not be worked on if it has dependencies with type 'blocks'
     that are not in 'closed' status.
-    
+
     Args:
         item_id: The issue ID to check.
-        
+
     Returns:
         True if the item has unmet blocking dependencies, False otherwise.
     """
     issue = get_issue_dependencies(item_id)
     if not issue or not issue.dependencies:
         return False
-    
+
     return any(
         dep.dependency_type == 'blocks' and dep.status != 'closed'
         for dep in issue.dependencies
@@ -170,10 +170,10 @@ def has_unmet_blocking_dependencies(item_id: str) -> bool:
 
 def get_beads_stats() -> BeadsStats | None:
     """Get current beads database statistics.
-    
+
     Runs from the main repository root to ensure beads database is accessible
     even when called from a worktree.
-    
+
     Returns:
         BeadsStats object with current counts, or None if command fails.
     """
@@ -181,7 +181,7 @@ def get_beads_stats() -> BeadsStats | None:
         # Get main repo root to ensure beads database is accessible
         main_repo = _get_main_repo_root()
         cwd = str(main_repo) if main_repo else None
-        
+
         result = subprocess.run(
             ['bd', 'stats', '--json'],
             capture_output=True,
@@ -191,10 +191,10 @@ def get_beads_stats() -> BeadsStats | None:
             cwd=cwd,
             timeout=30
         )
-        
+
         data = json.loads(result.stdout)
         summary = data.get('summary', {})
-        
+
         return BeadsStats(
             total_issues=summary.get('total_issues', 0),
             open_issues=summary.get('open_issues', 0),

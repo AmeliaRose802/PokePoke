@@ -11,15 +11,15 @@ if TYPE_CHECKING:
 
 class RunLogger:
     """Manages logging for a PokePoke run.
-    
+
     Creates a unique directory for each run and manages two types of logs:
     1. Orchestrator log - High-level actions taken by PokePoke (no agent output)
     2. Per-item logs - Detailed agent output for each work item processed
     """
-    
+
     def __init__(self, base_dir: str = ".pokepoke/logs"):
         """Initialize the run logger.
-        
+
         Args:
             base_dir: Base directory for all log runs (default: ".pokepoke/logs")
         """
@@ -28,30 +28,30 @@ class RunLogger:
         self.base_dir = Path(base_dir).resolve()
         self.run_dir = self.base_dir / self.run_id
         self.run_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Create log files
         self.orchestrator_log_path = self.run_dir / "orchestrator.log"
         self.item_logs_dir = self.run_dir / "items"
         self.item_logs_dir.mkdir(exist_ok=True)
         self.maintenance_logs_dir = self.run_dir / "maintenance"
         self.maintenance_logs_dir.mkdir(exist_ok=True)
-        
+
         # Track current item logger
         self._current_item_logger: 'ItemLogger | None' = None
-        
+
         # Write initial orchestrator log entry
         self._init_orchestrator_log()
-    
+
     def _generate_run_id(self) -> str:
         """Generate a unique run ID with timestamp and short UUID.
-        
+
         Returns:
             Run ID in format: YYYYMMDD_HHMMSS_<short-uuid>
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         short_uuid = str(uuid.uuid4())[:8]
         return f"{timestamp}_{short_uuid}"
-    
+
     def _init_orchestrator_log(self) -> None:
         """Write initial header to orchestrator log."""
         with open(self.orchestrator_log_path, 'w', encoding='utf-8') as f:
@@ -61,10 +61,10 @@ class RunLogger:
             f.write(f"Run ID: {self.run_id}\n")
             f.write(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write("=" * 80 + "\n\n")
-    
+
     def log_orchestrator(self, message: str, level: str = "INFO") -> None:
         """Log a message to the orchestrator log.
-        
+
         Args:
             message: Message to log
             level: Log level (INFO, WARNING, ERROR, etc.)
@@ -72,7 +72,7 @@ class RunLogger:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(self.orchestrator_log_path, 'a', encoding='utf-8') as f:
             f.write(f"[{timestamp}] [{level}] {message}\n")
-    
+
     def start_item_log(
         self,
         item_id: str,
@@ -80,12 +80,12 @@ class RunLogger:
         agent_name: str | None = None,
     ) -> 'ItemLogger':
         """Start logging for a specific work item.
-        
+
         Args:
             item_id: Work item ID
             item_title: Work item title
             agent_name: Name of the agent handling this item (defaults to current agent)
-             
+
         Returns:
             ItemLogger instance for the work item
         """
@@ -105,16 +105,16 @@ class RunLogger:
             item_title,
             agent_name=agent_name,
         )
-        
+
         agent_suffix = f" (agent: {agent_name})" if agent_name else ""
         self.log_orchestrator(
             f"Started processing work item: {item_id} - {item_title}{agent_suffix}"
         )
         return self._current_item_logger
-    
+
     def end_item_log(self, success: bool, request_count: int) -> None:
         """End logging for the current work item.
-        
+
         Args:
             success: Whether the work item was completed successfully
             request_count: Number of agent requests made
@@ -123,15 +123,15 @@ class RunLogger:
             self._current_item_logger.log_summary(success, request_count)
             self._current_item_logger.close()
             self._current_item_logger = None
-        
+
         status = "SUCCESS" if success else "FAILURE"
         self.log_orchestrator(
             f"Completed work item with {request_count} agent requests - Status: {status}"
         )
-    
+
     def log_maintenance(self, agent_type: str, message: str) -> None:
         """Log a maintenance agent action.
-        
+
         Args:
             agent_type: Type of maintenance agent (tech_debt, janitor, etc.)
             message: Message to log
@@ -160,7 +160,7 @@ class RunLogger:
     def finalize(self, items_completed: int, total_requests: int, elapsed: float,
                  session_stats: 'SessionStats | None' = None) -> None:
         """Write final summary to orchestrator log and persist stats to disk.
-        
+
         Args:
             items_completed: Number of work items completed
             total_requests: Total number of agent requests made
@@ -176,7 +176,7 @@ class RunLogger:
             f.write(f"Total agent requests: {total_requests}\n")
             f.write(f"Total time: {elapsed / 60:.1f} minutes\n")
             f.write("=" * 80 + "\n")
-        
+
         # Persist session stats to stats.json
         if session_stats is not None:
             try:
@@ -187,20 +187,20 @@ class RunLogger:
                 self.log_orchestrator(f"Session stats saved to {stats_path}")
             except Exception as e:
                 self.log_orchestrator(f"Failed to save session stats: {e}", level="ERROR")
-        
+
         self.log_orchestrator("PokePoke run completed")
-    
+
     def get_run_id(self) -> str:
         """Get the run ID for this logger.
-        
+
         Returns:
             Run ID string
         """
         return self.run_id
-    
+
     def get_run_dir(self) -> Path:
         """Get the run directory path.
-        
+
         Returns:
             Path to the run directory
         """
@@ -209,7 +209,7 @@ class RunLogger:
 
 class ItemLogger:
     """Manages logging for a single work item's agent interactions."""
-    
+
     def __init__(
         self,
         logs_dir: Path,
@@ -218,7 +218,7 @@ class ItemLogger:
         agent_name: str | None = None,
     ):
         """Initialize the item logger.
-        
+
         Args:
             logs_dir: Directory to store item logs
             item_id: Work item ID
@@ -228,7 +228,7 @@ class ItemLogger:
         self.item_id = item_id
         self.item_title = item_title
         self.agent_name = agent_name
-        
+
         # Create log file with sanitized filename
         safe_id = item_id.replace('/', '_').replace('\\', '_')
         filename = safe_id
@@ -236,7 +236,7 @@ class ItemLogger:
             safe_agent = self._sanitize_agent_component(agent_name)
             filename = f"{filename}_{safe_agent}"
         self.log_path = logs_dir / f"{filename}.log"
-        
+
         # Initialize log file
         with open(self.log_path, 'w', encoding='utf-8') as f:
             f.write("=" * 80 + "\n")
@@ -248,13 +248,13 @@ class ItemLogger:
                 f.write("=" * 80 + "\n")
             f.write(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write("=" * 80 + "\n\n")
-        
+
         # Track whether file is open
         self._file_handle: object | None = None
-    
+
     def log(self, message: str) -> None:
         """Log a message to the item log.
-        
+
         Args:
             message: Message to log
         """
@@ -300,7 +300,7 @@ class ItemLogger:
 
     def log_summary(self, success: bool, request_count: int) -> None:
         """Log summary information for the work item.
-        
+
         Args:
             success: Whether the work item was completed successfully
             request_count: Number of agent requests made
@@ -313,7 +313,7 @@ class ItemLogger:
             f.write(f"Status: {'SUCCESS' if success else 'FAILURE'}\n")
             f.write(f"Agent requests: {request_count}\n")
             f.write("=" * 80 + "\n")
-    
+
     def close(self) -> None:
         """Close the item logger."""
         # Nothing to do - we use context managers for writes

@@ -10,7 +10,7 @@ from pokepoke.types import CopilotResult
 
 class TestInvokeCopilot:
     """Tests for invoke_copilot function (SDK-based)."""
-    
+
     @patch('pokepoke.copilot.get_backend')
     def test_invoke_copilot_success(self, mock_backend_factory, sample_work_item):
         """Test successful invocation."""
@@ -23,9 +23,9 @@ class TestInvokeCopilot:
         mock_backend = MagicMock()
         mock_backend.invoke.return_value = expected_result
         mock_backend_factory.return_value = mock_backend
-        
+
         result = invoke_copilot(sample_work_item)
-        
+
         assert result == expected_result
         mock_backend_factory.assert_called_once_with(None)
         mock_backend.invoke.assert_called_once_with(
@@ -38,7 +38,7 @@ class TestInvokeCopilot:
             model=None,
             cwd=None
         )
-    
+
     @patch('pokepoke.copilot.get_backend')
     def test_invoke_copilot_with_params(self, mock_backend_factory, sample_work_item):
         """Test invocation with custom parameters."""
@@ -51,7 +51,7 @@ class TestInvokeCopilot:
         mock_backend = MagicMock()
         mock_backend.invoke.return_value = expected_result
         mock_backend_factory.return_value = mock_backend
-        
+
         result = invoke_copilot(
             sample_work_item,
             prompt="custom prompt",
@@ -59,7 +59,7 @@ class TestInvokeCopilot:
             deny_write=True,
             provider="claude-code"
         )
-        
+
         assert result == expected_result
         mock_backend_factory.assert_called_once_with("claude-code")
         mock_backend.invoke.assert_called_once_with(

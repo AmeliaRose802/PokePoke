@@ -21,22 +21,22 @@ from pokepoke import terminal_ui
 
 # Agents that require singleton guard (modify shared state or produce duplicates)
 _SINGLETON_AGENTS: set[str] = {
-    "Beta Tester", 
-    "Janitor", 
-    "Backlog Cleanup", 
+    "Beta Tester",
+    "Janitor",
+    "Backlog Cleanup",
     "Worktree Cleanup"
 }
 
 # Agents that can safely run in parallel (beads-only, no conflicts)
 _PARALLEL_SAFE_AGENTS: set[str] = {
-    "Tech Debt", 
+    "Tech Debt",
     "Code Review"
 }
 
 # Map of agent stat attribute names by agent name
 _AGENT_STAT_ATTRS = {
     "Tech Debt": "tech_debt_agent_runs",
-    "Janitor": "janitor_agent_runs", 
+    "Janitor": "janitor_agent_runs",
     "Backlog Cleanup": "backlog_cleanup_agent_runs",
     "Beta Tester": "beta_tester_agent_runs",
     "Code Review": "code_review_agent_runs",
@@ -49,12 +49,12 @@ _SPECIAL_AGENTS = {"Beta Tester", "Worktree Cleanup"}
 
 class MaintenanceScheduler:
     """Coordinated scheduler for maintenance agents with singleton guards."""
-    
+
     def __init__(self) -> None:
         # In-process locks for thread coordination
         self._locks: dict[str, threading.Lock] = {}
         self._lock_creation_lock = threading.Lock()
-        
+
     def _get_agent_lock(self, agent_name: str) -> threading.Lock:
         """Get or create a threading lock for the given agent."""
         if agent_name not in self._locks:
@@ -63,10 +63,10 @@ class MaintenanceScheduler:
                 if agent_name not in self._locks:
                     self._locks[agent_name] = threading.Lock()
         return self._locks[agent_name]
-    
+
     def maybe_run_maintenance(self, items_completed: int, session_stats: SessionStats, run_logger: RunLogger) -> None:
         """Run maintenance agents that are due, with singleton coordination.
-        
+
         Args:
             items_completed: Number of items completed (for frequency calculation)
             session_stats: Session statistics to update
@@ -100,7 +100,7 @@ class MaintenanceScheduler:
 
     def _maybe_run_agent(self, agent_name: str, agent_cfg: MaintenanceAgentConfig, pokepoke_repo: Path, session_stats: SessionStats, run_logger: RunLogger) -> None:
         """Try to run a single maintenance agent with appropriate locking.
-        
+
         Args:
             agent_name: Name of the agent to run
             agent_cfg: Agent configuration
@@ -109,7 +109,9 @@ class MaintenanceScheduler:
             run_logger: Logger for maintenance events
         """
         log_key = agent_name.lower().replace(" ", "_")
-        log_fn = lambda msg: run_logger.log_maintenance(log_key, msg)
+
+        def log_fn(msg: str) -> None:
+            run_logger.log_maintenance(log_key, msg)
 
         if not wait_for_main_repo_clean(
             pokepoke_repo,
@@ -122,40 +124,40 @@ class MaintenanceScheduler:
                 f"Skipping {agent_name} Agent - main repo still dirty after wait",
             )
             return
-        
+
         if agent_name in _PARALLEL_SAFE_AGENTS:
             # Parallel-safe agents don't need singleton coordination
             self._run_agent_with_coordination(agent_name, agent_cfg, pokepoke_repo, session_stats, run_logger)
             return
-        
+
         # Singleton or unknown agents need lock protection
         if agent_name not in _SINGLETON_AGENTS:
             run_logger.log_maintenance(log_key, f"WARNING: Unknown agent classification for {agent_name}, applying singleton guard")
-        
+
         self._run_with_singleton_guard(agent_name, agent_cfg, pokepoke_repo, session_stats, run_logger)
-    
+
     def _run_with_singleton_guard(self, agent_name: str, agent_cfg: MaintenanceAgentConfig, pokepoke_repo: Path, session_stats: SessionStats, run_logger: RunLogger) -> None:
         """Run an agent with both thread and file lock singleton protection."""
         log_key = agent_name.lower().replace(" ", "_")
         file_lock = None
         thread_lock = self._get_agent_lock(agent_name)
-        
+
         # Try to acquire thread lock first (non-blocking)
         thread_acquired = thread_lock.acquire(blocking=False)
         if not thread_acquired:
             run_logger.log_maintenance(log_key, f"Skipping {agent_name} Agent - already running in this process")
             return
-        
+
         try:
             # Try to acquire file lock (cross-process)
             file_lock = try_lock(f"maintenance-{agent_name.lower().replace(' ', '-')}")
             if file_lock is None:
                 run_logger.log_maintenance(log_key, f"Skipping {agent_name} Agent - already running in another process")
                 return
-            
+
             # Both locks acquired - run the agent
             self._run_agent_with_coordination(agent_name, agent_cfg, pokepoke_repo, session_stats, run_logger)
-            
+
         finally:
             if file_lock is not None:
                 file_lock.release()
@@ -163,7 +165,7 @@ class MaintenanceScheduler:
 
     def _run_agent_with_coordination(self, agent_name: str, agent_cfg: MaintenanceAgentConfig, pokepoke_repo: Path, session_stats: SessionStats, run_logger: RunLogger) -> None:
         """Run a maintenance agent and handle statistics coordination.
-        
+
         Args:
             agent_name: Name of the agent to run
             agent_cfg: Agent configuration
@@ -172,11 +174,11 @@ class MaintenanceScheduler:
             run_logger: Logger for maintenance events
         """
         log_key = agent_name.lower().replace(" ", "_")
-        
+
         # Register maintenance agent in the Agents panel
         agent_id = f"maintenance-{log_key}"
         terminal_ui.ui.push_agent_status(agent_id, f"{agent_name} Agent", iteration=1, status="running")
-        
+
         set_terminal_banner(f"PokePoke - Synced {agent_name} Agent")
         terminal_ui.ui.update_header("MAINTENANCE", f"{agent_name} Agent", "Running")
         print(f"\n🔧 Running {agent_name} Agent...")
@@ -209,13 +211,13 @@ class MaintenanceScheduler:
                         model=agent_cfg.model,
                         item_logger=maint_logger,
                     )
-            
+
             success = result is not None
-            
+
             # Update agent status based on result
             status = "success" if success else "failed"
             terminal_ui.ui.push_agent_status(agent_id, f"{agent_name} Agent", iteration=1, status=status)
-            
+
             maint_logger.log_summary(success, request_count=0)
 
             if result:
@@ -225,7 +227,7 @@ class MaintenanceScheduler:
                 run_logger.log_maintenance(log_key, f"{agent_name} Agent completed successfully")
             else:
                 run_logger.log_maintenance(log_key, f"{agent_name} Agent failed")
-                
+
         except Exception:
             terminal_ui.ui.push_agent_status(agent_id, f"{agent_name} Agent", iteration=1, status="failed")
             run_logger.log_maintenance(log_key, f"{agent_name} Agent raised exception")
@@ -250,12 +252,12 @@ def get_maintenance_scheduler() -> MaintenanceScheduler:
 
 def run_periodic_maintenance(items_completed: int, session_stats: SessionStats, run_logger: RunLogger) -> None:
     """Run periodic maintenance agents based on config and completion count.
-    
+
     This is a backward-compatible wrapper that delegates to the MaintenanceScheduler.
-    
+
     Args:
         items_completed: Number of completed work items
-        session_stats: Session statistics to update  
+        session_stats: Session statistics to update
         run_logger: Logger for maintenance events
     """
     from pokepoke.shutdown import should_stop_after_current

@@ -31,7 +31,8 @@ def _finalize_session(
     items_completed: int, total_requests: int, run_logger: RunLogger,
 ) -> None:
     """Collect ending stats, print summary, and clean up UI."""
-    end_time = time.time(); terminal_ui.ui.set_session_end_time(end_time)  # Stop desktop UI clock
+    end_time = time.time()
+    terminal_ui.ui.set_session_end_time(end_time)  # Stop desktop UI clock
     try:
         session_stats.set_ending_beads_stats(get_beads_stats())
     except KeyboardInterrupt:
@@ -268,7 +269,7 @@ def run_orchestrator(
                     terminal_ui.ui.stop_and_capture()
                     _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
                     return 0 if success else 1
-                
+
                 if interactive:
                     # Clear banner between items
                     set_terminal_banner(f"PokePoke {mode_name} - {agent_name}")
@@ -374,15 +375,15 @@ def main() -> int:
 
     # Autonomous flag overrides interactive
     interactive = not args.autonomous
-    
+
     # Check beads availability BEFORE starting any UI
     # so error messages print directly to stdout
     if not check_beads_available():
         return 1
-    
+
     from pokepoke.desktop_ui import DesktopUI
     active_ui: DesktopUI = terminal_ui.ui
-    
+
     # Run the orchestrator with the selected UI
     def orchestrator_func() -> int:
         return run_orchestrator(
@@ -392,9 +393,8 @@ def main() -> int:
             agent_name_override=args.agent_name,
             max_parallel_agents=args.max_agents,
         )
-    
-    return active_ui.run_with_orchestrator(orchestrator_func)
 
+    return active_ui.run_with_orchestrator(orchestrator_func)
 
 if __name__ == "__main__":
     sys.exit(main())

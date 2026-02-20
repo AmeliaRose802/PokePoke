@@ -25,7 +25,7 @@ def _make_default_config() -> ProjectConfig:
 
 class TestAggregateStats:
     """Test aggregate_stats function."""
-    
+
     def test_aggregates_all_fields(self) -> None:
         """Test that all stats fields are aggregated correctly."""
         session_stats = SessionStats(agent_stats=AgentStats(
@@ -39,7 +39,7 @@ class TestAggregateStats:
             tool_calls=5,
             retries=0
         ))
-        
+
         item_stats = AgentStats(
             wall_duration=5.0,
             api_duration=2.0,
@@ -51,9 +51,9 @@ class TestAggregateStats:
             tool_calls=3,
             retries=1
         )
-        
+
         aggregate_stats(session_stats, item_stats)
-        
+
         assert session_stats.agent_stats.wall_duration == 15.0
         assert session_stats.agent_stats.api_duration == 7.0
         assert session_stats.agent_stats.input_tokens == 150
@@ -67,15 +67,15 @@ class TestAggregateStats:
     def test_aggregates_from_zero(self) -> None:
         """Test aggregation when session stats start at zero."""
         session_stats = SessionStats(agent_stats=AgentStats())
-        
+
         item_stats = AgentStats(
             wall_duration=10.0,
             input_tokens=100,
             output_tokens=50
         )
-        
+
         aggregate_stats(session_stats, item_stats)
-        
+
         assert session_stats.agent_stats.wall_duration == 10.0
         assert session_stats.agent_stats.input_tokens == 100
         assert session_stats.agent_stats.output_tokens == 50
@@ -83,14 +83,14 @@ class TestAggregateStats:
     def test_aggregates_multiple_items(self) -> None:
         """Test aggregation of multiple items."""
         session_stats = SessionStats(agent_stats=AgentStats())
-        
+
         for i in range(3):
             item_stats = AgentStats(
                 wall_duration=10.0,
                 input_tokens=100
             )
             aggregate_stats(session_stats, item_stats)
-        
+
         assert session_stats.agent_stats.wall_duration == 30.0
         assert session_stats.agent_stats.input_tokens == 300
 
@@ -123,9 +123,9 @@ class TestRunPeriodicMaintenance:
         mock_lock.return_value = Mock()
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
-        
+
         run_periodic_maintenance(0, session_stats, run_logger)
-        
+
         mock_maintenance.assert_not_called()
         mock_special_agent.assert_not_called()
 
@@ -150,12 +150,12 @@ class TestRunPeriodicMaintenance:
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         mock_maintenance.return_value = None
-        
+
         # Should run at 2, 4, 6, 8...
         run_periodic_maintenance(2, session_stats, run_logger)
-        
+
         # Check Janitor was called (it runs at every 2 items)
-        calls = [call for call in mock_maintenance.call_args_list 
+        calls = [call for call in mock_maintenance.call_args_list
                  if call[0][0] == "Janitor"]
         assert len(calls) == 1
         assert session_stats.janitor_agent_runs == 1
@@ -181,11 +181,11 @@ class TestRunPeriodicMaintenance:
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         mock_special_agent.return_value = None
-        
+
         run_periodic_maintenance(3, session_stats, run_logger)
-        
+
         # Check Beta Tester was called via _run_special_agent
-        calls = [call for call in mock_special_agent.call_args_list 
+        calls = [call for call in mock_special_agent.call_args_list
                  if call[0][0] == "Beta Tester"]
         assert len(calls) == 1
         assert session_stats.beta_tester_agent_runs == 1
@@ -211,11 +211,11 @@ class TestRunPeriodicMaintenance:
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         mock_special_agent.return_value = None
-        
+
         run_periodic_maintenance(4, session_stats, run_logger)
-        
-        # Check Worktree Cleanup was called via _run_special_agent  
-        calls = [call for call in mock_special_agent.call_args_list 
+
+        # Check Worktree Cleanup was called via _run_special_agent
+        calls = [call for call in mock_special_agent.call_args_list
                  if call[0][0] == "Worktree Cleanup"]
         assert len(calls) == 1
         assert session_stats.worktree_cleanup_agent_runs == 1
@@ -241,15 +241,15 @@ class TestRunPeriodicMaintenance:
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         mock_maintenance.return_value = None
-        
+
         run_periodic_maintenance(5, session_stats, run_logger)
-        
+
         # Check Tech Debt and Code Review were called
-        tech_debt_calls = [call for call in mock_maintenance.call_args_list 
+        tech_debt_calls = [call for call in mock_maintenance.call_args_list
                           if call[0][0] == "Tech Debt"]
-        code_review_calls = [call for call in mock_maintenance.call_args_list 
+        code_review_calls = [call for call in mock_maintenance.call_args_list
                              if call[0][0] == "Code Review"]
-        
+
         assert len(tech_debt_calls) == 1
         assert len(code_review_calls) == 1
         assert session_stats.tech_debt_agent_runs == 1
@@ -276,13 +276,13 @@ class TestRunPeriodicMaintenance:
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         mock_maintenance.return_value = None
-        
+
         run_periodic_maintenance(7, session_stats, run_logger)
-        
+
         # Check Backlog Cleanup was called
-        backlog_calls = [call for call in mock_maintenance.call_args_list 
+        backlog_calls = [call for call in mock_maintenance.call_args_list
                          if call[0][0] == "Backlog Cleanup"]
-        
+
         assert len(backlog_calls) == 1
         assert session_stats.backlog_cleanup_agent_runs == 1
 
@@ -306,16 +306,16 @@ class TestRunPeriodicMaintenance:
         mock_lock.return_value = Mock()
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
-        
+
         # Return stats from maintenance agent (Janitor runs at 2)
         mock_maintenance.return_value = AgentStats(
             wall_duration=10.0,
             input_tokens=100,
             lines_removed=50
         )
-        
+
         run_periodic_maintenance(2, session_stats, run_logger)
-        
+
         # Stats should be aggregated
         assert session_stats.agent_stats.wall_duration == 10.0
         assert session_stats.agent_stats.input_tokens == 100
@@ -341,14 +341,14 @@ class TestRunPeriodicMaintenance:
         mock_lock.return_value = Mock()
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
-        
+
         # All agents return None (failure)
         mock_maintenance.return_value = None
         mock_special_agent.return_value = None
-        
+
         # Should not raise
         run_periodic_maintenance(10, session_stats, run_logger)
-        
+
         # Counts should still be updated
         assert session_stats.janitor_agent_runs == 1
         assert session_stats.tech_debt_agent_runs == 1
@@ -374,9 +374,9 @@ class TestRunPeriodicMaintenance:
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         mock_maintenance.return_value = AgentStats()
-        
+
         run_periodic_maintenance(2, session_stats, run_logger)
-        
+
         # Should have logged start and completion
         log_calls = run_logger.log_maintenance.call_args_list
         assert len(log_calls) >= 2  # At least start and end
@@ -403,15 +403,15 @@ class TestRunPeriodicMaintenance:
         run_logger = Mock()
         mock_maintenance.return_value = None
         mock_special_agent.return_value = None
-        
+
         # At 6: Janitor (2), Beta Tester (3), Backlog Cleanup (7-no)
         run_periodic_maintenance(6, session_stats, run_logger)
-        
+
         assert session_stats.janitor_agent_runs == 1
         assert session_stats.beta_tester_agent_runs == 1
-        
+
         # Check Beta Tester was called via _run_special_agent
-        beta_calls = [call for call in mock_special_agent.call_args_list 
+        beta_calls = [call for call in mock_special_agent.call_args_list
                       if call[0][0] == "Beta Tester"]
         assert len(beta_calls) == 1
 
@@ -436,14 +436,14 @@ class TestRunPeriodicMaintenance:
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         mock_maintenance.return_value = None
-        
+
         run_periodic_maintenance(5, session_stats, run_logger)
-        
+
         # Find the Code Review call
-        code_review_calls = [call for call in mock_maintenance.call_args_list 
+        code_review_calls = [call for call in mock_maintenance.call_args_list
                              if call[0][0] == "Code Review"]
         assert len(code_review_calls) == 1
-        
+
         # Check that model parameter was passed
         call_kwargs = code_review_calls[0][1]
         assert call_kwargs.get('model') == "gpt-5.1-codex"
@@ -469,14 +469,14 @@ class TestRunPeriodicMaintenance:
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         mock_maintenance.return_value = None
-        
+
         run_periodic_maintenance(7, session_stats, run_logger)
-        
+
         # Find the Backlog Cleanup call
-        backlog_calls = [call for call in mock_maintenance.call_args_list 
+        backlog_calls = [call for call in mock_maintenance.call_args_list
                          if call[0][0] == "Backlog Cleanup"]
         assert len(backlog_calls) == 1
-        
+
         # Check that merge_changes=False was passed
         call_kwargs = backlog_calls[0][1]
         assert call_kwargs.get('merge_changes') is False

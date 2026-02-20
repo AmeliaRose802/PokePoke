@@ -15,9 +15,9 @@ def test_parse_agent_stats_with_all_fields():
     Est. 3 Premium requests
     More output
     """
-    
+
     stats = parse_agent_stats(output)
-    
+
     assert stats is not None
     assert stats.wall_duration == 45.2
     assert stats.api_duration == 30.1
@@ -35,9 +35,9 @@ def test_parse_agent_stats_with_partial_fields():
     Input: 5000 input
     Output: 2000 output
     """
-    
+
     stats = parse_agent_stats(output)
-    
+
     assert stats is not None
     assert stats.wall_duration == 12.5
     assert stats.api_duration == 0.0
@@ -51,9 +51,9 @@ def test_parse_agent_stats_with_partial_fields():
 def test_parse_agent_stats_with_no_stats():
     """Test that None is returned when no stats are found in output."""
     output = "Just some regular output with no statistics"
-    
+
     stats = parse_agent_stats(output)
-    
+
     assert stats is None
 
 
@@ -61,7 +61,7 @@ def test_parse_agent_stats_with_empty_output():
     """Test that None is returned for empty output."""
     stats = parse_agent_stats("")
     assert stats is None
-    
+
     stats = parse_agent_stats(None)
     assert stats is None
 
@@ -71,9 +71,9 @@ def test_parse_agent_stats_with_alternative_premium_format():
     output = """
     Total usage est: 5 Premium requests
     """
-    
+
     stats = parse_agent_stats(output)
-    
+
     assert stats is not None
     assert stats.premium_requests == 5
 
@@ -84,9 +84,9 @@ def test_parse_agent_stats_with_tokens_in_thousands():
     15.5k input
     8.2k output
     """
-    
+
     stats = parse_agent_stats(output)
-    
+
     assert stats is not None
     assert stats.input_tokens == 15500
     assert stats.output_tokens == 8200
@@ -98,9 +98,9 @@ def test_parse_agent_stats_with_tokens_without_k():
     1500 input
     800 output
     """
-    
+
     stats = parse_agent_stats(output)
-    
+
     assert stats is not None
     assert stats.input_tokens == 1500
     assert stats.output_tokens == 800
@@ -112,9 +112,9 @@ def test_parse_agent_stats_with_zero_changes():
     Total duration (wall): 10.0s
     Total code changes: 0 lines added, 0 lines removed
     """
-    
+
     stats = parse_agent_stats(output)
-    
+
     assert stats is not None
     assert stats.wall_duration == 10.0
     assert stats.lines_added == 0
@@ -128,10 +128,10 @@ def test_parse_agent_stats_with_invalid_format():
     Total code changes: invalid format
     5k input
     """
-    
+
     # Should still parse the valid fields
     stats = parse_agent_stats(output)
-    
+
     assert stats is not None
     assert stats.wall_duration == 15.0
     assert stats.input_tokens == 5000
@@ -142,22 +142,22 @@ def test_parse_agent_stats_with_exception_handling(capsys, monkeypatch):
     """Test that exceptions during parsing are caught and logged."""
     # Create output that will trigger an exception during parsing
     output = "Total duration (wall): 10.0s"
-    
+
     # Mock float() to raise ValueError
     original_float = float
     call_count = [0]
-    
+
     def mock_float(value):
         call_count[0] += 1
         if call_count[0] == 1:  # First call to float() in parse
             raise ValueError("Mock parsing error")
         return original_float(value)
-    
+
     monkeypatch.setattr('builtins.float', mock_float)
-    
+
     # Should return None and print warning
     stats = parse_agent_stats(output)
-    
+
     assert stats is None
     captured = capsys.readouterr()
     assert "Warning: Failed to parse agent stats" in captured.out

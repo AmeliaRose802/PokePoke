@@ -3,7 +3,6 @@
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 
 from pokepoke.init import init_project, main, _SAMPLE_CONFIG
 

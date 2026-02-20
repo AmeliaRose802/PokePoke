@@ -24,13 +24,13 @@ def create_worktree(item_id: str, base_branch: str | None = None) -> Path:
     """Create a git worktree for a work item. Returns existing path if already exists."""
     # Sanitize the item_id for use in branch names
     sanitized_id = sanitize_branch_name(item_id)
-    
+
     # Worktree path: ./worktrees/task-{sanitized_id}
     worktree_path = Path("worktrees") / f"task-{sanitized_id}"
-    
+
     # Branch name for the worktree
     branch_name = f"task/{sanitized_id}"
-    
+
     # Check if worktree already exists
     existing_worktrees = list_worktrees()
     for wt in existing_worktrees:
@@ -39,10 +39,10 @@ def create_worktree(item_id: str, base_branch: str | None = None) -> Path:
         if wt_path == worktree_path.resolve() or wt.get("branch", "").endswith(branch_name):
             print(f"   ♻️  Reusing existing worktree at {wt_path}")
             return wt_path
-    
+
     # Create worktrees directory if it doesn't exist
     Path("worktrees").mkdir(exist_ok=True)
-    
+
     # Resolve default base branch if not provided
     if base_branch is None:
         base_branch = get_default_branch()
@@ -60,7 +60,7 @@ def create_worktree(item_id: str, base_branch: str | None = None) -> Path:
     except subprocess.CalledProcessError as e:
         # Log the actual error for debugging
         print(f"   ⚠️  Git error: {e.stderr if e.stderr else 'No stderr'}")
-        
+
         # Check if error is because branch already exists
         if e.stderr and ("already exists" in e.stderr.lower() or "already checked out" in e.stderr.lower()):
             # Try to find the existing worktree
@@ -69,16 +69,16 @@ def create_worktree(item_id: str, base_branch: str | None = None) -> Path:
                 if wt.get("branch", "").endswith(branch_name):
                     print(f"   ♻️  Reusing existing worktree at {wt['path']}")
                     return Path(wt["path"])
-        
+
         # Check if the base branch doesn't exist
         if e.stderr and ("invalid reference" in e.stderr.lower() or "not a valid" in e.stderr.lower()):
             raise RuntimeError(f"Base branch '{base_branch}' does not exist. Please create it first or specify a different base branch.")
-        
+
         # If we couldn't recover, re-raise the error with more context
         raise RuntimeError(f"Failed to create worktree: {e.stderr if e.stderr else str(e)}") from e
     except subprocess.TimeoutExpired as e:
         raise RuntimeError(f"Timed out creating worktree after {e.timeout}s") from e
-    
+
     return worktree_path
 
 
@@ -101,7 +101,7 @@ def is_worktree_merged(item_id: str, target_branch: str | None = None) -> bool:
 
 def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool = True) -> tuple[bool, list[str]]:
     """Merge a worktree's branch into the target branch and optionally clean up.
-    
+
     Returns:
         Tuple of (success: bool, unmerged_files: list[str])
         - If successful: (True, [])
@@ -115,20 +115,20 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
 
     if target_branch is None:
         target_branch = get_default_branch()
-    
+
     # PRE-MERGE VALIDATION: Verify worktree is clean
     if not is_worktree_clean(worktree_path):
         print("❌ Pre-merge validation failed: Worktree has uncommitted changes")
         return False, []
-    
+
     print("✅ Pre-merge validation passed: Worktree is clean")
-    
+
     if not _sync_and_ensure_clean_main_repo(branch_name):
         return False, []
-    
+
     # Execute merge sequence with proper error handling
     merge_success, merge_error, unmerged_files = execute_merge_sequence(branch_name, target_branch)
-    
+
     if not merge_success:
         if unmerged_files:
             print(f"❌ Merge conflicts detected in {len(unmerged_files)} file(s):")
@@ -139,74 +139,74 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
         else:
             print(f"❌ Merge failed: {merge_error}")
         return False, unmerged_files
-    
+
     print(f"✅ Merged {branch_name} into {target_branch}")
-    
+
     if not validate_post_merge(target_branch):
         return False, []
-    
+
     print(f"✅ Post-merge validation passed: {target_branch} is clean")
-    
+
     try:
         subprocess.run(["git", "push"], check=True, capture_output=True, text=True, encoding='utf-8', timeout=120)
         print(f"✅ Pushed {target_branch} to remote")
     except subprocess.CalledProcessError as e:
         print(f"❌ Push failed: {e.stderr if e.stderr else str(e)}")
         return False, []
-    
+
     # MERGE CONFIRMATION: Verify branch is actually merged
     if not is_worktree_merged(item_id, target_branch):
         print(f"❌ Merge confirmation failed: {branch_name} not showing as merged")
         return False, []
-    
+
     print(f"✅ Merge confirmed: {branch_name} is merged into {target_branch}")
-    
+
     if cleanup:
         cleanup_after_merge(worktree_path, branch_name)
-    
+
     return True, []  # Merge completed
 
 
 def cleanup_worktree(item_id: str, force: bool = False) -> bool:
     """Remove a worktree and its associated branch.
-    
+
     Handles both sanitized and unsanitized worktree paths by searching
     for the actual worktree associated with this item_id.
-    
+
     Returns True if cleanup succeeds or if the worktree/branch don't exist.
     """
     sanitized_id = sanitize_branch_name(item_id)
     branch_name = f"task/{sanitized_id}"
     expected_worktree_path = Path("worktrees") / f"task-{sanitized_id}"
-    
+
     # Find the actual worktree for this item (might have unsanitized path if created before fix)
     actual_worktree_path = None
     existing_worktrees = list_worktrees()
-    
+
     # Search by branch name first
     for wt in existing_worktrees:
         wt_branch = wt.get("branch", "")
         if wt_branch.endswith(branch_name):
             actual_worktree_path = Path(wt["path"])
             break
-    
+
     # If not found by branch, check if expected path exists
     if actual_worktree_path is None and expected_worktree_path.exists():
         actual_worktree_path = expected_worktree_path
-    
+
     # Also check for unsanitized path (for backwards compatibility)
     if actual_worktree_path is None:
         unsanitized_path = Path("worktrees") / f"task-{item_id}"
         if unsanitized_path.exists():
             actual_worktree_path = unsanitized_path
-    
+
     # Remove worktree if found
     if actual_worktree_path and actual_worktree_path.exists():
         try:
             cmd = ["git", "worktree", "remove", str(actual_worktree_path)]
             if force:
                 cmd.append("--force")
-            
+
             subprocess.run(
                 cmd,
                 check=True,
@@ -240,10 +240,10 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
                 if actual_worktree_path.exists():
                     add_uncleaned_worktree(item_id, str(actual_worktree_path), f"Worktree removal warning: {stderr}")
                 # Continue to try branch deletion
-    
+
     # Delete branch (try both sanitized and unsanitized branch names)
     delete_flag = "-D" if force else "-d"
-    
+
     # Try sanitized branch name first
     try:
         subprocess.run(
@@ -276,7 +276,7 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
                 # If both worktree and branch operations failed, return False
                 if actual_worktree_path is not None:
                     return False
-    
+
     return True
 
 
@@ -291,10 +291,10 @@ def list_worktrees() -> list[dict[str, str]]:
             encoding='utf-8',
             timeout=30
         )
-        
+
         worktrees = []
         current: dict[str, str] = {}
-        
+
         for line in result.stdout.splitlines():
             if line.startswith("worktree "):
                 if current:
@@ -304,12 +304,12 @@ def list_worktrees() -> list[dict[str, str]]:
                 current["branch"] = line.split(" ", 1)[1]
             elif line.startswith("HEAD "):
                 current["commit"] = line.split(" ", 1)[1]
-        
+
         if current:
             worktrees.append(current)
-        
+
         return worktrees
-        
+
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return []
 
@@ -336,11 +336,11 @@ def _sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
             check=True,
             timeout=30
         ).stdout.strip()
-        
+
         if main_status:
             lines = main_status.split('\n')
             changes = categorize_git_changes(lines)
-            
+
             # Block merge if there are problematic changes
             if changes['other']:
                 print("⚠️  Main repo has uncommitted changes:")
@@ -350,21 +350,21 @@ def _sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
                     print(f"   ... and {len(changes['other']) - 10} more")
                 print("❌ Cannot merge: main repo has uncommitted non-beads changes")
                 return False
-            
+
             if changes['beads']:
                 print("🔧 Committing beads database changes...")
                 subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8', errors='replace', timeout=30)
                 subprocess.run(["git", "commit", "-m", f"chore: sync beads before merge of {branch_name}"],
                              check=True, encoding='utf-8', errors='replace', timeout=60)
                 print("✅ Beads changes committed")
-            
+
             if changes['worktree']:
                 print("🧹 Committing worktree cleanup changes...")
                 subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8', errors='replace', timeout=30)
                 subprocess.run(["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
                              check=True, encoding='utf-8', errors='replace', timeout=60)
                 print("✅ Worktree cleanup committed")
-                
+
         return True
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         print(f"❌ Failed to check/clean main repo: {e}")

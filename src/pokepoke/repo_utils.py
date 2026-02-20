@@ -8,7 +8,7 @@ from typing import Optional
 
 def get_repository_name() -> str:
     """Extract repository name from git remote origin URL or fallback sources.
-    
+
     Returns:
         Repository name extracted from git remote, config, or directory name.
         Falls back to "Unknown" if none are available.
@@ -17,12 +17,12 @@ def get_repository_name() -> str:
     repo_name = _get_repo_name_from_git()
     if repo_name:
         return repo_name
-    
+
     # Fallback to project_name from config
     repo_name = _get_repo_name_from_config()
     if repo_name:
         return repo_name
-    
+
     # Final fallback to current working directory name
     try:
         return Path.cwd().name

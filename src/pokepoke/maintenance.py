@@ -28,7 +28,7 @@ def _run_special_agent(name: str, repo_root: Path, item_logger: 'ItemLogger | No
 
 def run_periodic_maintenance(items_completed: int, session_stats: SessionStats, run_logger: RunLogger) -> None:
     """Run periodic maintenance agents based on config and completion count.
-    
+
     This function now delegates to MaintenanceScheduler for singleton coordination.
     Kept for backward compatibility.
     """

@@ -3,7 +3,6 @@
 import subprocess
 from unittest.mock import Mock, patch
 
-import pytest
 
 from pokepoke.repo_check import check_beads_available
 

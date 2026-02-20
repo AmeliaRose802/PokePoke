@@ -60,7 +60,6 @@ def test_historical_agent_logs_loaded(tmp_path, monkeypatch) -> None:
     log_path.write_text(log_content, encoding="utf-8")
 
     # Override the autouse fixture's patch to point to our test logs
-    from pathlib import Path
     monkeypatch.setattr(
         "pokepoke.desktop_api_ext._discover_log_roots",
         lambda: [logs_root],
@@ -180,23 +179,23 @@ def test_session_end_time_freezes_clock() -> None:
     api = DesktopAPI()
     start_time = time.time() - 10  # 10 seconds ago
     api.set_session_start_time(start_time)
-    
+
     # Clock should be running
     stats1 = api.get_stats()
     assert stats1 is not None
     elapsed1 = stats1["elapsed_time"]
     assert elapsed1 >= 9.0  # Should be ~10 seconds
-    
+
     # Set end time to freeze the clock
     end_time = start_time + 5.5  # 5.5 seconds after start
     api.set_session_end_time(end_time)
-    
+
     # Clock should be frozen at 5.5 seconds
     stats2 = api.get_stats()
     assert stats2 is not None
     elapsed2 = stats2["elapsed_time"]
     assert abs(elapsed2 - 5.5) < 0.1  # Should be exactly 5.5 seconds
-    
+
     # Clock should remain frozen even after waiting
     time.sleep(0.1)
     stats3 = api.get_stats()
@@ -209,7 +208,7 @@ def test_session_end_time_without_start_time() -> None:
     """Session end time should be ignored if no start time is set."""
     api = DesktopAPI()
     api.set_session_end_time(time.time())
-    
+
     # No session start time set, so elapsed_time shouldn't exist
     stats = api.get_stats()
     assert stats is None or "elapsed_time" not in stats
@@ -220,15 +219,15 @@ def test_session_end_time_with_pushed_stats() -> None:
     api = DesktopAPI()
     start_time = time.time() - 10
     api.set_session_start_time(start_time)
-    
+
     # Push stats with some elapsed time
     stats_obj = SessionStats(agent_stats=AgentStats(), items_completed=2)
     api.push_stats(stats_obj, elapsed_time=100.0)  # wrong value
-    
+
     # Set end time to freeze the clock
     end_time = start_time + 3.0  # 3 seconds after start
     api.set_session_end_time(end_time)
-    
+
     # Should use frozen time (3.0), not pushed time (100.0)
     state = api.get_state()
     assert state["stats"] is not None

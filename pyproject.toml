@@ -65,6 +65,26 @@ exclude_lines = [
     "@abstractmethod"
 ]
 
+
+# Ruff linter configuration
+[tool.ruff]
+line-length = 120
+exclude = [
+    ".git",
+    ".tox",
+    "dist",
+    "build",
+    "*.egg",
+    "venv",
+    ".venv",
+    "__pycache__",
+    "worktrees",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = ["E501"]  # Line too long - ruff excludes E501 by default
+
 # Mypy type checking configuration
 [tool.mypy]
 python_version = "3.12"

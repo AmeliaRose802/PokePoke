@@ -24,22 +24,22 @@ class ShellReadState:
 
 class HungCommandDetector:
     """Detects hung commands based on read_powershell call patterns.
-    
+
     A command is considered hung when:
     1. read_powershell has been called max_retries times with no new output, OR
     2. Total cumulative wait time exceeds cumulative_timeout seconds
-    
+
     The detector tracks state per shell session and provides corrective
     feedback messages when a hung state is detected.
     """
-    
+
     def __init__(
         self,
         max_retries: int = 3,
         cumulative_timeout: float = 300.0,
     ):
         """Initialize the detector.
-        
+
         Args:
             max_retries: Maximum read_powershell calls before considering hung.
             cumulative_timeout: Maximum total wait time in seconds.
@@ -47,17 +47,17 @@ class HungCommandDetector:
         self.max_retries = max_retries
         self.cumulative_timeout = cumulative_timeout
         self._shell_states: Dict[str, ShellReadState] = {}
-    
+
     def record_powershell_start(self, shell_id: str) -> None:
         """Record that a new powershell command was started.
-        
+
         Resets any existing state for this shell.
-        
+
         Args:
             shell_id: The shell session ID.
         """
         self._shell_states[shell_id] = ShellReadState(shell_id=shell_id)
-    
+
     def record_read_powershell(
         self,
         shell_id: str,
@@ -65,30 +65,30 @@ class HungCommandDetector:
         output: Optional[str] = None,
     ) -> Tuple[bool, Optional[str]]:
         """Record a read_powershell call and check if command appears hung.
-        
+
         Args:
             shell_id: The shell session ID.
             delay: The delay parameter used in the read call.
             output: The output returned from the read (if any).
-            
+
         Returns:
             Tuple of (is_hung, corrective_message).
             If is_hung is True, corrective_message contains guidance for the agent.
         """
         now = time.time()
-        
+
         # Get or create state for this shell
         if shell_id not in self._shell_states:
             self._shell_states[shell_id] = ShellReadState(
                 shell_id=shell_id,
                 first_read_time=now,
             )
-        
+
         state = self._shell_states[shell_id]
         state.read_count += 1
         state.last_read_time = now
         state.total_wait_seconds += delay
-        
+
         # Check if output has changed
         output_hash = hash(output) if output else None
         if output_hash == state.last_output_hash or not output or output.strip() == "":
@@ -96,47 +96,47 @@ class HungCommandDetector:
         else:
             state.consecutive_empty_reads = 0
         state.last_output_hash = output_hash
-        
+
         # Check hung conditions
         is_hung = False
         reason = ""
-        
+
         if state.consecutive_empty_reads >= self.max_retries:
             is_hung = True
             reason = f"No new output after {state.consecutive_empty_reads} consecutive read_powershell calls"
         elif state.total_wait_seconds >= self.cumulative_timeout:
             is_hung = True
             reason = f"Command has been running for {state.total_wait_seconds:.0f}s (timeout: {self.cumulative_timeout:.0f}s)"
-        
+
         if is_hung:
             message = self._build_corrective_message(shell_id, state, reason)
             return True, message
-        
+
         return False, None
-    
+
     def record_stop_powershell(self, shell_id: str) -> None:
         """Record that a shell was stopped (clears state).
-        
+
         Args:
             shell_id: The shell session ID.
         """
         self._shell_states.pop(shell_id, None)
-    
+
     def get_state(self, shell_id: str) -> Optional[ShellReadState]:
         """Get the current state for a shell session.
-        
+
         Args:
             shell_id: The shell session ID.
-            
+
         Returns:
             The ShellReadState if tracked, None otherwise.
         """
         return self._shell_states.get(shell_id)
-    
+
     def clear_all(self) -> None:
         """Clear all tracked shell states."""
         self._shell_states.clear()
-    
+
     def _build_corrective_message(
         self,
         shell_id: str,
@@ -144,12 +144,12 @@ class HungCommandDetector:
         reason: str,
     ) -> str:
         """Build a corrective feedback message for the agent.
-        
+
         Args:
             shell_id: The shell session ID.
             state: The current shell read state.
             reason: Why the command was detected as hung.
-            
+
         Returns:
             A corrective message with guidance for recovery.
         """

@@ -14,18 +14,18 @@ from .repo_state_guard import cleanup_lock
 
 def finalize_work_item(item: BeadsWorkItem, worktree_path: Path) -> bool:
     """Finalize work item by merging worktree and closing issue.
-    
+
     Returns:
         True if successful, False otherwise
     """
     print("\n✅ Successfully completed work item!")
     print("   All changes committed and validated")
-    
+
     if not check_and_merge_worktree(item, worktree_path):
         return False
-    
+
     close_work_item_and_parents(item)
-    
+
     return True
 
 
@@ -43,15 +43,15 @@ def check_and_merge_worktree(item: BeadsWorkItem, worktree_path: Path) -> bool:
             timeout=30
         )
         commit_count = int(check_result.stdout.strip())
-        
+
         if commit_count == 0:
             print("\n⏭️  No commits in worktree - nothing to merge")
             print("   Cleaning up worktree without merge...")
             cleanup_worktree(item.id, force=True)
             return True
-        
+
         return merge_worktree_to_dev(item)
-        
+
     except Exception as e:
         print(f"\n⚠️  Could not check commit count: {e}")
         print("   Attempting merge anyway...")
@@ -61,20 +61,20 @@ def check_and_merge_worktree(item: BeadsWorkItem, worktree_path: Path) -> bool:
 def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
     """Merge worktree to the default development branch."""
     from .git_operations import is_merge_in_progress, get_unmerged_files, abort_merge
-    
+
     print("\n🔍 Checking if main repo is ready for merge...")
     is_ready, error_msg = check_main_repo_ready_for_merge()
-    
+
     if not is_ready:
         print(f"\n⚠️  Cannot merge: {error_msg}")
         print(f"   Worktree preserved at worktrees/task-{item.id} - requires cleanup")
-        
+
         print("   Invoking cleanup agent to resolve uncommitted changes before merge...")
         from .cleanup_agents import invoke_cleanup_agent
 
         with cleanup_lock():
             cleanup_success, _ = invoke_cleanup_agent(item, Path.cwd())
-        
+
         if cleanup_success:
             print("   Cleanup successful, retrying merge check...")
             is_ready, error_msg = check_main_repo_ready_for_merge()
@@ -87,7 +87,7 @@ def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
 
     print(f"\n🔀 Merging worktree for {item.id}...")
     merge_success, unmerged_files = merge_worktree(item.id, cleanup=True)
-    
+
     if not merge_success:
         # Check if we're in a conflict state
         if is_merge_in_progress():
@@ -103,14 +103,14 @@ def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
             # Get fresh unmerged files if not provided
             if not unmerged_files:
                 unmerged_files = get_unmerged_files()
-        
+
         print(f"   Worktree preserved at worktrees/task-{item.id} - requires conflict resolution")
-        
+
         # Build detailed error message with file list
         conflict_details = ""
         if unmerged_files:
             conflict_details = "\n**Conflicted Files:**\n" + "\n".join(f"- `{f}`" for f in unmerged_files)
-        
+
         print("   Invoking cleanup agent to resolve conflicts...")
         from .cleanup_agents import invoke_merge_conflict_cleanup_agent
 
@@ -121,7 +121,7 @@ def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
                 f"Merge conflict detected in {len(unmerged_files)} file(s){conflict_details}",
                 unmerged_files=unmerged_files
             )
-        
+
         if success:
             print("   Cleanup successful, retrying merge...")
             # Check if merge is still in progress (agent may have completed it)
@@ -132,7 +132,7 @@ def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
                     print(f"   ❌ Failed to abort merge: {abort_error}")
                     return False
                 print("   ✅ Merge aborted, will retry")
-            
+
             merge_success, _ = merge_worktree(item.id, cleanup=True)
             if merge_success:
                 print("   Merged and cleaned up worktree")
@@ -153,7 +153,7 @@ def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
                 if not abort_success:
                     print(f"   ❌ Failed to abort merge: {abort_error}")
             return False
-    
+
     print("   Merged and cleaned up worktree")
     return True
 
@@ -174,7 +174,7 @@ def close_work_item_and_parents(item: BeadsWorkItem) -> None:
         if not items_data:
             raise ValueError(f"No data returned for item {item.id}")
         item_data = items_data[0]
-        
+
         if item_data.get("status") in ["closed", "completed"]:
             print("   ✅ Agent successfully closed the item")
         else:
@@ -184,7 +184,7 @@ def close_work_item_and_parents(item: BeadsWorkItem) -> None:
         print(f"   ⚠️  Could not check item status: {e}")
         print("   Closing item as fallback...")
         close_item(item.id, "Completed by PokePoke orchestrator")
-    
+
     # Check parent hierarchy
     check_parent_hierarchy(item)
 
@@ -195,7 +195,7 @@ def check_parent_hierarchy(item: BeadsWorkItem) -> None:
     if parent_id:
         print(f"\n🔍 Checking parent {parent_id} completion status...")
         close_parent_if_complete(parent_id)
-        
+
         # Recursively check grandparents
         grandparent_id = get_parent_id(parent_id)
         if grandparent_id:

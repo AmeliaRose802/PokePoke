@@ -83,9 +83,9 @@ class TestFindFrontendDist:
         monkeypatch.setattr(desktop_ui_module, "__file__", str(fake_file))
         # Mock sys.frozen to False (not running as bundle)
         monkeypatch.setattr("sys.frozen", False, raising=False)
-        
+
         # Mock tempfile.gettempdir to return an empty directory
-        empty_temp = tmp_path / "empty_temp" 
+        empty_temp = tmp_path / "empty_temp"
         empty_temp.mkdir()
         monkeypatch.setattr("tempfile.gettempdir", lambda: str(empty_temp))
 
@@ -99,7 +99,7 @@ class TestFindFrontendDist:
 
     def test_handles_missing_directories_gracefully(self, monkeypatch, tmp_path) -> None:
         """Test that it returns None when no frontend is found."""
-        fake_src = tmp_path / "src" / "pokepoke"  
+        fake_src = tmp_path / "src" / "pokepoke"
         fake_src.mkdir(parents=True)
         fake_file = fake_src / "desktop_ui.py"
         fake_file.write_text("", encoding="utf-8")
@@ -107,9 +107,9 @@ class TestFindFrontendDist:
         # Don't create any dist or static directories
         monkeypatch.setattr(desktop_ui_module, "__file__", str(fake_file))
         monkeypatch.setattr("sys.frozen", False, raising=False)
-        
+
         # Mock tempfile.gettempdir to return an empty directory
-        empty_temp = tmp_path / "empty_temp" 
+        empty_temp = tmp_path / "empty_temp"
         empty_temp.mkdir()
         monkeypatch.setattr("tempfile.gettempdir", lambda: str(empty_temp))
 
@@ -125,7 +125,7 @@ class TestFindFrontendDist:
         # The result depends on whether package resources are available
         # In the real package, this would extract to temp directory
         # In isolated tests, it might return None
-        result = frontend_discovery_module.find_frontend_dist()
+        frontend_discovery_module.find_frontend_dist()
         # Don't assert None - the behavior depends on the test environment
 
 

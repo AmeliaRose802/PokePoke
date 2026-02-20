@@ -8,27 +8,20 @@ import concurrent.futures
 import threading
 import time
 from pathlib import Path
-from queue import Queue
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
-import pytest
 
 from pokepoke.agent_context import clear_agent_name, get_agent_name, set_agent_name
-from pokepoke.coordination import try_lock
 from pokepoke.logging_utils import RunLogger
 from pokepoke.merge_queue import MergeQueue, MergeResult, MergeStatus
 from pokepoke.parallel import (
     _collect_done_futures,
     _parallel_process_item,
-    run_parallel_loop,
 )
 from pokepoke.shutdown import (
-    get_active_agent_count,
     is_shutting_down,
-    register_agent,
     request_shutdown,
     reset,
-    unregister_agent,
 )
 from pokepoke.types import AgentStats, BeadsWorkItem, ModelCompletionRecord, SessionStats
 
@@ -110,10 +103,6 @@ class TestMergeQueueSerialization:
         merge_order: list[str] = []
         merge_lock = threading.Lock()
 
-        mq = MergeQueue()
-
-        original_worker_loop = mq._worker_loop
-
         # Patch the internal merge so we can track ordering
         def fake_merge(worktree_path: Path, item: BeadsWorkItem) -> MergeResult:
             with merge_lock:
@@ -131,10 +120,7 @@ class TestMergeQueueSerialization:
         mq2 = MergeQueue()
 
         # Directly test: submit 2 items, collect results
-        future_results: list[MergeResult] = []
-        event_a = threading.Event()
-        event_b = threading.Event()
-
+        # (event_a, event_b reserved for future serialization test)
         # Manually enqueue items and track order via a simple side-effect
         # on the actual merge queue's submit method
         item_a = _make_item("MERGE-A")
