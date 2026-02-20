@@ -22,9 +22,6 @@ import "./App.css";
 
 function App() {
   const bridge = useBridge();
-  const [activePanel, setActivePanel] = useState<"orchestrator" | "agent">(
-    "agent"
-  );
   const [showPrompts, setShowPrompts] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showStatsPage, setShowStatsPage] = useState(false);
@@ -65,11 +62,14 @@ function App() {
   const fallbackAgentLogCount = bridge.agentLogs.length;
   const shouldShowFallbackAgentPanel =
     !selectedAgentDetail && !autoFollowAgent && fallbackAgentLogCount > 0;
-  const shouldExpandOrchestrator =
-    !selectedAgentDetail && !autoFollowAgent && !shouldShowFallbackAgentPanel;
-  const logContainerClassName = `log-container${
-    shouldExpandOrchestrator ? " log-container--single" : ""
-  }`;
+
+  const hasPrimaryAgentOutput =
+    selectedAgentDetail !== null ||
+    autoFollowAgent !== null ||
+    shouldShowFallbackAgentPanel;
+
+  const shouldShowOrchestratorDrawer =
+    hasPrimaryAgentOutput && bridge.orchestratorLogs.length > 0;
 
   const loadModelHistory = useCallback(async () => {
     setHistoryLoading(true);
@@ -148,41 +148,57 @@ function App() {
 
       {/* Main content area with logs and agents panel */}
       <div className="main-content">
-        {/* Log panels or selected agent log panel */}
-        <div className={logContainerClassName}>
+        {/* Primary log output + secondary (collapsible) orchestrator log */}
+        <div className="log-container">
           {selectedAgentDetail ? (
             <AgentLogPanel
               agent={selectedAgentDetail}
               onClose={() => setSelectedAgentId(null)}
             />
+          ) : autoFollowAgent ? (
+            <AgentLogPanel
+              agent={autoFollowAgent}
+              onClose={() => {
+                /* no-op: auto-follow has no manual close */
+              }}
+              showClose={false}
+            />
+          ) : shouldShowFallbackAgentPanel ? (
+            <LogPanel
+              title="Agent"
+              icon="🤖"
+              logs={bridge.agentLogs}
+              accentColor="#5cb85c"
+            />
           ) : (
-            <>
-              <LogPanel
-                title="Orchestrator"
-                icon="🔧"
-                logs={bridge.orchestratorLogs}
-                accentColor="#f0ad4e"
-                focused={activePanel === "orchestrator"}
-                onFocus={() => setActivePanel("orchestrator")}
-              />
-              {autoFollowAgent ? (
-                <AgentLogPanel
-                  agent={autoFollowAgent}
-                  onClose={() => {/* no-op: auto-follow has no manual close */}}
-                  showClose={false}
-                />
-              ) : shouldShowFallbackAgentPanel ? (
-                <LogPanel
-                  title="Agent"
-                  icon="🤖"
-                  logs={bridge.agentLogs}
-                  accentColor="#5cb85c"
-                  focused={activePanel === "agent"}
-                  onFocus={() => setActivePanel("agent")}
-                />
-              ) : null}
-            </>
+            <LogPanel
+              title="Orchestrator"
+              icon="🔧"
+              logs={bridge.orchestratorLogs}
+              accentColor="#f0ad4e"
+            />
           )}
+
+          {shouldShowOrchestratorDrawer ? (
+            <details className="orchestrator-collapsible">
+              <summary className="orchestrator-collapsible-summary">
+                <span className="orchestrator-collapsible-title">
+                  🔧 Orchestrator
+                </span>
+                <span className="log-count">
+                  {bridge.orchestratorLogs.length} lines
+                </span>
+              </summary>
+              <div className="orchestrator-collapsible-content">
+                <LogPanel
+                  title="Orchestrator"
+                  icon="🔧"
+                  logs={bridge.orchestratorLogs}
+                  accentColor="#f0ad4e"
+                />
+              </div>
+            </details>
+          ) : null}
         </div>
 
         {/* Agents panel */}
