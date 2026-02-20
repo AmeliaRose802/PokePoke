@@ -164,11 +164,11 @@ export function AgentsPanel({
         }${depthClass}${gateClass}${pausedClass}`}
         role={onSelectAgent ? "button" : undefined}
         tabIndex={onSelectAgent ? 0 : undefined}
-        onClick={() => onSelectAgent?.(isSelected ? null : agent.agent_id)}
+        onClick={() => onSelectAgent?.(agent.agent_id)}
         onKeyDown={(evt) => {
           if (evt.key === "Enter" || evt.key === " ") {
             evt.preventDefault();
-            onSelectAgent?.(isSelected ? null : agent.agent_id);
+            onSelectAgent?.(agent.agent_id);
           }
         }}
       >

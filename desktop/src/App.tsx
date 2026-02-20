@@ -60,6 +60,13 @@ function App() {
     return sorted[0] ?? null;
   })();
 
+  // Toggle manual selection: deselect if already manually selected, otherwise select.
+  // This correctly handles the auto-follow case where the card appears highlighted
+  // but selectedAgentId is still null — clicking should open full-screen, not deselect.
+  const handleSelectAgent = useCallback((agentId: string | null) => {
+    setSelectedAgentId((prev) => (prev === agentId ? null : agentId));
+  }, []);
+
   const { getModelHistory } = bridge;
 
   const fallbackAgentLogCount = bridge.agentLogs.length;
@@ -190,7 +197,7 @@ function App() {
           agents={bridge.agents}
           currentSessionId={bridge.currentSessionId}
           selectedAgentId={displayedAgentId ?? autoFollowAgent?.agent_id ?? null}
-          onSelectAgent={setSelectedAgentId}
+          onSelectAgent={handleSelectAgent}
           onPauseAgent={bridge.pauseAgent}
           onResumeAgent={bridge.resumeAgent}
         />
