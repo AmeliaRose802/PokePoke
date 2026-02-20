@@ -130,11 +130,14 @@ def run_maintenance_agent(
         prompts_dir = get_pokepoke_prompts_dir()
         prompt_path = prompts_dir / prompt_file
     except FileNotFoundError as e:
-        print(f"❌ {e}")
+        print(f"❌ {agent_name} Agent failed to start: {e}")
+        print(f"   The prompts directory is missing. Ensure .pokepoke/prompts/ exists in the PokePoke installation.")
         return None
     
     if not prompt_path.exists():
-        print(f"❌ Prompt not found at {prompt_path}")
+        print(f"❌ {agent_name} Agent failed to start: prompt file '{prompt_file}' not found")
+        print(f"   Expected location: {prompt_path}")
+        print(f"   Available prompts: {', '.join(p.name for p in prompts_dir.glob('*.md'))}")
         return None
     
     agent_prompt = prompt_path.read_text(encoding='utf-8')
