@@ -4,7 +4,7 @@ Loads project-specific settings from .pokepoke/config.yaml, allowing PokePoke
 to be used generically on any project without hardcoded values.
 """
 
-import subprocess
+
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -117,15 +117,11 @@ class GitConfig:
     default_branch: str | None = None
     fallback_branch: str = "master"
 
-    def get_preferred_branch(self) -> str | None:
-        """Get the preferred branch, auto-detecting from environment if not set."""
+    def get_preferred_branch(self) -> str:
+        """Get the preferred branch, falling back to fallback_branch if not set."""
         if self.default_branch:
             return self.default_branch
-        # Auto-detect: try git config or environment
-        username = _detect_git_username()
-        if username:
-            return f"{username}/dev"
-        return None
+        return self.fallback_branch
 
 
 @dataclass
@@ -238,20 +234,6 @@ class ProjectConfig:
         return config
 
 
-def _detect_git_username() -> str | None:
-    """Try to detect the git username from git config."""
-    try:
-        result = subprocess.run(
-            ["git", "config", "user.email"],
-            capture_output=True, text=True, encoding='utf-8', timeout=5
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            email = result.stdout.strip()
-            # Extract username from email (part before @)
-            return email.split("@")[0]
-    except Exception:
-        pass
-    return None
 
 
 def _find_repo_root() -> Path:
