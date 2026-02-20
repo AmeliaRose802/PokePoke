@@ -67,8 +67,8 @@ def test_run_logger_item_logging():
         # Log some content
         item_logger.log("Test agent output\n")
         
-        # End item log
-        logger.end_item_log(success=True, request_count=5)
+        # End item log directly (no longer calling run_logger.end_item_log)
+        item_logger.log_summary(success=True, request_count=5)
         
         # Check that item log file exists
         item_log_path = logger.item_logs_dir / "test-item-123_pokepoke_unit_agent.log"
@@ -219,7 +219,7 @@ def test_multiple_item_logs():
         # Process first item
         item_logger1 = logger.start_item_log("item-1", "First Item", agent_name="Agent One")
         item_logger1.log("First item output\n")
-        logger.end_item_log(success=True, request_count=3)
+        item_logger1.log_summary(success=True, request_count=3)
         
         # Process second item
         item_logger2 = logger.start_item_log(
@@ -228,7 +228,7 @@ def test_multiple_item_logs():
             agent_name="Agent Two",
         )
         item_logger2.log("Second item output\n")
-        logger.end_item_log(success=False, request_count=5)
+        item_logger2.log_summary(success=False, request_count=5)
         
         # Check that both item logs exist
         assert (logger.item_logs_dir / "item-1_agent_one.log").exists()
