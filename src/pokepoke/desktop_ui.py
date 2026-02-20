@@ -23,6 +23,7 @@ from contextlib import contextmanager
 from pokepoke.desktop_api import DesktopAPI
 from pokepoke.shutdown import is_shutting_down, request_shutdown
 from pokepoke.frontend_discovery import find_frontend_dist
+from pokepoke.native_icon import set_native_window_icon
 
 if TYPE_CHECKING:
     from pokepoke.types import SessionStats
@@ -137,13 +138,18 @@ class DesktopUI:
             name="orchestrator",
         )
 
+        # Create native window pointing at the built React app
+        icon_path = dist_dir / "pokepoke.ico"
+
         def on_window_loaded() -> None:
             """Called after the webview window is ready."""
+            # pywebview's icon parameter only works on GTK/QT — on Windows
+            # the WinForms backend extracts the icon from sys.executable
+            # (python.exe → Python logo).  Override it via the native form.
+            set_native_window_icon(window, icon_path)
             self._api.set_window(window)
             orch_thread.start()
 
-        # Create native window pointing at the built React app
-        icon_path = dist_dir / "pokepoke.ico"
         window_kwargs: dict[str, Any] = {
             "title": "PokePoke - Autonomous Workflow Manager",
             "url": str(dist_dir / "index.html"),
