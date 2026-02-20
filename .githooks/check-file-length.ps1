@@ -82,7 +82,6 @@ function Test-FileLengths {
                 Lines = $lineCount
                 Excess = $lineCount - $Limit
             }
-            Write-Host "  ❌ $file - $lineCount lines (exceeds limit by $($lineCount - $Limit))" -ForegroundColor Red
         }
         else {
             $passedCount++

@@ -7,6 +7,7 @@ Explicitly resolves the repo/worktree root to avoid CWD dependency issues.
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -62,9 +63,26 @@ def get_staged_python_files() -> list[str]:
         return []
 
 
+# Matches pytest progress lines like "....s.F.. [ 37%]" (xdist or sequential)
+_PROGRESS_RE = re.compile(r'^[.sFExX]+ \[\s*\d+%\]')
+
+
+def _filter_pytest_output(output: str) -> str:
+    """Remove progress-dot lines; keep failures, warnings, and the summary."""
+    filtered = []
+    for line in output.splitlines():
+        if _PROGRESS_RE.match(line.lstrip()):
+            continue
+        filtered.append(line)
+    # Strip leading blank lines
+    while filtered and not filtered[0].strip():
+        filtered.pop(0)
+    return "\n".join(filtered)
+
+
 def run_tests_with_coverage(repo_root: Path) -> bool:
     """Run pytest with coverage from the repo root."""
-    print("[test] Running tests with coverage...")
+    print("[test] Running tests...")
 
     try:
         result = subprocess.run(
@@ -77,15 +95,24 @@ def run_tests_with_coverage(repo_root: Path) -> bool:
                 "--cov=src/pokepoke",
                 "--cov-report=json",
                 "-q",
-                "--tb=line",
+                "--no-header",
+                "--tb=short",
                 "--timeout=30",
             ],
+            capture_output=True,
             text=True,
             timeout=300,
             cwd=str(repo_root),
         )
 
+        # Print filtered output (no progress dots)
+        filtered = _filter_pytest_output(result.stdout)
+        if filtered:
+            print(filtered)
+
         if result.returncode != 0:
+            if result.stderr.strip():
+                print(result.stderr.strip(), file=sys.stderr)
             print("[error] Tests failed", file=sys.stderr)
             return False
 
