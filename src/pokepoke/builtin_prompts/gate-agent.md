@@ -23,21 +23,21 @@ VERIFY that the work item has been completed successfully and meets all quality 
 **Instructions:**
 
 0. **USE THE HANDOFF CONTEXT ABOVE (if present):**
-   - The "Work Agent Handoff Context" section above lists exactly which files were changed, the diff stats, and commit history
-   - **DO NOT re-discover the project structure** — go directly to the changed files
-   - Start with `git diff HEAD~1 --name-only` or review the files listed in the handoff
-   - Only explore beyond the listed files if you need to verify integration points
+   - The "Work Agent Handoff Context" section above lists exactly which files were changed, the diff stats, commit history, **and the full unified diff**
+   - **DO NOT run `git diff`, `git log`, or `git show`** — all the information you need is already in the handoff context
+   - **DO NOT re-discover the project structure** — go directly to the changed files listed above
+   - Only run git commands if the diff was marked as truncated, or if you need to verify integration points not covered by the listed files
 
 1. **FIRST: Check if work already exists on main/dev branch:**
-   - Use `git diff HEAD..origin/{{default_branch}}` to see if this worktree has changes
-   - If NO changes in the worktree, check if the requested work already exists on main/dev
+   - Review the handoff context above — if it contains changed files and diff content, changes exist
+   - If NO handoff context is present (or it is empty), check if the requested work already exists on main/dev
    - **CRITICAL:** If the fix/feature is already present on the main branch:
      - Output "VERIFICATION SUCCESSFUL" with reason "work_already_complete"
      - Explain that the item should be closed as already-resolved
      - DO NOT reject just because you don't see new commits in this worktree
 
 2. **Analyze the work done (if changes exist):**
-   - Check the git changes (use `git diff` or `git log`) to see what was modified
+   - Review the diff content from the handoff context above to see what was modified
    - Compare current state vs work item requirements
 
 3. **⚠️ DO NOT RE-RUN QUALITY VALIDATIONS:**

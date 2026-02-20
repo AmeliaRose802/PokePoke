@@ -500,7 +500,9 @@ class TestBuildHandoffContext:
     def test_returns_full_context_with_all_sections(
         self, mock_run: Mock, mock_branch: Mock
     ) -> None:
-        """Test that handoff context includes changed files, diff stat, and commits."""
+        """Test that handoff context includes changed files, diff stat, commits, and diff content."""
+        fake_diff = "diff --git a/src/foo.py b/src/foo.py\n--- a/src/foo.py\n+++ b/src/foo.py\n@@ -1 +1 @@\n-old\n+new\n"
+
         def side_effect(cmd: list[str], **kwargs: object) -> Mock:
             if "diff" in cmd and "--name-status" in cmd:
                 return Mock(returncode=0, stdout="M\tsrc/foo.py\nA\tsrc/bar.py\n")
@@ -508,6 +510,8 @@ class TestBuildHandoffContext:
                 return Mock(returncode=0, stdout=" src/foo.py | 10 ++++------\n src/bar.py |  5 +++++\n 2 files changed, 9 insertions(+), 6 deletions(-)\n")
             if "log" in cmd and "--oneline" in cmd:
                 return Mock(returncode=0, stdout="abc1234 feat: add bar module\ndef5678 fix: update foo logic\n")
+            if "diff" in cmd:
+                return Mock(returncode=0, stdout=fake_diff)
             return Mock(returncode=1, stdout="")
 
         mock_run.side_effect = side_effect
@@ -522,6 +526,10 @@ class TestBuildHandoffContext:
         assert "2 files changed" in result
         assert "### Commit History" in result
         assert "abc1234 feat: add bar module" in result
+        assert "### Diff Content" in result
+        assert "```diff" in result
+        assert "-old" in result
+        assert "+new" in result
         assert "Start your verification" in result
 
     @patch('pokepoke.git_operations.get_default_branch', return_value='master')
@@ -565,11 +573,11 @@ class TestBuildHandoffContext:
     def test_omits_missing_sections(
         self, mock_run: Mock, mock_branch: Mock
     ) -> None:
-        """Test that missing sections (stat, log) are omitted gracefully."""
+        """Test that missing sections (stat, log, diff content) are omitted gracefully."""
         def side_effect(cmd: list[str], **kwargs: object) -> Mock:
             if "diff" in cmd and "--name-status" in cmd:
                 return Mock(returncode=0, stdout="M\tsrc/only.py\n")
-            # stat and log fail
+            # stat, log, and bare diff all fail
             return Mock(returncode=1, stdout="")
 
         mock_run.side_effect = side_effect
@@ -580,6 +588,7 @@ class TestBuildHandoffContext:
         assert "M\tsrc/only.py" in result
         assert "### Diff Summary" not in result
         assert "### Commit History" not in result
+        assert "### Diff Content" not in result
 
     @patch('src.pokepoke.handoff_context.get_default_branch', return_value='master')
     @patch('src.pokepoke.handoff_context.subprocess.run')
@@ -594,6 +603,8 @@ class TestBuildHandoffContext:
                 return Mock(returncode=0, stdout=" src/a.py | 1 +\n")
             if "log" in cmd:
                 return Mock(returncode=0, stdout="abc fix\n")
+            if "diff" in cmd:
+                return Mock(returncode=0, stdout="diff --git a/src/a.py\n")
             return Mock(returncode=0, stdout="")
 
         mock_run.side_effect = side_effect
@@ -602,3 +613,31 @@ class TestBuildHandoffContext:
 
         for call in mock_run.call_args_list:
             assert call.kwargs.get("cwd") == "/my/worktree"
+
+    @patch('src.pokepoke.handoff_context.get_default_branch', return_value='master')
+    @patch('src.pokepoke.handoff_context.subprocess.run')
+    def test_truncates_large_diff(
+        self, mock_run: Mock, mock_branch: Mock
+    ) -> None:
+        """Test that very large diffs are truncated with a note."""
+        large_diff = "x" * 30_000
+
+        def side_effect(cmd: list[str], **kwargs: object) -> Mock:
+            if "diff" in cmd and "--name-status" in cmd:
+                return Mock(returncode=0, stdout="M\tsrc/big.py\n")
+            if "diff" in cmd and "--stat" in cmd:
+                return Mock(returncode=1, stdout="")
+            if "log" in cmd:
+                return Mock(returncode=1, stdout="")
+            if "diff" in cmd:
+                return Mock(returncode=0, stdout=large_diff)
+            return Mock(returncode=1, stdout="")
+
+        mock_run.side_effect = side_effect
+
+        result = build_handoff_context(cwd="/tmp/worktree")
+
+        assert "### Diff Content" in result
+        assert "diff truncated" in result
+        # Verify the content was actually truncated (not the full 30k)
+        assert len(result) < 25_000
