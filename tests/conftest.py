@@ -24,6 +24,15 @@ if importlib.util.find_spec("pytest_timeout") is None:
         "Install it with: pip install pytest-timeout"
     )
 
+# Fail fast if pytest-xdist is not installed.  The pre-commit coverage check
+# uses '-n auto' for parallel test execution; without xdist the flag is
+# silently rejected by pytest causing the check to fail.
+if importlib.util.find_spec("xdist") is None:
+    raise RuntimeError(
+        "pytest-xdist is required but not installed. "
+        "Install it with: pip install pytest-xdist"
+    )
+
 import pytest
 from unittest.mock import patch
 

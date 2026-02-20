@@ -72,6 +72,8 @@ def run_tests_with_coverage(repo_root: Path) -> bool:
                 sys.executable,
                 "-m",
                 "pytest",
+                "-n",
+                "auto",
                 "--cov=src/pokepoke",
                 "--cov-report=json",
                 "-q",
