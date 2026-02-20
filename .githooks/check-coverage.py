@@ -63,6 +63,74 @@ def get_staged_python_files() -> list[str]:
         return []
 
 
+def _get_all_staged_files() -> list[str]:
+    """Get ALL staged files (not just source), for test file detection."""
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
+    except subprocess.CalledProcessError:
+        return []
+
+
+def _find_test_files_for_staged(
+    staged_source: list[str], repo_root: Path
+) -> tuple[list[str], bool]:
+    """Map staged source files to relevant test files.
+
+    Returns (test_files, run_full_suite).
+    - test_files: list of test file paths relative to repo_root
+    - run_full_suite: True if we should fall back to running everything
+      (e.g. conftest.py changed, __init__.py changed, or no mapping found)
+    """
+    all_staged = _get_all_staged_files()
+
+    # If conftest.py or __init__.py changed, fall back to full suite
+    # because these are test infrastructure files that affect all tests.
+    for f in all_staged:
+        basename = os.path.basename(f)
+        if basename in ("conftest.py", "__init__.py"):
+            print(f"[scope] {basename} changed — running full test suite")
+            return [], True
+
+    test_files: list[str] = []
+    tests_dir = repo_root / "tests"
+
+    # Collect any directly-staged test files
+    for f in all_staged:
+        if f.startswith("tests/") and f.endswith(".py") and "test_" in f:
+            test_files.append(f)
+
+    # Map source files to their test files using naming convention:
+    #   src/pokepoke/foo.py  →  tests/test_foo.py
+    #   Also match tests/test_foo_*.py (e.g. beads.py → test_beads_*.py)
+    for src_file in staged_source:
+        # Extract module name: src/pokepoke/foo.py → foo
+        module_name = Path(src_file).stem
+
+        # Direct match: tests/test_foo.py
+        direct = f"tests/test_{module_name}.py"
+        if (repo_root / direct).exists() and direct not in test_files:
+            test_files.append(direct)
+
+        # Glob match: tests/test_foo_*.py (for split test files)
+        for match in tests_dir.glob(f"test_{module_name}_*.py"):
+            rel = f"tests/{match.name}"
+            if rel not in test_files:
+                test_files.append(rel)
+
+    if not test_files:
+        # No test files found — fall back to full suite for safety
+        print("[scope] No matching test files found — running full test suite")
+        return [], True
+
+    return sorted(test_files), False
+
+
 # Matches pytest progress lines like "....s.F.. [ 37%]" (xdist or sequential)
 _PROGRESS_RE = re.compile(r'^[.sFExX]+ \[\s*\d+%\]')
 
@@ -80,25 +148,43 @@ def _filter_pytest_output(output: str) -> str:
     return "\n".join(filtered)
 
 
-def run_tests_with_coverage(repo_root: Path) -> bool:
-    """Run pytest with coverage from the repo root."""
-    print("[test] Running tests...")
+def run_tests_with_coverage(
+    repo_root: Path, test_files: list[str] | None = None
+) -> bool:
+    """Run pytest with coverage from the repo root.
+
+    Args:
+        repo_root: Repository root directory.
+        test_files: Optional list of specific test files to run (relative to
+            repo_root).  When provided, only these tests are executed instead
+            of the full suite, dramatically reducing commit time.
+    """
+    if test_files:
+        print(f"[test] Running {len(test_files)} scoped test file(s)...")
+        for tf in test_files:
+            print(f"       {tf}")
+    else:
+        print("[test] Running full test suite...")
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "-n",
+        "auto",
+        "--cov=src/pokepoke",
+        "--cov-report=json",
+        "-q",
+        "--no-header",
+        "--tb=short",
+        "--timeout=30",
+    ]
+    if test_files:
+        cmd.extend(test_files)
 
     try:
         result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pytest",
-                "-n",
-                "auto",
-                "--cov=src/pokepoke",
-                "--cov-report=json",
-                "-q",
-                "--no-header",
-                "--tb=short",
-                "--timeout=30",
-            ],
+            cmd,
             capture_output=True,
             text=True,
             timeout=300,
@@ -211,8 +297,12 @@ def main() -> int:
 
     print(f"Checking coverage for {len(staged_files)} staged file(s)...")
 
+    # Determine which test files to run (scoped or full suite)
+    test_files, run_full = _find_test_files_for_staged(staged_files, repo_root)
+    scoped = test_files if not run_full else None
+
     # Run tests from repo root
-    if not run_tests_with_coverage(repo_root):
+    if not run_tests_with_coverage(repo_root, test_files=scoped):
         return 1
 
     # Check coverage with explicit repo root
