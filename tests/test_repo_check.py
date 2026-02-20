@@ -152,31 +152,87 @@ class TestCheckAndCommitMainRepo:
             mock_cleanup.assert_called_once()
             # Verify cleanup item was created with correct properties
             cleanup_item = mock_cleanup.call_args[0][0]
-            assert cleanup_item.id == "cleanup-main-repo"
+            assert cleanup_item.id == "cleanup-main-repo-1"  # First attempt
             assert "uncommitted changes" in cleanup_item.title.lower()
     
-    def test_other_changes_invoke_cleanup_agent_failure(self):
-        """Test that cleanup agent failure returns False."""
+    def test_other_changes_invoke_cleanup_agent_failure_retries_and_stashes(self):
+        """Test that cleanup agent failure triggers retries then stash fallback."""
         mock_logger = Mock()
         repo_path = Path("/fake/repo")
         
         with patch('subprocess.run') as mock_run, \
-             patch('pokepoke.agent_runner.invoke_cleanup_agent') as mock_cleanup:
+             patch('pokepoke.agent_runner.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.repo_check.time.sleep'):  # Speed up test
+            # Mock git status showing regular changes, then stash commands
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout=" M src/module.py", stderr=""),  # git status
+                Mock(returncode=0),  # git add --all for stash
+                Mock(returncode=0, stdout="", stderr="")  # git stash push
+            ]
+            # Mock cleanup agent failing all 3 times
+            mock_cleanup.return_value = (False, Mock())
+            
+            result = check_and_commit_main_repo(repo_path, mock_logger)
+            
+            # Should return True because stash succeeded
+            assert result is True
+            # Should have tried cleanup 3 times (MAX_CLEANUP_RETRIES)
+            assert mock_cleanup.call_count == 3
+            # Should log that stash was successful
+            mock_logger.log_orchestrator.assert_any_call("Uncommitted changes stashed successfully")
+    
+    def test_cleanup_failure_continues_if_stash_fails(self):
+        """Test that cleanup and stash failure still continues (workers use worktrees)."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+        
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.agent_runner.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.repo_check.time.sleep'):  # Speed up test
+            # Mock git status, then stash failing
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout=" M src/module.py", stderr=""),  # git status
+                Mock(returncode=0),  # git add --all
+                Mock(returncode=1, stdout="", stderr="cannot stash")  # git stash fails
+            ]
+            # Mock cleanup agent failing all 3 times
+            mock_cleanup.return_value = (False, Mock())
+            
+            result = check_and_commit_main_repo(repo_path, mock_logger)
+            
+            # Should STILL return True - workers use isolated worktrees
+            assert result is True
+            # Should log that we're continuing despite failure
+            mock_logger.log_orchestrator.assert_any_call(
+                "Cleanup and stash both failed, but continuing (workers use worktrees)",
+                level="WARNING"
+            )
+    
+    def test_cleanup_succeeds_on_second_retry(self):
+        """Test that cleanup succeeding on retry returns True without stash."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+        
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.agent_runner.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.repo_check.time.sleep'):  # Speed up test
             # Mock git status showing regular changes
             mock_run.return_value = Mock(
                 returncode=0,
                 stdout=" M src/module.py",
                 stderr=""
             )
-            # Mock cleanup agent failing
-            mock_cleanup.return_value = (False, Mock())
+            # Mock cleanup agent failing first, succeeding second
+            mock_cleanup.side_effect = [(False, Mock()), (True, Mock())]
             
             result = check_and_commit_main_repo(repo_path, mock_logger)
             
-            assert result is False
+            assert result is True
+            # Should have tried cleanup twice
+            assert mock_cleanup.call_count == 2
+            # Should log success
             mock_logger.log_orchestrator.assert_any_call(
-                "Cleanup agent failed to resolve uncommitted changes",
-                level="ERROR"
+                "Cleanup agent successfully resolved uncommitted changes"
             )
     
     def test_untracked_files_ignored(self):

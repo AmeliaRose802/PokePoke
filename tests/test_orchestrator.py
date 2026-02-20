@@ -975,7 +975,7 @@ class TestOrchestratorHelperFunctions:
             # Verify cleanup agent was called with correct work item
             call_args = mock_cleanup.call_args
             work_item = call_args[0][0]  # First positional argument
-            assert work_item.id == "cleanup-main-repo"
+            assert work_item.id == "cleanup-main-repo-1"  # First attempt
             assert "uncommitted changes" in work_item.title.lower()
     
     def test_aggregate_stats(self) -> None:
@@ -2052,27 +2052,25 @@ class TestMainWorktreeCoverage:
 class TestOrchestratorCleanupDetection:
     """Test orchestrator's main repo cleanup detection."""
     
-    @patch('pokepoke.agent_runner.invoke_cleanup_agent')
+    @patch('pokepoke.orchestrator.check_and_commit_main_repo')
     @patch('pokepoke.orchestrator.get_ready_work_items')
-    @patch('subprocess.run')
     def test_detects_uncommitted_changes_and_invokes_cleanup(
         self,
-        mock_subprocess: Mock,
         mock_get_items: Mock,
-        mock_cleanup: Mock
+        mock_check_repo: Mock
     ) -> None:
-        """Test that uncommitted non-beads changes invoke cleanup agent."""
-        mock_subprocess.return_value = Mock(
-            stdout=" M src/pokepoke/orchestrator.py\n M src/pokepoke/beads.py",
-            returncode=0
-        )
-        mock_cleanup.return_value = (False, None)
+        """Test that orchestrator invokes check_and_commit_main_repo."""
+        mock_check_repo.return_value = True  # Repo check passes (cleanup succeeded or continued)
+        mock_get_items.return_value = []  # No work items available
         
         result = run_orchestrator(interactive=False, continuous=False)
         
-        assert result == 1
-        mock_cleanup.assert_called_once()
-        mock_get_items.assert_not_called()
+        # Should return 0 because repo check passes
+        assert result == 0
+        # Should call check_and_commit_main_repo at least once
+        mock_check_repo.assert_called()
+        # Should call get_items since repo check passed
+        mock_get_items.assert_called()
     
     @patch('pokepoke.orchestrator.check_and_commit_main_repo')
     @patch('pokepoke.orchestrator.get_beads_stats')
