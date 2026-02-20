@@ -26,6 +26,7 @@ def get_repo_root() -> Path:
             capture_output=True,
             text=True,
             check=True,
+            encoding="utf-8",
         )
         return Path(result.stdout.strip())
     except subprocess.CalledProcessError:
@@ -41,6 +42,7 @@ def _get_staged_files() -> list[str]:
             capture_output=True,
             text=True,
             check=True,
+            encoding="utf-8",
         )
         return [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
     except subprocess.CalledProcessError as e:
@@ -172,6 +174,7 @@ def run_tests_with_coverage(
             text=True,
             timeout=300,
             cwd=str(repo_root),
+            encoding="utf-8",
         )
 
         # Print filtered output (no progress dots)
