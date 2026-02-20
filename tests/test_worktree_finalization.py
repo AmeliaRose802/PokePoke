@@ -667,3 +667,12 @@ def _mock_cleanup_lock(monkeypatch):
         "pokepoke.worktree_finalization.cleanup_lock",
         lambda: nullcontext(),
     )
+
+
+@pytest.fixture(autouse=True)
+def _mock_merge_lock(monkeypatch):
+    """Ensure merge lock does not hit filesystem during tests."""
+    monkeypatch.setattr(
+        "pokepoke.worktree_finalization.merge_lock",
+        lambda: nullcontext(),
+    )

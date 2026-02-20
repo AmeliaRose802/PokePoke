@@ -48,7 +48,8 @@ class TestWaitForMainRepoClean:
     def test_returns_immediately_when_clean(self):
         """If repo clean and lock free, should return True."""
         with patch.object(guard, "is_main_repo_clean", return_value=(True, [])), \
-             patch.object(guard, "cleanup_lock_active", return_value=False):
+             patch.object(guard, "cleanup_lock_active", return_value=False), \
+             patch.object(guard, "merge_lock_active", return_value=False):
             assert guard.wait_for_main_repo_clean(timeout=0.1, poll_interval=0.01) is True
 
     def test_waits_until_repo_clean(self):
@@ -59,7 +60,8 @@ class TestWaitForMainRepoClean:
             (True, []),
         ]
         with patch.object(guard, "is_main_repo_clean", side_effect=states), \
-             patch.object(guard, "cleanup_lock_active", return_value=False):
+             patch.object(guard, "cleanup_lock_active", return_value=False), \
+             patch.object(guard, "merge_lock_active", return_value=False):
             result = guard.wait_for_main_repo_clean(timeout=0.5, poll_interval=0.01)
             assert result is True
 
@@ -67,9 +69,19 @@ class TestWaitForMainRepoClean:
         """Should stay in loop while cleanup lock is active."""
         lock_states = [True, True, False]
         with patch.object(guard, "is_main_repo_clean", return_value=(True, [])), \
-             patch.object(guard, "cleanup_lock_active", side_effect=lock_states) as mock_lock:
+             patch.object(guard, "cleanup_lock_active", side_effect=lock_states) as mock_lock, \
+             patch.object(guard, "merge_lock_active", return_value=False):
             assert guard.wait_for_main_repo_clean(timeout=0.5, poll_interval=0.01) is True
             assert mock_lock.call_count == len(lock_states)
+
+    def test_waits_until_merge_lock_released(self):
+        """Should stay in loop while merge lock is active."""
+        merge_lock_states = [True, True, False]
+        with patch.object(guard, "is_main_repo_clean", return_value=(True, [])), \
+             patch.object(guard, "cleanup_lock_active", return_value=False), \
+             patch.object(guard, "merge_lock_active", side_effect=merge_lock_states) as mock_merge_lock:
+            assert guard.wait_for_main_repo_clean(timeout=0.5, poll_interval=0.01) is True
+            assert mock_merge_lock.call_count == len(merge_lock_states)
 
     def test_times_out_if_still_dirty(self):
         """Return False when timeout expires."""
@@ -79,7 +91,23 @@ class TestWaitForMainRepoClean:
             events.append(msg)
 
         with patch.object(guard, "is_main_repo_clean", return_value=(False, [" M file.py"])), \
-             patch.object(guard, "cleanup_lock_active", return_value=False):
+             patch.object(guard, "cleanup_lock_active", return_value=False), \
+             patch.object(guard, "merge_lock_active", return_value=False):
             result = guard.wait_for_main_repo_clean(timeout=0.05, poll_interval=0.01, log_fn=_log)
             assert result is False
             assert any("Timed out" in msg for msg in events)
+
+    def test_logs_merge_in_progress_message(self):
+        """Should log when waiting for merge lock."""
+        events = []
+
+        def _log(msg: str) -> None:
+            events.append(msg)
+
+        merge_lock_states = [True, False]
+        with patch.object(guard, "is_main_repo_clean", return_value=(True, [])), \
+             patch.object(guard, "cleanup_lock_active", return_value=False), \
+             patch.object(guard, "merge_lock_active", side_effect=merge_lock_states):
+            result = guard.wait_for_main_repo_clean(timeout=0.5, poll_interval=0.01, log_fn=_log)
+            assert result is True
+            assert any("Merge in progress" in msg for msg in events)

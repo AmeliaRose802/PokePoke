@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from collections.abc import Callable, Iterable, Generator
 
-from pokepoke.coordination import acquire_lock, try_lock
+from pokepoke.coordination import acquire_lock, try_lock, merge_lock_active
 from pokepoke.git_operations import verify_main_repo_clean
 
 CleanupLogFn = Callable[[str], None]
@@ -62,7 +62,7 @@ def wait_for_main_repo_clean(
     poll_interval: float = 2.0,
     log_fn: CleanupLogFn | None = None,
 ) -> bool:
-    """Poll until the main repo is clean and no cleanup agent is running.
+    """Poll until the main repo is clean and no cleanup/merge agent is running.
 
     Args:
         repo_path: Optional repo path; defaults to the current working directory.
@@ -71,16 +71,17 @@ def wait_for_main_repo_clean(
         log_fn: Optional logger callable for status updates.
 
     Returns:
-        True when the repository is clean and no cleanup agent owns the lock.
+        True when the repository is clean and no cleanup/merge agent owns locks.
         False if the timeout elapsed while waiting.
     """
     deadline = (time.time() + timeout) if timeout >= 0 else None
 
     while True:
         is_clean, dirty_files = is_main_repo_clean(repo_path)
-        lock_busy = cleanup_lock_active()
+        cleanup_busy = cleanup_lock_active()
+        merge_busy = merge_lock_active()
 
-        if is_clean and not lock_busy:
+        if is_clean and not cleanup_busy and not merge_busy:
             return True
 
         if not is_clean:
@@ -92,8 +93,10 @@ def wait_for_main_repo_clean(
                 f"Main repo dirty ({len(dirty_files)} file(s)). Waiting for cleanup to finish: {summary}",
                 log_fn,
             )
-        elif lock_busy:
+        elif cleanup_busy:
             _emit("Cleanup agent still holding lock; waiting before scheduling new agents.", log_fn)
+        elif merge_busy:
+            _emit("Merge in progress; waiting for merge to complete before scheduling.", log_fn)
 
         if deadline is not None and time.time() >= deadline:
             _emit("Timed out waiting for main repo to become clean.", log_fn)

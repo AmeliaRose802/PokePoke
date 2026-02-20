@@ -1,6 +1,7 @@
 """Worktree finalization and merging operations."""
 
 import json
+import logging
 import subprocess
 from pathlib import Path
 
@@ -10,6 +11,9 @@ from .git_operations import check_main_repo_ready_for_merge, get_default_branch
 from .beads_hierarchy import get_parent_id, close_parent_if_complete
 from .beads_management import close_item
 from .repo_state_guard import cleanup_lock
+from .coordination import merge_lock
+
+logger = logging.getLogger(__name__)
 
 
 def finalize_work_item(item: BeadsWorkItem, worktree_path: Path) -> bool:
@@ -30,7 +34,12 @@ def finalize_work_item(item: BeadsWorkItem, worktree_path: Path) -> bool:
 
 
 def check_and_merge_worktree(item: BeadsWorkItem, worktree_path: Path) -> bool:
-    """Check if worktree has commits and merge if needed."""
+    """Check if worktree has commits and merge if needed.
+
+    Uses the merge lock to serialize concurrent merge attempts from
+    parallel agents. This prevents merge conflict cascades where multiple
+    agents try to merge to master simultaneously.
+    """
     try:
         # Use the actual target branch from config (not hardcoded)
         target_branch = get_default_branch()
@@ -50,12 +59,24 @@ def check_and_merge_worktree(item: BeadsWorkItem, worktree_path: Path) -> bool:
             cleanup_worktree(item.id, force=True)
             return True
         
-        return merge_worktree_to_dev(item)
+        # Acquire merge lock to serialize with other parallel agents
+        print("\n🔒 Acquiring merge lock for serialized merge...")
+        logger.info("Waiting for merge lock for item %s", item.id)
+        with merge_lock():
+            logger.info("Acquired merge lock for item %s", item.id)
+            print("   ✅ Lock acquired, proceeding with merge")
+            return merge_worktree_to_dev(item)
         
     except Exception as e:
         print(f"\n⚠️  Could not check commit count: {e}")
         print("   Attempting merge anyway...")
-        return merge_worktree_to_dev(item)
+        # Still acquire lock even on error path
+        print("\n🔒 Acquiring merge lock for serialized merge...")
+        logger.info("Waiting for merge lock for item %s (error path)", item.id)
+        with merge_lock():
+            logger.info("Acquired merge lock for item %s (error path)", item.id)
+            print("   ✅ Lock acquired, proceeding with merge")
+            return merge_worktree_to_dev(item)
 
 
 def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:

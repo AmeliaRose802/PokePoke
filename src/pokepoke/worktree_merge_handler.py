@@ -1,11 +1,15 @@
 """Worktree merge handling for maintenance agents."""
 
+import logging
 from pathlib import Path
 
 from pokepoke.types import BeadsWorkItem, AgentStats
 from pokepoke.worktrees import merge_worktree
 from pokepoke.cleanup_agents import invoke_cleanup_agent, invoke_merge_conflict_cleanup_agent
 from pokepoke.repo_state_guard import cleanup_lock
+from pokepoke.coordination import merge_lock
+
+logger = logging.getLogger(__name__)
 
 
 def handle_worktree_merge(
@@ -17,6 +21,9 @@ def handle_worktree_merge(
     agent_stats: AgentStats | None
 ) -> tuple[bool, bool]:
     """Handle worktree merge with conflict resolution.
+
+    Uses the merge lock to serialize concurrent merge attempts from
+    parallel agents. This prevents merge conflict cascades.
     
     Args:
         agent_id: Agent ID for worktree tracking
@@ -29,6 +36,26 @@ def handle_worktree_merge(
     Returns:
         Tuple of (merge_success, worktree_cleaned)
     """
+    # Acquire merge lock to serialize with other parallel agents
+    print("\n🔒 Acquiring merge lock for serialized merge...")
+    logger.info("Waiting for merge lock for agent %s", agent_id)
+    with merge_lock():
+        logger.info("Acquired merge lock for agent %s", agent_id)
+        print("   ✅ Lock acquired, proceeding with merge")
+        return _handle_worktree_merge_inner(
+            agent_id, agent_item, agent_name, worktree_path, repo_root, agent_stats
+        )
+
+
+def _handle_worktree_merge_inner(
+    agent_id: str,
+    agent_item: BeadsWorkItem,
+    agent_name: str,
+    worktree_path: Path,
+    repo_root: Path,
+    agent_stats: AgentStats | None
+) -> tuple[bool, bool]:
+    """Inner merge logic, called while holding the merge lock."""
     from pokepoke.git_operations import (
         check_main_repo_ready_for_merge,
         is_merge_in_progress,
