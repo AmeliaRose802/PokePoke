@@ -377,6 +377,23 @@ class TestBackwardCompatibility:
         
         mock_scheduler.maybe_run_maintenance.assert_called_once_with(5, session_stats, run_logger)
 
+    @patch('pokepoke.shutdown.should_stop_after_current', return_value=True)
+    @patch('pokepoke.maintenance_scheduler.get_maintenance_scheduler')
+    def test_run_periodic_maintenance_skips_when_stop_requested(self, mock_get_scheduler, _mock_stop):
+        """Test that maintenance is skipped when stop-after-current is requested."""
+        mock_scheduler = Mock()
+        mock_get_scheduler.return_value = mock_scheduler
+
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        run_periodic_maintenance(5, session_stats, run_logger)
+
+        mock_scheduler.maybe_run_maintenance.assert_not_called()
+        run_logger.log_orchestrator.assert_called_with(
+            "Skipping maintenance - stop after current item requested"
+        )
+
 
 class TestAgentClassification:
     """Test agent classification constants."""

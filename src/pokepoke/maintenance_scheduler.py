@@ -258,5 +258,10 @@ def run_periodic_maintenance(items_completed: int, session_stats: SessionStats, 
         session_stats: Session statistics to update  
         run_logger: Logger for maintenance events
     """
+    from pokepoke.shutdown import should_stop_after_current
+    if should_stop_after_current():
+        run_logger.log_orchestrator("Skipping maintenance - stop after current item requested")
+        return
+
     scheduler = get_maintenance_scheduler()
     scheduler.maybe_run_maintenance(items_completed, session_stats, run_logger)
