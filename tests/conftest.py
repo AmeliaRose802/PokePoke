@@ -60,6 +60,15 @@ def _suppress_atexit():
         yield
 
 
+@pytest.fixture(autouse=True)
+def _fast_repo_guard(monkeypatch):
+    """Ensure maintenance tests never block on repo cleanliness."""
+    monkeypatch.setattr(
+        "pokepoke.maintenance_scheduler.wait_for_main_repo_clean",
+        lambda *_, **__: True,
+    )
+
+
 @pytest.fixture
 def sample_work_item() -> BeadsWorkItem:
     """Create a sample work item for testing."""

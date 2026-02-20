@@ -1,9 +1,19 @@
 """Tests for repository check utilities."""
 
+from contextlib import nullcontext
 import subprocess
 from pathlib import Path
 from unittest.mock import Mock, patch
+
+import pytest
+
 from pokepoke.repo_check import check_and_commit_main_repo
+
+
+@pytest.fixture(autouse=True)
+def _mock_cleanup_lock(monkeypatch):
+    """Replace cleanup_lock with a noop context manager."""
+    monkeypatch.setattr("pokepoke.repo_check.cleanup_lock", lambda: nullcontext())
 
 
 class TestCheckAndCommitMainRepo:
