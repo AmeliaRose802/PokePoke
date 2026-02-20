@@ -33,7 +33,8 @@ def process_work_item(
     timeout_hours: float = 2.0,
     run_beta_test: bool = False,
     run_logger: 'RunLogger | None' = None,
-    max_timeout_restarts: int = 3
+    max_timeout_restarts: int = 3,
+    agent_id: str | None = None,
 ) -> tuple[bool, int, AgentStats | None, int, int, ModelCompletionRecord | None]:
     """Process a single work item with timeout protection.
 
@@ -62,12 +63,13 @@ def process_work_item(
         # Select model for this work item (A/B testing)
         config = get_config()
         selected_model = select_model_for_item(item.id)
+        base_agent_id = agent_id or item.id
         backend_provider = config.ai_backend.provider
         worktree_lock_timeout = float(config.command_timeout)
 
         # Keep the Desktop UI agent card in sync with the selected model.
         terminal_ui.ui.push_agent_status(
-            item.id,
+            base_agent_id,
             get_agent_name(default="pokepoke"),
             iteration=1,
             status="running",
@@ -228,14 +230,14 @@ def process_work_item(
             from pokepoke.git_operations import build_handoff_context
             handoff_ctx = build_handoff_context(cwd=worktree_cwd)
 
-            gate_agent_id = f"{item.id}-gate"
+            gate_agent_id = f"{base_agent_id}-gate"
             gate_iteration = gate_agent_runs + 1
             terminal_ui.ui.push_agent_status(
                 gate_agent_id,
                 "Gate Agent",
                 iteration=gate_iteration,
                 status="running",
-                parent_agent_id=item.id,
+                parent_agent_id=base_agent_id,
                 work_item_id=item.id,
                 work_item_title=item.title,
             )
@@ -252,7 +254,7 @@ def process_work_item(
                     "Gate Agent",
                     iteration=gate_agent_runs,
                     status="failed",
-                    parent_agent_id=item.id,
+                    parent_agent_id=base_agent_id,
                     work_item_id=item.id,
                     work_item_title=item.title,
                 )
@@ -263,7 +265,7 @@ def process_work_item(
                 "Gate Agent",
                 iteration=gate_agent_runs,
                 status="success" if gate_success else "failed",
-                parent_agent_id=item.id,
+                parent_agent_id=base_agent_id,
                 work_item_id=item.id,
                 work_item_title=item.title,
             )

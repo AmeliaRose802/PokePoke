@@ -130,6 +130,22 @@ class TestParallelProcessItem:
         assert "dup-item:worker-1" in agent_ids
         assert "dup-item:worker-2" in agent_ids
 
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.process_work_item")
+    def test_process_work_item_receives_agent_id(
+        self, mock_pwi: Mock, mock_ui: Mock,
+    ) -> None:
+        """process_work_item should receive the derived agent_id for gating."""
+        mock_pwi.return_value = (True, 1, None, 0, 0, None)
+        sem = threading.Semaphore(0)
+        item = _make_item("gate-1")
+
+        _parallel_process_item(item, Mock(), sem, worker_agent_name="worker-A")
+
+        assert mock_pwi.call_args
+        _, kwargs = mock_pwi.call_args
+        assert kwargs["agent_id"] == "gate-1:worker-A"
+
 
 # ── _collect_done_futures ─────────────────────────────────────
 

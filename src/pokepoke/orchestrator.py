@@ -226,9 +226,7 @@ def run_orchestrator(
                 success = False
                 try:
                     with terminal_ui.ui.agent_output_for(agent_id):
-                        success, requests, item_stats, cleanup_runs, gate_runs, model_completion = process_work_item(
-                            selected_item, interactive, run_logger=run_logger
-                        )
+                        success, requests, item_stats, cleanup_runs, gate_runs, model_completion = process_work_item(selected_item, interactive, run_logger=run_logger, agent_id=agent_id)
                 finally:
                     terminal_ui.ui.push_agent_status(
                         agent_id,
