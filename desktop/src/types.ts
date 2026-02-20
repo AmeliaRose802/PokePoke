@@ -59,6 +59,7 @@ export interface CreatedItem {
 /** Historical model completion record with timestamp (from persistent store) */
 export interface ModelHistoryEntry extends ModelCompletionRecord {
   timestamp: string;
+  item_type?: string; // 'bug', 'feature', 'task', etc. Optional for backward compatibility
 }
 
 /** Session-level statistics from the orchestrator */

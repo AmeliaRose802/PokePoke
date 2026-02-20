@@ -2234,3 +2234,103 @@
   font-family: "Fira Code", "Cascadia Code", "Consolas", monospace;
   font-size: 12px;
 }
+
+/* ── Completion Time Chart ─────────────────────────────────────────────── */
+
+.completion-time-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.completion-time-chart svg {
+  width: 100%;
+  height: 180px;
+  background: #14151d;
+  border: 1px solid #2d3145;
+  border-radius: 6px;
+  display: block;
+}
+
+.completion-time-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.completion-time-series {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.completion-time-series-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px;
+  background: #14151d;
+  border: 1px solid #2d3145;
+  border-radius: 6px;
+}
+
+.completion-time-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #c0caf5;
+  white-space: nowrap;
+  min-width: 80px;
+}
+
+.completion-time-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.completion-time-dot.color-bug {
+  background-color: #f7768e;
+}
+
+.completion-time-dot.color-feature {
+  background-color: #7aa2f7;
+}
+
+.completion-time-dot.color-task {
+  background-color: #9ece6a;
+}
+
+.completion-time-dot.color-unknown {
+  background-color: #565f89;
+}
+
+.completion-time-values {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 8px;
+  flex: 1;
+}
+
+.completion-time-value {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+}
+
+.completion-time-value small {
+  color: #565f89;
+  font-size: 10px;
+}
+
+.completion-time-value strong {
+  color: #c0caf5;
+  font-size: 12px;
+}
