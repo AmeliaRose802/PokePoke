@@ -68,9 +68,7 @@ class TestConcurrentAgentsNoInterference:
             results[item.id] = (True, agent)
             return _fake_process_result(success=True)
 
-        semaphore = threading.Semaphore(2)
-        active_ids: set[str] = set()
-        lock = threading.Lock()
+        semaphore = threading.Semaphore(0)
         logger = MagicMock(spec=RunLogger)
 
         item_a = _make_item("A-1", "Task A")
@@ -80,11 +78,11 @@ class TestConcurrentAgentsNoInterference:
             threads = [
                 threading.Thread(
                     target=_parallel_process_item,
-                    args=(item_a, logger, semaphore, active_ids, lock, "worker-1"),
+                    args=(item_a, logger, semaphore, "worker-1"),
                 ),
                 threading.Thread(
                     target=_parallel_process_item,
-                    args=(item_b, logger, semaphore, active_ids, lock, "worker-2"),
+                    args=(item_b, logger, semaphore, "worker-2"),
                 ),
             ]
             for t in threads:
@@ -98,8 +96,6 @@ class TestConcurrentAgentsNoInterference:
         # Each saw its own worker name
         assert results["A-1"][1] == "worker-1"
         assert results["B-2"][1] == "worker-2"
-        # active_ids is empty after completion
-        assert len(active_ids) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -278,8 +274,6 @@ class TestMaxParallelAgentsConfig:
             return _fake_process_result()
 
         semaphore = threading.Semaphore(max_agents)
-        active_ids: set[str] = set()
-        lock = threading.Lock()
         logger = MagicMock(spec=RunLogger)
 
         items = [_make_item(f"CONC-{i}") for i in range(5)]
@@ -290,7 +284,7 @@ class TestMaxParallelAgentsConfig:
                 semaphore.acquire()
                 t = threading.Thread(
                     target=_parallel_process_item,
-                    args=(item, logger, semaphore, active_ids, lock, f"w-{i}"),
+                    args=(item, logger, semaphore, f"w-{i}"),
                 )
                 t.start()
                 threads.append(t)
@@ -316,15 +310,13 @@ class TestAgentContextInParallelProcessItem:
             observed_names.append(get_agent_name())
             return _fake_process_result()
 
-        semaphore = threading.Semaphore(2)
-        active_ids: set[str] = set()
-        lock = threading.Lock()
+        semaphore = threading.Semaphore(0)
         logger = MagicMock(spec=RunLogger)
 
         with patch("pokepoke.parallel.process_work_item", side_effect=fake_process):
             t = threading.Thread(
                 target=_parallel_process_item,
-                args=(_make_item(), logger, semaphore, active_ids, lock, "special-worker"),
+                args=(_make_item(), logger, semaphore, "special-worker"),
             )
             t.start()
             t.join(timeout=5)
@@ -338,14 +330,12 @@ class TestAgentContextInParallelProcessItem:
         def fake_process(item, **kwargs):
             return _fake_process_result()
 
-        semaphore = threading.Semaphore(1)
-        active_ids: set[str] = set()
-        lock = threading.Lock()
+        semaphore = threading.Semaphore(0)
         logger = MagicMock(spec=RunLogger)
 
         def run_and_check():
             _parallel_process_item(
-                _make_item(), logger, semaphore, active_ids, lock, "temp-worker",
+                _make_item(), logger, semaphore, "temp-worker",
             )
             # After completion, thread-local should be cleared
             from pokepoke.agent_context import _thread_local
@@ -472,9 +462,7 @@ class TestWorkerCounterIncrements:
 
         items = [_make_item(f"WC-{i}") for i in range(3)]
 
-        semaphore = threading.Semaphore(3)
-        active_ids: set[str] = set()
-        lock = threading.Lock()
+        semaphore = threading.Semaphore(0)
         logger = MagicMock(spec=RunLogger)
 
         with patch("pokepoke.parallel.process_work_item", side_effect=fake_process):
@@ -483,7 +471,7 @@ class TestWorkerCounterIncrements:
                 name = f"test-agent-worker-{i + 1}"
                 t = threading.Thread(
                     target=_parallel_process_item,
-                    args=(item, logger, semaphore, active_ids, lock, name),
+                    args=(item, logger, semaphore, name),
                 )
                 t.start()
                 threads.append(t)

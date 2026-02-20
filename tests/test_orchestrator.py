@@ -2253,16 +2253,13 @@ class TestParallelProcessItem:
         from pokepoke.parallel import _parallel_process_item
 
         mock_pwi.return_value = (True, 1, None, 0, 0, None)
-        sem = threading.Semaphore(1)
-        ids = {"t1"}
-        lock = threading.Lock()
+        sem = threading.Semaphore(0)
         item = BeadsWorkItem(id="t1", title="T", status="o", priority=1, issue_type="task")
         logger = Mock()
 
-        result = _parallel_process_item(item, logger, sem, ids, lock)
+        result = _parallel_process_item(item, logger, sem)
 
         assert result == (True, 1, None, 0, 0, None)
-        assert "t1" not in ids
         # Semaphore should have been released (can acquire again)
         assert sem.acquire(blocking=False)
 
@@ -2271,16 +2268,13 @@ class TestParallelProcessItem:
         import threading
         from pokepoke.parallel import _parallel_process_item
 
-        sem = threading.Semaphore(1)
-        ids = {"t1"}
-        lock = threading.Lock()
+        sem = threading.Semaphore(0)
         item = BeadsWorkItem(id="t1", title="T", status="o", priority=1, issue_type="task")
         logger = Mock()
 
         with pytest.raises(RuntimeError):
-            _parallel_process_item(item, logger, sem, ids, lock)
+            _parallel_process_item(item, logger, sem)
 
-        assert "t1" not in ids
         assert sem.acquire(blocking=False)
 
 
