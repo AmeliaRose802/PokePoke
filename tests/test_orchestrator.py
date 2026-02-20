@@ -938,17 +938,19 @@ class TestOrchestratorHelperFunctions:
         mock_subprocess: Mock,
         mock_cleanup: Mock
     ) -> None:
-        """Test check_and_commit_main_repo with non-beads changes - should invoke cleanup agent."""
+        """Test check_and_commit_main_repo with non-beads changes - tries auto-commit first, then cleanup agent."""
         from pokepoke.repo_check import check_and_commit_main_repo
         from pokepoke.types import AgentStats
         from pokepoke.logging_utils import RunLogger
         from pathlib import Path
         import tempfile
         
-        mock_subprocess.return_value = Mock(
-            stdout=" M src/file.py\n M tests/test.py\n",
-            returncode=0
-        )
+        # git status returns changes, auto-commit (add succeeds, commit fails), then cleanup agent
+        mock_subprocess.side_effect = [
+            Mock(stdout=" M src/file.py\n M tests/test.py\n", returncode=0),  # git status
+            Mock(returncode=0),  # git add --all (auto-commit)
+            Mock(returncode=1, stdout="", stderr="pre-commit hook failed"),  # git commit fails
+        ]
         # Mock cleanup agent to return success
         mock_cleanup.return_value = (True, AgentStats(
             wall_duration=1.0,
@@ -968,8 +970,8 @@ class TestOrchestratorHelperFunctions:
             result = check_and_commit_main_repo(repo_path, run_logger)
             
             assert result is True  # Should return True after successful cleanup
-            # Should call subprocess for git status
-            assert mock_subprocess.call_count >= 1
+            # Should call subprocess for git status + auto-commit attempt
+            assert mock_subprocess.call_count >= 3
             mock_cleanup.assert_called_once()
             
             # Verify cleanup agent was called with correct work item

@@ -51,6 +51,67 @@ def check_beads_available() -> bool:
     return True
 
 
+def _try_auto_commit(repo_path: Path, run_logger: 'RunLogger') -> bool:
+    """Attempt to auto-commit uncommitted changes with git add + git commit.
+
+    This is tried before launching the cleanup agent so that trivial changes
+    (e.g., modified tracking files) can be committed quickly without wasting
+    tokens on an AI agent.
+
+    Args:
+        repo_path: Path to the repository
+        run_logger: Run logger instance
+
+    Returns:
+        True if auto-commit succeeded, False otherwise (e.g., pre-commit hooks reject)
+    """
+    try:
+        subprocess.run(
+            ["git", "add", "--all"],
+            check=True,
+            capture_output=True,
+            encoding='utf-8',
+            errors='replace',
+            cwd=str(repo_path),
+            timeout=30
+        )
+
+        result = subprocess.run(
+            ["git", "commit", "-m", "chore: auto-commit uncommitted changes"],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            cwd=str(repo_path),
+            timeout=120
+        )
+
+        if result.returncode == 0:
+            run_logger.log_orchestrator("Auto-committed uncommitted changes")
+            return True
+
+        # Commit failed (e.g., pre-commit hooks rejected)
+        error_msg = result.stderr.strip() if result.stderr else "unknown error"
+        run_logger.log_orchestrator(
+            f"Auto-commit failed (will try cleanup agent): {error_msg}",
+            level="WARNING"
+        )
+        return False
+
+    except subprocess.TimeoutExpired:
+        run_logger.log_orchestrator("Auto-commit timed out", level="WARNING")
+        return False
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr.strip() if e.stderr else f"exit code {e.returncode}"
+        run_logger.log_orchestrator(
+            f"Auto-commit git add failed: {error_msg}", level="WARNING"
+        )
+        return False
+    except Exception as e:
+        run_logger.log_orchestrator(f"Auto-commit failed: {e}", level="WARNING")
+        return False
+
+
 def _stash_uncommitted_changes(repo_path: Path, run_logger: 'RunLogger') -> bool:
     """Attempt to stash uncommitted changes as a fallback.
     
@@ -163,9 +224,15 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
             if len(changes['other']) > 10:
                 print(f"   ... and {len(changes['other']) - 10} more")
             
-            # Retry cleanup agent with exponential backoff before giving up
-            print("\n🤖 Launching cleanup agent to resolve uncommitted changes...")
-            run_logger.log_orchestrator("Launching cleanup agent for uncommitted changes")
+            # Try auto-commit first before launching the heavyweight cleanup agent
+            print("\n🔄 Attempting to auto-commit changes...")
+            if _try_auto_commit(repo_path, run_logger):
+                print("✅ Auto-committed uncommitted changes")
+                return True
+            
+            # Auto-commit failed - fall back to cleanup agent
+            print("\n🤖 Auto-commit failed, launching cleanup agent...")
+            run_logger.log_orchestrator("Auto-commit failed, launching cleanup agent")
             
             from pokepoke.agent_runner import invoke_cleanup_agent
             from pokepoke.types import BeadsWorkItem
