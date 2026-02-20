@@ -406,6 +406,41 @@ class TestRunGateAgent:
         template_vars = call_args[0][1]
         assert template_vars["handoff_context"] == ""
 
+    @patch('pokepoke.agent_runner.get_default_branch', return_value='main')
+    @patch('pokepoke.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.PromptService')
+    def test_default_branch_passed_to_template(
+        self,
+        mock_service_cls: Mock,
+        mock_invoke: Mock,
+        mock_parse: Mock,
+        mock_get_branch: Mock,
+        work_item: BeadsWorkItem,
+    ) -> None:
+        """Test that default_branch variable is passed to the gate-agent template."""
+        mock_service = Mock()
+        mock_service.load_and_render.return_value = "Gate prompt with default_branch"
+        mock_service_cls.return_value = mock_service
+
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="test-123",
+            success=True,
+            output='```json\n{"status": "success", "message": "OK"}\n```',
+            attempt_count=1,
+        )
+        mock_parse.return_value = None
+
+        run_gate_agent(work_item)
+
+        # Verify get_default_branch was called
+        mock_get_branch.assert_called_once()
+
+        # Verify default_branch was included in template variables
+        call_args = mock_service.load_and_render.call_args
+        template_vars = call_args[0][1]
+        assert template_vars["default_branch"] == "main"
+
 
 class TestRunMaintenanceAgent:
     """Test run_maintenance_agent function."""
