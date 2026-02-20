@@ -1571,6 +1571,102 @@ class TestProcessWorkItem:
         mock_invoke.assert_called_once()
 
 
+class TestProcessWorkItemCoordination:
+    """Tests for concurrent-agent coordination paths in process_work_item."""
 
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('time.time')
+    def test_assign_fails_race_condition(
+        self,
+        mock_time: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
+    ) -> None:
+        """When assign_and_sync_item returns False (another agent already claimed the item),
+        process_work_item must return (False, 0, ...) without creating a worktree."""
+        item = BeadsWorkItem(
+            id="task-race",
+            title="Race Task",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task",
+        )
+        mock_time.return_value = 0.0
+        mock_assign.return_value = False  # Simulate another agent grabbed the item first
+
+        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+            item, interactive=False
+        )
+
+        assert success is False
+        assert count == 0
+        assert stats is None
+        mock_setup.assert_not_called()
+
+    @patch('pokepoke.workflow.worktree_setup_lock')
+    @patch('time.time')
+    def test_worktree_lock_timeout(
+        self,
+        mock_time: Mock,
+        mock_lock: Mock,
+    ) -> None:
+        """When worktree_setup_lock times out (another agent holds the lock),
+        process_work_item must return (False, 0, ...) without crashing."""
+        from filelock import Timeout
+
+        item = BeadsWorkItem(
+            id="task-lock",
+            title="Lock Task",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task",
+        )
+        mock_time.return_value = 0.0
+        mock_lock.side_effect = Timeout("worktree-setup")
+
+        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+            item, interactive=False
+        )
+
+        assert success is False
+        assert count == 0
+        assert stats is None
+
+    @patch('pokepoke.workflow.unassign_item')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('time.time')
+    def test_worktree_failure_triggers_unassign(
+        self,
+        mock_time: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
+        mock_unassign: Mock,
+    ) -> None:
+        """When worktree creation fails after a successful claim,
+        process_work_item must unassign the item so other agents can pick it up."""
+        item = BeadsWorkItem(
+            id="task-wt-fail",
+            title="Worktree Fail Task",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task",
+        )
+        mock_time.return_value = 0.0
+        mock_assign.return_value = True
+        mock_setup.return_value = None  # Worktree creation failed
+        mock_unassign.return_value = True
+
+        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+            item, interactive=False
+        )
+
+        assert success is False
+        assert count == 0
+        mock_unassign.assert_called_once_with(item.id)
 
 
