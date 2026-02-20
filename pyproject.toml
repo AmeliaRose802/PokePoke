@@ -16,6 +16,9 @@ pokepoke-init = "pokepoke.init:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+pokepoke = ["static/**/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]

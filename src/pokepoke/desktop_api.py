@@ -2,14 +2,11 @@
 
 Every public method on DesktopAPI is callable from JavaScript as:
     await window.pywebview.api.method_name(args)
-
-This is NOT a server. pywebview calls these methods directly in-process.
 """
 from __future__ import annotations
 
 import threading
 import time
-from dataclasses import asdict
 from typing import Any, TYPE_CHECKING
 
 from pokepoke.agent_registry import AgentRegistry
@@ -22,6 +19,7 @@ from pokepoke.shutdown import (
 )
 
 from pokepoke import desktop_api_ext as _ext
+from pokepoke import desktop_api_stats as _stats
 
 if TYPE_CHECKING:
     from pokepoke.types import SessionStats
@@ -51,6 +49,8 @@ class DesktopAPI:
         self._session_start_time: float | None = None
         # Session end time to freeze the clock when agents complete
         self._session_end_time: float | None = None
+        # Current session identifier for grouping agents
+        self._current_session_id: str | None = None
 
         # Live reference to SessionStats — serialized fresh on each poll
         # so agent run counts, token stats, etc. update in real-time
@@ -83,60 +83,13 @@ class DesktopAPI:
         """Called once after pywebview creates the window."""
         self._window = window
 
-    @staticmethod
-    def _snapshot_to_dict(snapshot: Any) -> dict[str, Any]:
-        """Convert a SessionStatsSnapshot to a JSON-serializable dict."""
-        return {
-            "agent_stats": asdict(snapshot.agent_stats),
-            "items_completed": snapshot.items_completed,
-            "completed_items": [
-                {
-                    "id": item.id,
-                    "title": item.title,
-                    "status": item.status,
-                    "issue_type": item.issue_type,
-                }
-                for item in snapshot.completed_items_list
-            ],
-            "work_agent_runs": snapshot.work_agent_runs,
-            "gate_agent_runs": snapshot.gate_agent_runs,
-            "tech_debt_agent_runs": snapshot.tech_debt_agent_runs,
-            "janitor_agent_runs": snapshot.janitor_agent_runs,
-            "backlog_cleanup_agent_runs": snapshot.backlog_cleanup_agent_runs,
-            "cleanup_agent_runs": snapshot.cleanup_agent_runs,
-            "beta_tester_agent_runs": snapshot.beta_tester_agent_runs,
-            "code_review_agent_runs": snapshot.code_review_agent_runs,
-            "worktree_cleanup_agent_runs": snapshot.worktree_cleanup_agent_runs,
-            "model_completions": [asdict(mc) for mc in snapshot.model_completions],
-        }
-
-    def _serialize_live_stats(self) -> dict[str, Any] | None:
-        """Serialize session stats fresh on every poll."""
-        stats: dict[str, Any] | None = None
-        live = self._live_session_stats
-        if live is not None:
-            stats = self._snapshot_to_dict(live.snapshot())
-            cached = self._current_stats
-            if cached is not None and "elapsed_time" in cached:
-                stats["elapsed_time"] = cached["elapsed_time"]
-        elif self._current_stats is not None:
-            stats = dict(self._current_stats)
-
-        # Override with live elapsed_time if session start is known
-        if self._session_start_time is not None:
-            # If session has ended, use the final elapsed time (frozen clock)
-            if self._session_end_time is not None:
-                elapsed = self._session_end_time - self._session_start_time
-            else:
-                # Session is still running, calculate live elapsed time
-                elapsed = time.time() - self._session_start_time
-            
-            if stats is None:
-                stats = {"elapsed_time": elapsed}
-            else:
-                stats["elapsed_time"] = elapsed
-
-        return stats
+    # Stats serialization — delegated to desktop_api_stats
+    _snapshot_to_dict = staticmethod(_stats.snapshot_to_dict)
+    _serialize_live_stats = _stats.serialize_live_stats
+    _get_cached_leaderboard = _stats.get_cached_leaderboard
+    get_model_leaderboard = _stats.get_model_leaderboard
+    get_model_history = _stats.get_model_history
+    push_stats = _stats.push_stats
 
     def get_state(self) -> dict[str, Any]:
         """Get the full current state snapshot. Called on frontend init."""
@@ -155,16 +108,8 @@ class DesktopAPI:
                 "agents": self._agent_registry.serialize_all(),
                 "stop_after_current": _should_stop_after_current(),
                 "project_name": config.project_name,
+                "current_session_id": self._current_session_id,
             }
-
-    def _get_cached_leaderboard(self) -> dict[str, Any]:
-        """Return model leaderboard, cached for 5 seconds to avoid disk reads on every poll."""
-        now = time.time()
-        if now - self._leaderboard_cache_time > 5.0:
-            from pokepoke.model_stats_store import get_model_summary
-            self._leaderboard_cache = get_model_summary()
-            self._leaderboard_cache_time = now
-        return self._leaderboard_cache
 
     def get_new_logs(self) -> list[dict[str, Any]]:
         """Get log entries added since the last call (incremental).
@@ -199,31 +144,6 @@ class DesktopAPI:
         with self._lock:
             return self._serialize_live_stats()
 
-    def get_model_leaderboard(self) -> dict[str, Any]:
-        """Get all-time model performance stats from persistent storage."""
-        from pokepoke.model_stats_store import get_model_summary
-        return get_model_summary()
-
-    def get_model_history(self, limit: int = 200) -> list[dict[str, Any]]:
-        """Return recent model completion history for trend charts."""
-        if limit <= 0:
-            return []
-        now = time.time()
-        if (
-            self._history_cache
-            and limit == self._history_cache_limit
-            and now - self._history_cache_time <= 5.0
-        ):
-            return list(self._history_cache)
-
-        from pokepoke.model_stats_store import get_model_history as _get_model_history
-
-        history = list(_get_model_history(limit=limit))
-        self._history_cache = history
-        self._history_cache_limit = limit
-        self._history_cache_time = now
-        return list(history)
-
     get_config = _ext.get_config
     save_config = _ext.save_config
 
@@ -256,44 +176,17 @@ class DesktopAPI:
         }
 
     def set_session_start_time(self, start_time: float) -> None:
-        """Store the session start time for dynamic elapsed_time computation.
-
-        Once set, every call to get_state()/get_stats() will recompute
-        elapsed_time = now - start_time so the frontend timer ticks live.
-        """
+        """Store session start time (enables live elapsed_time ticking)."""
         self._session_start_time = start_time
+        self._current_session_id = str(start_time)
 
     def set_session_end_time(self, end_time: float) -> None:
-        """Store the session end time to freeze the elapsed_time clock.
-
-        When called, the session clock will stop and show the final
-        session duration instead of continuing to tick. This should
-        be called when all agents have finished and the session is complete.
-        """
+        """Store session end time (freezes elapsed_time)."""
         self._session_end_time = end_time
 
     def set_live_session_stats(self, session_stats: SessionStats) -> None:
-        """Store a live reference to SessionStats for real-time polling.
-
-        The live object is serialized fresh on every get_state()/get_stats()
-        poll, so any mutations (agent run counts, token stats, retries)
-        are reflected immediately without needing explicit push calls.
-        """
+        """Store a live SessionStats reference for real-time polling."""
         self._live_session_stats = session_stats
-
-    def push_stats(
-        self, session_stats: SessionStats | None, elapsed_time: float = 0.0
-    ) -> None:
-        """Update session statistics (snapshot fallback).
-
-        Prefer set_live_session_stats() for real-time updates.
-        """
-        if session_stats:
-            self._live_session_stats = session_stats
-        stats_data: dict[str, Any] = {"elapsed_time": elapsed_time}
-        if session_stats:
-            stats_data.update(self._snapshot_to_dict(session_stats.snapshot()))
-        self._current_stats = stats_data
 
     def push_agent_name(self, name: str) -> None:
         """Update the current agent name."""
@@ -337,6 +230,7 @@ class DesktopAPI:
         parent_agent_id: str | None = None,
         work_item_id: str | None = None,
         work_item_title: str | None = None,
+        modified_files: list[str] | None = None,
     ) -> None:
         """Register or update a running agent."""
         self._agent_registry.update_status(
@@ -348,6 +242,8 @@ class DesktopAPI:
             parent_agent_id=parent_agent_id,
             work_item_id=work_item_id,
             work_item_title=work_item_title,
+            session_id=self._current_session_id,
+            modified_files=modified_files,
         )
 
     def push_agent_log(self, agent_id: str, line: str) -> None:
@@ -363,11 +259,29 @@ class DesktopAPI:
         return self._agent_registry.serialize_all()
 
     def get_agent_detail(self, agent_id: str) -> dict[str, Any] | None:
-        """Return a deep copy of a single agent's detail state (logs included)."""
+        """Return a deep copy of a single agent's detail state."""
         return self._agent_registry.get_detail(agent_id)
 
+    def pause_agent(self, agent_id: str) -> dict[str, Any]:
+        """Pause an agent, preventing future scheduling."""
+        success = self._agent_registry.pause(agent_id)
+        if success:
+            self.push_log(f"⏸️  Agent {agent_id} paused", "orchestrator", "yellow")
+        return {"agent_id": agent_id, "paused": success}
+
+    def resume_agent(self, agent_id: str) -> dict[str, Any]:
+        """Resume a paused agent."""
+        success = self._agent_registry.resume(agent_id)
+        if success:
+            self.push_log(f"▶️  Agent {agent_id} resumed", "orchestrator")
+        return {"agent_id": agent_id, "resumed": success}
+
+    def is_agent_paused(self, agent_id: str) -> bool:
+        """Check if an agent is paused."""
+        return self._agent_registry.is_paused(agent_id)
+
     def request_stop_after_current(self) -> dict[str, bool]:
-        """Request that the orchestrator stop after the current item completes."""
+        """Request orchestrator stop after the current item completes."""
         _request_stop_after_current()
         self.push_log("⏸️  Stop after current item requested", "orchestrator", "yellow")
         return {"stop_after_current": True}

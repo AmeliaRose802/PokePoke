@@ -11,6 +11,7 @@ from src.pokepoke.git_operations import (
     has_uncommitted_changes,
     commit_all_changes,
     execute_merge_sequence,
+    build_handoff_context,
 )
 
 
@@ -489,3 +490,115 @@ class TestExecuteMergeSequence:
         assert message == ""
         assert unmerged == []
         mock_restore.assert_called_once_with("git pull --rebase")
+
+
+class TestBuildHandoffContext:
+    """Test build_handoff_context function."""
+
+    @patch('pokepoke.git_operations.get_default_branch', return_value='master')
+    @patch('pokepoke.git_operations.subprocess.run')
+    def test_returns_full_context_with_all_sections(
+        self, mock_run: Mock, mock_branch: Mock
+    ) -> None:
+        """Test that handoff context includes changed files, diff stat, and commits."""
+        def side_effect(cmd: list[str], **kwargs: object) -> Mock:
+            if "diff" in cmd and "--name-status" in cmd:
+                return Mock(returncode=0, stdout="M\tsrc/foo.py\nA\tsrc/bar.py\n")
+            if "diff" in cmd and "--stat" in cmd:
+                return Mock(returncode=0, stdout=" src/foo.py | 10 ++++------\n src/bar.py |  5 +++++\n 2 files changed, 9 insertions(+), 6 deletions(-)\n")
+            if "log" in cmd and "--oneline" in cmd:
+                return Mock(returncode=0, stdout="abc1234 feat: add bar module\ndef5678 fix: update foo logic\n")
+            return Mock(returncode=1, stdout="")
+
+        mock_run.side_effect = side_effect
+
+        result = build_handoff_context(cwd="/tmp/worktree")
+
+        assert "## Work Agent Handoff Context" in result
+        assert "### Changed Files" in result
+        assert "M\tsrc/foo.py" in result
+        assert "A\tsrc/bar.py" in result
+        assert "### Diff Summary" in result
+        assert "2 files changed" in result
+        assert "### Commit History" in result
+        assert "abc1234 feat: add bar module" in result
+        assert "Start your verification" in result
+
+    @patch('pokepoke.git_operations.get_default_branch', return_value='master')
+    @patch('pokepoke.git_operations.subprocess.run')
+    def test_returns_empty_when_no_changes(
+        self, mock_run: Mock, mock_branch: Mock
+    ) -> None:
+        """Test that handoff returns empty string when no files changed."""
+        mock_run.return_value = Mock(returncode=0, stdout="")
+
+        result = build_handoff_context(cwd="/tmp/worktree")
+
+        assert result == ""
+
+    @patch('pokepoke.git_operations.get_default_branch', return_value='master')
+    @patch('pokepoke.git_operations.subprocess.run')
+    def test_returns_empty_on_git_failure(
+        self, mock_run: Mock, mock_branch: Mock
+    ) -> None:
+        """Test that handoff returns empty string when git commands fail."""
+        mock_run.return_value = Mock(returncode=1, stdout="")
+
+        result = build_handoff_context(cwd="/tmp/worktree")
+
+        assert result == ""
+
+    @patch('src.pokepoke.handoff_context.get_default_branch', return_value='master')
+    @patch('src.pokepoke.handoff_context.subprocess.run')
+    def test_handles_timeout(
+        self, mock_run: Mock, mock_branch: Mock
+    ) -> None:
+        """Test graceful handling of subprocess timeout."""
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="git", timeout=15)
+
+        result = build_handoff_context(cwd="/tmp/worktree")
+
+        assert result == ""
+
+    @patch('pokepoke.git_operations.get_default_branch', return_value='master')
+    @patch('pokepoke.git_operations.subprocess.run')
+    def test_omits_missing_sections(
+        self, mock_run: Mock, mock_branch: Mock
+    ) -> None:
+        """Test that missing sections (stat, log) are omitted gracefully."""
+        def side_effect(cmd: list[str], **kwargs: object) -> Mock:
+            if "diff" in cmd and "--name-status" in cmd:
+                return Mock(returncode=0, stdout="M\tsrc/only.py\n")
+            # stat and log fail
+            return Mock(returncode=1, stdout="")
+
+        mock_run.side_effect = side_effect
+
+        result = build_handoff_context(cwd="/tmp/worktree")
+
+        assert "### Changed Files" in result
+        assert "M\tsrc/only.py" in result
+        assert "### Diff Summary" not in result
+        assert "### Commit History" not in result
+
+    @patch('src.pokepoke.handoff_context.get_default_branch', return_value='master')
+    @patch('src.pokepoke.handoff_context.subprocess.run')
+    def test_passes_cwd_to_subprocess(
+        self, mock_run: Mock, mock_branch: Mock
+    ) -> None:
+        """Test that cwd is passed to all subprocess calls."""
+        def side_effect(cmd: list[str], **kwargs: object) -> Mock:
+            if "diff" in cmd and "--name-status" in cmd:
+                return Mock(returncode=0, stdout="M\tsrc/a.py\n")
+            if "diff" in cmd and "--stat" in cmd:
+                return Mock(returncode=0, stdout=" src/a.py | 1 +\n")
+            if "log" in cmd:
+                return Mock(returncode=0, stdout="abc fix\n")
+            return Mock(returncode=0, stdout="")
+
+        mock_run.side_effect = side_effect
+
+        build_handoff_context(cwd="/my/worktree")
+
+        for call in mock_run.call_args_list:
+            assert call.kwargs.get("cwd") == "/my/worktree"

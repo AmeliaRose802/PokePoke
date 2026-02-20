@@ -254,7 +254,7 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
             encoding='utf-8',
             timeout=30
         )
-    except subprocess.CalledProcessError as e:
+    except subprocess.CalledProcessError:
         # Try unsanitized branch name as fallback
         try:
             unsanitized_branch = f"task/{item_id}"

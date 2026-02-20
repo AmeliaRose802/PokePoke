@@ -1,31 +1,26 @@
 """Agent runner utilities for cleanup and maintenance agents."""
 
-import subprocess
 import json
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pokepoke.config import get_config
 from pokepoke.copilot import invoke_copilot
+from pokepoke.git_operations import get_default_branch
 from pokepoke.types import BeadsWorkItem, AgentStats
 from pokepoke.stats import parse_agent_stats
 from pokepoke.worktrees import create_worktree, cleanup_worktree
 from pokepoke.prompts import PromptService
 from pokepoke import terminal_ui
-from pokepoke.cleanup_agents import (
-    invoke_cleanup_agent, invoke_merge_conflict_cleanup_agent,
-    get_pokepoke_prompts_dir, run_cleanup_loop, aggregate_cleanup_stats
-)
+from pokepoke.cleanup_agents import invoke_cleanup_agent, invoke_merge_conflict_cleanup_agent, get_pokepoke_prompts_dir, run_cleanup_loop, aggregate_cleanup_stats
+from pokepoke.worktree_cleanup import has_unmerged_worktrees
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import ItemLogger
 
 # Re-export cleanup agent functions for backward compatibility
-__all__ = ['invoke_cleanup_agent', 'invoke_merge_conflict_cleanup_agent',
-           'aggregate_cleanup_stats', 'run_cleanup_loop', 'run_maintenance_agent',
-           'run_beta_tester', 'run_gate_agent', 'run_worktree_cleanup']
+__all__ = ['invoke_cleanup_agent', 'invoke_merge_conflict_cleanup_agent', 'aggregate_cleanup_stats', 'run_cleanup_loop', 'run_maintenance_agent', 'run_beta_tester', 'run_gate_agent', 'run_worktree_cleanup']
 
 
 def _generate_unique_agent_id(agent_type: str) -> str:
@@ -36,7 +31,8 @@ def _generate_unique_agent_id(agent_type: str) -> str:
 def run_gate_agent(
     item: BeadsWorkItem, 
     cwd: str | None = None, 
-    work_model: str | None = None
+    work_model: str | None = None,
+    handoff_context: str | None = None,
 ) -> tuple[bool, str, AgentStats | None]:
     """Run the Gate Agent to verify a fixed work item.
     
@@ -45,6 +41,9 @@ def run_gate_agent(
         cwd: Optional working directory for the gate agent.
         work_model: Optional model that completed the work. If provided, ensures
                    gate agent uses a different model for objective verification.
+        handoff_context: Optional structured context from the work agent
+                        (changed files, diff stats, commit history) to inject
+                        into the gate prompt so it skips re-discovering the codebase.
     
     Returns:
         Tuple of (success, reason, stats).
@@ -63,14 +62,18 @@ def run_gate_agent(
         final_prompt = service.load_and_render("gate-agent", {
             "item_id": item.id,
             "title": item.title,
-            "description": item.description or ""
+            "description": item.description or "",
+            "handoff_context": handoff_context or "",
+            "default_branch": get_default_branch(),
         })
     except Exception as e:
         return False, f"Failed to render prompt: {e}", None
 
     # Gate Agent runs in the specified directory (worktree)
     # deny_write=True ensures it only reads/runs tests but doesn't modify code
-    result = invoke_copilot(item, prompt=final_prompt, deny_write=True, cwd=cwd, model=gate_model)
+    from pokepoke.metrics_context import agent_type_context
+    with agent_type_context("gate"):
+        result = invoke_copilot(item, prompt=final_prompt, deny_write=True, cwd=cwd, model=gate_model)
     
     stats = parse_agent_stats(result.output) if result.output else None
     
@@ -166,7 +169,10 @@ def _run_simple_agent(
 ) -> AgentStats | None:
     """Run a simple agent in the main repo with configurable write access."""
     print(f"\n📋 Running {agent_name} ({'no write' if deny_write else 'write enabled'}){f', model={model}' if model else ''}")
-    result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=deny_write, model=model, cwd=cwd, item_logger=item_logger)
+    from pokepoke.metrics_context import agent_type_context
+    normalized = agent_name.lower().replace(" ", "_")
+    with agent_type_context(normalized):
+        result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=deny_write, model=model, cwd=cwd, item_logger=item_logger)
     if result.success:
         print(f"✅ {agent_name} completed")
         return parse_agent_stats(result.output) if result.output else None
@@ -186,7 +192,10 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
     """Run worktree cleanup agent to merge/delete stale worktrees."""
     terminal_ui.ui.set_current_agent("Worktree Cleanup")
     
-    # Register Worktree Cleanup agent in the Agents panel (if not already registered by maintenance)
+    if not has_unmerged_worktrees():
+        print("\n🌳 No unmerged worktrees detected — skipping Worktree Cleanup Agent")
+        return None
+    
     agent_id = "worktree-cleanup"
     terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="running")
     print(f"\n{'='*60}\n🌳 Running Worktree Cleanup Agent\n{'='*60}")
@@ -212,11 +221,9 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
             labels=["maintenance", "worktree-cleanup"]
         )
         
-        # Pass repo_root as cwd to the agent instead of changing process directory
         cwd = str(repo_root) if repo_root is not None else None
         agent_result = _run_main_repo_agent("Worktree Cleanup", cleanup_item, cleanup_prompt, cwd=cwd, item_logger=item_logger)
         
-        # Update agent status based on result
         status = "success" if agent_result is not None else "failed"
         terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status=status)
         return agent_result
@@ -244,13 +251,15 @@ def _run_worktree_agent(
     if model:
         print(f"   Model: {model}")
     
-    # Flag to track if worktree has been cleaned up
     worktree_cleaned = False
     
     try:
         # Main agent execution block
         try:
-            result = invoke_copilot(agent_item, prompt=agent_prompt, model=model, cwd=worktree_cwd, item_logger=item_logger)
+            from pokepoke.metrics_context import agent_type_context
+            normalized = agent_name.lower().replace(" ", "_")
+            with agent_type_context(normalized):
+                result = invoke_copilot(agent_item, prompt=agent_prompt, model=model, cwd=worktree_cwd, item_logger=item_logger)
         except Exception as e:
             print(f"❌ Error invoking Copilot: {e}")
             from pokepoke.types import CopilotResult
@@ -314,83 +323,5 @@ def _run_worktree_agent(
                 )
 
 
-def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | None' = None) -> AgentStats | None:
-    """Run beta tester agent to test all MCP tools. Restarts MCP server first."""
-    config = get_config()
-    terminal_ui.ui.set_current_agent("Beta Tester")
-    
-    # Register Beta Tester agent in the Agents panel (if not already registered by maintenance)
-    agent_id = "beta-tester"
-    terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="running")
-    
-    print(f"\n{'='*60}\n🧪 Running Beta Tester Agent\n{'='*60}")
-    
-    try:
-        # Restart MCP server to load latest code (if configured)
-        if config.mcp_server.enabled and config.mcp_server.restart_script:
-            print("\n🔄 Restarting MCP server...")
-            try:
-                package_root = Path(__file__).resolve().parent.parent.parent
-                restart_script = package_root / config.mcp_server.restart_script
-                
-                if not restart_script.exists():
-                    print(f"⚠️  Restart script not found at {restart_script}")
-                    print("   Proceeding without restart - server may have stale code")
-                else:
-                    result = subprocess.run(
-                        ["pwsh", "-NoProfile", "-File", str(restart_script)],
-                        capture_output=True, text=True, encoding='utf-8', timeout=60
-                    )
-                    if result.returncode == 0:
-                        print("✓ MCP server restarted successfully")
-                    else:
-                        print(f"⚠️  MCP server restart had issues (exit code {result.returncode})")
-                        if result.stdout:
-                            print(f"   Output: {result.stdout[:200]}")
-            except subprocess.TimeoutExpired:
-                print("⚠️  MCP server restart timed out (server may still be starting)")
-            except Exception as e:
-                print(f"⚠️  Could not restart MCP server: {e}")
-                print("   Proceeding anyway - server may have stale code")
-        elif not config.mcp_server.enabled:
-            print("ℹ️  MCP server not enabled in config - skipping restart")
-        
-        # Load beta tester prompt
-        try:
-            prompts_dir = get_pokepoke_prompts_dir()
-            prompt_path = prompts_dir / "beta-tester.md"
-        except FileNotFoundError as e:
-            print(f"❌ {e}")
-            terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed")
-            return None
-        
-        if not prompt_path.exists():
-            print(f"❌ Prompt not found at {prompt_path}")
-            terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed")
-            return None
-        
-        beta_prompt = prompt_path.read_text(encoding='utf-8')
-        
-        # Use unique ID with timestamp to avoid worktree conflicts on multiple runs
-        worktree_agent_id = _generate_unique_agent_id("beta-tester")
-        beta_item = BeadsWorkItem(
-            id=worktree_agent_id, title="Beta Test All MCP Tools", description=beta_prompt,
-            status="in_progress", priority=2, issue_type="task",
-            labels=["testing", "mcp-server", "automated"]
-        )
-        
-        print("\n🧪 Invoking beta tester agent in isolated worktree (will be discarded)...")
-        if repo_root is None:
-            repo_root = Path.cwd()
-        
-        agent_result = _run_worktree_agent("Beta Tester", worktree_agent_id, beta_item, beta_prompt, repo_root, merge_changes=False, item_logger=item_logger)
-        
-        # Update agent status based on result
-        status = "success" if agent_result is not None else "failed"
-        terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status=status)
-        
-        return agent_result
-        
-    except Exception:
-        terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed")
-        raise
+# Re-export beta tester for backward compatibility
+from pokepoke.beta_tester import run_beta_tester  # noqa: F401

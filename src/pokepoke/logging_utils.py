@@ -1,6 +1,5 @@
 """Logging utilities for PokePoke - File-based logging for runs and work items."""
 
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -318,7 +317,6 @@ class ItemLogger:
     def close(self) -> None:
         """Close the item logger."""
         # Nothing to do - we use context managers for writes
-        pass
 
     @staticmethod
     def _sanitize_agent_component(agent_name: str) -> str:

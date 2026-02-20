@@ -13,6 +13,12 @@ import {
 } from "../utils/logProcessor";
 import { RenderLogItems } from "./LogComponents";
 import { useBridge } from "../useBridge";
+import {
+  getAgentAvatar,
+  getAgentPrimaryLabel,
+  getAgentType,
+  isGateAgent,
+} from "../utils/agentHelpers";
 
 interface Props {
   agent: AgentInfo;
@@ -31,15 +37,6 @@ const ROBOT_AVATARS = [
   "🚀", "🎯", "⚡", "🔮", "🌀", "🏗️", "🧩", "🎲",
 ];
 
-function getAgentPrimaryLabel(agent: AgentInfo): string {
-  if (agent.work_item_id) {
-    return agent.work_item_title
-      ? `${agent.work_item_id}: ${agent.work_item_title}`
-      : agent.work_item_id;
-  }
-  return agent.name;
-}
-
 function getAvatar(agentId: string): string {
   let hash = 0;
   for (let i = 0; i < agentId.length; i++) {
@@ -54,15 +51,27 @@ function formatTimestamp(ts?: number | null): string {
 }
 
 export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
-  const { getAgentDetail } = useBridge();
+  const { getAgentDetail, agents } = useBridge();
   const [detailedAgent, setDetailedAgent] = useState<AgentInfo | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
-  
+  const isGate = isGateAgent(agent);
+  const linkedParent =
+    agent.parent_agent_id && isGate
+      ? agents.find((candidate) => candidate.agent_id === agent.parent_agent_id) ?? null
+      : null;
+  const parentLabel = linkedParent
+    ? getAgentPrimaryLabel(linkedParent)
+    : agent.parent_agent_id ?? null;
+
   const statusInfo = STATUS_INDICATOR[agent.status] ?? STATUS_INDICATOR.running;
   
   // Use detailed agent logs if available, otherwise fall back to basic agent info
   const agentToUse = detailedAgent || agent;
+  const agentType = getAgentType(agentToUse);
+  const agentIconPath = getAgentAvatar(agentToUse);
+  const fallbackAvatar = getAvatar(agentToUse.agent_id);
+  const iconAlt = `${agentType ?? "agent"} icon`;
   const logLines = agentToUse.log_lines && agentToUse.log_lines.length > 0
     ? agentToUse.log_lines
     : agentToUse.recent_logs;
@@ -124,7 +133,21 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
             ✕
           </button>
         )}
-        <span className="agent-log-panel-avatar">{getAvatar(agent.agent_id)}</span>
+        {agentIconPath ? (
+          <img
+            src={agentIconPath}
+            alt={iconAlt}
+            className="agent-log-panel-avatar agent-log-panel-icon"
+            onError={(e) => {
+              const parent = e.currentTarget.parentElement;
+              if (parent) {
+                parent.innerHTML = `<span class="agent-log-panel-avatar">${fallbackAvatar}</span>`;
+              }
+            }}
+          />
+        ) : (
+          <span className="agent-log-panel-avatar">{fallbackAvatar}</span>
+        )}
         <div className="agent-log-panel-info">
           <span className="agent-log-panel-name">{primaryLabel}</span>
           <span className="agent-log-panel-iter">v{agent.iteration}</span>
@@ -136,14 +159,38 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
           <span className={`agent-dot ${statusInfo.dot}`} title={statusInfo.label} />
           <span className={`agent-status-chip status-${agent.status}`}>{statusInfo.label}</span>
         </div>
+        {isGate && parentLabel ? (
+          <div className="agent-log-panel-link">
+            <span className="agent-card-link-label">Gate for</span>
+            <span className="agent-card-link-target" title={parentLabel}>
+              {parentLabel}
+            </span>
+          </div>
+        ) : null}
         <div className="agent-log-panel-meta">
           <span className="agent-meta-item">
             <strong>ID:</strong> {agent.agent_id}
           </span>
+          {agent.work_item_id ? (
+            <span className="agent-meta-item">
+              <strong>Work item:</strong> {agent.work_item_id}
+              {agent.work_item_title ? ` — ${agent.work_item_title}` : ""}
+            </span>
+          ) : null}
           <span className="agent-meta-item">
             <strong>Last log:</strong> {formatTimestamp(agent.last_log_at ?? agent.last_updated)}
           </span>
         </div>
+        {agent.modified_files && agent.modified_files.length > 0 ? (
+          <div className="agent-log-panel-files">
+            <strong>Modified files:</strong>
+            <ul className="agent-log-panel-file-list">
+              {agent.modified_files.map((file, i) => (
+                <li key={i}>{file}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <span className="log-count">
           {isLoadingDetail ? "Loading detailed logs..." : `${logLines.length} lines`}
           {detailError && " (Error loading details)"}

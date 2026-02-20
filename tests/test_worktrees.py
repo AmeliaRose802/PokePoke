@@ -1,15 +1,14 @@
 """Tests for git worktree management."""
 import json
 import subprocess
-from datetime import datetime
 from pathlib import Path
-from unittest.mock import Mock, patch, call
+from unittest.mock import Mock, patch
 
 import pytest
 
 # Import the module to ensure coverage tracking works
 import pokepoke.worktrees
-import pokepoke.git_operations
+import pokepoke.git_operations  # noqa: F401  # imported for coverage tracking
 
 from pokepoke.git_operations import (
     get_main_repo_root,
@@ -1157,6 +1156,33 @@ class TestWorktreeManifest:
             save_worktree_manifest(manifest)
             raw = json.loads(manifest_path.read_text(encoding="utf-8"))
             assert raw["task-2"]["reason"] == "cleanup"
+
+    def test_save_manifest_logs_oserror(self, tmp_path: Path, caplog) -> None:
+        """save_worktree_manifest should log OSError instead of silently failing."""
+        import logging
+        manifest_path = tmp_path / "nonexistent_dir" / "uncleaned_worktrees.json"
+        manifest = {
+            "task-3": {
+                "path": "worktrees/task-3",
+                "reason": "test",
+                "timestamp": "2026-02-14T00:00:00",
+            }
+        }
+        
+        # Make parent.mkdir() raise OSError
+        with patch(
+            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+            return_value=manifest_path,
+        ), patch("pathlib.Path.mkdir", side_effect=OSError("Permission denied")), \
+           caplog.at_level(logging.WARNING):
+            save_worktree_manifest(manifest)
+            
+            # Verify warning was logged
+            assert "Failed to save worktree manifest" in caplog.text
+            assert "Permission denied" in caplog.text
+            assert "worktrees/task-3" in caplog.text
+            assert "may become orphaned" in caplog.text
+
 
 
 class TestCleanupAfterMergePermissionDenied:

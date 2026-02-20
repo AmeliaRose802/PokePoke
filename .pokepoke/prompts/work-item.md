@@ -26,3 +26,42 @@ Please implement this task according to the project guidelines and best practice
 
 Work independently and autonomously. Report completion when done.
 
+---
+
+## ⚡ Efficiency Rules (follow these to avoid wasting time)
+
+### Shell command `initial_wait` values
+Use these values — do NOT guess high "to be safe". Over-estimating wastes pure sleep time:
+
+| Command | `initial_wait` |
+|---|---|
+| `npm run build` (vite) | **3** |
+| `npm test` (vitest) | **5** |
+| `npm install` | **60** |
+| `pytest` (unit tests only) | **10** |
+| `git commit` (triggers pre-commit) | **45** |
+| Any other quick shell command | **3** |
+
+### Testing workflow — tight loop only
+Follow this exact sequence. Do NOT add extra verification steps:
+1. Make your code changes
+2. Run the **full** test suite **once**: `npm test` for TS changes, `pytest tests/` for Python changes
+3. Fix failures if any, then run again
+4. `git commit` — pre-commit runs build + lint + type-check automatically. **Do NOT run a manual final build check before committing** — it's redundant.
+
+**Before running `pytest`, check what changed:**
+```
+git diff --name-only HEAD
+```
+If **no `.py` files** appear in the output, **skip `pytest` entirely** — pre-commit will also skip Python coverage. Only run `pytest` if Python files are staged.
+
+**Never pass `--timeout` to vitest** — it is not a supported flag (`CACError: Unknown option --timeout`). Use `vitest run` or `npm test` directly.
+
+### Never run pre-commit manually
+`git commit` triggers `.githooks/pre-commit.ps1` automatically.
+**Never run `.githooks/pre-commit.ps1` (or `pre-commit.ps1`) manually** — it just doubles the work.
+
+### Always use the native `bd()` tool for beads operations
+**Never call `powershell('bd ...')`** for beads queries — it adds shell startup overhead and a 30s+ poll penalty.
+Use the native `bd()` tool: `bd({'command': 'show {{id}} --json'})`.
+

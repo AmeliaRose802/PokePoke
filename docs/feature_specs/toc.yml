@@ -1,6 +1,9 @@
 features:
   - category: "Desktop UI"
     items:
+      - name: "App icon and branding"
+        file: "app-icon-branding.md"
+        status: "Implemented"
       - name: "Agent tool call accordions"
         file: "agent-tool-call-accordions.md"
         status: "Implemented"

@@ -21,7 +21,7 @@ from pokepoke.maintenance_state import increment_items_completed
 from pokepoke.repo_check import check_and_commit_main_repo, check_beads_available
 from pokepoke.maintenance import run_periodic_maintenance
 from pokepoke.shutdown import is_shutting_down, request_shutdown, should_stop_after_current, cancel_stop_after_current
-from pokepoke.model_stats_store import record_completion, print_model_leaderboard
+from pokepoke.model_stats_store import record_completion
 from pokepoke.model_history import append_model_history_entry
 from pokepoke.config import load_config
 
@@ -40,6 +40,8 @@ def _finalize_session(
     elapsed = end_time - start_time
     print_stats(items_completed, total_requests, elapsed, session_stats)
     run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
+    from pokepoke.session_stats_registry import set_current_session_stats
+    set_current_session_stats(None)
     clear_terminal_banner()
 
 
@@ -78,12 +80,14 @@ def _record_item_result(
 
     items_completed = 0
     if success:
-        items_completed = session_stats.record_completion(selected_item)
-        total_persistent_count = increment_items_completed()
-        print(f"\n📈 Items completed this session: {items_completed}")
-        print(f"📈 Total items completed (lifetime): {total_persistent_count}")
-        run_logger.log_orchestrator(f"Items completed this session: {items_completed}")
+        items_completed = session_stats.record_completion(selected_item, agent_type="work")
+        from pokepoke.beads_item_stats_store import record_item_completed
+        beads_summary = record_item_completed(selected_item.id, agent_type="work")
+        session_stats.set_lifetime_beads_item_totals(created=int(beads_summary.get("total_created", 0)), completed=int(beads_summary.get("total_completed", 0)))
 
+        total_persistent_count = increment_items_completed()
+        print(f"\n📈 Items completed this session: {items_completed}\n📈 Total items completed (lifetime): {total_persistent_count}\n📈 Beads created (lifetime): {session_stats.lifetime_items_created}\n📈 Beads net delta (lifetime): {session_stats.lifetime_items_created - session_stats.lifetime_items_completed:+d}")
+        run_logger.log_orchestrator(f"Items completed this session: {items_completed}")
         run_periodic_maintenance(total_persistent_count, session_stats, run_logger)
 
     return success, session_stats.items_completed
@@ -94,18 +98,7 @@ def run_orchestrator(
     run_beta_first: bool = False, agent_name_override: str | None = None,
     max_parallel_agents: int = 1,
 ) -> int:
-    """Main orchestrator loop.
-
-    Args:
-        interactive: If True, prompt for user input at decision points
-        continuous: If True, loop continuously; if False, process one item and exit
-        run_beta_first: If True, run beta tester at startup
-        agent_name_override: Optional custom agent name supplied via CLI
-        max_parallel_agents: Max concurrent work-item agents (default 1 = sequential)
-
-    Returns:
-        Exit code (0 for success, 1 for failure)
-    """
+    """Main orchestrator loop (interactive or autonomous)."""
     # UI is started by run_with_orchestrator - just update header
     terminal_ui.ui.update_header("PokePoke", f"Initializing {interactive and 'Interactive' or 'Autonomous'} Mode...")
 
@@ -136,6 +129,13 @@ def run_orchestrator(
         items_completed = 0
         total_requests = 0
         session_stats = SessionStats(agent_stats=AgentStats())
+        from pokepoke.session_stats_registry import set_current_session_stats
+        set_current_session_stats(session_stats)
+
+        from pokepoke.beads_item_stats_store import get_summary as _get_beads_summary
+        s = _get_beads_summary()
+        session_stats.set_lifetime_beads_item_totals(created=int(s.get("total_created", 0)), completed=int(s.get("total_completed", 0)))
+
         print("📊 Recording starting beads statistics...")
         run_logger.log_orchestrator("Recording starting beads statistics")
         session_stats.set_starting_beads_stats(get_beads_stats())

@@ -11,8 +11,10 @@ import {
   formatPercent,
   formatTokens,
   inferCurrentModel,
+  getAddedCount,
   getCompletedItems,
   getDoneCount,
+  getNetDelta,
 } from "../utils/stats";
 
 interface StatsPageProps {
@@ -44,20 +46,23 @@ export function StatsPage({
 }: StatsPageProps) {
   const agent = stats?.agent_stats;
   const [completedItems, doneCount] = [getCompletedItems(stats), getDoneCount(stats)];
+  const addedCount = getAddedCount(stats);
+  const netDelta = getNetDelta(stats);
+  const lifetimeAdded = stats?.lifetime_items_created ?? 0;
+  const lifetimeDone = stats?.lifetime_items_completed ?? 0;
+  const lifetimeNet = lifetimeAdded - lifetimeDone;
+
   const sessionCards = [
+    { label: "Added", value: addedCount, icon: "➕" },
     { label: "Done", value: doneCount, icon: "✅" },
+    { label: "Net", value: netDelta >= 0 ? `+${netDelta}` : netDelta, icon: "📈" },
     { label: "Retries", value: agent?.retries ?? 0, icon: "🔁" },
     { label: "API Calls", value: agent?.premium_requests ?? 0, icon: "📡" },
     { label: "API seconds", value: (agent?.api_duration ?? 0) > 0 ? formatDurationShort(agent?.api_duration) : "—", icon: "⚡" },
-    {
-      label: "Tokens",
-      value: formatTokens((agent?.input_tokens ?? 0) + (agent?.output_tokens ?? 0)),
-      icon: "🧮",
-    },
+    { label: "Tokens", value: formatTokens((agent?.input_tokens ?? 0) + (agent?.output_tokens ?? 0)), icon: "🧮" },
     { label: "Tool Calls", value: agent?.tool_calls ?? 0, icon: "🛠️" },
     { label: "Uptime", value: formatElapsed(stats?.elapsed_time ?? 0), icon: "⏱️" },
   ];
-
   const agentActivity = buildAgentActivity(stats);
   const normalizedSegments = normalizeAgentSegments(agentActivity);
   const currentModel = inferCurrentModel(stats, modelLeaderboard, activeAgentModel);
@@ -144,6 +149,33 @@ export function StatsPage({
                   </div>
                 </div>
               ))}
+            </div>
+          </section>
+
+          <section>
+            <h3>Lifetime beads throughput</h3>
+            <div className="stats-card-grid">
+              <div className="stats-card">
+                <span className="stats-card-icon">➕</span>
+                <div className="stats-card-body">
+                  <span className="stats-card-label">Added</span>
+                  <span className="stats-card-value">{lifetimeAdded}</span>
+                </div>
+              </div>
+              <div className="stats-card">
+                <span className="stats-card-icon">✅</span>
+                <div className="stats-card-body">
+                  <span className="stats-card-label">Done</span>
+                  <span className="stats-card-value">{lifetimeDone}</span>
+                </div>
+              </div>
+              <div className="stats-card">
+                <span className="stats-card-icon">📈</span>
+                <div className="stats-card-body">
+                  <span className="stats-card-label">Net</span>
+                  <span className="stats-card-value">{lifetimeNet >= 0 ? `+${lifetimeNet}` : lifetimeNet}</span>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -383,19 +415,7 @@ function aggregateHistory(history: ModelHistoryEntry[]) {
   }));
 }
 
-function TrendChart({
-  title,
-  data,
-  color,
-  valueFormatter,
-  emptyLabel,
-}: {
-  title: string;
-  data: TrendPoint[];
-  color: string;
-  valueFormatter?: (value: number) => string;
-  emptyLabel: string;
-}) {
+function TrendChart({ title, data, color, valueFormatter, emptyLabel }: { title: string; data: TrendPoint[]; color: string; valueFormatter?: (value: number) => string; emptyLabel: string; }) {
   if (!data.length) {
     return (
       <div className="stats-panel-card trend-card">
@@ -441,11 +461,7 @@ function TrendChart({
     </div>
   );
 }
-
-function SortableHead({ label, field, activeField, asc, onSort }: {
-  label: string; field: SortField; activeField: SortField; asc: boolean;
-  onSort: (field: SortField) => void;
-}) {
+function SortableHead({ label, field, activeField, asc, onSort }: { label: string; field: SortField; activeField: SortField; asc: boolean; onSort: (field: SortField) => void; }) {
   const isActive = activeField === field;
   return (
     <th>

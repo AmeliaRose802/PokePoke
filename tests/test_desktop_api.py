@@ -125,7 +125,12 @@ def test_push_state_updates() -> None:
     assert state["stats"]["elapsed_time"] == 12.5
     assert state["stats"]["agent_stats"]["input_tokens"] == 10
     assert state["stats"]["items_completed"] == 1
+    assert state["stats"]["items_created"] == 0
+    assert state["stats"]["net_items_delta"] == -1
+    assert state["stats"]["lifetime_items_created"] == 0
+    assert state["stats"]["lifetime_items_completed"] == 0
     assert state["stats"]["completed_items"][0]["id"] == "item-1"
+    assert state["stats"]["created_items"] == []
     assert state["progress"] == {"active": True, "status": "Working"}
 
 
@@ -242,6 +247,7 @@ def test_live_stats_update_in_realtime() -> None:
     assert state["stats"]["work_agent_runs"] == 0
     assert state["stats"]["gate_agent_runs"] == 0
     assert state["stats"]["items_completed"] == 0
+    assert state["stats"]["items_created"] == 0
 
     # Mutate the live object (as the orchestrator does)
     stats_obj.work_agent_runs += 1
@@ -254,6 +260,7 @@ def test_live_stats_update_in_realtime() -> None:
     assert state["stats"]["work_agent_runs"] == 1
     assert state["stats"]["gate_agent_runs"] == 2
     assert state["stats"]["items_completed"] == 1
+    assert state["stats"]["items_created"] == 0
     assert state["stats"]["agent_stats"]["input_tokens"] == 500
 
 
@@ -583,6 +590,7 @@ def test_push_agent_status_registers_agent(monkeypatch) -> None:
     assert agents[0]["model"] == "gpt-5.1"
     assert agents[0]["work_item_id"] is None
     assert agents[0]["work_item_title"] is None
+    assert agents[0]["modified_files"] == []
     assert agents[0]["recent_logs"] == []
 
 
@@ -703,6 +711,40 @@ def test_get_state_includes_agents(monkeypatch) -> None:
     assert state["agents"][0]["work_item_id"] is None
 
 
+def test_push_agent_status_with_modified_files() -> None:
+    """push_agent_status should store and return modified_files."""
+    api = DesktopAPI()
+    files = ["src/main.py", "tests/test_main.py"]
+    api.push_agent_status(
+        "cleanup-1", "Cleanup Agent", iteration=1, status="running",
+        work_item_id="item-42", work_item_title="Fix bug",
+        modified_files=files,
+    )
+
+    agents = api.get_agents()
+    assert len(agents) == 1
+    assert agents[0]["work_item_id"] == "item-42"
+    assert agents[0]["work_item_title"] == "Fix bug"
+    assert agents[0]["modified_files"] == files
+
+    # modified_files should be preserved across status updates
+    api.push_agent_status("cleanup-1", "Cleanup Agent", iteration=1, status="success")
+    agents = api.get_agents()
+    assert agents[0]["modified_files"] == files
+
+
+def test_get_agent_detail_includes_modified_files() -> None:
+    """get_agent_detail should include modified_files."""
+    api = DesktopAPI()
+    api.push_agent_status(
+        "cleanup-1", "Cleanup Agent", iteration=1, status="running",
+        modified_files=["file.py"],
+    )
+    detail = api.get_agent_detail("cleanup-1")
+    assert detail is not None
+    assert detail["modified_files"] == ["file.py"]
+
+
 def test_get_agent_detail_includes_full_logs_and_timestamps() -> None:
     """get_agent_detail should return deep copies with trimmed logs and metadata."""
     api = DesktopAPI()
@@ -757,3 +799,100 @@ def test_cancel_stop_after_current_clears_flag() -> None:
     state = api.get_state()
     assert state["stop_after_current"] is False
     shutdown_reset()
+
+
+# ─── Agent pause/resume tests ───────────────────────────────────────────
+
+
+def test_pause_agent_sets_paused_flag() -> None:
+    """pause_agent should mark agent as paused and reflect in serialization."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+
+    result = api.pause_agent("agent-1")
+    assert result["paused"] is True
+
+    agents = api.get_agents()
+    assert agents[0]["paused"] is True
+
+
+def test_resume_agent_clears_paused_flag() -> None:
+    """resume_agent should clear paused flag."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    api.pause_agent("agent-1")
+
+    result = api.resume_agent("agent-1")
+    assert result["resumed"] is True
+
+    agents = api.get_agents()
+    assert agents[0]["paused"] is False
+
+
+def test_pause_nonexistent_agent_returns_false() -> None:
+    """pause_agent should return paused=False for unknown agent."""
+    api = DesktopAPI()
+    result = api.pause_agent("nonexistent")
+    assert result["paused"] is False
+
+
+def test_resume_non_paused_agent_returns_false() -> None:
+    """resume_agent should return resumed=False when agent is not paused."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    result = api.resume_agent("agent-1")
+    assert result["resumed"] is False
+
+
+def test_is_agent_paused() -> None:
+    """is_agent_paused should reflect pause/resume state."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+
+    assert api.is_agent_paused("agent-1") is False
+    api.pause_agent("agent-1")
+    assert api.is_agent_paused("agent-1") is True
+    api.resume_agent("agent-1")
+    assert api.is_agent_paused("agent-1") is False
+
+
+def test_remove_agent_clears_paused_state() -> None:
+    """remove_agent should also remove paused state."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    api.pause_agent("agent-1")
+    api.remove_agent("agent-1")
+    assert api.is_agent_paused("agent-1") is False
+
+
+def test_get_agent_detail_includes_paused() -> None:
+    """get_agent_detail should include paused field."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    api.pause_agent("agent-1")
+
+    detail = api.get_agent_detail("agent-1")
+    assert detail is not None
+    assert detail["paused"] is True
+
+
+def test_pause_agent_logs_message() -> None:
+    """pause_agent should log a pause message."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    api.pause_agent("agent-1")
+
+    logs = api.get_all_logs()
+    assert any("paused" in log["message"].lower() for log in logs)
+
+
+def test_resume_agent_logs_message() -> None:
+    """resume_agent should log a resume message."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    api.pause_agent("agent-1")
+    api.get_all_logs()  # clear read index
+    api.resume_agent("agent-1")
+
+    logs = api.get_new_logs()
+    assert any("resumed" in log["message"].lower() for log in logs)

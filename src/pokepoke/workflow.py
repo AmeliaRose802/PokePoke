@@ -4,20 +4,24 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from filelock import Timeout
+
 from pokepoke.copilot import invoke_copilot
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, ModelCompletionRecord
 from pokepoke.worktrees import create_worktree, cleanup_worktree
 from pokepoke.git_operations import has_uncommitted_changes, has_commits_ahead
-from pokepoke.beads import assign_and_sync_item, add_comment
+from pokepoke.beads import assign_and_sync_item, unassign_item, add_comment
 from pokepoke.agent_runner import run_cleanup_loop, run_beta_tester, run_gate_agent
 from pokepoke.worktree_finalization import finalize_work_item
-from pokepoke.work_item_selection import select_work_item
+from pokepoke.work_item_selection import select_work_item  # noqa: F401  # re-exported
 from pokepoke.stats import parse_agent_stats
 from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner
 from pokepoke import terminal_ui
 from pokepoke.shutdown import is_shutting_down, register_agent, unregister_agent
 from pokepoke.model_selection import select_model_for_item
 from pokepoke.agent_context import get_agent_name
+from pokepoke.config import get_config
+from pokepoke.coordination import worktree_setup_lock
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import RunLogger
@@ -56,7 +60,10 @@ def process_work_item(
         gate_agent_runs = 0
         
         # Select model for this work item (A/B testing)
+        config = get_config()
         selected_model = select_model_for_item(item.id)
+        backend_provider = config.ai_backend.provider
+        worktree_lock_timeout = float(config.command_timeout)
 
         # Keep the Desktop UI agent card in sync with the selected model.
         terminal_ui.ui.push_agent_status(
@@ -72,6 +79,7 @@ def process_work_item(
         print(f"\n🚀 Processing work item: {item.id}")
         print(f"   {item.title}")
         print(f"   🤖 Model: {selected_model}")
+        print(f"   🧠 Backend: {backend_provider}")
         print(f"   ⏱️  Timeout: {timeout_hours} hours\n")
         
         # Start item logging
@@ -90,22 +98,34 @@ def process_work_item(
                 return False, 0, None, 0, 0, None
         
         # Assign and sync BEFORE creating worktree to prevent parallel conflicts
-        print(f"\n🔒 Claiming work item...")
-        if not assign_and_sync_item(item.id):
-            print(f"❌ Failed to assign work item {item.id}")
+        print("\n🔒 Claiming work item...")
+        try:
+            with worktree_setup_lock(timeout=worktree_lock_timeout):
+                if not assign_and_sync_item(item.id):
+                    print(f"❌ Failed to assign work item {item.id}")
+                    if run_logger:
+                        run_logger.end_item_log(False, 0)
+                    return False, 0, None, 0, 0, None
+                
+                worktree_path = _setup_worktree(item)
+                
+                if worktree_path is None:
+                    print(f"↩️  Returning {item.id} to queue (unassigning due to worktree failure)...")
+                    unassign_item(item.id)
+                    if run_logger:
+                        run_logger.end_item_log(False, 0)
+                    return False, 0, None, 0, 0, None
+        except Timeout:
+            wait_seconds = int(worktree_lock_timeout)
+            print(f"❌ Timed out waiting {wait_seconds}s for worktree setup lock (another agent is claiming an item).")
             if run_logger:
                 run_logger.end_item_log(False, 0)
             return False, 0, None, 0, 0, None
         
         # Use current working directory as repo root
         pokepoke_root = Path.cwd()
-        worktree_path = _setup_worktree(item)
         
-        if worktree_path is None:
-            if run_logger:
-                run_logger.end_item_log(False, 0)
-            return False, 0, None, 0, 0, None
-        
+        assert worktree_path is not None
         worktree_cwd = str(worktree_path)
         
         print(f"   Working directory: {worktree_cwd}\n")
@@ -146,7 +166,7 @@ def process_work_item(
 
             # Append feedback if retrying
             if last_feedback:
-                print(f"\n🔄 Restarting Work Agent with feedback...")
+                print("\n🔄 Restarting Work Agent with feedback...")
                 current_desc = item.description or ""
                 if "**PREVIOUS GATE AGENT FEEDBACK:**" not in current_desc:
                     current_desc += "\n\n**PREVIOUS GATE AGENT FEEDBACK:**\n"
@@ -154,7 +174,15 @@ def process_work_item(
                 item.description = current_desc
 
             terminal_ui.ui.set_current_agent("Work Agent")
-            result = invoke_copilot(item, timeout=remaining_timeout, item_logger=item_logger, model=selected_model, cwd=worktree_cwd)
+            from pokepoke.metrics_context import agent_type_context
+            with agent_type_context("work"):
+                result = invoke_copilot(
+                    item,
+                    timeout=remaining_timeout,
+                    item_logger=item_logger,
+                    model=selected_model,
+                    cwd=worktree_cwd,
+                )
             request_count += result.attempt_count
 
             # Aggregate stats
@@ -190,6 +218,10 @@ def process_work_item(
                 return False, request_count, accumulated_stats, cleanup_agent_runs, gate_agent_runs, None
 
             # --- GATE AGENT CHECK ---
+            # Build handoff context so gate agent skips re-discovering the codebase
+            from pokepoke.git_operations import build_handoff_context
+            handoff_ctx = build_handoff_context(cwd=worktree_cwd)
+
             gate_agent_id = f"{item.id}-gate"
             gate_iteration = gate_agent_runs + 1
             terminal_ui.ui.push_agent_status(
@@ -204,7 +236,8 @@ def process_work_item(
             try:
                 with terminal_ui.ui.agent_output_for(gate_agent_id):
                     gate_success, gate_reason, gate_stats = run_gate_agent(
-                        item, cwd=worktree_cwd, work_model=selected_model
+                        item, cwd=worktree_cwd, work_model=selected_model,
+                        handoff_context=handoff_ctx,
                     )
             except Exception:
                 gate_agent_runs += 1
@@ -276,7 +309,7 @@ def process_work_item(
         else:
             set_terminal_banner(format_work_item_banner(item.id, item.title, "Failed"))
             print(f"\n\u274c Failed to complete work item: {result.error}")
-            print(f"\n\U0001f9f9 Cleaning up worktree...")
+            print("\n\U0001f9f9 Cleaning up worktree...")
             cleanup_worktree(item.id, force=True)
 
             if run_logger:

@@ -1,7 +1,10 @@
 """Tests for handle_worktree_merge cleanup retry behavior."""
 
+from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from pokepoke.types import BeadsWorkItem
 from pokepoke.worktree_merge_handler import handle_worktree_merge
@@ -169,3 +172,10 @@ def test_handle_worktree_merge_conflict_cleanup_failure(
     mock_remove_manifest.assert_not_called()
     mock_invoke_conflict_cleanup.assert_called_once()
     mock_abort_merge.assert_called_once()
+@pytest.fixture(autouse=True)
+def _mock_cleanup_lock(monkeypatch):
+    """Ensure cleanup lock is a no-op for tests."""
+    monkeypatch.setattr(
+        "pokepoke.worktree_merge_handler.cleanup_lock",
+        lambda: nullcontext(),
+    )

@@ -21,7 +21,7 @@ __all__ = [
     'is_merge_in_progress', 'get_unmerged_files', 'abort_merge',
     'get_merge_conflict_details', 'has_uncommitted_changes',
     'execute_merge_sequence', 'check_main_repo_ready_for_merge',
-    'categorize_git_changes',
+    'categorize_git_changes', 'build_handoff_context',
 ]
 
 
@@ -42,9 +42,8 @@ def categorize_git_changes(lines: list[str]) -> dict[str, list[str]]:
 
 def has_uncommitted_changes(cwd: str | None = None) -> bool:
     """Check if there are uncommitted changes in the given directory.
-    
-    Returns True if changes exist OR if git status cannot be verified.
-    Returns False only if git successfully reports a clean working directory.
+
+    Returns True if changes exist or git status cannot be verified.
     Assumes dirty state on failure to prevent data loss during merge operations.
     """
     try:
@@ -187,7 +186,6 @@ def branch_exists(branch_name: str) -> bool:
     except subprocess.CalledProcessError:
         return False
 
-
 def get_default_branch(preferred: str | None = None, fallback: str | None = None) -> str:
     """Resolve the default branch name for the repo.
 
@@ -259,7 +257,6 @@ def get_default_branch(preferred: str | None = None, fallback: str | None = None
 
     return fallback
 
-
 def get_main_repo_root() -> Path:
     """Get the main repository root directory (not a worktree)."""
     try:
@@ -272,7 +269,6 @@ def get_main_repo_root() -> Path:
         return git_common_dir.parent
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Not in a git repository: {e}")
-
 
 def is_worktree_clean(worktree_path: Path) -> bool:
     """Check if a worktree has no uncommitted changes."""
@@ -289,7 +285,6 @@ def is_worktree_clean(worktree_path: Path) -> bool:
         return not bool(result.stdout.strip())
     except subprocess.CalledProcessError:
         return False
-
 
 def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, str, list[str]]:
     """Execute the checkout, pull, and merge sequence.
@@ -379,7 +374,6 @@ def validate_post_merge(target_branch: str) -> bool:
     
     return True
 
-
 def has_commits_ahead(target_branch: str | None = None, cwd: str | None = None) -> int:
     """Count commits in current branch ahead of the target branch."""
     if target_branch is None:
@@ -397,3 +391,6 @@ def has_commits_ahead(target_branch: str | None = None, cwd: str | None = None) 
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError):
         pass
     return 0
+
+# Re-export handoff context builder for backward compatibility
+from .handoff_context import build_handoff_context  # noqa: F401

@@ -9,10 +9,12 @@ models:
   default: claude-opus-4.6
   fallback: claude-sonnet-4.5
   candidate_models:
+    - claude-haiku-4.5
     - claude-opus-4.5
     - claude-opus-4.6
     - claude-sonnet-4
     - claude-sonnet-4.5
+    - claude-sonnet-4.6
     - gemini-3-pro
     - gpt-5-codex
     - gpt-5.1
@@ -22,10 +24,8 @@ models:
     - gpt-5.2-codex
 
 # Git branch configuration
-# If not set, auto-detects from git user.email (e.g., user@example.com -> user/dev)
 git:
-  # default_branch: ameliapayne/dev
-  fallback_branch: master
+  default_branch: master
 
 # MCP server integration (optional)
 # Set enabled: true and provide restart_script if your project uses MCP servers

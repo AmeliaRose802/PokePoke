@@ -5,8 +5,8 @@ This module provides SDK-based Copilot integration.
 
 from typing import TYPE_CHECKING
 
+from .ai_backends import get_backend
 from .types import BeadsWorkItem, CopilotResult, RetryConfig
-from .copilot_sdk import invoke_copilot_sdk_sync
 
 if TYPE_CHECKING:
     from .logging_utils import ItemLogger
@@ -20,7 +20,8 @@ def invoke_copilot(
     deny_write: bool = False,
     item_logger: 'ItemLogger | None' = None,
     model: str | None = None,
-    cwd: str | None = None
+    cwd: str | None = None,
+    provider: str | None = None,
 ) -> CopilotResult:
     """Invoke GitHub Copilot using SDK.
     
@@ -33,11 +34,13 @@ def invoke_copilot(
         item_logger: Optional item logger for file logging.
         model: Optional model name to use (e.g., 'gpt-5.1-codex', defaults to 'claude-opus-4.6').
         cwd: Optional working directory for the Copilot process (for thread-safe worktree isolation).
+        provider: Optional backend provider override (e.g., 'copilot', 'claude-code').
         
     Returns:
         Result of the Copilot invocation.
     """
-    return invoke_copilot_sdk_sync(
+    backend = get_backend(provider)
+    return backend.invoke(
         work_item=work_item,
         prompt=prompt,
         retry_config=retry_config,
@@ -45,6 +48,6 @@ def invoke_copilot(
         deny_write=deny_write,
         item_logger=item_logger,
         model=model,
-        cwd=cwd
+        cwd=cwd,
     )
 

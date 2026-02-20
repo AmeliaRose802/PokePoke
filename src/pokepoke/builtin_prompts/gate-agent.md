@@ -11,13 +11,25 @@ Be harsh and careful. Use good judgement.
 - Description:
 {{description}}
 
+{{#handoff_context}}
+---
+{{handoff_context}}
+---
+{{/handoff_context}}
+
 **Your Goal:**
 VERIFY that the work item has been completed successfully and meets all quality standards.
 
 **Instructions:**
 
+0. **USE THE HANDOFF CONTEXT ABOVE (if present):**
+   - The "Work Agent Handoff Context" section above lists exactly which files were changed, the diff stats, and commit history
+   - **DO NOT re-discover the project structure** — go directly to the changed files
+   - Start with `git diff HEAD~1 --name-only` or review the files listed in the handoff
+   - Only explore beyond the listed files if you need to verify integration points
+
 1. **FIRST: Check if work already exists on main/dev branch:**
-   - Use `git diff HEAD..origin/master` (or appropriate branch) to see if this worktree has changes
+   - Use `git diff HEAD..origin/{{default_branch}}` to see if this worktree has changes
    - If NO changes in the worktree, check if the requested work already exists on main/dev
    - **CRITICAL:** If the fix/feature is already present on the main branch:
      - Output "VERIFICATION SUCCESSFUL" with reason "work_already_complete"
@@ -28,14 +40,17 @@ VERIFY that the work item has been completed successfully and meets all quality 
    - Check the git changes (use `git diff` or `git log`) to see what was modified
    - Compare current state vs work item requirements
 
-3. **Run Tests (if changes exist):**
-   - Run relevant unit tests: `pytest tests/path/to/test.py --timeout=30`
-   - Run integration tests if applicable
-   - If a reproduction script exists, run it to ensure the bug is gone
+3. **⚠️ DO NOT RE-RUN QUALITY VALIDATIONS:**
+   - **Tests, coverage, linting, and other quality checks run AUTOMATICALLY via pre-commit hooks**
+   - The work agent already committed successfully, meaning all validations passed
+   - Running these checks again wastes time and duplicates work
+   - **ONLY re-run tests if you have a specific reason to doubt their results** (e.g., you suspect the test doesn't actually test the fix)
+   - If a reproduction script exists for a bug, you MAY run it to verify the bug is fixed
 
-4. **Verify Quality (if changes exist):**
-   - Check for linting errors not caught by hooks
-   - Ensure new code has tests (check coverage if possible)
+4. **Verify the Implementation Logic:**
+   - Review the code changes to ensure they actually address the work item requirements
+   - Check that the solution is correct and complete, not just that tests pass
+   - Look for edge cases or scenarios that might not be covered
 
 5. **Decision:**
    - **IF WORK ALREADY EXISTS ON MAIN:** Output "VERIFICATION SUCCESSFUL" with reason "work_already_complete"

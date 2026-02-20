@@ -5,6 +5,7 @@ from pathlib import Path
 from pokepoke.types import BeadsWorkItem, AgentStats
 from pokepoke.worktrees import merge_worktree
 from pokepoke.cleanup_agents import invoke_cleanup_agent, invoke_merge_conflict_cleanup_agent
+from pokepoke.repo_state_guard import cleanup_lock
 
 
 def handle_worktree_merge(
@@ -52,7 +53,8 @@ def handle_worktree_merge(
         )
         
         print("   Invoking cleanup agent to resolve uncommitted changes before merge...")
-        cleanup_success, _ = invoke_cleanup_agent(agent_item, repo_root)
+        with cleanup_lock():
+            cleanup_success, _ = invoke_cleanup_agent(agent_item, repo_root)
 
         if cleanup_success:
             print("   Cleanup successful, retrying merge check...")
@@ -93,12 +95,13 @@ def handle_worktree_merge(
         if not unmerged_files:
             unmerged_files = get_unmerged_files()
 
-        success, _ = invoke_merge_conflict_cleanup_agent(
-            agent_item,
-            repo_root,
-            f"Merge conflict detected in {len(unmerged_files)} file(s)",
-            unmerged_files=unmerged_files
-        )
+        with cleanup_lock():
+            success, _ = invoke_merge_conflict_cleanup_agent(
+                agent_item,
+                repo_root,
+                f"Merge conflict detected in {len(unmerged_files)} file(s)",
+                unmerged_files=unmerged_files
+            )
 
         if success:
             print("   Cleanup successful, retrying merge...")

@@ -663,34 +663,43 @@ class TestMergeWorktreeToDev:
         mock_cleanup.assert_called_once()
         mock_merge.assert_called_once()
 
+    @patch('pokepoke.git_operations.abort_merge')
+    @patch('pokepoke.git_operations.is_merge_in_progress')
+    @patch('pokepoke.git_operations.get_unmerged_files')
     @patch('pokepoke.cleanup_agents.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.worktree_finalization.merge_worktree')
     @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
-    def test_merge_fails_autofix_fails(self, mock_check: Mock, mock_merge: Mock, mock_cleanup: Mock) -> None:
+    def test_merge_fails_autofix_fails(self, mock_check: Mock, mock_merge: Mock, mock_cleanup: Mock, mock_get_unmerged: Mock, mock_is_merging: Mock, mock_abort: Mock) -> None:
         """Test when merge fails and cleanup fails."""
         item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
 
         mock_check.return_value = (True, "")
         mock_merge.return_value = (False, ["conflict.py"])  # Updated to return tuple
         mock_cleanup.return_value = (False, "Failed")
+        mock_is_merging.return_value = True
+        mock_get_unmerged.return_value = ["conflict.py"]
+        mock_abort.return_value = (True, "")
 
         result = merge_worktree_to_dev(item)
 
         assert result is False
         mock_cleanup.assert_called_once()
 
-    @patch('pokepoke.git_operations.abort_merge', return_value=(True, ""))
-    @patch('pokepoke.git_operations.is_merge_in_progress', side_effect=[True, True, False])
+    @patch('pokepoke.git_operations.abort_merge')
+    @patch('pokepoke.git_operations.is_merge_in_progress')
+    @patch('pokepoke.git_operations.get_unmerged_files')
     @patch('pokepoke.cleanup_agents.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.worktree_finalization.merge_worktree')
     @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
-    def test_merge_fails_autofix_succeeds(self, mock_check: Mock, mock_merge: Mock, mock_cleanup: Mock, mock_in_progress: Mock, mock_abort: Mock) -> None:
+    def test_merge_fails_autofix_succeeds(self, mock_check: Mock, mock_merge: Mock, mock_cleanup: Mock, mock_get_unmerged: Mock, mock_is_merging: Mock, mock_abort: Mock) -> None:
         """Test when merge fails, cleanup succeeds, retry works."""
         item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
 
         mock_check.return_value = (True, "")
         mock_merge.side_effect = [(False, ["conflict.py"]), (True, [])]  # Updated to return tuples
         mock_cleanup.return_value = (True, "Fixed")
+        mock_is_merging.side_effect = [True, False]
+        mock_get_unmerged.return_value = ["conflict.py"]
 
         result = merge_worktree_to_dev(item)
 
@@ -916,9 +925,9 @@ class TestProcessWorkItem:
         mock_time: Mock,
         mock_input: Mock,
         mock_assign: Mock,
-        mock_setup: Mock
+        mock_setup: Mock,
     ) -> None:
-        """Test when worktree setup fails."""
+        """Test when worktree setup fails, process returns failure."""
         item = BeadsWorkItem(
             id="task-1",
             title="Task 1",
@@ -987,6 +996,7 @@ class TestProcessWorkItem:
         mock_invoke.assert_not_called()
         mock_cleanup_worktree.assert_any_call(item.id, force=True)
     
+    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.run_gate_agent')  # Mock gate agent
     @patch('pokepoke.workflow.run_beta_tester')  # Mock beta tester
     @patch('pokepoke.workflow.finalize_work_item')
@@ -1014,7 +1024,8 @@ class TestProcessWorkItem:
         mock_chdir: Mock,
         mock_finalize: Mock,
         mock_beta: Mock,
-        mock_gate_agent: Mock
+        mock_gate_agent: Mock,
+        mock_handoff: Mock
     ) -> None:
         """Test when Copilot makes no changes (no uncommitted and no commits ahead)."""
         item = BeadsWorkItem(
@@ -1053,6 +1064,7 @@ class TestProcessWorkItem:
         # Cleanup is called even with no changes (it just exits early)
         mock_cleanup_timeout.assert_called_once()
     
+    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.run_gate_agent')  # Mock gate agent
     @patch('pokepoke.workflow.run_beta_tester')  # Mock beta tester
     @patch('pokepoke.workflow.finalize_work_item')
@@ -1080,7 +1092,8 @@ class TestProcessWorkItem:
         mock_chdir: Mock,
         mock_finalize: Mock,
         mock_beta: Mock,
-        mock_gate_agent: Mock
+        mock_gate_agent: Mock,
+        mock_handoff: Mock
     ) -> None:
         """Test when Copilot committed changes (clean tree but commits ahead)."""
         item = BeadsWorkItem(
@@ -1181,6 +1194,7 @@ class TestProcessWorkItem:
         assert count == 1
         mock_cleanup.assert_called_with("task-1", force=True)
     
+    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.add_comment')
     @patch('pokepoke.workflow.run_gate_agent')
     @patch('pokepoke.workflow.run_beta_tester')
@@ -1210,7 +1224,8 @@ class TestProcessWorkItem:
         mock_finalize: Mock,
         mock_beta: Mock,
         mock_gate_agent: Mock,
-        mock_add_comment: Mock
+        mock_add_comment: Mock,
+        mock_handoff: Mock
     ) -> None:
         """Test gate agent rejection triggers retry loop."""
         item = BeadsWorkItem(
@@ -1253,6 +1268,7 @@ class TestProcessWorkItem:
         mock_add_comment.assert_called_once()  # Comment added for gate rejection
         assert mock_gate_agent.call_count == 2
     
+    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.add_comment')
     @patch('pokepoke.workflow.run_gate_agent')
     @patch('pokepoke.workflow.run_beta_tester')
@@ -1282,7 +1298,8 @@ class TestProcessWorkItem:
         mock_finalize: Mock,
         mock_beta: Mock,
         mock_gate_agent: Mock,
-        mock_add_comment: Mock
+        mock_add_comment: Mock,
+        mock_handoff: Mock
     ) -> None:
         """Test gate agent stats are aggregated into totals."""
         item = BeadsWorkItem(
@@ -1410,6 +1427,7 @@ class TestProcessWorkItem:
         assert stats is not None  # Stats should be returned even on failure
         assert stats.wall_duration == 10.0
 
+    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.add_comment')
     @patch('pokepoke.workflow.run_gate_agent')
     @patch('pokepoke.workflow.select_model_for_item')
@@ -1435,7 +1453,8 @@ class TestProcessWorkItem:
         mock_cleanup_worktree: Mock,
         mock_select_model: Mock,
         mock_gate_agent: Mock,
-        mock_add_comment: Mock
+        mock_add_comment: Mock,
+        mock_handoff: Mock
     ) -> None:
         """Test that repeated timeouts are bounded by max_timeout_restarts."""
         item = BeadsWorkItem(
@@ -1477,6 +1496,7 @@ class TestProcessWorkItem:
         assert success is False
         mock_cleanup_worktree.assert_called_with(item.id, force=True)
 
+    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.run_gate_agent')
     @patch('pokepoke.workflow.run_beta_tester')
     @patch('pokepoke.workflow.finalize_work_item')
@@ -1500,7 +1520,8 @@ class TestProcessWorkItem:
         mock_cleanup_timeout: Mock,
         mock_finalize: Mock,
         mock_beta: Mock,
-        mock_gate_agent: Mock
+        mock_gate_agent: Mock,
+        mock_handoff: Mock
     ) -> None:
         """Test that a timeout restart followed by success works correctly."""
         item = BeadsWorkItem(
@@ -1550,6 +1571,102 @@ class TestProcessWorkItem:
         mock_invoke.assert_called_once()
 
 
+class TestProcessWorkItemCoordination:
+    """Tests for concurrent-agent coordination paths in process_work_item."""
 
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('time.time')
+    def test_assign_fails_race_condition(
+        self,
+        mock_time: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
+    ) -> None:
+        """When assign_and_sync_item returns False (another agent already claimed the item),
+        process_work_item must return (False, 0, ...) without creating a worktree."""
+        item = BeadsWorkItem(
+            id="task-race",
+            title="Race Task",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task",
+        )
+        mock_time.return_value = 0.0
+        mock_assign.return_value = False  # Simulate another agent grabbed the item first
+
+        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+            item, interactive=False
+        )
+
+        assert success is False
+        assert count == 0
+        assert stats is None
+        mock_setup.assert_not_called()
+
+    @patch('pokepoke.workflow.worktree_setup_lock')
+    @patch('time.time')
+    def test_worktree_lock_timeout(
+        self,
+        mock_time: Mock,
+        mock_lock: Mock,
+    ) -> None:
+        """When worktree_setup_lock times out (another agent holds the lock),
+        process_work_item must return (False, 0, ...) without crashing."""
+        from filelock import Timeout
+
+        item = BeadsWorkItem(
+            id="task-lock",
+            title="Lock Task",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task",
+        )
+        mock_time.return_value = 0.0
+        mock_lock.side_effect = Timeout("worktree-setup")
+
+        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+            item, interactive=False
+        )
+
+        assert success is False
+        assert count == 0
+        assert stats is None
+
+    @patch('pokepoke.workflow.unassign_item')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('time.time')
+    def test_worktree_failure_triggers_unassign(
+        self,
+        mock_time: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
+        mock_unassign: Mock,
+    ) -> None:
+        """When worktree creation fails after a successful claim,
+        process_work_item must unassign the item so other agents can pick it up."""
+        item = BeadsWorkItem(
+            id="task-wt-fail",
+            title="Worktree Fail Task",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task",
+        )
+        mock_time.return_value = 0.0
+        mock_assign.return_value = True
+        mock_setup.return_value = None  # Worktree creation failed
+        mock_unassign.return_value = True
+
+        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+            item, interactive=False
+        )
+
+        assert success is False
+        assert count == 0
+        mock_unassign.assert_called_once_with(item.id)
 
 

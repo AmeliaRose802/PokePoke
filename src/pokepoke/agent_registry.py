@@ -20,6 +20,7 @@ class AgentRegistry:
         self._agents: dict[str, dict[str, Any]] = {}
         self._preview_limit = preview_limit
         self._detail_limit = detail_limit
+        self._paused_agents: set[str] = set()
 
     def set_limits(self, preview_limit: int, detail_limit: int) -> None:
         with self._lock:
@@ -36,6 +37,8 @@ class AgentRegistry:
         parent_agent_id: str | None = None,
         work_item_id: str | None = None,
         work_item_title: str | None = None,
+        session_id: str | None = None,
+        modified_files: list[str] | None = None,
     ) -> None:
         now = time.time()
         with self._lock:
@@ -60,6 +63,16 @@ class AgentRegistry:
                 if work_item_title is not None
                 else (existing.get("work_item_title") if existing else None)
             )
+            current_session_id = (
+                session_id
+                if session_id is not None
+                else (existing.get("session_id") if existing else None)
+            )
+            current_modified_files = (
+                modified_files
+                if modified_files is not None
+                else (existing.get("modified_files") if existing else None)
+            )
             self._agents[agent_id] = {
                 "agent_id": agent_id,
                 "name": name,
@@ -69,6 +82,8 @@ class AgentRegistry:
                 "parent_agent_id": current_parent,
                 "work_item_id": current_work_item_id,
                 "work_item_title": current_work_item_title,
+                "session_id": current_session_id,
+                "modified_files": current_modified_files,
                 "recent_logs": recent_logs,
                 "log_lines": log_lines,
                 "started_at": existing.get("started_at", now) if existing else now,
@@ -99,13 +114,35 @@ class AgentRegistry:
                 }
             )
 
+    def pause(self, agent_id: str) -> bool:
+        """Mark an agent as paused. Returns True if the agent exists."""
+        with self._lock:
+            if agent_id not in self._agents:
+                return False
+            self._paused_agents.add(agent_id)
+            return True
+
+    def resume(self, agent_id: str) -> bool:
+        """Mark an agent as resumed. Returns True if the agent was paused."""
+        with self._lock:
+            if agent_id in self._paused_agents:
+                self._paused_agents.discard(agent_id)
+                return True
+            return False
+
+    def is_paused(self, agent_id: str) -> bool:
+        """Check if an agent is paused."""
+        with self._lock:
+            return agent_id in self._paused_agents
+
     def remove(self, agent_id: str) -> None:
         with self._lock:
             self._agents.pop(agent_id, None)
+            self._paused_agents.discard(agent_id)
 
     def serialize_all(self) -> list[dict[str, Any]]:
         with self._lock:
-            agents = [self._copy_agent(agent) for agent in self._agents.values()]
+            agents = [self._copy_agent(agent, agent.get("agent_id") in self._paused_agents) for agent in self._agents.values()]
         agents.sort(
             key=lambda agent: agent.get("last_updated")
             or agent.get("last_log_at")
@@ -120,10 +157,10 @@ class AgentRegistry:
             agent = self._agents.get(agent_id)
             if agent is None:
                 return None
-            return self._copy_agent(agent)
+            return self._copy_agent(agent, agent_id in self._paused_agents)
 
     @staticmethod
-    def _copy_agent(agent: dict[str, Any]) -> dict[str, Any]:
+    def _copy_agent(agent: dict[str, Any], paused: bool = False) -> dict[str, Any]:
         return {
             "agent_id": agent.get("agent_id"),
             "name": agent.get("name"),
@@ -133,11 +170,14 @@ class AgentRegistry:
             "parent_agent_id": agent.get("parent_agent_id"),
             "work_item_id": agent.get("work_item_id"),
             "work_item_title": agent.get("work_item_title"),
+            "session_id": agent.get("session_id"),
+            "modified_files": list(agent.get("modified_files") or []),
             "recent_logs": list(agent.get("recent_logs", [])),
             "log_lines": list(agent.get("log_lines", [])),
             "started_at": agent.get("started_at"),
             "last_updated": agent.get("last_updated"),
             "last_log_at": agent.get("last_log_at"),
+            "paused": paused,
         }
 
     def register_historical_agent(self, agent_state: dict[str, Any]) -> None:

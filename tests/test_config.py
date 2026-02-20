@@ -1,7 +1,6 @@
 """Tests for the project configuration system."""
 
 import json
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -16,7 +15,7 @@ from pokepoke.config import (
     reset_config,
     get_config,
     _detect_git_username,
-    _find_repo_root,
+    _find_repo_root,  # noqa: F401  # used via patch strings
     _load_config_file,
 )
 
@@ -132,6 +131,8 @@ class TestProjectConfig:
         config = ProjectConfig()
         assert config.project_name == ""
         assert config.models.default == "claude-opus-4.6"
+        assert config.ai_backend.provider == "copilot"
+        assert config.ai_backend.copilot_cli_path == "copilot.cmd"
         assert config.mcp_server.enabled is False
         assert config.test_data == {}
         assert config.work_artifacts_dir is None
@@ -147,6 +148,11 @@ class TestProjectConfig:
             "models": {
                 "default": "gpt-4o",
                 "fallback": "gpt-4o-mini",
+            },
+            "ai_backend": {
+                "provider": "claude-code",
+                "copilot_cli_path": "custom-copilot.cmd",
+                "claude_code_cli_path": "claude-cli"
             },
             "git": {
                 "default_branch": "develop",
@@ -181,6 +187,9 @@ class TestProjectConfig:
         assert config.project_name == "MyProject"
         assert config.models.default == "gpt-4o"
         assert config.models.fallback == "gpt-4o-mini"
+        assert config.ai_backend.provider == "claude-code"
+        assert config.ai_backend.copilot_cli_path == "custom-copilot.cmd"
+        assert config.ai_backend.claude_code_cli_path == "claude-cli"
         assert config.git.default_branch == "develop"
         assert config.git.fallback_branch == "main"
         assert config.mcp_server.enabled is True

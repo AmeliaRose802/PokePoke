@@ -14,6 +14,7 @@ from pokepoke.types import SessionStats
 from pokepoke.logging_utils import RunLogger
 from pokepoke.maintenance import _run_special_agent
 from pokepoke.agent_runner import run_maintenance_agent
+from pokepoke.repo_state_guard import wait_for_main_repo_clean
 from pokepoke.terminal_ui import set_terminal_banner
 from pokepoke import terminal_ui
 
@@ -87,6 +88,13 @@ class MaintenanceScheduler:
             if items_completed % agent_cfg.frequency != 0:
                 continue
 
+            # Check if agent is paused in the UI
+            log_key = agent_cfg.name.lower().replace(" ", "_")
+            agent_id = f"maintenance-{log_key}"
+            if terminal_ui.ui.is_agent_paused(agent_id) is True:
+                run_logger.log_maintenance(log_key, f"Skipping {agent_cfg.name} Agent - paused by user")
+                continue
+
             # Agent is due to run - try to schedule it
             self._maybe_run_agent(agent_cfg.name, agent_cfg, pokepoke_repo, session_stats, run_logger)
 
@@ -101,6 +109,19 @@ class MaintenanceScheduler:
             run_logger: Logger for maintenance events
         """
         log_key = agent_name.lower().replace(" ", "_")
+        log_fn = lambda msg: run_logger.log_maintenance(log_key, msg)
+
+        if not wait_for_main_repo_clean(
+            pokepoke_repo,
+            timeout=180.0,
+            poll_interval=2.0,
+            log_fn=log_fn,
+        ):
+            run_logger.log_maintenance(
+                log_key,
+                f"Skipping {agent_name} Agent - main repo still dirty after wait",
+            )
+            return
         
         if agent_name in _PARALLEL_SAFE_AGENTS:
             # Parallel-safe agents don't need singleton coordination

@@ -1,19 +1,28 @@
 """Tests for MaintenanceScheduler singleton coordination."""
 
 import threading
-import time
-from unittest.mock import Mock, patch, MagicMock
+from pathlib import Path
+from unittest.mock import Mock, patch
 import pytest
 
 from pokepoke.maintenance_scheduler import (
-    MaintenanceScheduler, 
-    get_maintenance_scheduler, 
+    MaintenanceScheduler,
+    get_maintenance_scheduler,
     run_periodic_maintenance,
     _SINGLETON_AGENTS,
-    _PARALLEL_SAFE_AGENTS
+    _PARALLEL_SAFE_AGENTS,
 )
 from pokepoke.types import AgentStats, SessionStats
 from pokepoke.config import MaintenanceConfig, MaintenanceAgentConfig, ProjectConfig
+
+
+@pytest.fixture(autouse=True)
+def _force_repo_clean(monkeypatch):
+    """Ensure repo state guard always reports clean unless overridden."""
+    monkeypatch.setattr(
+        "pokepoke.maintenance_scheduler.wait_for_main_repo_clean",
+        lambda *_, **__: True,
+    )
 
 
 def _make_default_config() -> ProjectConfig:
@@ -74,7 +83,7 @@ class TestMaintenanceScheduler:
         assert len(locks_created) == 5
         assert all(lock is locks_created[0] for lock in locks_created)
     
-    @patch('pokepoke.maintenance_scheduler.get_config')
+    @patch("pokepoke.maintenance_scheduler.get_config")
     def test_maybe_run_maintenance_skips_zero_items(self, mock_config):
         """Test that no agents run when items_completed is 0."""
         mock_config.return_value = _make_default_config()
@@ -86,7 +95,7 @@ class TestMaintenanceScheduler:
             scheduler.maybe_run_maintenance(0, session_stats, run_logger)
             mock_run.assert_not_called()
     
-    @patch('pokepoke.maintenance_scheduler.get_config')
+    @patch("pokepoke.maintenance_scheduler.get_config")
     def test_maybe_run_maintenance_respects_frequency(self, mock_config):
         """Test that agents only run at their configured frequency."""
         mock_config.return_value = _make_default_config()
@@ -103,7 +112,7 @@ class TestMaintenanceScheduler:
             scheduler.maybe_run_maintenance(2, session_stats, run_logger)  # Due
             assert any("Janitor" in str(call) for call in mock_run.call_args_list)
     
-    @patch('pokepoke.maintenance_scheduler.get_config')
+    @patch("pokepoke.maintenance_scheduler.get_config")
     def test_maybe_run_maintenance_skips_disabled_agents(self, mock_config):
         """Test that disabled agents are skipped."""
         config = ProjectConfig()
@@ -121,6 +130,30 @@ class TestMaintenanceScheduler:
         with patch.object(scheduler, '_maybe_run_agent') as mock_run:
             scheduler.maybe_run_maintenance(2, session_stats, run_logger)
             mock_run.assert_not_called()
+
+    @patch("pokepoke.maintenance_scheduler.terminal_ui")
+    @patch("pokepoke.maintenance_scheduler.get_config")
+    def test_maybe_run_maintenance_skips_paused_agents(self, mock_config, mock_terminal_ui):
+        """Test that paused agents are skipped during scheduling."""
+        config = ProjectConfig()
+        config.maintenance = MaintenanceConfig(agents=[
+            MaintenanceAgentConfig(
+                name="Janitor", prompt_file="janitor.md",
+                frequency=2, enabled=True,
+            ),
+        ])
+        mock_config.return_value = config
+        mock_terminal_ui.ui.is_agent_paused.return_value = True
+        scheduler = MaintenanceScheduler()
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        with patch.object(scheduler, '_maybe_run_agent') as mock_run:
+            scheduler.maybe_run_maintenance(2, session_stats, run_logger)
+            mock_run.assert_not_called()
+            run_logger.log_maintenance.assert_called_with(
+                "janitor", "Skipping Janitor Agent - paused by user"
+            )
 
 
 class TestSingletonCoordination:
@@ -459,3 +492,19 @@ class TestConcurrentExecution:
         # All should be skipped because lock was held
         assert len(results) == 0  # None should complete
         assert len(skipped_messages) == 3  # All should be skipped
+
+    @patch("pokepoke.maintenance_scheduler.wait_for_main_repo_clean")
+    def test_maybe_run_agent_defers_when_repo_stays_dirty(self, mock_wait):
+        """Agents should skip when repo never becomes clean."""
+        mock_wait.return_value = False
+        scheduler = MaintenanceScheduler()
+        agent_cfg = MaintenanceAgentConfig(name="Janitor", prompt_file="janitor.md", frequency=2)
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        scheduler._maybe_run_agent("Janitor", agent_cfg, Path.cwd(), session_stats, run_logger)
+
+        run_logger.log_maintenance.assert_called_with(
+            "janitor",
+            "Skipping Janitor Agent - main repo still dirty after wait",
+        )

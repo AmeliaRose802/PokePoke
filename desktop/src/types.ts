@@ -49,6 +49,13 @@ export interface CompletedItem {
   issue_type?: string;
 }
 
+/** Work item created during the current session (via bd create) */
+export interface CreatedItem {
+  id: string;
+  title?: string;
+  agent_type?: string;
+}
+
 /** Historical model completion record with timestamp (from persistent store) */
 export interface ModelHistoryEntry extends ModelCompletionRecord {
   timestamp: string;
@@ -58,8 +65,22 @@ export interface ModelHistoryEntry extends ModelCompletionRecord {
 export interface SessionStats {
   elapsed_time: number;
   agent_stats?: AgentStats;
+
+  // Beads throughput (session)
   items_completed?: number;
+  items_created?: number;
+  net_items_delta?: number;
+
+  // Beads throughput (lifetime)
+  lifetime_items_created?: number;
+  lifetime_items_completed?: number;
+
+  created_counts_by_agent_type?: Record<string, number>;
+  completed_counts_by_agent_type?: Record<string, number>;
+
   completed_items?: CompletedItem[];
+  created_items?: CreatedItem[];
+
   work_agent_runs?: number;
   gate_agent_runs?: number;
   tech_debt_agent_runs?: number;
@@ -111,11 +132,11 @@ export interface MaintenanceConfig {
   agents: MaintenanceAgent[];
 }
 
-/** MCP server configuration section */
+/** MCP server configuration */
 export interface McpServerConfig {
   enabled?: boolean;
-  name?: string;
   restart_script?: string;
+  name?: string;
 }
 
 /** Project configuration from .pokepoke/config.yaml */
@@ -133,6 +154,7 @@ export interface ProjectConfig {
 export interface ModelsConfig {
   default?: string;
   fallback?: string;
+  ab_testing_enabled?: boolean;
   candidate_models?: string[];
 }
 
@@ -165,11 +187,15 @@ export interface AgentInfo {
   status: "running" | "success" | "failed";
   model?: string | null;
   parent_agent_id?: string | null;
-   work_item_id?: string | null;
-   work_item_title?: string | null;
+  work_item_id?: string | null;
+  work_item_title?: string | null;
+  agent_type?: string | null;
+  modified_files?: string[];
   recent_logs: string[];
   log_lines?: string[];
   started_at?: number;
   last_updated?: number;
   last_log_at?: number | null;
+  paused?: boolean;
+  session_id?: string | null;
 }

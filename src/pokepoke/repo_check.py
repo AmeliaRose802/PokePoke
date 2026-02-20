@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pokepoke.git_operations import categorize_git_changes
+from pokepoke.repo_state_guard import cleanup_lock
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import RunLogger
@@ -113,7 +114,8 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
                 labels=["cleanup", "auto-generated"]
             )
             
-            cleanup_success, cleanup_stats = invoke_cleanup_agent(cleanup_item, repo_path)
+            with cleanup_lock():
+                cleanup_success, cleanup_stats = invoke_cleanup_agent(cleanup_item, repo_path)
             
             if cleanup_success:
                 print("✅ Cleanup agent successfully resolved uncommitted changes")

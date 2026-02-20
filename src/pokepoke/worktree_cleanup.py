@@ -1,6 +1,7 @@
 """Windows-safe directory removal utilities for worktree cleanup."""
 
 import json
+import logging
 import os
 import shutil
 import stat
@@ -9,6 +10,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import cast
+
+logger = logging.getLogger(__name__)
 
 # Retry settings for worktree removal on Windows
 _CLEANUP_MAX_RETRIES = 3
@@ -85,8 +88,15 @@ def save_worktree_manifest(manifest: dict[str, dict[str, str]]) -> None:
         manifest_path.parent.mkdir(exist_ok=True)
         with open(manifest_path, 'w', encoding='utf-8') as f:
             json.dump(manifest, f, indent=2, ensure_ascii=False)
-    except OSError:
-        pass  # Silently fail to avoid disrupting main operations
+    except OSError as e:
+        logger.warning('Failed to save worktree manifest to %s: %s', manifest_path, e)
+        # Extract worktree paths from manifest for diagnostic context
+        worktree_paths = [entry.get('path', 'unknown') for entry in manifest.values()]
+        if worktree_paths:
+            logger.warning(
+                'Worktrees at the following paths may become orphaned (not tracked for cleanup): %s',
+                ', '.join(worktree_paths)
+            )
 
 
 def add_uncleaned_worktree(worktree_id: str, worktree_path: str, reason: str) -> None:
@@ -152,3 +162,17 @@ def cleanup_after_merge(worktree_path: Path, branch_name: str) -> None:
         print(f"\u2705 Deleted branch {branch_name}")
     except subprocess.CalledProcessError as e:
         print(f"\u26a0\ufe0f  Could not delete branch: {e.stderr or e}")
+
+
+def has_unmerged_worktrees() -> bool:
+    """Check if there are any task worktrees or uncleaned manifest entries."""
+    from pokepoke.worktrees import list_worktrees
+    worktrees = list_worktrees()
+    task_worktrees = [
+        wt for wt in worktrees
+        if "worktrees" in wt.get("path", "") and "task-" in wt.get("path", "")
+    ]
+    if task_worktrees:
+        return True
+    manifest = load_worktree_manifest()
+    return len(manifest) > 0

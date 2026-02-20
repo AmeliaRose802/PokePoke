@@ -201,7 +201,15 @@ npm test | Select-Object -First 1                # WILL HANG on slow output
 
 ## 🧪 TESTING
 
-**Note:** Pre-commit hooks automatically run tests on every commit.
+### 🚨 DO NOT RUN THE FULL TEST SUITE MANUALLY
+
+**Pre-commit hooks automatically run ALL tests, coverage checks, linting, and build verification on every `git commit`.** Running `pytest tests/` or the full test suite yourself before committing is **duplicate work that wastes time and money**. The pre-commit hook will catch any failures.
+
+**When to run tests manually:**
+- ✅ Run a **single specific test file** to debug a failure: `pytest tests/test_foo.py -x`
+- ✅ Run a **single test function** during development: `pytest tests/test_foo.py::test_bar -x`
+- ❌ **NEVER** run `pytest tests/` (full suite) — the commit hook does this
+- ❌ **NEVER** run `pytest --cov` manually — the commit hook does this
 
 ### Test Strategy
 

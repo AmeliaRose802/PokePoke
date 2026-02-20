@@ -62,6 +62,15 @@ function App() {
 
   const { getModelHistory } = bridge;
 
+  const fallbackAgentLogCount = bridge.agentLogs.length;
+  const shouldShowFallbackAgentPanel =
+    !selectedAgentDetail && !autoFollowAgent && fallbackAgentLogCount > 0;
+  const shouldExpandOrchestrator =
+    !selectedAgentDetail && !autoFollowAgent && !shouldShowFallbackAgentPanel;
+  const logContainerClassName = `log-container${
+    shouldExpandOrchestrator ? " log-container--single" : ""
+  }`;
+
   const loadModelHistory = useCallback(async () => {
     setHistoryLoading(true);
     setHistoryError(null);
@@ -140,7 +149,7 @@ function App() {
       {/* Main content area with logs and agents panel */}
       <div className="main-content">
         {/* Log panels or selected agent log panel */}
-        <div className="log-container">
+        <div className={logContainerClassName}>
           {selectedAgentDetail ? (
             <AgentLogPanel
               agent={selectedAgentDetail}
@@ -162,7 +171,7 @@ function App() {
                   onClose={() => {/* no-op: auto-follow has no manual close */}}
                   showClose={false}
                 />
-              ) : (
+              ) : shouldShowFallbackAgentPanel ? (
                 <LogPanel
                   title="Agent"
                   icon="🤖"
@@ -171,7 +180,7 @@ function App() {
                   focused={activePanel === "agent"}
                   onFocus={() => setActivePanel("agent")}
                 />
-              )}
+              ) : null}
             </>
           )}
         </div>
@@ -179,8 +188,11 @@ function App() {
         {/* Agents panel */}
         <AgentsPanel
           agents={bridge.agents}
+          currentSessionId={bridge.currentSessionId}
           selectedAgentId={displayedAgentId ?? autoFollowAgent?.agent_id ?? null}
           onSelectAgent={setSelectedAgentId}
+          onPauseAgent={bridge.pauseAgent}
+          onResumeAgent={bridge.resumeAgent}
         />
       </div>
 

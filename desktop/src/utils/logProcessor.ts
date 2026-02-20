@@ -45,7 +45,16 @@ export type RenderLogItem =
   | { type: "log"; entry: LogEntry }
   | { type: "tool"; tool: ToolItem }
   | { type: "tool-batch"; batch: ToolBatch }
-  | { type: "narration"; entries: LogEntry[]; startedAt: number };
+  | { type: "narration"; entries: LogEntry[]; startedAt: number }
+  | { type: "markdown-block"; entries: LogEntry[]; startedAt: number }
+  | {
+      type: "code-block";
+      entries: LogEntry[];
+      startedAt: number;
+      markdown: string;
+      codeLineCount: number;
+      language?: string;
+    };
 
 // ===================== Patterns =====================
 
@@ -53,6 +62,7 @@ const TOOL_CALL_PATTERN = /^\s*(?:🔧|\[Tool\])\s*(.*)$/;
 const TOOL_RESULT_PATTERN = /^\s*(✅|❌)\s*Result:\s*(.*)$/;
 const TOOL_RESULT_FALLBACK = /^\s*\[Result\]\s*(.*)$/i;
 const COPILOT_TOOL_BATCH_HEADER = /^\s*\[Copilot\]\s*Calling\s+(\d+)\s+tool\(s\)\.\.\.$/;
+const CODE_FENCE_REGEX = /```([^\n`]*)?\n([\s\S]*?)```/m;
 
 // ===================== Detection Functions =====================
 
@@ -359,7 +369,72 @@ export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
     i += 1;
   }
 
-  return items;
+  return mergeConsecutiveLogEntries(items);
+}
+
+/**
+ * Merge consecutive plain log entries into markdown blocks for rich rendering.
+ * Single isolated log entries are kept as-is.
+ */
+function mergeConsecutiveLogEntries(items: RenderLogItem[]): RenderLogItem[] {
+  const merged: RenderLogItem[] = [];
+  let i = 0;
+  while (i < items.length) {
+    if (items[i].type !== "log") {
+      merged.push(items[i]);
+      i += 1;
+      continue;
+    }
+    const block: LogEntry[] = [];
+    const startedAt = (items[i] as { type: "log"; entry: LogEntry }).entry.timestamp;
+    while (i < items.length && items[i].type === "log") {
+      block.push((items[i] as { type: "log"; entry: LogEntry }).entry);
+      i += 1;
+    }
+    if (block.length === 1 && !containsMarkdown(block[0].message)) {
+      merged.push({ type: "log", entry: block[0] });
+      continue;
+    }
+
+    const markdown = block.map((entry) => entry.message).join("\n");
+    const codeMetadata = extractCodeFenceMetadata(markdown);
+    if (codeMetadata) {
+      merged.push({
+        type: "code-block",
+        entries: block,
+        startedAt,
+        markdown,
+        codeLineCount: codeMetadata.lineCount,
+        language: codeMetadata.language,
+      });
+      continue;
+    }
+
+    merged.push({ type: "markdown-block", entries: block, startedAt });
+  }
+  return merged;
+}
+
+/** Check if a string contains markdown syntax worth rendering. */
+export function containsMarkdown(text: string): boolean {
+  return /(?:^#{1,6}\s|[*_]{1,2}\S|\[.+\]\(.+\)|`[^`]+`|^[-*+]\s|^\d+\.\s|^>\s|^```)/m.test(text);
+}
+
+interface CodeFenceMetadata {
+  language?: string;
+  lineCount: number;
+}
+
+function extractCodeFenceMetadata(markdown: string): CodeFenceMetadata | undefined {
+  const match = markdown.match(CODE_FENCE_REGEX);
+  if (!match) return undefined;
+  const language = match[1]?.trim() || undefined;
+  const codeBody = (match[2] ?? "").replace(/\s+$/, "");
+  const lines = codeBody.length === 0 ? 0 : codeBody.split(/\r?\n/).length;
+  return {
+    language,
+    lineCount: Math.max(lines, 1),
+  };
 }
 
 // ===================== String-to-LogEntry Conversion =====================

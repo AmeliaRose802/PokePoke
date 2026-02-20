@@ -4,16 +4,13 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from copilot import CopilotClient  # type: ignore
-from .config import get_config
+from .config import get_config, DEFAULT_MODEL, FALLBACK_MODEL
 from .types import BeadsWorkItem, CopilotResult, RetryConfig, AgentStats
 from .prompts import PromptService
 from . import terminal_ui
 from .shutdown import is_shutting_down
 from .process_utils import wait_for_process_cleanup
 from .sdk_event_handler import create_event_handler
-
-DEFAULT_MODEL = "claude-opus-4.6"
-FALLBACK_MODEL = "claude-sonnet-4.5"
 
 if TYPE_CHECKING:
     from .logging_utils import ItemLogger
@@ -110,14 +107,18 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     cwd: str | None = None
 ) -> CopilotResult:
     """Invoke GitHub Copilot using the SDK. Falls back to Sonnet on rate limit."""
-    config = retry_config or RetryConfig()
     final_prompt = prompt or build_prompt_from_work_item(work_item)
     max_timeout = timeout or 7200.0
     current_model = model or DEFAULT_MODEL
     watchdog_task: asyncio.Task[bool] | None = None  # Initialize early for finally block
     
     # Pass PYTHONIOENCODING via subprocess env (thread-safe, no global os.environ mutation)
-    client_opts: dict[str, Any] = {"cli_path": "copilot.cmd", "log_level": "info", "env": {**os.environ, "PYTHONIOENCODING": "utf-8:replace"}}
+    proj_config = get_config()
+    client_opts: dict[str, Any] = {
+        "cli_path": proj_config.ai_backend.copilot_cli_path,
+        "log_level": "info",
+        "env": {**os.environ, "PYTHONIOENCODING": "utf-8:replace"},
+    }
     if cwd:
         client_opts["cwd"] = cwd
     client = CopilotClient(client_opts)  # type: ignore[arg-type]
@@ -151,8 +152,6 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         
         # Setup activity watchdog
         watchdog_abort = asyncio.Event()
-        proj_config = get_config()
-        
         if item_logger and proj_config.activity_watchdog.enabled:
             log_path = Path(item_logger.log_path)
             watchdog_task = asyncio.create_task(

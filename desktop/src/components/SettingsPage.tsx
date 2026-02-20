@@ -6,8 +6,16 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { ConfigResponse, ProjectConfig, ModelsConfig, McpServerConfig, MaintenanceAgent } from "../types";
-import { McpServerSection } from "./McpServerSection";
+import type { ConfigResponse, ProjectConfig, ModelsConfig, MaintenanceAgent, McpServerConfig } from "../types";
+import { MaintenanceAgentsSection } from "./MaintenanceAgentsSection";
+
+const isAbTestingEnabled = (models?: ModelsConfig): boolean => {
+  if (!models) return false;
+  if (typeof models.ab_testing_enabled === "boolean") {
+    return models.ab_testing_enabled;
+  }
+  return (models.candidate_models?.length ?? 0) > 0;
+};
 
 /** Well-known model names for dropdown suggestions */
 const KNOWN_MODELS = [
@@ -38,7 +46,10 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
   const [candidateModels, setCandidateModels] = useState<string[]>([]);
   const [chipInput, setChipInput] = useState("");
   const [maintenanceAgents, setMaintenanceAgents] = useState<MaintenanceAgent[]>([]);
-  const [mcpConfig, setMcpConfig] = useState<McpServerConfig>({ enabled: false });
+  const [abTestingEnabled, setAbTestingEnabled] = useState(false);
+  const [mcpEnabled, setMcpEnabled] = useState(false);
+  const [mcpName, setMcpName] = useState("");
+  const [mcpRestartScript, setMcpRestartScript] = useState("");
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -53,20 +64,20 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
       if (!resp) return;
       setConfig(resp.config);
       const models = resp.config.models ?? {};
+      const abTesting = isAbTestingEnabled(models);
+      setAbTestingEnabled(abTesting);
       setDefaultModel(models.default ?? "");
       setFallbackModel(models.fallback ?? "");
       setCandidateModels(models.candidate_models ?? []);
+      const mcpServer = resp.config.mcp_server ?? {};
+      setMcpEnabled(mcpServer.enabled ?? false);
+      setMcpName(mcpServer.name ?? "");
+      setMcpRestartScript(mcpServer.restart_script ?? "");
       
       // Load maintenance agents
       const maintenance = resp.config.maintenance;
       if (maintenance && Array.isArray(maintenance.agents)) {
         setMaintenanceAgents(maintenance.agents);
-      }
-      
-      // Load MCP server config
-      const mcp = resp.config.mcp_server;
-      if (mcp) {
-        setMcpConfig(mcp);
       }
     });
     return () => {
@@ -79,6 +90,14 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
     setMessage("");
   }, []);
 
+  const handleAbToggle = useCallback(
+    (enabled: boolean) => {
+      setAbTestingEnabled(enabled);
+      markDirty();
+    },
+    [markDirty]
+  );
+
   const handleSave = useCallback(async () => {
     if (!config) return;
     setSaving(true);
@@ -86,20 +105,22 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
       ...config,
       models: {
         ...(config.models ?? {}),
+        ab_testing_enabled: abTestingEnabled,
         default: defaultModel || undefined,
         fallback: fallbackModel || undefined,
         candidate_models:
           candidateModels.length > 0 ? candidateModels : undefined,
       } as ModelsConfig,
+      mcp_server: {
+        ...(config.mcp_server ?? {}),
+        enabled: mcpEnabled,
+        name: mcpName || undefined,
+        restart_script: mcpRestartScript || undefined,
+      } as McpServerConfig,
       maintenance: {
         ...config.maintenance,
         agents: maintenanceAgents,
       },
-      mcp_server: {
-        enabled: mcpConfig.enabled ?? false,
-        name: mcpConfig.name || undefined,
-        restart_script: mcpConfig.restart_script || undefined,
-      } as McpServerConfig,
     };
     const ok = await saveConfig(updated);
     setSaving(false);
@@ -110,14 +131,21 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
     } else {
       setMessage("Save failed");
     }
-  }, [config, defaultModel, fallbackModel, candidateModels, maintenanceAgents, mcpConfig, saveConfig]);
+  }, [config, defaultModel, fallbackModel, candidateModels, maintenanceAgents, abTestingEnabled, mcpEnabled, mcpName, mcpRestartScript, saveConfig]);
 
   const handleReset = useCallback(() => {
     if (!config) return;
     const models = config.models ?? {};
+    const abTesting = isAbTestingEnabled(models);
+    setAbTestingEnabled(abTesting);
     setDefaultModel(models.default ?? "");
     setFallbackModel(models.fallback ?? "");
     setCandidateModels(models.candidate_models ?? []);
+    setChipInput("");
+    const mcpServer = config.mcp_server ?? {};
+    setMcpEnabled(mcpServer.enabled ?? false);
+    setMcpName(mcpServer.name ?? "");
+    setMcpRestartScript(mcpServer.restart_script ?? "");
     
     // Reset maintenance agents
     const maintenance = config.maintenance;
@@ -127,34 +155,34 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
       setMaintenanceAgents([]);
     }
     
-    // Reset MCP server config
-    setMcpConfig(config.mcp_server ?? { enabled: false });
-    
     setDirty(false);
     setMessage("Reset to saved values");
   }, [config]);
 
   const addChip = useCallback(
     (value: string) => {
+      if (!abTestingEnabled) return;
       const trimmed = value.trim();
       if (!trimmed || candidateModels.includes(trimmed)) return;
       setCandidateModels((prev) => [...prev, trimmed]);
       setChipInput("");
       markDirty();
     },
-    [candidateModels, markDirty]
+    [abTestingEnabled, candidateModels, markDirty]
   );
 
   const removeChip = useCallback(
     (model: string) => {
+      if (!abTestingEnabled) return;
       setCandidateModels((prev) => prev.filter((m) => m !== model));
       markDirty();
     },
-    [markDirty]
+    [abTestingEnabled, markDirty]
   );
 
   const handleChipKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (!abTestingEnabled) return;
       if (e.key === "Enter" || e.key === ",") {
         e.preventDefault();
         addChip(chipInput);
@@ -166,7 +194,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
         removeChip(candidateModels[candidateModels.length - 1]);
       }
     },
-    [chipInput, candidateModels, addChip, removeChip]
+    [abTestingEnabled, chipInput, candidateModels, addChip, removeChip]
   );
 
   // Maintenance agent handlers
@@ -212,6 +240,24 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
             <div className="settings-section">
               <h3 className="settings-section-title">🤖 Model Configuration</h3>
 
+              {/* A/B Testing toggle */}
+              <div className="settings-field">
+                <label className="settings-label" htmlFor="ab-testing-mode">
+                  Enable A/B testing mode
+                </label>
+                <div className="settings-checkbox-row">
+                  <input
+                    id="ab-testing-mode"
+                    type="checkbox"
+                    checked={abTestingEnabled}
+                    onChange={(e) => handleAbToggle(e.target.checked)}
+                  />
+                  <span className="settings-hint">
+                    Switch between single-model (Default/Fallback) and rotating candidate models.
+                  </span>
+                </div>
+              </div>
+
               {/* Default Model */}
               <div className="settings-field">
                 <label className="settings-label" htmlFor="default-model">
@@ -222,6 +268,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
                   className="settings-input"
                   list="default-model-suggestions"
                   value={defaultModel}
+                  disabled={abTestingEnabled}
                   onChange={(e) => {
                     setDefaultModel(e.target.value);
                     markDirty();
@@ -248,6 +295,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
                   className="settings-input"
                   list="fallback-model-suggestions"
                   value={fallbackModel}
+                  disabled={abTestingEnabled}
                   onChange={(e) => {
                     setFallbackModel(e.target.value);
                     markDirty();
@@ -269,34 +317,42 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
                 <label className="settings-label">
                   A/B Candidate Models
                 </label>
-                <div className="chip-container">
+                <div
+                  className={`chip-container ${
+                    !abTestingEnabled ? "chip-container-disabled" : ""
+                  }`}
+                  aria-disabled={!abTestingEnabled}
+                >
                   {candidateModels.map((m) => (
                     <span key={m} className="chip">
                       {m}
                       <button
                         className="chip-remove"
                         onClick={() => removeChip(m)}
+                        disabled={!abTestingEnabled}
                         aria-label={`Remove ${m}`}
                       >
                         ✕
                       </button>
                     </span>
                   ))}
-                  <input
-                    className="chip-input"
-                    value={chipInput}
-                    onChange={(e) => setChipInput(e.target.value)}
-                    onKeyDown={handleChipKeyDown}
-                    onBlur={() => {
-                      if (chipInput.trim()) addChip(chipInput);
-                    }}
-                    placeholder={
-                      candidateModels.length === 0
-                        ? "Type model name and press Enter"
-                        : "Add model…"
-                    }
-                    list="chip-suggestions"
-                  />
+                  {abTestingEnabled && (
+                    <input
+                      className="chip-input"
+                      value={chipInput}
+                      onChange={(e) => setChipInput(e.target.value)}
+                      onKeyDown={handleChipKeyDown}
+                      onBlur={() => {
+                        if (chipInput.trim()) addChip(chipInput);
+                      }}
+                      placeholder={
+                        candidateModels.length === 0
+                          ? "Type model name and press Enter"
+                          : "Add model…"
+                      }
+                      list="chip-suggestions"
+                    />
+                  )}
                   <datalist id="chip-suggestions">
                     {suggestions.map((m) => (
                       <option key={m} value={m} />
@@ -304,108 +360,82 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
                   </datalist>
                 </div>
                 <span className="settings-hint">
-                  Models to rotate through for A/B performance testing
+                  {abTestingEnabled
+                    ? "Models to rotate through for A/B performance testing"
+                    : "Enable A/B testing to configure candidate models"}
                 </span>
               </div>
             </div>
 
-            {/* Section: MCP Server Configuration */}
-            <McpServerSection
-              mcpConfig={mcpConfig}
-              onChange={(updates) => {
-                setMcpConfig((prev) => ({ ...prev, ...updates }));
-                markDirty();
-              }}
-            />
-
-            {/* Section: Maintenance Agents Configuration */}
+            {/* Section: MCP Server */}
             <div className="settings-section">
-              <h3 className="settings-section-title">🔧 Maintenance Agents</h3>
+              <h3 className="settings-section-title">🖧 MCP Server</h3>
 
-              {maintenanceAgents.length === 0 ? (
-                <div className="settings-no-agents">
-                  No maintenance agents configured
+              <div className="settings-field">
+                <label className="settings-label" htmlFor="mcp-enabled">
+                  Enable MCP server
+                </label>
+                <div className="settings-checkbox-row">
+                  <input
+                    id="mcp-enabled"
+                    type="checkbox"
+                    checked={mcpEnabled}
+                    onChange={(e) => {
+                      setMcpEnabled(e.target.checked);
+                      markDirty();
+                    }}
+                  />
+                  <span className="settings-hint">
+                    Controls MCP server integration and restart script usage.
+                  </span>
                 </div>
-              ) : (
-                <div className="agents-list">
-                  {maintenanceAgents.map((agent, index) => (
-                    <div key={agent.name} className="agent-config">
-                      <div className="agent-header">
-                        <span className="agent-name">{agent.name}</span>
-                        <label className="agent-toggle">
-                          <input
-                            type="checkbox"
-                            checked={agent.enabled}
-                            onChange={(e) =>
-                              updateMaintenanceAgent(index, { enabled: e.target.checked })
-                            }
-                          />
-                          <span className="toggle-slider"></span>
-                        </label>
-                      </div>
+              </div>
 
-                      <div className="agent-details">
-                        <div className="agent-field">
-                          <label className="settings-label">
-                            Run every N work items
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            max="100"
-                            className="settings-input number-input"
-                            value={agent.frequency}
-                            onChange={(e) =>
-                              updateMaintenanceAgent(index, {
-                                frequency: parseInt(e.target.value) || 1,
-                              })
-                            }
-                          />
-                        </div>
+              <div className="settings-field">
+                <label className="settings-label" htmlFor="mcp-name">
+                  MCP server name (optional)
+                </label>
+                <input
+                  id="mcp-name"
+                  className="settings-input"
+                  value={mcpName}
+                  onChange={(e) => {
+                    setMcpName(e.target.value);
+                    markDirty();
+                  }}
+                  placeholder="e.g. My MCP Server"
+                  disabled={!mcpEnabled}
+                />
+                <span className="settings-hint">
+                  Friendly display name for the MCP server.
+                </span>
+              </div>
 
-                        <div className="agent-field">
-                          <label className="settings-label">
-                            Model Override (optional)
-                          </label>
-                          <input
-                            className="settings-input"
-                            list="model-override-suggestions"
-                            value={agent.model || ""}
-                            onChange={(e) =>
-                              updateMaintenanceAgent(index, {
-                                model: e.target.value || undefined,
-                              })
-                            }
-                            placeholder="Use default model"
-                          />
-                          <datalist id="model-override-suggestions">
-                            {KNOWN_MODELS.map((m) => (
-                              <option key={m} value={m} />
-                            ))}
-                          </datalist>
-                        </div>
-
-                        <div className="agent-metadata">
-                          <span className="metadata-item">
-                            📄 {agent.prompt_file}
-                          </span>
-                          {agent.needs_worktree && (
-                            <span className="metadata-item">
-                              🌳 Needs worktree
-                            </span>
-                          )}
-                          {agent.merge_changes && (
-                            <span className="metadata-item">
-                              🔀 Merges changes
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div className="settings-field">
+                <label className="settings-label" htmlFor="mcp-restart-script">
+                  Restart script (optional)
+                </label>
+                <input
+                  id="mcp-restart-script"
+                  className="settings-input"
+                  value={mcpRestartScript}
+                  onChange={(e) => {
+                    setMcpRestartScript(e.target.value);
+                    markDirty();
+                  }}
+                  placeholder="scripts/Restart-MCPServer.ps1"
+                  disabled={!mcpEnabled}
+                />
+                <span className="settings-hint">
+                  Path to restart the MCP server after configuration changes.
+                </span>
+              </div>
             </div>
+
+            <MaintenanceAgentsSection
+              agents={maintenanceAgents}
+              onUpdate={updateMaintenanceAgent}
+            />
 
             {/* Footer actions */}
             <div className="settings-footer">

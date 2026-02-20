@@ -29,6 +29,7 @@ from .beads_management import (
     close_item,
     select_next_hierarchical_item,
     assign_and_sync_item,
+    unassign_item,
     add_comment
 )
 
@@ -52,5 +53,6 @@ __all__ = [
     'close_item',
     'select_next_hierarchical_item',
     'assign_and_sync_item',
+    'unassign_item',
     'add_comment',
 ]

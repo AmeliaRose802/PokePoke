@@ -1,5 +1,6 @@
 import type {
   CompletedItem,
+  CreatedItem,
   ModelPerformanceSummary,
   SessionStats,
 } from "../types";
@@ -161,4 +162,31 @@ export function formatAgentRuns(counts: AgentRunCounts): string {
   }
   
   return parts.length > 0 ? parts.join(" · ") : "—";
+}
+
+export function getCreatedItems(stats: SessionStats | null): CreatedItem[] {
+  const items = stats?.created_items ?? [];
+  const seen = new Set<string>();
+  const deduped: CreatedItem[] = [];
+
+  for (const item of items) {
+    const id = item.id?.trim();
+    if (!id) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    deduped.push({ ...item, id });
+  }
+
+  return deduped;
+}
+
+export function getAddedCount(stats: SessionStats | null): number {
+  const created = getCreatedItems(stats);
+  if (created.length > 0) return created.length;
+  return stats?.items_created ?? 0;
+}
+
+export function getNetDelta(stats: SessionStats | null): number {
+  if (typeof stats?.net_items_delta === "number") return stats.net_items_delta;
+  return getAddedCount(stats) - getDoneCount(stats);
 }

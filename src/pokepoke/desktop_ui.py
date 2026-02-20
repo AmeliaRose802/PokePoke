@@ -16,13 +16,13 @@ import builtins
 import os
 import sys
 import threading
-from pathlib import Path
 from typing import Any, TYPE_CHECKING
 from collections.abc import Iterator, Callable
 from contextlib import contextmanager
 
 from pokepoke.desktop_api import DesktopAPI
 from pokepoke.shutdown import is_shutting_down, request_shutdown
+from pokepoke.frontend_discovery import find_frontend_dist
 
 if TYPE_CHECKING:
     from pokepoke.types import SessionStats
@@ -53,38 +53,6 @@ def _shutdown_threading_excepthook(args: threading.ExceptHookArgs) -> None:
 _original_excepthook: Callable[..., Any] | None = None
 
 
-def _find_frontend_dist() -> Path | None:
-    """Locate the pre-built React frontend dist/ directory."""
-    import subprocess
-    
-    # Look relative to this file: src/pokepoke/desktop_ui.py → ../../desktop/dist
-    src_root = Path(__file__).resolve().parent.parent.parent
-    dist = src_root / "desktop" / "dist"
-    if dist.is_dir() and (dist / "index.html").exists():
-        return dist
-    
-    # If in a git worktree, the desktop build is in the main repo
-    # Try to find the main worktree via git
-    try:
-        result = subprocess.run(
-            ["git", "worktree", "list", "--porcelain"],
-            cwd=src_root,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        # First worktree in the list is the main repo
-        for line in result.stdout.splitlines():
-            if line.startswith("worktree "):
-                main_repo = Path(line.split(None, 1)[1])
-                dist = main_repo / "desktop" / "dist"
-                if dist.is_dir() and (dist / "index.html").exists():
-                    return dist
-                break
-    except Exception:
-        pass
-    
-    return None
 # Thread-local storage for per-thread output routing.
 _thread_output = threading.local()
 
@@ -139,7 +107,7 @@ class DesktopUI:
         )
 
         # Find the frontend
-        dist_dir = _find_frontend_dist()
+        dist_dir = find_frontend_dist()
         if dist_dir is None:
             builtins.print = self._original_print
             print("❌ Desktop frontend not built. Run:", file=sys.stderr)
@@ -175,21 +143,26 @@ class DesktopUI:
             orch_thread.start()
 
         # Create native window pointing at the built React app
-        window = webview.create_window(
-            title="PokePoke - Autonomous Workflow Manager",
-            url=str(dist_dir / "index.html"),
-            js_api=self._api,
-            width=1280,
-            height=800,
-            min_size=(900, 600),
-            text_select=True,
-        )
+        icon_path = dist_dir / "pokepoke.ico"
+        window_kwargs: dict[str, Any] = {
+            "title": "PokePoke - Autonomous Workflow Manager",
+            "url": str(dist_dir / "index.html"),
+            "js_api": self._api,
+            "width": 1280,
+            "height": 800,
+            "min_size": (900, 600),
+            "text_select": True,
+        }
+        window = webview.create_window(**window_kwargs)
 
         # Run pywebview on the main thread (blocks until window closes)
-        webview.start(
-            func=on_window_loaded,
-            debug=(os.environ.get("POKEPOKE_DEBUG", "").lower() in ("1", "true")),
-        )
+        start_kwargs: dict[str, Any] = {
+            "func": on_window_loaded,
+            "debug": os.environ.get("POKEPOKE_DEBUG", "").lower() in ("1", "true"),
+        }
+        if icon_path.exists():
+            start_kwargs["icon"] = str(icon_path)
+        webview.start(**start_kwargs)
 
         # Window closed — tell orchestrator to shut down
         request_shutdown()
@@ -315,15 +288,7 @@ class DesktopUI:
 
     @contextmanager
     def agent_output_for(self, agent_id: str) -> Iterator[None]:
-        """Route all print output on this thread to a specific agent's log buffer.
-
-        While this context is active, print() calls on the current thread
-        will be captured into the named agent's log ring in the
-        :class:`AgentRegistry` and will NOT appear in the shared
-        orchestrator/agent console log.  This is the key mechanism for
-        isolating parallel agent output (dtqz) and populating the Agents
-        panel with live log data (ukr0).
-        """
+        """Route print output on this thread to a specific agent's log buffer."""
         prev_agent_id = getattr(_thread_output, "agent_id", None)
         _thread_output.agent_id = agent_id
         try:
@@ -383,17 +348,26 @@ class DesktopUI:
         parent_agent_id: str | None = None,
         work_item_id: str | None = None,
         work_item_title: str | None = None,
+        modified_files: list[str] | None = None,
     ) -> None:
         """Register or update a running agent card."""
         self._api.push_agent_status(
-            agent_id, name, iteration, status, model, parent_agent_id, work_item_id, work_item_title
+            agent_id, name, iteration, status, model, parent_agent_id,
+            work_item_id, work_item_title, modified_files,
         )
 
     def push_agent_log(self, agent_id: str, line: str) -> None:
-        """Append a log line to an agent's recent log preview."""
         self._api.push_agent_log(agent_id, line)
 
     def remove_agent(self, agent_id: str) -> None:
-        """Remove a finished agent from the tracked set."""
         self._api.remove_agent(agent_id)
+
+    def pause_agent(self, agent_id: str) -> bool:
+        return bool(self._api.pause_agent(agent_id).get("paused", False))
+
+    def resume_agent(self, agent_id: str) -> bool:
+        return bool(self._api.resume_agent(agent_id).get("resumed", False))
+
+    def is_agent_paused(self, agent_id: str) -> bool:
+        return self._api.is_agent_paused(agent_id)
 

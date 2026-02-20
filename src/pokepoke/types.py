@@ -24,6 +24,15 @@ class BeadsWorkItem:
     notes: str | None = None
 
 
+@dataclass(frozen=True)
+class BeadsCreatedItem:
+    """A beads item created by an agent during the session."""
+
+    id: str
+    title: str = ""
+    agent_type: str = "unknown"
+
+
 @dataclass
 class Dependency:
     """Represents a dependency relationship."""
@@ -133,9 +142,24 @@ _AGENT_RUN_ATTRS = {
 @dataclass(frozen=True)
 class SessionStatsSnapshot:
     """Frozen snapshot of session stats for UI display."""
+
     agent_stats: AgentStats
+
+    # Per-session beads throughput
     items_completed: int = 0
+    items_created: int = 0
     completed_items_list: tuple[BeadsWorkItem, ...] = ()
+    created_items_list: tuple[BeadsCreatedItem, ...] = ()
+
+    # Per-session breakdowns
+    created_counts_by_agent_type: dict[str, int] = field(default_factory=dict)
+    completed_counts_by_agent_type: dict[str, int] = field(default_factory=dict)
+
+    # Lifetime totals (persisted)
+    lifetime_items_created: int = 0
+    lifetime_items_completed: int = 0
+
+    # Agent runs
     work_agent_runs: int = 0
     gate_agent_runs: int = 0
     tech_debt_agent_runs: int = 0
@@ -146,17 +170,35 @@ class SessionStatsSnapshot:
     beta_tester_agent_runs: int = 0
     code_review_agent_runs: int = 0
     worktree_cleanup_agent_runs: int = 0
+
+    # Beads DB stats snapshot
     starting_beads_stats: BeadsStats | None = None
     ending_beads_stats: BeadsStats | None = None
+
     model_completions: tuple[ModelCompletionRecord, ...] = ()
 
 
 @dataclass
 class SessionStats:
     """Combined session statistics including agent stats and run counts."""
+
     agent_stats: AgentStats
+
+    # Per-session beads throughput
     items_completed: int = 0  # Number of items successfully completed in this session
-    completed_items_list: list[BeadsWorkItem] = field(default_factory=list)  # List of items successfully completed
+    items_created: int = 0  # Number of beads items created by agents in this session
+    completed_items_list: list[BeadsWorkItem] = field(default_factory=list)  # Completed items
+    created_items_list: list[BeadsCreatedItem] = field(default_factory=list)  # Created items
+
+    # Per-session breakdowns
+    created_counts_by_agent_type: dict[str, int] = field(default_factory=dict)
+    completed_counts_by_agent_type: dict[str, int] = field(default_factory=dict)
+
+    # Lifetime totals (persisted)
+    lifetime_items_created: int = 0
+    lifetime_items_completed: int = 0
+
+    # Agent runs
     work_agent_runs: int = 0
     gate_agent_runs: int = 0
     tech_debt_agent_runs: int = 0
@@ -170,12 +212,18 @@ class SessionStats:
     starting_beads_stats: BeadsStats | None = None
     ending_beads_stats: BeadsStats | None = None
     model_completions: list[ModelCompletionRecord] = field(default_factory=list)
+
+    _created_item_ids: set[str] = field(default_factory=set, init=False, repr=False, compare=False)
     _lock: threading.Lock = field(
         default_factory=threading.Lock, init=False, repr=False, compare=False
     )
 
     def record_completion(
-        self, item: BeadsWorkItem, items_completed: int | None = None
+        self,
+        item: BeadsWorkItem,
+        items_completed: int | None = None,
+        *,
+        agent_type: str | None = None,
     ) -> int:
         """Record a completed work item in a thread-safe way."""
         with self._lock:
@@ -186,7 +234,37 @@ class SessionStats:
                     raise ValueError("items_completed cannot be negative")
                 self.items_completed = items_completed
             self.completed_items_list.append(replace(item))
+
+            if agent_type:
+                normalized = agent_type.strip().lower() or "unknown"
+                self.completed_counts_by_agent_type[normalized] = (
+                    self.completed_counts_by_agent_type.get(normalized, 0) + 1
+                )
+
             return self.items_completed
+
+    def record_created_item(self, item: BeadsCreatedItem) -> int:
+        """Record a created beads item (deduped by id)."""
+        with self._lock:
+            if item.id in self._created_item_ids:
+                return self.items_created
+
+            self._created_item_ids.add(item.id)
+            self.items_created += 1
+            self.created_items_list.append(replace(item))
+
+            normalized = (item.agent_type or "unknown").strip().lower() or "unknown"
+            self.created_counts_by_agent_type[normalized] = (
+                self.created_counts_by_agent_type.get(normalized, 0) + 1
+            )
+
+            return self.items_created
+
+    def set_lifetime_beads_item_totals(self, *, created: int, completed: int) -> None:
+        """Set lifetime created/completed totals (persisted across sessions)."""
+        with self._lock:
+            self.lifetime_items_created = int(created)
+            self.lifetime_items_completed = int(completed)
 
     def record_agent_run(self, agent_type: str, count: int = 1) -> None:
         """Increment agent run counts safely."""
@@ -251,7 +329,13 @@ class SessionStats:
             return SessionStatsSnapshot(
                 agent_stats=replace(self.agent_stats),
                 items_completed=self.items_completed,
+                items_created=self.items_created,
                 completed_items_list=tuple(replace(item) for item in self.completed_items_list),
+                created_items_list=tuple(replace(item) for item in self.created_items_list),
+                created_counts_by_agent_type=dict(self.created_counts_by_agent_type),
+                completed_counts_by_agent_type=dict(self.completed_counts_by_agent_type),
+                lifetime_items_created=self.lifetime_items_created,
+                lifetime_items_completed=self.lifetime_items_completed,
                 work_agent_runs=self.work_agent_runs,
                 gate_agent_runs=self.gate_agent_runs,
                 tech_debt_agent_runs=self.tech_debt_agent_runs,
