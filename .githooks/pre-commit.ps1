@@ -13,7 +13,7 @@
     5. Skipped tests check (no skipped pytest tests) [parallel]
     6. Ruff lint check [parallel]
     7. File length check [parallel]
-    8. Desktop lint and TypeScript checks [parallel]
+    8. Desktop lint check [parallel]
 
 .NOTES
     ⚠️  CRITICAL: This file is protected by CODEOWNERS
@@ -108,7 +108,9 @@ $staticChecks = @(
     @{ Name = "Skipped Tests"; Script = "check-skipped-tests.ps1" }
     @{ Name = "File Length"; Script = "check-file-length.ps1" }
     @{ Name = "Desktop ESLint"; Script = "check-desktop-lint.ps1" }
-    @{ Name = "Desktop TypeScript"; Script = "check-desktop.ps1" }
+    # Desktop TypeScript check removed: check-build.ps1 already runs
+    # tsc -b via "npm run build" (tsc -b && vite build), so running
+    # check-desktop.ps1 separately duplicates TS error output.
 )
 
 # Checks that need build artifacts or must run in sequence: build -> mypy -> coverage
