@@ -69,6 +69,20 @@ def _fast_repo_guard(monkeypatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def _mock_cleanup_lock_global(monkeypatch):
+    """Prevent cleanup_lock from hitting the filesystem during tests.
+
+    The real lock uses filelock which hangs when orchestrator processes
+    hold the lock.  Replace with a no-op context manager globally.
+    """
+    from contextlib import nullcontext
+
+    monkeypatch.setattr("pokepoke.repo_state_guard.cleanup_lock", lambda: nullcontext())
+    monkeypatch.setattr("pokepoke.repo_check.cleanup_lock", lambda: nullcontext())
+    monkeypatch.setattr("pokepoke.worktree_finalization.cleanup_lock", lambda: nullcontext())
+
+
 @pytest.fixture
 def sample_work_item() -> BeadsWorkItem:
     """Create a sample work item for testing."""

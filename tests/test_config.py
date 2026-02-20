@@ -1,7 +1,6 @@
 """Tests for the project configuration system."""
 
 import json
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -16,7 +15,7 @@ from pokepoke.config import (
     reset_config,
     get_config,
     _detect_git_username,
-    _find_repo_root,
+    _find_repo_root,  # noqa: F401  # used via patch strings
     _load_config_file,
 )
 

@@ -132,9 +132,7 @@ def create_event_handler(
     
     def handle_event(event: Any) -> None:
         """Handle SDK session events."""
-        nonlocal stats
-        
-        event_type = event.type.value if hasattr(event.type, 'value') else str(event.type)
+        event_type= event.type.value if hasattr(event.type, 'value') else str(event.type)
         
         if event_type == "assistant.message_delta":
             terminal_ui.ui.set_style("green")

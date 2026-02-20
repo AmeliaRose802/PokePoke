@@ -1,6 +1,5 @@
 """Tests for frontend discovery functionality."""
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest

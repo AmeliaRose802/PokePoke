@@ -1676,3 +1676,146 @@ class TestRunWorktreeCleanup:
         """Test has_unmerged_worktrees returns False when nothing to clean."""
         from pokepoke.worktree_cleanup import has_unmerged_worktrees
         assert has_unmerged_worktrees() is False
+
+
+class TestGateAgentJsonDecodeError:
+    """Test gate agent JSONDecodeError fallback (lines 112-113)."""
+
+    @pytest.fixture
+    def work_item(self) -> BeadsWorkItem:
+        return BeadsWorkItem(
+            id="test-123", title="Test Fix", description="Fix the bug",
+            status="in_progress", priority=1, issue_type="bug", labels=["test"]
+        )
+
+    @patch('pokepoke.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.PromptService')
+    def test_invalid_json_falls_back_to_text(
+        self, mock_service_cls: Mock, mock_invoke: Mock, mock_parse: Mock,
+        work_item: BeadsWorkItem
+    ) -> None:
+        """Invalid JSON in code block triggers JSONDecodeError handler."""
+        mock_service = Mock()
+        mock_service.load_and_render.return_value = "Gate prompt"
+        mock_service_cls.return_value = mock_service
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="test-123", success=True,
+            output='```json\n{not valid json}\n```',
+            attempt_count=1
+        )
+        mock_parse.return_value = None
+        success, reason, stats = run_gate_agent(work_item)
+        assert success is False
+        assert "did not explicitly approve" in reason
+
+
+class TestMaintenanceAgentPromptMissing:
+    """Test run_maintenance_agent prompt file not found (lines 139-140)."""
+
+    @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
+    def test_prompt_file_doesnt_exist(self, mock_get_dir: Mock) -> None:
+        mock_dir = MagicMock()
+        mock_prompt_path = MagicMock()
+        mock_prompt_path.exists.return_value = False
+        mock_dir.__truediv__ = Mock(return_value=mock_prompt_path)
+        mock_get_dir.return_value = mock_dir
+        stats = run_maintenance_agent("TestAgent", "missing.md", needs_worktree=False)
+        assert stats is None
+
+
+class TestWorktreeAgentMergeChangeFalse:
+    """Test _run_worktree_agent with merge_changes=False (lines 281-284)."""
+
+    @patch('pokepoke.agent_runner.cleanup_worktree')
+    @patch('pokepoke.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agent_runner.run_cleanup_loop')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.create_worktree')
+    def test_discards_worktree(
+        self, mock_create: Mock, mock_invoke: Mock, mock_cleanup_loop: Mock,
+        mock_parse: Mock, mock_cleanup: Mock
+    ) -> None:
+        agent_item = BeadsWorkItem(
+            id="maint-test", title="Test", description="Test",
+            status="in_progress", priority=0, issue_type="task", labels=["maintenance"]
+        )
+        mock_create.return_value = Path("/fake/worktree")
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="maint-test", success=True,
+            output="Completed", attempt_count=1
+        )
+        mock_cleanup_loop.return_value = (True, 0)
+        mock_parse.return_value = AgentStats(
+            wall_duration=10.0, api_duration=5.0, input_tokens=100,
+            output_tokens=50, lines_added=10, lines_removed=5, premium_requests=1
+        )
+        stats = _run_worktree_agent(
+            "Test", "maint-test", agent_item, "Prompt",
+            Path("/fake/repo"), merge_changes=False
+        )
+        assert stats is not None
+        mock_cleanup.assert_called_once_with("maint-test", force=True)
+
+    @patch('pokepoke.agent_runner.cleanup_worktree')
+    @patch('pokepoke.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agent_runner.run_cleanup_loop')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.create_worktree')
+    def test_with_model_prints_model(
+        self, mock_create: Mock, mock_invoke: Mock, mock_cleanup_loop: Mock,
+        mock_parse: Mock, mock_cleanup: Mock
+    ) -> None:
+        """Covers line 254: model print."""
+        agent_item = BeadsWorkItem(
+            id="maint-test", title="Test", description="Test",
+            status="in_progress", priority=0, issue_type="task", labels=["maintenance"]
+        )
+        mock_create.return_value = Path("/fake/worktree")
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="maint-test", success=True,
+            output="Completed", attempt_count=1
+        )
+        mock_cleanup_loop.return_value = (True, 0)
+        mock_parse.return_value = None
+        stats = _run_worktree_agent(
+            "Test", "maint-test", agent_item, "Prompt",
+            Path("/fake/repo"), merge_changes=False, model="gpt-4"
+        )
+        assert stats is None  # parse returns None
+
+
+class TestWorktreeAgentFinallyCleanupException:
+    """Test _run_worktree_agent finally block cleanup exception (lines 317-321)."""
+
+    @patch('pokepoke.worktree_cleanup.add_uncleaned_worktree')
+    @patch('pokepoke.agent_runner.cleanup_worktree')
+    @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
+    @patch('pokepoke.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agent_runner.run_cleanup_loop')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.create_worktree')
+    def test_cleanup_raises_adds_uncleaned(
+        self, mock_create: Mock, mock_invoke: Mock, mock_cleanup_loop: Mock,
+        mock_parse: Mock, mock_handle_merge: Mock, mock_cleanup: Mock,
+        mock_add_uncleaned: Mock
+    ) -> None:
+        agent_item = BeadsWorkItem(
+            id="maint-test", title="Test", description="Test",
+            status="in_progress", priority=0, issue_type="task", labels=["maintenance"]
+        )
+        mock_create.return_value = Path("/fake/worktree")
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="maint-test", success=True,
+            output="Completed", attempt_count=1
+        )
+        mock_cleanup_loop.return_value = (True, 0)
+        mock_parse.return_value = None
+        mock_handle_merge.return_value = (False, False)
+        mock_cleanup.side_effect = Exception("Cannot remove worktree")
+        stats = _run_worktree_agent(
+            "Test", "maint-test", agent_item, "Prompt",
+            Path("/fake/repo")
+        )
+        assert stats is None
+        mock_add_uncleaned.assert_called_once()

@@ -663,32 +663,43 @@ class TestMergeWorktreeToDev:
         mock_cleanup.assert_called_once()
         mock_merge.assert_called_once()
 
+    @patch('pokepoke.git_operations.abort_merge')
+    @patch('pokepoke.git_operations.is_merge_in_progress')
+    @patch('pokepoke.git_operations.get_unmerged_files')
     @patch('pokepoke.cleanup_agents.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.worktree_finalization.merge_worktree')
     @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
-    def test_merge_fails_autofix_fails(self, mock_check: Mock, mock_merge: Mock, mock_cleanup: Mock) -> None:
+    def test_merge_fails_autofix_fails(self, mock_check: Mock, mock_merge: Mock, mock_cleanup: Mock, mock_get_unmerged: Mock, mock_is_merging: Mock, mock_abort: Mock) -> None:
         """Test when merge fails and cleanup fails."""
         item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
 
         mock_check.return_value = (True, "")
         mock_merge.return_value = (False, ["conflict.py"])  # Updated to return tuple
         mock_cleanup.return_value = (False, "Failed")
+        mock_is_merging.return_value = True
+        mock_get_unmerged.return_value = ["conflict.py"]
+        mock_abort.return_value = (True, "")
 
         result = merge_worktree_to_dev(item)
 
         assert result is False
         mock_cleanup.assert_called_once()
 
+    @patch('pokepoke.git_operations.abort_merge')
+    @patch('pokepoke.git_operations.is_merge_in_progress')
+    @patch('pokepoke.git_operations.get_unmerged_files')
     @patch('pokepoke.cleanup_agents.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.worktree_finalization.merge_worktree')
     @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
-    def test_merge_fails_autofix_succeeds(self, mock_check: Mock, mock_merge: Mock, mock_cleanup: Mock) -> None:
+    def test_merge_fails_autofix_succeeds(self, mock_check: Mock, mock_merge: Mock, mock_cleanup: Mock, mock_get_unmerged: Mock, mock_is_merging: Mock, mock_abort: Mock) -> None:
         """Test when merge fails, cleanup succeeds, retry works."""
         item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
 
         mock_check.return_value = (True, "")
         mock_merge.side_effect = [(False, ["conflict.py"]), (True, [])]  # Updated to return tuples
         mock_cleanup.return_value = (True, "Fixed")
+        mock_is_merging.side_effect = [True, False]
+        mock_get_unmerged.return_value = ["conflict.py"]
 
         result = merge_worktree_to_dev(item)
 

@@ -317,7 +317,7 @@ def run_parallel_loop(
                     items_completed = session_stats.items_completed
             except concurrent.futures.TimeoutError:
                 print(f"⚠️  Timeout waiting for {len(futures)} workers after 5 minutes")
-                run_logger.log_orchestrator(f"Timeout waiting for workers", level="WARNING")
+                run_logger.log_orchestrator("Timeout waiting for workers", level="WARNING")
             
             print("✅ All workers completed")
             run_logger.log_orchestrator("All workers completed")

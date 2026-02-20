@@ -1,10 +1,8 @@
 """Tests for MaintenanceScheduler singleton coordination."""
 
 import threading
-import time
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-
+from unittest.mock import Mock, patch
 import pytest
 
 from pokepoke.maintenance_scheduler import (
