@@ -68,6 +68,7 @@ def try_lock(name: str) -> FileLock | None:
 
 
 _WORKTREE_SETUP_LOCK = "worktree-setup"
+_MERGE_LOCK = "merge-queue"
 
 
 @contextmanager
@@ -75,3 +76,35 @@ def worktree_setup_lock(timeout: float = 180.0) -> Generator[FileLock, None, Non
     """Serialize beads assignment + worktree creation across agents."""
     with acquire_lock(_WORKTREE_SETUP_LOCK, timeout=timeout) as lock:
         yield lock
+
+
+@contextmanager
+def merge_lock(timeout: float = 600.0) -> Generator[FileLock, None, None]:
+    """Serialize worktree merges across parallel agents.
+
+    This lock is held during the entire merge operation to prevent:
+    1. Multiple agents merging concurrently (causing conflicts)
+    2. Cleanup agents running while a merge is in progress (leaving dirty state)
+
+    The lock coordinates with cleanup_lock in repo_state_guard.py -
+    cleanup agents should wait for this lock before attempting to
+    fix uncommitted changes on the main repo.
+
+    Args:
+        timeout: Seconds to wait. Default 600s (10 minutes) to allow
+                 for slow merges with conflict resolution.
+
+    Yields:
+        The acquired FileLock instance.
+    """
+    with acquire_lock(_MERGE_LOCK, timeout=timeout) as lock:
+        yield lock
+
+
+def merge_lock_active() -> bool:
+    """Return True if another agent currently holds the merge lock."""
+    lock = try_lock(_MERGE_LOCK)
+    if lock is None:
+        return True
+    lock.release()
+    return False

@@ -179,3 +179,12 @@ def _mock_cleanup_lock(monkeypatch):
         "pokepoke.worktree_merge_handler.cleanup_lock",
         lambda: nullcontext(),
     )
+
+
+@pytest.fixture(autouse=True)
+def _mock_merge_lock(monkeypatch):
+    """Ensure merge lock is a no-op for tests."""
+    monkeypatch.setattr(
+        "pokepoke.worktree_merge_handler.merge_lock",
+        lambda: nullcontext(),
+    )
