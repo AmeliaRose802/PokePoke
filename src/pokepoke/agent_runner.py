@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from pokepoke.config import get_config
 from pokepoke.copilot import invoke_copilot
+from pokepoke.git_operations import get_default_branch
 from pokepoke.types import BeadsWorkItem, AgentStats
 from pokepoke.stats import parse_agent_stats
 from pokepoke.worktrees import create_worktree, cleanup_worktree
@@ -65,6 +66,7 @@ def run_gate_agent(
             "title": item.title,
             "description": item.description or "",
             "handoff_context": handoff_context or "",
+            "default_branch": get_default_branch(),
         })
     except Exception as e:
         return False, f"Failed to render prompt: {e}", None

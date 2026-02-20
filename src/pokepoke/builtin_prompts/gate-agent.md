@@ -29,7 +29,7 @@ VERIFY that the work item has been completed successfully and meets all quality 
    - Only explore beyond the listed files if you need to verify integration points
 
 1. **FIRST: Check if work already exists on main/dev branch:**
-   - Use `git diff HEAD..origin/master` (or appropriate branch) to see if this worktree has changes
+   - Use `git diff HEAD..origin/{{default_branch}}` to see if this worktree has changes
    - If NO changes in the worktree, check if the requested work already exists on main/dev
    - **CRITICAL:** If the fix/feature is already present on the main branch:
      - Output "VERIFICATION SUCCESSFUL" with reason "work_already_complete"
