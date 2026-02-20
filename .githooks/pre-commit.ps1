@@ -138,7 +138,8 @@ foreach ($check in $staticChecks) {
     }
 }
 
-# Run build-dependent checks sequentially
+# Run build-dependent checks sequentially (abort on first failure)
+$buildFailed = $false
 foreach ($check in $buildDependentChecks) {
     Write-Host "  • $($check.Name)... " -ForegroundColor Gray
     
@@ -152,13 +153,30 @@ foreach ($check in $buildDependentChecks) {
         else {
             $failed += $check.Name
             $allPassed = $false
+            $buildFailed = $true
+            Write-Host "  ⚡ Build/syntax failure — skipping remaining build-dependent checks" -ForegroundColor Yellow
+            break
         }
     }
     catch {
         Write-Host "Error: $_" -ForegroundColor Red
         $failed += $check.Name
         $allPassed = $false
+        $buildFailed = $true
+        Write-Host "  ⚡ Build/syntax failure — skipping remaining build-dependent checks" -ForegroundColor Yellow
+        break
     }
+}
+
+# If build failed, stop parallel static jobs and exit early
+if ($buildFailed) {
+    foreach ($jobInfo in $staticJobs) {
+        Stop-Job $jobInfo.Job -ErrorAction SilentlyContinue
+        Remove-Job $jobInfo.Job -Force -ErrorAction SilentlyContinue
+    }
+    Write-Host ""
+    Write-Host "❌ Build failed: $($failed -join ', ') — downstream checks skipped" -ForegroundColor Red
+    exit 1
 }
 
 # Wait for and process static checks results
