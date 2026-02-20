@@ -75,7 +75,7 @@ maintenance:
 
     - name: Worktree Cleanup
       prompt_file: worktree-cleanup.md
-      frequency: 4
+      frequency: 2  # Run every 2 items instead of 4 to handle locked worktrees faster
       needs_worktree: false
       enabled: true
 
