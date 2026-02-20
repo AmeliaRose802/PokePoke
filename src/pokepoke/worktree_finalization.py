@@ -9,6 +9,7 @@ from .worktrees import merge_worktree, cleanup_worktree
 from .git_operations import check_main_repo_ready_for_merge, get_default_branch
 from .beads_hierarchy import get_parent_id, close_parent_if_complete
 from .beads_management import close_item
+from .repo_state_guard import cleanup_lock
 
 
 def finalize_work_item(item: BeadsWorkItem, worktree_path: Path) -> bool:
@@ -98,8 +99,9 @@ def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
         
         print(f"   Invoking cleanup agent to resolve uncommitted changes before merge...")
         from .cleanup_agents import invoke_cleanup_agent
-        
-        cleanup_success, _ = invoke_cleanup_agent(item, Path.cwd())
+
+        with cleanup_lock():
+            cleanup_success, _ = invoke_cleanup_agent(item, Path.cwd())
         
         if cleanup_success:
             print("   Cleanup successful, retrying merge check...")
@@ -139,13 +141,14 @@ def merge_worktree_to_dev(item: BeadsWorkItem) -> bool:
         
         print(f"   Invoking cleanup agent to resolve conflicts...")
         from .cleanup_agents import invoke_merge_conflict_cleanup_agent
-        
-        success, _ = invoke_merge_conflict_cleanup_agent(
-            item, 
-            Path.cwd(), 
-            f"Merge conflict detected in {len(unmerged_files)} file(s){conflict_details}",
-            unmerged_files=unmerged_files
-        )
+
+        with cleanup_lock():
+            success, _ = invoke_merge_conflict_cleanup_agent(
+                item,
+                Path.cwd(),
+                f"Merge conflict detected in {len(unmerged_files)} file(s){conflict_details}",
+                unmerged_files=unmerged_files
+            )
         
         if success:
             print("   Cleanup successful, retrying merge...")

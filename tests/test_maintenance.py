@@ -7,6 +7,15 @@ from pokepoke.config import MaintenanceConfig, MaintenanceAgentConfig, ProjectCo
 from pokepoke.maintenance import aggregate_stats, run_periodic_maintenance, _run_special_agent
 
 
+@pytest.fixture(autouse=True)
+def _repo_clean_guard(monkeypatch):
+    """Ensure repo state guard never blocks maintenance tests."""
+    monkeypatch.setattr(
+        "pokepoke.maintenance_scheduler.wait_for_main_repo_clean",
+        lambda *_, **__: True,
+    )
+
+
 def _make_default_config() -> ProjectConfig:
     """Create a ProjectConfig with default maintenance agents."""
     config = ProjectConfig()

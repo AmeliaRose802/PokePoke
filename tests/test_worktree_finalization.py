@@ -8,6 +8,7 @@ This module tests the critical merge conflict handling code in worktree_finaliza
 - Retry merge after cleanup success/failure scenarios
 """
 
+from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -458,3 +459,10 @@ class TestMultipleConflictFiles:
         # Verify cleanup was called with all files
         call_kwargs = mock_conflict_cleanup.call_args
         assert len(call_kwargs.kwargs["unmerged_files"]) == 15
+@pytest.fixture(autouse=True)
+def _mock_cleanup_lock(monkeypatch):
+    """Ensure cleanup lock does not hit filesystem during tests."""
+    monkeypatch.setattr(
+        "pokepoke.worktree_finalization.cleanup_lock",
+        lambda: nullcontext(),
+    )
