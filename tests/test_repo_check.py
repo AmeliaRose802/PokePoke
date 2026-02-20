@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from pokepoke.repo_check import check_and_commit_main_repo
+from pokepoke.repo_check import check_and_commit_main_repo, _try_auto_commit
 
 
 @pytest.fixture(autouse=True)
@@ -130,19 +130,39 @@ class TestCheckAndCommitMainRepo:
                 level="WARNING"
             )
     
-    def test_other_changes_invoke_cleanup_agent_success(self):
-        """Test that other changes invoke cleanup agent successfully."""
+    def test_other_changes_auto_commit_success_skips_cleanup(self):
+        """Test that successful auto-commit skips cleanup agent."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+        
+        with patch('subprocess.run') as mock_run:
+            # git status, git add, git commit
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout=" M src/module.py\n M README.md", stderr=""),
+                Mock(returncode=0),  # git add --all
+                Mock(returncode=0, stdout="", stderr=""),  # git commit
+            ]
+            
+            result = check_and_commit_main_repo(repo_path, mock_logger)
+            
+            assert result is True
+            # Should NOT have invoked cleanup agent
+            assert mock_run.call_count == 3
+            mock_logger.log_orchestrator.assert_any_call("Auto-committed uncommitted changes")
+    
+    def test_other_changes_auto_commit_fails_invokes_cleanup(self):
+        """Test that failed auto-commit falls back to cleanup agent."""
         mock_logger = Mock()
         repo_path = Path("/fake/repo")
         
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.agent_runner.invoke_cleanup_agent') as mock_cleanup:
-            # Mock git status showing regular changes
-            mock_run.return_value = Mock(
-                returncode=0,
-                stdout=" M src/module.py\n M README.md",
-                stderr=""
-            )
+            # git status, git add (auto-commit), git commit fails, then cleanup agent
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout=" M src/module.py\n M README.md", stderr=""),
+                Mock(returncode=0),  # git add --all (auto-commit)
+                Mock(returncode=1, stdout="", stderr="pre-commit hook failed"),  # git commit fails
+            ]
             # Mock cleanup agent succeeding
             mock_cleanup.return_value = (True, Mock())
             
@@ -150,22 +170,23 @@ class TestCheckAndCommitMainRepo:
             
             assert result is True
             mock_cleanup.assert_called_once()
-            # Verify cleanup item was created with correct properties
             cleanup_item = mock_cleanup.call_args[0][0]
-            assert cleanup_item.id == "cleanup-main-repo-1"  # First attempt
+            assert cleanup_item.id == "cleanup-main-repo-1"
             assert "uncommitted changes" in cleanup_item.title.lower()
     
-    def test_other_changes_invoke_cleanup_agent_failure_retries_and_stashes(self):
-        """Test that cleanup agent failure triggers retries then stash fallback."""
+    def test_auto_commit_and_cleanup_failure_retries_and_stashes(self):
+        """Test that auto-commit + cleanup agent failure triggers retries then stash."""
         mock_logger = Mock()
         repo_path = Path("/fake/repo")
         
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.agent_runner.invoke_cleanup_agent') as mock_cleanup, \
              patch('pokepoke.repo_check.time.sleep'):  # Speed up test
-            # Mock git status showing regular changes, then stash commands
+            # git status, auto-commit (add + commit fail), then stash commands
             mock_run.side_effect = [
                 Mock(returncode=0, stdout=" M src/module.py", stderr=""),  # git status
+                Mock(returncode=0),  # git add --all (auto-commit)
+                Mock(returncode=1, stdout="", stderr="hook failed"),  # git commit fails
                 Mock(returncode=0),  # git add --all for stash
                 Mock(returncode=0, stdout="", stderr="")  # git stash push
             ]
@@ -181,18 +202,20 @@ class TestCheckAndCommitMainRepo:
             # Should log that stash was successful
             mock_logger.log_orchestrator.assert_any_call("Uncommitted changes stashed successfully")
     
-    def test_cleanup_failure_continues_if_stash_fails(self):
-        """Test that cleanup and stash failure still continues (workers use worktrees)."""
+    def test_all_fallbacks_fail_continues_anyway(self):
+        """Test that auto-commit + cleanup + stash failure still continues."""
         mock_logger = Mock()
         repo_path = Path("/fake/repo")
         
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.agent_runner.invoke_cleanup_agent') as mock_cleanup, \
              patch('pokepoke.repo_check.time.sleep'):  # Speed up test
-            # Mock git status, then stash failing
+            # git status, auto-commit fails, then stash also fails
             mock_run.side_effect = [
                 Mock(returncode=0, stdout=" M src/module.py", stderr=""),  # git status
-                Mock(returncode=0),  # git add --all
+                Mock(returncode=0),  # git add --all (auto-commit)
+                Mock(returncode=1, stdout="", stderr="hook failed"),  # git commit fails
+                Mock(returncode=0),  # git add --all (stash)
                 Mock(returncode=1, stdout="", stderr="cannot stash")  # git stash fails
             ]
             # Mock cleanup agent failing all 3 times
@@ -202,7 +225,6 @@ class TestCheckAndCommitMainRepo:
             
             # Should STILL return True - workers use isolated worktrees
             assert result is True
-            # Should log that we're continuing despite failure
             mock_logger.log_orchestrator.assert_any_call(
                 "Cleanup and stash both failed, but continuing (workers use worktrees)",
                 level="WARNING"
@@ -216,12 +238,12 @@ class TestCheckAndCommitMainRepo:
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.agent_runner.invoke_cleanup_agent') as mock_cleanup, \
              patch('pokepoke.repo_check.time.sleep'):  # Speed up test
-            # Mock git status showing regular changes
-            mock_run.return_value = Mock(
-                returncode=0,
-                stdout=" M src/module.py",
-                stderr=""
-            )
+            # git status, auto-commit fails
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout=" M src/module.py", stderr=""),
+                Mock(returncode=0),  # git add --all (auto-commit)
+                Mock(returncode=1, stdout="", stderr="hook failed"),  # git commit fails
+            ]
             # Mock cleanup agent failing first, succeeding second
             mock_cleanup.side_effect = [(False, Mock()), (True, Mock())]
             
@@ -252,26 +274,23 @@ class TestCheckAndCommitMainRepo:
             
             assert result is True
     
-    def test_mixed_changes_triggers_cleanup(self):
-        """Test that mixed changes (beads + other) still trigger cleanup."""
+    def test_mixed_changes_tries_auto_commit_first(self):
+        """Test that mixed changes (beads + other) try auto-commit before cleanup."""
         mock_logger = Mock()
         repo_path = Path("/fake/repo")
         
-        with patch('subprocess.run') as mock_run, \
-             patch('pokepoke.agent_runner.invoke_cleanup_agent') as mock_cleanup:
-            # Mock git status with beads and other changes
-            mock_run.return_value = Mock(
-                returncode=0,
-                stdout=" M .beads/database.json\n M src/main.py",
-                stderr=""
-            )
-            mock_cleanup.return_value = (True, Mock())
+        with patch('subprocess.run') as mock_run:
+            # git status, auto-commit succeeds
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout=" M .beads/database.json\n M src/main.py", stderr=""),
+                Mock(returncode=0),  # git add --all
+                Mock(returncode=0, stdout="", stderr=""),  # git commit
+            ]
             
             result = check_and_commit_main_repo(repo_path, mock_logger)
             
             assert result is True
-            # Should invoke cleanup agent for non-beads changes
-            mock_cleanup.assert_called_once()
+            mock_logger.log_orchestrator.assert_any_call("Auto-committed uncommitted changes")
     
     def test_many_other_changes_truncated_output(self):
         """Test that many changes are truncated in output."""
@@ -279,16 +298,14 @@ class TestCheckAndCommitMainRepo:
         repo_path = Path("/fake/repo")
         
         with patch('subprocess.run') as mock_run, \
-             patch('pokepoke.agent_runner.invoke_cleanup_agent') as mock_cleanup, \
              patch('builtins.print') as mock_print:
-            # Mock git status with 15 changes
+            # Mock git status with 15 changes, auto-commit succeeds
             changes = [f" M file{i}.py" for i in range(15)]
-            mock_run.return_value = Mock(
-                returncode=0,
-                stdout="\n".join(changes),
-                stderr=""
-            )
-            mock_cleanup.return_value = (True, Mock())
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout="\n".join(changes), stderr=""),
+                Mock(returncode=0),  # git add --all
+                Mock(returncode=0, stdout="", stderr=""),  # git commit
+            ]
             
             result = check_and_commit_main_repo(repo_path, mock_logger)
             
@@ -318,3 +335,65 @@ class TestCheckAndCommitMainRepo:
             # Should use "exit code X" format
             log_calls = [str(call) for call in mock_logger.log_orchestrator.call_args_list]
             assert any("exit code 1" in call for call in log_calls)
+
+
+class TestTryAutoCommit:
+    """Test _try_auto_commit function."""
+
+    def test_auto_commit_success(self):
+        """Test successful auto-commit."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run:
+            mock_run.side_effect = [
+                Mock(returncode=0),  # git add --all
+                Mock(returncode=0, stdout="", stderr=""),  # git commit
+            ]
+
+            result = _try_auto_commit(repo_path, mock_logger)
+
+            assert result is True
+            mock_logger.log_orchestrator.assert_any_call("Auto-committed uncommitted changes")
+
+    def test_auto_commit_hook_failure(self):
+        """Test auto-commit fails when pre-commit hooks reject."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run:
+            mock_run.side_effect = [
+                Mock(returncode=0),  # git add --all
+                Mock(returncode=1, stdout="", stderr="pre-commit hook failed"),  # git commit fails
+            ]
+
+            result = _try_auto_commit(repo_path, mock_logger)
+
+            assert result is False
+
+    def test_auto_commit_git_add_fails(self):
+        """Test auto-commit fails when git add fails."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run:
+            mock_run.side_effect = subprocess.CalledProcessError(
+                returncode=128, cmd=["git", "add"], stderr="error"
+            )
+
+            result = _try_auto_commit(repo_path, mock_logger)
+
+            assert result is False
+
+    def test_auto_commit_timeout(self):
+        """Test auto-commit handles timeout."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run:
+            mock_run.side_effect = subprocess.TimeoutExpired(cmd="git", timeout=120)
+
+            result = _try_auto_commit(repo_path, mock_logger)
+
+            assert result is False
+            mock_logger.log_orchestrator.assert_any_call("Auto-commit timed out", level="WARNING")
