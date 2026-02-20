@@ -31,14 +31,11 @@ class TestParallelProcessItem:
     @patch("pokepoke.parallel.process_work_item")
     def test_success_releases_resources(self, mock_pwi: Mock, mock_ui: Mock) -> None:
         mock_pwi.return_value = (True, 1, None, 0, 0, None)
-        sem = threading.Semaphore(1)
-        ids = {"t1"}
-        lock = threading.Lock()
+        sem = threading.Semaphore(0)
 
-        result = _parallel_process_item(_make_item(), Mock(), sem, ids, lock)
+        result = _parallel_process_item(_make_item(), Mock(), sem)
 
         assert result == (True, 1, None, 0, 0, None)
-        assert "t1" not in ids
         assert sem.acquire(blocking=False)
         # Agent status should be registered and updated
         mock_ui.ui.push_agent_status.assert_any_call(
@@ -61,14 +58,11 @@ class TestParallelProcessItem:
     @patch("pokepoke.parallel.terminal_ui")
     @patch("pokepoke.parallel.process_work_item", side_effect=RuntimeError("boom"))
     def test_exception_releases_resources(self, mock_pwi: Mock, mock_ui: Mock) -> None:
-        sem = threading.Semaphore(1)
-        ids = {"t1"}
-        lock = threading.Lock()
+        sem = threading.Semaphore(0)
 
         with pytest.raises(RuntimeError):
-            _parallel_process_item(_make_item(), Mock(), sem, ids, lock)
+            _parallel_process_item(_make_item(), Mock(), sem)
 
-        assert "t1" not in ids
         assert sem.acquire(blocking=False)
         # Agent status should be set to failed on exception
         mock_ui.ui.push_agent_status.assert_any_call(
@@ -85,11 +79,9 @@ class TestParallelProcessItem:
     def test_failure_sets_agent_failed_status(self, mock_pwi: Mock, mock_ui: Mock) -> None:
         """A work item that returns success=False should set agent status to failed."""
         mock_pwi.return_value = (False, 1, None, 0, 0, None)
-        sem = threading.Semaphore(1)
-        ids = {"t1"}
-        lock = threading.Lock()
+        sem = threading.Semaphore(0)
 
-        result = _parallel_process_item(_make_item(), Mock(), sem, ids, lock)
+        result = _parallel_process_item(_make_item(), Mock(), sem)
 
         assert result[0] is False
         mock_ui.ui.push_agent_status.assert_any_call(
@@ -106,11 +98,9 @@ class TestParallelProcessItem:
     def test_output_routed_via_agent_output_for(self, mock_pwi: Mock, mock_ui: Mock) -> None:
         """Verify that agent_output_for context manager is used for output routing."""
         mock_pwi.return_value = (True, 1, None, 0, 0, None)
-        sem = threading.Semaphore(1)
-        ids = {"t1"}
-        lock = threading.Lock()
+        sem = threading.Semaphore(0)
 
-        _parallel_process_item(_make_item(), Mock(), sem, ids, lock)
+        _parallel_process_item(_make_item(), Mock(), sem)
 
         # Should use agent_output_for to route output
         mock_ui.ui.agent_output_for.assert_called_once_with("t1")
@@ -282,6 +272,51 @@ class TestRunParallelLoop:
         finalize_fn.assert_called_once()
         # record_fn should be called at least once (from collect or drain)
         assert record_fn.call_count >= 1
+
+    @patch("pokepoke.parallel.time.sleep")
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.set_executor")
+    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.parallel.is_shutting_down")
+    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.parallel.get_ready_work_items")
+    @patch("pokepoke.parallel.select_multiple_items")
+    @patch("pokepoke.parallel._collect_done_futures")
+    @patch("pokepoke.parallel.process_work_item")
+    def test_does_not_resubmit_while_future_tracked(
+        self, mock_pwi, mock_collect, mock_sel, mock_ready,
+        mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep,
+    ) -> None:
+        """Regression: slot/claimed tracking must be based on futures (worker count).
+
+        If a worker finishes and releases the semaphore but its future hasn't
+        been collected yet, we must not consider that slot available.
+        """
+        item = _make_item("dup1")
+        mock_ready.return_value = [item]
+        mock_sel.return_value = [item]
+        mock_pwi.return_value = (True, 1, AgentStats(), 0, 0, None)
+        mock_collect.side_effect = lambda futures, failed, total, stats, logger, record_fn: (total, False)
+
+        # Two full loop iterations + shutdown, accounting for the inner sleep loop checks.
+        mock_shut.side_effect = [False] + ([False] * 10) + [False, True, True]
+
+        stats = SessionStats(agent_stats=AgentStats())
+        record_fn = Mock()
+        finalize_fn = Mock()
+        logger = Mock()
+
+        code = run_parallel_loop(
+            effective_parallel=1, mode_name="Autonomous",
+            main_repo_path="/repo", failed_claim_ids=set(),
+            session_stats=stats, start_time=time.time(),
+            run_logger=logger, continuous=True,
+            record_fn=record_fn, finalize_fn=finalize_fn,
+        )
+
+        assert code == 0
+        # Must not submit again while the original future is still tracked.
+        assert mock_sel.call_count == 1
 
     @patch("pokepoke.parallel.time.sleep")
     @patch("pokepoke.parallel.terminal_ui")

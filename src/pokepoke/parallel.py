@@ -25,8 +25,6 @@ def _parallel_process_item(
     item: BeadsWorkItem,
     run_logger: RunLogger,
     semaphore: threading.Semaphore,
-    active_ids: set[str],
-    active_ids_lock: threading.Lock,
     worker_agent_name: str | None = None,
 ) -> tuple[bool, int, AgentStats | None, int, int, ModelCompletionRecord | None]:
     """Wrapper for process_work_item used by the thread pool.
@@ -39,7 +37,7 @@ def _parallel_process_item(
     print output to the agent's own log buffer so parallel output is not
     interleaved (dtqz) and the Agents panel shows live data (ukr0).
 
-    Releases the semaphore and removes the item from active_ids when done.
+    Releases the semaphore when done.
     """
     agent_id = item.id  # Use work-item id as unique agent identifier
     display_name = worker_agent_name or "agent"
@@ -89,8 +87,6 @@ def _parallel_process_item(
         raise
     finally:
         clear_agent_name()
-        with active_ids_lock:
-            active_ids.discard(item.id)
         semaphore.release()
 
 
@@ -166,8 +162,6 @@ def run_parallel_loop(
     items_completed = 0
     semaphore = threading.Semaphore(effective_parallel)
     futures: dict[_Future, BeadsWorkItem] = {}
-    active_ids: set[str] = set()
-    active_ids_lock = threading.Lock()
     executor = concurrent.futures.ThreadPoolExecutor(
         max_workers=effective_parallel,
         thread_name_prefix="pokepoke-agent",
@@ -198,9 +192,8 @@ def run_parallel_loop(
                 print(f"⚠️  Warning: failed to fetch ready items: {e}")
                 ready_items = []
 
-            with active_ids_lock:
-                current_active = set(active_ids)
-            slots = effective_parallel - len(current_active)
+            current_active = {i.id for i in futures.values()}
+            slots = effective_parallel - len(futures)
 
             if slots > 0 and not should_stop_after_current():
                 selected_items = select_multiple_items(
@@ -215,19 +208,14 @@ def run_parallel_loop(
                     run_logger.log_orchestrator(
                         f"Submitting item: {item.id} - {item.title} (worker: {worker_name})"
                     )
-                    with active_ids_lock:
-                        active_ids.add(item.id)
                     semaphore.acquire()
                     try:
                         fut = executor.submit(
                             _parallel_process_item,
-                            item, run_logger, semaphore, active_ids, active_ids_lock,
-                            worker_name,
+                            item, run_logger, semaphore, worker_name,
                         )
                     except Exception:
                         semaphore.release()
-                        with active_ids_lock:
-                            active_ids.discard(item.id)
                         raise
                     futures[fut] = item
 
