@@ -176,7 +176,8 @@
 
 .log-container {
   display: flex;
-  flex: 1;
+  flex: 1 1 0;
+  flex-direction: column;
   gap: 8px;
   padding: 8px 12px;
   overflow: hidden;
@@ -191,11 +192,61 @@
   flex-basis: 100%;
 }
 
+/* Collapsible orchestrator log (secondary) */
+
+.orchestrator-collapsible {
+  flex: 0 0 auto;
+  border: 1px solid #292e42;
+  border-radius: 6px;
+  background: #16161e;
+  overflow: hidden;
+}
+
+.orchestrator-collapsible-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: #1a1b26;
+  border-left: 3px solid #f0ad4e;
+  color: #a9b1d6;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.orchestrator-collapsible-summary::-webkit-details-marker {
+  display: none;
+}
+
+.orchestrator-collapsible[open] .orchestrator-collapsible-summary {
+  border-bottom: 1px solid #292e42;
+}
+
+.orchestrator-collapsible-content {
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.orchestrator-collapsible-content .log-panel {
+  border: none;
+  border-radius: 0;
+  border-left: none;
+  cursor: default;
+}
+
+.orchestrator-collapsible-content .log-panel-header {
+  display: none;
+}
+
 /* ── Agents Panel ──────────────────────────────────────────────────────── */
 
 .agents-panel {
-  width: 260px;
-  min-width: 200px;
+  flex: 2 1 0;
+  min-width: 260px;
   display: flex;
   flex-direction: column;
   background: #16161e;
