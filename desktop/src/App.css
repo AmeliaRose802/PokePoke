@@ -366,7 +366,8 @@
   flex-shrink: 0;
 }
 
-.agent-card-snake-icon {
+.agent-card-snake-icon,
+.agent-card-icon {
   width: 20px;
   height: 20px;
   object-fit: contain;
@@ -723,6 +724,13 @@
 
 .agent-log-panel-avatar {
   font-size: 24px;
+}
+
+.agent-log-panel-icon {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  border-radius: 4px;
 }
 
 .agent-log-panel-info {
