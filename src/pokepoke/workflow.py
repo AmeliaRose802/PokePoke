@@ -93,8 +93,9 @@ def process_work_item(
             terminal_ui.ui.start()
             if confirm and confirm != 'y':
                 print("⏭️  Skipped.")
-                if run_logger:
-                    run_logger.end_item_log(False, 0)
+                if run_logger and item_logger:
+                    item_logger.log_summary(False, 0)
+                    run_logger.log_orchestrator(f"Completed work item with 0 agent requests - Status: FAILURE")
                 return False, 0, None, 0, 0, None
         
         # Assign and sync BEFORE creating worktree to prevent parallel conflicts
@@ -103,8 +104,9 @@ def process_work_item(
             with worktree_setup_lock(timeout=worktree_lock_timeout):
                 if not assign_and_sync_item(item.id):
                     print(f"❌ Failed to assign work item {item.id}")
-                    if run_logger:
-                        run_logger.end_item_log(False, 0)
+                    if run_logger and item_logger:
+                        item_logger.log_summary(False, 0)
+                        run_logger.log_orchestrator(f"Completed work item with 0 agent requests - Status: FAILURE")
                     return False, 0, None, 0, 0, None
                 
                 worktree_path = _setup_worktree(item)
@@ -112,14 +114,16 @@ def process_work_item(
                 if worktree_path is None:
                     print(f"↩️  Returning {item.id} to queue (unassigning due to worktree failure)...")
                     unassign_item(item.id)
-                    if run_logger:
-                        run_logger.end_item_log(False, 0)
+                    if run_logger and item_logger:
+                        item_logger.log_summary(False, 0)
+                        run_logger.log_orchestrator(f"Completed work item with 0 agent requests - Status: FAILURE")
                     return False, 0, None, 0, 0, None
         except Timeout:
             wait_seconds = int(worktree_lock_timeout)
             print(f"❌ Timed out waiting {wait_seconds}s for worktree setup lock (another agent is claiming an item).")
-            if run_logger:
-                run_logger.end_item_log(False, 0)
+            if run_logger and item_logger:
+                item_logger.log_summary(False, 0)
+                run_logger.log_orchestrator(f"Completed work item with 0 agent requests - Status: FAILURE")
             return False, 0, None, 0, 0, None
         
         # Use current working directory as repo root
@@ -152,8 +156,9 @@ def process_work_item(
                 if timeout_restart_count > max_timeout_restarts:
                     print(f"\n⏱️  TIMEOUT: Exceeded max restarts ({max_timeout_restarts})")
                     print(f"   Failing item {item.id} after {timeout_restart_count - 1} timeout restart(s).\n")
-                    if run_logger:
-                        run_logger.end_item_log(False, request_count)
+                    if run_logger and item_logger:
+                        item_logger.log_summary(False, request_count)
+                        run_logger.log_orchestrator(f"Completed work item with {request_count} agent requests - Status: FAILURE")
                     cleanup_worktree(item.id, force=True)
                     terminal_ui.ui.set_current_agent(None)
                     return False, request_count, accumulated_stats, cleanup_agent_runs, gate_agent_runs, None
@@ -213,8 +218,9 @@ def process_work_item(
                 # Cleanup failed (e.g. timeout), consider item failed or retry?
                 # For now, if cleanup fails, we fail the cycle.
                 result.success = False
-                if run_logger:
-                    run_logger.end_item_log(False, request_count)
+                if run_logger and item_logger:
+                    item_logger.log_summary(False, request_count)
+                    run_logger.log_orchestrator(f"Completed work item with {request_count} agent requests - Status: FAILURE")
                 return False, request_count, accumulated_stats, cleanup_agent_runs, gate_agent_runs, None
 
             # --- GATE AGENT CHECK ---
@@ -291,8 +297,9 @@ def process_work_item(
                     item_stats.accumulate(beta_stats)
                 set_terminal_banner(format_work_item_banner(item.id, item.title, "Completed"))
 
-            if run_logger:
-                run_logger.end_item_log(success, request_count)
+            if run_logger and item_logger:
+                item_logger.log_summary(success, request_count)
+                run_logger.log_orchestrator(f"Completed work item with {request_count} agent requests - Status: {'SUCCESS' if success else 'FAILURE'}")
 
             terminal_ui.ui.set_current_agent(None)
 
@@ -312,8 +319,9 @@ def process_work_item(
             print("\n\U0001f9f9 Cleaning up worktree...")
             cleanup_worktree(item.id, force=True)
 
-            if run_logger:
-                run_logger.end_item_log(False, request_count)
+            if run_logger and item_logger:
+                item_logger.log_summary(False, request_count)
+                run_logger.log_orchestrator(f"Completed work item with {request_count} agent requests - Status: FAILURE")
 
             terminal_ui.ui.set_current_agent(None)
 

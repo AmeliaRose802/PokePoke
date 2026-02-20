@@ -36,9 +36,6 @@ class RunLogger:
         self.maintenance_logs_dir = self.run_dir / "maintenance"
         self.maintenance_logs_dir.mkdir(exist_ok=True)
         
-        # Track current item logger
-        self._current_item_logger: 'ItemLogger | None' = None
-        
         # Write initial orchestrator log entry
         self._init_orchestrator_log()
     
@@ -89,17 +86,13 @@ class RunLogger:
         Returns:
             ItemLogger instance for the work item
         """
-        # Close previous item logger if exists
-        if self._current_item_logger:
-            self._current_item_logger.close()
-
         if agent_name is None:
             # Defer import to avoid circular dependency at module load
             from pokepoke.agent_context import get_agent_name
 
             agent_name = get_agent_name(default="agent")
 
-        self._current_item_logger = ItemLogger(
+        item_logger = ItemLogger(
             self.item_logs_dir,
             item_id,
             item_title,
@@ -110,24 +103,7 @@ class RunLogger:
         self.log_orchestrator(
             f"Started processing work item: {item_id} - {item_title}{agent_suffix}"
         )
-        return self._current_item_logger
-    
-    def end_item_log(self, success: bool, request_count: int) -> None:
-        """End logging for the current work item.
-        
-        Args:
-            success: Whether the work item was completed successfully
-            request_count: Number of agent requests made
-        """
-        if self._current_item_logger:
-            self._current_item_logger.log_summary(success, request_count)
-            self._current_item_logger.close()
-            self._current_item_logger = None
-        
-        status = "SUCCESS" if success else "FAILURE"
-        self.log_orchestrator(
-            f"Completed work item with {request_count} agent requests - Status: {status}"
-        )
+        return item_logger
     
     def log_maintenance(self, agent_type: str, message: str) -> None:
         """Log a maintenance agent action.
