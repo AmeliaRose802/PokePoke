@@ -12,6 +12,7 @@ import {
   detectLevel,
   formatTime,
 } from "../utils/logProcessor";
+import { renderMarkdown } from "../utils/markdown";
 
 // ===================== Render Components =====================
 
@@ -176,6 +177,26 @@ export function ToolBatchAccordion({ batch, keyPrefix }: ToolBatchAccordionProps
   );
 }
 
+interface MarkdownBlockProps {
+  entries: LogEntry[];
+  startedAt: number;
+  keyPrefix: string;
+}
+
+export function MarkdownBlock({ entries, startedAt, keyPrefix }: MarkdownBlockProps) {
+  const markdown = entries.map((e) => e.message).join("\n");
+  const html = renderMarkdown(markdown);
+  return (
+    <div key={keyPrefix} className="log-entry log-markdown-block">
+      <span className="log-timestamp">{formatTime(startedAt)}</span>
+      <span
+        className="log-message log-markdown-content"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    </div>
+  );
+}
+
 interface RenderLogItemsProps {
   items: RenderLogItem[];
 }
@@ -214,6 +235,17 @@ export function RenderLogItems({ items }: RenderLogItemsProps) {
               key={`tool-batch-${i}`}
               batch={item.batch}
               keyPrefix={`tool-batch-${i}`}
+            />
+          );
+        }
+
+        if (item.type === "markdown-block") {
+          return (
+            <MarkdownBlock
+              key={`md-${i}`}
+              entries={item.entries}
+              startedAt={item.startedAt}
+              keyPrefix={`md-${i}`}
             />
           );
         }

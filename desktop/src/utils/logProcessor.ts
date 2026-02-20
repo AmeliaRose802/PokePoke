@@ -45,7 +45,8 @@ export type RenderLogItem =
   | { type: "log"; entry: LogEntry }
   | { type: "tool"; tool: ToolItem }
   | { type: "tool-batch"; batch: ToolBatch }
-  | { type: "narration"; entries: LogEntry[]; startedAt: number };
+  | { type: "narration"; entries: LogEntry[]; startedAt: number }
+  | { type: "markdown-block"; entries: LogEntry[]; startedAt: number };
 
 // ===================== Patterns =====================
 
@@ -359,7 +360,40 @@ export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
     i += 1;
   }
 
-  return items;
+  return mergeConsecutiveLogEntries(items);
+}
+
+/**
+ * Merge consecutive plain log entries into markdown blocks for rich rendering.
+ * Single isolated log entries are kept as-is.
+ */
+function mergeConsecutiveLogEntries(items: RenderLogItem[]): RenderLogItem[] {
+  const merged: RenderLogItem[] = [];
+  let i = 0;
+  while (i < items.length) {
+    if (items[i].type !== "log") {
+      merged.push(items[i]);
+      i += 1;
+      continue;
+    }
+    const block: LogEntry[] = [];
+    const startedAt = (items[i] as { type: "log"; entry: LogEntry }).entry.timestamp;
+    while (i < items.length && items[i].type === "log") {
+      block.push((items[i] as { type: "log"; entry: LogEntry }).entry);
+      i += 1;
+    }
+    if (block.length === 1 && !containsMarkdown(block[0].message)) {
+      merged.push({ type: "log", entry: block[0] });
+    } else {
+      merged.push({ type: "markdown-block", entries: block, startedAt });
+    }
+  }
+  return merged;
+}
+
+/** Check if a string contains markdown syntax worth rendering. */
+export function containsMarkdown(text: string): boolean {
+  return /(?:^#{1,6}\s|[*_]{1,2}\S|\[.+\]\(.+\)|`[^`]+`|^[-*+]\s|^\d+\.\s|^>\s|^```)/m.test(text);
 }
 
 // ===================== String-to-LogEntry Conversion =====================

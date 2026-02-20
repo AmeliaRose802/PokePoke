@@ -118,4 +118,45 @@ describe('LogPanel', () => {
     expect(screen.getByText('🔧 view')).toBeInTheDocument();
     expect(screen.getByText('🔧 edit')).toBeInTheDocument();
   });
+
+  it('renders consecutive markdown lines as formatted HTML', () => {
+    const logs: LogEntry[] = [
+      mk(1, '## Summary'),
+      mk(2, 'I made the following **changes**:'),
+      mk(3, '- Updated `config.ts`'),
+      mk(4, '- Fixed the bug'),
+    ];
+
+    render(
+      <LogPanel
+        title="Agent"
+        icon="🤖"
+        logs={logs}
+        accentColor="#7dcfff"
+      />
+    );
+
+    // Markdown should be rendered as HTML elements
+    const container = document.querySelector('.log-markdown-content');
+    expect(container).not.toBeNull();
+
+    // Check for rendered heading
+    const heading = container!.querySelector('h2');
+    expect(heading).not.toBeNull();
+    expect(heading!.textContent).toBe('Summary');
+
+    // Check for rendered bold text
+    const bold = container!.querySelector('strong');
+    expect(bold).not.toBeNull();
+    expect(bold!.textContent).toBe('changes');
+
+    // Check for rendered list items
+    const listItems = container!.querySelectorAll('li');
+    expect(listItems.length).toBe(2);
+
+    // Check for rendered inline code
+    const code = container!.querySelector('code');
+    expect(code).not.toBeNull();
+    expect(code!.textContent).toBe('config.ts');
+  });
 });

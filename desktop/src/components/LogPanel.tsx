@@ -6,6 +6,7 @@ import {
   ToolAccordion,
   NarrationAccordion,
   ToolBatchAccordion,
+  MarkdownBlock,
 } from "./LogComponents";
 
 interface Props {
@@ -100,6 +101,17 @@ export function LogPanel({
                 key={`tool-batch-${i}`}
                 batch={item.batch}
                 keyPrefix={`tool-batch-${i}`}
+              />
+            );
+          }
+
+          if (item.type === "markdown-block") {
+            return (
+              <MarkdownBlock
+                key={`md-${i}`}
+                entries={item.entries}
+                startedAt={item.startedAt}
+                keyPrefix={`md-${i}`}
               />
             );
           }
