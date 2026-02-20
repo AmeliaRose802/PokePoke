@@ -13,7 +13,12 @@ import {
 } from "../utils/logProcessor";
 import { RenderLogItems } from "./LogComponents";
 import { useBridge } from "../useBridge";
-import { getAgentPrimaryLabel, isGateAgent } from "../utils/agentHelpers";
+import {
+  getAgentAvatar,
+  getAgentPrimaryLabel,
+  getAgentType,
+  isGateAgent,
+} from "../utils/agentHelpers";
 
 interface Props {
   agent: AgentInfo;
@@ -63,6 +68,10 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
   
   // Use detailed agent logs if available, otherwise fall back to basic agent info
   const agentToUse = detailedAgent || agent;
+  const agentType = getAgentType(agentToUse);
+  const agentIconPath = getAgentAvatar(agentToUse);
+  const fallbackAvatar = getAvatar(agentToUse.agent_id);
+  const iconAlt = `${agentType ?? "agent"} icon`;
   const logLines = agentToUse.log_lines && agentToUse.log_lines.length > 0
     ? agentToUse.log_lines
     : agentToUse.recent_logs;
@@ -124,7 +133,21 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
             ✕
           </button>
         )}
-        <span className="agent-log-panel-avatar">{getAvatar(agent.agent_id)}</span>
+        {agentIconPath ? (
+          <img
+            src={agentIconPath}
+            alt={iconAlt}
+            className="agent-log-panel-avatar agent-log-panel-icon"
+            onError={(e) => {
+              const parent = e.currentTarget.parentElement;
+              if (parent) {
+                parent.innerHTML = `<span class="agent-log-panel-avatar">${fallbackAvatar}</span>`;
+              }
+            }}
+          />
+        ) : (
+          <span className="agent-log-panel-avatar">{fallbackAvatar}</span>
+        )}
         <div className="agent-log-panel-info">
           <span className="agent-log-panel-name">{primaryLabel}</span>
           <span className="agent-log-panel-iter">v{agent.iteration}</span>

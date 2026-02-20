@@ -12,7 +12,12 @@
 
 import { useState, type ReactElement } from "react";
 import type { AgentInfo } from "../types";
-import { getAgentPrimaryLabel, isGateAgent, getAgentAvatar } from "../utils/agentHelpers";
+import {
+  getAgentPrimaryLabel,
+  isGateAgent,
+  getAgentAvatar,
+  getAgentType,
+} from "../utils/agentHelpers";
 
 interface Props {
   agents: AgentInfo[];
@@ -146,6 +151,10 @@ export function AgentsPanel({
       isGate && parent
         ? `${parent.name}${parent.iteration ? ` · v${parent.iteration}` : ""}`
         : agent.parent_agent_id ?? null;
+    const agentType = getAgentType(agent);
+    const agentIconPath = getAgentAvatar(agent);
+    const fallbackEmoji = getEmojiAvatar(agent.agent_id);
+    const iconAlt = `${agentType ?? "agent"} icon`;
 
     return (
       <div
@@ -165,25 +174,24 @@ export function AgentsPanel({
       >
         <div className="agent-card-top">
           {(() => {
-            const snakeIconPath = getAgentAvatar(agent);
-            if (snakeIconPath) {
+            if (agentIconPath) {
               return (
                 <img 
-                  src={snakeIconPath} 
-                  alt="Snake agent icon"
-                  className="agent-card-avatar agent-card-snake-icon"
+                  src={agentIconPath} 
+                  alt={iconAlt}
+                  className="agent-card-avatar agent-card-snake-icon agent-card-icon"
                   onError={(e) => {
                     // Fallback to emoji if image fails to load
-                    const target = e.target as HTMLImageElement;
+                    const target = e.currentTarget;
                     const parent = target.parentElement;
                     if (parent) {
-                      parent.innerHTML = `<span class="agent-card-avatar">${getEmojiAvatar(agent.agent_id)}</span>`;
+                      parent.innerHTML = `<span class="agent-card-avatar">${fallbackEmoji}</span>`;
                     }
                   }}
                 />
               );
             } else {
-              return <span className="agent-card-avatar">{getEmojiAvatar(agent.agent_id)}</span>;
+              return <span className="agent-card-avatar">{fallbackEmoji}</span>;
             }
           })()}
           <div className="agent-card-info">

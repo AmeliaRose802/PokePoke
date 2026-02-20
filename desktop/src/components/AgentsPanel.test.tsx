@@ -30,6 +30,16 @@ describe('AgentsPanel', () => {
     expect(pauseBtn.textContent).toBe('⏸');
   });
 
+  it('renders agent type icon when provided', () => {
+    const agent = mkAgent({ agent_type: 'janitor' });
+    render(
+      <AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />
+    );
+    const icon = screen.getByAltText('janitor icon') as HTMLImageElement;
+    expect(icon).toBeInTheDocument();
+    expect(icon.getAttribute('src')).toBe('/agent_icons/janitor_agent_icon.png');
+  });
+
   it('renders resume button for paused agents', () => {
     const agent = mkAgent({ paused: true });
     render(

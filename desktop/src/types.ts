@@ -187,8 +187,9 @@ export interface AgentInfo {
   status: "running" | "success" | "failed";
   model?: string | null;
   parent_agent_id?: string | null;
-   work_item_id?: string | null;
-   work_item_title?: string | null;
+  work_item_id?: string | null;
+  work_item_title?: string | null;
+  agent_type?: string | null;
   modified_files?: string[];
   recent_logs: string[];
   log_lines?: string[];
