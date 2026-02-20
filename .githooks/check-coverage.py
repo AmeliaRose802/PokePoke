@@ -33,38 +33,8 @@ def get_repo_root() -> Path:
         return Path(__file__).resolve().parent.parent
 
 
-def get_staged_python_files() -> list[str]:
-    """Get list of staged Python source files."""
-    try:
-        result = subprocess.run(
-            ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-
-        files = []
-        for line in result.stdout.strip().split("\n"):
-            line = line.strip()
-            if not line:
-                continue
-            # Include Python files in src/pokepoke, exclude tests
-            if (
-                line.endswith(".py")
-                and line.startswith("src/pokepoke/")
-                and "test" not in line
-                and "__pycache__" not in line
-            ):
-                files.append(line)
-
-        return files
-    except subprocess.CalledProcessError as e:
-        print(f"[error] Failed to get staged files: {e}", file=sys.stderr)
-        return []
-
-
-def _get_all_staged_files() -> list[str]:
-    """Get ALL staged files (not just source), for test file detection."""
+def _get_staged_files() -> list[str]:
+    """Get all staged file paths (added/copied/modified) from git index."""
     try:
         result = subprocess.run(
             ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
@@ -73,8 +43,21 @@ def _get_all_staged_files() -> list[str]:
             check=True,
         )
         return [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as e:
+        print(f"[error] Failed to get staged files: {e}", file=sys.stderr)
         return []
+
+
+def get_staged_python_files() -> list[str]:
+    """Get staged Python source files under src/pokepoke/ (excludes tests)."""
+    return [
+        f
+        for f in _get_staged_files()
+        if f.endswith(".py")
+        and f.startswith("src/pokepoke/")
+        and "test" not in f
+        and "__pycache__" not in f
+    ]
 
 
 def _find_test_files_for_staged(
@@ -87,7 +70,7 @@ def _find_test_files_for_staged(
     - run_full_suite: True if we should fall back to running everything
       (e.g. conftest.py changed, __init__.py changed, or no mapping found)
     """
-    all_staged = _get_all_staged_files()
+    all_staged = _get_staged_files()
 
     # If conftest.py or __init__.py changed, fall back to full suite
     # because these are test infrastructure files that affect all tests.
