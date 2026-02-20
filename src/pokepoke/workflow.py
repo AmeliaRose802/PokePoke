@@ -11,7 +11,7 @@ from pokepoke.git_operations import has_uncommitted_changes, has_commits_ahead
 from pokepoke.beads import assign_and_sync_item, unassign_item, add_comment
 from pokepoke.agent_runner import run_cleanup_loop, run_beta_tester, run_gate_agent
 from pokepoke.worktree_finalization import finalize_work_item
-from pokepoke.work_item_selection import select_work_item  # re-exported
+from pokepoke.work_item_selection import select_work_item  # noqa: F401  # re-exported
 from pokepoke.stats import parse_agent_stats
 from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner
 from pokepoke import terminal_ui
@@ -93,7 +93,7 @@ def process_work_item(
                 return False, 0, None, 0, 0, None
         
         # Assign and sync BEFORE creating worktree to prevent parallel conflicts
-        print(f"\n🔒 Claiming work item...")
+        print("\n🔒 Claiming work item...")
         if not assign_and_sync_item(item.id):
             print(f"❌ Failed to assign work item {item.id}")
             if run_logger:
@@ -151,7 +151,7 @@ def process_work_item(
 
             # Append feedback if retrying
             if last_feedback:
-                print(f"\n🔄 Restarting Work Agent with feedback...")
+                print("\n🔄 Restarting Work Agent with feedback...")
                 current_desc = item.description or ""
                 if "**PREVIOUS GATE AGENT FEEDBACK:**" not in current_desc:
                     current_desc += "\n\n**PREVIOUS GATE AGENT FEEDBACK:**\n"
@@ -294,7 +294,7 @@ def process_work_item(
         else:
             set_terminal_banner(format_work_item_banner(item.id, item.title, "Failed"))
             print(f"\n\u274c Failed to complete work item: {result.error}")
-            print(f"\n\U0001f9f9 Cleaning up worktree...")
+            print("\n\U0001f9f9 Cleaning up worktree...")
             cleanup_worktree(item.id, force=True)
 
             if run_logger:

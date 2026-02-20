@@ -1,13 +1,11 @@
 """Agent runner utilities for cleanup and maintenance agents."""
 
-import subprocess
 import json
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pokepoke.config import get_config
 from pokepoke.copilot import invoke_copilot
 from pokepoke.git_operations import get_default_branch
 from pokepoke.types import BeadsWorkItem, AgentStats

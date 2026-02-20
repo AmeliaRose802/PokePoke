@@ -40,7 +40,7 @@ def run_cleanup_loop(item: BeadsWorkItem, result: CopilotResult, repo_root: Path
             print("✅ Changes committed successfully (validation passed)")
             break
         else:
-            print(f"\n❌ Commit failed - validation errors:")
+            print("\n❌ Commit failed - validation errors:")
             print(f"   {commit_error}")
         
         print("\n🧹 Invoking cleanup agent to fix validation errors...")

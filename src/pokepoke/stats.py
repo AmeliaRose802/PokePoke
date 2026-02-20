@@ -226,7 +226,7 @@ def _print_model_comparison(completions: list[ModelCompletionRecord]) -> None:
             pass_pct = (gate_passed / gate_total) * 100
             print(f"     Gate pass rate:   {pass_pct:.0f}% ({gate_passed}/{gate_total})")
         else:
-            print(f"     Gate pass rate:   N/A (no gate runs)")
+            print("     Gate pass rate:   N/A (no gate runs)")
 
 
 def serialize_session_stats(

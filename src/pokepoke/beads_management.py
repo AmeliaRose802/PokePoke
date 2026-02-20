@@ -125,7 +125,7 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
             print(f"✅ Synced assignment - other agents will see {item_id} is claimed")
         else:
             print(f"⚠️  bd sync returned non-zero: {sync_result.returncode}")
-            print(f"   Assignment may not be immediately visible to other agents")
+            print("   Assignment may not be immediately visible to other agents")
         
         return True
         
