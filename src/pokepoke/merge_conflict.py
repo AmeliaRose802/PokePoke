@@ -6,7 +6,7 @@ from pathlib import Path
 
 def is_merge_in_progress(repo_path: Path | None = None) -> bool:
     """Check if a merge is currently in progress (unfinished merge).
-    
+
     A merge is in progress when MERGE_HEAD exists, meaning we're between
     'git merge' starting and completing (either via commit or abort).
     """
@@ -29,14 +29,14 @@ def is_merge_in_progress(repo_path: Path | None = None) -> bool:
 
 def get_unmerged_files(repo_path: Path | None = None) -> list[str]:
     """Get list of files with merge conflicts (unmerged entries).
-    
+
     Uses git status --porcelain to find files with merge conflict indicators:
     - UU: Both modified (most common)
     - AA: Both added
     - DD: Both deleted
     - AU/UA: Added by us/them, modified by other
     - DU/UD: Deleted by us/them, modified by other
-    
+
     Returns:
         List of file paths with unmerged conflicts
     """
@@ -53,11 +53,11 @@ def get_unmerged_files(repo_path: Path | None = None) -> list[str]:
             check=True,
             timeout=10
         )
-        
+
         unmerged = []
         # Unmerged file indicators in git status --porcelain
         conflict_patterns = {'UU', 'AA', 'DD', 'AU', 'UA', 'DU', 'UD'}
-        
+
         for line in result.stdout.strip().split('\n'):
             if not line:
                 continue
@@ -67,7 +67,7 @@ def get_unmerged_files(repo_path: Path | None = None) -> list[str]:
                 # Extract filename (after the status and space)
                 filename = line[3:]
                 unmerged.append(filename)
-        
+
         return unmerged
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return []
@@ -75,7 +75,7 @@ def get_unmerged_files(repo_path: Path | None = None) -> list[str]:
 
 def abort_merge(repo_path: Path | None = None) -> tuple[bool, str]:
     """Abort an in-progress merge, returning to the state before the merge started.
-    
+
     Returns:
         Tuple of (success, error_message)
     """
@@ -103,7 +103,7 @@ def abort_merge(repo_path: Path | None = None) -> tuple[bool, str]:
 
 def get_merge_conflict_details(repo_path: Path | None = None) -> dict[str, object]:
     """Get detailed information about the current merge conflict state.
-    
+
     Returns a dictionary with:
     - is_merging: bool - whether a merge is in progress
     - unmerged_files: list - files with conflicts
@@ -112,7 +112,7 @@ def get_merge_conflict_details(repo_path: Path | None = None) -> dict[str, objec
     """
     is_merging = is_merge_in_progress(repo_path)
     unmerged = get_unmerged_files(repo_path)
-    
+
     merge_head = ""
     if is_merging:
         try:
@@ -131,7 +131,7 @@ def get_merge_conflict_details(repo_path: Path | None = None) -> dict[str, objec
                 merge_head = result.stdout.strip()
         except Exception:
             pass
-    
+
     return {
         "is_merging": is_merging,
         "unmerged_files": unmerged,

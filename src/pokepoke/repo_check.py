@@ -114,11 +114,11 @@ def _try_auto_commit(repo_path: Path, run_logger: 'RunLogger') -> bool:
 
 def _stash_uncommitted_changes(repo_path: Path, run_logger: 'RunLogger') -> bool:
     """Attempt to stash uncommitted changes as a fallback.
-    
+
     Args:
         repo_path: Path to the repository
         run_logger: Run logger instance
-    
+
     Returns:
         True if stash succeeded, False otherwise
     """
@@ -133,12 +133,12 @@ def _stash_uncommitted_changes(repo_path: Path, run_logger: 'RunLogger') -> bool
             cwd=str(repo_path),
             timeout=30
         )
-        
+
         # Create a descriptive stash message
         import datetime
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         stash_msg = f"pokepoke-auto-stash-{timestamp}: cleanup agent failed"
-        
+
         # Stash all staged changes
         result = subprocess.run(
             ["git", "stash", "push", "-m", stash_msg],
@@ -149,17 +149,17 @@ def _stash_uncommitted_changes(repo_path: Path, run_logger: 'RunLogger') -> bool
             cwd=str(repo_path),
             timeout=60
         )
-        
+
         if result.returncode == 0:
             run_logger.log_orchestrator(f"Stashed changes: {stash_msg}")
             return True
-        
+
         # Stash failed
         error_msg = result.stderr.strip() if result.stderr else "unknown error"
         print(f"⚠️  git stash failed: {error_msg}")
         run_logger.log_orchestrator(f"git stash failed: {error_msg}", level="WARNING")
         return False
-        
+
     except subprocess.TimeoutExpired:
         print("⚠️  git stash timed out")
         run_logger.log_orchestrator("git stash timed out", level="WARNING")
@@ -177,11 +177,11 @@ def _stash_uncommitted_changes(repo_path: Path, run_logger: 'RunLogger') -> bool
 
 def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool:
     """Check main repository status and commit beads changes if needed.
-    
+
     Args:
         repo_path: Path to the main repository
         run_logger: Run logger instance
-    
+
     Returns:
         True if ready to continue, False if should exit
     """
@@ -209,12 +209,12 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
         # For other git errors, try to continue
         print("   Continuing despite git error...")
         return True
-    
+
     uncommitted = status_result.stdout.strip()
     if uncommitted:
         lines = uncommitted.split('\n')
         changes = categorize_git_changes(lines)
-        
+
         # Handle problematic changes that need agent intervention
         if changes['other']:
             print("\n⚠️  Main repository has uncommitted changes:")
@@ -223,20 +223,20 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
                 print(f"   {line}")
             if len(changes['other']) > 10:
                 print(f"   ... and {len(changes['other']) - 10} more")
-            
+
             # Try auto-commit first before launching the heavyweight cleanup agent
             print("\n🔄 Attempting to auto-commit changes...")
             if _try_auto_commit(repo_path, run_logger):
                 print("✅ Auto-committed uncommitted changes")
                 return True
-            
+
             # Auto-commit failed - fall back to cleanup agent
             print("\n🤖 Auto-commit failed, launching cleanup agent...")
             run_logger.log_orchestrator("Auto-commit failed, launching cleanup agent")
-            
+
             from pokepoke.agent_runner import invoke_cleanup_agent
             from pokepoke.types import BeadsWorkItem
-            
+
             cleanup_success = False
             for attempt in range(1, MAX_CLEANUP_RETRIES + 1):
                 # Create a temporary work item for the cleanup agent
@@ -249,32 +249,32 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
                     status="in_progress",
                     labels=["cleanup", "auto-generated"]
                 )
-                
+
                 with cleanup_lock():
                     cleanup_success, cleanup_stats = invoke_cleanup_agent(cleanup_item, repo_path)
-                
+
                 if cleanup_success:
                     print("✅ Cleanup agent successfully resolved uncommitted changes")
                     run_logger.log_orchestrator("Cleanup agent successfully resolved uncommitted changes")
                     return True  # Continue processing
-                
+
                 if attempt < MAX_CLEANUP_RETRIES:
                     wait_time = 2 ** attempt  # Exponential backoff: 2, 4, 8 seconds
                     print(f"⚠️  Cleanup attempt {attempt}/{MAX_CLEANUP_RETRIES} failed, retrying in {wait_time}s...")
                     run_logger.log_orchestrator(f"Cleanup attempt {attempt} failed, retrying", level="WARNING")
                     time.sleep(wait_time)
-            
+
             # All cleanup retries failed - try stashing as last resort
             print(f"\n⚠️  All {MAX_CLEANUP_RETRIES} cleanup attempts failed")
             print("🔄 Attempting to stash uncommitted changes as fallback...")
             run_logger.log_orchestrator("Cleanup retries exhausted, attempting git stash", level="WARNING")
-            
+
             stash_success = _stash_uncommitted_changes(repo_path, run_logger)
             if stash_success:
                 print("✅ Changes stashed successfully - continuing with orchestration")
                 run_logger.log_orchestrator("Uncommitted changes stashed successfully")
                 return True
-            
+
             # Stash failed - but workers use isolated worktrees, so continue anyway
             print("\n⚠️  Could not resolve uncommitted changes in main repo")
             print("   Workers use isolated worktrees - continuing anyway")
@@ -283,13 +283,13 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
                 level="WARNING"
             )
             return True  # Continue processing - workers are isolated
-        
+
         # Beads changes are handled by beads' own sync mechanism (bd sync)
         # Do NOT manually commit them - beads daemon handles this automatically
         if changes['beads']:
             print("ℹ️  Beads database changes detected - will be synced by beads daemon")
             print("ℹ️  Run 'bd sync' to force immediate sync if needed")
-        
+
         # Auto-resolve worktree cleanup deletions
         if changes['worktree']:
             print("🧹 Committing worktree cleanup changes...")
@@ -304,5 +304,5 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
                 timeout=60
             )
             print("✅ Worktree cleanup committed")
-    
+
     return True

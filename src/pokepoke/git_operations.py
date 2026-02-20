@@ -8,14 +8,14 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # Re-export merge conflict utilities for backward compatibility
-from .merge_conflict import (
+from .merge_conflict import (  # noqa: E402
     is_merge_in_progress,
     get_unmerged_files,
     abort_merge,
     get_merge_conflict_details,
 )
 
-from .git_helpers import restore_beads_stash
+from .git_helpers import restore_beads_stash  # noqa: E402
 
 __all__ = [
     'is_merge_in_progress', 'get_unmerged_files', 'abort_merge',
@@ -66,7 +66,7 @@ def commit_all_changes(message: str = "Auto-commit by PokePoke", cwd: str | None
             text=True, encoding='utf-8', errors='replace',
             timeout=240, cwd=cwd
         )
-        
+
         result = subprocess.run(
             ["git", "commit", "-m", message],
             capture_output=True,
@@ -76,7 +76,7 @@ def commit_all_changes(message: str = "Auto-commit by PokePoke", cwd: str | None
             timeout=300,  # 5 minutes for pre-commit hooks
             cwd=cwd
         )
-        
+
         if result.returncode == 0:
             return True, ""
         else:
@@ -93,7 +93,7 @@ def commit_all_changes(message: str = "Auto-commit by PokePoke", cwd: str | None
 
 def verify_main_repo_clean(cwd: str | None = None) -> tuple[bool, str, list[str]]:
     """Verify repository has no uncommitted non-beads changes.
-    
+
     Returns (is_clean, uncommitted_output, non_beads_changes).
     """
     try:
@@ -102,18 +102,18 @@ def verify_main_repo_clean(cwd: str | None = None) -> tuple[bool, str, list[str]
             capture_output=True, text=True, encoding='utf-8',
             errors='replace', check=True, timeout=10, cwd=cwd
         )
-        
+
         uncommitted = status_result.stdout.strip()
         if uncommitted:
             changes = categorize_git_changes(uncommitted.split('\n'))
             # Exclude untracked files under .beads/ and worktrees/
             relevant_untracked = [
-                l for l in changes['untracked']
-                if '.beads/' not in l and 'worktrees/' not in l
+                line for line in changes['untracked']
+                if '.beads/' not in line and 'worktrees/' not in line
             ]
             non_beads = changes['other'] + relevant_untracked
             return len(non_beads) == 0, uncommitted, non_beads
-        
+
         return True, "", []
     except Exception as e:
         raise RuntimeError(f"Error checking git status: {e}")
@@ -121,7 +121,7 @@ def verify_main_repo_clean(cwd: str | None = None) -> tuple[bool, str, list[str]
 
 def handle_beads_auto_commit() -> None:
     """Automatically commit beads database changes.
-    
+
     Raises:
         RuntimeError: If commit fails
     """
@@ -145,20 +145,20 @@ def handle_beads_auto_commit() -> None:
 
 def check_main_repo_ready_for_merge() -> tuple[bool, str]:
     """Check if main repo is ready for worktree merge.
-    
+
     Returns:
         (is_ready, error_message) tuple
     """
     try:
         is_clean, uncommitted, non_beads_changes = verify_main_repo_clean()
-        
+
         if not is_clean:
             return False, f"Main repo has uncommitted non-beads changes:\n{chr(10).join(non_beads_changes)}"
-        
+
         # If we have uncommitted changes, they must be beads-only
         if uncommitted:
             handle_beads_auto_commit()
-        
+
         return True, ""
     except Exception as e:
         return False, f"Error checking main repo status: {e}"
@@ -203,7 +203,7 @@ def get_default_branch(preferred: str | None = None, fallback: str | None = None
         # Check local
         if branch_exists(preferred):
             return preferred
-            
+
         # Check remote
         try:
             subprocess.run(
@@ -212,7 +212,7 @@ def get_default_branch(preferred: str | None = None, fallback: str | None = None
                 check=True,
                 timeout=30
             )
-            
+
             # Found on remote, create local tracking branch
             print(f"   ✨ Creating local tracking branch for {preferred}...")
             subprocess.run(
@@ -288,7 +288,7 @@ def is_worktree_clean(worktree_path: Path) -> bool:
 
 def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, str, list[str]]:
     """Execute the checkout, pull, and merge sequence.
-    
+
     Returns:
         Tuple of (success, error_message, unmerged_files)
         - If successful: (True, "", [])
@@ -300,7 +300,7 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, 
                      timeout=30)
     except subprocess.CalledProcessError as e:
         return False, f"Failed to checkout {target_branch}: {e.stderr or str(e)}", []
-    
+
     # Stash any beads daemon changes before pull to avoid "unstaged changes" error
     # The beads daemon continuously updates .beads/issues.jsonl which can cause
     # git pull --rebase to fail if changes happen between our commit and the pull
@@ -320,7 +320,7 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, 
             stashed = True
     except subprocess.CalledProcessError:
         pass  # Stash failed, will try pull anyway
-    
+
     try:
         subprocess.run(["git", "pull", "--rebase", "origin", target_branch],
                      check=True, capture_output=True, text=True, encoding='utf-8',
@@ -330,11 +330,11 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, 
         if stashed:
             restore_beads_stash("git pull --rebase failure")
         return False, f"Failed to pull with rebase: {e.stderr or str(e)}", []
-    
+
     # Restore stashed beads changes after successful pull
     if stashed:
         restore_beads_stash("git pull --rebase")
-    
+
     try:
         subprocess.run(["git", "merge", "--no-ff", branch_name, "-m", f"Merge {branch_name}"],
                      check=True, capture_output=True, text=True, encoding='utf-8',
@@ -344,7 +344,7 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, 
         # Check if this is a merge conflict
         unmerged = get_unmerged_files()
         is_merging = is_merge_in_progress()
-        
+
         if is_merging and unmerged:
             return False, f"Merge conflicts detected in {len(unmerged)} file(s)", unmerged
         else:
@@ -357,21 +357,21 @@ def validate_post_merge(target_branch: str) -> bool:
         capture_output=True, text=True, encoding='utf-8', check=True,
         timeout=30
     ).stdout.strip()
-    
+
     if current_branch != target_branch:
         print(f"❌ Post-merge validation failed: Not on {target_branch} (on {current_branch})")
         return False
-    
+
     status_result = subprocess.run(
         ["git", "status", "--porcelain"],
         capture_output=True, text=True, encoding='utf-8', check=True,
         timeout=30
     )
-    
+
     if status_result.stdout.strip():
         print(f"❌ Post-merge validation failed: {target_branch} has uncommitted changes")
         return False
-    
+
     return True
 
 def has_commits_ahead(target_branch: str | None = None, cwd: str | None = None) -> int:
@@ -393,4 +393,4 @@ def has_commits_ahead(target_branch: str | None = None, cwd: str | None = None) 
     return 0
 
 # Re-export handoff context builder for backward compatibility
-from .handoff_context import build_handoff_context  # noqa: F401
+from .handoff_context import build_handoff_context  # noqa: E402,F401

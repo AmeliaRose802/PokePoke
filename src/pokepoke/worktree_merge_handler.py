@@ -24,7 +24,7 @@ def handle_worktree_merge(
 
     Uses the merge lock to serialize concurrent merge attempts from
     parallel agents. This prevents merge conflict cascades.
-    
+
     Args:
         agent_id: Agent ID for worktree tracking
         agent_item: Work item for the agent
@@ -32,7 +32,7 @@ def handle_worktree_merge(
         worktree_path: Path to the worktree
         repo_root: Repository root path
         agent_stats: Agent statistics to return
-        
+
     Returns:
         Tuple of (merge_success, worktree_cleaned)
     """
@@ -63,7 +63,7 @@ def _handle_worktree_merge_inner(
         abort_merge
     )
     from pokepoke.worktree_cleanup import add_uncleaned_worktree, remove_from_manifest
-    
+
     # Check if main repo is ready for merge
     print("\n🔍 Checking if main repo is ready for merge...")
     is_ready, error_msg = check_main_repo_ready_for_merge()
@@ -71,14 +71,14 @@ def _handle_worktree_merge_inner(
     if not is_ready:
         print(f"\n⚠️  Cannot merge: {error_msg}")
         print(f"   Worktree preserved at worktrees/task-{agent_id} for manual intervention")
-        
+
         # Track preserved worktree in manifest
         add_uncleaned_worktree(
             agent_id,
             str(worktree_path),
             f"Main repo not ready for merge: {error_msg}"
         )
-        
+
         print("   Invoking cleanup agent to resolve uncommitted changes before merge...")
         with cleanup_lock():
             cleanup_success, _ = invoke_cleanup_agent(agent_item, repo_root)
@@ -94,11 +94,11 @@ def _handle_worktree_merge_inner(
         else:
             print("   Cleanup failed.")
             return False, False
-    
+
     # Attempt merge
     print(f"\n🔀 Merging worktree for {agent_id}...")
     merge_success, unmerged_files = merge_worktree(agent_id, cleanup=True)
-    
+
     if not merge_success:
         print("\n❌ Worktree merge failed!")
         if unmerged_files:
@@ -108,14 +108,14 @@ def _handle_worktree_merge_inner(
             if len(unmerged_files) > 5:
                 print(f"      ... and {len(unmerged_files) - 5} more")
         print(f"   Worktree preserved at worktrees/task-{agent_id} for manual intervention")
-        
+
         # Track preserved worktree in manifest
         add_uncleaned_worktree(
             agent_id,
             str(worktree_path),
             f"Merge conflict in {len(unmerged_files) if unmerged_files else 0} file(s)"
         )
-        
+
         print("   Invoking cleanup agent to resolve conflicts...")
 
         # Get fresh unmerged files if not provided

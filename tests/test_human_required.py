@@ -6,7 +6,6 @@ child task selection.
 """
 
 from unittest.mock import Mock, patch
-import pytest
 
 from src.pokepoke.types import BeadsWorkItem
 from src.pokepoke.work_item_selection import (

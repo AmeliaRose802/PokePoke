@@ -47,7 +47,7 @@ def request_shutdown() -> None:
     Call this from the UI quit action or any Ctrl+C handler.
     Starts a watchdog that will force-kill the process if graceful
     shutdown doesn't complete within the grace period.
-    
+
     Shutdown coordination:
     1. Signals all agent threads via Event
     2. Shuts down ThreadPoolExecutor (if present)
@@ -82,7 +82,7 @@ def request_shutdown() -> None:
     # Calculate watchdog timeout based on active agents
     with _agent_count_lock:
         agent_count = _active_agent_count
-    
+
     watchdog_timeout = _WATCHDOG_BASE_SECONDS + (_WATCHDOG_PER_AGENT_SECONDS * agent_count)
 
     # Start a daemon watchdog thread that will hard-kill after grace period
@@ -121,7 +121,7 @@ def reset() -> None:
 
 def register_agent() -> None:
     """Register an active agent to scale shutdown timeout.
-    
+
     Call this when an agent thread starts processing work.
     Increases the watchdog timeout to allow time for graceful shutdown.
     """
@@ -132,7 +132,7 @@ def register_agent() -> None:
 
 def unregister_agent() -> None:
     """Unregister an active agent.
-    
+
     Call this when an agent thread completes or exits.
     """
     global _active_agent_count
@@ -148,7 +148,7 @@ def get_active_agent_count() -> int:
 
 def set_executor(executor: concurrent.futures.ThreadPoolExecutor | None) -> None:
     """Set the global ThreadPoolExecutor for shutdown coordination.
-    
+
     Call this from orchestrator when parallel agent mode is enabled.
     Future: Used when ThreadPoolExecutor is implemented (PokePoke-3f87).
     """
@@ -181,7 +181,7 @@ def should_stop_after_current() -> bool:
 
 def _watchdog_thread(timeout: float) -> None:
     """Force-terminate the process if graceful shutdown stalls.
-    
+
     Args:
         timeout: Grace period in seconds before force-exit.
     """

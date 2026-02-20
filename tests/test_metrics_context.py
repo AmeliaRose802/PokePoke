@@ -34,6 +34,7 @@ def test_thread_local_isolated_between_threads() -> None:
             results.append(get_current_agent_type())
 
     t = threading.Thread(target=worker)
-    t.start(); t.join()
+    t.start()
+    t.join()
     assert results == ["janitor"]
     assert get_current_agent_type() == "unknown"

@@ -39,7 +39,7 @@ __all__ = [
     'get_issue_dependencies',
     'get_beads_stats',
     'has_unmet_blocking_dependencies',
-    
+
     # Hierarchy operations
     'get_children',
     'get_next_child_task',
@@ -48,7 +48,7 @@ __all__ = [
     'get_parent_id',
     'has_feature_parent',
     'resolve_to_leaf_task',
-    
+
     # Management operations
     'close_item',
     'select_next_hierarchical_item',

@@ -190,7 +190,7 @@ def run_parallel_loop(
             except Exception as e:
                 # This should not happen now that get_ready_work_items handles errors,
                 # but keep as additional safety measure
-                run_logger.log_orchestrator(f"Failed to fetch ready items: {e}", level="ERROR") 
+                run_logger.log_orchestrator(f"Failed to fetch ready items: {e}", level="ERROR")
                 print(f"⚠️  Warning: failed to fetch ready items: {e}")
                 ready_items = []
 
@@ -275,7 +275,7 @@ def run_parallel_loop(
                         continue  # Go back to main loop to process these items
                 except Exception as e:
                     run_logger.log_orchestrator(f"Final beads check failed: {e}", level="WARNING")
-                
+
                 terminal_ui.ui.stop_and_capture()
                 print("\n👋 Exiting PokePoke - no work items available.")
                 run_logger.log_orchestrator("No work items available - exiting")
@@ -297,7 +297,7 @@ def run_parallel_loop(
         if futures:
             print(f"\n⏳ Waiting for {len(futures)} active workers to complete...")
             run_logger.log_orchestrator(f"Waiting for {len(futures)} active workers to complete")
-            
+
             # Wait for all remaining futures to complete (with reasonable timeout)
             remaining = list(futures.keys())
             try:
@@ -313,21 +313,21 @@ def run_parallel_loop(
                         print(f"❌ Worker failed for item {item.id}: {e}")
                         run_logger.log_orchestrator(f"Worker failed for item {item.id}: {e}", level="ERROR")
                         s, r, st, cr, gr, mc = False, 0, None, 0, 0, None
-                    
+
                     total_requests += r
                     record_fn(item, s, r, st, cr, gr, mc, session_stats, run_logger)
                     items_completed = session_stats.items_completed
             except concurrent.futures.TimeoutError:
                 print(f"⚠️  Timeout waiting for {len(futures)} workers after 5 minutes")
                 run_logger.log_orchestrator("Timeout waiting for workers", level="WARNING")
-            
+
             print("✅ All workers completed")
             run_logger.log_orchestrator("All workers completed")
-        
+
         # Now shutdown the executor (no need to wait since we already waited above)
         executor.shutdown(wait=False, cancel_futures=False)
         set_executor(None)
-        
+
         # Call finalize if it hasn't been called yet (e.g., on shutdown or exception)
         if not finalized:
             print("\n🏁 Finalizing session...")

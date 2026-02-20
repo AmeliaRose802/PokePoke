@@ -24,7 +24,7 @@ def invoke_copilot(
     provider: str | None = None,
 ) -> CopilotResult:
     """Invoke GitHub Copilot using SDK.
-    
+
     Args:
         work_item: The beads work item to process.
         prompt: Optional pre-built prompt (if not provided, will build one from template).
@@ -35,7 +35,7 @@ def invoke_copilot(
         model: Optional model name to use (e.g., 'gpt-5.1-codex', defaults to 'claude-opus-4.6').
         cwd: Optional working directory for the Copilot process (for thread-safe worktree isolation).
         provider: Optional backend provider override (e.g., 'copilot', 'claude-code').
-        
+
     Returns:
         Result of the Copilot invocation.
     """

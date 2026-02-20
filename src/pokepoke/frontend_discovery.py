@@ -17,7 +17,7 @@ from pathlib import Path
 
 def find_frontend_dist() -> Path | None:
     """Locate the React frontend - prioritizing embedded assets for bundled apps."""
-    
+
     # First, try to use embedded static assets from the package
     try:
         # Handle both regular Python execution and PyInstaller frozen execution
@@ -36,21 +36,21 @@ def find_frontend_dist() -> Path | None:
             static_dir = Path(desktop_ui_module.__file__).resolve().parent / "static"
             if static_dir.is_dir() and (static_dir / "index.html").exists():
                 return static_dir
-            
+
             # If not on filesystem, try to extract from package resources
             try:
                 import importlib.resources as pkg_resources
                 static_ref = pkg_resources.files('pokepoke.static')
-                
+
                 # Check if the package resources exist and have index.html
                 if static_ref and (static_ref / "index.html").is_file():
                     # Extract resources to a temporary directory for pywebview
                     temp_dir = Path(tempfile.gettempdir()) / "pokepoke_static"
-                    
+
                     # Check if already extracted and current
                     if temp_dir.is_dir() and (temp_dir / "index.html").exists():
                         return temp_dir
-                    
+
                     # Extract fresh copy
                     temp_dir.mkdir(exist_ok=True)
                     for resource in static_ref.iterdir():
@@ -65,16 +65,16 @@ def find_frontend_dist() -> Path | None:
                                 if subresource.is_file():
                                     with pkg_resources.as_file(subresource) as subresource_path:
                                         shutil.copy2(subresource_path, dest_dir / subresource.name)
-                    
+
                     if (temp_dir / "index.html").exists():
                         return temp_dir
-                        
+
             except (ImportError, AttributeError):
                 pass
     except Exception as e:
         # If package resources fail, fall back to filesystem search
         print(f"Warning: Failed to load embedded frontend assets: {e}")
-    
+
     # Fallback 1: Look relative to desktop_ui module (development mode)
     try:
         import pokepoke.desktop_ui as desktop_ui_module
@@ -84,7 +84,7 @@ def find_frontend_dist() -> Path | None:
             return dist
     except Exception:
         pass
-    
+
     # Fallback 2: If in a git worktree, try to find the main repo
     try:
         import pokepoke.desktop_ui as desktop_ui_module
@@ -106,5 +106,5 @@ def find_frontend_dist() -> Path | None:
                 break
     except Exception:
         pass
-    
+
     return None

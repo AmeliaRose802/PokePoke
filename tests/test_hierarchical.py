@@ -2,7 +2,6 @@
 
 import subprocess
 from unittest.mock import Mock, patch
-import pytest
 
 from pokepoke.beads import (
     get_children,
@@ -19,7 +18,7 @@ from pokepoke.types import BeadsWorkItem, IssueWithDependencies, Dependency
 
 class TestHierarchicalWorkAssignment:
     """Test hierarchical work assignment functions."""
-    
+
     @patch('pokepoke.beads_hierarchy.get_issue_dependencies')
     def test_get_children_no_dependents(self, mock_get_issue: Mock) -> None:
         """Test getting children when issue has no dependents."""
@@ -32,11 +31,11 @@ class TestHierarchicalWorkAssignment:
             issue_type="epic",
             dependents=None
         )
-        
+
         children = get_children("epic-1")
-        
+
         assert children == []
-    
+
     @patch('pokepoke.beads_hierarchy.get_issue_dependencies')
     def test_get_children_with_parent_dependents(self, mock_get_issue: Mock) -> None:
         """Test getting children with parent-type dependents."""
@@ -70,23 +69,23 @@ class TestHierarchicalWorkAssignment:
                 issue_type="task"
             )
         ]
-        
+
         children = get_children("epic-1")
-        
+
         assert len(children) == 1
         assert children[0].id == "task-1"
         assert children[0].title == "Task 1"
         assert children[0].issue_type == "task"
-    
+
     @patch('pokepoke.beads_hierarchy.get_children')
     def test_get_next_child_task_no_children(self, mock_get_children: Mock) -> None:
         """Test getting next child when there are no children."""
         mock_get_children.return_value = []
-        
+
         next_child = get_next_child_task("epic-1")
-        
+
         assert next_child is None
-    
+
     @patch('pokepoke.beads_hierarchy.get_children')
     def test_get_next_child_task_all_complete(self, mock_get_children: Mock) -> None:
         """Test getting next child when all children are complete."""
@@ -100,11 +99,11 @@ class TestHierarchicalWorkAssignment:
                 issue_type="task"
             )
         ]
-        
+
         next_child = get_next_child_task("epic-1")
-        
+
         assert next_child is None
-    
+
     @patch('pokepoke.beads_hierarchy.get_children')
     def test_get_next_child_task_returns_highest_priority(self, mock_get_children: Mock) -> None:
         """Test that next child returns highest priority open task."""
@@ -134,20 +133,20 @@ class TestHierarchicalWorkAssignment:
                 issue_type="task"
             )
         ]
-        
+
         next_child = get_next_child_task("epic-1")
-        
+
         assert next_child is not None
         assert next_child.id == "task-2"
         assert next_child.priority == 1
-    
+
     @patch('pokepoke.beads_hierarchy.get_children')
     def test_get_next_child_task_skips_items_assigned_to_others(self, mock_get_children: Mock) -> None:
         """Test that next child skips items assigned to other agents."""
         # Set up current agent
         import os
         os.environ['AGENT_NAME'] = 'agent_alpha'
-        
+
         mock_get_children.return_value = [
             BeadsWorkItem(
                 id="task-1",
@@ -177,22 +176,22 @@ class TestHierarchicalWorkAssignment:
                 owner="agent_alpha"  # Assigned to us
             )
         ]
-        
+
         next_child = get_next_child_task("epic-1")
-        
+
         # Should return task-2 (unassigned, priority 2) because task-1 is assigned to someone else
         # Even though task-3 is assigned to us, task-2 has higher priority
         assert next_child is not None
         assert next_child.id == "task-2"
         assert next_child.priority == 2
-    
+
     @patch('pokepoke.beads_hierarchy.get_children')
     def test_get_next_child_task_all_assigned_to_others(self, mock_get_children: Mock) -> None:
         """Test that next child returns None when all items are assigned to other agents."""
         # Set up current agent
         import os
         os.environ['AGENT_NAME'] = 'agent_alpha'
-        
+
         mock_get_children.return_value = [
             BeadsWorkItem(
                 id="task-1",
@@ -213,23 +212,23 @@ class TestHierarchicalWorkAssignment:
                 owner="agent_gamma"
             )
         ]
-        
+
         next_child = get_next_child_task("epic-1")
-        
+
         # Should return None since all children are assigned to other agents
         assert next_child is None
-    
+
     @patch('pokepoke.beads_hierarchy.get_children')
     def test_all_children_complete_no_children(self, mock_get_children: Mock) -> None:
         """Test that no children means NOT complete (prevents premature closure)."""
         mock_get_children.return_value = []
-        
+
         result = all_children_complete("epic-1")
-        
+
         # No children should return False to prevent premature parent closure
         # This handles cases where children aren't registered yet or fetch failed
         assert result is False
-    
+
     @patch('pokepoke.beads_hierarchy.get_children')
     def test_all_children_complete_with_open_children(self, mock_get_children: Mock) -> None:
         """Test that open children means not all complete."""
@@ -251,11 +250,11 @@ class TestHierarchicalWorkAssignment:
                 issue_type="task"
             )
         ]
-        
+
         result = all_children_complete("epic-1")
-        
+
         assert result is False
-    
+
     @patch('pokepoke.beads_hierarchy.get_children')
     def test_all_children_complete_all_done(self, mock_get_children: Mock) -> None:
         """Test that all done children returns True."""
@@ -285,39 +284,39 @@ class TestHierarchicalWorkAssignment:
                 issue_type="task"
             )
         ]
-        
+
         result = all_children_complete("epic-1")
-        
+
         assert result is True
-    
+
     @patch('pokepoke.beads_hierarchy.subprocess.run')
     @patch('pokepoke.beads_hierarchy.all_children_complete')
     def test_close_parent_if_complete_not_complete(
-        self, 
-        mock_all_complete: Mock, 
+        self,
+        mock_all_complete: Mock,
         mock_run: Mock
     ) -> None:
         """Test that parent is not closed if children incomplete."""
         mock_all_complete.return_value = False
-        
+
         result = close_parent_if_complete("epic-1")
-        
+
         assert result is False
         mock_run.assert_not_called()
-    
+
     @patch('pokepoke.beads_hierarchy.subprocess.run')
     @patch('pokepoke.beads_hierarchy.all_children_complete')
     def test_close_parent_if_complete_success(
-        self, 
-        mock_all_complete: Mock, 
+        self,
+        mock_all_complete: Mock,
         mock_run: Mock
     ) -> None:
         """Test that parent is closed when all children complete."""
         mock_all_complete.return_value = True
         mock_run.return_value = Mock(returncode=0)
-        
+
         result = close_parent_if_complete("epic-1")
-        
+
         assert result is True
         mock_run.assert_called_once_with(
             ['bd', 'close', 'epic-1', '-r', 'All child items completed'],
@@ -327,14 +326,14 @@ class TestHierarchicalWorkAssignment:
             check=True,
             timeout=30
         )
-    
+
     @patch('pokepoke.beads_hierarchy.subprocess.run')
     def test_close_item_success(self, mock_run: Mock) -> None:
         """Test closing an item successfully."""
         mock_run.return_value = Mock(returncode=0)
-        
+
         result = close_item("task-1", "Test completion")
-        
+
         assert result is True
         mock_run.assert_called_once_with(
             ['bd', 'close', 'task-1', '--reason', 'Test completion'],
@@ -344,18 +343,18 @@ class TestHierarchicalWorkAssignment:
             check=True,
             timeout=30
         )
-    
+
     @patch('pokepoke.beads_hierarchy.subprocess.run')
     def test_close_item_failure(self, mock_run: Mock) -> None:
         """Test handling close item failure."""
         mock_run.side_effect = subprocess.CalledProcessError(
             1, 'bd', stderr="Error closing item"
         )
-        
+
         result = close_item("task-1", "Test completion")
-        
+
         assert result is False
-    
+
     @patch('pokepoke.beads_hierarchy.get_issue_dependencies')
     def test_get_parent_id_no_dependencies(self, mock_get_issue: Mock) -> None:
         """Test getting parent ID when no dependencies exist."""
@@ -368,11 +367,11 @@ class TestHierarchicalWorkAssignment:
             issue_type="task",
             dependencies=None
         )
-        
+
         parent_id = get_parent_id("task-1")
-        
+
         assert parent_id is None
-    
+
     @patch('pokepoke.beads_hierarchy.get_issue_dependencies')
     def test_get_parent_id_with_parent(self, mock_get_issue: Mock) -> None:
         """Test getting parent ID when parent dependency exists."""
@@ -394,15 +393,15 @@ class TestHierarchicalWorkAssignment:
                 )
             ]
         )
-        
+
         parent_id = get_parent_id("task-1")
-        
+
         assert parent_id == "feature-1"
-    
+
     @patch('pokepoke.beads_hierarchy.get_children')
     @patch('pokepoke.beads_hierarchy.close_parent_if_complete')
     def test_select_next_hierarchical_item_epic_with_children(
-        self, 
+        self,
         mock_close_parent: Mock,
         mock_get_children: Mock
     ) -> None:
@@ -428,17 +427,17 @@ class TestHierarchicalWorkAssignment:
                 issue_type="task"
             )
         ]
-        
+
         selected = select_next_hierarchical_item(items)
-        
+
         assert selected is not None
         assert selected.id == "task-1"
         mock_close_parent.assert_not_called()
-    
+
     @patch('pokepoke.beads_hierarchy.get_children')
     @patch('pokepoke.beads_hierarchy.close_parent_if_complete')
     def test_select_next_hierarchical_item_epic_all_children_complete(
-        self, 
+        self,
         mock_close_parent: Mock,
         mock_get_children: Mock
     ) -> None:
@@ -473,17 +472,17 @@ class TestHierarchicalWorkAssignment:
             )
         ]
         mock_close_parent.return_value = True
-        
+
         selected = select_next_hierarchical_item(items)
-        
+
         # Should auto-close epic and select the standalone task
         assert selected is not None
         assert selected.id == "task-1"
         mock_close_parent.assert_called_once_with("epic-1")
-    
+
     @patch('pokepoke.beads_management.resolve_to_leaf_task')
     def test_select_next_hierarchical_item_standalone_task(
-        self, 
+        self,
         mock_resolve: Mock
     ) -> None:
         """Test hierarchical selection with standalone task."""
@@ -497,17 +496,17 @@ class TestHierarchicalWorkAssignment:
                 issue_type="task"
             )
         ]
-        
+
         selected = select_next_hierarchical_item(items)
-        
+
         assert selected is not None
         assert selected.id == "task-1"
         mock_resolve.assert_not_called()
-    
+
     def test_select_next_hierarchical_item_empty_list(self) -> None:
         """Test hierarchical selection with empty list."""
         selected = select_next_hierarchical_item([])
-        
+
         assert selected is None
 
     @patch('pokepoke.beads_hierarchy.get_children')
@@ -516,7 +515,7 @@ class TestHierarchicalWorkAssignment:
         mock_get_children: Mock
     ) -> None:
         """Test hierarchical selection returns childless feature directly.
-        
+
         When a feature has no children, it should be returned for direct work
         (the agent should break it down into tasks). Previously this was a bug
         where childless features were skipped, causing 'no work available'.
@@ -531,12 +530,12 @@ class TestHierarchicalWorkAssignment:
             issue_type="feature"
         )
         items = [feature]
-        
+
         # Mock: feature has no children
         mock_get_children.return_value = []
-        
+
         selected = select_next_hierarchical_item(items)
-        
+
         # Should return the childless feature for direct work
         assert selected is not None
         assert selected.id == "feature-1"
@@ -557,11 +556,11 @@ class TestHierarchicalWorkAssignment:
             issue_type="epic"
         )
         items = [epic]
-        
+
         mock_get_children.return_value = []
-        
+
         selected = select_next_hierarchical_item(items)
-        
+
         assert selected is not None
         assert selected.id == "epic-1"
         assert selected.issue_type == "epic"
@@ -589,11 +588,11 @@ class TestHierarchicalWorkAssignment:
             issue_type="task"
         )
         items = [feature, task]  # Feature listed first
-        
+
         mock_get_children.return_value = []
-        
+
         selected = select_next_hierarchical_item(items)
-        
+
         # Task should be selected due to higher priority
         assert selected is not None
         assert selected.id == "task-1"
@@ -612,9 +611,9 @@ class TestResolveToLeafTask:
             priority=1,
             issue_type="task"
         )
-        
+
         result = resolve_to_leaf_task(task)
-        
+
         assert result is not None
         assert result.id == "task-1"
 
@@ -630,9 +629,9 @@ class TestResolveToLeafTask:
             issue_type="epic"
         )
         mock_get_children.return_value = []
-        
+
         result = resolve_to_leaf_task(epic)
-        
+
         assert result is not None
         assert result.id == "epic-1"
 
@@ -657,9 +656,9 @@ class TestResolveToLeafTask:
                 issue_type="task"
             )
         ]
-        
+
         result = resolve_to_leaf_task(epic)
-        
+
         assert result is not None
         assert result.id == "task-1"
 
@@ -668,7 +667,7 @@ class TestResolveToLeafTask:
         self, mock_get_children: Mock
     ) -> None:
         """Epic -> feature -> task should resolve to the grandchild task.
-        
+
         This is the core bug fix: we should never directly assign a feature
         that has children. Instead, we walk down to the leaf task.
         """
@@ -680,7 +679,7 @@ class TestResolveToLeafTask:
             priority=1,
             issue_type="epic"
         )
-        
+
         # First call: epic's children (a feature)
         # Second call: feature's children (a task)
         mock_get_children.side_effect = [
@@ -705,9 +704,9 @@ class TestResolveToLeafTask:
                 )
             ]
         ]
-        
+
         result = resolve_to_leaf_task(epic)
-        
+
         # Should resolve to the grandchild task, NOT the feature
         assert result is not None
         assert result.id == "task-1"
@@ -740,9 +739,9 @@ class TestResolveToLeafTask:
             )
         ]
         mock_close_parent.return_value = True
-        
+
         result = resolve_to_leaf_task(epic)
-        
+
         assert result is None
         mock_close_parent.assert_called_once_with("epic-1")
 
@@ -775,9 +774,9 @@ class TestResolveToLeafTask:
         ]
         # Mock: item is assigned to someone else
         mock_is_current.return_value = False
-        
+
         result = resolve_to_leaf_task(epic)
-        
+
         assert result is None
 
     @patch('pokepoke.beads_hierarchy.get_children')
@@ -798,7 +797,7 @@ class TestResolveToLeafTask:
         )
         import os
         os.environ['AGENT_NAME'] = 'agent_alpha'
-        
+
         # First call: epic's children (feature + task)
         # Second call: feature-1's children (all blocked)
         mock_get_children.side_effect = [
@@ -833,9 +832,9 @@ class TestResolveToLeafTask:
             ]
         ]
         mock_close_parent.return_value = False
-        
+
         result = resolve_to_leaf_task(epic)
-        
+
         # Should skip the blocked feature and return the sibling task
         assert result is not None
         assert result.id == "task-2"
@@ -869,9 +868,9 @@ class TestResolveToLeafTask:
                 issue_type="task"
             )
         ]
-        
+
         result = resolve_to_leaf_task(feature)
-        
+
         assert result is not None
         assert result.id == "task-high"
 
@@ -885,10 +884,10 @@ class TestResolveToLeafTask:
             priority=1,
             issue_type="epic"
         )
-        
+
         # At max depth, should return None
         result = resolve_to_leaf_task(epic, _depth=10)
-        
+
         assert result is None
 
     @patch('pokepoke.beads_hierarchy.get_children')
@@ -907,7 +906,7 @@ class TestResolveToLeafTask:
             priority=1,
             issue_type="epic"
         )
-        
+
         # First call: epic's children (one feature)
         # Second call: feature's children (all done)
         mock_get_children.side_effect = [
@@ -933,9 +932,9 @@ class TestResolveToLeafTask:
             ]
         ]
         mock_close_parent.return_value = True
-        
+
         result = resolve_to_leaf_task(epic)
-        
+
         # Should return None after auto-closing both feature and epic
         assert result is None
         # close_parent_if_complete called for feature-1 first, then epic-1
