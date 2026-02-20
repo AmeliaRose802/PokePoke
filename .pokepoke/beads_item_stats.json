@@ -1823,19 +1823,25 @@
       "item_id": "task-42",
       "agent_type": "work",
       "timestamp": "2026-02-20T21:26:31.897329+00:00"
+    },
+    {
+      "event": "completed",
+      "item_id": "PokePoke-eg6h",
+      "agent_type": "work",
+      "timestamp": "2026-02-20T21:30:20.632740+00:00"
     }
   ],
   "summary": {
     "total_created": 0,
-    "total_completed": 304,
-    "net_delta": -304,
+    "total_completed": 305,
+    "net_delta": -305,
     "by_agent_type": {
       "work": {
         "created": 0,
-        "completed": 304,
-        "net_delta": -304
+        "completed": 305,
+        "net_delta": -305
       }
     },
-    "last_updated": "2026-02-20T21:26:31.901358+00:00"
+    "last_updated": "2026-02-20T21:30:20.649819+00:00"
   }
 }
