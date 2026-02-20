@@ -42,6 +42,14 @@ def set_native_window_icon(window: Any, icon_path: str | Path) -> None:
         return
 
     try:
+        # The ``func`` callback of ``webview.start()`` fires on a background
+        # thread *before* the WinForms Form is fully created.  We must wait
+        # for the ``shown`` event so that ``window.native`` (the Form) is
+        # available.
+        shown = getattr(getattr(window, "events", None), "shown", None)
+        if shown is not None and hasattr(shown, "wait"):
+            shown.wait(10)
+
         form = getattr(window, "native", None)
         if form is None:
             return
