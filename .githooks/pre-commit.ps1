@@ -7,10 +7,12 @@
 .DESCRIPTION
     Runs the following checks before allowing a commit:
     1. Integrity check (verifies quality scripts haven't been tampered with)
-    2. Build check (Python syntax validation)
-    3. Code quality check (mypy type checking)
-    4. Skipped tests check (no skipped pytest tests)
-    5. Test coverage check (modified files must have 80%+ coverage)
+    2. Build check (Python syntax validation) [sequential]
+    3. Code quality check (mypy type checking) [sequential, after build]
+    4. Test coverage check (modified files must have 80%+ coverage) [sequential, after mypy]
+    5. Skipped tests check (no skipped pytest tests) [parallel]
+    6. File length check [parallel]
+    7. Desktop lint and TypeScript checks [parallel]
 
 .NOTES
     ⚠️  CRITICAL: This file is protected by CODEOWNERS
@@ -101,16 +103,17 @@ $failed = @()
 # Checks that don't depend on build artifacts - can run in parallel
 $staticChecks = @(
     @{ Name = "Pokepoke Boot"; Script = "check-pokepoke-import.ps1" }
-    @{ Name = "Code Quality"; Script = "check-code-quality.ps1" }
     @{ Name = "Skipped Tests"; Script = "check-skipped-tests.ps1" }
     @{ Name = "File Length"; Script = "check-file-length.ps1" }
     @{ Name = "Desktop ESLint"; Script = "check-desktop-lint.ps1" }
     @{ Name = "Desktop TypeScript"; Script = "check-desktop.ps1" }
 )
 
-# Checks that need build artifacts or must run in sequence
+# Checks that need build artifacts or must run in sequence: build -> mypy -> coverage
+# If build or mypy fails, coverage is skipped (early exit on first failure)
 $buildDependentChecks = @(
     @{ Name = "Build"; Script = "check-build.ps1" }
+    @{ Name = "Code Quality"; Script = "check-code-quality.ps1" }
     @{ Name = "Test Coverage"; Script = "check-coverage.ps1" }
 )
 
