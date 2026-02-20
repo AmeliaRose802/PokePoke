@@ -14,7 +14,13 @@ def aggregate_cleanup_stats(result_stats: AgentStats | None, cleanup_stats: Agen
         result_stats.accumulate(cleanup_stats)
 
 
-def run_cleanup_loop(item: BeadsWorkItem, result: CopilotResult, repo_root: Path, cwd: str | None = None) -> tuple[bool, int]:
+def run_cleanup_loop(
+    item: BeadsWorkItem,
+    result: CopilotResult,
+    repo_root: Path,
+    cwd: str | None = None,
+    parent_agent_id: str | None = None
+) -> tuple[bool, int]:
     """Run cleanup loop to commit changes and fix validation failures."""
     cleanup_agent_runs = 0
     cleanup_attempt = 0
@@ -48,7 +54,11 @@ def run_cleanup_loop(item: BeadsWorkItem, result: CopilotResult, repo_root: Path
         # Extract file paths from status lines (e.g. " M file.py" -> "file.py")
         file_paths = [f.split()[-1] if f.split() else f for f in non_beads_changes]
         cleanup_success, cleanup_stats = invoke_cleanup_agent(
-            item, repo_root, cwd=cwd, modified_files=file_paths,
+            item,
+            repo_root,
+            cwd=cwd,
+            modified_files=file_paths,
+            parent_agent_id=parent_agent_id,
         )
 
         aggregate_cleanup_stats(result.stats, cleanup_stats)
@@ -143,7 +153,13 @@ def _get_current_git_context(cwd: str | None = None) -> tuple[str, str, bool]:
     return current_dir, current_branch, is_worktree
 
 
-def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path, cwd: str | None = None, modified_files: list[str] | None = None) -> tuple[bool, AgentStats | None]:
+def invoke_cleanup_agent(
+    item: BeadsWorkItem,
+    repo_root: Path,
+    cwd: str | None = None,
+    modified_files: list[str] | None = None,
+    parent_agent_id: str | None = None
+) -> tuple[bool, AgentStats | None]:
     """Invoke cleanup agent to commit uncommitted changes."""
     terminal_ui.ui.set_current_agent("Cleanup Agent")
 
@@ -153,11 +169,18 @@ def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path, cwd: str | None =
         agent_id, "Cleanup Agent", iteration=1, status="running",
         work_item_id=item.id, work_item_title=item.title,
         modified_files=modified_files,
+        parent_agent_id=parent_agent_id,
     )
 
     cleanup_prompt_template = load_prompt_file("cleanup.md")
     if cleanup_prompt_template is None:
-        terminal_ui.ui.push_agent_status(agent_id, "Cleanup Agent", iteration=1, status="failed")
+        terminal_ui.ui.push_agent_status(
+            agent_id,
+            "Cleanup Agent",
+            iteration=1,
+            status="failed",
+            parent_agent_id=parent_agent_id,
+        )
         return False, None
 
     # Get current context information
@@ -207,11 +230,23 @@ def invoke_cleanup_agent(item: BeadsWorkItem, repo_root: Path, cwd: str | None =
 
         # Update agent status based on result
         status = "success" if copilot_result.success else "failed"
-        terminal_ui.ui.push_agent_status(agent_id, "Cleanup Agent", iteration=1, status=status)
+        terminal_ui.ui.push_agent_status(
+            agent_id,
+            "Cleanup Agent",
+            iteration=1,
+            status=status,
+            parent_agent_id=parent_agent_id,
+        )
 
         return copilot_result.success, copilot_result.stats
     except Exception:
-        terminal_ui.ui.push_agent_status(agent_id, "Cleanup Agent", iteration=1, status="failed")
+        terminal_ui.ui.push_agent_status(
+            agent_id,
+            "Cleanup Agent",
+            iteration=1,
+            status="failed",
+            parent_agent_id=parent_agent_id,
+        )
         raise
 
 
@@ -220,7 +255,8 @@ def invoke_merge_conflict_cleanup_agent(
     repo_root: Path,
     error_msg: str,
     unmerged_files: list[str] | None = None,
-    cwd: str | None = None
+    cwd: str | None = None,
+    parent_agent_id: str | None = None
 ) -> tuple[bool, AgentStats | None]:
     """Invoke cleanup agent to resolve merge conflicts.
 
@@ -230,6 +266,7 @@ def invoke_merge_conflict_cleanup_agent(
         error_msg: Description of the merge error
         unmerged_files: Optional list of files with merge conflicts
         cwd: Optional working directory for the Copilot process.
+        parent_agent_id: Optional parent agent id for UI nesting.
     """
     terminal_ui.ui.set_current_agent("Merge Conflict Cleanup")
 
@@ -238,6 +275,7 @@ def invoke_merge_conflict_cleanup_agent(
     terminal_ui.ui.push_agent_status(
         agent_id, "Merge Conflict Cleanup", iteration=1, status="running",
         work_item_id=item.id, work_item_title=item.title,
+        parent_agent_id=parent_agent_id,
     )
 
     from pokepoke.git_operations import is_merge_in_progress, get_unmerged_files as git_get_unmerged
@@ -246,8 +284,14 @@ def invoke_merge_conflict_cleanup_agent(
     if cleanup_prompt_template is None:
         # Fallback to standard cleanup
         print("⚠️ Falling back to standard cleanup agent")
-        terminal_ui.ui.push_agent_status(agent_id, "Merge Conflict Cleanup", iteration=1, status="failed")
-        return invoke_cleanup_agent(item, repo_root)
+        terminal_ui.ui.push_agent_status(
+            agent_id,
+            "Merge Conflict Cleanup",
+            iteration=1,
+            status="failed",
+            parent_agent_id=parent_agent_id,
+        )
+        return invoke_cleanup_agent(item, repo_root, parent_agent_id=parent_agent_id)
 
     # Get current context information
     current_dir, current_branch, is_worktree = _get_current_git_context(cwd=cwd)
@@ -326,9 +370,21 @@ def invoke_merge_conflict_cleanup_agent(
 
         # Update agent status based on result
         status = "success" if copilot_result.success else "failed"
-        terminal_ui.ui.push_agent_status(agent_id, "Merge Conflict Cleanup", iteration=1, status=status)
+        terminal_ui.ui.push_agent_status(
+            agent_id,
+            "Merge Conflict Cleanup",
+            iteration=1,
+            status=status,
+            parent_agent_id=parent_agent_id,
+        )
 
         return copilot_result.success, copilot_result.stats
     except Exception:
-        terminal_ui.ui.push_agent_status(agent_id, "Merge Conflict Cleanup", iteration=1, status="failed")
+        terminal_ui.ui.push_agent_status(
+            agent_id,
+            "Merge Conflict Cleanup",
+            iteration=1,
+            status="failed",
+            parent_agent_id=parent_agent_id,
+        )
         raise

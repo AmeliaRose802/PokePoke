@@ -270,7 +270,13 @@ def _run_worktree_agent(
                 work_item_id=agent_item.id, success=False, output="", error=str(e), attempt_count=1
             )
 
-        cleanup_success, _ = run_cleanup_loop(agent_item, result, repo_root, cwd=worktree_cwd)
+        cleanup_success, _ = run_cleanup_loop(
+            agent_item,
+            result,
+            repo_root,
+            cwd=worktree_cwd,
+            parent_agent_id=agent_id,
+        )
 
         if not cleanup_success:
             result.success = False

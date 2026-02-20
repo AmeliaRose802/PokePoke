@@ -81,7 +81,11 @@ def _handle_worktree_merge_inner(
 
         print("   Invoking cleanup agent to resolve uncommitted changes before merge...")
         with cleanup_lock():
-            cleanup_success, _ = invoke_cleanup_agent(agent_item, repo_root)
+            cleanup_success, _ = invoke_cleanup_agent(
+                agent_item,
+                repo_root,
+                parent_agent_id=agent_id,
+            )
 
         if cleanup_success:
             print("   Cleanup successful, retrying merge check...")
@@ -127,7 +131,8 @@ def _handle_worktree_merge_inner(
                 agent_item,
                 repo_root,
                 f"Merge conflict detected in {len(unmerged_files)} file(s)",
-                unmerged_files=unmerged_files
+                unmerged_files=unmerged_files,
+                parent_agent_id=agent_id,
             )
 
         if success:
