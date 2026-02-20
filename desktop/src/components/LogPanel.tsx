@@ -7,6 +7,7 @@ import {
   NarrationAccordion,
   ToolBatchAccordion,
   MarkdownBlock,
+  CodeBlockAccordion,
 } from "./LogComponents";
 
 interface Props {
@@ -112,6 +113,19 @@ export function LogPanel({
                 entries={item.entries}
                 startedAt={item.startedAt}
                 keyPrefix={`md-${i}`}
+              />
+            );
+          }
+
+          if (item.type === "code-block") {
+            return (
+              <CodeBlockAccordion
+                key={`code-${i}`}
+                startedAt={item.startedAt}
+                keyPrefix={`code-${i}`}
+                markdown={item.markdown}
+                lineCount={item.codeLineCount}
+                language={item.language}
               />
             );
           }
