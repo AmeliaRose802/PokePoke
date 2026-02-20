@@ -65,3 +65,13 @@ def try_lock(name: str) -> FileLock | None:
         return lock
     except Timeout:
         return None
+
+
+_WORKTREE_SETUP_LOCK = "worktree-setup"
+
+
+@contextmanager
+def worktree_setup_lock(timeout: float = 180.0) -> Generator[FileLock, None, None]:
+    """Serialize beads assignment + worktree creation across agents."""
+    with acquire_lock(_WORKTREE_SETUP_LOCK, timeout=timeout) as lock:
+        yield lock

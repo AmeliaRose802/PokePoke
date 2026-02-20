@@ -12,6 +12,13 @@ bd close <id>         # Complete work
 bd sync               # Sync with git
 ```
 
+## Beads + Worktree Coordination
+
+- Claiming a beads item and creating its worktree is now serialized through `.pokepoke/locks/worktree-setup.lock`.
+- All `assign_and_sync_item()` and `git worktree add` calls inside the orchestrator run under this lock so only one agent mutates `.beads/` + `.git/worktrees/` at a time.
+- Never bypass this lock (e.g., by calling `assign_and_sync_item()` directly) or you risk double-claiming issues and corrupting the repo.
+- If you are building new tooling that also claims beads items, reuse the same lock to keep the critical section atomic.
+
 ## Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.

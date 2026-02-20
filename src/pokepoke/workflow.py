@@ -4,6 +4,8 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from filelock import Timeout
+
 from pokepoke.copilot import invoke_copilot
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, ModelCompletionRecord
 from pokepoke.worktrees import create_worktree, cleanup_worktree
@@ -19,6 +21,7 @@ from pokepoke.shutdown import is_shutting_down, register_agent, unregister_agent
 from pokepoke.model_selection import select_model_for_item
 from pokepoke.agent_context import get_agent_name
 from pokepoke.config import get_config
+from pokepoke.coordination import worktree_setup_lock
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import RunLogger
@@ -57,8 +60,10 @@ def process_work_item(
         gate_agent_runs = 0
         
         # Select model for this work item (A/B testing)
+        config = get_config()
         selected_model = select_model_for_item(item.id)
-        backend_provider = get_config().ai_backend.provider
+        backend_provider = config.ai_backend.provider
+        worktree_lock_timeout = float(config.command_timeout)
 
         # Keep the Desktop UI agent card in sync with the selected model.
         terminal_ui.ui.push_agent_status(
@@ -94,23 +99,33 @@ def process_work_item(
         
         # Assign and sync BEFORE creating worktree to prevent parallel conflicts
         print("\n🔒 Claiming work item...")
-        if not assign_and_sync_item(item.id):
-            print(f"❌ Failed to assign work item {item.id}")
+        try:
+            with worktree_setup_lock(timeout=worktree_lock_timeout):
+                if not assign_and_sync_item(item.id):
+                    print(f"❌ Failed to assign work item {item.id}")
+                    if run_logger:
+                        run_logger.end_item_log(False, 0)
+                    return False, 0, None, 0, 0, None
+                
+                worktree_path = _setup_worktree(item)
+                
+                if worktree_path is None:
+                    print(f"↩️  Returning {item.id} to queue (unassigning due to worktree failure)...")
+                    unassign_item(item.id)
+                    if run_logger:
+                        run_logger.end_item_log(False, 0)
+                    return False, 0, None, 0, 0, None
+        except Timeout:
+            wait_seconds = int(worktree_lock_timeout)
+            print(f"❌ Timed out waiting {wait_seconds}s for worktree setup lock (another agent is claiming an item).")
             if run_logger:
                 run_logger.end_item_log(False, 0)
             return False, 0, None, 0, 0, None
         
         # Use current working directory as repo root
         pokepoke_root = Path.cwd()
-        worktree_path = _setup_worktree(item)
         
-        if worktree_path is None:
-            print(f"↩️  Returning {item.id} to queue (unassigning due to worktree failure)...")
-            unassign_item(item.id)
-            if run_logger:
-                run_logger.end_item_log(False, 0)
-            return False, 0, None, 0, 0, None
-        
+        assert worktree_path is not None
         worktree_cwd = str(worktree_path)
         
         print(f"   Working directory: {worktree_cwd}\n")
