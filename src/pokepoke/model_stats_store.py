@@ -26,15 +26,14 @@ File layout (.pokepoke/model_stats.json):
 from __future__ import annotations
 
 import json
-import os
 import statistics
 import threading
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from pokepoke.coordination import acquire_lock
+from pokepoke.file_utils import replace_with_retry
 from pokepoke.types import ModelCompletionRecord
 
 STATS_FILE = Path(".pokepoke") / "model_stats.json"
@@ -146,19 +145,7 @@ def save_model_stats(data: dict[str, Any], path: Path | None = None) -> None:
         json.dump(data, f, indent=2)
     # Retry os.replace on Windows where the destination file may be briefly
     # locked by a previous operation, causing PermissionError.
-    _replace_with_retry(tmp_path, stats_path)
-
-
-def _replace_with_retry(src: Path, dst: Path, retries: int = 5, delay: float = 0.05) -> None:
-    """Replace *dst* with *src*, retrying on PermissionError (Windows)."""
-    for attempt in range(retries):
-        try:
-            os.replace(str(src), str(dst))
-            return
-        except PermissionError:
-            if attempt == retries - 1:
-                raise
-            time.sleep(delay * (2 ** attempt))
+    replace_with_retry(tmp_path, stats_path)
 
 
 def record_completion(record: ModelCompletionRecord, path: Path | None = None) -> None:
