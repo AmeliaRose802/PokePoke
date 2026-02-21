@@ -1,10 +1,19 @@
 """Tests for pokepoke.init module."""
 
+import json
+import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
 
-from pokepoke.init import init_project, main, _SAMPLE_CONFIG
+from pokepoke.init import (
+    _SAMPLE_CONFIG,
+    _SEED_BEADS_ITEMS,
+    _load_existing_beads_titles,
+    _seed_setup_beads_items,
+    init_project,
+    main,
+)
 
 
 class TestInitProject:
@@ -131,3 +140,67 @@ class TestSampleConfig:
         content = _SAMPLE_CONFIG.format(project_name="X")
         for section in ["models:", "git:", "mcp_server:", "maintenance:"]:
             assert section in content
+
+
+class TestBeadsSeeding:
+    """Tests for beads setup item seeding."""
+
+    def test_load_existing_beads_titles_parses_jsonl(self, tmp_path: Path) -> None:
+        beads_dir = tmp_path / ".beads"
+        beads_dir.mkdir()
+        issues_path = beads_dir / "issues.jsonl"
+        issues_path.write_text(
+            '{"title": "First"}\n'
+            'not-json\n'
+            '{"title": "Second"}\n',
+            encoding="utf-8",
+        )
+
+        titles = _load_existing_beads_titles(tmp_path)
+
+        assert titles == {"first", "second"}
+
+    def test_seed_setup_items_skips_without_beads(self, tmp_path: Path) -> None:
+        with patch("pokepoke.init.subprocess.run") as run_mock:
+            _seed_setup_beads_items(tmp_path)
+
+        run_mock.assert_not_called()
+
+    def test_seed_setup_items_skips_without_bd(self, tmp_path: Path) -> None:
+        (tmp_path / ".beads").mkdir()
+        with (
+            patch("pokepoke.init.shutil.which", return_value=None),
+            patch("pokepoke.init.subprocess.run") as run_mock,
+        ):
+            _seed_setup_beads_items(tmp_path)
+
+        run_mock.assert_not_called()
+
+    def test_seed_setup_items_creates_missing_item(self, tmp_path: Path) -> None:
+        beads_dir = tmp_path / ".beads"
+        beads_dir.mkdir()
+        issues_path = beads_dir / "issues.jsonl"
+        existing_title = str(_SEED_BEADS_ITEMS[0]["title"])
+        issues_path.write_text(
+            json.dumps({"title": existing_title}) + "\n",
+            encoding="utf-8",
+        )
+
+        created = subprocess.CompletedProcess(
+            args=["bd", "create"],
+            returncode=0,
+            stdout=json.dumps({"id": "PokePoke-123", "title": "Created"}),
+            stderr="",
+        )
+
+        with (
+            patch("pokepoke.init.shutil.which", return_value="bd"),
+            patch("pokepoke.init.subprocess.run", return_value=created) as run_mock,
+        ):
+            _seed_setup_beads_items(tmp_path)
+
+        run_mock.assert_called_once()
+        cmd = run_mock.call_args[0][0]
+        assert cmd[0:2] == ["bd", "create"]
+        assert cmd[2] == str(_SEED_BEADS_ITEMS[1]["title"])
+        assert "--labels" in cmd

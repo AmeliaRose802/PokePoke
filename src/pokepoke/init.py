@@ -5,6 +5,9 @@ to help new projects adopt PokePoke quickly.
 """
 
 import argparse
+import json
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -99,6 +102,113 @@ ensure all tests pass before finishing.
 {{/test_data_section}}
 """
 
+_SEED_BEADS_ITEMS: tuple[dict[str, object], ...] = (
+    {
+        "title": "Setup pre-commit hooks (quality gates, linting, test runner)",
+        "description": (
+            "Add pre-commit hooks that run quality gates, linting, and targeted tests. "
+            "Document how to install and run the hooks so agents follow the same workflow."
+        ),
+        "labels": ("setup", "quality-gates"),
+        "priority": "3",
+    },
+    {
+        "title": "Create copilot-instructions.md and repo instruction files",
+        "description": (
+            "Add .github/copilot-instructions.md plus any supporting instruction files "
+            "so Copilot agents understand repository conventions and quality gates."
+        ),
+        "labels": ("setup", "copilot-instructions"),
+        "priority": "3",
+    },
+)
+
+
+def _load_existing_beads_titles(root: Path) -> set[str]:
+    issues_path = root / ".beads" / "issues.jsonl"
+    if not issues_path.exists():
+        return set()
+
+    titles: set[str] = set()
+    with issues_path.open(encoding="utf-8") as handle:
+        for line in handle:
+            raw = line.strip()
+            if not raw:
+                continue
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            title = data.get("title") if isinstance(data, dict) else None
+            if isinstance(title, str) and title.strip():
+                titles.add(title.strip().lower())
+    return titles
+
+
+def _seed_setup_beads_items(root: Path) -> None:
+    if not (root / ".beads").exists():
+        print("ℹ️  Beads not initialized yet; skipping setup item seeding.")
+        return
+    if not shutil.which("bd"):
+        print("ℹ️  Beads CLI not found; skipping setup item seeding.")
+        return
+
+    existing_titles = _load_existing_beads_titles(root)
+    for item in _SEED_BEADS_ITEMS:
+        title = str(item["title"])
+        if title.strip().lower() in existing_titles:
+            print(f"ℹ️  Beads item already exists: {title}")
+            continue
+
+        labels = item.get("labels", ())
+        label_value = ",".join(labels) if isinstance(labels, (tuple, list)) else ""
+        cmd = [
+            "bd",
+            "create",
+            title,
+            "--type",
+            "task",
+            "--priority",
+            str(item.get("priority", "3")),
+            "--description",
+            str(item.get("description", "")),
+            "--json",
+        ]
+        if label_value:
+            cmd.extend(["--labels", label_value])
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                cwd=str(root),
+                check=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired:
+            print(f"⚠️  Timed out creating beads item: {title}")
+            continue
+        except subprocess.CalledProcessError as exc:
+            error_msg = exc.stderr.strip() if exc.stderr else f"exit code {exc.returncode}"
+            print(f"⚠️  Failed to create beads item '{title}': {error_msg}")
+            continue
+
+        created_id = None
+        try:
+            payload = json.loads(result.stdout)
+            if isinstance(payload, dict):
+                created_id = payload.get("id")
+        except json.JSONDecodeError:
+            created_id = None
+
+        if isinstance(created_id, str) and created_id:
+            print(f"✅ Created beads item {created_id}: {title}")
+        else:
+            print(f"✅ Created beads item: {title}")
+
 
 def init_project(
     target_dir: Path | None = None,
@@ -142,6 +252,8 @@ def init_project(
     if not beads_path.exists() or force:
         beads_path.write_text(_BEADS_ITEM_TEMPLATE, encoding="utf-8")
         print(f"📄 Created {beads_path.relative_to(root)}")
+
+    _seed_setup_beads_items(root)
 
     print(f"\n✅ PokePoke initialized for '{project_name}'")
     print("\nNext steps:")
