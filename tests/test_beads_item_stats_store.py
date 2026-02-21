@@ -6,12 +6,12 @@ from unittest.mock import patch
 import pytest
 
 from pokepoke.beads_item_stats_store import (
-    _replace_with_retry,
     get_summary,
     load_beads_item_stats,
     record_item_completed,
     record_item_created,
 )
+from pokepoke.file_utils import replace_with_retry
 
 
 def test_missing_file_loads_empty_store() -> None:
@@ -79,7 +79,7 @@ def test_replace_with_retry_succeeds_on_first_attempt() -> None:
         src = Path(tmpdir) / "src.tmp"
         dst = Path(tmpdir) / "dst.json"
         src.write_text("data", encoding="utf-8")
-        _replace_with_retry(src, dst)
+        replace_with_retry(src, dst)
         assert dst.exists()
         assert dst.read_text(encoding="utf-8") == "data"
         assert not src.exists()
@@ -99,9 +99,9 @@ def test_replace_with_retry_retries_on_permission_error() -> None:
                 raise PermissionError("locked")
             # Success on third attempt — nothing to do, just return
 
-        with patch("pokepoke.beads_item_stats_store.os.replace", side_effect=fake_replace), \
-             patch("pokepoke.beads_item_stats_store.time.sleep") as mock_sleep:
-            _replace_with_retry(src, dst, retries=5, delay=0.01)
+        with patch("pokepoke.file_utils.os.replace", side_effect=fake_replace), \
+             patch("pokepoke.file_utils.time.sleep") as mock_sleep:
+            replace_with_retry(src, dst, retries=5, delay=0.01)
 
         assert fail_count[0] == 3
         assert mock_sleep.call_count == 2
@@ -113,7 +113,7 @@ def test_replace_with_retry_raises_after_all_retries_exhausted() -> None:
         dst = Path(tmpdir) / "dst.json"
         src.write_text("data", encoding="utf-8")
 
-        with patch("pokepoke.beads_item_stats_store.os.replace", side_effect=PermissionError("locked")), \
-             patch("pokepoke.beads_item_stats_store.time.sleep"):
+        with patch("pokepoke.file_utils.os.replace", side_effect=PermissionError("locked")), \
+             patch("pokepoke.file_utils.time.sleep"):
             with pytest.raises(PermissionError):
-                _replace_with_retry(src, dst, retries=3, delay=0.001)
+                replace_with_retry(src, dst, retries=3, delay=0.001)

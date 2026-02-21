@@ -326,6 +326,6 @@ def save_session_stats_to_disk(
         session_stats, elapsed_seconds, items_completed, total_requests
     )
     stats_path = run_dir / "stats.json"
-    with open(stats_path, "w", encoding="utf-8") as f:
+    with stats_path.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
     return stats_path

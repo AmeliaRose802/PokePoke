@@ -80,6 +80,15 @@ def check_and_merge_worktree(
         return merge_worktree_to_dev(item, parent_agent_id=parent_agent_id)
 
 
+def _abort_merge_if_active() -> None:
+    """Abort any in-progress merge to leave a clean state."""
+    from .git_operations import is_merge_in_progress, abort_merge
+    if is_merge_in_progress():
+        abort_success, abort_error = abort_merge()
+        if not abort_success:
+            print(f"   ❌ Failed to abort merge: {abort_error}")
+
+
 def merge_worktree_to_dev(item: BeadsWorkItem, parent_agent_id: str | None = None) -> bool:
     """Merge worktree to the default development branch."""
     from .git_operations import is_merge_in_progress, get_unmerged_files, abort_merge
@@ -166,19 +175,11 @@ def merge_worktree_to_dev(item: BeadsWorkItem, parent_agent_id: str | None = Non
                 return True
             else:
                 print("   Merge failed again after cleanup.")
-                # Abort the merge to leave clean state
-                if is_merge_in_progress():
-                    abort_success, abort_error = abort_merge()
-                    if not abort_success:
-                        print(f"   ❌ Failed to abort merge: {abort_error}")
+                _abort_merge_if_active()
                 return False
         else:
             print("   Cleanup failed.")
-            # Abort the merge to leave clean state
-            if is_merge_in_progress():
-                abort_success, abort_error = abort_merge()
-                if not abort_success:
-                    print(f"   ❌ Failed to abort merge: {abort_error}")
+            _abort_merge_if_active()
             return False
 
     print("   Merged and cleaned up worktree")
