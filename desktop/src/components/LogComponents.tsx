@@ -39,6 +39,7 @@ interface ToolAccordionProps {
 
 export function ToolAccordion({ tool, keyPrefix, nested = false }: ToolAccordionProps) {
   const detailsEntries = [tool.entry];
+  if (tool.additionalEntries) detailsEntries.push(...tool.additionalEntries);
   if (tool.result) detailsEntries.push(tool.result);
   const nestedClass = nested ? "nested" : "";
 

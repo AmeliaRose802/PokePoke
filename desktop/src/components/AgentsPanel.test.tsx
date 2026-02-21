@@ -213,6 +213,21 @@ describe('AgentsPanel', () => {
       expect(count?.textContent).toBe('2');
     });
 
+    it('shows "Previous Session" instead of "Session __unknown__" for agents without session_id', () => {
+      const oldAgent = mkAgent({ agent_id: 'old-1', name: 'OldWorker' }); // no session_id
+      const newAgent = mkAgent({ agent_id: 'new-1', name: 'NewWorker', session_id: '2000.0' });
+      render(
+        <AgentsPanel
+          agents={[oldAgent, newAgent]}
+          currentSessionId="2000.0"
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+      expect(screen.getByText(/Previous Session/)).toBeInTheDocument();
+      expect(screen.queryByText(/__unknown__/)).not.toBeInTheDocument();
+    });
+
     it('re-collapses session when header is clicked twice', () => {
       const oldAgent = mkAgent({ agent_id: 'old-1', name: 'OldWorker', session_id: '1000.0' });
       const newAgent = mkAgent({ agent_id: 'new-1', name: 'NewWorker', session_id: '2000.0' });
