@@ -199,6 +199,17 @@ def run_parallel_loop(
                 print(f"⚠️  Warning: failed to fetch ready items: {e}")
                 ready_items = []
 
+            # Collect completed futures BEFORE calculating slots so the
+            # refill logic sees the true number of active agents and can
+            # launch enough replacements to fill back to max_agents.
+            total_requests, any_success = _collect_done_futures(
+                futures, failed_claim_ids, total_requests,
+                session_stats, run_logger, record_fn,
+            )
+            items_completed = session_stats.items_completed
+
+            terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
+
             current_active = {i.id for i in futures.values()}
             slots = effective_parallel - len(futures)
 
@@ -225,14 +236,6 @@ def run_parallel_loop(
                         semaphore.release()
                         raise
                     futures[fut] = item
-
-            total_requests, any_success = _collect_done_futures(
-                futures, failed_claim_ids, total_requests,
-                session_stats, run_logger, record_fn,
-            )
-            items_completed = session_stats.items_completed
-
-            terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
 
             # Check if user requested stop after current item
             if should_stop_after_current() and not futures:
