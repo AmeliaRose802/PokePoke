@@ -123,6 +123,23 @@ describe('AgentsPanel', () => {
     expect(screen.getByText('Paused')).toBeInTheDocument();
   });
 
+  it('allows collapsing and expanding the run log snippet per agent card', () => {
+    const agent = mkAgent({ recent_logs: ['line 1', 'line 2'] });
+    render(
+      <AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />
+    );
+
+    expect(screen.getByText('line 1')).toBeInTheDocument();
+
+    const hideBtn = screen.getByRole('button', { name: /hide log/i });
+    fireEvent.click(hideBtn);
+    expect(screen.queryByText('line 1')).not.toBeInTheDocument();
+
+    const showBtn = screen.getByRole('button', { name: /show log/i });
+    fireEvent.click(showBtn);
+    expect(screen.getByText('line 1')).toBeInTheDocument();
+  });
+
   it('pause click does not trigger card selection', () => {
     const onSelect = vi.fn();
     const onPause = vi.fn();

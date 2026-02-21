@@ -570,6 +570,44 @@
   background: #f7768e;
 }
 
+.agent-card-log-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.agent-card-log-toggle {
+  align-self: flex-end;
+  background: none;
+  border: none;
+  color: #7aa2f7;
+  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.agent-card-log-toggle:hover,
+.agent-card-log-toggle:focus-visible {
+  color: #c0caf5;
+}
+
+.agent-card-log-toggle:focus-visible {
+  outline: 1px solid #7aa2f7;
+  outline-offset: 1px;
+}
+
+.agent-card-log-toggle-chevron {
+  font-size: 10px;
+}
+
+.agent-card-log-section-collapsed .agent-card-logs {
+  display: none;
+}
+
 .agent-card-logs {
   background: #14151d;
   border-radius: 4px;
