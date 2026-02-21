@@ -32,6 +32,8 @@ function App() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [spawnAtLimit, setSpawnAtLimit] = useState(false);
+  const repositoryDisplayName = bridge.repositoryName.trim();
+  const showRepositoryName = repositoryDisplayName.length > 0;
 
   // Update browser tab title with current agent and project name
   useDocumentTitle(bridge.agentName, bridge.projectName);
@@ -121,47 +123,59 @@ function App() {
     <div className="app">
       {/* Title bar */}
       <div className="app-header">
-        <div className="app-title">
-          <span className="app-logo">🐍</span>
-          PokePoke
+        <div className="app-title-group">
+          <div className="app-title">
+            <span className="app-logo">🐍</span>
+            PokePoke
+          </div>
+          {showRepositoryName && (
+            <div className="app-repo-name" title={repositoryDisplayName}>
+              <span className="app-repo-icon" aria-hidden="true">
+                📁
+              </span>
+              <span className="app-repo-text">{repositoryDisplayName}</span>
+            </div>
+          )}
         </div>
-        <ConnectionIndicator status={bridge.connectionStatus} />
-        <button
-          className={`finish-after-current-btn${bridge.stopAfterCurrent ? " stopping" : ""}`}
-          onClick={() =>
-            bridge.stopAfterCurrent
-              ? bridge.cancelStopAfterCurrent()
-              : bridge.requestStopAfterCurrent()
-          }
-          title={
-            bridge.stopAfterCurrent
-              ? "Cancel — continue processing items"
-              : "Finish after current item completes"
-          }
-        >
-          {bridge.stopAfterCurrent ? "⏸ Stopping…" : "⏸ Finish after current"}
-        </button>
-        <button
-          className="prompt-editor-toggle"
-          onClick={() => setShowStatsPage(true)}
-          title="Open stats"
-        >
-          🌿
-        </button>
-        <button
-          className="prompt-editor-toggle"
-          onClick={() => setShowPrompts(true)}
-          title="Edit prompt templates"
-        >
-          🌱
-        </button>
-        <button
-          className="prompt-editor-toggle"
-          onClick={() => setShowSettings(true)}
-          title="Settings"
-        >
-          🍃
-        </button>
+        <div className="app-header-controls">
+          <ConnectionIndicator status={bridge.connectionStatus} />
+          <button
+            className={`finish-after-current-btn${bridge.stopAfterCurrent ? " stopping" : ""}`}
+            onClick={() =>
+              bridge.stopAfterCurrent
+                ? bridge.cancelStopAfterCurrent()
+                : bridge.requestStopAfterCurrent()
+            }
+            title={
+              bridge.stopAfterCurrent
+                ? "Cancel — continue processing items"
+                : "Finish after current item completes"
+            }
+          >
+            {bridge.stopAfterCurrent ? "⏸ Stopping…" : "⏸ Finish after current"}
+          </button>
+          <button
+            className="prompt-editor-toggle"
+            onClick={() => setShowStatsPage(true)}
+            title="Open stats"
+          >
+            🌿
+          </button>
+          <button
+            className="prompt-editor-toggle"
+            onClick={() => setShowPrompts(true)}
+            title="Edit prompt templates"
+          >
+            🌱
+          </button>
+          <button
+            className="prompt-editor-toggle"
+            onClick={() => setShowSettings(true)}
+            title="Settings"
+          >
+            🍃
+          </button>
+        </div>
       </div>
 
       {/* Work item header */}
