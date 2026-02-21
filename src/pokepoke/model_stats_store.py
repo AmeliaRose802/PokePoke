@@ -122,7 +122,7 @@ def load_model_stats(path: Path | None = None) -> dict[str, Any]:
     if not stats_path.exists():
         return _empty_store()
     try:
-        with open(stats_path, encoding="utf-8") as f:
+        with stats_path.open(encoding="utf-8") as f:
             data = json.load(f)
         # Basic validation
         if not isinstance(data, dict) or "log" not in data:
@@ -141,7 +141,7 @@ def save_model_stats(data: dict[str, Any], path: Path | None = None) -> None:
     stats_path = path or STATS_FILE
     stats_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = stats_path.with_suffix(".tmp")
-    with open(tmp_path, "w", encoding="utf-8") as f:
+    with tmp_path.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
     # Retry os.replace on Windows where the destination file may be briefly
     # locked by a previous operation, causing PermissionError.
