@@ -231,8 +231,8 @@ def process_work_item(
             from pokepoke.git_operations import build_handoff_context
             handoff_ctx = build_handoff_context(cwd=worktree_cwd)
 
-            gate_agent_id = f"{base_agent_id}-gate"
             gate_iteration = gate_agent_runs + 1
+            gate_agent_id = f"{base_agent_id}-gate-{gate_iteration}"
             terminal_ui.ui.push_agent_status(
                 gate_agent_id,
                 "Gate Agent",
