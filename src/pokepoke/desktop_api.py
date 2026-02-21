@@ -44,6 +44,7 @@ class DesktopAPI:
         self._current_stats: dict[str, Any] | None = None
         self._current_progress: dict[str, Any] = {"active": False, "status": ""}
         self._repository_name: str = ""
+        self._current_logs_dir: str | None = None
 
         # Session start time for dynamic elapsed_time computation
         self._session_start_time: float | None = None
@@ -109,6 +110,7 @@ class DesktopAPI:
                 "stop_after_current": _should_stop_after_current(),
                 "project_name": config.project_name,
                 "current_session_id": self._current_session_id,
+                "logs_dir": self._current_logs_dir,
             }
 
     def get_new_logs(self) -> list[dict[str, Any]]:
@@ -195,6 +197,10 @@ class DesktopAPI:
     def push_progress(self, active: bool, status: str = "") -> None:
         """Update the progress indicator."""
         self._current_progress = {"active": active, "status": status}
+
+    def set_logs_dir(self, logs_dir: str) -> None:
+        """Set the current logs directory path."""
+        self._current_logs_dir = logs_dir
 
     def clear_logs(self) -> None:
         """Clear the log buffer."""

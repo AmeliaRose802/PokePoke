@@ -124,6 +124,10 @@ def run_orchestrator(
         run_id = run_logger.get_run_id()
         run_dir = run_logger.get_run_dir()
         print(f"📝 Run ID: {run_id} | 📁 Logs: {run_dir}")
+        
+        # Set logs directory in desktop API for persistent UI display
+        terminal_ui.ui.set_logs_dir(str(run_dir))
+        
         run_logger.log_orchestrator(f"PokePoke started in {mode_name} mode with agent name: {agent_name}")
 
         # Register signal handlers for graceful shutdown logging

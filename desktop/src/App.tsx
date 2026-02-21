@@ -13,6 +13,7 @@ import { AgentLogPanel } from "./components/AgentLogPanel";
 import { AgentsPanel } from "./components/AgentsPanel";
 import { ConnectionIndicator } from "./components/ConnectionIndicator";
 import { LogPanel } from "./components/LogPanel";
+import { LogsLocationBox } from "./components/LogsLocationBox";
 import { PromptEditor } from "./components/PromptEditor";
 import { SettingsPage } from "./components/SettingsPage";
 import { StatsBar } from "./components/StatsBar";
@@ -125,43 +126,46 @@ function App() {
           <span className="app-logo">🐍</span>
           PokePoke
         </div>
-        <ConnectionIndicator status={bridge.connectionStatus} />
-        <button
-          className={`finish-after-current-btn${bridge.stopAfterCurrent ? " stopping" : ""}`}
-          onClick={() =>
-            bridge.stopAfterCurrent
-              ? bridge.cancelStopAfterCurrent()
-              : bridge.requestStopAfterCurrent()
-          }
-          title={
-            bridge.stopAfterCurrent
-              ? "Cancel — continue processing items"
-              : "Finish after current item completes"
-          }
-        >
-          {bridge.stopAfterCurrent ? "⏸ Stopping…" : "⏸ Finish after current"}
-        </button>
-        <button
-          className="prompt-editor-toggle"
-          onClick={() => setShowStatsPage(true)}
-          title="Open stats"
-        >
-          🌿
-        </button>
-        <button
-          className="prompt-editor-toggle"
-          onClick={() => setShowPrompts(true)}
-          title="Edit prompt templates"
-        >
-          🌱
-        </button>
-        <button
-          className="prompt-editor-toggle"
-          onClick={() => setShowSettings(true)}
-          title="Settings"
-        >
-          🍃
-        </button>
+        <div className="app-header-right">
+          <ConnectionIndicator status={bridge.connectionStatus} />
+          <LogsLocationBox logsDir={bridge.logsDir} />
+          <button
+            className={`finish-after-current-btn${bridge.stopAfterCurrent ? " stopping" : ""}`}
+            onClick={() =>
+              bridge.stopAfterCurrent
+                ? bridge.cancelStopAfterCurrent()
+                : bridge.requestStopAfterCurrent()
+            }
+            title={
+              bridge.stopAfterCurrent
+                ? "Cancel — continue processing items"
+                : "Finish after current item completes"
+            }
+          >
+            {bridge.stopAfterCurrent ? "⏸ Stopping…" : "⏸ Finish after current"}
+          </button>
+          <button
+            className="prompt-editor-toggle"
+            onClick={() => setShowStatsPage(true)}
+            title="Open stats"
+          >
+            🌿
+          </button>
+          <button
+            className="prompt-editor-toggle"
+            onClick={() => setShowPrompts(true)}
+            title="Edit prompt templates"
+          >
+            🌱
+          </button>
+          <button
+            className="prompt-editor-toggle"
+            onClick={() => setShowSettings(true)}
+            title="Settings"
+          >
+            🍃
+          </button>
+        </div>
       </div>
 
       {/* Work item header */}

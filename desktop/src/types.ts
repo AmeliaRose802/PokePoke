@@ -202,3 +202,19 @@ export interface AgentInfo {
   paused?: boolean;
   session_id?: string | null;
 }
+
+/** State snapshot from the bridge */
+export interface AppState {
+  work_item: WorkItem | null;
+  agent_name: string;
+  repository_name: string;
+  stats: SessionStats | null;
+  progress: ProgressState;
+  log_count: number;
+  model_leaderboard: Record<string, ModelPerformanceSummary>;
+  agents: AgentInfo[];
+  stop_after_current: boolean;
+  project_name?: string;
+  current_session_id: string | null;
+  logs_dir: string | null;
+}
