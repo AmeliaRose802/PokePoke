@@ -342,6 +342,22 @@ def test_push_log_buffer_trim_adjusts_read_index() -> None:
     assert len(new_logs) >= 0
 
 
+def test_agent_detail_retains_full_log_history() -> None:
+    """Agent detail responses should keep full logs, not cap at arbitrary limits."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "AgentOne")
+
+    for i in range(3000):
+        api.push_agent_log("agent-1", f"line-{i}")
+
+    detail = api.get_agent_detail("agent-1")
+    assert detail is not None
+    assert len(detail["recent_logs"]) == api._agent_max_log_lines  # preview still limited
+    assert len(detail["log_lines"]) == 3000  # full history retained
+    assert detail["log_lines"][0] == "line-0"
+    assert detail["log_lines"][-1] == "line-2999"
+
+
 def test_serialize_live_stats_no_session_start() -> None:
     """_serialize_live_stats should carry forward cached elapsed_time."""
     api = DesktopAPI()

@@ -68,7 +68,7 @@ class DesktopAPI:
 
         # Running agents — keyed by agent_id
         self._agent_max_log_lines_internal = 20
-        self._agent_detail_max_log_lines_internal = 200
+        self._agent_detail_max_log_lines_internal: int | None = None
         self._agent_registry = AgentRegistry(
             self._lock,
             preview_limit=self._agent_max_log_lines_internal,
@@ -212,11 +212,11 @@ class DesktopAPI:
         self._agent_registry.set_limits(value, self._agent_detail_max_log_lines_internal)
 
     @property
-    def _agent_detail_max_log_lines(self) -> int:
+    def _agent_detail_max_log_lines(self) -> int | None:
         return self._agent_detail_max_log_lines_internal
 
     @_agent_detail_max_log_lines.setter
-    def _agent_detail_max_log_lines(self, value: int) -> None:
+    def _agent_detail_max_log_lines(self, value: int | None) -> None:
         self._agent_detail_max_log_lines_internal = value
         self._agent_registry.set_limits(self._agent_max_log_lines_internal, value)
 

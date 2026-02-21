@@ -15,14 +15,14 @@ _FAILURE_KEYWORDS = ("fail", "failed", "failure", "error", "exception", "aborted
 def load_historical_agents(
     log_roots: Iterable[Path],
     preview_limit: int,
-    detail_limit: int,
+    detail_limit: int | None,
 ) -> list[dict[str, Any]]:
     """Scan the provided log roots and load per-agent log snippets.
 
     Args:
         log_roots: Candidate directories that may contain per-run subdirectories.
         preview_limit: Maximum number of recent log lines to expose in agent cards.
-        detail_limit: Maximum number of log lines to expose in the detail panel.
+        detail_limit: Maximum number of log lines to expose in the detail panel (None for unlimited).
 
     Returns:
         A list of dictionaries compatible with AgentRegistry entries.
@@ -31,7 +31,10 @@ def load_historical_agents(
     records: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     effective_preview = max(1, preview_limit)
-    effective_detail = max(effective_preview, detail_limit if detail_limit > 0 else effective_preview)
+    if detail_limit is None:
+        effective_detail: int | None = None
+    else:
+        effective_detail = max(effective_preview, detail_limit if detail_limit > 0 else effective_preview)
 
     for root in log_roots:
         root_path = Path(root)
@@ -98,7 +101,7 @@ def _parse_agent_log(
     log_path: Path,
     run_id: str,
     preview_limit: int,
-    detail_limit: int,
+    detail_limit: int | None,
 ) -> dict[str, Any] | None:
     """Parse a single agent log file into metadata + limited log lines."""
     try:
