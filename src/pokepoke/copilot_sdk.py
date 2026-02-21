@@ -1,5 +1,6 @@
 """GitHub Copilot SDK integration."""
 import asyncio
+import contextlib
 import logging
 import os
 from pathlib import Path
@@ -204,7 +205,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                         return False
                     try:
                         await asyncio.wait_for(done.wait(), timeout=min(1.0, remaining))
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         continue
             except KeyboardInterrupt:
                 print("\n\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")
@@ -244,10 +245,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         # Cancel watchdog if it's still running
         if watchdog_task and not watchdog_task.done():
             watchdog_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await watchdog_task
-            except asyncio.CancelledError:
-                pass
 
         # Handle timeout/interrupt cases
         if activity_timeout:
@@ -286,10 +285,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         # Ensure watchdog is cancelled
         if watchdog_task and not watchdog_task.done():
             watchdog_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await watchdog_task
-            except asyncio.CancelledError:
-                pass
 
         try:
             print("\n[SDK] Initiating graceful client shutdown...")
@@ -299,7 +296,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                 print("[SDK] Client stopped gracefully")
                 if os.name == 'nt':
                     wait_for_process_cleanup(max_wait=2.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 print("[SDK] Client stop timed out after 10s - forcing shutdown")
                 try:
                     await client.stop()

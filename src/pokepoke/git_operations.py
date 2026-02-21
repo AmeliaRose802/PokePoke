@@ -116,7 +116,7 @@ def verify_main_repo_clean(cwd: str | None = None) -> tuple[bool, str, list[str]
 
         return True, "", []
     except Exception as e:
-        raise RuntimeError(f"Error checking git status: {e}")
+        raise RuntimeError(f"Error checking git status: {e}") from e
 
 
 def handle_beads_auto_commit() -> None:
@@ -138,9 +138,9 @@ def handle_beads_auto_commit() -> None:
         )
         print("✅ Beads changes committed")
     except subprocess.TimeoutExpired as e:
-        raise RuntimeError(f"Beads commit timed out after {e.timeout} seconds")
+        raise RuntimeError(f"Beads commit timed out after {e.timeout} seconds") from e
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Failed to commit beads changes: {e}")
+        raise RuntimeError(f"Failed to commit beads changes: {e}") from e
 
 
 def check_main_repo_ready_for_merge() -> tuple[bool, str]:
@@ -268,7 +268,7 @@ def get_main_repo_root() -> Path:
         git_common_dir = Path(result.stdout.strip())
         return git_common_dir.parent
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Not in a git repository: {e}")
+        raise RuntimeError(f"Not in a git repository: {e}") from e
 
 def is_worktree_clean(worktree_path: Path) -> bool:
     """Check if a worktree has no uncommitted changes."""

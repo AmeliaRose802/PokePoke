@@ -28,7 +28,7 @@ from __future__ import annotations
 import json
 import statistics
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -58,7 +58,7 @@ def _record_to_dict(record: ModelCompletionRecord) -> dict[str, Any]:
         "model": record.model,
         "duration_seconds": record.duration_seconds,
         "gate_passed": record.gate_passed,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 

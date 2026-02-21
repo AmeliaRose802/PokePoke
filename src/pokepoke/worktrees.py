@@ -73,7 +73,7 @@ def create_worktree(item_id: str, base_branch: str | None = None) -> Path:
 
         # Check if the base branch doesn't exist
         if e.stderr and ("invalid reference" in e.stderr.lower() or "not a valid" in e.stderr.lower()):
-            raise RuntimeError(f"Base branch '{base_branch}' does not exist. Please create it first or specify a different base branch.")
+            raise RuntimeError(f"Base branch '{base_branch}' does not exist. Please create it first or specify a different base branch.") from e
 
         # If we couldn't recover, re-raise the error with more context
         raise RuntimeError(f"Failed to create worktree: {e.stderr if e.stderr else str(e)}") from e

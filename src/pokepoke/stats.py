@@ -50,10 +50,8 @@ def parse_agent_stats(output: str) -> AgentStats | None:
             found_any = True
 
         # Parse premium requests
-        if match := re.search(r'Est\.\s*(\d+)\s+Premium request', output, re.IGNORECASE):
-            stats.premium_requests = int(match.group(1))
-            found_any = True
-        elif match := re.search(r'Total usage est:\s*(\d+)\s+Premium request', output, re.IGNORECASE):
+        if (match := re.search(r'Est\.\s*(\d+)\s+Premium request', output, re.IGNORECASE)) or \
+           (match := re.search(r'Total usage est:\s*(\d+)\s+Premium request', output, re.IGNORECASE)):
             stats.premium_requests = int(match.group(1))
             found_any = True
 
