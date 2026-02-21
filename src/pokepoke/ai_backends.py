@@ -6,7 +6,8 @@ import os
 import shutil
 import subprocess
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol
+from collections.abc import Callable
+from typing import Any, Protocol
 
 from pokepoke.config import get_config
 from pokepoke.copilot_sdk import build_prompt_from_work_item, invoke_copilot_sdk_sync

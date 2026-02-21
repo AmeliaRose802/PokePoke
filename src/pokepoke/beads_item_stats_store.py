@@ -156,14 +156,13 @@ def record_event(
         "timestamp": _now_iso(),
     }
 
-    with _thread_lock:
-        with acquire_lock(_STATS_FILE_LOCK):
-            data = load_beads_item_stats(path)
-            data["log"].append(entry)
-            data["summary"] = _rebuild_summary(data["log"])
-            save_beads_item_stats(data, path)
-            summary: dict[str, Any] = data.get("summary", {})
-            return summary
+    with _thread_lock, acquire_lock(_STATS_FILE_LOCK):
+        data = load_beads_item_stats(path)
+        data["log"].append(entry)
+        data["summary"] = _rebuild_summary(data["log"])
+        save_beads_item_stats(data, path)
+        summary: dict[str, Any] = data.get("summary", {})
+        return summary
 
 
 def record_item_created(item_id: str, agent_type: str = "unknown", *, path: Path | None = None) -> dict[str, Any]:

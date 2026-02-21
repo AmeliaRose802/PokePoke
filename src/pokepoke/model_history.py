@@ -118,6 +118,5 @@ def append_model_history_entry(
     )
 
     line = json.dumps(record, ensure_ascii=False)
-    with _lock:
-        with open(history_path, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
+    with _lock, open(history_path, "a", encoding="utf-8") as f:
+        f.write(line + "\n")

@@ -8,7 +8,8 @@ import signal
 import sys
 import threading
 from types import FrameType
-from typing import Callable, Any
+from collections.abc import Callable
+from typing import Any
 from datetime import datetime
 
 from pokepoke.logging_utils import RunLogger

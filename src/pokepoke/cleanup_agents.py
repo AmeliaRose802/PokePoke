@@ -199,9 +199,8 @@ def _run_agent_with_ui(
     """Invoke copilot with UI status tracking and metrics context."""
     try:
         from pokepoke.metrics_context import agent_type_context
-        with terminal_ui.ui.agent_output_for(agent_id):
-            with agent_type_context(agent_type_key):
-                copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd)
+        with terminal_ui.ui.agent_output_for(agent_id), agent_type_context(agent_type_key):
+            copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd)
 
         status = "success" if copilot_result.success else "failed"
         terminal_ui.ui.push_agent_status(
