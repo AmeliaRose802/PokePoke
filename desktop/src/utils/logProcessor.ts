@@ -1,13 +1,10 @@
 /**
  * Log processing utilities for tool call collapsing and batching.
- *
  * Pure functions for parsing and processing log entries - no React components.
  * Used by both LogPanel (main agent/orchestrator logs) and AgentLogPanel (agent detail view).
  */
 
 import type { LogEntry } from "../types";
-
-// ===================== Types =====================
 
 export interface ToolSummary {
   toolLabel: string;
@@ -21,6 +18,7 @@ export interface ToolItem {
   entry: LogEntry;
   result?: LogEntry;
   summary: ToolSummary;
+  additionalEntries?: LogEntry[];
 }
 
 export interface ToolGroup {
@@ -56,15 +54,15 @@ export type RenderLogItem =
       language?: string;
     };
 
-// ===================== Patterns =====================
-
 const TOOL_CALL_PATTERN = /^\s*(?:🌿|\[Tool\])\s*(.*)$/;
 const TOOL_RESULT_PATTERN = /^\s*(✅|❌)\s*Result:\s*(.*)$/;
 const TOOL_RESULT_FALLBACK = /^\s*\[Result\]\s*(.*)$/i;
 const COPILOT_TOOL_BATCH_HEADER = /^\s*\[Copilot\]\s*Calling\s+(\d+)\s+tool\(s\)\.\.\.$/;
 const CODE_FENCE_REGEX = /```([^\n`]*)?\n([\s\S]*?)```/m;
 
-// ===================== Detection Functions =====================
+const APPLY_PATCH_RE = /apply_patch\s*\(/;
+const PATCH_END_RE = /\*{3}\s*End Patch/;
+const PATCH_UPDATE_FILE_RE = /\*{3}\s*(?:Update|Add|Delete)\s+File:\s*(.+)/;
 
 export function isToolCallMessage(message: string): boolean {
   return TOOL_CALL_PATTERN.test(message);
@@ -95,7 +93,9 @@ export function isNarrationCandidate(message: string): boolean {
   );
 }
 
-// ===================== Parsing Functions =====================
+function isApplyPatchToolCall(message: string): boolean {
+  return isToolCallMessage(message) && APPLY_PATCH_RE.test(message);
+}
 
 export function parseToolLabel(message: string): string {
   const match = message.match(TOOL_CALL_PATTERN);
@@ -167,6 +167,20 @@ function sumReplacementsFromResults(items: ToolItem[]): number {
 }
 
 function buildToolGroupSummary(toolName: string, items: ToolItem[]): string | undefined {
+  if (toolName === "apply_patch") {
+    const files = new Set<string>();
+    for (const item of items) {
+      for (const entry of item.additionalEntries ?? []) {
+        const match = entry.message.match(PATCH_UPDATE_FILE_RE);
+        if (match) files.add(match[1].trim());
+      }
+    }
+    if (files.size > 0) {
+      return `Patched ${files.size} file${files.size === 1 ? "" : "s"}`;
+    }
+    return `${items.length} patch${items.length === 1 ? "" : "es"}`;
+  }
+
   if (toolName === "edit") {
     const files = new Set(items.flatMap((i) => extractPathsFromArgs(i.argsText)));
     const replacements = sumReplacementsFromResults(items);
@@ -197,8 +211,6 @@ function buildToolGroupSummary(toolName: string, items: ToolItem[]): string | un
   return undefined;
 }
 
-// ===================== Level Detection =====================
-
 /** Map log content keywords to CSS class names */
 export function detectLevel(message: string): string {
   const lower = message.toLowerCase();
@@ -211,24 +223,65 @@ export function detectLevel(message: string): string {
   return "log-info";
 }
 
-// ===================== Time Formatting =====================
-
 /** Format a unix timestamp to HH:MM:SS */
 export function formatTime(ts: number): string {
   const d = new Date(ts * 1000);
   return d.toLocaleTimeString("en-US", { hour12: false });
 }
 
-// ===================== Log Processing =====================
-
-/**
- * Process log entries into renderable items with tool batching/grouping.
- */
 export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
   const items: RenderLogItem[] = [];
 
   function parseToolAt(index: number): { tool: ToolItem; nextIndex: number } {
     const entry = logs[index];
+    // Handle multiline apply_patch tool calls
+    if (isApplyPatchToolCall(entry.message)) {
+      const additionalEntries: LogEntry[] = [];
+      const filePaths: string[] = [];
+      let j = index + 1;
+
+      while (j < logs.length) {
+        const line = logs[j];
+        if (isToolCallMessage(line.message) || isCopilotToolBatchHeader(line.message)) break;
+        if (isToolResultMessage(line.message)) break;
+
+        const fileMatch = line.message.match(PATCH_UPDATE_FILE_RE);
+        if (fileMatch) filePaths.push(fileMatch[1].trim());
+
+        additionalEntries.push(line);
+
+        if (PATCH_END_RE.test(line.message)) {
+          j += 1;
+          break;
+        }
+        j += 1;
+      }
+
+      const nextEntry = logs[j];
+      const result = nextEntry && isToolResultMessage(nextEntry.message) ? nextEntry : undefined;
+      const nextIndex = result ? j + 1 : j;
+
+      const fileLabel = filePaths.length > 0
+        ? ` — ${filePaths.map(p => p.replace(/^.*[/\\]/, "")).join(", ")}`
+        : "";
+      const toolLabel = `🌿 apply_patch${fileLabel}`;
+
+      return {
+        tool: {
+          toolName: "apply_patch",
+          entry,
+          result,
+          additionalEntries,
+          summary: {
+            toolLabel,
+            resultSummary: result ? buildToolSummary("", result.message).resultSummary : undefined,
+            statusClass: result ? buildToolSummary("", result.message).statusClass : undefined,
+          },
+        },
+        nextIndex,
+      };
+    }
+
     const parts = parseToolCallParts(entry.message);
     const next = logs[index + 1];
     const result = next && isToolResultMessage(next.message) ? next : undefined;
@@ -372,10 +425,7 @@ export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
   return mergeConsecutiveLogEntries(items);
 }
 
-/**
- * Merge consecutive plain log entries into markdown blocks for rich rendering.
- * Single isolated log entries are kept as-is.
- */
+/** Merge consecutive plain log entries into markdown blocks for rich rendering. */
 function mergeConsecutiveLogEntries(items: RenderLogItem[]): RenderLogItem[] {
   const merged: RenderLogItem[] = [];
   let i = 0;
@@ -437,12 +487,7 @@ function extractCodeFenceMetadata(markdown: string): CodeFenceMetadata | undefin
   };
 }
 
-// ===================== String-to-LogEntry Conversion =====================
-
-/**
- * Convert raw string log lines (from AgentInfo) to LogEntry format.
- * Uses the string index as a pseudo-timestamp for ordering.
- */
+/** Convert raw string log lines (from AgentInfo) to LogEntry format. */
 export function stringsToLogEntries(lines: string[], baseTimestamp: number): LogEntry[] {
   return lines.map((line, index) => ({
     message: line,

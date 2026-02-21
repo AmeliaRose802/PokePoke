@@ -120,6 +120,48 @@ describe('LogPanel', () => {
     expect(screen.getByText('🌿 edit')).toBeInTheDocument();
   });
 
+  it('collapses multiline apply_patch tool call into accordion', () => {
+    const logs: LogEntry[] = [
+      mk(1, "[Tool] apply_patch({'patch': '*** Begin Patch"),
+      mk(2, '*** Update File: src/components/App.tsx'),
+      mk(3, '@@ -10,5 +10,5 @@'),
+      mk(4, ' existing line'),
+      mk(5, '-old line'),
+      mk(6, '+new line'),
+      mk(7, " *** End Patch'})"),
+      mk(8, '✅ Result: Applied patch successfully'),
+    ];
+
+    render(
+      <LogPanel
+        title="Agent"
+        icon="🤖"
+        logs={logs}
+        accentColor="#7dcfff"
+      />
+    );
+
+    // Should render as a collapsed tool accordion with file name
+    expect(screen.getByText(/apply_patch — App\.tsx/)).toBeInTheDocument();
+
+    // Patch content lines should be inside the accordion, not as standalone log entries
+    const accordion = document.querySelector('details.log-accordion');
+    expect(accordion).not.toBeNull();
+    const details = accordion!.querySelector('.log-accordion-details');
+    expect(details).not.toBeNull();
+    // Patch lines are inside the accordion details
+    expect(details!.textContent).toContain('@@ -10,5 +10,5 @@');
+    expect(details!.textContent).toContain('-old line');
+    expect(details!.textContent).toContain('+new line');
+
+    // There should be no standalone log-entry elements outside the accordion for patch content
+    const standaloneEntries = document.querySelectorAll('.log-panel-body > .log-entry');
+    for (const entry of standaloneEntries) {
+      expect(entry.textContent).not.toContain('@@ -10,5 +10,5 @@');
+      expect(entry.textContent).not.toContain('-old line');
+    }
+  });
+
   it('renders consecutive markdown lines as formatted HTML', () => {
     const logs: LogEntry[] = [
       mk(1, '## Summary'),
