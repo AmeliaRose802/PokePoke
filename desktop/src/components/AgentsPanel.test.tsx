@@ -234,6 +234,81 @@ describe('AgentsPanel', () => {
     });
   });
 
+  describe('spawn agent button', () => {
+    it('shows spawn button when orchestratorRunning is true', () => {
+      const agent = mkAgent();
+      render(
+        <AgentsPanel
+          agents={[agent]}
+          orchestratorRunning={true}
+          onSpawnAgent={vi.fn()}
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+      expect(screen.getByTitle('Spawn additional agent')).toBeInTheDocument();
+    });
+
+    it('does not show spawn button when orchestratorRunning is false', () => {
+      const agent = mkAgent();
+      render(
+        <AgentsPanel
+          agents={[agent]}
+          orchestratorRunning={false}
+          onSpawnAgent={vi.fn()}
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+      expect(screen.queryByTitle('Spawn additional agent')).not.toBeInTheDocument();
+    });
+
+    it('calls onSpawnAgent when spawn button is clicked', () => {
+      const onSpawn = vi.fn();
+      const agent = mkAgent();
+      render(
+        <AgentsPanel
+          agents={[agent]}
+          orchestratorRunning={true}
+          onSpawnAgent={onSpawn}
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+      fireEvent.click(screen.getByTitle('Spawn additional agent'));
+      expect(onSpawn).toHaveBeenCalledTimes(1);
+    });
+
+    it('disables spawn button and shows limit title when spawnAtLimit is true', () => {
+      const agent = mkAgent();
+      render(
+        <AgentsPanel
+          agents={[agent]}
+          orchestratorRunning={true}
+          onSpawnAgent={vi.fn()}
+          spawnAtLimit={true}
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+      const btn = screen.getByTitle(/At max agent limit/);
+      expect(btn).toBeDisabled();
+    });
+
+    it('shows spawn button in empty state when orchestratorRunning', () => {
+      render(
+        <AgentsPanel
+          agents={[]}
+          orchestratorRunning={true}
+          onSpawnAgent={vi.fn()}
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+      expect(screen.getByTitle('Spawn additional agent')).toBeInTheDocument();
+    });
+  });
+
   describe('modified files display', () => {
     it('shows file count and list for agents with modified_files', () => {
       const agent = mkAgent({

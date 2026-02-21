@@ -96,6 +96,7 @@ interface PyWebViewAPI {
   get_agent_detail(agent_id: string): Promise<AgentInfo | null>;
   pause_agent(agent_id: string): Promise<{ agent_id: string; paused: boolean }>;
   resume_agent(agent_id: string): Promise<{ agent_id: string; resumed: boolean }>;
+  spawn_agent(): Promise<{ success: boolean; at_limit: boolean; active: number; max: number }>;
 }
 
 declare global {
@@ -170,6 +171,7 @@ export interface BridgeState {
   getAgentDetail: (agentId: string) => Promise<AgentInfo | null>;
   pauseAgent: (agentId: string) => Promise<boolean>;
   resumeAgent: (agentId: string) => Promise<boolean>;
+  spawnAgent: () => Promise<{ success: boolean; at_limit: boolean; active: number; max: number } | null>;
 }
 
 /**
@@ -287,6 +289,15 @@ export function useBridge(): BridgeState {
       return result.resumed;
     } catch {
       return false;
+    }
+  }, []);
+
+  const spawnAgent = useCallback(async () => {
+    if (!window.pywebview?.api) return null;
+    try {
+      return await window.pywebview.api.spawn_agent();
+    } catch {
+      return null;
     }
   }, []);
 
@@ -437,5 +448,6 @@ export function useBridge(): BridgeState {
     getAgentDetail,
     pauseAgent,
     resumeAgent,
+    spawnAgent,
   };
 }

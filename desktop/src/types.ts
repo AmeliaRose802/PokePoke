@@ -149,6 +149,7 @@ export interface ProjectConfig {
   mcp_server?: McpServerConfig;
   maintenance?: MaintenanceConfig;
   test_data?: Record<string, string>;
+  max_parallel_agents?: number;
   [key: string]: unknown;
 }
 

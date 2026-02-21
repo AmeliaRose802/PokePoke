@@ -50,6 +50,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
   const [mcpEnabled, setMcpEnabled] = useState(false);
   const [mcpName, setMcpName] = useState("");
   const [mcpRestartScript, setMcpRestartScript] = useState("");
+  const [maxParallelAgents, setMaxParallelAgents] = useState(1);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -73,6 +74,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
       setMcpEnabled(mcpServer.enabled ?? false);
       setMcpName(mcpServer.name ?? "");
       setMcpRestartScript(mcpServer.restart_script ?? "");
+      setMaxParallelAgents(Math.max(1, resp.config.max_parallel_agents ?? 1));
       
       // Load maintenance agents
       const maintenance = resp.config.maintenance;
@@ -121,6 +123,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
         ...config.maintenance,
         agents: maintenanceAgents,
       },
+      max_parallel_agents: maxParallelAgents,
     };
     const ok = await saveConfig(updated);
     setSaving(false);
@@ -131,7 +134,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
     } else {
       setMessage("Save failed");
     }
-  }, [config, defaultModel, fallbackModel, candidateModels, maintenanceAgents, abTestingEnabled, mcpEnabled, mcpName, mcpRestartScript, saveConfig]);
+  }, [config, defaultModel, fallbackModel, candidateModels, maintenanceAgents, abTestingEnabled, mcpEnabled, mcpName, mcpRestartScript, maxParallelAgents, saveConfig]);
 
   const handleReset = useCallback(() => {
     if (!config) return;
@@ -146,6 +149,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
     setMcpEnabled(mcpServer.enabled ?? false);
     setMcpName(mcpServer.name ?? "");
     setMcpRestartScript(mcpServer.restart_script ?? "");
+    setMaxParallelAgents(Math.max(1, config.max_parallel_agents ?? 1));
     
     // Reset maintenance agents
     const maintenance = config.maintenance;
@@ -364,6 +368,21 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
                     ? "Models to rotate through for A/B performance testing"
                     : "Enable A/B testing to configure candidate models"}
                 </span>
+              </div>
+            </div>
+
+            {/* Section: Orchestrator */}
+            <div className="settings-section">
+              <h3 className="settings-section-title">⚡ Orchestrator</h3>
+              <div className="settings-field">
+                <label className="settings-label" htmlFor="max-parallel-agents">Max Parallel Agents</label>
+                <input
+                  id="max-parallel-agents" className="settings-input settings-input-number"
+                  type="number" min={1} max={8} value={maxParallelAgents}
+                  onChange={(e) => { const v = Math.max(1, Math.min(8, parseInt(e.target.value, 10) || 1)); setMaxParallelAgents(v); markDirty(); }}
+                />
+                <span className="settings-hint">Controls how many work items are processed concurrently (1–8).</span>
+                {maxParallelAgents > 1 && <span className="settings-warning">⚠️ Parallel mode is experimental. Changes take effect on next restart.</span>}
               </div>
             </div>
 

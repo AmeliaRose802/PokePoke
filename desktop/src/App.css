@@ -2147,6 +2147,43 @@
   margin-top: 3px;
 }
 
+.settings-warning {
+  display: block;
+  font-size: 11px;
+  color: #e0af68;
+  margin-top: 4px;
+}
+
+.settings-input-number {
+  width: 80px;
+}
+
+/* ── Agents Spawn Button ───────────────────────────────────────────────── */
+
+.agents-spawn-btn {
+  margin-left: auto;
+  padding: 2px 8px;
+  background: #292e42;
+  border: 1px solid #3b4261;
+  border-radius: 4px;
+  color: #7aa2f7;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.agents-spawn-btn:hover:not(:disabled) {
+  background: #3b4261;
+  border-color: #7aa2f7;
+}
+
+.agents-spawn-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* ── Chip / Tag Input ──────────────────────────────────────────────────── */
 
 .chip-container {

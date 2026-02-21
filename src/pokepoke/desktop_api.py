@@ -292,6 +292,48 @@ class DesktopAPI:
         self.push_log("▶️  Stop after current item cancelled", "orchestrator")
         return {"stop_after_current": False}
 
+    def spawn_agent(self) -> dict[str, Any]:
+        """Spawn an additional agent if the orchestrator is running and below the limit.
+
+        Returns a dict with:
+          - success: bool — True if a spawn was requested
+          - at_limit: bool — True if already at max_parallel_agents
+          - active: int — number of currently running agents
+          - max: int — configured max_parallel_agents
+        """
+        from pokepoke.config import get_config
+        from pokepoke.parallel import request_spawn_agent
+
+        config = get_config()
+        max_agents = config.max_parallel_agents
+
+        with self._lock:
+            running_agents = [
+                a for a in self._agent_registry.serialize_all()
+                if a.get("status") == "running"
+            ]
+        active_count = len(running_agents)
+
+        if active_count >= max_agents:
+            return {
+                "success": False,
+                "at_limit": True,
+                "active": active_count,
+                "max": max_agents,
+            }
+
+        request_spawn_agent()
+        self.push_log(
+            f"🚀 Spawn agent requested ({active_count + 1}/{max_agents})",
+            "orchestrator",
+        )
+        return {
+            "success": True,
+            "at_limit": False,
+            "active": active_count,
+            "max": max_agents,
+        }
+
     list_prompts = _ext.list_prompts
     get_prompt = _ext.get_prompt
     save_prompt = _ext.save_prompt

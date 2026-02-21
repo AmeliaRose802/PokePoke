@@ -641,7 +641,54 @@ describe('SettingsPage', () => {
     expect(savedConfig.maintenance).toBeDefined();
   });
 
-  it('should save updated MCP server fields', async () => {
+  it('should display and update max parallel agents setting', async () => {
+    const user = userEvent.setup();
+    const configWithParallelAgents: ConfigResponse = {
+      ...defaultConfigResponse,
+      config: { ...defaultConfig, max_parallel_agents: 2 },
+    };
+    mockGetConfig.mockResolvedValueOnce(configWithParallelAgents);
+
+    render(
+      <SettingsPage
+        getConfig={mockGetConfig}
+        saveConfig={mockSaveConfig}
+        onClose={mockOnClose}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+    });
+
+    const input = screen.getByLabelText('Max Parallel Agents');
+    expect(input).toHaveValue(2);
+    // Warning should appear when > 1
+    expect(screen.getByText(/Parallel mode is experimental/)).toBeInTheDocument();
+
+    await user.clear(input);
+    await user.type(input, '3');
+
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+  });
+
+  it('should not show parallel warning when max_parallel_agents is 1', async () => {
+    render(
+      <SettingsPage
+        getConfig={mockGetConfig}
+        saveConfig={mockSaveConfig}
+        onClose={mockOnClose}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+    });
+
+    expect(screen.queryByText(/Parallel mode is experimental/)).not.toBeInTheDocument();
+  });
+
+  it('should save max_parallel_agents in config', async () => {
     const user = userEvent.setup();
     render(
       <SettingsPage
@@ -655,20 +702,18 @@ describe('SettingsPage', () => {
       expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
     });
 
-    await user.clear(screen.getByLabelText('MCP server name (optional)'));
-    await user.type(screen.getByLabelText('MCP server name (optional)'), 'New MCP');
-    await user.clear(screen.getByLabelText('Restart script (optional)'));
-    await user.type(screen.getByLabelText('Restart script (optional)'), 'scripts/new-restart.ps1');
+    const input = screen.getByLabelText('Max Parallel Agents');
+    await user.tripleClick(input);
+    await user.type(input, '4');
 
-    const saveButton = screen.getByText('💾 Save');
-    await user.click(saveButton);
+    await user.click(screen.getByText('💾 Save'));
 
     await waitFor(() => {
       expect(mockSaveConfig).toHaveBeenCalledTimes(1);
     });
 
     const savedConfig = mockSaveConfig.mock.calls[0][0];
-    expect(savedConfig.mcp_server?.name).toBe('New MCP');
-    expect(savedConfig.mcp_server?.restart_script).toBe('scripts/new-restart.ps1');
+    expect(savedConfig.max_parallel_agents).toBeGreaterThanOrEqual(1);
+    expect(savedConfig.max_parallel_agents).toBeLessThanOrEqual(8);
   });
 });

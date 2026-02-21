@@ -26,6 +26,9 @@ interface Props {
   onSelectAgent?: (agentId: string | null) => void;
   onPauseAgent?: (agentId: string) => void;
   onResumeAgent?: (agentId: string) => void;
+  onSpawnAgent?: () => void;
+  orchestratorRunning?: boolean;
+  spawnAtLimit?: boolean;
 }
 
 const ROBOT_AVATARS = [
@@ -93,6 +96,9 @@ export function AgentsPanel({
   onSelectAgent,
   onPauseAgent,
   onResumeAgent,
+  onSpawnAgent,
+  orchestratorRunning = false,
+  spawnAtLimit = false,
 }: Props) {
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(
     new Set()
@@ -429,6 +435,16 @@ export function AgentsPanel({
         <div className="agents-panel-header">
           <span>🐍 Agents</span>
           <span className="agents-count">0</span>
+          {orchestratorRunning && onSpawnAgent && (
+            <button
+              className="agents-spawn-btn"
+              onClick={onSpawnAgent}
+              title="Spawn additional agent"
+              disabled={spawnAtLimit}
+            >
+              +
+            </button>
+          )}
         </div>
         <div className="agents-empty">No agents running</div>
       </aside>
@@ -440,6 +456,16 @@ export function AgentsPanel({
       <div className="agents-panel-header">
         <span>🐍 Agents</span>
         <span className="agents-count">{agents.length}</span>
+        {orchestratorRunning && onSpawnAgent && (
+          <button
+            className="agents-spawn-btn"
+            onClick={onSpawnAgent}
+            title={spawnAtLimit ? "At max agent limit — increase max_parallel_agents in Settings" : "Spawn additional agent"}
+            disabled={spawnAtLimit}
+          >
+            +
+          </button>
+        )}
       </div>
       <div className="agents-scroll">
         {sessionGroups.map((group) =>

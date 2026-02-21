@@ -20,6 +20,10 @@ _Future = concurrent.futures.Future[
     tuple[bool, int, AgentStats | None, int, int, ModelCompletionRecord | None]
 ]
 
+# Threading event used to wake up the parallel loop immediately when a
+# spawn agent request arrives from the desktop UI.
+_spawn_wakeup = threading.Event()
+
 _SNAKE_TYPES: tuple[str, ...] = (
     "cobra",
     "corn",
@@ -27,6 +31,15 @@ _SNAKE_TYPES: tuple[str, ...] = (
     "rattlesnake",
     "sea_snake",
 )
+
+
+def request_spawn_agent() -> None:
+    """Signal the parallel loop to attempt spawning an additional agent immediately.
+
+    Called from the desktop UI when the user clicks the Spawn Agent button.
+    The loop will wake up early from its sleep and try to fill available slots.
+    """
+    _spawn_wakeup.set()
 
 
 def _hash_string(value: str) -> int:
@@ -333,9 +346,10 @@ def run_parallel_loop(
                 "PokePoke", f"{mode_name} Mode", f"{len(futures)} agents active",
             )
             for _ in range(10):
-                if is_shutting_down():
+                if is_shutting_down() or _spawn_wakeup.is_set():
                     break
                 time.sleep(0.5)
+            _spawn_wakeup.clear()
 
     finally:
         # Wait for all workers to complete before shutting down

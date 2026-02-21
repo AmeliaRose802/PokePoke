@@ -29,6 +29,7 @@ function App() {
   const [modelHistory, setModelHistory] = useState<ModelHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [spawnAtLimit, setSpawnAtLimit] = useState(false);
 
   // Update browser tab title with current agent and project name
   useDocumentTitle(bridge.agentName, bridge.projectName);
@@ -66,6 +67,15 @@ function App() {
   }, []);
 
   const { getModelHistory } = bridge;
+
+  const handleSpawnAgent = useCallback(async () => {
+    const result = await bridge.spawnAgent();
+    if (result?.at_limit) {
+      setSpawnAtLimit(true);
+      // Clear the at-limit indicator after 3 seconds
+      setTimeout(() => setSpawnAtLimit(false), 3000);
+    }
+  }, [bridge]);
 
   const fallbackAgentLogCount = bridge.agentLogs.length;
   const shouldShowFallbackAgentPanel =
@@ -217,6 +227,9 @@ function App() {
           onSelectAgent={handleSelectAgent}
           onPauseAgent={bridge.pauseAgent}
           onResumeAgent={bridge.resumeAgent}
+          onSpawnAgent={handleSpawnAgent}
+          orchestratorRunning={bridge.progress.active}
+          spawnAtLimit={spawnAtLimit}
         />
       </div>
 
