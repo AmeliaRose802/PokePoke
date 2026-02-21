@@ -1679,3 +1679,74 @@ class TestProcessWorkItemCoordination:
         mock_unassign.assert_called_once_with(item.id)
 
 
+class TestGateAgentDisabled:
+    """Tests for gate_agent_enabled config setting."""
+
+    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
+    @patch('pokepoke.workflow.run_gate_agent')
+    @patch('pokepoke.workflow.run_beta_tester')
+    @patch('pokepoke.workflow.finalize_work_item')
+    @patch('os.chdir')
+    @patch('os.getcwd')
+    @patch('pokepoke.workflow._run_cleanup_with_timeout')
+    @patch('pokepoke.workflow.invoke_copilot')
+    @patch('pokepoke.workflow.has_commits_ahead')
+    @patch('pokepoke.workflow.has_uncommitted_changes')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('builtins.input')
+    @patch('time.time')
+    def test_gate_agent_skipped_when_disabled(
+        self,
+        mock_time: Mock,
+        mock_input: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
+        mock_uncommitted: Mock,
+        mock_commits_ahead: Mock,
+        mock_invoke: Mock,
+        mock_cleanup_timeout: Mock,
+        mock_getcwd: Mock,
+        mock_chdir: Mock,
+        mock_finalize: Mock,
+        mock_beta: Mock,
+        mock_gate_agent: Mock,
+        mock_handoff: Mock,
+    ) -> None:
+        """When gate_agent_enabled is False, gate agent should not run."""
+        item = BeadsWorkItem(
+            id="task-1",
+            title="Task 1",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task",
+        )
+
+        mock_time.return_value = 0
+        mock_input.return_value = 'y'
+        mock_assign.return_value = True
+        mock_setup.return_value = Path("/fake/worktree")
+        mock_getcwd.return_value = "/original"
+        mock_uncommitted.return_value = False
+        mock_commits_ahead.return_value = 1
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="task-1", success=True, output="Done", attempt_count=1,
+        )
+        mock_cleanup_timeout.return_value = (True, 0)
+        mock_finalize.return_value = True
+        mock_beta.return_value = None
+
+        # Patch get_config to disable gate agent
+        from pokepoke.config import ProjectConfig
+        cfg = ProjectConfig()
+        cfg.gate_agent_enabled = False
+        with patch('pokepoke.workflow.get_config', return_value=cfg):
+            success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+                item, interactive=True,
+            )
+
+        assert success is True
+        assert gate_runs == 0
+        mock_gate_agent.assert_not_called()
+

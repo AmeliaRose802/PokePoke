@@ -404,3 +404,23 @@ class TestCommandTimeout:
         data = {"command_timeout": 0}
         config = ProjectConfig.from_dict(data)
         assert config.command_timeout == 30
+
+
+class TestGateAgentEnabled:
+    """Tests for gate_agent_enabled configuration."""
+
+    def test_default_value(self):
+        config = ProjectConfig()
+        assert config.gate_agent_enabled is True
+
+    def test_from_dict_default(self):
+        config = ProjectConfig.from_dict({})
+        assert config.gate_agent_enabled is True
+
+    def test_from_dict_disabled(self):
+        config = ProjectConfig.from_dict({"gate_agent_enabled": False})
+        assert config.gate_agent_enabled is False
+
+    def test_from_dict_enabled_explicit(self):
+        config = ProjectConfig.from_dict({"gate_agent_enabled": True})
+        assert config.gate_agent_enabled is True

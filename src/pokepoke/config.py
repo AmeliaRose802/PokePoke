@@ -153,6 +153,7 @@ class ProjectConfig:
     work_artifacts_dir: str | None = None
     max_parallel_agents: int = 1
     command_timeout: int = 300  # Default 5 minutes for long-running commands
+    gate_agent_enabled: bool = True
     activity_watchdog: ActivityWatchdogConfig = field(default_factory=ActivityWatchdogConfig)
 
     @staticmethod
@@ -204,6 +205,11 @@ class ProjectConfig:
 
         # Command timeout (default 300 seconds)
         config.command_timeout = max(30, int(data.get("command_timeout", 300)))
+
+        # Gate agent
+        gate_val = data.get("gate_agent_enabled")
+        if gate_val is not None:
+            config.gate_agent_enabled = bool(gate_val)
 
         # Activity watchdog
         watchdog_data = data.get("activity_watchdog", {})

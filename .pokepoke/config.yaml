@@ -99,3 +99,7 @@ test_data:
 # Agents are instructed to use this timeout for long-running commands like pytest.
 # Helps prevent hung commands from wasting agent time.
 command_timeout: 300
+
+# Gate agent verification after work items complete.
+# Set to false to skip the gate agent review step.
+# gate_agent_enabled: true
