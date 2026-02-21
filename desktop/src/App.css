@@ -937,6 +937,13 @@
   color: var(--text-primary);
 }
 
+.agent-log-panel-friendly-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary, #b0b4c0);
+  letter-spacing: 0.02em;
+}
+
 .agent-log-panel-iter {
   font-size: 11px;
   color: var(--text-muted);
