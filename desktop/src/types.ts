@@ -91,6 +91,7 @@ export interface SessionStats {
   beta_tester_agent_runs?: number;
   code_review_agent_runs?: number;
   worktree_cleanup_agent_runs?: number;
+  agent_type_elapsed_seconds?: Record<string, number>;
   model_completions?: ModelCompletionRecord[];
 }
 

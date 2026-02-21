@@ -171,6 +171,9 @@ class SessionStatsSnapshot:
     code_review_agent_runs: int = 0
     worktree_cleanup_agent_runs: int = 0
 
+    # Elapsed wall-clock seconds spent in each agent type
+    agent_type_elapsed_seconds: dict[str, float] = field(default_factory=dict)
+
     # Beads DB stats snapshot
     starting_beads_stats: BeadsStats | None = None
     ending_beads_stats: BeadsStats | None = None
@@ -209,6 +212,7 @@ class SessionStats:
     beta_tester_agent_runs: int = 0
     code_review_agent_runs: int = 0
     worktree_cleanup_agent_runs: int = 0
+    agent_type_elapsed_seconds: dict[str, float] = field(default_factory=dict)
     starting_beads_stats: BeadsStats | None = None
     ending_beads_stats: BeadsStats | None = None
     model_completions: list[ModelCompletionRecord] = field(default_factory=list)
@@ -279,6 +283,16 @@ class SessionStats:
         with self._lock:
             setattr(self, attr, getattr(self, attr) + count)
 
+    def record_agent_elapsed_time(self, agent_type: str, elapsed_seconds: float) -> None:
+        """Accumulate elapsed wall-clock seconds for an agent type."""
+        if elapsed_seconds <= 0:
+            return
+        normalized = agent_type.lower().replace(" ", "_")
+        with self._lock:
+            self.agent_type_elapsed_seconds[normalized] = (
+                self.agent_type_elapsed_seconds.get(normalized, 0.0) + elapsed_seconds
+            )
+
     def record_agent_stats(self, item_stats: AgentStats) -> None:
         """Aggregate per-item stats into the session totals."""
         with self._lock:
@@ -346,6 +360,7 @@ class SessionStats:
                 beta_tester_agent_runs=self.beta_tester_agent_runs,
                 code_review_agent_runs=self.code_review_agent_runs,
                 worktree_cleanup_agent_runs=self.worktree_cleanup_agent_runs,
+                agent_type_elapsed_seconds=dict(self.agent_type_elapsed_seconds),
                 starting_beads_stats=(
                     replace(self.starting_beads_stats)
                     if self.starting_beads_stats and is_dataclass(self.starting_beads_stats)

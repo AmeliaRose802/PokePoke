@@ -47,6 +47,7 @@ def snapshot_to_dict(snapshot: Any) -> dict[str, Any]:
         "beta_tester_agent_runs": snapshot.beta_tester_agent_runs,
         "code_review_agent_runs": snapshot.code_review_agent_runs,
         "worktree_cleanup_agent_runs": snapshot.worktree_cleanup_agent_runs,
+        "agent_type_elapsed_seconds": dict(snapshot.agent_type_elapsed_seconds),
         "model_completions": [asdict(mc) for mc in snapshot.model_completions],
     }
 
