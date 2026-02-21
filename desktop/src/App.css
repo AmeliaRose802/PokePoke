@@ -176,7 +176,7 @@
 
 .log-container {
   display: flex;
-  flex: 1 1 0;
+  flex: 2 1 0;
   flex-direction: column;
   gap: 8px;
   padding: 8px 12px;
@@ -245,7 +245,7 @@
 /* ── Agents Panel ──────────────────────────────────────────────────────── */
 
 .agents-panel {
-  flex: 2 1 0;
+  flex: 1 1 0;
   min-width: 260px;
   display: flex;
   flex-direction: column;
