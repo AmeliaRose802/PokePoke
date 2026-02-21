@@ -22,7 +22,7 @@ from contextlib import contextmanager
 
 from pokepoke.desktop_api import DesktopAPI
 from pokepoke.shutdown import is_shutting_down, request_shutdown
-from pokepoke.frontend_discovery import find_frontend_dist
+from pokepoke.frontend_discovery import find_dev_server_url, find_frontend_dist
 from pokepoke.native_icon import set_native_window_icon, set_app_user_model_id
 
 if TYPE_CHECKING:
@@ -107,13 +107,23 @@ class DesktopUI:
             "orchestrator",
         )
 
-        # Find the frontend
-        dist_dir = find_frontend_dist()
-        if dist_dir is None:
-            builtins.print = self._original_print
-            print("❌ Desktop frontend not built. Run:", file=sys.stderr)
-            print("   cd desktop && npm install && npm run build", file=sys.stderr)
-            return 1
+        # Find the frontend — prefer Vite dev server for hot reload
+        dev_url = find_dev_server_url()
+        if dev_url:
+            self._api.push_log(
+                f"🔥 Hot reload enabled — loading from {dev_url}",
+                "orchestrator",
+            )
+            window_url = dev_url
+            dist_dir = find_frontend_dist()  # still needed for icon
+        else:
+            dist_dir = find_frontend_dist()
+            if dist_dir is None:
+                builtins.print = self._original_print
+                print("❌ Desktop frontend not built. Run:", file=sys.stderr)
+                print("   cd desktop && npm install && npm run build", file=sys.stderr)
+                return 1
+            window_url = str(dist_dir / "index.html")
 
         # Result container for the orchestrator thread
         exit_code_box: list[int] = [0]
@@ -139,20 +149,21 @@ class DesktopUI:
         )
 
         # Create native window pointing at the built React app
-        icon_path = dist_dir / "pokepoke.ico"
+        icon_path = dist_dir / "pokepoke.ico" if dist_dir else None
 
         def on_window_loaded() -> None:
             """Called after the webview window is ready."""
             # pywebview's icon parameter only works on GTK/QT — on Windows
             # the WinForms backend extracts the icon from sys.executable
             # (python.exe → Python logo).  Override it via the native form.
-            set_native_window_icon(window, icon_path)
+            if icon_path is not None:
+                set_native_window_icon(window, icon_path)
             self._api.set_window(window)
             orch_thread.start()
 
         window_kwargs: dict[str, Any] = {
             "title": "PokePoke - Autonomous Workflow Manager",
-            "url": str(dist_dir / "index.html"),
+            "url": window_url,
             "js_api": self._api,
             "width": 1280,
             "height": 800,
@@ -170,9 +181,9 @@ class DesktopUI:
         # Run pywebview on the main thread (blocks until window closes)
         start_kwargs: dict[str, Any] = {
             "func": on_window_loaded,
-            "debug": os.environ.get("POKEPOKE_DEBUG", "").lower() in ("1", "true"),
+            "debug": dev_url is not None or os.environ.get("POKEPOKE_DEBUG", "").lower() in ("1", "true"),
         }
-        if icon_path.exists():
+        if icon_path and icon_path.exists():
             start_kwargs["icon"] = str(icon_path)
         webview.start(**start_kwargs)
 

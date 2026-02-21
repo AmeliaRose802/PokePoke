@@ -2,8 +2,61 @@
 
 from unittest.mock import MagicMock, patch
 
-
 import pokepoke.frontend_discovery as frontend_discovery_module
+
+
+class TestFindDevServerUrl:
+    """Test the find_dev_server_url function."""
+
+    def test_returns_none_when_env_not_set(self, monkeypatch) -> None:
+        """find_dev_server_url returns None when POKEPOKE_DEV is not set."""
+        monkeypatch.delenv("POKEPOKE_DEV", raising=False)
+        monkeypatch.delenv("POKEPOKE_DEV_URL", raising=False)
+        result = frontend_discovery_module.find_dev_server_url()
+        assert result is None
+
+    def test_returns_none_when_env_is_false(self, monkeypatch) -> None:
+        """find_dev_server_url returns None when POKEPOKE_DEV=0."""
+        monkeypatch.setenv("POKEPOKE_DEV", "0")
+        result = frontend_discovery_module.find_dev_server_url()
+        assert result is None
+
+    def test_returns_url_when_server_reachable(self, monkeypatch) -> None:
+        """find_dev_server_url returns URL when dev server is running."""
+        monkeypatch.setenv("POKEPOKE_DEV", "1")
+        monkeypatch.delenv("POKEPOKE_DEV_URL", raising=False)
+
+        with patch("pokepoke.frontend_discovery.urllib.request.urlopen"):
+            result = frontend_discovery_module.find_dev_server_url()
+        assert result == "http://localhost:5173"
+
+    def test_returns_none_when_server_unreachable(self, monkeypatch) -> None:
+        """find_dev_server_url returns None when dev server is not running."""
+        monkeypatch.setenv("POKEPOKE_DEV", "1")
+
+        with patch(
+            "pokepoke.frontend_discovery.urllib.request.urlopen",
+            side_effect=ConnectionRefusedError,
+        ):
+            result = frontend_discovery_module.find_dev_server_url()
+        assert result is None
+
+    def test_custom_url_via_env(self, monkeypatch) -> None:
+        """find_dev_server_url respects POKEPOKE_DEV_URL."""
+        monkeypatch.setenv("POKEPOKE_DEV", "true")
+        monkeypatch.setenv("POKEPOKE_DEV_URL", "http://localhost:3000")
+
+        with patch("pokepoke.frontend_discovery.urllib.request.urlopen"):
+            result = frontend_discovery_module.find_dev_server_url()
+        assert result == "http://localhost:3000"
+
+    def test_case_insensitive_env_value(self, monkeypatch) -> None:
+        """POKEPOKE_DEV accepts 'True', 'TRUE', etc."""
+        monkeypatch.setenv("POKEPOKE_DEV", "True")
+
+        with patch("pokepoke.frontend_discovery.urllib.request.urlopen"):
+            result = frontend_discovery_module.find_dev_server_url()
+        assert result == "http://localhost:5173"
 
 
 class TestFindFrontendDist:

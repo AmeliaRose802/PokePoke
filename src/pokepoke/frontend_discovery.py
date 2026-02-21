@@ -1,6 +1,7 @@
 """Frontend asset discovery utilities for the desktop UI.
 
 This module handles finding React frontend assets in different deployment scenarios:
+- Hot reload mode: Proxies to Vite dev server (POKEPOKE_DEV=1)
 - Development mode: Uses desktop/dist/ directory
 - Package mode: Uses embedded src/pokepoke/static/ assets
 - Bundled mode: Uses assets extracted from PyInstaller bundle
@@ -8,11 +9,37 @@ This module handles finding React frontend assets in different deployment scenar
 
 from __future__ import annotations
 
+import os
 import sys
 import subprocess
 import tempfile
 import shutil
+import urllib.request
 from pathlib import Path
+
+# Default Vite dev server URL
+VITE_DEV_SERVER_URL = "http://localhost:5173"
+
+
+def find_dev_server_url() -> str | None:
+    """Return the Vite dev server URL if dev mode is enabled and server is reachable.
+
+    Set ``POKEPOKE_DEV=1`` to enable.  Optionally set ``POKEPOKE_DEV_URL``
+    to override the default ``http://localhost:5173``.
+
+    Returns the URL string when the dev server is running, or ``None``.
+    """
+    if os.environ.get("POKEPOKE_DEV", "").lower() not in ("1", "true"):
+        return None
+
+    url = os.environ.get("POKEPOKE_DEV_URL", VITE_DEV_SERVER_URL)
+
+    try:
+        req = urllib.request.Request(url, method="HEAD")
+        with urllib.request.urlopen(req, timeout=2):
+            return url
+    except Exception:
+        return None
 
 
 def find_frontend_dist() -> Path | None:
