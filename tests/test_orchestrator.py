@@ -1,11 +1,12 @@
 """Unit tests for orchestrator module."""
 
+import contextlib
 import pytest
 from unittest.mock import Mock, patch, ANY, call
 
 from pokepoke.orchestrator import run_orchestrator
 from pokepoke.workflow import select_work_item, process_work_item
-from pokepoke.types import BeadsWorkItem, BeadsStats, CopilotResult
+from pokepoke.types import AgentStats, BeadsWorkItem, BeadsStats, CopilotResult
 from pokepoke import terminal_ui
 
 
@@ -141,6 +142,7 @@ class TestProcessWorkItem:
     @patch('subprocess.run')
     @patch('pokepoke.workflow.cleanup_worktree')
     @patch('pokepoke.worktree_finalization.merge_worktree')
+    @patch('pokepoke.worktree_finalization.merge_lock')
     @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
     @patch('pokepoke.git_operations.has_uncommitted_changes')
     @patch('os.chdir')
@@ -157,6 +159,7 @@ class TestProcessWorkItem:
         mock_chdir: Mock,
         mock_uncommitted: Mock,
         mock_check_ready: Mock,
+        mock_merge_lock: Mock,
         mock_merge: Mock,
         mock_cleanup: Mock,
         mock_subprocess: Mock,
@@ -208,6 +211,7 @@ class TestProcessWorkItem:
             return Mock(stdout="", returncode=0)
         mock_subprocess.side_effect = subprocess_side_effect
         mock_get_parent.return_value = None
+        mock_merge_lock.return_value = contextlib.nullcontext()
 
         result = process_work_item(item, interactive=True)
 
@@ -224,6 +228,7 @@ class TestProcessWorkItem:
     @patch('subprocess.run')
     @patch('pokepoke.workflow.cleanup_worktree')
     @patch('pokepoke.worktree_finalization.merge_worktree')
+    @patch('pokepoke.worktree_finalization.merge_lock')
     @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
     @patch('os.chdir')
     @patch('os.getcwd')
@@ -236,6 +241,7 @@ class TestProcessWorkItem:
         mock_getcwd: Mock,
         mock_chdir: Mock,
         mock_check_ready: Mock,
+        mock_merge_lock: Mock,
         mock_merge: Mock,
         mock_cleanup: Mock,
         mock_subprocess: Mock,
@@ -284,6 +290,7 @@ class TestProcessWorkItem:
             return Mock(stdout="", returncode=0)
         mock_subprocess.side_effect = subprocess_side_effect
         mock_get_parent.side_effect = ["feature-1", "epic-1", None]
+        mock_merge_lock.return_value = contextlib.nullcontext()
 
         result = process_work_item(item, interactive=False)
 
@@ -548,7 +555,6 @@ class TestRunOrchestrator:
         mock_subprocess_run: Mock
     ) -> None:
         """Test single-shot mode with successful processing."""
-        from pokepoke.types import AgentStats
         mock_beta.return_value = None
         # Mock git status to return clean repo
         mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
@@ -629,7 +635,6 @@ class TestRunOrchestrator:
         mock_subprocess_run: Mock
     ) -> None:
         """Test continuous interactive mode with user quit."""
-        from pokepoke.types import AgentStats
         mock_beta.return_value = None
         # Mock git status to return clean repo
         mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
@@ -793,7 +798,6 @@ class TestRunOrchestratorContinuousMode:
     ) -> None:
         """Test continuous autonomous mode processes multiple items."""
         from pokepoke.orchestrator import run_orchestrator
-        from pokepoke.types import AgentStats
 
         item1 = BeadsWorkItem(
             id="task-1",
@@ -851,7 +855,6 @@ class TestRunOrchestratorContinuousMode:
     ) -> None:
         """Test maintenance agents are triggered at correct intervals."""
         from pokepoke.orchestrator import run_orchestrator
-        from pokepoke.types import AgentStats
 
         items = [BeadsWorkItem(
             id=f"task-{i}",
@@ -900,7 +903,6 @@ class TestRunOrchestratorContinuousMode:
     ) -> None:
         """Test continuous interactive mode with user continuation prompt."""
         from pokepoke.orchestrator import run_orchestrator
-        from pokepoke.types import AgentStats
 
         # Configure mocks to avoid returning Mocks that cause TypeErrors during stats aggregation
         mock_maintenance.return_value = None
@@ -940,7 +942,6 @@ class TestOrchestratorHelperFunctions:
     ) -> None:
         """Test check_and_commit_main_repo with non-beads changes - tries auto-commit first, then cleanup agent."""
         from pokepoke.repo_check import check_and_commit_main_repo
-        from pokepoke.types import AgentStats
         from pokepoke.logging_utils import RunLogger
         from pathlib import Path
         import tempfile
@@ -983,7 +984,7 @@ class TestOrchestratorHelperFunctions:
     def test_aggregate_stats(self) -> None:
         """Test aggregate_stats function."""
         from pokepoke.maintenance import aggregate_stats
-        from pokepoke.types import SessionStats, AgentStats
+        from pokepoke.types import SessionStats
 
         session_stats = SessionStats(agent_stats=AgentStats(
             wall_duration=10.0,
@@ -1214,7 +1215,7 @@ class TestFinalizeSession:
     ) -> None:
         """Test finalize collects stats, prints, and clears banner."""
         from src.pokepoke.orchestrator import _finalize_session
-        from pokepoke.types import SessionStats, AgentStats
+        from pokepoke.types import SessionStats
         from pokepoke.logging_utils import RunLogger
         import tempfile
 
@@ -1240,7 +1241,7 @@ class TestFinalizeSession:
     ) -> None:
         """Test finalize handles KeyboardInterrupt during stats collection."""
         from src.pokepoke.orchestrator import _finalize_session
-        from pokepoke.types import SessionStats, AgentStats
+        from pokepoke.types import SessionStats
         from pokepoke.logging_utils import RunLogger
         import tempfile
 
@@ -1272,7 +1273,6 @@ class TestRunOrchestratorBetaFirst:
         mock_cleanup: Mock, mock_subprocess: Mock
     ) -> None:
         """Test beta tester runs at startup when run_beta_first=True."""
-        from pokepoke.types import AgentStats
 
         mock_subprocess.return_value = Mock(stdout="", returncode=0)
         beta_stats = AgentStats(
@@ -1370,7 +1370,6 @@ class TestRunOrchestratorFailedClaims:
         mock_beta: Mock, mock_cleanup: Mock, mock_sleep: Mock
     ) -> None:
         """Test successful processing clears the skip list."""
-        from pokepoke.types import AgentStats
 
         mock_check_repo.return_value = True
         mock_stats.return_value = {}
@@ -1417,7 +1416,7 @@ class TestRunOrchestratorModelCompletion:
         mock_cleanup: Mock, mock_subprocess: Mock
     ) -> None:
         """Test model completion is recorded when present."""
-        from pokepoke.types import AgentStats, ModelCompletionRecord
+        from pokepoke.types import ModelCompletionRecord
 
         mock_subprocess.return_value = Mock(stdout="", returncode=0)
         mock_maintenance.return_value = None
@@ -1484,7 +1483,6 @@ class TestRunOrchestratorContinuousAutonomousSleep:
         mock_beta: Mock, mock_cleanup: Mock, mock_sleep: Mock
     ) -> None:
         """Test autonomous continuous mode sleeps 5s between items."""
-        from pokepoke.types import AgentStats
 
         mock_check_repo.return_value = True
         mock_stats.return_value = {}
@@ -1523,7 +1521,6 @@ class TestRunOrchestratorRetries:
         mock_beta: Mock, mock_cleanup: Mock, mock_subprocess: Mock
     ) -> None:
         """Test retries are counted when request_count > 1."""
-        from pokepoke.types import AgentStats
 
         mock_subprocess.return_value = Mock(stdout="", returncode=0)
         mock_maintenance.return_value = None
@@ -1613,7 +1610,6 @@ class TestRunOrchestratorWorktreeCoverage:
     ) -> None:
         """Test single-shot success returns 0."""
         from src.pokepoke.orchestrator import run_orchestrator as run_orch
-        from pokepoke.types import AgentStats
 
         mock_subprocess.return_value = Mock(stdout="", returncode=0)
         mock_beta.return_value = None
@@ -1674,7 +1670,7 @@ class TestRunOrchestratorWorktreeCoverage:
     ) -> None:
         """Test model completion is recorded when present."""
         from src.pokepoke.orchestrator import run_orchestrator as run_orch
-        from pokepoke.types import AgentStats, ModelCompletionRecord
+        from pokepoke.types import ModelCompletionRecord
 
         mock_subprocess.return_value = Mock(stdout="", returncode=0)
         mock_maintenance.return_value = None
@@ -1711,7 +1707,6 @@ class TestRunOrchestratorWorktreeCoverage:
     ) -> None:
         """Test that multiple requests are tracked as retries."""
         from src.pokepoke.orchestrator import run_orchestrator as run_orch
-        from pokepoke.types import AgentStats
 
         mock_subprocess.return_value = Mock(stdout="", returncode=0)
         mock_maintenance.return_value = None
@@ -1800,7 +1795,6 @@ class TestRunOrchestratorWorktreeCoverage:
     ) -> None:
         """Test beta_first flag runs beta tester and aggregates stats."""
         from src.pokepoke.orchestrator import run_orchestrator as run_orch
-        from pokepoke.types import AgentStats
 
         mock_subprocess.return_value = Mock(stdout="", returncode=0)
         beta_stats = AgentStats(
@@ -1854,7 +1848,6 @@ class TestRunOrchestratorWorktreeCoverage:
     ) -> None:
         """Test continuous autonomous mode processes multiple items."""
         from src.pokepoke.orchestrator import run_orchestrator as run_orch
-        from pokepoke.types import AgentStats
 
         mock_check_repo.return_value = True
         mock_stats.return_value = {}
@@ -1934,7 +1927,6 @@ class TestRunOrchestratorWorktreeCoverage:
     ) -> None:
         """Test interactive continuous mode with user quitting."""
         from src.pokepoke.orchestrator import run_orchestrator as run_orch
-        from pokepoke.types import AgentStats
 
         mock_check_repo.return_value = True
         mock_stats.return_value = {}
@@ -2050,19 +2042,23 @@ class TestMainWorktreeCoverage:
         )
 
 
+@pytest.mark.timeout(60)
 class TestOrchestratorCleanupDetection:
     """Test orchestrator's main repo cleanup detection."""
 
+    @patch('pokepoke.orchestrator.terminal_ui')
     @patch('pokepoke.orchestrator.check_and_commit_main_repo')
     @patch('pokepoke.orchestrator.get_ready_work_items')
     def test_detects_uncommitted_changes_and_invokes_cleanup(
         self,
         mock_get_items: Mock,
-        mock_check_repo: Mock
+        mock_check_repo: Mock,
+        mock_terminal: Mock
     ) -> None:
         """Test that orchestrator invokes check_and_commit_main_repo."""
         mock_check_repo.return_value = True  # Repo check passes (cleanup succeeded or continued)
         mock_get_items.return_value = []  # No work items available
+        mock_terminal.ui = Mock()
 
         result = run_orchestrator(interactive=False, continuous=False)
 
@@ -2098,12 +2094,14 @@ class TestOrchestratorCleanupDetection:
         mock_check_repo.assert_called_once()
         assert result == 0
 
+    @patch('pokepoke.orchestrator.load_config')
     @patch('pokepoke.orchestrator.get_ready_work_items')
     @patch('subprocess.run')
     def test_clean_repo_proceeds_to_work(
         self,
         mock_subprocess: Mock,
-        mock_get_items: Mock
+        mock_get_items: Mock,
+        mock_load_config: Mock,
     ) -> None:
         """Test that clean repo proceeds to normal work processing."""
         mock_subprocess.return_value = Mock(
@@ -2111,6 +2109,7 @@ class TestOrchestratorCleanupDetection:
             returncode=0
         )
         mock_get_items.return_value = []
+        mock_load_config.return_value = Mock(max_parallel_agents=1)
 
         result = run_orchestrator(interactive=False, continuous=False)
 
@@ -2190,7 +2189,7 @@ class TestRecordItemResult:
     @patch('pokepoke.orchestrator.record_completion')
     def test_records_success(self, mock_record, mock_hist, mock_inc, mock_maint):
         from pokepoke.orchestrator import _record_item_result
-        from pokepoke.types import AgentStats, SessionStats, ModelCompletionRecord
+        from pokepoke.types import SessionStats, ModelCompletionRecord
 
         stats = SessionStats(agent_stats=AgentStats())
         item = BeadsWorkItem(id="t1", title="T1", status="open", priority=1, issue_type="task")
@@ -2212,7 +2211,7 @@ class TestRecordItemResult:
     @patch('pokepoke.orchestrator.record_completion')
     def test_records_failure(self, mock_record, mock_hist, mock_inc, mock_maint):
         from pokepoke.orchestrator import _record_item_result
-        from pokepoke.types import AgentStats, SessionStats
+        from pokepoke.types import SessionStats
 
         stats = SessionStats(agent_stats=AgentStats())
         item = BeadsWorkItem(id="t1", title="T1", status="open", priority=1, issue_type="task")
@@ -2232,7 +2231,7 @@ class TestRecordItemResult:
     @patch('pokepoke.orchestrator.record_completion')
     def test_records_retries(self, mock_record, mock_hist, mock_inc, mock_maint):
         from pokepoke.orchestrator import _record_item_result
-        from pokepoke.types import AgentStats, SessionStats
+        from pokepoke.types import SessionStats
 
         stats = SessionStats(agent_stats=AgentStats())
         item = BeadsWorkItem(id="t1", title="T1", status="open", priority=1, issue_type="task")
@@ -2327,7 +2326,6 @@ class TestSingleAgentPanelRegistration:
         mock_subprocess_run: Mock,
     ) -> None:
         """Single-agent mode should call push_agent_status and agent_output_for."""
-        from pokepoke.types import AgentStats
         mock_beta.return_value = None
         mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
         mock_maintenance.return_value = None

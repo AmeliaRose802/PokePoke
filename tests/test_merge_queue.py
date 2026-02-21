@@ -20,7 +20,11 @@ from pokepoke.merge_queue import (
 from pokepoke.types import BeadsWorkItem
 
 
-def _make_item(item_id: str = "TEST-001", title: str = "Test item") -> BeadsWorkItem:
+def _make_item(
+    item_id: str = "TEST-001",
+    title: str = "Test item",
+    labels: list[str] | None = None,
+) -> BeadsWorkItem:
     """Create a test BeadsWorkItem."""
     return BeadsWorkItem(
         id=item_id,
@@ -28,6 +32,7 @@ def _make_item(item_id: str = "TEST-001", title: str = "Test item") -> BeadsWork
         status="in_progress",
         priority=1,
         issue_type="task",
+        labels=labels,
     )
 
 
@@ -152,6 +157,25 @@ class TestMergeQueue:
             result = future.result(timeout=10)
 
         assert result.status == MergeStatus.SUCCESS
+
+    @patch("pokepoke.merge_queue.time.sleep")
+    @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
+    @patch("pokepoke.merge_queue._rebase_worktree", return_value=True)
+    def test_high_conflict_triggers_cautious_strategy(
+        self, mock_rebase, mock_shutdown, mock_sleep
+    ):
+        """High-conflict items should apply slower, double-rebase strategy."""
+        with patch(
+            "pokepoke.worktree_finalization.merge_worktree_to_dev", return_value=True
+        ):
+            self.queue.start()
+            item = _make_item(labels=["high-conflict-risk"])
+            future = self.queue.submit(Path("worktrees/task-TEST-001"), item)
+            result = future.result(timeout=10)
+
+        assert result.status == MergeStatus.SUCCESS
+        assert mock_rebase.call_count == 2
+        mock_sleep.assert_called_once()
 
     @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
     @patch("pokepoke.merge_queue._rebase_worktree", return_value=True)

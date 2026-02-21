@@ -13,6 +13,7 @@ worktrees/
 .pokepoke/model_history.jsonl
 .pokepoke/uncleaned_worktrees.json
 .pokepoke/beads_item_stats.json
+.pokepoke/beads_item_stats.gw*.json
 .maintenance_state.json
 .pokepoke/locks/
 
@@ -22,6 +23,7 @@ logs/
 
 # Beads daemon logs
 .beads/daemon-*.log.gz
+.beads/bd.sock.startlock
 
 # Work artifacts (configurable via work_artifacts_dir in .pokepoke/config.yaml)
 ai_incident_reports/

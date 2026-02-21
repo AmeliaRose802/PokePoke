@@ -3,6 +3,7 @@
 import subprocess
 from unittest.mock import Mock, patch
 
+import pokepoke.beads_hierarchy  # noqa: F401  # imported for coverage tracking
 from pokepoke.beads import (
     get_children,
     get_next_child_task,

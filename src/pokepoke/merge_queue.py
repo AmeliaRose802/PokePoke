@@ -12,6 +12,7 @@ merge_worktree_to_dev() from worktree_finalization.py.
 import logging
 import subprocess
 import threading
+import time
 from concurrent.futures import Future
 from dataclasses import dataclass
 from enum import Enum
@@ -21,6 +22,7 @@ from queue import Empty, Queue
 from .git_operations import get_default_branch
 from .shutdown import is_shutting_down
 from .types import BeadsWorkItem
+from .beads import is_high_conflict_risk
 
 logger = logging.getLogger(__name__)
 
@@ -161,12 +163,19 @@ class MergeQueue:
         """Process a single merge request."""
         item = request.item
         worktree_path = request.worktree_path
+        high_conflict = is_high_conflict_risk(item)
 
         logger.info("Processing merge for %s from %s", item.id, worktree_path)
+        if high_conflict:
+            logger.info("Applying cautious merge strategy for high-conflict item %s", item.id)
 
         # Rebase worktree against target branch to incorporate any previous merges
         target_branch = get_default_branch()
         rebase_ok = _rebase_worktree(worktree_path, target_branch=target_branch)
+        if high_conflict and rebase_ok:
+            logger.info("Second safety rebase for high-conflict item %s", item.id)
+            rebase_ok = _rebase_worktree(worktree_path, target_branch=target_branch) and rebase_ok
+            time.sleep(1.0)
         if not rebase_ok:
             logger.warning(
                 "Rebase failed for %s - attempting merge anyway", item.id

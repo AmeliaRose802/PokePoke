@@ -6,10 +6,8 @@ import threading
 import time
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from pokepoke.agent_context import get_agent_name, set_agent_name, clear_agent_name
-from pokepoke.beads import get_ready_work_items
+from pokepoke.beads import get_ready_work_items, is_high_conflict_risk
 from pokepoke.types import AgentStats, BeadsWorkItem, ModelCompletionRecord, SessionStats
 from pokepoke.workflow import process_work_item
 from pokepoke.work_item_selection import select_multiple_items
@@ -18,10 +16,10 @@ from pokepoke import terminal_ui
 from pokepoke.repo_check import check_and_commit_main_repo
 from pokepoke.shutdown import is_shutting_down, set_executor, should_stop_after_current, cancel_stop_after_current
 
+logger = logging.getLogger(__name__)
+
 # Type alias to satisfy mypy strict generics
-_Future = concurrent.futures.Future[
-    tuple[bool, int, AgentStats | None, int, int, ModelCompletionRecord | None]
-]
+_Future = concurrent.futures.Future[tuple[bool, int, AgentStats | None, int, int, ModelCompletionRecord | None]]
 
 # Threading event used to wake up the parallel loop immediately when a
 # spawn agent request arrives from the desktop UI.
@@ -37,16 +35,12 @@ _SNAKE_TYPES: tuple[str, ...] = (
 
 
 def request_spawn_agent() -> None:
-    """Signal the parallel loop to attempt spawning an additional agent immediately.
-
-    Called from the desktop UI when the user clicks the Spawn Agent button.
-    The loop will wake up early from its sleep and try to fill available slots.
-    """
+    """Wake the parallel loop to try spawning an additional agent."""
     _spawn_wakeup.set()
 
 
 def _hash_string(value: str) -> int:
-    """Mirror desktop snake hash: deterministic 32-bit string hash (Math.abs())."""
+    """Deterministic 32-bit string hash matching the desktop."""
     hash_val = 0
     for ch in value:
         hash_val = ((hash_val << 5) - hash_val + ord(ch)) & 0xFFFFFFFF
@@ -57,13 +51,13 @@ def _hash_string(value: str) -> int:
 
 
 def _snake_for_work_item(item_id: str) -> str:
-    """Deterministically pick a snake type for a work item ID."""
+    """Pick a deterministic snake type for a work item ID."""
     index = _hash_string(item_id) % len(_SNAKE_TYPES)
     return _SNAKE_TYPES[index]
 
 
 def _build_worker_name(base_agent_name: str, item_id: str, counter: int) -> str:
-    """Compose a worker name that includes the snake icon type and a unique suffix."""
+    """Compose a worker name with snake icon type and a unique suffix."""
     snake_type = _snake_for_work_item(item_id)
     return f"{base_agent_name}-{snake_type}-worker-{counter}"
 
@@ -74,18 +68,7 @@ def _parallel_process_item(
     semaphore: threading.Semaphore,
     worker_agent_name: str | None = None,
 ) -> tuple[bool, int, AgentStats | None, int, int, ModelCompletionRecord | None]:
-    """Wrapper for process_work_item used by the thread pool.
-
-    Sets a per-thread agent name so that beads management / hierarchy
-    code resolves the correct identity for this worker instead of the
-    process-global ``os.environ['AGENT_NAME']``.
-
-    Registers the agent in the desktop UI agent registry and routes all
-    print output to the agent's own log buffer so parallel output is not
-    interleaved (dtqz) and the Agents panel shows live data (ukr0).
-
-    Releases the semaphore when done.
-    """
+    """Run a work item in a worker thread while keeping UI/agent context isolated."""
     # Combine item id with worker name so two workers on the same item
     # get distinct UI slots (PokePoke-kluq).
     agent_id = f"{item.id}:{worker_agent_name}" if worker_agent_name else item.id
@@ -153,11 +136,7 @@ def _collect_done_futures(
     run_logger: RunLogger,
     record_fn: Any,
 ) -> tuple[int, bool]:
-    """Collect completed futures and record results.
-
-    Returns:
-        (updated total_requests, any_success)
-    """
+    """Collect completed futures, record results, and return (total_requests, any_success)."""
     done_futs: set[_Future] = set()
     for fut in list(futures):
         if fut.done():
@@ -187,11 +166,7 @@ def _collect_done_futures(
             any_success = True
 
         total_requests += requests
-        record_fn(
-            item, success, requests, item_stats,
-            cleanup_runs, gate_runs, mc,
-            session_stats, run_logger,
-        )
+        record_fn(item, success, requests, item_stats, cleanup_runs, gate_runs, mc, session_stats, run_logger)
 
     return total_requests, any_success
 
@@ -208,11 +183,7 @@ def run_parallel_loop(
     record_fn: Any,
     finalize_fn: Any,
 ) -> int:
-    """Run the parallel orchestrator loop with a ThreadPoolExecutor.
-
-    Returns:
-        Exit code (0 for success, 1 for failure).
-    """
+    """Run the parallel orchestrator loop and return exit code."""
     total_requests = 0
     items_completed = 0
     semaphore = threading.Semaphore(effective_parallel)
@@ -260,16 +231,32 @@ def run_parallel_loop(
 
             current_active = {i.id for i in futures.values()}
             slots = effective_parallel - len(futures)
+            high_conflict_active = any(is_high_conflict_risk(item) for item in futures.values())
+            high_conflict_ready = [item for item in ready_items if is_high_conflict_risk(item)]
 
             if (
                 slots > 0
                 and not should_stop_after_current()
                 and not (not continuous and any_success)
             ):
-                selected_items = select_multiple_items(
-                    ready_items, count=slots,
-                    skip_ids=failed_claim_ids, claimed_ids=current_active,
-                )
+                selected_items: list[BeadsWorkItem] = []
+                if high_conflict_active:
+                    run_logger.log_orchestrator(
+                        "High-conflict item in progress - pausing new scheduling"
+                    )
+                    print("⚠️  High-conflict item running - pausing parallel scheduling")
+                elif high_conflict_ready:
+                    selected_items = [high_conflict_ready[0]]
+                    run_logger.log_orchestrator(
+                        f"Serializing high-conflict item {selected_items[0].id}"
+                    )
+                    print(f"⚠️  High-conflict item {selected_items[0].id} is queued - running alone")
+                else:
+                    selected_items = select_multiple_items(
+                        ready_items, count=slots,
+                        skip_ids=failed_claim_ids, claimed_ids=current_active,
+                    )
+
                 for item in selected_items:
                     _worker_counter += 1
                     base_name = get_agent_name(default="pokepoke")
@@ -348,8 +335,13 @@ def run_parallel_loop(
                 exit_code = 0
                 break
 
+            header_status = f"{len(futures)} agents active"
+            if high_conflict_active:
+                header_status = "⚠️ High-conflict item running - parallel paused"
+            elif high_conflict_ready:
+                header_status = "⚠️ High-conflict item queued - serializing"
             terminal_ui.ui.update_header(
-                "PokePoke", f"{mode_name} Mode", f"{len(futures)} agents active",
+                "PokePoke", f"{mode_name} Mode", header_status,
             )
             for _ in range(10):
                 if is_shutting_down() or _spawn_wakeup.is_set():

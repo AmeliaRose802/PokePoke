@@ -22,7 +22,9 @@ from .beads_hierarchy import (
     close_parent_if_complete,
     get_parent_id,
     has_feature_parent,
-    resolve_to_leaf_task
+    resolve_to_leaf_task,
+    is_high_conflict_risk,
+    HIGH_CONFLICT_LABELS,
 )
 
 from .beads_management import (
@@ -48,6 +50,8 @@ __all__ = [
     'get_parent_id',
     'has_feature_parent',
     'resolve_to_leaf_task',
+    'is_high_conflict_risk',
+    'HIGH_CONFLICT_LABELS',
 
     # Management operations
     'close_item',

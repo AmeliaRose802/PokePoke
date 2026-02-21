@@ -8,8 +8,19 @@ from .beads_query import get_issue_dependencies
 # Label that marks items as requiring human intervention - agents will skip these
 HUMAN_REQUIRED_LABEL = 'human-required'
 
+# Labels that mark items as high merge-conflict risk and should be serialized
+HIGH_CONFLICT_LABELS: tuple[str, ...] = ('high-conflict-risk', 'merge-conflict-prone')
+
 # Statuses that indicate a work item is complete
 COMPLETED_STATUSES = ('done', 'closed', 'resolved')
+
+
+def is_high_conflict_risk(item: BeadsWorkItem) -> bool:
+    """Return True if the item is labeled as high merge-conflict risk."""
+    if not item.labels:
+        return False
+    normalized = {label.lower() for label in item.labels}
+    return any(label in normalized for label in HIGH_CONFLICT_LABELS)
 
 
 def get_children(parent_id: str) -> list[BeadsWorkItem]:
