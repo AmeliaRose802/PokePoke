@@ -4,9 +4,12 @@ These are mixed in by DesktopAPI at import time.
 """
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 try:
     import yaml  # type: ignore[import-untyped]
@@ -38,7 +41,8 @@ def _discover_log_roots() -> list[Path]:
         from pokepoke.config import _find_repo_root
 
         repo_root = _find_repo_root()
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Failed to find repo root via config, using cwd: {e}")
         repo_root = Path.cwd()
 
     for candidate in (repo_root / ".pokepoke" / "logs", repo_root / "logs"):

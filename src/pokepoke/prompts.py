@@ -1,10 +1,13 @@
 """Prompt template loading and rendering service."""
 
+import logging
 from pathlib import Path
 from typing import Any
 import re
 
 from pokepoke.config import _find_repo_root
+
+logger = logging.getLogger(__name__)
 
 
 # Built-in prompts ship with the package
@@ -56,7 +59,8 @@ class PromptService:
         if prompts_dir is None:
             try:
                 repo_root = _find_repo_root()
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Failed to find repo root when initializing PromptService: {e}")
                 repo_root = None
 
             if repo_root is not None:

@@ -1,8 +1,11 @@
 """Beta tester agent — tests all MCP tools in an isolated worktree."""
 
+import logging
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 from pokepoke.config import get_config
 from pokepoke.types import BeadsWorkItem, AgentStats
@@ -92,6 +95,7 @@ def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | No
 
         return agent_result
 
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Beta Tester agent raised exception: {e}", exc_info=True)
         terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed")
         raise

@@ -9,6 +9,7 @@ This module handles finding React frontend assets in different deployment scenar
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import subprocess
@@ -16,6 +17,8 @@ import tempfile
 import shutil
 import urllib.request
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Default Vite dev server URL
 VITE_DEV_SERVER_URL = "http://localhost:5173"
@@ -38,7 +41,8 @@ def find_dev_server_url() -> str | None:
         req = urllib.request.Request(url, method="HEAD")
         with urllib.request.urlopen(req, timeout=2):
             return url
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Dev server at {url} not available: {e}")
         return None
 
 
@@ -109,8 +113,8 @@ def find_frontend_dist() -> Path | None:
         dist = src_root / "desktop" / "dist"
         if dist.is_dir() and (dist / "index.html").exists():
             return dist
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to locate dist folder relative to desktop_ui module: {e}")
 
     # Fallback 2: If in a git worktree, try to find the main repo
     try:
@@ -131,7 +135,7 @@ def find_frontend_dist() -> Path | None:
                 if dist.is_dir() and (dist / "index.html").exists():
                     return dist
                 break
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to locate dist folder from git worktree: {e}")
 
     return None

@@ -21,9 +21,12 @@ This module provides two workarounds:
 
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 #: App User Model ID used to register the process with Windows shell.
 APP_USER_MODEL_ID = "PokePoke.Desktop"
@@ -48,8 +51,8 @@ def set_app_user_model_id(app_id: str = APP_USER_MODEL_ID) -> None:
     try:
         import ctypes
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to set app user model ID: {e}")
 
 
 def _apply_taskbar_icon(hwnd: int, icon_path: Path) -> None:
@@ -142,8 +145,8 @@ def set_native_window_icon(window: Any, icon_path: str | Path) -> None:
         try:
             hwnd = int(form.Handle)
             _apply_taskbar_icon(hwnd, icon_path)
-        except Exception:
-            pass
-    except Exception:
+        except Exception as e:
+            logger.debug(f"Failed to apply taskbar icon: {e}")
+    except Exception as e:
         # Non-fatal — fall back to whatever icon pywebview set.
-        pass
+        logger.debug(f"Failed to set native window icon: {e}")

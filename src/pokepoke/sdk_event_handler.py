@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import re
 from typing import Any, TypedDict
 
@@ -10,6 +11,8 @@ from collections.abc import Callable
 from . import terminal_ui
 from .hung_command_detector import HungCommandDetector
 from .config import get_config, DEFAULT_MODEL, FALLBACK_MODEL
+
+logger = logging.getLogger(__name__)
 
 
 _BEADS_CREATE_RE = re.compile(r"\bbd\s+create\b", re.IGNORECASE)
@@ -47,8 +50,8 @@ def _parse_created_items(result_content: str) -> list[tuple[str, str]]:
                     out.append((item_id, title if isinstance(title, str) else ""))
             if out:
                 return out
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to parse created items from JSON, falling back to regex: {e}")
 
     # Fallback: regex scan
     ids = _ITEM_ID_RE.findall(result_content)

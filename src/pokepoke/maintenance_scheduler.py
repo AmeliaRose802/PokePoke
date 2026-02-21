@@ -6,8 +6,11 @@ or could produce duplicate work (like Beta Tester filing the same issues twice).
 """
 
 import contextlib
+import logging
 import threading
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from pokepoke.config import get_config, MaintenanceAgentConfig
 from pokepoke.coordination import try_lock
@@ -226,7 +229,8 @@ class MaintenanceScheduler:
             else:
                 run_logger.log_maintenance(log_key, f"{agent_name} Agent failed")
 
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Maintenance agent {agent_name} raised exception: {e}", exc_info=True)
             terminal_ui.ui.push_agent_status(agent_id, f"{agent_name} Agent", iteration=1, status="failed")
             run_logger.log_maintenance(log_key, f"{agent_name} Agent raised exception")
             raise

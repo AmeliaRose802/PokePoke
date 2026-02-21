@@ -1,10 +1,13 @@
 """Agent runner utilities for cleanup and maintenance agents."""
 
 import json
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 from pokepoke.copilot import invoke_copilot
 from pokepoke.git_operations import get_default_branch
@@ -241,7 +244,8 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
         terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status=status)
         return agent_result
 
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Worktree cleanup agent raised exception: {e}", exc_info=True)
         terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed")
         raise
 

@@ -1,5 +1,6 @@
 """GitHub Copilot SDK integration."""
 import asyncio
+import logging
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -11,6 +12,8 @@ from . import terminal_ui
 from .shutdown import is_shutting_down
 from .process_utils import wait_for_process_cleanup
 from .sdk_event_handler import create_event_handler
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .logging_utils import ItemLogger
@@ -197,8 +200,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                 print("\n\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")
                 try:
                     await session.abort()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Failed to abort session on interrupt: {e}")
                 interrupted = True
                 return False
             finally:
@@ -211,8 +214,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                 print(f"\n[SDK] Retrying with fallback model: {FALLBACK_MODEL}")
                 try:
                     await session.destroy()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Failed to destroy session for fallback retry: {e}")
                 session_config["model"] = FALLBACK_MODEL
                 session = await client.create_session(session_config)  # type: ignore[arg-type]
                 print(f"[SDK] New session created with {FALLBACK_MODEL}: {session.session_id}\n")
@@ -292,8 +295,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     await client.stop()
                     if os.name == 'nt':
                         wait_for_process_cleanup(max_wait=1.0)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Failed to force stop client: {e}")
         except UnicodeDecodeError:
             print("[SDK] Client stopped (encoding error suppressed)")
         except Exception as e:

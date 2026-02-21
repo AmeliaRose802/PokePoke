@@ -1,7 +1,10 @@
 """Process utilities for SDK client management."""
+import logging
 import os
 import subprocess
 import time
+
+logger = logging.getLogger(__name__)
 
 
 def check_copilot_processes() -> int:
@@ -20,7 +23,8 @@ def check_copilot_processes() -> int:
         # Count lines excluding header
         lines = result.stdout.strip().split('\n')
         return max(0, len(lines) - 1) if len(lines) > 1 else 0
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to check for Copilot processes: {e}")
         return 0  # Assume no processes if check fails
 
 

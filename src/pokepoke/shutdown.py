@@ -15,9 +15,12 @@ Multi-agent shutdown coordination:
 from __future__ import annotations
 
 import concurrent.futures
+import logging
 import os
 import threading
 import time
+
+logger = logging.getLogger(__name__)
 
 # Global shutdown event - checked by all loops
 _shutdown_event = threading.Event()
@@ -76,8 +79,8 @@ def request_shutdown() -> None:
                 daemon=True,
                 name="merge-queue-shutdown"
             ).start()
-    except Exception:
-        pass  # Merge queue shutdown is best-effort
+    except Exception as e:
+        logger.debug(f"Failed to shutdown merge queue: {e}")
 
     # Calculate watchdog timeout based on active agents
     with _agent_count_lock:

@@ -1,9 +1,12 @@
 """Parallel orchestrator loop for running multiple work items concurrently."""
 
 import concurrent.futures
+import logging
 import threading
 import time
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from pokepoke.agent_context import get_agent_name, set_agent_name, clear_agent_name
 from pokepoke.beads import get_ready_work_items
@@ -125,7 +128,8 @@ def _parallel_process_item(
             f"{status_emoji} Agent {display_name} {'completed' if success else 'failed'} item {item.id}"
         )
         return result
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to process work item {item.id} in parallel: {e}", exc_info=True)
         terminal_ui.ui.push_agent_status(
             agent_id,
             display_name,
@@ -279,7 +283,8 @@ def run_parallel_loop(
                             _parallel_process_item,
                             item, run_logger, semaphore, worker_name,
                         )
-                    except Exception:
+                    except Exception as e:
+                        logger.warning(f"Failed to submit work item {item.id} to executor: {e}")
                         semaphore.release()
                         raise
                     futures[fut] = item
@@ -304,7 +309,8 @@ def run_parallel_loop(
                     ))
                     try:
                         s, r, st, cr, gr, mc = fut.result()
-                    except Exception:
+                    except Exception as e:
+                        logger.warning(f"Future raised exception: {e}")
                         s, r, st, cr, gr, mc = False, 0, None, 0, 0, None
                     total_requests += r
                     record_fn(item, s, r, st, cr, gr, mc, session_stats, run_logger)

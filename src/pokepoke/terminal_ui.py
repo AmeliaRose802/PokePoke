@@ -1,8 +1,11 @@
 """Terminal UI utilities for PowerShell display enhancements."""
 
+import logging
 import sys
 
 from pokepoke.desktop_ui import DesktopUI
+
+logger = logging.getLogger(__name__)
 
 
 def set_terminal_banner(text: str) -> None:
@@ -12,8 +15,8 @@ def set_terminal_banner(text: str) -> None:
     try:
         import ctypes
         ctypes.windll.kernel32.SetConsoleTitleW(text)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to set terminal banner: {e}")
 
 
 def clear_terminal_banner() -> None:

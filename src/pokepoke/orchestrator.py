@@ -3,10 +3,13 @@
 import argparse
 import atexit
 import contextlib
+import logging
 import os
 import sys
 import time
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from pokepoke.beads import get_ready_work_items, get_beads_stats
 from pokepoke.types import AgentStats, SessionStats, BeadsWorkItem, ModelCompletionRecord
@@ -317,8 +320,8 @@ def run_orchestrator(
             merge_queue = get_merge_queue()
             if merge_queue.is_running:
                 merge_queue.shutdown(timeout=10.0)
-        except Exception:
-            pass  # Best effort cleanup
+        except Exception as e:
+            logger.debug(f"Failed to shutdown merge queue during cleanup: {e}")
         # Clean up signal handlers
         with contextlib.suppress(Exception):
             unregister_shutdown_handlers()

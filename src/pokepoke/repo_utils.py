@@ -1,8 +1,11 @@
 """Utility functions for working with repository information."""
 
+import logging
 import re
 import subprocess
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def get_repository_name() -> str:
@@ -25,7 +28,8 @@ def get_repository_name() -> str:
     # Final fallback to current working directory name
     try:
         return Path.cwd().name
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to get current working directory name: {e}")
         return "Unknown"
 
 
@@ -58,6 +62,6 @@ def _get_repo_name_from_config() -> str | None:
         config = get_config()
         if config.project_name:
             return config.project_name
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to get repository name from config: {e}")
     return None

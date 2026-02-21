@@ -1,8 +1,11 @@
 """Workflow management for work item selection and processing."""
 
+import logging
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+logger = logging.getLogger(__name__)
 
 from filelock import Timeout
 
@@ -248,7 +251,8 @@ def process_work_item(
                         item, cwd=worktree_cwd, work_model=selected_model,
                         handoff_context=handoff_ctx,
                     )
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Gate agent raised exception: {e}", exc_info=True)
                 gate_agent_runs += 1
                 terminal_ui.ui.push_agent_status(
                     gate_agent_id,
@@ -344,8 +348,8 @@ def process_work_item(
         try:
             if worktree_path is not None:
                 cleanup_worktree(item.id, force=True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to cleanup worktree: {e}")
         # Always unregister agent when done, regardless of success/failure
         unregister_agent()
 

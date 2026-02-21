@@ -1,8 +1,11 @@
 """Persistent state tracking for maintenance agents."""
 
 import json
+import logging
 from pathlib import Path
 from dataclasses import dataclass, asdict
+
+logger = logging.getLogger(__name__)
 
 STATE_FILE = Path(".pokepoke") / "maintenance_state.json"
 
@@ -23,7 +26,8 @@ def load_state() -> MaintenanceState:
         try:
             data = json.loads(STATE_FILE.read_text(encoding='utf-8'))
             return MaintenanceState(**data)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to load maintenance state from {STATE_FILE}: {e}")
             return MaintenanceState()
     return MaintenanceState()
 

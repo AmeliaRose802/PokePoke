@@ -1,7 +1,10 @@
 """Merge Conflict Detection and Resolution - Utilities for detecting and handling git merge conflicts."""
 
+import logging
 import subprocess
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def is_merge_in_progress(repo_path: Path | None = None) -> bool:
@@ -129,8 +132,8 @@ def get_merge_conflict_details(repo_path: Path | None = None) -> dict[str, objec
             )
             if result.returncode == 0:
                 merge_head = result.stdout.strip()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to get merge head: {e}")
 
     return {
         "is_merging": is_merging,

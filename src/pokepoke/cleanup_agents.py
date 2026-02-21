@@ -1,5 +1,6 @@
 """Cleanup agent invocation utilities."""
 
+import logging
 import subprocess
 from pathlib import Path
 
@@ -7,6 +8,8 @@ from pokepoke.copilot import invoke_copilot
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
 from pokepoke.git_operations import verify_main_repo_clean, commit_all_changes
 from pokepoke import terminal_ui
+
+logger = logging.getLogger(__name__)
 
 def aggregate_cleanup_stats(result_stats: AgentStats | None, cleanup_stats: AgentStats | None) -> None:
     """Aggregate cleanup agent stats into result stats."""
@@ -133,7 +136,8 @@ def _get_current_git_context(cwd: str | None = None) -> tuple[str, str, bool]:
             cwd=cwd
         )
         current_branch = branch_result.stdout.strip() if branch_result.returncode == 0 else "unknown"
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to get current branch: {e}")
         current_branch = "unknown"
 
     # Determine if we're in a worktree
@@ -147,7 +151,8 @@ def _get_current_git_context(cwd: str | None = None) -> tuple[str, str, bool]:
             cwd=cwd
         )
         is_worktree = worktree_result.returncode == 0 and worktree_result.stdout.strip() == "true"
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to check if inside worktree: {e}")
         is_worktree = False
 
     return current_dir, current_branch, is_worktree
@@ -209,7 +214,8 @@ def _run_agent_with_ui(
         )
 
         return copilot_result.success, copilot_result.stats
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Cleanup agent failed with error: {e}", exc_info=True)
         terminal_ui.ui.push_agent_status(
             agent_id, agent_label, iteration=1, status="failed",
             parent_agent_id=parent_agent_id,
