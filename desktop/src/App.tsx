@@ -6,6 +6,7 @@
  */
 
 import "./App.css";
+import "highlight.js/styles/github-dark.css";
 
 import { useCallback, useEffect, useState } from "react";
 
