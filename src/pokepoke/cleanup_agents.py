@@ -153,6 +153,71 @@ def _get_current_git_context(cwd: str | None = None) -> tuple[str, str, bool]:
     return current_dir, current_branch, is_worktree
 
 
+def _apply_base_template_vars(
+    template: str,
+    current_dir: str,
+    current_branch: str,
+    is_worktree: bool,
+) -> str:
+    """Apply common template variable replacements."""
+    template = template.replace("{cwd}", current_dir)
+    template = template.replace("{branch}", current_branch)
+    template = template.replace("{is_worktree}", str(is_worktree))
+    return template
+
+
+def _build_work_item_context(item: BeadsWorkItem, heading: str, extra: str = "") -> str:
+    """Build markdown context block for a work item."""
+    context = f"""
+# {heading}
+
+**ID:** {item.id}
+**Title:** {item.title}
+**Type:** {item.issue_type}
+**Priority:** {item.priority}
+**Status:** {item.status}
+
+**Description:**
+{item.description}
+{extra}"""
+
+    if item.labels:
+        context += f"\n**Labels:** {', '.join(item.labels)}\n"
+
+    return context
+
+
+def _run_agent_with_ui(
+    agent_id: str,
+    agent_label: str,
+    agent_type_key: str,
+    cleanup_item: BeadsWorkItem,
+    cleanup_prompt: str,
+    cwd: str | None,
+    parent_agent_id: str | None,
+) -> tuple[bool, AgentStats | None]:
+    """Invoke copilot with UI status tracking and metrics context."""
+    try:
+        from pokepoke.metrics_context import agent_type_context
+        with terminal_ui.ui.agent_output_for(agent_id):
+            with agent_type_context(agent_type_key):
+                copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd)
+
+        status = "success" if copilot_result.success else "failed"
+        terminal_ui.ui.push_agent_status(
+            agent_id, agent_label, iteration=1, status=status,
+            parent_agent_id=parent_agent_id,
+        )
+
+        return copilot_result.success, copilot_result.stats
+    except Exception:
+        terminal_ui.ui.push_agent_status(
+            agent_id, agent_label, iteration=1, status="failed",
+            parent_agent_id=parent_agent_id,
+        )
+        raise
+
+
 def invoke_cleanup_agent(
     item: BeadsWorkItem,
     repo_root: Path,
@@ -163,7 +228,6 @@ def invoke_cleanup_agent(
     """Invoke cleanup agent to commit uncommitted changes."""
     terminal_ui.ui.set_current_agent("Cleanup Agent")
 
-    # Register cleanup agent in the Agents panel
     agent_id = f"{item.id}-cleanup"
     terminal_ui.ui.push_agent_status(
         agent_id, "Cleanup Agent", iteration=1, status="running",
@@ -175,38 +239,17 @@ def invoke_cleanup_agent(
     cleanup_prompt_template = load_prompt_file("cleanup.md")
     if cleanup_prompt_template is None:
         terminal_ui.ui.push_agent_status(
-            agent_id,
-            "Cleanup Agent",
-            iteration=1,
-            status="failed",
+            agent_id, "Cleanup Agent", iteration=1, status="failed",
             parent_agent_id=parent_agent_id,
         )
         return False, None
 
-    # Get current context information
     current_dir, current_branch, is_worktree = _get_current_git_context(cwd=cwd)
+    cleanup_prompt_template = _apply_base_template_vars(
+        cleanup_prompt_template, current_dir, current_branch, is_worktree,
+    )
 
-    # Replace placeholders in template
-    cleanup_prompt_template = cleanup_prompt_template.replace("{cwd}", current_dir)
-    cleanup_prompt_template = cleanup_prompt_template.replace("{branch}", current_branch)
-    cleanup_prompt_template = cleanup_prompt_template.replace("{is_worktree}", str(is_worktree))
-
-    work_item_context = f"""
-# Work Item Being Cleaned Up
-
-**ID:** {item.id}
-**Title:** {item.title}
-**Type:** {item.issue_type}
-**Priority:** {item.priority}
-**Status:** {item.status}
-
-**Description:**
-{item.description}
-"""
-
-    if item.labels:
-        work_item_context += f"\n**Labels:** {', '.join(item.labels)}\n"
-
+    work_item_context = _build_work_item_context(item, "Work Item Being Cleaned Up")
     cleanup_prompt = f"{work_item_context}\n\n---\n\n{cleanup_prompt_template}"
 
     cleanup_item = BeadsWorkItem(
@@ -221,33 +264,10 @@ def invoke_cleanup_agent(
 
     print("\n🧹 Invoking cleanup agent...")
 
-    # Route all output to the cleanup agent's log buffer
-    try:
-        from pokepoke.metrics_context import agent_type_context
-        with terminal_ui.ui.agent_output_for(agent_id):
-            with agent_type_context("cleanup"):
-                copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd)
-
-        # Update agent status based on result
-        status = "success" if copilot_result.success else "failed"
-        terminal_ui.ui.push_agent_status(
-            agent_id,
-            "Cleanup Agent",
-            iteration=1,
-            status=status,
-            parent_agent_id=parent_agent_id,
-        )
-
-        return copilot_result.success, copilot_result.stats
-    except Exception:
-        terminal_ui.ui.push_agent_status(
-            agent_id,
-            "Cleanup Agent",
-            iteration=1,
-            status="failed",
-            parent_agent_id=parent_agent_id,
-        )
-        raise
+    return _run_agent_with_ui(
+        agent_id, "Cleanup Agent", "cleanup",
+        cleanup_item, cleanup_prompt, cwd, parent_agent_id,
+    )
 
 
 def invoke_merge_conflict_cleanup_agent(
@@ -270,7 +290,6 @@ def invoke_merge_conflict_cleanup_agent(
     """
     terminal_ui.ui.set_current_agent("Merge Conflict Cleanup")
 
-    # Register merge conflict cleanup agent in the Agents panel
     agent_id = f"{item.id}-merge-fix"
     terminal_ui.ui.push_agent_status(
         agent_id, "Merge Conflict Cleanup", iteration=1, status="running",
@@ -282,53 +301,34 @@ def invoke_merge_conflict_cleanup_agent(
 
     cleanup_prompt_template = load_prompt_file("merge-conflict-cleanup.md")
     if cleanup_prompt_template is None:
-        # Fallback to standard cleanup
         print("⚠️ Falling back to standard cleanup agent")
         terminal_ui.ui.push_agent_status(
-            agent_id,
-            "Merge Conflict Cleanup",
-            iteration=1,
-            status="failed",
+            agent_id, "Merge Conflict Cleanup", iteration=1, status="failed",
             parent_agent_id=parent_agent_id,
         )
         return invoke_cleanup_agent(item, repo_root, parent_agent_id=parent_agent_id)
 
-    # Get current context information
     current_dir, current_branch, is_worktree = _get_current_git_context(cwd=cwd)
 
-    # Get merge state info
     is_merging = is_merge_in_progress()
     if unmerged_files is None:
         unmerged_files = git_get_unmerged()
 
-    # Build conflict files section
     conflict_files_section = ""
     if unmerged_files:
         lines = [f"- `{f}`" for f in unmerged_files]
         conflict_files_section = "\n**Conflicted Files:**\n" + "\n".join(lines) + "\n"
 
-    # Replace placeholders in template
-    cleanup_prompt_template = cleanup_prompt_template.replace("{cwd}", current_dir)
-    cleanup_prompt_template = cleanup_prompt_template.replace("{branch}", current_branch)
-    cleanup_prompt_template = cleanup_prompt_template.replace("{is_worktree}", str(is_worktree))
+    cleanup_prompt_template = _apply_base_template_vars(
+        cleanup_prompt_template, current_dir, current_branch, is_worktree,
+    )
     cleanup_prompt_template = cleanup_prompt_template.replace("{merge_error}", error_msg)
     cleanup_prompt_template = cleanup_prompt_template.replace("{worktree_path}", f"worktrees/task-{item.id}")
     cleanup_prompt_template = cleanup_prompt_template.replace("{is_merge_in_progress}", str(is_merging))
     cleanup_prompt_template = cleanup_prompt_template.replace("{conflict_files}", conflict_files_section)
     cleanup_prompt_template = cleanup_prompt_template.replace("{conflict_count}", str(len(unmerged_files)))
 
-    work_item_context = f"""
-# Work Item That Failed to Merge
-
-**ID:** {item.id}
-**Title:** {item.title}
-**Type:** {item.issue_type}
-**Priority:** {item.priority}
-**Status:** {item.status}
-
-**Description:**
-{item.description}
-
+    merge_extra = f"""
 **Merge State:**
 - Merge in progress: {is_merging}
 - Conflicted files: {len(unmerged_files)}
@@ -337,10 +337,7 @@ def invoke_merge_conflict_cleanup_agent(
 **Merge Error:**
 {error_msg}
 """
-
-    if item.labels:
-        work_item_context += f"\n**Labels:** {', '.join(item.labels)}\n"
-
+    work_item_context = _build_work_item_context(item, "Work Item That Failed to Merge", extra=merge_extra)
     cleanup_prompt = f"{work_item_context}\n\n---\n\n{cleanup_prompt_template}"
 
     cleanup_item = BeadsWorkItem(
@@ -361,30 +358,7 @@ def invoke_merge_conflict_cleanup_agent(
         if len(unmerged_files) > 5:
             print(f"      ... and {len(unmerged_files) - 5} more")
 
-    # Route all output to the merge conflict cleanup agent's log buffer
-    try:
-        from pokepoke.metrics_context import agent_type_context
-        with terminal_ui.ui.agent_output_for(agent_id):
-            with agent_type_context("merge_conflict_cleanup"):
-                copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd)
-
-        # Update agent status based on result
-        status = "success" if copilot_result.success else "failed"
-        terminal_ui.ui.push_agent_status(
-            agent_id,
-            "Merge Conflict Cleanup",
-            iteration=1,
-            status=status,
-            parent_agent_id=parent_agent_id,
-        )
-
-        return copilot_result.success, copilot_result.stats
-    except Exception:
-        terminal_ui.ui.push_agent_status(
-            agent_id,
-            "Merge Conflict Cleanup",
-            iteration=1,
-            status="failed",
-            parent_agent_id=parent_agent_id,
-        )
-        raise
+    return _run_agent_with_ui(
+        agent_id, "Merge Conflict Cleanup", "merge_conflict_cleanup",
+        cleanup_item, cleanup_prompt, cwd, parent_agent_id,
+    )
