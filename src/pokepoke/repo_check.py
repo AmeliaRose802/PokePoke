@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 # Maximum number of cleanup agent retries before falling back to stash
 MAX_CLEANUP_RETRIES = 3
+BD_INFO_TIMEOUT = 30
 
 
 def check_beads_available() -> bool:
@@ -34,7 +35,7 @@ def check_beads_available() -> bool:
         result = subprocess.run(
             ['bd', 'info', '--json'],
             capture_output=True, text=True, encoding='utf-8',
-            timeout=10
+            timeout=BD_INFO_TIMEOUT
         )
         if result.returncode != 0:
             print("\nError: This directory is not a beads repository.", file=sys.stderr)

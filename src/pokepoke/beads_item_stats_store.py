@@ -30,6 +30,7 @@ The raw log is append-only; summary can be rebuilt at any time.
 from __future__ import annotations
 
 import json
+import os
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -100,8 +101,24 @@ def _rebuild_summary(log: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _resolve_stats_path(path: Path | None = None) -> Path:
+    if path is not None:
+        return path
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    if worker:
+        return Path(".pokepoke") / f"beads_item_stats.{worker}.json"
+    return STATS_FILE
+
+
+def _resolve_lock_name() -> str:
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    if worker:
+        return f"{_STATS_FILE_LOCK}-{worker}"
+    return _STATS_FILE_LOCK
+
+
 def load_beads_item_stats(path: Path | None = None) -> dict[str, Any]:
-    stats_path = path or STATS_FILE
+    stats_path = _resolve_stats_path(path)
     if not stats_path.exists():
         return _empty_store()
 
@@ -118,7 +135,7 @@ def load_beads_item_stats(path: Path | None = None) -> dict[str, Any]:
 
 
 def save_beads_item_stats(data: dict[str, Any], path: Path | None = None) -> None:
-    stats_path = path or STATS_FILE
+    stats_path = _resolve_stats_path(path)
     stats_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = stats_path.with_suffix(".tmp")
     with tmp_path.open("w", encoding="utf-8") as f:
@@ -143,7 +160,8 @@ def record_event(
         "timestamp": _now_iso(),
     }
 
-    with _thread_lock, acquire_lock(_STATS_FILE_LOCK):
+    lock_name = _resolve_lock_name()
+    with _thread_lock, acquire_lock(lock_name):
         data = load_beads_item_stats(path)
         data["log"].append(entry)
         data["summary"] = _rebuild_summary(data["log"])

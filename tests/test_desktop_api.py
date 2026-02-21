@@ -2,6 +2,7 @@
 
 import textwrap
 import time
+from unittest.mock import Mock
 
 import pytest
 
@@ -104,7 +105,7 @@ def test_get_all_logs_resets_index() -> None:
 
 def test_push_state_updates() -> None:
     api = DesktopAPI()
-    api.push_work_item("item-1", "Title", "open")
+    api.push_work_item("item-1", "Title", "open", ["human-required"])
     api.push_agent_name("agent-1")
 
     stats = SessionStats(
@@ -119,6 +120,7 @@ def test_push_state_updates() -> None:
 
     state = api.get_state()
     assert state["work_item"]["item_id"] == "item-1"
+    assert state["work_item"]["labels"] == ["human-required"]
     assert state["agent_name"] == "agent-1"
     assert state["stats"]["elapsed_time"] == 12.5
     assert state["stats"]["agent_stats"]["input_tokens"] == 10
@@ -130,6 +132,20 @@ def test_push_state_updates() -> None:
     assert state["stats"]["completed_items"][0]["id"] == "item-1"
     assert state["stats"]["created_items"] == []
     assert state["progress"] == {"active": True, "status": "Working"}
+
+
+def test_add_remove_work_item_label(monkeypatch) -> None:
+    api = DesktopAPI()
+    api.push_work_item("PokePoke-1", "Title", "open", ["urgent"])
+
+    mock_run = Mock(returncode=0, stdout="{}", stderr="")
+    monkeypatch.setattr("pokepoke.desktop_api_ext.subprocess.run", lambda *args, **kwargs: mock_run)
+
+    added = api.add_work_item_label("PokePoke-1", "human-required")
+    assert added["labels"] == ["urgent", "human-required"]
+
+    removed = api.remove_work_item_label("PokePoke-1", "urgent")
+    assert removed["labels"] == ["human-required"]
 
 
 def test_clear_logs() -> None:

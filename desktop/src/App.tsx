@@ -186,6 +186,8 @@ function App() {
         workItem={bridge.workItem}
         agentName={bridge.agentName}
         repositoryName={bridge.repositoryName}
+        onAddLabel={bridge.addWorkItemLabel}
+        onRemoveLabel={bridge.removeWorkItemLabel}
       />
 
       {/* Main content area with logs and agents panel */}

@@ -39,7 +39,7 @@ class DesktopAPI:
         # Buffered state — frontend can poll or get pushed updates
         self._log_buffer: list[dict[str, Any]] = []
         self._max_log_buffer = 2000
-        self._current_work_item: dict[str, str] | None = None
+        self._current_work_item: dict[str, Any] | None = None
         self._current_agent_name: str = ""
         self._current_stats: dict[str, Any] | None = None
         self._current_progress: dict[str, Any] = {"active": False, "status": ""}
@@ -133,7 +133,7 @@ class DesktopAPI:
             self._log_read_index = len(self._log_buffer)
             return list(self._log_buffer)
 
-    def get_work_item(self) -> dict[str, str] | None:
+    def get_work_item(self) -> dict[str, Any] | None:
         """Get the current work item."""
         with self._lock:
             return self._current_work_item
@@ -170,13 +170,20 @@ class DesktopAPI:
                 self._log_buffer = self._log_buffer[trim:]
                 self._log_read_index = max(0, self._log_read_index - trim)
 
-    def push_work_item(self, item_id: str, title: str, status: str = "") -> None:
+    def push_work_item(
+        self,
+        item_id: str,
+        title: str,
+        status: str = "",
+        labels: list[str] | None = None,
+    ) -> None:
         """Update the current work item."""
         with self._lock:
             self._current_work_item = {
                 "item_id": item_id,
                 "title": title,
                 "status": status,
+                "labels": list(labels) if labels is not None else [],
             }
 
     def set_session_start_time(self, start_time: float) -> None:
@@ -355,3 +362,5 @@ class DesktopAPI:
     get_prompt = _ext.get_prompt
     save_prompt = _ext.save_prompt
     reset_prompt = _ext.reset_prompt
+    add_work_item_label = _ext.add_work_item_label
+    remove_work_item_label = _ext.remove_work_item_label

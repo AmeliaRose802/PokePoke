@@ -262,9 +262,9 @@ class TestDesktopUIStateUpdates:
     def test_update_header(self) -> None:
         ui = DesktopUI()
         ui._api = MagicMock()
-        ui.update_header("item-1", "Fix bug", "in_progress")
+        ui.update_header("item-1", "Fix bug", "in_progress", ["human-required"])
         ui._api.push_work_item.assert_called_once_with(
-            "item-1", "Fix bug", "in_progress"
+            "item-1", "Fix bug", "in_progress", ["human-required"]
         )
 
     def test_set_current_agent(self) -> None:

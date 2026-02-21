@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -174,3 +175,52 @@ def reset_prompt(self: Any, name: str) -> dict[str, Any]:
 
     service = get_prompt_service()
     return service.reset_prompt(name)
+
+
+def _update_current_labels(self: Any, item_id: str, label: str, action: str) -> list[str] | None:
+    with self._lock:
+        current = self._current_work_item
+        if not current or current.get("item_id") != item_id:
+            return None
+        labels = list(current.get("labels") or [])
+        if action == "add":
+            if label not in labels:
+                labels.append(label)
+        elif action == "remove":
+            labels = [existing for existing in labels if existing != label]
+        else:
+            raise ValueError(f"Unknown label action: {action}")
+        current["labels"] = labels
+        return labels
+
+
+def add_work_item_label(self: Any, item_id: str, label: str) -> dict[str, Any]:
+    """Add a label to a beads work item and update the cached UI state."""
+    if not label.strip():
+        raise ValueError("Label cannot be empty")
+    subprocess.run(
+        ["bd", "update", item_id, "--add-label", label, "--json"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+        timeout=30,
+    )
+    labels = _update_current_labels(self, item_id, label, "add")
+    return {"item_id": item_id, "label": label, "labels": labels or []}
+
+
+def remove_work_item_label(self: Any, item_id: str, label: str) -> dict[str, Any]:
+    """Remove a label from a beads work item and update the cached UI state."""
+    if not label.strip():
+        raise ValueError("Label cannot be empty")
+    subprocess.run(
+        ["bd", "update", item_id, "--remove-label", label, "--json"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+        timeout=30,
+    )
+    labels = _update_current_labels(self, item_id, label, "remove")
+    return {"item_id": item_id, "label": label, "labels": labels or []}

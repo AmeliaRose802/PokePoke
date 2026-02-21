@@ -99,6 +99,8 @@ interface PyWebViewAPI {
   pause_agent(agent_id: string): Promise<{ agent_id: string; paused: boolean }>;
   resume_agent(agent_id: string): Promise<{ agent_id: string; resumed: boolean }>;
   spawn_agent(): Promise<{ success: boolean; at_limit: boolean; active: number; max: number }>;
+  add_work_item_label(item_id: string, label: string): Promise<{ item_id: string; label: string; labels: string[] }>;
+  remove_work_item_label(item_id: string, label: string): Promise<{ item_id: string; label: string; labels: string[] }>;
 }
 
 declare global {
@@ -171,6 +173,8 @@ export interface BridgeState {
   getModelHistory: (limit?: number) => Promise<ModelHistoryEntry[]>;
   requestStopAfterCurrent: () => Promise<void>;
   cancelStopAfterCurrent: () => Promise<void>;
+  addWorkItemLabel: (label: string) => Promise<void>;
+  removeWorkItemLabel: (label: string) => Promise<void>;
   getAgentDetail: (agentId: string) => Promise<AgentInfo | null>;
   pauseAgent: (agentId: string) => Promise<boolean>;
   resumeAgent: (agentId: string) => Promise<boolean>;
@@ -266,6 +270,30 @@ export function useBridge(): BridgeState {
     await window.pywebview.api.cancel_stop_after_current();
     setStopAfterCurrent(false);
   }, []);
+
+  const addWorkItemLabel = useCallback(async (label: string): Promise<void> => {
+    if (!window.pywebview?.api || !workItem) return;
+    try {
+      const result = await window.pywebview.api.add_work_item_label(workItem.item_id, label);
+      if (result?.labels) {
+        setWorkItem((prev) => (prev ? { ...prev, labels: result.labels } : prev));
+      }
+    } catch (error) {
+      console.error("Failed to add work item label:", error);
+    }
+  }, [workItem]);
+
+  const removeWorkItemLabel = useCallback(async (label: string): Promise<void> => {
+    if (!window.pywebview?.api || !workItem) return;
+    try {
+      const result = await window.pywebview.api.remove_work_item_label(workItem.item_id, label);
+      if (result?.labels) {
+        setWorkItem((prev) => (prev ? { ...prev, labels: result.labels } : prev));
+      }
+    } catch (error) {
+      console.error("Failed to remove work item label:", error);
+    }
+  }, [workItem]);
 
   const getAgentDetail = useCallback(async (agentId: string): Promise<AgentInfo | null> => {
     if (!window.pywebview?.api) return null;
@@ -452,6 +480,8 @@ export function useBridge(): BridgeState {
     getModelHistory,
     requestStopAfterCurrent,
     cancelStopAfterCurrent,
+    addWorkItemLabel,
+    removeWorkItemLabel,
     getAgentDetail,
     pauseAgent,
     resumeAgent,

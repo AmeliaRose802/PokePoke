@@ -9,9 +9,7 @@ import sys
 import time
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
-from pokepoke.beads import get_ready_work_items, get_beads_stats
+from pokepoke.beads import get_ready_work_items, get_beads_stats, is_high_conflict_risk
 from pokepoke.types import AgentStats, SessionStats, BeadsWorkItem, ModelCompletionRecord
 from pokepoke.stats import print_stats
 from pokepoke.workflow import process_work_item
@@ -29,6 +27,8 @@ from pokepoke.model_stats_store import record_completion
 from pokepoke.model_history import append_model_history_entry
 from pokepoke.config import load_config
 from pokepoke.signal_handlers import register_shutdown_handlers, unregister_shutdown_handlers
+
+logger = logging.getLogger(__name__)
 
 
 def _finalize_session(
@@ -57,11 +57,7 @@ def _record_item_result(
     model_completion: ModelCompletionRecord | None,
     session_stats: SessionStats, run_logger: RunLogger,
 ) -> tuple[bool, int]:
-    """Record the result of processing a single work item.
-
-    Returns:
-        (success, items_completed) after recording.
-    """
+    """Record the result of processing a single work item."""
     if requests > 1:
         session_stats.record_retries(requests - 1)
 
@@ -119,38 +115,29 @@ def run_orchestrator(
         print("=" * 50)
         set_terminal_banner(f"PokePoke {mode_name} - {agent_name}")
         terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", agent_name)
-
         run_logger = RunLogger()
         run_id = run_logger.get_run_id()
         run_dir = run_logger.get_run_dir()
         print(f"📝 Run ID: {run_id} | 📁 Logs: {run_dir}")
-        
         # Set logs directory in desktop API for persistent UI display
         terminal_ui.ui.set_logs_dir(str(run_dir))
-        
         run_logger.log_orchestrator(f"PokePoke started in {mode_name} mode with agent name: {agent_name}")
-
         # Register signal handlers for graceful shutdown logging
         register_shutdown_handlers(run_logger)
         run_logger.log_orchestrator("Signal handlers registered for graceful shutdown logging")
-
         atexit.register(lambda: print(f"\n📁 Logs saved to: {run_dir}"))
-
         main_repo_path = Path.cwd()
         print(f"📁 Repository: {main_repo_path}")
         run_logger.log_orchestrator(f"Repository: {main_repo_path}")
-
         start_time = time.time()
         items_completed = 0
         total_requests = 0
         session_stats = SessionStats(agent_stats=AgentStats())
         from pokepoke.session_stats_registry import set_current_session_stats
         set_current_session_stats(session_stats)
-
         from pokepoke.beads_item_stats_store import get_summary as _get_beads_summary
         s = _get_beads_summary()
         session_stats.set_lifetime_beads_item_totals(created=int(s.get("total_created", 0)), completed=int(s.get("total_completed", 0)))
-
         print("📊 Recording starting beads statistics...")
         run_logger.log_orchestrator("Recording starting beads statistics")
         session_stats.set_starting_beads_stats(get_beads_stats())
@@ -175,7 +162,6 @@ def run_orchestrator(
         if effective_parallel > 1:
             print(f"🔀 Parallel mode: up to {effective_parallel} concurrent agents")
             run_logger.log_orchestrator(f"Parallel mode enabled: max_parallel_agents={effective_parallel}")
-        # ── Parallel orchestrator loop ──────────────────────────────
         if effective_parallel > 1:
             from pokepoke.parallel import run_parallel_loop
             exit_code = run_parallel_loop(
@@ -194,7 +180,6 @@ def run_orchestrator(
             terminal_ui.ui.stop_and_capture()
             if exit_code is not None:
                 return exit_code
-        # ── Sequential orchestrator loop (original behaviour) ──────
         else:
             while not is_shutting_down():
                 print("\n\ud83d\udd0d Checking main repository status...")
@@ -217,9 +202,18 @@ def run_orchestrator(
                     _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
                     return 0
                 run_logger.log_orchestrator(f"Selected item: {selected_item.id} - {selected_item.title}")
+                if is_high_conflict_risk(selected_item):
+                    print(f"⚠️  High-conflict item {selected_item.id} - running sequentially")
+                    run_logger.log_orchestrator(
+                        f"High-conflict item selected: {selected_item.id} - serializing execution"
+                    )
                 banner = format_work_item_banner(selected_item.id, selected_item.title)
                 set_terminal_banner(banner)
-                terminal_ui.ui.update_header(selected_item.id, selected_item.title)
+                terminal_ui.ui.update_header(
+                    selected_item.id,
+                    selected_item.title,
+                    labels=selected_item.labels,
+                )
 
                 agent_id = selected_item.id
                 display_name = get_agent_name(default="pokepoke")
@@ -401,6 +395,5 @@ def main() -> int:
             max_parallel_agents=args.max_agents,
         )
     return active_ui.run_with_orchestrator(orchestrator_func)
-
 if __name__ == "__main__":
     sys.exit(main())

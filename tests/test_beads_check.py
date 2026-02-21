@@ -39,7 +39,7 @@ class TestCheckBeadsAvailable:
     def test_bd_info_timeout(self, mock_which: Mock, mock_run: Mock, capsys) -> None:
         """Test error when bd info command times out."""
         mock_which.return_value = '/usr/bin/bd'
-        mock_run.side_effect = subprocess.TimeoutExpired(cmd='bd', timeout=10)
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd='bd', timeout=30)
 
         result = check_beads_available()
 
@@ -73,5 +73,5 @@ class TestCheckBeadsAvailable:
         mock_run.assert_called_once_with(
             ['bd', 'info', '--json'],
             capture_output=True, text=True, encoding='utf-8',
-            timeout=10
+            timeout=30
         )
