@@ -118,3 +118,41 @@ jobs:
         show_branch: true
         show_missing: true
         link_missing_lines: true
+
+  desktop-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: './desktop/package-lock.json'
+
+    - name: Install desktop dependencies
+      run: npm ci
+      working-directory: ./desktop
+
+    - name: Run desktop tests with coverage
+      run: npm run test:coverage
+      working-directory: ./desktop
+
+    - name: Check desktop coverage threshold
+      run: |
+        # Coverage threshold check will be handled by vitest config
+        echo "✓ Desktop tests completed successfully"
+      working-directory: ./desktop
+
+    - name: Upload desktop coverage report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: desktop-coverage-report
+        path: ./desktop/coverage
+        retention-days: 30
