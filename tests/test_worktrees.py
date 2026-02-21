@@ -29,10 +29,13 @@ from pokepoke.worktrees import (
 from pokepoke.worktree_cleanup import (
     add_uncleaned_worktree,
     force_remove_directory,
+    get_uncleaned_worktree_count,
     load_worktree_manifest,
     remove_from_manifest,
+    retry_failed_cleanups,
     save_worktree_manifest,
     _handle_remove_readonly,
+    _is_windows_lock_error,
 )
 
 
@@ -1330,3 +1333,198 @@ class TestListWorktrees:
             assert 'commit' not in result[1]
             assert result[1]['path'] == '/home/user/repo/worktrees/task-42'
             assert result[1]['branch'] == 'refs/heads/task/incredible_icm-42'
+
+
+class TestIsWindowsLockError:
+    """Tests for _is_windows_lock_error."""
+
+    def test_empty_string_returns_false(self) -> None:
+        assert _is_windows_lock_error("") is False
+
+    def test_permission_denied(self) -> None:
+        assert _is_windows_lock_error("Permission denied") is True
+
+    def test_access_is_denied(self) -> None:
+        assert _is_windows_lock_error("Access is denied") is True
+
+    def test_unrelated_error_returns_false(self) -> None:
+        assert _is_windows_lock_error("File not found") is False
+
+
+class TestRetryFailedCleanups:
+    """Tests for retry_failed_cleanups."""
+
+    def test_empty_manifest_returns_zero(self, tmp_path: Path) -> None:
+        manifest_path = tmp_path / "uncleaned_worktrees.json"
+        with patch(
+            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+            return_value=manifest_path,
+        ):
+            assert retry_failed_cleanups() == 0
+
+    def test_directory_already_removed(self, tmp_path: Path) -> None:
+        """Worktree dir no longer exists - should count as cleaned."""
+        manifest_path = tmp_path / "uncleaned_worktrees.json"
+        manifest = {
+            "task-gone": {
+                "path": str(tmp_path / "nonexistent"),
+                "reason": "failed",
+                "timestamp": "2026-01-01T00:00:00",
+            }
+        }
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        with patch(
+            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+            return_value=manifest_path,
+        ):
+            result = retry_failed_cleanups()
+            assert result == 1
+            assert load_worktree_manifest() == {}
+
+    def test_force_remove_succeeds(self, tmp_path: Path) -> None:
+        """force_remove_directory succeeds on retry."""
+        manifest_path = tmp_path / "uncleaned_worktrees.json"
+        wt_dir = tmp_path / "wt"
+        wt_dir.mkdir()
+        manifest = {
+            "task-retry": {
+                "path": str(wt_dir),
+                "reason": "locked",
+                "timestamp": "2026-01-01T00:00:00",
+            }
+        }
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        with patch(
+            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+            return_value=manifest_path,
+        ), patch(
+            "pokepoke.worktree_cleanup.force_remove_directory",
+            return_value=True,
+        ):
+            result = retry_failed_cleanups()
+            assert result == 1
+
+    def test_force_remove_fails(self, tmp_path: Path) -> None:
+        """force_remove_directory fails - count stays zero."""
+        manifest_path = tmp_path / "uncleaned_worktrees.json"
+        wt_dir = tmp_path / "wt"
+        wt_dir.mkdir()
+        manifest = {
+            "task-stuck": {
+                "path": str(wt_dir),
+                "reason": "locked",
+                "timestamp": "2026-01-01T00:00:00",
+            }
+        }
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        with patch(
+            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+            return_value=manifest_path,
+        ), patch(
+            "pokepoke.worktree_cleanup.force_remove_directory",
+            return_value=False,
+        ):
+            result = retry_failed_cleanups()
+            assert result == 0
+
+
+class TestGetUncleanedWorktreeCount:
+    """Tests for get_uncleaned_worktree_count."""
+
+    def test_returns_zero_for_empty_manifest(self, tmp_path: Path) -> None:
+        manifest_path = tmp_path / "uncleaned_worktrees.json"
+        with patch(
+            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+            return_value=manifest_path,
+        ):
+            assert get_uncleaned_worktree_count() == 0
+
+    def test_returns_count(self, tmp_path: Path) -> None:
+        manifest_path = tmp_path / "uncleaned_worktrees.json"
+        manifest = {
+            "a": {"path": "a", "reason": "r", "timestamp": "t"},
+            "b": {"path": "b", "reason": "r", "timestamp": "t"},
+        }
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        with patch(
+            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+            return_value=manifest_path,
+        ):
+            assert get_uncleaned_worktree_count() == 2
+
+
+class TestLoadManifestCorrupt:
+    """Test load_worktree_manifest with corrupt JSON."""
+
+    def test_corrupt_json_returns_empty(self, tmp_path: Path) -> None:
+        manifest_path = tmp_path / "uncleaned_worktrees.json"
+        manifest_path.write_text("{invalid json", encoding="utf-8")
+        with patch(
+            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+            return_value=manifest_path,
+        ):
+            assert load_worktree_manifest() == {}
+
+
+class TestCleanupAfterMergeNonLockError:
+    """Test cleanup_after_merge with non-lock errors."""
+
+    def test_non_lock_error_adds_to_manifest(self) -> None:
+        """Non-lock CalledProcessError should add to manifest without force retry."""
+        from pokepoke.worktree_cleanup import cleanup_after_merge
+
+        with patch('subprocess.run') as mock_run, \
+             patch('pathlib.Path.exists', return_value=True), \
+             patch('pokepoke.worktree_cleanup.add_uncleaned_worktree') as mock_add:
+
+            def run_side_effect(*args, **kwargs):
+                cmd = args[0]
+                if 'worktree' in cmd and 'remove' in cmd:
+                    raise subprocess.CalledProcessError(1, cmd, stderr="fatal: some other error")
+                return Mock(returncode=0, stderr='', stdout='')
+
+            mock_run.side_effect = run_side_effect
+
+            cleanup_after_merge(Path("worktrees/task-x"), "task/x-branch")
+
+            mock_add.assert_called_once()
+            call_args = mock_add.call_args
+            assert "x-branch" == call_args[0][0]
+
+
+class TestForceRemoveTimeoutBranch:
+    """Test force_remove_directory timeout handling."""
+
+    def test_git_worktree_remove_timeout(self) -> None:
+        """TimeoutExpired during git worktree remove should be handled."""
+        with patch('subprocess.run') as mock_run, \
+             patch('shutil.rmtree') as mock_rmtree, \
+             patch('pokepoke.process_utils.wait_for_process_cleanup'), \
+             patch('time.sleep'):
+
+            # First call (git worktree remove) times out, second call (rmtree fallback prune) succeeds
+            mock_run.side_effect = [
+                subprocess.TimeoutExpired("git", 30),
+                Mock(returncode=0),  # git worktree prune
+            ]
+            mock_rmtree.return_value = None
+
+            result = force_remove_directory(Path("/fake/path"))
+            assert result is True
+
+    def test_lock_error_on_direct_removal(self) -> None:
+        """Windows lock error on shutil.rmtree should be reported."""
+        with patch('subprocess.run') as mock_run, \
+             patch('shutil.rmtree') as mock_rmtree, \
+             patch('pokepoke.process_utils.wait_for_process_cleanup'), \
+             patch('time.sleep'), \
+             patch('pokepoke.worktree_cleanup._CLEANUP_MAX_RETRIES', 1):
+
+            mock_run.side_effect = subprocess.CalledProcessError(1, "git", stderr="other error")
+            mock_rmtree.side_effect = PermissionError("Access is denied")
+
+            result = force_remove_directory(Path("/fake/path"))
+            assert result is False

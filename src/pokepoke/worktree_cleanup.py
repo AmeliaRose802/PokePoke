@@ -33,14 +33,14 @@ def force_remove_directory(dir_path: Path) -> bool:
     """
     # Import here to avoid circular dependency
     from pokepoke.process_utils import wait_for_process_cleanup
-    
+
     print(f"🔄 Attempting force removal of worktree: {dir_path}")
-    
+
     for attempt in range(_CLEANUP_MAX_RETRIES):
         if attempt > 0:
             # Wait for processes to clean up before retry
             wait_for_process_cleanup(max_wait=3.0)
-            
+
             # Calculate delay with capped exponential backoff
             delay = min(_CLEANUP_RETRY_DELAY_SECONDS * (2 ** (attempt - 1)), _CLEANUP_MAX_DELAY_SECONDS)
             print(f"   ⏳ Retry {attempt + 1}/{_CLEANUP_MAX_RETRIES} after {delay:.1f}s...")
@@ -48,12 +48,12 @@ def force_remove_directory(dir_path: Path) -> bool:
 
         # First try git worktree remove --force
         try:
-            result = subprocess.run(
+            subprocess.run(
                 ["git", "worktree", "remove", "--force", str(dir_path)],
                 check=True, capture_output=True, text=True, encoding='utf-8',
                 timeout=30
             )
-            print(f"   ✅ Git worktree remove successful")
+            print("   ✅ Git worktree remove successful")
             return True
         except subprocess.CalledProcessError as e:
             stderr = e.stderr or ""
@@ -66,16 +66,16 @@ def force_remove_directory(dir_path: Path) -> bool:
 
         # Fallback: direct directory removal with enhanced error handling
         try:
-            print(f"   🔨 Attempting direct directory removal...")
+            print("   🔨 Attempting direct directory removal...")
             shutil.rmtree(str(dir_path), onerror=_handle_remove_readonly)
-            
+
             # Clean up git worktree bookkeeping after manual removal
             subprocess.run(
                 ["git", "worktree", "prune"],
                 check=False, capture_output=True, text=True, encoding='utf-8',
                 timeout=30
             )
-            print(f"   ✅ Direct removal and git prune successful")
+            print("   ✅ Direct removal and git prune successful")
             return True
         except (OSError, PermissionError) as e:
             if _is_windows_lock_error(str(e)):
@@ -91,11 +91,11 @@ def _is_windows_lock_error(error_text: str) -> bool:
     """Detect Windows file locking related errors."""
     if not error_text:
         return False
-    
+
     error_lower = error_text.lower()
     windows_lock_indicators = [
         "permission denied",
-        "being used by another process", 
+        "being used by another process",
         "cannot access the file",
         "sharing violation",
         "access is denied",
@@ -103,7 +103,7 @@ def _is_windows_lock_error(error_text: str) -> bool:
         "directory not empty",
         "invalid argument"  # Sometimes seen with locked files on Windows
     ]
-    
+
     return any(indicator in error_lower for indicator in windows_lock_indicators)
 
 
@@ -209,33 +209,33 @@ def cleanup_after_merge(worktree_path: Path, branch_name: str) -> None:
 
 def retry_failed_cleanups() -> int:
     """Retry cleanup of worktrees that previously failed to be removed.
-    
+
     Returns the number of worktrees successfully cleaned up.
     """
     manifest = load_worktree_manifest()
     if not manifest:
         return 0
-    
+
     cleaned_count = 0
     print(f"🔄 Found {len(manifest)} worktrees in failed cleanup manifest")
-    
+
     for worktree_id, entry in list(manifest.items()):
         worktree_path = Path(entry["path"])
         reason = entry.get("reason", "Unknown reason")
         timestamp = entry.get("timestamp", "Unknown time")
-        
+
         print(f"\n🧹 Retrying cleanup for {worktree_id}:")
         print(f"   Path: {worktree_path}")
         print(f"   Failed at: {timestamp}")
         print(f"   Reason: {reason}")
-        
+
         # Check if worktree still exists
         if not worktree_path.exists():
-            print(f"   ✅ Directory no longer exists - removing from manifest")
+            print("   ✅ Directory no longer exists - removing from manifest")
             remove_from_manifest(worktree_id)
             cleaned_count += 1
             continue
-            
+
         # Try enhanced force removal
         if force_remove_directory(worktree_path):
             print(f"   ✅ Successfully removed worktree {worktree_id}")
@@ -243,12 +243,12 @@ def retry_failed_cleanups() -> int:
             cleaned_count += 1
         else:
             print(f"   ❌ Still failed to remove {worktree_id} - will retry later")
-    
+
     if cleaned_count > 0:
         print(f"\n✅ Successfully cleaned up {cleaned_count} previously failed worktrees")
     else:
-        print(f"\n⚠️  No additional worktrees could be cleaned up this time")
-        
+        print("\n⚠️  No additional worktrees could be cleaned up this time")
+
     return cleaned_count
 
 
