@@ -18,6 +18,7 @@ export interface WorkItem {
   item_id: string;
   title: string;
   status: string;
+  labels?: string[];
 }
 
 /** Agent execution statistics */
