@@ -17,6 +17,7 @@ from pokepoke.worktree_cleanup import (
     cleanup_after_merge,
     force_remove_directory,
     remove_from_manifest,
+    _is_windows_lock_error,
 )
 
 
@@ -224,12 +225,8 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
             if "not a working tree" in stderr_lower or "no such file" in stderr_lower:
                 # Already gone, that's fine
                 pass
-            elif any(s in stderr_lower for s in [
-                "permission denied",
-                "being used by another process",
-                "invalid argument",
-            ]):
-                print("⚠️  Worktree removal failed (likely locked). Retrying with force removal...")
+            elif _is_windows_lock_error(stderr):
+                print("⚠️  Worktree removal failed (likely locked). Retrying with enhanced force removal...")
                 if force_remove_directory(actual_worktree_path):
                     remove_from_manifest(item_id)
                 else:
