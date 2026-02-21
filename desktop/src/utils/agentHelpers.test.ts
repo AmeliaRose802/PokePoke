@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AgentInfo } from "../types";
-import { getAgentAvatar, getAgentType } from "./agentHelpers";
+import { formatModelName, getAgentAvatar, getAgentType } from "./agentHelpers";
 import { getAgentSnakeIcon } from "./snakeIcons";
 
 function mkAgent(overrides: Partial<AgentInfo> = {}): AgentInfo {
@@ -41,5 +41,38 @@ describe("agentHelpers", () => {
     const workItemId = "PP-123";
     const agent = mkAgent({ work_item_id: workItemId, agent_id: "work-pp-123" });
     expect(getAgentAvatar(agent)).toBe(getAgentSnakeIcon(workItemId, false));
+  });
+
+  describe("formatModelName", () => {
+    it("formats Claude models correctly", () => {
+      expect(formatModelName("claude-3-5-sonnet-20241022")).toBe("Claude Sonnet");
+      expect(formatModelName("claude-3-haiku-20240307")).toBe("Claude Haiku");
+      expect(formatModelName("claude-3-opus-20240229")).toBe("Claude Opus");
+      expect(formatModelName("claude-unknown")).toBe("Claude");
+    });
+
+    it("formats GPT models correctly", () => {
+      expect(formatModelName("gpt-4o")).toBe("GPT-4o");
+      expect(formatModelName("gpt-4-turbo")).toBe("GPT-4 Turbo");
+      expect(formatModelName("gpt-4")).toBe("GPT-4");
+      expect(formatModelName("gpt-3.5-turbo")).toBe("GPT-3.5");
+      expect(formatModelName("gpt-unknown")).toBe("GPT");
+    });
+
+    it("formats Gemini models correctly", () => {
+      expect(formatModelName("gemini-1.5-pro")).toBe("Gemini Pro");
+      expect(formatModelName("gemini-flash")).toBe("Gemini");
+    });
+
+    it("handles null and undefined models", () => {
+      expect(formatModelName(null)).toBe("Unknown Model");
+      expect(formatModelName(undefined)).toBe("Unknown Model");
+      expect(formatModelName("")).toBe("Unknown Model");
+    });
+
+    it("capitalizes unknown model names", () => {
+      expect(formatModelName("custom-model-v1")).toBe("Custom-model-v1");
+      expect(formatModelName("llama2")).toBe("Llama2");
+    });
   });
 });

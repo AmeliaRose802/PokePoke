@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentInfo } from "../types";
 import { useBridge } from "../useBridge";
 import {
+  formatModelName,
   getAgentAvatar,
   getAgentPrimaryLabel,
   getAgentType,
@@ -171,6 +172,9 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
         <div className="agent-log-panel-meta">
           <span className="agent-meta-item">
             <strong>ID:</strong> {agent.agent_id}
+          </span>
+          <span className="agent-meta-item">
+            <strong>Model:</strong> {formatModelName(agent.model)}
           </span>
           {agent.work_item_id ? (
             <span className="agent-meta-item">

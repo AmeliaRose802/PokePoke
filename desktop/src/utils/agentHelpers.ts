@@ -92,3 +92,52 @@ export function getAgentAvatar(agent: AgentInfo): string | null {
 
   return getAgentSnakeIcon(agent.work_item_id, isGateAgent(agent));
 }
+
+/**
+ * Format a model name into a user-friendly display name.
+ * Converts technical model names into readable labels.
+ */
+export function formatModelName(model: string | null | undefined): string {
+  if (!model) {
+    return "Unknown Model";
+  }
+
+  const modelStr = model.toLowerCase();
+
+  // Claude models
+  if (modelStr.includes("claude")) {
+    if (modelStr.includes("sonnet")) {
+      return "Claude Sonnet";
+    } else if (modelStr.includes("haiku")) {
+      return "Claude Haiku";
+    } else if (modelStr.includes("opus")) {
+      return "Claude Opus";
+    }
+    return "Claude";
+  }
+
+  // GPT models
+  if (modelStr.includes("gpt")) {
+    if (modelStr.includes("4o")) {
+      return "GPT-4o";
+    } else if (modelStr.includes("4") && modelStr.includes("turbo")) {
+      return "GPT-4 Turbo";
+    } else if (modelStr.includes("4")) {
+      return "GPT-4";
+    } else if (modelStr.includes("3.5")) {
+      return "GPT-3.5";
+    }
+    return "GPT";
+  }
+
+  // Gemini models
+  if (modelStr.includes("gemini")) {
+    if (modelStr.includes("pro")) {
+      return "Gemini Pro";
+    }
+    return "Gemini";
+  }
+
+  // For any other model, capitalize the first letter and return as-is
+  return model.charAt(0).toUpperCase() + model.slice(1);
+}
