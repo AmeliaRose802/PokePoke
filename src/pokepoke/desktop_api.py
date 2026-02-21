@@ -135,7 +135,8 @@ class DesktopAPI:
 
     def get_work_item(self) -> dict[str, str] | None:
         """Get the current work item."""
-        return self._current_work_item
+        with self._lock:
+            return self._current_work_item
 
     def get_repository_name(self) -> str:
         """Get the repository name."""
@@ -171,36 +172,43 @@ class DesktopAPI:
 
     def push_work_item(self, item_id: str, title: str, status: str = "") -> None:
         """Update the current work item."""
-        self._current_work_item = {
-            "item_id": item_id,
-            "title": title,
-            "status": status,
-        }
+        with self._lock:
+            self._current_work_item = {
+                "item_id": item_id,
+                "title": title,
+                "status": status,
+            }
 
     def set_session_start_time(self, start_time: float) -> None:
         """Store session start time (enables live elapsed_time ticking)."""
-        self._session_start_time = start_time
-        self._current_session_id = str(start_time)
+        with self._lock:
+            self._session_start_time = start_time
+            self._current_session_id = str(start_time)
 
     def set_session_end_time(self, end_time: float) -> None:
         """Store session end time (freezes elapsed_time)."""
-        self._session_end_time = end_time
+        with self._lock:
+            self._session_end_time = end_time
 
     def set_live_session_stats(self, session_stats: SessionStats) -> None:
         """Store a live SessionStats reference for real-time polling."""
-        self._live_session_stats = session_stats
+        with self._lock:
+            self._live_session_stats = session_stats
 
     def push_agent_name(self, name: str) -> None:
         """Update the current agent name."""
-        self._current_agent_name = name
+        with self._lock:
+            self._current_agent_name = name
 
     def push_progress(self, active: bool, status: str = "") -> None:
         """Update the progress indicator."""
-        self._current_progress = {"active": active, "status": status}
+        with self._lock:
+            self._current_progress = {"active": active, "status": status}
 
     def set_logs_dir(self, logs_dir: str) -> None:
         """Set the current logs directory path."""
-        self._current_logs_dir = logs_dir
+        with self._lock:
+            self._current_logs_dir = logs_dir
 
     def clear_logs(self) -> None:
         """Clear the log buffer."""
@@ -239,6 +247,9 @@ class DesktopAPI:
         modified_files: list[str] | None = None,
     ) -> None:
         """Register or update a running agent."""
+        with self._lock:
+            session_id = self._current_session_id
+
         self._agent_registry.update_status(
             agent_id,
             name,
@@ -248,7 +259,7 @@ class DesktopAPI:
             parent_agent_id=parent_agent_id,
             work_item_id=work_item_id,
             work_item_title=work_item_title,
-            session_id=self._current_session_id,
+            session_id=session_id,
             modified_files=modified_files,
         )
 
