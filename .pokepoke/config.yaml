@@ -119,3 +119,6 @@ command_timeout: 300
 #         labels: [refactoring]
 #       model: gpt-5.1-codex
 #   fallback: weighted
+# Gate agent verification after work items complete.
+# Set to false to skip the gate agent review step.
+# gate_agent_enabled: true

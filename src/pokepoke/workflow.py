@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from pokepoke.logging_utils import RunLogger
 
+logger = logging.getLogger(__name__)
+
 
 def process_work_item(
     item: BeadsWorkItem,
@@ -81,11 +83,8 @@ def process_work_item(
             work_item_title=item.title,
         )
 
-        print(f"\n🚀 Processing work item: {item.id}")
-        print(f"   {item.title}")
-        print(f"   🤖 Model: {selected_model}")
-        print(f"   🧠 Backend: {backend_provider}")
-        print(f"   ⏱️  Timeout: {timeout_hours} hours\n")
+        print(f"\n🚀 Processing work item: {item.id} — {item.title}")
+        print(f"   🤖 Model: {selected_model} | 🧠 Backend: {backend_provider} | ⏱️  Timeout: {timeout_hours}h\n")
 
         # Start item logging
         item_logger = None
@@ -230,6 +229,11 @@ def process_work_item(
                 return False, request_count, accumulated_stats, cleanup_agent_runs, gate_agent_runs, None
 
             # --- GATE AGENT CHECK ---
+            if not config.gate_agent_enabled:
+                print("\n⏭️  Gate Agent disabled via config — skipping verification")
+                gate_success = True
+                break
+
             # Build handoff context so gate agent skips re-discovering the codebase
             from pokepoke.git_operations import build_handoff_context
             handoff_ctx = build_handoff_context(cwd=worktree_cwd)
