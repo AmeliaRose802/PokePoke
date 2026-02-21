@@ -14,6 +14,7 @@ import { AgentLogPanel } from "./components/AgentLogPanel";
 import { AgentsPanel } from "./components/AgentsPanel";
 import { ConnectionIndicator } from "./components/ConnectionIndicator";
 import { LogPanel } from "./components/LogPanel";
+import { LogsLocationBox } from "./components/LogsLocationBox";
 import { PromptEditor } from "./components/PromptEditor";
 import { SettingsPage } from "./components/SettingsPage";
 import { StatsBar } from "./components/StatsBar";
@@ -140,6 +141,7 @@ function App() {
         </div>
         <div className="app-header-controls">
           <ConnectionIndicator status={bridge.connectionStatus} />
+          <LogsLocationBox logsDir={bridge.logsDir} />
           <button
             className={`finish-after-current-btn${bridge.stopAfterCurrent ? " stopping" : ""}`}
             onClick={() =>

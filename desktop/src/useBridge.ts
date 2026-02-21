@@ -79,6 +79,7 @@ interface PyWebViewAPI {
     stop_after_current: boolean;
     project_name: string;
     current_session_id: string | null;
+    logs_dir: string | null;
   }>;
   get_new_logs(): Promise<LogEntry[]>;
   get_all_logs(): Promise<LogEntry[]>;
@@ -159,6 +160,7 @@ export interface BridgeState {
   agents: AgentInfo[];
   stopAfterCurrent: boolean;
   currentSessionId: string | null;
+  logsDir: string | null;
   clearLogs: (target: "orchestrator" | "agent" | "all") => void;
   listPrompts: () => Promise<PromptInfo[]>;
   getPrompt: (name: string) => Promise<PromptDetail | null>;
@@ -197,6 +199,7 @@ export function useBridge(): BridgeState {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [stopAfterCurrent, setStopAfterCurrent] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [logsDir, setLogsDir] = useState<string | null>(null);
 
   const clearLogs = useCallback(
     (target: "orchestrator" | "agent" | "all") => {
@@ -353,6 +356,7 @@ export function useBridge(): BridgeState {
       if (state.agents) setAgents(state.agents);
       setStopAfterCurrent(!!state.stop_after_current);
       setCurrentSessionId(state.current_session_id ?? null);
+      setLogsDir(state.logs_dir ?? null);
 
       // Load initial logs with retry
       const allLogs = await retryWithBackoff(async () => {
@@ -397,6 +401,7 @@ export function useBridge(): BridgeState {
           if (state.agents) setIfChanged(setAgents)(state.agents);
           setStopAfterCurrent(!!state.stop_after_current);
           setCurrentSessionId(state.current_session_id ?? null);
+          setIfChanged(setLogsDir)(state.logs_dir ?? null);
 
           // Reset consecutive failures on success
           consecutiveFailures = 0;
@@ -436,6 +441,7 @@ export function useBridge(): BridgeState {
     agents,
     stopAfterCurrent,
     currentSessionId,
+    logsDir,
     clearLogs,
     listPrompts,
     getPrompt,
