@@ -19,9 +19,6 @@ class BeadsWorkItem:
     created_by: str | None = None
     updated_at: str | None = None
     labels: list[str] | None = None
-    dependency_count: int | None = None
-    dependent_count: int | None = None
-    notes: str | None = None
 
 
 @dataclass(frozen=True)
