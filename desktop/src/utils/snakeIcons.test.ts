@@ -3,11 +3,12 @@
  */
 
 import { describe, expect, test } from 'vitest';
+
 import { 
+  getAgentSnakeIcon,
+  getGateAgentIconPath,
   getSnakeForWorkItem, 
   getWorkAgentIconPath, 
-  getGateAgentIconPath,
-  getAgentSnakeIcon,
   SNAKE_TYPES 
 } from './snakeIcons';
 

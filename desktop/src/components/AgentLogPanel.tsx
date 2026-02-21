@@ -6,12 +6,8 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+
 import type { AgentInfo } from "../types";
-import {
-  processLogsToRenderItems,
-  stringsToLogEntries,
-} from "../utils/logProcessor";
-import { RenderLogItems } from "./LogComponents";
 import { useBridge } from "../useBridge";
 import {
   getAgentAvatar,
@@ -19,6 +15,11 @@ import {
   getAgentType,
   isGateAgent,
 } from "../utils/agentHelpers";
+import {
+  processLogsToRenderItems,
+  stringsToLogEntries,
+} from "../utils/logProcessor";
+import { RenderLogItems } from "./LogComponents";
 
 interface Props {
   agent: AgentInfo;

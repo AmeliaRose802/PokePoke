@@ -1,20 +1,21 @@
 import { useMemo, useState } from "react";
+
 import type {
   ModelHistoryEntry,
   ModelPerformanceSummary,
   SessionStats,
 } from "../types";
 import {
+  buildCompletionTimeSeries,
   formatDurationShort,
   formatElapsed,
   formatPercent,
   formatTokens,
-  inferCurrentModel,
   getAddedCount,
   getCompletedItems,
   getDoneCount,
   getNetDelta,
-  buildCompletionTimeSeries,
+  inferCurrentModel,
 } from "../utils/stats";
 import { CompletionTimeChart } from "./CompletionTimeChart";
 import { ModelTable } from "./ModelTable";

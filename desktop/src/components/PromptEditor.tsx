@@ -6,7 +6,8 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { PromptInfo, PromptDetail } from "../types";
+
+import type { PromptDetail,PromptInfo } from "../types";
 
 interface Props {
   listPrompts: () => Promise<PromptInfo[]>;

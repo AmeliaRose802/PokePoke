@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import type { AgentInfo } from "../types";
 import { getAgentAvatar, getAgentType } from "./agentHelpers";
 import { getAgentSnakeIcon } from "./snakeIcons";

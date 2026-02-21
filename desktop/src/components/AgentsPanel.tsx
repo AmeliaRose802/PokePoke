@@ -10,13 +10,14 @@
  * by default and can be expanded by clicking the session header.
  */
 
-import { useState, type ReactElement } from "react";
+import { type ReactElement,useState } from "react";
+
 import type { AgentInfo } from "../types";
 import {
-  getAgentPrimaryLabel,
-  isGateAgent,
   getAgentAvatar,
+  getAgentPrimaryLabel,
   getAgentType,
+  isGateAgent,
 } from "../utils/agentHelpers";
 
 interface Props {

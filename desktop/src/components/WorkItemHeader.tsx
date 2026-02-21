@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from "react";
+
 import type { WorkItem } from "../types";
 
 const SPINNER_FRAMES = ["◐", "◓", "◑", "◒"];

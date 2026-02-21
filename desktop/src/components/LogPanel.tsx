@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef } from "react";
+
 import type { LogEntry } from "../types";
 import { processLogsToRenderItems } from "../utils/logProcessor";
 import {
-  LogEntryRenderer,
-  ToolAccordion,
-  NarrationAccordion,
-  ToolBatchAccordion,
-  MarkdownBlock,
   CodeBlockAccordion,
+  LogEntryRenderer,
+  MarkdownBlock,
+  NarrationAccordion,
+  ToolAccordion,
+  ToolBatchAccordion,
 } from "./LogComponents";
 
 interface Props {

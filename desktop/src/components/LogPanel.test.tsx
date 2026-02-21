@@ -2,10 +2,11 @@
  * Tests for LogPanel tool-call collapsing.
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { LogPanel } from './LogPanel';
+import { fireEvent,render, screen } from '@testing-library/react';
+import { afterEach,describe, expect, it, vi } from 'vitest';
+
 import type { LogEntry } from '../types';
+import { LogPanel } from './LogPanel';
 
 function mk(ts: number, message: string): LogEntry {
   return { timestamp: ts, message, target: 'agent', style: null };

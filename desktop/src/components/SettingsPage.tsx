@@ -6,9 +6,10 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { ConfigResponse, ProjectConfig, ModelsConfig, MaintenanceAgent, McpServerConfig } from "../types";
+
+import type { ConfigResponse, MaintenanceAgent, McpServerConfig,ModelsConfig, ProjectConfig } from "../types";
 import { MaintenanceAgentsSection } from "./MaintenanceAgentsSection";
-import { KNOWN_MODELS, isAbTestingEnabled } from "./settingsHelpers";
+import { isAbTestingEnabled,KNOWN_MODELS } from "./settingsHelpers";
 
 interface Props {
   getConfig: () => Promise<ConfigResponse | null>;

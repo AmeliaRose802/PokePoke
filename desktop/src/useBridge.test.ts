@@ -2,7 +2,8 @@
  * Tests for useBridge utilities (shallowEqual).
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect,it } from 'vitest';
+
 import { shallowEqual } from './useBridge';
 
 describe('shallowEqual', () => {

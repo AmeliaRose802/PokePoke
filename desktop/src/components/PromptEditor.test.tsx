@@ -2,11 +2,12 @@
  * Tests for PromptEditor component.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { beforeEach,describe, expect, it, vi } from 'vitest';
+
+import type { PromptDetail,PromptInfo } from '../types';
 import { PromptEditor } from './PromptEditor';
-import type { PromptInfo, PromptDetail } from '../types';
 
 describe('PromptEditor', () => {
   const mockListPrompts = vi.fn();

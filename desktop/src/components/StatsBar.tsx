@@ -5,19 +5,19 @@
  * API duration, items completed, retries, and agent run counts.
  */
 
-import type { SessionStats, ModelPerformanceSummary } from "../types";
+import type { ModelPerformanceSummary,SessionStats } from "../types";
 import {
+  formatAgentRuns,
   formatDurationShort,
   formatElapsed,
   formatPercent,
+  formatTotalTokens,
   getAddedCount,
+  getAgentRunCounts,
   getCompletedItems,
   getDoneCount,
   getNetDelta,
   inferCurrentModel,
-  formatTotalTokens,
-  getAgentRunCounts,
-  formatAgentRuns,
 } from "../utils/stats";
 
 interface Props {

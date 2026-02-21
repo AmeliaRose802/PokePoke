@@ -6,11 +6,11 @@
 
 import type { LogEntry } from "../types";
 import {
-  type ToolItem,
-  type ToolBatch,
-  type RenderLogItem,
   detectLevel,
   formatTime,
+  type RenderLogItem,
+  type ToolBatch,
+  type ToolItem,
 } from "../utils/logProcessor";
 import { renderMarkdown } from "../utils/markdown";
 

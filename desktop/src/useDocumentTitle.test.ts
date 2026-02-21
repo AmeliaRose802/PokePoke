@@ -2,8 +2,9 @@
  * Tests for useDocumentTitle hook.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { renderHook } from "@testing-library/react";
+import { afterEach,beforeEach, describe, expect, it } from "vitest";
+
 import { buildTitle, useDocumentTitle } from "./useDocumentTitle";
 
 describe("buildTitle", () => {

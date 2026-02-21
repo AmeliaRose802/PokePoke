@@ -2,7 +2,8 @@
  * Tests for markdown rendering with XSS sanitization.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, expect,it } from "vitest";
+
 import { renderMarkdown } from "./markdown";
 
 describe("renderMarkdown", () => {

@@ -5,20 +5,22 @@
  * Connects to the Python orchestrator via the pywebview API.
  */
 
+import "./App.css";
+
 import { useCallback, useEffect, useState } from "react";
-import { useBridge } from "./useBridge";
-import { useDocumentTitle } from "./useDocumentTitle";
-import { WorkItemHeader } from "./components/WorkItemHeader";
-import { LogPanel } from "./components/LogPanel";
-import { AgentsPanel } from "./components/AgentsPanel";
+
 import { AgentLogPanel } from "./components/AgentLogPanel";
-import { StatsBar } from "./components/StatsBar";
+import { AgentsPanel } from "./components/AgentsPanel";
 import { ConnectionIndicator } from "./components/ConnectionIndicator";
+import { LogPanel } from "./components/LogPanel";
 import { PromptEditor } from "./components/PromptEditor";
 import { SettingsPage } from "./components/SettingsPage";
+import { StatsBar } from "./components/StatsBar";
 import { StatsPage } from "./components/StatsPage";
+import { WorkItemHeader } from "./components/WorkItemHeader";
 import type { ModelHistoryEntry } from "./types";
-import "./App.css";
+import { useBridge } from "./useBridge";
+import { useDocumentTitle } from "./useDocumentTitle";
 
 function App() {
   const bridge = useBridge();

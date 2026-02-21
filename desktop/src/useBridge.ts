@@ -9,20 +9,21 @@
  * the last call (incremental).
  */
 
-import { useEffect, useState, useCallback } from "react";
+import { useCallback,useEffect, useState } from "react";
+
 import type {
-  LogEntry,
-  WorkItem,
-  SessionStats,
-  ProgressState,
-  ConnectionStatus,
-   ModelPerformanceSummary,
-   ModelHistoryEntry,
    AgentInfo,
-  PromptInfo,
-  PromptDetail,
   ConfigResponse,
+  ConnectionStatus,
+  LogEntry,
+   ModelHistoryEntry,
+   ModelPerformanceSummary,
+  ProgressState,
   ProjectConfig,
+  PromptDetail,
+  PromptInfo,
+  SessionStats,
+  WorkItem,
 } from "./types";
 
 /** Poll interval in ms — 100ms = responsive without hammering */

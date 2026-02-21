@@ -1,4 +1,5 @@
 import js from '@eslint/js'
+import simpleImportSort from 'eslint-plugin-simple-import-sort'
 import globals from 'globals'
 import react from 'eslint-plugin-react'
 import reactHooks from 'eslint-plugin-react-hooks'
@@ -18,12 +19,15 @@ export default defineConfig([
     ],
     plugins: {
       react,
+      'simple-import-sort': simpleImportSort,
     },
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
     },
     rules: {
+      'simple-import-sort/imports': 'error',
+      'simple-import-sort/exports': 'error',
       // Ban inline styles - force use of CSS classes for consistent theming
       'react/forbid-dom-props': ['error', { forbid: ['style'] }],
       'react/forbid-component-props': ['error', { forbid: ['style'] }],
