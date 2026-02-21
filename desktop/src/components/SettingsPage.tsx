@@ -8,38 +8,16 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ConfigResponse, ProjectConfig, ModelsConfig, MaintenanceAgent, McpServerConfig } from "../types";
 import { MaintenanceAgentsSection } from "./MaintenanceAgentsSection";
-
-const isAbTestingEnabled = (models?: ModelsConfig): boolean => {
-  if (!models) return false;
-  if (typeof models.ab_testing_enabled === "boolean") {
-    return models.ab_testing_enabled;
-  }
-  return (models.candidate_models?.length ?? 0) > 0;
-};
-
-/** Well-known model names for dropdown suggestions */
-const KNOWN_MODELS = [
-  "claude-opus-4.5",
-  "claude-opus-4.6",
-  "claude-sonnet-4",
-  "claude-sonnet-4.5",
-  "gemini-3-pro",
-  "gpt-5",
-  "gpt-5-codex",
-  "gpt-5.1",
-  "gpt-5.1-codex",
-  "gpt-5.1-codex-max",
-  "gpt-5.2",
-  "gpt-5.2-codex",
-];
+import { KNOWN_MODELS, isAbTestingEnabled } from "./settingsHelpers";
 
 interface Props {
   getConfig: () => Promise<ConfigResponse | null>;
   saveConfig: (config: ProjectConfig) => Promise<boolean>;
   onClose: () => void;
+  onOpenPromptEditor?: (promptName: string) => void;
 }
 
-export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
+export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEditor }: Props) {
   const [config, setConfig] = useState<ProjectConfig | null>(null);
   const [defaultModel, setDefaultModel] = useState("");
   const [fallbackModel, setFallbackModel] = useState("");
@@ -163,6 +141,17 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
     setMessage("Reset to saved values");
   }, [config]);
 
+  const handleCloseClick = useCallback(() => {
+    if (dirty) {
+      const shouldClose = window.confirm("Close without saving?");
+      if (shouldClose) {
+        onClose();
+      }
+    } else {
+      onClose();
+    }
+  }, [dirty, onClose]);
+
   const addChip = useCallback(
     (value: string) => {
       if (!abTestingEnabled) return;
@@ -227,10 +216,16 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
         {/* Header */}
         <div className="settings-header">
           <span>🍃 Settings</span>
-          <button className="prompt-close-btn" onClick={onClose}>
+          <button className="prompt-close-btn" onClick={handleCloseClick}>
             ✕
           </button>
         </div>
+
+        {dirty && (
+          <div className="settings-unsaved-banner">
+            ⚠️ You have unsaved changes
+          </div>
+        )}
 
         {loading ? (
           <div className="settings-loading">Loading configuration…</div>
@@ -454,6 +449,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
             <MaintenanceAgentsSection
               agents={maintenanceAgents}
               onUpdate={updateMaintenanceAgent}
+              onOpenPromptEditor={onOpenPromptEditor}
             />
 
             {/* Footer actions */}

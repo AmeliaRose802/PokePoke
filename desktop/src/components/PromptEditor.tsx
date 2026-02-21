@@ -5,7 +5,7 @@
  * template variable reference, and reset-to-default per prompt.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { PromptInfo, PromptDetail } from "../types";
 
 interface Props {
@@ -29,6 +29,7 @@ export function PromptEditor({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Load prompt list on mount
   useEffect(() => {
@@ -84,6 +85,29 @@ export function PromptEditor({
       setMessage("Reset failed");
     }
   }, [selected, resetPrompt, reloadList, selectPrompt]);
+
+  const insertVariable = useCallback((varName: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const before = editorContent.substring(0, start);
+    const after = editorContent.substring(end);
+    const variable = `{{${varName}}}`;
+    const newContent = before + variable + after;
+
+    setEditorContent(newContent);
+    setDirty(true);
+    setMessage("");
+
+    // Restore cursor position after the inserted variable
+    setTimeout(() => {
+      const newPosition = start + variable.length;
+      textarea.focus();
+      textarea.setSelectionRange(newPosition, newPosition);
+    }, 0);
+  }, [editorContent]);
 
   return (
     <div className="prompt-editor-overlay">
@@ -156,15 +180,22 @@ export function PromptEditor({
                   <div className="prompt-vars">
                     <span className="prompt-vars-label">Variables:</span>
                     {selected.template_variables.map((v) => (
-                      <code key={v} className="prompt-var-tag">
+                      <button
+                        key={v}
+                        className="prompt-var-tag"
+                        onClick={() => insertVariable(v)}
+                        type="button"
+                        title="Click to insert"
+                      >
                         {`{{${v}}}`}
-                      </code>
+                      </button>
                     ))}
                   </div>
                 )}
 
                 {/* Editor */}
                 <textarea
+                  ref={textareaRef}
                   className="prompt-textarea"
                   value={editorContent}
                   onChange={(e) => {

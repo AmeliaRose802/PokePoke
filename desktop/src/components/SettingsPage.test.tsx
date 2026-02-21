@@ -716,4 +716,157 @@ describe('SettingsPage', () => {
     expect(savedConfig.max_parallel_agents).toBeGreaterThanOrEqual(1);
     expect(savedConfig.max_parallel_agents).toBeLessThanOrEqual(8);
   });
+
+  it('should display unsaved changes red banner', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage
+        getConfig={mockGetConfig}
+        saveConfig={mockSaveConfig}
+        onClose={mockOnClose}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+    });
+
+    // Initially banner should not be present
+    await waitFor(() => {
+      expect(document.querySelector('.settings-unsaved-banner')).not.toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText('Enable A/B testing mode'));
+
+    // Banner should appear after change
+    await waitFor(() => {
+      const banner = document.querySelector('.settings-unsaved-banner');
+      expect(banner).toBeTruthy();
+      expect(banner?.textContent).toContain('unsaved changes');
+    });
+  });
+
+  it('should hide banner after save', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage
+        getConfig={mockGetConfig}
+        saveConfig={mockSaveConfig}
+        onClose={mockOnClose}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText('Enable A/B testing mode'));
+    
+    // Banner should appear
+    let banner = document.querySelector('.settings-unsaved-banner');
+    expect(banner).toBeInTheDocument();
+
+    await user.click(screen.getByText('💾 Save'));
+
+    await waitFor(() => {
+      banner = document.querySelector('.settings-unsaved-banner');
+      expect(banner).not.toBeInTheDocument();
+    });
+  });
+
+  it('should show confirmation dialog when closing with unsaved changes', async () => {
+    const user = userEvent.setup();
+    window.confirm = vi.fn().mockReturnValue(false);
+
+    render(
+      <SettingsPage
+        getConfig={mockGetConfig}
+        saveConfig={mockSaveConfig}
+        onClose={mockOnClose}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText('Enable A/B testing mode'));
+
+    const closeButton = screen.getByText('🍃 Settings').parentElement?.querySelector('.prompt-close-btn');
+    await user.click(closeButton!);
+
+    expect(window.confirm).toHaveBeenCalledWith('Close without saving?');
+    expect(mockOnClose).not.toHaveBeenCalled();
+  });
+
+  it('should close when confirming unsaved changes', async () => {
+    const user = userEvent.setup();
+    window.confirm = vi.fn().mockReturnValue(true);
+
+    render(
+      <SettingsPage
+        getConfig={mockGetConfig}
+        saveConfig={mockSaveConfig}
+        onClose={mockOnClose}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText('Enable A/B testing mode'));
+
+    const closeButton = screen.getByText('🍃 Settings').parentElement?.querySelector('.prompt-close-btn');
+    await user.click(closeButton!);
+
+    expect(window.confirm).toHaveBeenCalledWith('Close without saving?');
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('should close without dialog when no unsaved changes', async () => {
+    const user = userEvent.setup();
+    window.confirm = vi.fn();
+
+    render(
+      <SettingsPage
+        getConfig={mockGetConfig}
+        saveConfig={mockSaveConfig}
+        onClose={mockOnClose}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+    });
+
+    const closeButton = screen.getByText('🍃 Settings').parentElement?.querySelector('.prompt-close-btn');
+    await user.click(closeButton!);
+
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(mockOnClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('should call onOpenPromptEditor when prompt file link clicked', async () => {
+    const user = userEvent.setup();
+    const mockOpenPromptEditor = vi.fn();
+
+    render(
+      <SettingsPage
+        getConfig={mockGetConfig}
+        saveConfig={mockSaveConfig}
+        onClose={mockOnClose}
+        onOpenPromptEditor={mockOpenPromptEditor}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+    });
+
+    const promptFileLink = screen.getByText('📄 janitor.md');
+    await user.click(promptFileLink);
+
+    expect(mockOpenPromptEditor).toHaveBeenCalledWith('janitor.md');
+  });
 });

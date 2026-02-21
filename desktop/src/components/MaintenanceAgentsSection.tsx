@@ -3,28 +3,15 @@
  */
 
 import type { MaintenanceAgent } from "../types";
-
-const KNOWN_MODELS = [
-  "claude-opus-4.5",
-  "claude-opus-4.6",
-  "claude-sonnet-4",
-  "claude-sonnet-4.5",
-  "gemini-3-pro",
-  "gpt-5",
-  "gpt-5-codex",
-  "gpt-5.1",
-  "gpt-5.1-codex",
-  "gpt-5.1-codex-max",
-  "gpt-5.2",
-  "gpt-5.2-codex",
-];
+import { KNOWN_MODELS } from "./settingsHelpers";
 
 interface Props {
   agents: MaintenanceAgent[];
   onUpdate: (index: number, updates: Partial<MaintenanceAgent>) => void;
+  onOpenPromptEditor?: (promptName: string) => void;
 }
 
-export function MaintenanceAgentsSection({ agents, onUpdate }: Props) {
+export function MaintenanceAgentsSection({ agents, onUpdate, onOpenPromptEditor }: Props) {
   return (
     <div className="settings-section">
       <h3 className="settings-section-title">🌳 Maintenance Agents</h3>
@@ -93,7 +80,18 @@ export function MaintenanceAgentsSection({ agents, onUpdate }: Props) {
                 </div>
 
                 <div className="agent-metadata">
-                  <span className="metadata-item">
+                  <span 
+                    className="metadata-item prompt-file-link"
+                    onClick={() => onOpenPromptEditor?.(agent.prompt_file)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onOpenPromptEditor?.(agent.prompt_file);
+                      }
+                    }}
+                  >
                     📄 {agent.prompt_file}
                   </span>
                   {agent.needs_worktree && (

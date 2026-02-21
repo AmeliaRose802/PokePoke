@@ -66,6 +66,11 @@ function App() {
     setSelectedAgentId((prev) => (prev === agentId ? null : agentId));
   }, []);
 
+  const handleOpenPromptEditor = useCallback(() => {
+    setShowPrompts(true);
+    setShowSettings(false);
+  }, []);
+
   const { getModelHistory } = bridge;
 
   const handleSpawnAgent = useCallback(async () => {
@@ -258,6 +263,7 @@ function App() {
           getConfig={bridge.getConfig}
           saveConfig={bridge.saveConfig}
           onClose={() => setShowSettings(false)}
+          onOpenPromptEditor={handleOpenPromptEditor}
         />
       )}
 
