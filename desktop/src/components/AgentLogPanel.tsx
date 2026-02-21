@@ -52,6 +52,18 @@ function formatTimestamp(ts?: number | null): string {
   return new Date(ts * 1000).toLocaleTimeString("en-US", { hour12: false });
 }
 
+function formatElapsedTime(startTs?: number | null): string {
+  if (!startTs) return "—";
+  const elapsedSeconds = Math.floor(Date.now() / 1000) - startTs;
+  if (elapsedSeconds < 60) return `${elapsedSeconds}s`;
+  const minutes = Math.floor(elapsedSeconds / 60);
+  const seconds = elapsedSeconds % 60;
+  if (minutes < 60) return `${minutes}m ${seconds}s`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return `${hours}h ${remainingMinutes}m`;
+}
+
 export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
   const { getAgentDetail, agents } = useBridge();
   const [detailedAgent, setDetailedAgent] = useState<AgentInfo | null>(null);
@@ -173,6 +185,9 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
         <div className="agent-log-panel-meta">
           <span className="agent-meta-item">
             <strong>ID:</strong> {agent.agent_id}
+          </span>
+          <span className="agent-meta-item">
+            <strong>Started:</strong> {formatTimestamp(agent.started_at)} ({formatElapsedTime(agent.started_at)})
           </span>
           <span className="agent-meta-item">
             <strong>Model:</strong> {formatModelName(agent.model)}
