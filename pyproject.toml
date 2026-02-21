@@ -46,6 +46,7 @@ filterwarnings = ['ignore::pytest.PytestWarning']
 # Coverage settings
 [tool.coverage.run]
 source = ["src/pokepoke"]
+parallel = true
 omit = [
     "*/tests/*",
     "*/test_*",
