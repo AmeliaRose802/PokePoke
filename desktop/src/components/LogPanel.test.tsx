@@ -62,7 +62,7 @@ describe('LogPanel', () => {
       />
     );
 
-    expect(screen.getByText('🌿 view')).toBeInTheDocument();
+    expect(screen.getByText('🌿 view - README.md')).toBeInTheDocument();
     expect(screen.queryByText(/Tool batch/)).not.toBeInTheDocument();
   });
 
@@ -115,9 +115,38 @@ describe('LogPanel', () => {
     expect(screen.queryByText(/view ×1/)).not.toBeInTheDocument();
     expect(screen.queryByText(/edit ×1/)).not.toBeInTheDocument();
 
-    // Individual tools should be directly visible within the batch
-    expect(screen.getByText('🌿 view')).toBeInTheDocument();
-    expect(screen.getByText('🌿 edit')).toBeInTheDocument();
+    // Individual tools should be directly visible within the batch with descriptions
+    expect(screen.getByText('🌿 view - a.txt')).toBeInTheDocument();
+    expect(screen.getByText('🌿 edit - b.txt')).toBeInTheDocument();
+  });
+
+  it('displays tool call descriptions in accordion titles for various tool types', () => {
+    const logs: LogEntry[] = [
+      mk(1, '[Copilot] Calling 3 tool(s)...'),
+      mk(2, "[Tool] powershell({'command': 'npm run build', 'shellId': 'shell-1'})"),
+      mk(3, '✅ Result: Build succeeded'),
+      mk(4, "[Tool] grep({'pattern': 'TODO', 'path': 'src/'})"),
+      mk(5, '✅ Result: Found 5 matches'),
+      mk(6, "[Tool] view({'path': 'src/components/Button.tsx'})"),
+      mk(7, '✅ Result: File read'),
+    ];
+
+    render(
+      <LogPanel
+        title="Agent"
+        icon="🤖"
+        logs={logs}
+        accentColor="#7dcfff"
+      />
+    );
+
+    // Verify descriptions are shown in tool labels - descriptions extracted from args
+    // powershell shows the command
+    expect(screen.getByText(/powershell - npm run build/)).toBeInTheDocument();
+    // grep shows the pattern
+    expect(screen.getByText(/grep - TODO/)).toBeInTheDocument();
+    // view shows the file path
+    expect(screen.getByText(/view - src.*Button\.tsx/)).toBeInTheDocument();
   });
 
   it('collapses multiline apply_patch tool call into accordion', () => {

@@ -5,6 +5,7 @@
  */
 
 import type { LogEntry } from "../types";
+import { extractDescriptionFromArgs } from "./toolDescriptions";
 
 export interface ToolSummary {
   toolLabel: string;
@@ -59,7 +60,6 @@ const TOOL_RESULT_PATTERN = /^\s*(✅|❌)\s*Result:\s*(.*)$/;
 const TOOL_RESULT_FALLBACK = /^\s*\[Result\]\s*(.*)$/i;
 const COPILOT_TOOL_BATCH_HEADER = /^\s*\[Copilot\]\s*Calling\s+(\d+)\s+tool\(s\)\.\.\.$/;
 const CODE_FENCE_REGEX = /```([^\n`]*)?\n([\s\S]*?)```/m;
-
 const APPLY_PATCH_RE = /apply_patch\s*\(/;
 const PATCH_END_RE = /\*{3}\s*End Patch/;
 const PATCH_UPDATE_FILE_RE = /\*{3}\s*(?:Update|Add|Delete)\s+File:\s*(.+)/;
@@ -103,18 +103,18 @@ export function parseToolLabel(message: string): string {
   const rest = match[1].trim();
   const callMatch = rest.match(/^([^(]+)\((.*)\)$/);
   if (!callMatch) return `🌿 ${rest}`;
-  return `🌿 ${callMatch[1].trim()}`;
+  const toolName = callMatch[1].trim();
+  const description = extractDescriptionFromArgs(toolName, callMatch[2].trim());
+  const label = `🌿 ${toolName}`;
+  return description ? `${label} - ${truncateText(description, 50)}` : label;
 }
 
 function parseToolCallParts(message: string): { toolName: string; argsText?: string } {
   const match = message.match(TOOL_CALL_PATTERN);
   if (!match) return { toolName: message.trim() };
-  const rest = match[1].trim();
-  const callMatch = rest.match(/^([^(]+)\((.*)\)$/);
-  if (callMatch) {
-    return { toolName: callMatch[1].trim(), argsText: callMatch[2].trim() };
-  }
-  const toolName = rest.split(/\s+/)[0]?.trim() || rest;
+  const callMatch = match[1].trim().match(/^([^(]+)\((.*)\)$/);
+  if (callMatch) return { toolName: callMatch[1].trim(), argsText: callMatch[2].trim() };
+  const toolName = match[1].trim().split(/\s+/)[0]?.trim() || match[1].trim();
   return { toolName };
 }
 
