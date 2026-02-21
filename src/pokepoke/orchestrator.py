@@ -24,6 +24,7 @@ from pokepoke.shutdown import is_shutting_down, request_shutdown, should_stop_af
 from pokepoke.model_stats_store import record_completion
 from pokepoke.model_history import append_model_history_entry
 from pokepoke.config import load_config
+from pokepoke.signal_handlers import register_shutdown_handlers, unregister_shutdown_handlers
 
 
 def _finalize_session(
@@ -120,6 +121,11 @@ def run_orchestrator(
         run_dir = run_logger.get_run_dir()
         print(f"📝 Run ID: {run_id} | 📁 Logs: {run_dir}")
         run_logger.log_orchestrator(f"PokePoke started in {mode_name} mode with agent name: {agent_name}")
+
+        # Register signal handlers for graceful shutdown logging
+        register_shutdown_handlers(run_logger)
+        run_logger.log_orchestrator("Signal handlers registered for graceful shutdown logging")
+
         atexit.register(lambda: print(f"\n📁 Logs saved to: {run_dir}"))
 
         main_repo_path = Path.cwd()
@@ -152,21 +158,18 @@ def run_orchestrator(
                 session_stats.record_agent_stats(beta_stats)
             print("✅ Beta Tester completed\n")
         failed_claim_ids: set[str] = set()
-
         # Resolve effective parallelism: CLI arg > config > 1
         cfg = load_config()
         effective_parallel = max(1, max_parallel_agents if max_parallel_agents > 1 else cfg.max_parallel_agents)
         if effective_parallel > 1 and interactive:
             print(f"⚠️  Parallel mode (--max-agents {effective_parallel}) requires autonomous mode; forcing parallel=1")
             effective_parallel = 1
-
         if effective_parallel > 1:
             print(f"🔀 Parallel mode: up to {effective_parallel} concurrent agents")
             run_logger.log_orchestrator(f"Parallel mode enabled: max_parallel_agents={effective_parallel}")
         # ── Parallel orchestrator loop ──────────────────────────────
         if effective_parallel > 1:
             from pokepoke.parallel import run_parallel_loop
-
             exit_code = run_parallel_loop(
                 effective_parallel=effective_parallel,
                 mode_name=mode_name,
@@ -194,20 +197,17 @@ def run_orchestrator(
                 print("\nFetching ready work from beads...")
                 run_logger.log_orchestrator("Fetching ready work from beads")
                 ready_items = get_ready_work_items()
-
                 if interactive:
                     terminal_ui.ui.stop()
                 selected_item = select_work_item(ready_items, interactive, skip_ids=failed_claim_ids)
                 if interactive:
                     terminal_ui.ui.start()
-
                 if selected_item is None:
                     terminal_ui.ui.stop_and_capture()
                     print("\n👋 Exiting PokePoke - no work items available.")
                     run_logger.log_orchestrator("No work items available - exiting")
                     _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
                     return 0
-
                 run_logger.log_orchestrator(f"Selected item: {selected_item.id} - {selected_item.title}")
                 banner = format_work_item_banner(selected_item.id, selected_item.title)
                 set_terminal_banner(banner)
@@ -267,7 +267,6 @@ def run_orchestrator(
                     terminal_ui.ui.stop_and_capture()
                     _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
                     return 0 if success else 1
-
                 if interactive:
                     # Clear banner between items
                     set_terminal_banner(f"PokePoke {mode_name} - {agent_name}")
@@ -319,7 +318,11 @@ def run_orchestrator(
                 merge_queue.shutdown(timeout=10.0)
         except Exception:
             pass  # Best effort cleanup
-
+        # Clean up signal handlers
+        try:
+            unregister_shutdown_handlers()
+        except Exception:
+            pass  # Best effort cleanup
 
 def main() -> int:
     """Main entry point for PokePoke CLI."""
@@ -391,7 +394,6 @@ def main() -> int:
             agent_name_override=args.agent_name,
             max_parallel_agents=args.max_agents,
         )
-
     return active_ui.run_with_orchestrator(orchestrator_func)
 
 if __name__ == "__main__":
