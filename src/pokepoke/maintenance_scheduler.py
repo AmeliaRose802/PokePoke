@@ -5,6 +5,7 @@ which is critical for agents that modify shared state (like Janitor cleaning wor
 or could produce duplicate work (like Beta Tester filing the same issues twice).
 """
 
+import contextlib
 import threading
 from pathlib import Path
 
@@ -187,11 +188,8 @@ class MaintenanceScheduler:
         # Update run count on session stats if attribute exists (thread-safe)
         stat_attr = _AGENT_STAT_ATTRS.get(agent_name)
         if stat_attr and hasattr(session_stats, 'record_agent_run'):
-            try:
+            with contextlib.suppress(AttributeError, ValueError):
                 session_stats.record_agent_run(agent_name)
-            except (AttributeError, ValueError):
-                # Silently skip if method doesn't exist or agent name not recognized
-                pass
 
         # Create a dedicated log file for the maintenance agent output
         maint_logger = run_logger.start_maintenance_log(agent_name)
