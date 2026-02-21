@@ -194,6 +194,9 @@ def _run_main_repo_agent(agent_name: str, agent_item: BeadsWorkItem, agent_promp
 def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger | None' = None) -> AgentStats | None:
     """Run worktree cleanup agent to merge/delete stale worktrees."""
     terminal_ui.ui.set_current_agent("Worktree Cleanup")
+    
+    # Import here to avoid circular dependency
+    from pokepoke.worktree_cleanup import retry_failed_cleanups, get_uncleaned_worktree_count
 
     if not has_unmerged_worktrees():
         print("\n🌳 No unmerged worktrees detected — skipping Worktree Cleanup Agent")
@@ -202,6 +205,13 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
     agent_id = "worktree-cleanup"
     terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="running")
     print(f"\n{'='*60}\n🌳 Running Worktree Cleanup Agent\n{'='*60}")
+    
+    # First, try to clean up any worktrees that previously failed
+    failed_count = get_uncleaned_worktree_count()
+    if failed_count > 0:
+        print(f"\n🔧 Pre-cleanup: Retrying {failed_count} previously failed worktree removals...")
+        cleaned_count = retry_failed_cleanups()
+        print(f"   Recovered {cleaned_count}/{failed_count} failed worktrees")
 
     try:
         try:

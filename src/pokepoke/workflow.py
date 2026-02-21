@@ -141,6 +141,7 @@ def process_work_item(
         accumulated_stats = AgentStats()
         gate_success = False  # Track last gate result for model completion record
         timeout_restart_count = 0
+        work_agent_iteration = 1  # Track work agent retry iterations
 
         # Ensure result is always defined even if shutdown happens before the first loop iteration.
         result = CopilotResult(
@@ -179,17 +180,16 @@ def process_work_item(
                     current_desc += "\n\n**PREVIOUS GATE AGENT FEEDBACK:**\n"
                 current_desc += f"\n- {last_feedback}"
                 item.description = current_desc
+                work_agent_iteration += 1
+                terminal_ui.ui.push_agent_status(base_agent_id, get_agent_name(default="pokepoke"),
+                    iteration=work_agent_iteration, status="running", model=selected_model,
+                    work_item_id=item.id, work_item_title=item.title)
 
             terminal_ui.ui.set_current_agent("Work Agent")
             from pokepoke.metrics_context import agent_type_context
             with agent_type_context("work"):
-                result = invoke_copilot(
-                    item,
-                    timeout=remaining_timeout,
-                    item_logger=item_logger,
-                    model=selected_model,
-                    cwd=worktree_cwd,
-                )
+                result = invoke_copilot(item, timeout=remaining_timeout, item_logger=item_logger,
+                    model=selected_model, cwd=worktree_cwd)
             request_count += result.attempt_count
 
             # Aggregate stats

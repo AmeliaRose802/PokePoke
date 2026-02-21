@@ -869,6 +869,8 @@ class TestCheckParentHierarchy:
 class TestProcessWorkItem:
     """Test process_work_item function."""
 
+    @patch('pokepoke.model_selection.get_config')
+    @patch('pokepoke.workflow.get_config')
     @patch('pokepoke.workflow.run_beta_tester')  # Mock beta tester
     @patch('pokepoke.workflow.finalize_work_item')
     @patch('os.chdir')
@@ -890,7 +892,9 @@ class TestProcessWorkItem:
         mock_getcwd: Mock,
         mock_chdir: Mock,
         mock_finalize: Mock,
-        mock_beta: Mock
+        mock_beta: Mock,
+        mock_config: Mock,
+        mock_model_config: Mock,
     ) -> None:
         """Test skipping item in interactive mode."""
         item = BeadsWorkItem(
@@ -904,6 +908,12 @@ class TestProcessWorkItem:
 
         mock_input.return_value = 'n'
         mock_beta.return_value = None  # Beta tester returns None
+        # Mock get_config to avoid needing proper path resolution
+        mock_config.return_value.ai_backend.provider = "copilot"
+        mock_config.return_value.command_timeout = "300"
+        # Mock model selection config
+        mock_model_config.return_value.models.candidate_models = ["gemini-3-pro"]
+        mock_model_config.return_value.models.default = "gemini-3-pro"
 
         success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
             item, interactive=True
