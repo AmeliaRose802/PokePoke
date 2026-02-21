@@ -13,3 +13,6 @@ types-setuptools>=69.0.0
 
 # Linting
 ruff>=0.3.0
+
+# Packaging
+pyinstaller>=6.3,<7
