@@ -87,6 +87,16 @@ def _signal_handler(signum: int, frame: FrameType | None) -> None:
         print(f"[{timestamp}] [ERROR] Signal handler failed: {e}", file=sys.stderr)
         print(f"[{timestamp}] [WARNING] Process terminated by signal {signal_name}", file=sys.stderr)
 
+    # Signal the global shutdown coordinator before exiting so other threads
+    # (agents, merge queue, executors) can stop cleanly.
+    try:
+        from pokepoke.shutdown import request_shutdown
+
+        request_shutdown()
+    except Exception as e:
+        # Signal handlers must never fail; best-effort log to stderr.
+        print(f"[{timestamp}] [ERROR] Failed to request graceful shutdown: {e}", file=sys.stderr)
+
     # Exit with appropriate code
     # SIGTERM/SIGINT should result in exit code 128 + signal number
     # This is the standard convention for processes killed by signals

@@ -1,5 +1,6 @@
 """Tests for signal handler functionality in PokePoke orchestrator."""
 
+import contextlib
 import signal
 import tempfile
 import threading
@@ -45,8 +46,9 @@ class TestSignalHandlers:
         # Should be able to register again without issues
         register_shutdown_handlers(mock_logger)
 
+    @patch('pokepoke.shutdown.request_shutdown')
     @patch('pokepoke.signal_handlers.sys.exit')
-    def test_sigterm_handler_logs_and_exits(self, mock_exit):
+    def test_sigterm_handler_logs_and_exits(self, mock_exit, mock_request_shutdown):
         """Test that SIGTERM handler logs appropriately and exits."""
         mock_logger = Mock()
         register_shutdown_handlers(mock_logger)
@@ -68,11 +70,14 @@ class TestSignalHandlers:
             "PokePoke orchestrator shutdown due to signal"
         )
 
+        mock_request_shutdown.assert_called_once()
+
         # Verify sys.exit was called with appropriate code (128 + signal number)
         mock_exit.assert_called_once_with(128 + signal.SIGTERM)
 
+    @patch('pokepoke.shutdown.request_shutdown')
     @patch('pokepoke.signal_handlers.sys.exit')
-    def test_sigint_handler_logs_and_exits(self, mock_exit):
+    def test_sigint_handler_logs_and_exits(self, mock_exit, mock_request_shutdown):
         """Test that SIGINT handler logs appropriately and exits."""
         mock_logger = Mock()
         register_shutdown_handlers(mock_logger)
@@ -88,12 +93,15 @@ class TestSignalHandlers:
             level="WARNING"
         )
 
+        mock_request_shutdown.assert_called_once()
+
         # Verify sys.exit was called with appropriate code
         mock_exit.assert_called_once_with(128 + signal.SIGINT)
 
+    @patch('pokepoke.shutdown.request_shutdown')
     @patch('pokepoke.signal_handlers.sys.exit')
     @patch('pokepoke.signal_handlers.print')
-    def test_signal_handler_fallback_when_no_logger(self, mock_print, mock_exit):
+    def test_signal_handler_fallback_when_no_logger(self, mock_print, mock_exit, mock_request_shutdown):
         """Test that signal handler falls back to stderr when no logger available."""
         # Don't register a logger
         from pokepoke.signal_handlers import _signal_handler
@@ -109,10 +117,12 @@ class TestSignalHandlers:
                          if any("signal SIGTERM" in str(arg) for arg in call[0])]
         assert len(signal_messages) > 0
 
+        mock_request_shutdown.assert_called_once()
         mock_exit.assert_called_once_with(128 + signal.SIGTERM)
 
+    @patch('pokepoke.shutdown.request_shutdown')
     @patch('pokepoke.signal_handlers.sys.exit')
-    def test_signal_handler_handles_logger_exception(self, mock_exit):
+    def test_signal_handler_handles_logger_exception(self, mock_exit, mock_request_shutdown):
         """Test that signal handler handles logging exceptions gracefully."""
         # Create a mock logger that raises an exception
         mock_logger = Mock()
@@ -124,6 +134,8 @@ class TestSignalHandlers:
 
         # Call handler - should not raise exception
         _signal_handler(signal.SIGTERM, None)
+
+        mock_request_shutdown.assert_called_once()
 
         # Should still exit despite logging failure
         mock_exit.assert_called_once_with(128 + signal.SIGTERM)
@@ -189,10 +201,9 @@ class TestOrchestratorSignalIntegration:
 
             mock_config.return_value = Mock(max_parallel_agents=1)
 
-            try:
+            with contextlib.suppress(SystemExit):
+                # Expected when no work items available
                 run_orchestrator(interactive=False, continuous=False)
-            except SystemExit:
-                pass  # Expected when no work items available
 
         # Verify signal handlers were registered
         mock_register.assert_called_once()
