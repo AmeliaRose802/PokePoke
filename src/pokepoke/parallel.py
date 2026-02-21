@@ -7,8 +7,8 @@ import time
 from typing import Any
 
 from pokepoke.agent_context import get_agent_name, set_agent_name, clear_agent_name
-from pokepoke.beads import get_ready_work_items, is_high_conflict_risk
-from pokepoke.types import AgentStats, BeadsWorkItem, ModelCompletionRecord, SessionStats
+from pokepoke.beads import get_ready_work_items
+from pokepoke.types import BeadsWorkItem, SessionStats, WorkItemResult
 from pokepoke.workflow import process_work_item
 from pokepoke.work_item_selection import select_multiple_items
 from pokepoke.logging_utils import RunLogger
@@ -19,7 +19,7 @@ from pokepoke.shutdown import is_shutting_down, set_executor, should_stop_after_
 logger = logging.getLogger(__name__)
 
 # Type alias to satisfy mypy strict generics
-_Future = concurrent.futures.Future[tuple[bool, int, AgentStats | None, int, int, ModelCompletionRecord | None]]
+_Future = concurrent.futures.Future[WorkItemResult]
 
 # Threading event used to wake up the parallel loop immediately when a
 # spawn agent request arrives from the desktop UI.
@@ -35,12 +35,16 @@ _SNAKE_TYPES: tuple[str, ...] = (
 
 
 def request_spawn_agent() -> None:
-    """Wake the parallel loop to try spawning an additional agent."""
+    """Signal the parallel loop to attempt spawning an additional agent immediately.
+
+    Called from the desktop UI when the user clicks the Spawn Agent button.
+    The loop will wake up early from its sleep and try to fill available slots.
+    """
     _spawn_wakeup.set()
 
 
 def _hash_string(value: str) -> int:
-    """Deterministic 32-bit string hash matching the desktop."""
+    """Mirror desktop snake hash: deterministic 32-bit string hash (Math.abs())."""
     hash_val = 0
     for ch in value:
         hash_val = ((hash_val << 5) - hash_val + ord(ch)) & 0xFFFFFFFF
@@ -51,13 +55,13 @@ def _hash_string(value: str) -> int:
 
 
 def _snake_for_work_item(item_id: str) -> str:
-    """Pick a deterministic snake type for a work item ID."""
+    """Deterministically pick a snake type for a work item ID."""
     index = _hash_string(item_id) % len(_SNAKE_TYPES)
     return _SNAKE_TYPES[index]
 
 
 def _build_worker_name(base_agent_name: str, item_id: str, counter: int) -> str:
-    """Compose a worker name with snake icon type and a unique suffix."""
+    """Compose a worker name that includes the snake icon type and a unique suffix."""
     snake_type = _snake_for_work_item(item_id)
     return f"{base_agent_name}-{snake_type}-worker-{counter}"
 
@@ -67,10 +71,13 @@ def _parallel_process_item(
     run_logger: RunLogger,
     semaphore: threading.Semaphore,
     worker_agent_name: str | None = None,
-) -> tuple[bool, int, AgentStats | None, int, int, ModelCompletionRecord | None]:
-    """Run a work item in a worker thread while keeping UI/agent context isolated."""
-    # Combine item id with worker name so two workers on the same item
-    # get distinct UI slots (PokePoke-kluq).
+) -> WorkItemResult:
+    """Wrapper for process_work_item used by the thread pool.
+
+    Sets a per-thread agent name, registers the agent in the desktop UI,
+    and routes print output to the agent's own log buffer so parallel
+    output is not interleaved. Releases the semaphore when done.
+    """
     agent_id = f"{item.id}:{worker_agent_name}" if worker_agent_name else item.id
     display_name = worker_agent_name or "agent"
 
@@ -97,7 +104,7 @@ def _parallel_process_item(
                 agent_id=agent_id,
             )
         # Update agent status based on result
-        success = result[0]
+        success = result.success
         terminal_ui.ui.push_agent_status(
             agent_id,
             display_name,
@@ -136,7 +143,11 @@ def _collect_done_futures(
     run_logger: RunLogger,
     record_fn: Any,
 ) -> tuple[int, bool]:
-    """Collect completed futures, record results, and return (total_requests, any_success)."""
+    """Collect completed futures and record results.
+
+    Returns:
+        (updated total_requests, any_success)
+    """
     done_futs: set[_Future] = set()
     for fut in list(futures):
         if fut.done():
@@ -152,21 +163,23 @@ def _collect_done_futures(
     for fut in done_futs:
         item = futures.pop(fut)
         try:
-            success, requests, item_stats, cleanup_runs, gate_runs, mc = fut.result()
+            result = fut.result()
         except Exception as exc:
-            print(f"\n❌ Agent for {item.id} raised: {exc}")
+            print(f"\nΓ¥î Agent for {item.id} raised: {exc}")
             run_logger.log_orchestrator(f"Agent error for {item.id}: {exc}", level="ERROR")
-            success, requests, item_stats = False, 0, None
-            cleanup_runs, gate_runs, mc = 0, 0, None
+            result = WorkItemResult(success=False, request_count=0)
 
-        if not success and requests == 0:
+        if not result.success and result.request_count == 0:
             failed_claim_ids.add(item.id)
-        elif success:
+        elif result.success:
             failed_claim_ids.discard(item.id)
             any_success = True
 
-        total_requests += requests
-        record_fn(item, success, requests, item_stats, cleanup_runs, gate_runs, mc, session_stats, run_logger)
+        total_requests += result.request_count
+        record_fn(
+            item, result,
+            session_stats, run_logger,
+        )
 
     return total_requests, any_success
 
@@ -183,7 +196,11 @@ def run_parallel_loop(
     record_fn: Any,
     finalize_fn: Any,
 ) -> int:
-    """Run the parallel orchestrator loop and return exit code."""
+    """Run the parallel orchestrator loop with a ThreadPoolExecutor.
+
+    Returns:
+        Exit code (0 for success, 1 for failure).
+    """
     total_requests = 0
     items_completed = 0
     semaphore = threading.Semaphore(effective_parallel)
@@ -215,7 +232,7 @@ def run_parallel_loop(
                 # This should not happen now that get_ready_work_items handles errors,
                 # but keep as additional safety measure
                 run_logger.log_orchestrator(f"Failed to fetch ready items: {e}", level="ERROR")
-                print(f"⚠️  Warning: failed to fetch ready items: {e}")
+                print(f"ΓÜá∩╕Å  Warning: failed to fetch ready items: {e}")
                 ready_items = []
 
             # Collect completed futures BEFORE calculating slots so the
@@ -231,32 +248,16 @@ def run_parallel_loop(
 
             current_active = {i.id for i in futures.values()}
             slots = effective_parallel - len(futures)
-            high_conflict_active = any(is_high_conflict_risk(item) for item in futures.values())
-            high_conflict_ready = [item for item in ready_items if is_high_conflict_risk(item)]
 
             if (
                 slots > 0
                 and not should_stop_after_current()
                 and not (not continuous and any_success)
             ):
-                selected_items: list[BeadsWorkItem] = []
-                if high_conflict_active:
-                    run_logger.log_orchestrator(
-                        "High-conflict item in progress - pausing new scheduling"
-                    )
-                    print("⚠️  High-conflict item running - pausing parallel scheduling")
-                elif high_conflict_ready:
-                    selected_items = [high_conflict_ready[0]]
-                    run_logger.log_orchestrator(
-                        f"Serializing high-conflict item {selected_items[0].id}"
-                    )
-                    print(f"⚠️  High-conflict item {selected_items[0].id} is queued - running alone")
-                else:
-                    selected_items = select_multiple_items(
-                        ready_items, count=slots,
-                        skip_ids=failed_claim_ids, claimed_ids=current_active,
-                    )
-
+                selected_items = select_multiple_items(
+                    ready_items, count=slots,
+                    skip_ids=failed_claim_ids, claimed_ids=current_active,
+                )
                 for item in selected_items:
                     _worker_counter += 1
                     base_name = get_agent_name(default="pokepoke")
@@ -280,7 +281,7 @@ def run_parallel_loop(
             if should_stop_after_current() and not futures:
                 cancel_stop_after_current()
                 terminal_ui.ui.stop_and_capture()
-                print("\n⏸️  Stopping after current item (user requested).")
+                print("\nΓÅ╕∩╕Å  Stopping after current item (user requested).")
                 run_logger.log_orchestrator("Stop after current item requested - exiting")
                 finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
                 finalized = True
@@ -295,12 +296,12 @@ def run_parallel_loop(
                         id="?", title="?", status="?", priority=0, issue_type="?",
                     ))
                     try:
-                        s, r, st, cr, gr, mc = fut.result()
+                        result = fut.result()
                     except Exception as e:
                         logger.warning(f"Future raised exception: {e}")
-                        s, r, st, cr, gr, mc = False, 0, None, 0, 0, None
-                    total_requests += r
-                    record_fn(item, s, r, st, cr, gr, mc, session_stats, run_logger)
+                        result = WorkItemResult(success=False, request_count=0)
+                    total_requests += result.request_count
+                    record_fn(item, result, session_stats, run_logger)
                     items_completed = session_stats.items_completed
                     terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
                 # Ensure UI sees the final snapshot even if no futures remained to drain.
@@ -316,32 +317,27 @@ def run_parallel_loop(
             if not futures and not ready_items:
                 # Double-check that we really have no work before exiting
                 # Sometimes beads queries can temporarily fail
-                print("\n🔄 No active workers or ready items - double-checking beads...")
+                print("\n≡ƒöä No active workers or ready items - double-checking beads...")
                 run_logger.log_orchestrator("Double-checking beads before exit")
                 try:
                     final_check = get_ready_work_items()
                     if final_check:
-                        print(f"📋 Found {len(final_check)} items on final check - continuing...")
+                        print(f"≡ƒôï Found {len(final_check)} items on final check - continuing...")
                         run_logger.log_orchestrator(f"Found {len(final_check)} items on final check")
                         continue  # Go back to main loop to process these items
                 except Exception as e:
                     run_logger.log_orchestrator(f"Final beads check failed: {e}", level="WARNING")
 
                 terminal_ui.ui.stop_and_capture()
-                print("\n👋 Exiting PokePoke - no work items available.")
+                print("\n≡ƒæï Exiting PokePoke - no work items available.")
                 run_logger.log_orchestrator("No work items available - exiting")
                 finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
                 finalized = True
                 exit_code = 0
                 break
 
-            header_status = f"{len(futures)} agents active"
-            if high_conflict_active:
-                header_status = "⚠️ High-conflict item running - parallel paused"
-            elif high_conflict_ready:
-                header_status = "⚠️ High-conflict item queued - serializing"
             terminal_ui.ui.update_header(
-                "PokePoke", f"{mode_name} Mode", header_status,
+                "PokePoke", f"{mode_name} Mode", f"{len(futures)} agents active",
             )
             for _ in range(10):
                 if is_shutting_down() or _spawn_wakeup.is_set():
@@ -352,7 +348,7 @@ def run_parallel_loop(
     finally:
         # Wait for all workers to complete before shutting down
         if futures:
-            print(f"\n⏳ Waiting for {len(futures)} active workers to complete...")
+            print(f"\nΓÅ│ Waiting for {len(futures)} active workers to complete...")
             run_logger.log_orchestrator(f"Waiting for {len(futures)} active workers to complete")
 
             # Wait for all remaining futures to complete (with reasonable timeout)
@@ -363,23 +359,23 @@ def run_parallel_loop(
                         id="?", title="?", status="?", priority=0, issue_type="?",
                     ))
                     try:
-                        s, r, st, cr, gr, mc = fut.result()
-                        print(f"✅ Worker completed item {item.id}")
+                        result = fut.result()
+                        print(f"Γ£à Worker completed item {item.id}")
                         run_logger.log_orchestrator(f"Worker completed item {item.id}")
                     except Exception as e:
-                        print(f"❌ Worker failed for item {item.id}: {e}")
+                        print(f"Γ¥î Worker failed for item {item.id}: {e}")
                         run_logger.log_orchestrator(f"Worker failed for item {item.id}: {e}", level="ERROR")
-                        s, r, st, cr, gr, mc = False, 0, None, 0, 0, None
+                        result = WorkItemResult(success=False, request_count=0)
 
-                    total_requests += r
-                    record_fn(item, s, r, st, cr, gr, mc, session_stats, run_logger)
+                    total_requests += result.request_count
+                    record_fn(item, result, session_stats, run_logger)
                     items_completed = session_stats.items_completed
                     terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
             except concurrent.futures.TimeoutError:
-                print(f"⚠️  Timeout waiting for {len(futures)} workers after 5 minutes")
+                print(f"ΓÜá∩╕Å  Timeout waiting for {len(futures)} workers after 5 minutes")
                 run_logger.log_orchestrator("Timeout waiting for workers", level="WARNING")
 
-            print("✅ All workers completed")
+            print("Γ£à All workers completed")
             run_logger.log_orchestrator("All workers completed")
             terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
 
@@ -389,7 +385,7 @@ def run_parallel_loop(
 
         # Call finalize if it hasn't been called yet (e.g., on shutdown or exception)
         if not finalized:
-            print("\n🏁 Finalizing session...")
+            print("\n≡ƒÅü Finalizing session...")
             run_logger.log_orchestrator("Finalizing session on exit")
             if terminal_ui.ui._is_running:
                 terminal_ui.ui.stop_and_capture()

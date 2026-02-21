@@ -1,12 +1,11 @@
 """Unit tests for orchestrator module."""
 
-import contextlib
 import pytest
 from unittest.mock import Mock, patch, ANY, call
 
 from pokepoke.orchestrator import run_orchestrator
 from pokepoke.workflow import select_work_item, process_work_item
-from pokepoke.types import AgentStats, BeadsWorkItem, BeadsStats, CopilotResult
+from pokepoke.types import AgentStats, BeadsWorkItem, BeadsStats, CopilotResult, WorkItemResult
 from pokepoke import terminal_ui
 
 
@@ -142,7 +141,6 @@ class TestProcessWorkItem:
     @patch('subprocess.run')
     @patch('pokepoke.workflow.cleanup_worktree')
     @patch('pokepoke.worktree_finalization.merge_worktree')
-    @patch('pokepoke.worktree_finalization.merge_lock')
     @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
     @patch('pokepoke.git_operations.has_uncommitted_changes')
     @patch('os.chdir')
@@ -159,7 +157,6 @@ class TestProcessWorkItem:
         mock_chdir: Mock,
         mock_uncommitted: Mock,
         mock_check_ready: Mock,
-        mock_merge_lock: Mock,
         mock_merge: Mock,
         mock_cleanup: Mock,
         mock_subprocess: Mock,
@@ -211,14 +208,12 @@ class TestProcessWorkItem:
             return Mock(stdout="", returncode=0)
         mock_subprocess.side_effect = subprocess_side_effect
         mock_get_parent.return_value = None
-        mock_merge_lock.return_value = contextlib.nullcontext()
 
         result = process_work_item(item, interactive=True)
 
-        success, request_count, stats, cleanup_runs, gate_runs, model_completion = result
-        assert success is True
-        assert request_count == 1
-        assert cleanup_runs == 0
+        assert result.success is True
+        assert result.request_count == 1
+        assert result.cleanup_agent_runs == 0
         mock_close.assert_called_once_with("task-1", "Completed by PokePoke orchestrator (agent did not close)")
 
     @patch('pokepoke.workflow.run_gate_agent')  # Mock gate agent to avoid actual copilot calls
@@ -228,7 +223,6 @@ class TestProcessWorkItem:
     @patch('subprocess.run')
     @patch('pokepoke.workflow.cleanup_worktree')
     @patch('pokepoke.worktree_finalization.merge_worktree')
-    @patch('pokepoke.worktree_finalization.merge_lock')
     @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
     @patch('os.chdir')
     @patch('os.getcwd')
@@ -241,7 +235,6 @@ class TestProcessWorkItem:
         mock_getcwd: Mock,
         mock_chdir: Mock,
         mock_check_ready: Mock,
-        mock_merge_lock: Mock,
         mock_merge: Mock,
         mock_cleanup: Mock,
         mock_subprocess: Mock,
@@ -290,14 +283,12 @@ class TestProcessWorkItem:
             return Mock(stdout="", returncode=0)
         mock_subprocess.side_effect = subprocess_side_effect
         mock_get_parent.side_effect = ["feature-1", "epic-1", None]
-        mock_merge_lock.return_value = contextlib.nullcontext()
 
         result = process_work_item(item, interactive=False)
 
-        success, request_count, stats, cleanup_runs, gate_runs, model_completion = result
-        assert success is True
-        assert request_count == 1
-        assert cleanup_runs == 0
+        assert result.success is True
+        assert result.request_count == 1
+        assert result.cleanup_agent_runs == 0
         mock_close.assert_called_once()
         assert mock_close_parent.call_count == 2
         mock_close_parent.assert_any_call("feature-1")
@@ -368,13 +359,12 @@ class TestProcessWorkItem:
 
         result = process_work_item(item, interactive=False)
 
-        success, request_count, stats, cleanup_runs, gate_runs, model_completion = result
-        assert success is False  # Fails when copilot fails
-        assert request_count == 1  # Records the failed attempt
+        assert result.success is False  # Fails when copilot fails
+        assert result.request_count == 1  # Records the failed attempt
         # Note: In actual failure scenario, cleanup may not be called if exception is raised
         # The important thing is that success is False
-        assert stats is None  # No stats on failure
-        assert cleanup_runs == 0  # No cleanup agents run on failure
+        assert result.stats is None  # No stats on failure
+        assert result.cleanup_agent_runs == 0  # No cleanup agents run on failure
         mock_invoke.assert_called_once()  # Copilot was invoked
 
     @patch('pokepoke.workflow.run_gate_agent')
@@ -572,7 +562,7 @@ class TestRunOrchestrator:
         )
         mock_get_items.return_value = [item]
         mock_select.return_value = item
-        mock_process.return_value = (True, 1, AgentStats(), 0, 0, None)  # 6-tuple: success, request_count, stats, cleanup_runs, gate_runs, model_completion
+        mock_process.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
 
         result = run_orchestrator(interactive=False, continuous=False)
 
@@ -652,7 +642,7 @@ class TestRunOrchestrator:
         )
         mock_get_items.return_value = [item]
         mock_select.return_value = item
-        mock_process.return_value = (True, 1, AgentStats(), 0, 0, None)  # 6-tuple: success, request_count, stats, cleanup_runs, gate_runs, model_completion
+        mock_process.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
         mock_input.return_value = 'n'  # Don't continue
 
         result = run_orchestrator(interactive=True, continuous=True)
@@ -820,8 +810,8 @@ class TestRunOrchestratorContinuousMode:
         mock_get_items.side_effect = [[item1], [item2], []]
         mock_select.side_effect = [item1, item2, None]
         mock_process.side_effect = [
-            (True, 1, AgentStats(), 0, 0, None),
-            (True, 1, AgentStats(), 0, 0, None)
+            WorkItemResult(success=True, request_count=1, stats=AgentStats()),
+            WorkItemResult(success=True, request_count=1, stats=AgentStats())
         ]
         mock_stats.return_value = {}
         mock_maintenance.return_value = None
@@ -869,7 +859,7 @@ class TestRunOrchestratorContinuousMode:
         # Return items for 10 iterations, then None
         mock_get_items.side_effect = [[items[i]] for i in range(10)] + [[]]
         mock_select.side_effect = items[:10] + [None]
-        mock_process.return_value = (True, 1, AgentStats(), 0, 0, None)
+        mock_process.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
         mock_stats.return_value = {}
         mock_maintenance.return_value = None  # run_periodic_maintenance doesn't return anything
         mock_beta.return_value = None
@@ -920,7 +910,7 @@ class TestRunOrchestratorContinuousMode:
         mock_check_repo.return_value = True
         mock_get_items.return_value = [item]
         mock_select.return_value = item
-        mock_process.return_value = (True, 1, AgentStats(), 0, 0, None)
+        mock_process.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
         mock_stats.return_value = {}
         mock_input.return_value = 'n'  # Don't continue
 
@@ -984,7 +974,7 @@ class TestOrchestratorHelperFunctions:
     def test_aggregate_stats(self) -> None:
         """Test aggregate_stats function."""
         from pokepoke.maintenance import aggregate_stats
-        from pokepoke.types import SessionStats
+        from pokepoke.types import SessionStats, AgentStats
 
         session_stats = SessionStats(agent_stats=AgentStats(
             wall_duration=10.0,
@@ -1215,7 +1205,7 @@ class TestFinalizeSession:
     ) -> None:
         """Test finalize collects stats, prints, and clears banner."""
         from src.pokepoke.orchestrator import _finalize_session
-        from pokepoke.types import SessionStats
+        from pokepoke.types import SessionStats, AgentStats
         from pokepoke.logging_utils import RunLogger
         import tempfile
 
@@ -1241,7 +1231,7 @@ class TestFinalizeSession:
     ) -> None:
         """Test finalize handles KeyboardInterrupt during stats collection."""
         from src.pokepoke.orchestrator import _finalize_session
-        from pokepoke.types import SessionStats
+        from pokepoke.types import SessionStats, AgentStats
         from pokepoke.logging_utils import RunLogger
         import tempfile
 
@@ -1345,7 +1335,7 @@ class TestRunOrchestratorFailedClaims:
         # Second iteration: no items available
         mock_get_items.side_effect = [[item], []]
         mock_select.side_effect = [item, None]
-        mock_process.return_value = (False, 0, None, 0, 0, None)
+        mock_process.return_value = WorkItemResult(success=False, request_count=0)
 
         result = run_orchestrator(interactive=False, continuous=True)
 
@@ -1389,8 +1379,8 @@ class TestRunOrchestratorFailedClaims:
         mock_select.side_effect = [item1, item2, None]
         # First fails claim, second succeeds
         mock_process.side_effect = [
-            (False, 0, None, 0, 0, None),
-            (True, 1, AgentStats(), 0, 0, None)
+            WorkItemResult(success=False, request_count=0),
+            WorkItemResult(success=True, request_count=1, stats=AgentStats())
         ]
 
         result = run_orchestrator(interactive=False, continuous=True)
@@ -1433,7 +1423,7 @@ class TestRunOrchestratorModelCompletion:
             model="claude-opus-4.6", item_id="task-1",
             duration_seconds=10.0, gate_passed=True
         )
-        mock_process.return_value = (True, 1, AgentStats(), 0, 0, completion)
+        mock_process.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats(), model_completion=completion)
 
         result = run_orchestrator(interactive=False, continuous=False)
 
@@ -1496,7 +1486,7 @@ class TestRunOrchestratorContinuousAutonomousSleep:
 
         mock_get_items.side_effect = [[item], []]
         mock_select.side_effect = [item, None]
-        mock_process.return_value = (True, 1, AgentStats(), 0, 0, None)
+        mock_process.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
 
         result = run_orchestrator(interactive=False, continuous=True)
 
@@ -1532,7 +1522,7 @@ class TestRunOrchestratorRetries:
         )
         mock_get_items.return_value = [item]
         mock_select.return_value = item
-        mock_process.return_value = (True, 3, AgentStats(), 1, 2, None)
+        mock_process.return_value = WorkItemResult(success=True, request_count=3, stats=AgentStats(), cleanup_agent_runs=1, gate_agent_runs=2)
 
         result = run_orchestrator(interactive=False, continuous=False)
 
@@ -1621,7 +1611,7 @@ class TestRunOrchestratorWorktreeCoverage:
         )
         mock_get_items.return_value = [item]
         mock_select.return_value = item
-        mock_process.return_value = (True, 1, AgentStats(), 0, 0, None)
+        mock_process.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
 
         result = run_orch(interactive=False, continuous=False)
         assert result == 0
@@ -1649,7 +1639,7 @@ class TestRunOrchestratorWorktreeCoverage:
         )
         mock_get_items.return_value = [item]
         mock_select.return_value = item
-        mock_process.return_value = (False, 1, None, 0, 0, None)
+        mock_process.return_value = WorkItemResult(success=False, request_count=1)
 
         result = run_orch(interactive=False, continuous=False)
         assert result == 1
@@ -1687,7 +1677,7 @@ class TestRunOrchestratorWorktreeCoverage:
             model="claude-opus-4.6", item_id="task-1",
             duration_seconds=10.0, gate_passed=True
         )
-        mock_process.return_value = (True, 1, AgentStats(), 0, 0, completion)
+        mock_process.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats(), model_completion=completion)
 
         result = run_orch(interactive=False, continuous=False)
         assert result == 0
@@ -1718,7 +1708,7 @@ class TestRunOrchestratorWorktreeCoverage:
         )
         mock_get_items.return_value = [item]
         mock_select.return_value = item
-        mock_process.return_value = (True, 3, AgentStats(), 1, 2, None)
+        mock_process.return_value = WorkItemResult(success=True, request_count=3, stats=AgentStats(), cleanup_agent_runs=1, gate_agent_runs=2)
 
         result = run_orch(interactive=False, continuous=False)
         assert result == 0
@@ -1866,8 +1856,8 @@ class TestRunOrchestratorWorktreeCoverage:
         mock_get_items.side_effect = [[item1], [item2], []]
         mock_select.side_effect = [item1, item2, None]
         mock_process.side_effect = [
-            (True, 1, AgentStats(), 0, 0, None),
-            (True, 1, AgentStats(), 0, 0, None)
+            WorkItemResult(success=True, request_count=1, stats=AgentStats()),
+            WorkItemResult(success=True, request_count=1, stats=AgentStats())
         ]
 
         result = run_orch(interactive=False, continuous=True)
@@ -1904,7 +1894,7 @@ class TestRunOrchestratorWorktreeCoverage:
 
         mock_get_items.side_effect = [[item], []]
         mock_select.side_effect = [item, None]
-        mock_process.return_value = (False, 0, None, 0, 0, None)
+        mock_process.return_value = WorkItemResult(success=False, request_count=0)
 
         result = run_orch(interactive=False, continuous=True)
         assert result == 0
@@ -1940,7 +1930,7 @@ class TestRunOrchestratorWorktreeCoverage:
 
         mock_get_items.return_value = [item]
         mock_select.return_value = item
-        mock_process.return_value = (True, 1, AgentStats(), 0, 0, None)
+        mock_process.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
         mock_input.return_value = 'n'
 
         result = run_orch(interactive=True, continuous=True)
@@ -2042,23 +2032,19 @@ class TestMainWorktreeCoverage:
         )
 
 
-@pytest.mark.timeout(60)
 class TestOrchestratorCleanupDetection:
     """Test orchestrator's main repo cleanup detection."""
 
-    @patch('pokepoke.orchestrator.terminal_ui')
     @patch('pokepoke.orchestrator.check_and_commit_main_repo')
     @patch('pokepoke.orchestrator.get_ready_work_items')
     def test_detects_uncommitted_changes_and_invokes_cleanup(
         self,
         mock_get_items: Mock,
-        mock_check_repo: Mock,
-        mock_terminal: Mock
+        mock_check_repo: Mock
     ) -> None:
         """Test that orchestrator invokes check_and_commit_main_repo."""
         mock_check_repo.return_value = True  # Repo check passes (cleanup succeeded or continued)
         mock_get_items.return_value = []  # No work items available
-        mock_terminal.ui = Mock()
 
         result = run_orchestrator(interactive=False, continuous=False)
 
@@ -2094,14 +2080,12 @@ class TestOrchestratorCleanupDetection:
         mock_check_repo.assert_called_once()
         assert result == 0
 
-    @patch('pokepoke.orchestrator.load_config')
     @patch('pokepoke.orchestrator.get_ready_work_items')
     @patch('subprocess.run')
     def test_clean_repo_proceeds_to_work(
         self,
         mock_subprocess: Mock,
-        mock_get_items: Mock,
-        mock_load_config: Mock,
+        mock_get_items: Mock
     ) -> None:
         """Test that clean repo proceeds to normal work processing."""
         mock_subprocess.return_value = Mock(
@@ -2109,7 +2093,6 @@ class TestOrchestratorCleanupDetection:
             returncode=0
         )
         mock_get_items.return_value = []
-        mock_load_config.return_value = Mock(max_parallel_agents=1)
 
         result = run_orchestrator(interactive=False, continuous=False)
 
@@ -2197,7 +2180,7 @@ class TestRecordItemResult:
         mc = ModelCompletionRecord(item_id="t1", model="m", duration_seconds=1.0)
 
         success, completed = _record_item_result(
-            item, True, 1, AgentStats(), 0, 1, mc, stats, logger,
+            item, WorkItemResult(success=True, request_count=1, stats=AgentStats(), gate_agent_runs=1, model_completion=mc), stats, logger,
         )
 
         assert success is True
@@ -2218,7 +2201,7 @@ class TestRecordItemResult:
         logger = Mock()
 
         success, completed = _record_item_result(
-            item, False, 0, None, 0, 0, None, stats, logger,
+            item, WorkItemResult(success=False, request_count=0), stats, logger,
         )
 
         assert success is False
@@ -2237,7 +2220,7 @@ class TestRecordItemResult:
         item = BeadsWorkItem(id="t1", title="T1", status="open", priority=1, issue_type="task")
         logger = Mock()
 
-        _record_item_result(item, True, 3, AgentStats(), 2, 1, None, stats, logger)
+        _record_item_result(item, WorkItemResult(success=True, request_count=3, stats=AgentStats(), cleanup_agent_runs=2, gate_agent_runs=1), stats, logger)
         # 3 requests => 2 retries recorded
         assert stats.agent_stats.retries == 2
 
@@ -2250,14 +2233,14 @@ class TestParallelProcessItem:
         import threading
         from pokepoke.parallel import _parallel_process_item
 
-        mock_pwi.return_value = (True, 1, None, 0, 0, None)
+        mock_pwi.return_value = WorkItemResult(success=True, request_count=1)
         sem = threading.Semaphore(0)
         item = BeadsWorkItem(id="t1", title="T", status="o", priority=1, issue_type="task")
         logger = Mock()
 
         result = _parallel_process_item(item, logger, sem)
 
-        assert result == (True, 1, None, 0, 0, None)
+        assert result == WorkItemResult(success=True, request_count=1)
         # Semaphore should have been released (can acquire again)
         assert sem.acquire(blocking=False)
 
@@ -2340,7 +2323,7 @@ class TestSingleAgentPanelRegistration:
         )
         mock_get_items.return_value = [item]
         mock_select.return_value = item
-        mock_process.return_value = (True, 1, AgentStats(), 0, 0, None)
+        mock_process.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
 
         with patch.object(terminal_ui.ui, 'push_agent_status') as mock_push, \
              patch.object(terminal_ui.ui, 'agent_output_for') as mock_output_for:
@@ -2403,7 +2386,7 @@ class TestSingleAgentPanelRegistration:
         )
         mock_get_items.return_value = [item]
         mock_select.return_value = item
-        mock_process.return_value = (False, 1, None, 0, 0, None)
+        mock_process.return_value = WorkItemResult(success=False, request_count=1)
 
         with patch.object(terminal_ui.ui, 'push_agent_status') as mock_push, \
              patch.object(terminal_ui.ui, 'agent_output_for') as mock_output_for:

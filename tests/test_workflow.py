@@ -925,14 +925,14 @@ class TestProcessWorkItem:
         mock_model_config.return_value.models.candidate_models = ["gemini-3-pro"]
         mock_model_config.return_value.models.default = "gemini-3-pro"
 
-        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+        result = process_work_item(
             item, interactive=True
         )
 
-        assert success is False
-        assert count == 0
-        assert stats is None
-        assert cleanup_runs == 0
+        assert result.success is False
+        assert result.request_count == 0
+        assert result.stats is None
+        assert result.cleanup_agent_runs == 0
         mock_setup.assert_not_called()
 
     @patch('pokepoke.workflow._setup_worktree')
@@ -960,14 +960,14 @@ class TestProcessWorkItem:
         mock_assign.return_value = True
         mock_setup.return_value = None
 
-        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+        result = process_work_item(
             item, interactive=True
         )
 
-        assert success is False
-        assert count == 0
-        assert stats is None
-        assert cleanup_runs == 0
+        assert result.success is False
+        assert result.request_count == 0
+        assert result.stats is None
+        assert result.cleanup_agent_runs == 0
 
     @patch('pokepoke.workflow.cleanup_worktree')
     @patch('pokepoke.workflow.invoke_copilot')
@@ -1002,16 +1002,16 @@ class TestProcessWorkItem:
         mock_assign.return_value = True
         mock_setup.return_value = Path("/fake/worktree")
 
-        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+        result = process_work_item(
             item, interactive=False
         )
 
-        assert success is False
-        assert count == 0
-        assert stats is None
-        assert cleanup_runs == 0
-        assert gate_runs == 0
-        assert model_completion is not None
+        assert result.success is False
+        assert result.request_count == 0
+        assert result.stats is None
+        assert result.cleanup_agent_runs == 0
+        assert result.gate_agent_runs == 0
+        assert result.model_completion is not None
         mock_invoke.assert_not_called()
         mock_cleanup_worktree.assert_any_call(item.id, force=True)
 
@@ -1074,12 +1074,12 @@ class TestProcessWorkItem:
         mock_finalize.return_value = True
         mock_beta.return_value = None  # Beta tester returns None
 
-        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+        result = process_work_item(
             item, interactive=True
         )
 
-        assert success is True
-        assert count == 1
+        assert result.success is True
+        assert result.request_count == 1
         # Cleanup is called even with no changes (it just exits early)
         mock_cleanup_timeout.assert_called_once()
 
@@ -1142,12 +1142,12 @@ class TestProcessWorkItem:
         mock_finalize.return_value = True
         mock_beta.return_value = None
 
-        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+        result = process_work_item(
             item, interactive=True
         )
 
-        assert success is True
-        assert count == 1
+        assert result.success is True
+        assert result.request_count == 1
         # Verify has_commits_ahead was called (distinguishes from "no changes")
         mock_commits_ahead.assert_called_once()
 
@@ -1205,12 +1205,12 @@ class TestProcessWorkItem:
         mock_cleanup_timeout.return_value = (True, 0)
         mock_beta.return_value = None  # Beta tester returns None
 
-        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+        result = process_work_item(
             item, interactive=True
         )
 
-        assert success is False
-        assert count == 1
+        assert result.success is False
+        assert result.request_count == 1
         mock_cleanup.assert_called_with("task-1", force=True)
 
     @patch('pokepoke.git_operations.build_handoff_context', return_value='')
@@ -1278,12 +1278,12 @@ class TestProcessWorkItem:
             CopilotResult(work_item_id="task-1", success=True, output="Try 2", attempt_count=1)
         ]
 
-        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+        result = process_work_item(
             item, interactive=True
         )
 
-        assert success is True
-        assert count == 2  # Two invocations
+        assert result.success is True
+        assert result.request_count == 2  # Two invocations
         mock_add_comment.assert_called_once()  # Comment added for gate rejection
         assert mock_gate_agent.call_count == 2
 
@@ -1365,16 +1365,16 @@ class TestProcessWorkItem:
             stats=work_stats
         )
 
-        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+        result = process_work_item(
             item, interactive=True
         )
 
-        assert success is True
-        assert stats is not None
+        assert result.success is True
+        assert result.stats is not None
         # Gate agent stats should NOT be aggregated into work agent stats (yja0 fix)
-        assert stats.wall_duration == 10.0  # Only work agent stats
-        assert stats.input_tokens == 100  # Only work agent tokens
-        assert gate_runs == 1  # Gate agent ran once
+        assert result.stats.wall_duration == 10.0  # Only work agent stats
+        assert result.stats.input_tokens == 100  # Only work agent tokens
+        assert result.gate_agent_runs == 1  # Gate agent ran once
 
     @patch('pokepoke.workflow.run_gate_agent')
     @patch('pokepoke.workflow.run_beta_tester')
@@ -1437,14 +1437,14 @@ class TestProcessWorkItem:
         )
         mock_cleanup_timeout.return_value = (False, 2)  # Cleanup fails
 
-        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+        result = process_work_item(
             item, interactive=True
         )
 
-        assert success is False
-        assert cleanup_runs == 2
-        assert stats is not None  # Stats should be returned even on failure
-        assert stats.wall_duration == 10.0
+        assert result.success is False
+        assert result.cleanup_agent_runs == 2
+        assert result.stats is not None  # Stats should be returned even on failure
+        assert result.stats.wall_duration == 10.0
 
     @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.add_comment')
@@ -1508,11 +1508,11 @@ class TestProcessWorkItem:
         # Gate rejects, forcing loop to continue to next timeout check
         mock_gate_agent.return_value = (False, "Rejected", None)
 
-        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+        result = process_work_item(
             item, interactive=True, timeout_hours=0.001, max_timeout_restarts=2
         )
 
-        assert success is False
+        assert result.success is False
         mock_cleanup_worktree.assert_called_with(item.id, force=True)
 
     @patch('pokepoke.git_operations.build_handoff_context', return_value='')
@@ -1582,11 +1582,11 @@ class TestProcessWorkItem:
         mock_finalize.return_value = True
         mock_beta.return_value = None
 
-        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+        result = process_work_item(
             item, interactive=True, max_timeout_restarts=3
         )
 
-        assert success is True
+        assert result.success is True
         mock_invoke.assert_called_once()
 
 
@@ -1615,13 +1615,13 @@ class TestProcessWorkItemCoordination:
         mock_time.return_value = 0.0
         mock_assign.return_value = False  # Simulate another agent grabbed the item first
 
-        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+        result = process_work_item(
             item, interactive=False
         )
 
-        assert success is False
-        assert count == 0
-        assert stats is None
+        assert result.success is False
+        assert result.request_count == 0
+        assert result.stats is None
         mock_setup.assert_not_called()
 
     @patch('pokepoke.workflow.worktree_setup_lock')
@@ -1646,13 +1646,13 @@ class TestProcessWorkItemCoordination:
         mock_time.return_value = 0.0
         mock_lock.side_effect = Timeout("worktree-setup")
 
-        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+        result = process_work_item(
             item, interactive=False
         )
 
-        assert success is False
-        assert count == 0
-        assert stats is None
+        assert result.success is False
+        assert result.request_count == 0
+        assert result.stats is None
 
     @patch('pokepoke.workflow.unassign_item')
     @patch('pokepoke.workflow._setup_worktree')
@@ -1680,12 +1680,12 @@ class TestProcessWorkItemCoordination:
         mock_setup.return_value = None  # Worktree creation failed
         mock_unassign.return_value = True
 
-        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+        result = process_work_item(
             item, interactive=False
         )
 
-        assert success is False
-        assert count == 0
+        assert result.success is False
+        assert result.request_count == 0
         mock_unassign.assert_called_once_with(item.id)
 
 
@@ -1752,157 +1752,11 @@ class TestGateAgentDisabled:
         cfg = ProjectConfig()
         cfg.gate_agent_enabled = False
         with patch('pokepoke.workflow.get_config', return_value=cfg):
-            success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+            result = process_work_item(
                 item, interactive=True,
             )
 
-        assert success is True
-        assert gate_runs == 0
+        assert result.success is True
+        assert result.gate_agent_runs == 0
         mock_gate_agent.assert_not_called()
-
-
-class TestAssignmentPromptTemplate:
-    """Tests for custom prompt template selection from assignment rules."""
-
-    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
-    @patch('pokepoke.workflow.run_gate_agent')
-    @patch('pokepoke.workflow.run_beta_tester')
-    @patch('pokepoke.workflow.finalize_work_item')
-    @patch('os.chdir')
-    @patch('os.getcwd')
-    @patch('pokepoke.workflow._run_cleanup_with_timeout')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.workflow.has_commits_ahead')
-    @patch('pokepoke.workflow.has_uncommitted_changes')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
-    @patch('builtins.input')
-    @patch('time.time')
-    @patch('pokepoke.workflow.get_assignment_for_item')
-    def test_custom_template_passed_to_invoke_copilot(
-        self,
-        mock_get_assignment: Mock,
-        mock_time: Mock,
-        mock_input: Mock,
-        mock_assign: Mock,
-        mock_setup: Mock,
-        mock_uncommitted: Mock,
-        mock_commits_ahead: Mock,
-        mock_invoke: Mock,
-        mock_cleanup_timeout: Mock,
-        mock_getcwd: Mock,
-        mock_chdir: Mock,
-        mock_finalize: Mock,
-        mock_beta: Mock,
-        mock_gate_agent: Mock,
-        mock_handoff: Mock,
-    ) -> None:
-        """When assignment rule specifies prompt_template, it should be passed to invoke_copilot."""
-        item = BeadsWorkItem(
-            id="bug-1",
-            title="Fix critical bug",
-            description="",
-            status="open",
-            priority=1,
-            issue_type="bug",
-        )
-
-        # Assignment rule returns custom template for bugs
-        mock_get_assignment.return_value = ("claude-sonnet-4.5", "bug-item")
-
-        mock_time.return_value = 0
-        mock_input.return_value = 'y'
-        mock_assign.return_value = True
-        mock_setup.return_value = Path("/fake/worktree")
-        mock_getcwd.return_value = "/original"
-        mock_uncommitted.return_value = False
-        mock_commits_ahead.return_value = 1
-        mock_invoke.return_value = CopilotResult(
-            work_item_id="bug-1", success=True, output="Done", attempt_count=1,
-        )
-        mock_cleanup_timeout.return_value = (True, 0)
-        mock_finalize.return_value = True
-        mock_beta.return_value = None
-        mock_gate_agent.return_value = (True, "Gate passed", None)
-
-        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
-            item, interactive=True,
-        )
-
-        assert success is True
-        # Verify invoke_copilot was called with the custom template
-        mock_invoke.assert_called()
-        call_kwargs = mock_invoke.call_args.kwargs
-        assert call_kwargs.get('template_name') == "bug-item"
-
-    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
-    @patch('pokepoke.workflow.run_gate_agent')
-    @patch('pokepoke.workflow.run_beta_tester')
-    @patch('pokepoke.workflow.finalize_work_item')
-    @patch('os.chdir')
-    @patch('os.getcwd')
-    @patch('pokepoke.workflow._run_cleanup_with_timeout')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.workflow.has_commits_ahead')
-    @patch('pokepoke.workflow.has_uncommitted_changes')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
-    @patch('builtins.input')
-    @patch('time.time')
-    @patch('pokepoke.workflow.get_assignment_for_item')
-    def test_no_template_when_no_rule_matches(
-        self,
-        mock_get_assignment: Mock,
-        mock_time: Mock,
-        mock_input: Mock,
-        mock_assign: Mock,
-        mock_setup: Mock,
-        mock_uncommitted: Mock,
-        mock_commits_ahead: Mock,
-        mock_invoke: Mock,
-        mock_cleanup_timeout: Mock,
-        mock_getcwd: Mock,
-        mock_chdir: Mock,
-        mock_finalize: Mock,
-        mock_beta: Mock,
-        mock_gate_agent: Mock,
-        mock_handoff: Mock,
-    ) -> None:
-        """When no assignment rule matches, template_name should be None."""
-        item = BeadsWorkItem(
-            id="task-1",
-            title="Task 1",
-            description="",
-            status="open",
-            priority=1,
-            issue_type="task",
-        )
-
-        # No matching rule - returns None for template
-        mock_get_assignment.return_value = (None, None)
-
-        mock_time.return_value = 0
-        mock_input.return_value = 'y'
-        mock_assign.return_value = True
-        mock_setup.return_value = Path("/fake/worktree")
-        mock_getcwd.return_value = "/original"
-        mock_uncommitted.return_value = False
-        mock_commits_ahead.return_value = 1
-        mock_invoke.return_value = CopilotResult(
-            work_item_id="task-1", success=True, output="Done", attempt_count=1,
-        )
-        mock_cleanup_timeout.return_value = (True, 0)
-        mock_finalize.return_value = True
-        mock_beta.return_value = None
-        mock_gate_agent.return_value = (True, "Gate passed", None)
-
-        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
-            item, interactive=True,
-        )
-
-        assert success is True
-        # Verify invoke_copilot was called with None template (will use default)
-        mock_invoke.assert_called()
-        call_kwargs = mock_invoke.call_args.kwargs
-        assert call_kwargs.get('template_name') is None
 

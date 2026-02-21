@@ -123,6 +123,17 @@ class ModelCompletionRecord:
     gate_passed: bool | None = None  # None = gate not run
 
 
+@dataclass
+class WorkItemResult:
+    """Result of processing a single work item."""
+    success: bool
+    request_count: int
+    stats: AgentStats | None = None
+    cleanup_agent_runs: int = 0
+    gate_agent_runs: int = 0
+    model_completion: ModelCompletionRecord | None = None
+
+
 _AGENT_RUN_ATTRS = {
     "work": "work_agent_runs",
     "gate": "gate_agent_runs",

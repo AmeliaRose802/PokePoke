@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch, MagicMock
 
 import pytest
 
-from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats
+from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats, WorkItemResult
 from pokepoke.parallel import (
     _parallel_process_item,
     _collect_done_futures,
@@ -22,7 +22,7 @@ def _make_item(item_id: str = "t1") -> BeadsWorkItem:
     )
 
 
-# ── _parallel_process_item ────────────────────────────────────
+# ΓöÇΓöÇ _parallel_process_item ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 class TestParallelProcessItem:
     """Tests for _parallel_process_item wrapper."""
@@ -30,12 +30,12 @@ class TestParallelProcessItem:
     @patch("pokepoke.parallel.terminal_ui")
     @patch("pokepoke.parallel.process_work_item")
     def test_success_releases_resources(self, mock_pwi: Mock, mock_ui: Mock) -> None:
-        mock_pwi.return_value = (True, 1, None, 0, 0, None)
+        mock_pwi.return_value = WorkItemResult(success=True, request_count=1)
         sem = threading.Semaphore(0)
 
         result = _parallel_process_item(_make_item(), Mock(), sem)
 
-        assert result == (True, 1, None, 0, 0, None)
+        assert result == WorkItemResult(success=True, request_count=1)
         assert sem.acquire(blocking=False)
         # Agent status should be registered and updated (agent_id is item.id
         # when no worker_agent_name is provided)
@@ -79,12 +79,12 @@ class TestParallelProcessItem:
     @patch("pokepoke.parallel.process_work_item")
     def test_failure_sets_agent_failed_status(self, mock_pwi: Mock, mock_ui: Mock) -> None:
         """A work item that returns success=False should set agent status to failed."""
-        mock_pwi.return_value = (False, 1, None, 0, 0, None)
+        mock_pwi.return_value = WorkItemResult(success=False, request_count=1)
         sem = threading.Semaphore(0)
 
         result = _parallel_process_item(_make_item(), Mock(), sem)
 
-        assert result[0] is False
+        assert result.success is False
         mock_ui.ui.push_agent_status.assert_any_call(
             "t1",
             "agent",
@@ -98,7 +98,7 @@ class TestParallelProcessItem:
     @patch("pokepoke.parallel.process_work_item")
     def test_output_routed_via_agent_output_for(self, mock_pwi: Mock, mock_ui: Mock) -> None:
         """Verify that agent_output_for context manager is used for output routing."""
-        mock_pwi.return_value = (True, 1, None, 0, 0, None)
+        mock_pwi.return_value = WorkItemResult(success=True, request_count=1)
         sem = threading.Semaphore(0)
 
         _parallel_process_item(_make_item(), Mock(), sem)
@@ -112,7 +112,7 @@ class TestParallelProcessItem:
         self, mock_pwi: Mock, mock_ui: Mock,
     ) -> None:
         """Two workers on the same item must use distinct agent_ids (PokePoke-kluq)."""
-        mock_pwi.return_value = (True, 1, None, 0, 0, None)
+        mock_pwi.return_value = WorkItemResult(success=True, request_count=1)
 
         item = _make_item("dup-item")
         sem1 = threading.Semaphore(0)
@@ -136,7 +136,7 @@ class TestParallelProcessItem:
         self, mock_pwi: Mock, mock_ui: Mock,
     ) -> None:
         """process_work_item should receive the derived agent_id for gating."""
-        mock_pwi.return_value = (True, 1, None, 0, 0, None)
+        mock_pwi.return_value = WorkItemResult(success=True, request_count=1)
         sem = threading.Semaphore(0)
         item = _make_item("gate-1")
 
@@ -147,7 +147,7 @@ class TestParallelProcessItem:
         assert kwargs["agent_id"] == "gate-1:worker-A"
 
 
-# ── _collect_done_futures ─────────────────────────────────────
+# ΓöÇΓöÇ _collect_done_futures ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 class TestCollectDoneFutures:
     """Tests for _collect_done_futures helper."""
@@ -155,7 +155,7 @@ class TestCollectDoneFutures:
     def test_collects_done_future(self) -> None:
         """A completed future is collected and record_fn is called."""
         fut: concurrent.futures.Future = concurrent.futures.Future()
-        fut.set_result((True, 2, AgentStats(), 1, 1, None))
+        fut.set_result(WorkItemResult(success=True, request_count=2, stats=AgentStats(), cleanup_agent_runs=1, gate_agent_runs=1))
         item = _make_item()
         futures = {fut: item}
         failed: set[str] = set()
@@ -175,7 +175,7 @@ class TestCollectDoneFutures:
     def test_records_failed_claim(self) -> None:
         """A failure with 0 requests adds item to failed_claim_ids."""
         fut: concurrent.futures.Future = concurrent.futures.Future()
-        fut.set_result((False, 0, None, 0, 0, None))
+        fut.set_result(WorkItemResult(success=False, request_count=0))
         item = _make_item("fail1")
         futures = {fut: item}
         failed: set[str] = set()
@@ -221,7 +221,7 @@ class TestCollectDoneFutures:
         record_fn.assert_not_called()
 
 
-# ── run_parallel_loop ─────────────────────────────────────────
+# ΓöÇΓöÇ run_parallel_loop ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 class TestRunParallelLoop:
     """Tests for run_parallel_loop."""
@@ -294,7 +294,7 @@ class TestRunParallelLoop:
         item = _make_item("x1")
         mock_ready.return_value = [item]
         mock_sel.return_value = [item]
-        mock_pwi.return_value = (True, 1, AgentStats(), 0, 1, None)
+        mock_pwi.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats(), gate_agent_runs=1)
 
         stats = SessionStats(agent_stats=AgentStats())
         record_fn = Mock()
@@ -331,7 +331,7 @@ class TestRunParallelLoop:
         """Regression (PokePoke-qagy): all empty slots refilled after batch completes."""
         items = [_make_item(f"r{i}") for i in range(6)]
         mock_ready.return_value = items
-        mock_pwi.return_value = (True, 1, AgentStats(), 0, 0, None)
+        mock_pwi.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
 
         # Iteration 1: collect does nothing (no completed futures yet).
         # Iteration 2: collect clears all 3 futures (simulates 3 completions).
@@ -386,7 +386,7 @@ class TestRunParallelLoop:
         item = _make_item("dup1")
         mock_ready.return_value = [item]
         mock_sel.return_value = [item]
-        mock_pwi.return_value = (True, 1, AgentStats(), 0, 0, None)
+        mock_pwi.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
         mock_collect.side_effect = lambda futures, failed, total, stats, logger, record_fn: (total, False)
 
         # Two full loop iterations + shutdown, accounting for the inner sleep loop checks.
@@ -594,15 +594,15 @@ class TestRunParallelLoop:
         def _process(item: BeadsWorkItem, *args, **kwargs):
             if item.id == "slow":
                 assert slow_release.wait(timeout=1), "Slow worker never released"
-            return (True, 1, AgentStats(), 0, 0, None)
+            return WorkItemResult(success=True, request_count=1, stats=AgentStats())
 
         mock_pwi.side_effect = _process
 
         stats = SessionStats(agent_stats=AgentStats())
         logger = Mock()
 
-        def record_fn(item, success, requests, item_stats, cleanup_runs, gate_runs, mc, s, _logger):
-            if success:
+        def record_fn(item, result, s, _logger):
+            if result.success:
                 s.items_completed += 1
 
         code = run_parallel_loop(
@@ -640,7 +640,7 @@ class TestRunParallelLoop:
         slow_item = _make_item("slow-shutdown")
         mock_ready.return_value = [slow_item]
         mock_sel.return_value = [slow_item]
-        mock_pwi.return_value = (True, 1, AgentStats(), 0, 0, None)
+        mock_pwi.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
 
         shutdown_flag = {"value": False}
         mock_shut.side_effect = lambda: shutdown_flag["value"]
@@ -655,8 +655,8 @@ class TestRunParallelLoop:
         stats = SessionStats(agent_stats=AgentStats())
         logger = Mock()
 
-        def record_fn(item, success, requests, item_stats, cleanup_runs, gate_runs, mc, s, _logger):
-            if success:
+        def record_fn(item, result, s, _logger):
+            if result.success:
                 s.items_completed += 1
 
         code = run_parallel_loop(
@@ -682,7 +682,7 @@ class TestCollectDoneFuturesWait:
         # Create a future that is not immediately done but completes during wait
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             import time as _time
-            fut = pool.submit(lambda: (_time.sleep(0.1), (True, 1, None, 0, 0, None))[1])
+            fut = pool.submit(lambda: (_time.sleep(0.1), WorkItemResult(success=True, request_count=1))[1])
             item = _make_item("w1")
             futures = {fut: item}
             failed: set[str] = set()

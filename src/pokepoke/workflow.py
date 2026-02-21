@@ -8,7 +8,8 @@ from typing import TYPE_CHECKING
 from filelock import Timeout
 
 from pokepoke.copilot import invoke_copilot
-from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, ModelCompletionRecord
+from pokepoke.copilot_sdk import build_prompt_from_work_item
+from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, ModelCompletionRecord, WorkItemResult
 from pokepoke.worktrees import create_worktree, cleanup_worktree
 from pokepoke.git_operations import has_uncommitted_changes, has_commits_ahead
 from pokepoke.beads import assign_and_sync_item, unassign_item, add_comment
@@ -24,10 +25,35 @@ from pokepoke.agent_context import get_agent_name
 from pokepoke.config import get_config
 from pokepoke.coordination import worktree_setup_lock
 
+if TYPE_CHECKING:
+    from pokepoke.logging_utils import ItemLogger, RunLogger
+
 logger = logging.getLogger(__name__)
 
-if TYPE_CHECKING:
-    from pokepoke.logging_utils import RunLogger
+
+def _log_failure(run_logger: 'RunLogger | None', item_logger: 'ItemLogger | None', request_count: int = 0) -> None:
+    """Log failure summary if loggers are available."""
+    if run_logger and item_logger:
+        item_logger.log_summary(False, request_count)
+        run_logger.log_orchestrator(f"Completed work item with {request_count} agent requests - Status: FAILURE")
+
+
+def _fail_result(
+    request_count: int = 0,
+    stats: AgentStats | None = None,
+    cleanup_agent_runs: int = 0,
+    gate_agent_runs: int = 0,
+    model_completion: ModelCompletionRecord | None = None,
+) -> WorkItemResult:
+    """Create a failed WorkItemResult."""
+    return WorkItemResult(
+        success=False,
+        request_count=request_count,
+        stats=stats,
+        cleanup_agent_runs=cleanup_agent_runs,
+        gate_agent_runs=gate_agent_runs,
+        model_completion=model_completion,
+    )
 
 
 def process_work_item(
@@ -38,8 +64,20 @@ def process_work_item(
     run_logger: 'RunLogger | None' = None,
     max_timeout_restarts: int = 3,
     agent_id: str | None = None,
-) -> tuple[bool, int, AgentStats | None, int, int, ModelCompletionRecord | None]:
-    """Process a single work item with timeout protection and optional beta/gate hooks."""
+) -> WorkItemResult:
+    """Process a single work item with timeout protection.
+
+    Args:
+        item: Work item to process
+        interactive: If True, prompt for confirmation before proceeding
+        timeout_hours: Maximum hours before timing out and restarting (default: 2.0)
+        run_beta_test: If True, run beta tester after completion (default: False)
+        run_logger: Optional run logger instance for file logging
+        max_timeout_restarts: Maximum number of timeout restarts before failing (default: 3)
+
+    Returns:
+        WorkItemResult with success status, request count, stats, and agent run counts.
+    """
     # Register this agent for shutdown coordination
     register_agent()
     worktree_path: Path | None = None
@@ -68,78 +106,57 @@ def process_work_item(
             work_item_title=item.title,
         )
 
-        print(f"\n🚀 Processing work item: {item.id}")
-        print(f"   {item.title}")
-        print(f"   🤖 Model: {selected_model}")
-        print(f"   🧠 Backend: {backend_provider}")
-        print(f"   ⏱️  Timeout: {timeout_hours} hours\n")
+        print(f"\n≡ƒÜÇ Processing work item: {item.id} ΓÇö {item.title}")
+        print(f"   ≡ƒñû Model: {selected_model} | ≡ƒºá Backend: {backend_provider} | ΓÅ▒∩╕Å  Timeout: {timeout_hours}h\n")
 
         # Start item logging
-        item_logger = None
-        if run_logger:
-            item_logger = run_logger.start_item_log(item.id, item.title)
+        item_logger = run_logger.start_item_log(item.id, item.title) if run_logger else None
 
         if interactive:
             terminal_ui.ui.stop()
             confirm = input("Proceed with this item? [Y/n]: ").strip().lower()
             terminal_ui.ui.start()
             if confirm and confirm != 'y':
-                print("⏭️  Skipped.")
-                if run_logger and item_logger:
-                    item_logger.log_summary(False, 0)
-                    run_logger.log_orchestrator("Completed work item with 0 agent requests - Status: FAILURE")
-                return False, 0, None, 0, 0, None
+                print("ΓÅ¡∩╕Å  Skipped.")
+                _log_failure(run_logger, item_logger)
+                return _fail_result()
 
         # Assign and sync BEFORE creating worktree to prevent parallel conflicts
-        print("\n🔒 Claiming work item...")
+        print("\n≡ƒöÆ Claiming work item...")
         try:
             with worktree_setup_lock(timeout=worktree_lock_timeout):
                 if not assign_and_sync_item(item.id):
-                    print(f"❌ Failed to assign work item {item.id}")
-                    if run_logger and item_logger:
-                        item_logger.log_summary(False, 0)
-                        run_logger.log_orchestrator("Completed work item with 0 agent requests - Status: FAILURE")
-                    return False, 0, None, 0, 0, None
+                    print(f"Γ¥î Failed to assign work item {item.id}")
+                    _log_failure(run_logger, item_logger)
+                    return _fail_result()
 
                 worktree_path = _setup_worktree(item)
 
                 if worktree_path is None:
-                    print(f"↩️  Returning {item.id} to queue (unassigning due to worktree failure)...")
+                    print(f"Γå⌐∩╕Å  Returning {item.id} to queue (unassigning due to worktree failure)...")
                     unassign_item(item.id)
-                    if run_logger and item_logger:
-                        item_logger.log_summary(False, 0)
-                        run_logger.log_orchestrator("Completed work item with 0 agent requests - Status: FAILURE")
-                    return False, 0, None, 0, 0, None
+                    _log_failure(run_logger, item_logger)
+                    return _fail_result()
         except Timeout:
             wait_seconds = int(worktree_lock_timeout)
-            print(f"❌ Timed out waiting {wait_seconds}s for worktree setup lock (another agent is claiming an item).")
-            if run_logger and item_logger:
-                item_logger.log_summary(False, 0)
-                run_logger.log_orchestrator("Completed work item with 0 agent requests - Status: FAILURE")
-            return False, 0, None, 0, 0, None
+            print(f"Γ¥î Timed out waiting {wait_seconds}s for worktree setup lock (another agent is claiming an item).")
+            _log_failure(run_logger, item_logger)
+            return _fail_result()
 
-        # Use current working directory as repo root
         pokepoke_root = Path.cwd()
-
         assert worktree_path is not None
         worktree_cwd = str(worktree_path)
-
         print(f"   Working directory: {worktree_cwd}\n")
 
         last_feedback = ""
-        # Initialize accumulated stats
         accumulated_stats = AgentStats()
-        gate_success = False  # Track last gate result for model completion record
+        gate_success = False
         timeout_restart_count = 0
-        work_agent_iteration = 1  # Track work agent retry iterations
+        work_agent_iteration = 1
 
-        # Ensure result is always defined even if shutdown happens before the first loop iteration.
-        result = CopilotResult(
-            work_item_id=item.id,
-            success=False,
-            error="Session aborted due to application shutdown",
-            attempt_count=0,
-        )
+        # Default result for shutdown before first loop iteration.
+        result = CopilotResult(work_item_id=item.id, success=False,
+            error="Session aborted due to application shutdown", attempt_count=0)
 
         while not is_shutting_down():
             # Check timeout before invoking Copilot
@@ -147,15 +164,14 @@ def process_work_item(
             if elapsed >= timeout_seconds:
                 timeout_restart_count += 1
                 if timeout_restart_count > max_timeout_restarts:
-                    print(f"\n⏱️  TIMEOUT: Exceeded max restarts ({max_timeout_restarts})")
+                    print(f"\nΓÅ▒∩╕Å  TIMEOUT: Exceeded max restarts ({max_timeout_restarts})")
                     print(f"   Failing item {item.id} after {timeout_restart_count - 1} timeout restart(s).\n")
-                    if run_logger and item_logger:
-                        item_logger.log_summary(False, request_count)
-                        run_logger.log_orchestrator(f"Completed work item with {request_count} agent requests - Status: FAILURE")
+                    _log_failure(run_logger, item_logger, request_count)
                     cleanup_worktree(item.id, force=True)
                     terminal_ui.ui.set_current_agent(None)
-                    return False, request_count, accumulated_stats, cleanup_agent_runs, gate_agent_runs, None
-                print(f"\n⏱️  TIMEOUT: Execution exceeded {timeout_hours} hours")
+                    return _fail_result(request_count=request_count, stats=accumulated_stats,
+                                        cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs)
+                print(f"\nΓÅ▒∩╕Å  TIMEOUT: Execution exceeded {timeout_hours} hours")
                 print(f"   Restarting item {item.id} (attempt {timeout_restart_count}/{max_timeout_restarts})...\n")
                 start_time = time.time()
                 elapsed = 0
@@ -164,7 +180,7 @@ def process_work_item(
 
             # Append feedback if retrying
             if last_feedback:
-                print("\n🔄 Restarting Work Agent with feedback...")
+                print("\n≡ƒöä Restarting Work Agent with feedback...")
                 current_desc = item.description or ""
                 if "**PREVIOUS GATE AGENT FEEDBACK:**" not in current_desc:
                     current_desc += "\n\n**PREVIOUS GATE AGENT FEEDBACK:**\n"
@@ -177,11 +193,11 @@ def process_work_item(
 
             terminal_ui.ui.set_current_agent("Work Agent")
             from pokepoke.metrics_context import agent_type_context
+            custom_prompt = build_prompt_from_work_item(item, template_name=selected_prompt_template) if selected_prompt_template else None
             with agent_type_context("work"):
                 result = invoke_copilot(
-                    item, prompt=None, timeout=remaining_timeout,
-                    item_logger=item_logger, model=selected_model, cwd=worktree_cwd,
-                    template_name=selected_prompt_template)
+                    item, prompt=custom_prompt, timeout=remaining_timeout,
+                    item_logger=item_logger, model=selected_model, cwd=worktree_cwd)
             request_count += result.attempt_count
 
             # Aggregate stats
@@ -196,10 +212,10 @@ def process_work_item(
             if not has_uncommitted_changes(cwd=worktree_cwd):
                 commits_ahead = has_commits_ahead(cwd=worktree_cwd)
                 if commits_ahead > 0:
-                    print(f"\n✅ All changes already committed ({commits_ahead} commit{'s' if commits_ahead != 1 else ''} ahead)")
+                    print(f"\nΓ£à All changes already committed ({commits_ahead} commit{'s' if commits_ahead != 1 else ''} ahead)")
                     print("   Skipping cleanup and commit steps")
                 else:
-                    print("\n✅ No changes made - work item may already be complete")
+                    print("\nΓ£à No changes made - work item may already be complete")
                     print("   Skipping cleanup and commit steps")
 
             # Run cleanup loop with timeout checking
@@ -213,13 +229,13 @@ def process_work_item(
                 # Cleanup failed (e.g. timeout), consider item failed or retry?
                 # For now, if cleanup fails, we fail the cycle.
                 result.success = False
-                if run_logger and item_logger:
-                    item_logger.log_summary(False, request_count)
-                    run_logger.log_orchestrator(f"Completed work item with {request_count} agent requests - Status: FAILURE")
-                return False, request_count, accumulated_stats, cleanup_agent_runs, gate_agent_runs, None
+                _log_failure(run_logger, item_logger, request_count)
+                return _fail_result(request_count=request_count, stats=accumulated_stats,
+                                    cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs)
 
             # --- GATE AGENT CHECK ---
             if not config.gate_agent_enabled:
+                print("\nΓÅ¡∩╕Å  Gate Agent disabled via config ΓÇö skipping verification")
                 gate_success = True
                 break
 
@@ -269,10 +285,10 @@ def process_work_item(
             )
 
             if gate_success:
-                print("\n✅ Gate Agent signed off!")
+                print("\nΓ£à Gate Agent signed off!")
                 break
             else:
-                print(f"\n❌ Gate Agent rejected fix: {gate_reason}")
+                print(f"\nΓ¥î Gate Agent rejected fix: {gate_reason}")
                 add_comment(item.id, f"Gate Agent Rejection:\n{gate_reason}")
                 last_feedback = gate_reason
                 # Loop continues...
@@ -284,10 +300,8 @@ def process_work_item(
             item_stats = accumulated_stats
 
             # Update banner based on finalization result
-            if success:
-                set_terminal_banner(format_work_item_banner(item.id, item.title, "Completed"))
-            else:
-                set_terminal_banner(format_work_item_banner(item.id, item.title, "Failed"))
+            status = "Completed" if success else "Failed"
+            set_terminal_banner(format_work_item_banner(item.id, item.title, status))
 
             # Run beta tester after successful completion
             if success and run_beta_test:
@@ -303,38 +317,30 @@ def process_work_item(
 
             terminal_ui.ui.set_current_agent(None)
 
-            # Build model completion record for A/B tracking
             item_duration = time.time() - start_time
+            gate_passed = gate_success if gate_agent_runs > 0 else None
             model_completion = ModelCompletionRecord(
-                item_id=item.id,
-                model=selected_model,
-                duration_seconds=item_duration,
-                gate_passed=gate_success if gate_agent_runs > 0 else None,
+                item_id=item.id, model=selected_model,
+                duration_seconds=item_duration, gate_passed=gate_passed,
             ) if success else None
 
-            return success, request_count, item_stats, cleanup_agent_runs, gate_agent_runs, model_completion
+            return WorkItemResult(success=success, request_count=request_count, stats=item_stats,
+                                  cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
+                                  model_completion=model_completion)
         else:
             set_terminal_banner(format_work_item_banner(item.id, item.title, "Failed"))
             print(f"\n\u274c Failed to complete work item: {result.error}")
             print("\n\U0001f9f9 Cleaning up worktree...")
             cleanup_worktree(item.id, force=True)
-
-            if run_logger and item_logger:
-                item_logger.log_summary(False, request_count)
-                run_logger.log_orchestrator(f"Completed work item with {request_count} agent requests - Status: FAILURE")
-
+            _log_failure(run_logger, item_logger, request_count)
             terminal_ui.ui.set_current_agent(None)
 
-            # Record failed completion too (gate_passed=False since work agent failed)
             item_duration = time.time() - start_time
             model_completion = ModelCompletionRecord(
-                item_id=item.id,
-                model=selected_model,
-                duration_seconds=item_duration,
-                gate_passed=False,
-            )
-
-            return False, request_count, None, cleanup_agent_runs, gate_agent_runs, model_completion
+                item_id=item.id, model=selected_model,
+                duration_seconds=item_duration, gate_passed=False)
+            return _fail_result(request_count=request_count, cleanup_agent_runs=cleanup_agent_runs,
+                                gate_agent_runs=gate_agent_runs, model_completion=model_completion)
 
     finally:
         # Best-effort worktree cleanup to prevent resource leaks on unhandled exceptions
@@ -349,13 +355,13 @@ def process_work_item(
 
 def _setup_worktree(item: BeadsWorkItem) -> Path | None:
     """Create worktree for work item processing."""
-    print(f"\n🌳 Creating worktree for {item.id}...")
+    print(f"\n≡ƒî│ Creating worktree for {item.id}...")
     try:
         worktree_path = create_worktree(item.id)
         print(f"   Created at: {worktree_path}")
         return worktree_path
     except Exception as e:
-        print(f"\n❌ Failed to create worktree: {e}")
+        print(f"\nΓ¥î Failed to create worktree: {e}")
         return None
 
 
@@ -370,7 +376,7 @@ def _run_cleanup_with_timeout(
     while result.success and has_uncommitted_changes(cwd=cwd):
         elapsed = time.time() - start_time
         if elapsed >= timeout_seconds:
-            print(f"\n⏱️  TIMEOUT: Execution exceeded {timeout_hours} hours during cleanup")
+            print(f"\nΓÅ▒∩╕Å  TIMEOUT: Execution exceeded {timeout_hours} hours during cleanup")
             print(f"   Restarting item {item.id} in same worktree...\n")
             return False, cleanup_agent_runs
 

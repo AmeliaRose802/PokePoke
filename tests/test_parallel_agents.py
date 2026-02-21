@@ -25,7 +25,7 @@ from pokepoke.shutdown import (
     request_shutdown,
     reset,
 )
-from pokepoke.types import AgentStats, BeadsWorkItem, ModelCompletionRecord, SessionStats
+from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats, WorkItemResult
 
 
 # ---------------------------------------------------------------------------
@@ -40,8 +40,8 @@ def _make_item(item_id: str = "TEST-1", title: str = "Test item") -> BeadsWorkIt
 
 def _fake_process_result(
     success: bool = True, requests: int = 1,
-) -> tuple[bool, int, AgentStats | None, int, int, ModelCompletionRecord | None]:
-    return (success, requests, AgentStats(), 0, 0, None)
+) -> WorkItemResult:
+    return WorkItemResult(success=success, request_count=requests, stats=AgentStats())
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +349,7 @@ class TestFailedClaimTracking:
         """If success=False and requests=0, the item should be added to failed_claim_ids."""
         item = _make_item("FAIL-1")
         fut: concurrent.futures.Future = concurrent.futures.Future()
-        fut.set_result((False, 0, None, 0, 0, None))  # failed claim
+        fut.set_result(WorkItemResult(success=False, request_count=0))  # failed claim
 
         futures = {fut: item}
         failed_claim_ids: set[str] = set()
@@ -367,7 +367,7 @@ class TestFailedClaimTracking:
         """A successful result should discard the item from failed_claim_ids."""
         item = _make_item("OK-1")
         fut: concurrent.futures.Future = concurrent.futures.Future()
-        fut.set_result((True, 1, AgentStats(), 0, 0, None))
+        fut.set_result(WorkItemResult(success=True, request_count=1, stats=AgentStats()))
 
         futures = {fut: item}
         failed_claim_ids: set[str] = {"OK-1", "OTHER-1"}
