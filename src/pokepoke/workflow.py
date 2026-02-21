@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from filelock import Timeout
 
 from pokepoke.copilot import invoke_copilot
+from pokepoke.copilot_sdk import build_prompt_from_work_item
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, ModelCompletionRecord
 from pokepoke.worktrees import create_worktree, cleanup_worktree
 from pokepoke.git_operations import has_uncommitted_changes, has_commits_ahead
@@ -19,7 +20,7 @@ from pokepoke.stats import parse_agent_stats
 from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner
 from pokepoke import terminal_ui
 from pokepoke.shutdown import is_shutting_down, register_agent, unregister_agent
-from pokepoke.model_selection import select_model_for_item
+from pokepoke.model_selection import select_model_for_item, get_assignment_for_item
 from pokepoke.agent_context import get_agent_name
 from pokepoke.config import get_config
 from pokepoke.coordination import worktree_setup_lock
@@ -28,8 +29,6 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import RunLogger
-
-logger = logging.getLogger(__name__)
 
 
 def process_work_item(
@@ -64,10 +63,9 @@ def process_work_item(
         request_count = 0
         cleanup_agent_runs = 0
         gate_agent_runs = 0
-
-        # Select model for this work item (A/B testing)
         config = get_config()
         selected_model = select_model_for_item(item)
+        _, selected_prompt_template = get_assignment_for_item(item)
         base_agent_id = agent_id or item.id
         backend_provider = config.ai_backend.provider
         worktree_lock_timeout = float(config.command_timeout)
@@ -83,8 +81,11 @@ def process_work_item(
             work_item_title=item.title,
         )
 
-        print(f"\n🚀 Processing work item: {item.id} — {item.title}")
-        print(f"   🤖 Model: {selected_model} | 🧠 Backend: {backend_provider} | ⏱️  Timeout: {timeout_hours}h\n")
+        print(f"\n🚀 Processing work item: {item.id}")
+        print(f"   {item.title}")
+        print(f"   🤖 Model: {selected_model}")
+        print(f"   🧠 Backend: {backend_provider}")
+        print(f"   ⏱️  Timeout: {timeout_hours} hours\n")
 
         # Start item logging
         item_logger = None
@@ -189,9 +190,11 @@ def process_work_item(
 
             terminal_ui.ui.set_current_agent("Work Agent")
             from pokepoke.metrics_context import agent_type_context
+            custom_prompt = build_prompt_from_work_item(item, template_name=selected_prompt_template) if selected_prompt_template else None
             with agent_type_context("work"):
-                result = invoke_copilot(item, timeout=remaining_timeout, item_logger=item_logger,
-                    model=selected_model, cwd=worktree_cwd)
+                result = invoke_copilot(
+                    item, prompt=custom_prompt, timeout=remaining_timeout,
+                    item_logger=item_logger, model=selected_model, cwd=worktree_cwd)
             request_count += result.attempt_count
 
             # Aggregate stats
@@ -229,11 +232,6 @@ def process_work_item(
                 return False, request_count, accumulated_stats, cleanup_agent_runs, gate_agent_runs, None
 
             # --- GATE AGENT CHECK ---
-            if not config.gate_agent_enabled:
-                print("\n⏭️  Gate Agent disabled via config — skipping verification")
-                gate_success = True
-                break
-
             # Build handoff context so gate agent skips re-discovering the codebase
             from pokepoke.git_operations import build_handoff_context
             handoff_ctx = build_handoff_context(cwd=worktree_cwd)

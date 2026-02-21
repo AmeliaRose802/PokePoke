@@ -85,6 +85,31 @@ class TestBuildPromptFromWorkItem:
         variables = call_args[0][1]
         assert variables["labels"] is None
 
+    @patch('pokepoke.copilot_sdk.PromptService')
+    def test_build_prompt_uses_custom_template_name(self, mock_service_class, sample_work_item):
+        """Test that a custom template_name from assignment rules is used."""
+        mock_service = MagicMock()
+        mock_service.load_and_render.return_value = "Custom template prompt"
+        mock_service_class.return_value = mock_service
+
+        result = build_prompt_from_work_item(sample_work_item, template_name="high-pri-feature")
+
+        assert result == "Custom template prompt"
+        call_args = mock_service.load_and_render.call_args
+        assert call_args[0][0] == "high-pri-feature"
+
+    @patch('pokepoke.copilot_sdk.PromptService')
+    def test_build_prompt_defaults_to_beads_item_template(self, mock_service_class, sample_work_item):
+        """Test that default template_name is 'beads-item' when none specified."""
+        mock_service = MagicMock()
+        mock_service.load_and_render.return_value = "Default prompt"
+        mock_service_class.return_value = mock_service
+
+        build_prompt_from_work_item(sample_work_item)
+
+        call_args = mock_service.load_and_render.call_args
+        assert call_args[0][0] == "beads-item"
+
 
 class TestInvokeCopilotSDKSync:
     """Tests for invoke_copilot_sdk_sync function signature."""
@@ -1169,3 +1194,24 @@ class TestActivityWatchdog:
         )
         assert result is True
         assert abort.is_set()
+
+    @pytest.mark.asyncio
+    async def test_watchdog_resets_on_activity(self, tmp_path):
+        """Test that activity (file modification) resets the idle timer."""
+        log_file = tmp_path / "test.log"
+        log_file.write_text("initial")
+        abort = asyncio.Event()
+
+        async def update_file():
+            await asyncio.sleep(0.03)
+            log_file.write_text("updated")
+
+        asyncio.create_task(update_file())
+        task = asyncio.create_task(
+            _activity_watchdog(log_file, timeout_seconds=0.06, check_interval_seconds=0.02, abort_event=abort)
+        )
+        # Wait long enough for the update to happen but cancel before idle timeout
+        await asyncio.sleep(0.08)
+        task.cancel()
+        result = await task
+        assert result is False

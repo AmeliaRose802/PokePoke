@@ -68,8 +68,17 @@ async def _activity_watchdog(
         return False
 
 
-def build_prompt_from_work_item(work_item: BeadsWorkItem) -> str:
-    """Build a prompt from a work item using the template system."""
+def build_prompt_from_work_item(
+    work_item: BeadsWorkItem,
+    template_name: str = "beads-item",
+) -> str:
+    """Build a prompt from a work item using the template system.
+
+    Args:
+        work_item: The work item to build a prompt for.
+        template_name: Name of the prompt template to use (default: ``"beads-item"``).
+            Assignment rules may specify a custom template via ``prompt_template``.
+    """
     config = get_config()
     service = PromptService()
     # Build test data section from config
@@ -90,7 +99,7 @@ def build_prompt_from_work_item(work_item: BeadsWorkItem) -> str:
         "command_timeout": config.command_timeout,
     }
 
-    return service.load_and_render("beads-item", variables)
+    return service.load_and_render(template_name, variables)
 
 
 def _fail_result(work_item_id: str, error: str) -> CopilotResult:
