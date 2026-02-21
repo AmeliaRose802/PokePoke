@@ -807,17 +807,6 @@
   background: rgba(247, 118, 142, 0.18);
 }
 
-.agent-card-gate-link {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-  padding: 4px 8px;
-  background: rgba(24, 25, 39, 0.9);
-  border: 1px solid var(--border-primary);
-  border-radius: 4px;
-}
-
 .agent-card-link-label {
   font-size: 9px;
   letter-spacing: 0.12em;
