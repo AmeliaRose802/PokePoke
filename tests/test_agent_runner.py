@@ -1460,6 +1460,7 @@ class TestRunMainRepoAgent:
 class TestRunWorktreeCleanup:
     """Test run_worktree_cleanup function."""
 
+    @patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=0)
     @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
@@ -1467,7 +1468,8 @@ class TestRunWorktreeCleanup:
         self,
         mock_get_prompts: Mock,
         mock_main_repo_agent: Mock,
-        mock_has_worktrees: Mock
+        mock_has_worktrees: Mock,
+        mock_uncleaned_count: Mock
     ) -> None:
         """Test successful worktree cleanup run."""
         mock_dir = MagicMock()
@@ -1497,6 +1499,7 @@ class TestRunWorktreeCleanup:
         args, _ = mock_main_repo_agent.call_args
         assert args[0] == "Worktree Cleanup"
 
+    @patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=0)
     @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
@@ -1504,7 +1507,8 @@ class TestRunWorktreeCleanup:
         self,
         mock_get_prompts: Mock,
         mock_main_repo_agent: Mock,
-        mock_has_worktrees: Mock
+        mock_has_worktrees: Mock,
+        mock_uncleaned_count: Mock
     ) -> None:
         """Test worktree cleanup returns None on failure."""
         mock_dir = MagicMock()
@@ -1520,12 +1524,14 @@ class TestRunWorktreeCleanup:
         stats = run_worktree_cleanup()
         assert stats is None
 
+    @patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=0)
     @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
     def test_worktree_cleanup_prompt_missing(
         self,
         mock_get_prompts: Mock,
-        mock_has_worktrees: Mock
+        mock_has_worktrees: Mock,
+        mock_uncleaned_count: Mock
     ) -> None:
         """Test worktree cleanup when prompt file is missing."""
         mock_dir = MagicMock()
@@ -1538,12 +1544,14 @@ class TestRunWorktreeCleanup:
         stats = run_worktree_cleanup()
         assert stats is None
 
+    @patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=0)
     @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
     def test_worktree_cleanup_prompts_dir_not_found(
         self,
         mock_get_prompts: Mock,
-        mock_has_worktrees: Mock
+        mock_has_worktrees: Mock,
+        mock_uncleaned_count: Mock
     ) -> None:
         """Test worktree cleanup when prompts directory not found."""
         mock_get_prompts.side_effect = FileNotFoundError("Prompts not found")
@@ -1552,6 +1560,7 @@ class TestRunWorktreeCleanup:
         stats = run_worktree_cleanup()
         assert stats is None
 
+    @patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=0)
     @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
@@ -1559,7 +1568,8 @@ class TestRunWorktreeCleanup:
         self,
         mock_get_prompts: Mock,
         mock_main_repo_agent: Mock,
-        mock_has_worktrees: Mock
+        mock_has_worktrees: Mock,
+        mock_uncleaned_count: Mock
     ) -> None:
         """Test worktree cleanup passes repo_root as cwd instead of chdir."""
         mock_dir = MagicMock()
@@ -1579,6 +1589,7 @@ class TestRunWorktreeCleanup:
         _, kwargs = mock_main_repo_agent.call_args
         assert kwargs.get("cwd") == str(Path("/main/repo"))
 
+    @patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=0)
     @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
@@ -1586,7 +1597,8 @@ class TestRunWorktreeCleanup:
         self,
         mock_get_prompts: Mock,
         mock_main_repo_agent: Mock,
-        mock_has_worktrees: Mock
+        mock_has_worktrees: Mock,
+        mock_uncleaned_count: Mock
     ) -> None:
         """Test worktree cleanup propagates agent errors without chdir."""
         mock_dir = MagicMock()
@@ -1602,6 +1614,7 @@ class TestRunWorktreeCleanup:
         with pytest.raises(RuntimeError, match="Agent exploded"):
             run_worktree_cleanup(repo_root=Path("/main/repo"))
 
+    @patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=0)
     @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
@@ -1609,7 +1622,8 @@ class TestRunWorktreeCleanup:
         self,
         mock_get_prompts: Mock,
         mock_main_repo_agent: Mock,
-        mock_has_worktrees: Mock
+        mock_has_worktrees: Mock,
+        mock_uncleaned_count: Mock
     ) -> None:
         """Test worktree cleanup without repo_root doesn't change directory."""
         mock_dir = MagicMock()
@@ -1626,6 +1640,7 @@ class TestRunWorktreeCleanup:
             run_worktree_cleanup()  # No repo_root
             mock_chdir.assert_not_called()
 
+    @patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=0)
     @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
@@ -1633,7 +1648,8 @@ class TestRunWorktreeCleanup:
         self,
         mock_get_prompts: Mock,
         mock_main_repo_agent: Mock,
-        mock_has_worktrees: Mock
+        mock_has_worktrees: Mock,
+        mock_uncleaned_count: Mock
     ) -> None:
         """Test worktree cleanup loads worktree-cleanup.md prompt."""
         mock_dir = MagicMock()

@@ -1000,7 +1000,6 @@
   border-left: 3px solid var(--accent, #292e42);
   overflow: hidden;
   transition: border-color 0.15s;
-  cursor: pointer;
 }
 
 .log-panel.focused {

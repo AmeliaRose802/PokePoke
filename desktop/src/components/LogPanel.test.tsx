@@ -2,8 +2,8 @@
  * Tests for LogPanel tool-call collapsing.
  */
 
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { LogPanel } from './LogPanel';
 import type { LogEntry } from '../types';
 
@@ -158,5 +158,53 @@ describe('LogPanel', () => {
     const code = container!.querySelector('code');
     expect(code).not.toBeNull();
     expect(code!.textContent).toBe('config.ts');
+  });
+
+  describe('click-to-focus vs text selection', () => {
+    afterEach(() => {
+      // Restore any getSelection mocks
+      vi.restoreAllMocks();
+    });
+
+    it('calls onFocus when clicking with no text selected', () => {
+      const onFocus = vi.fn();
+      // Ensure getSelection returns empty string
+      vi.spyOn(window, 'getSelection').mockReturnValue({
+        toString: () => '',
+      } as unknown as Selection);
+
+      render(
+        <LogPanel
+          title="Agent"
+          icon="🤖"
+          logs={[]}
+          accentColor="#7dcfff"
+          onFocus={onFocus}
+        />
+      );
+
+      fireEvent.click(screen.getByText(/Agent/));
+      expect(onFocus).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT call onFocus when text is selected (preserves copy)', () => {
+      const onFocus = vi.fn();
+      vi.spyOn(window, 'getSelection').mockReturnValue({
+        toString: () => 'some selected text',
+      } as unknown as Selection);
+
+      render(
+        <LogPanel
+          title="Agent"
+          icon="🤖"
+          logs={[]}
+          accentColor="#7dcfff"
+          onFocus={onFocus}
+        />
+      );
+
+      fireEvent.click(screen.getByText(/Agent/));
+      expect(onFocus).not.toHaveBeenCalled();
+    });
   });
 });

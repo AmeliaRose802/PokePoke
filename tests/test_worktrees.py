@@ -493,6 +493,7 @@ class TestMergeWorktree:
              patch('pokepoke.worktrees.get_default_branch', return_value='ameliapayne/dev'), \
              patch('pokepoke.worktrees.is_worktree_merged', return_value=True), \
              patch('pathlib.Path.exists', return_value=True), \
+             patch('pokepoke.worktree_cleanup.force_remove_directory', return_value=False), \
              patch('builtins.print') as mock_print:
 
             def run_side_effect(*args, **kwargs):

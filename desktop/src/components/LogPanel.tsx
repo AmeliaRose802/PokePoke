@@ -57,11 +57,17 @@ export function LogPanel({
 
   const renderItems = useMemo(() => processLogsToRenderItems(logs), [logs]);
 
+  // Guard: don't steal focus (and trigger re-render) when user is selecting text
+  const handleClick = () => {
+    if (window.getSelection()?.toString()) return;
+    onFocus?.();
+  };
+
   return (
     <div
       ref={panelRef}
       className={`log-panel ${focused ? "focused" : ""}`}
-      onClick={onFocus}
+      onClick={handleClick}
     >
       <div className="log-panel-header">
         <span>

@@ -29,6 +29,29 @@ import type {
 const POLL_INTERVAL_MS = 100;
 const MAX_LOG_ENTRIES = 2000;
 
+/**
+ * Shallow-compare two values to avoid unnecessary setState calls.
+ * Prevents React re-renders that clear native text selection.
+ */
+export function shallowEqual(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  const keysA = Object.keys(a as Record<string, unknown>);
+  const keysB = Object.keys(b as Record<string, unknown>);
+  if (keysA.length !== keysB.length) return false;
+  for (const key of keysA) {
+    if (!Object.is((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key])) return false;
+  }
+  return true;
+}
+
+/** setState wrapper that skips update when value is shallow-equal to current */
+function setIfChanged<T>(setter: React.Dispatch<React.SetStateAction<T>>): (value: T) => void {
+  return (value: T) => {
+    setter(prev => shallowEqual(prev, value) ? prev : value);
+  };
+}
+
 /** Retry configuration for initial state load */
 const INITIAL_RETRY_CONFIG = {
   MAX_RETRIES: 10,
@@ -360,16 +383,17 @@ export function useBridge(): BridgeState {
           const newLogs = await api.get_new_logs();
           appendLogs(newLogs);
 
-          // Get current state
+          // Get current state — use shallow-equal guards to avoid
+          // unnecessary re-renders that clear native text selection.
           const state = await api.get_state();
-          setWorkItem(state.work_item);
-          setAgentName(state.agent_name);
-          setRepositoryName(state.repository_name);
-          if (state.project_name !== undefined) setProjectName(state.project_name);
-          if (state.stats) setStats(state.stats);
-          if (state.progress) setProgress(state.progress);
-          if (state.model_leaderboard) setModelLeaderboard(state.model_leaderboard);
-          if (state.agents) setAgents(state.agents);
+          setIfChanged(setWorkItem)(state.work_item);
+          setIfChanged(setAgentName)(state.agent_name);
+          setIfChanged(setRepositoryName)(state.repository_name);
+          if (state.project_name !== undefined) setIfChanged(setProjectName)(state.project_name);
+          if (state.stats) setIfChanged(setStats)(state.stats);
+          if (state.progress) setIfChanged(setProgress)(state.progress);
+          if (state.model_leaderboard) setIfChanged(setModelLeaderboard)(state.model_leaderboard);
+          if (state.agents) setIfChanged(setAgents)(state.agents);
           setStopAfterCurrent(!!state.stop_after_current);
           setCurrentSessionId(state.current_session_id ?? null);
 
