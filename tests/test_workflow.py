@@ -33,8 +33,9 @@ class TestSelectWorkItem:
 
         assert result is None
 
+    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
     @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
-    def test_autonomous_selection(self, mock_select: Mock) -> None:
+    def test_autonomous_selection(self, mock_select: Mock, mock_deps: Mock) -> None:
         """Test autonomous mode selection."""
         items = [
             BeadsWorkItem(
@@ -55,8 +56,9 @@ class TestSelectWorkItem:
         # Should have passed the full list (no filtering since no items assigned to others)
         mock_select.assert_called_once()
 
+    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
     @patch('builtins.input')
-    def test_interactive_selection(self, mock_input: Mock) -> None:
+    def test_interactive_selection(self, mock_input: Mock, mock_deps: Mock) -> None:
         """Test interactive mode selection."""
         items = [
             BeadsWorkItem(
@@ -75,8 +77,9 @@ class TestSelectWorkItem:
         assert result is not None
         assert result.id == "task-1"
 
+    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
     @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
-    def test_filters_items_assigned_to_others(self, mock_select: Mock) -> None:
+    def test_filters_items_assigned_to_others(self, mock_select: Mock, mock_deps: Mock) -> None:
         """Test that items assigned to other agents are filtered out."""
         import os
         os.environ['AGENT_NAME'] = 'agent_alpha'
@@ -113,7 +116,8 @@ class TestSelectWorkItem:
         assert result is not None
         assert result.id == "task-2"
 
-    def test_all_items_assigned_to_others(self) -> None:
+    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
+    def test_all_items_assigned_to_others(self, mock_deps: Mock) -> None:
         """Test when all items are assigned to other agents."""
         import os
         os.environ['AGENT_NAME'] = 'agent_alpha'
@@ -517,6 +521,7 @@ class TestFinalizeWorkItem:
 class TestCheckAndMergeWorktree:
     """Test check_and_merge_worktree function."""
 
+    @patch('pokepoke.worktree_finalization.merge_lock')
     @patch('pokepoke.worktree_finalization.merge_worktree_to_dev')
     @patch('pokepoke.worktree_finalization.cleanup_worktree')
     @patch('subprocess.run')
@@ -524,7 +529,8 @@ class TestCheckAndMergeWorktree:
         self,
         mock_run: Mock,
         mock_cleanup: Mock,
-        mock_merge: Mock
+        mock_merge: Mock,
+        mock_lock: Mock
     ) -> None:
         """Test when worktree has no commits to merge."""
         item = BeadsWorkItem(
@@ -549,12 +555,14 @@ class TestCheckAndMergeWorktree:
         assert len(cwd_calls) == 1
         assert cwd_calls[0].kwargs['cwd'] == str(worktree_path)
 
+    @patch('pokepoke.worktree_finalization.merge_lock')
     @patch('pokepoke.worktree_finalization.merge_worktree_to_dev')
     @patch('subprocess.run')
     def test_has_commits_to_merge(
         self,
         mock_run: Mock,
-        mock_merge: Mock
+        mock_merge: Mock,
+        mock_lock: Mock
     ) -> None:
         """Test when worktree has commits to merge."""
         item = BeadsWorkItem(
@@ -575,12 +583,14 @@ class TestCheckAndMergeWorktree:
         assert result is True
         mock_merge.assert_called_once_with(item, parent_agent_id=None)
 
+    @patch('pokepoke.worktree_finalization.merge_lock')
     @patch('pokepoke.worktree_finalization.merge_worktree_to_dev')
     @patch('subprocess.run')
     def test_commit_count_check_fails(
         self,
         mock_run: Mock,
-        mock_merge: Mock
+        mock_merge: Mock,
+        mock_lock: Mock
     ) -> None:
         """Test when commit count check fails."""
         item = BeadsWorkItem(
