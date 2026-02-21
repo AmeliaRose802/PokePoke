@@ -23,7 +23,7 @@ from contextlib import contextmanager
 from pokepoke.desktop_api import DesktopAPI
 from pokepoke.shutdown import is_shutting_down, request_shutdown
 from pokepoke.frontend_discovery import find_frontend_dist
-from pokepoke.native_icon import set_native_window_icon
+from pokepoke.native_icon import set_native_window_icon, set_app_user_model_id
 
 if TYPE_CHECKING:
     from pokepoke.types import SessionStats
@@ -159,6 +159,12 @@ class DesktopUI:
             "min_size": (900, 600),
             "text_select": True,
         }
+
+        # Register the App User Model ID before creating the window so that
+        # Windows associates the taskbar button with this app identity and
+        # displays the PokePoke icon instead of the python.exe icon.
+        set_app_user_model_id()
+
         window = webview.create_window(**window_kwargs)
 
         # Run pywebview on the main thread (blocks until window closes)

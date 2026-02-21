@@ -2,10 +2,14 @@
 
 import sys
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, call
 
 import pokepoke.native_icon as native_icon_module
-from pokepoke.native_icon import set_native_window_icon
+from pokepoke.native_icon import (
+    set_native_window_icon,
+    set_app_user_model_id,
+    _apply_taskbar_icon,
+)
 
 
 def _make_shown_event() -> SimpleNamespace:
@@ -132,3 +136,108 @@ class TestSetNativeWindowIcon:
         }):
             # Should not raise
             set_native_window_icon(window, icon)
+
+    def test_sends_wm_seticon_after_setting_form_icon(self, tmp_path) -> None:
+        """Should call _apply_taskbar_icon with the form's HWND."""
+        icon = tmp_path / "pokepoke.ico"
+        icon.write_bytes(b"")
+
+        mock_icon_cls = MagicMock()
+        mock_action_cls = MagicMock()
+        mock_sys_drawing = MagicMock()
+        mock_sys_drawing.Icon = mock_icon_cls
+        mock_system = MagicMock()
+        mock_system.Action = mock_action_cls
+
+        form = MagicMock()
+        form.InvokeRequired = False
+        form.Handle = 12345
+        window = SimpleNamespace(native=form, events=_make_events())
+
+        with patch.object(
+            native_icon_module, "_apply_taskbar_icon"
+        ) as mock_apply, patch.dict(sys.modules, {
+            "System.Drawing": mock_sys_drawing,
+            "System": mock_system,
+        }):
+            set_native_window_icon(window, icon)
+
+        mock_apply.assert_called_once_with(12345, icon)
+
+
+class TestSetAppUserModelId:
+    def test_no_op_on_non_windows(self, monkeypatch) -> None:
+        """Should silently return on non-Windows platforms."""
+        monkeypatch.setattr(native_icon_module.sys, "platform", "linux")
+        # Should not raise and should not call shell32
+        with patch("ctypes.windll") as mock_windll:
+            set_app_user_model_id()
+            mock_windll.shell32.SetCurrentProcessExplicitAppUserModelID.assert_not_called()
+
+    def test_calls_shell32_on_windows(self, monkeypatch) -> None:
+        """Should call SetCurrentProcessExplicitAppUserModelID on Windows."""
+        monkeypatch.setattr(native_icon_module.sys, "platform", "win32")
+        mock_shell32 = MagicMock()
+        with patch("ctypes.windll", create=True) as mock_windll:
+            mock_windll.shell32 = mock_shell32
+            set_app_user_model_id("Test.AppId")
+        mock_shell32.SetCurrentProcessExplicitAppUserModelID.assert_called_once_with(
+            "Test.AppId"
+        )
+
+    def test_uses_default_app_id(self, monkeypatch) -> None:
+        """Should use APP_USER_MODEL_ID constant when no app_id provided."""
+        monkeypatch.setattr(native_icon_module.sys, "platform", "win32")
+        mock_shell32 = MagicMock()
+        with patch("ctypes.windll", create=True) as mock_windll:
+            mock_windll.shell32 = mock_shell32
+            set_app_user_model_id()
+        mock_shell32.SetCurrentProcessExplicitAppUserModelID.assert_called_once_with(
+            native_icon_module.APP_USER_MODEL_ID
+        )
+
+    def test_swallows_exceptions(self, monkeypatch) -> None:
+        """Should not raise if ctypes call fails."""
+        monkeypatch.setattr(native_icon_module.sys, "platform", "win32")
+        with patch("ctypes.windll", create=True) as mock_windll:
+            mock_windll.shell32.SetCurrentProcessExplicitAppUserModelID.side_effect = (
+                OSError("access denied")
+            )
+            # Should not raise
+            set_app_user_model_id()
+
+
+class TestApplyTaskbarIcon:
+    def test_sends_wm_seticon_messages(self, tmp_path) -> None:
+        """Should load icon and send WM_SETICON for both small and big."""
+        icon = tmp_path / "pokepoke.ico"
+        icon.write_bytes(b"")
+
+        mock_user32 = MagicMock()
+        mock_user32.LoadImageW.return_value = 999  # fake HICON
+
+        with patch("ctypes.windll", create=True) as mock_windll:
+            mock_windll.user32 = mock_user32
+            _apply_taskbar_icon(12345, icon)
+
+        mock_user32.LoadImageW.assert_called_once()
+        # WM_SETICON = 0x0080, ICON_BIG = 1, ICON_SMALL = 0
+        expected_calls = [
+            call(12345, 0x0080, 1, 999),  # ICON_BIG
+            call(12345, 0x0080, 0, 999),  # ICON_SMALL
+        ]
+        mock_user32.SendMessageW.assert_has_calls(expected_calls)
+
+    def test_skips_when_load_image_fails(self, tmp_path) -> None:
+        """Should not send WM_SETICON when LoadImageW returns 0."""
+        icon = tmp_path / "pokepoke.ico"
+        icon.write_bytes(b"")
+
+        mock_user32 = MagicMock()
+        mock_user32.LoadImageW.return_value = 0  # failure
+
+        with patch("ctypes.windll", create=True) as mock_windll:
+            mock_windll.user32 = mock_user32
+            _apply_taskbar_icon(12345, icon)
+
+        mock_user32.SendMessageW.assert_not_called()

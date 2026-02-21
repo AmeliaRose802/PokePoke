@@ -364,6 +364,45 @@ class TestDesktopUIRunWithOrchestrator:
         assert fake_webview.created_kwargs["js_api"] is ui._api
         ui._api.set_window.assert_called_once_with(fake_webview.window)
 
+    def test_set_app_user_model_id_called_before_create_window(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        """set_app_user_model_id must be called before webview.create_window."""
+        dist_dir = tmp_path / "dist"
+        dist_dir.mkdir()
+        (dist_dir / "index.html").write_text("<html></html>", encoding="utf-8")
+
+        call_order: list[str] = []
+
+        class OrderTrackingWebview(FakeWebviewModule):
+            def create_window(self, **kwargs):
+                call_order.append("create_window")
+                return super().create_window(**kwargs)
+
+        fake_webview = OrderTrackingWebview()
+        monkeypatch.setitem(sys.modules, "webview", fake_webview)
+        monkeypatch.setattr(
+            frontend_discovery_module, "find_frontend_dist", lambda: dist_dir
+        )
+        monkeypatch.setattr(desktop_ui_module, "request_shutdown", lambda: None)
+
+        def tracking_set_app_user_model_id(*args, **kwargs) -> None:
+            call_order.append("set_app_user_model_id")
+
+        monkeypatch.setattr(
+            desktop_ui_module, "set_app_user_model_id", tracking_set_app_user_model_id
+        )
+
+        ui = DesktopUI()
+        ui._api.set_window = MagicMock()
+        ui.run_with_orchestrator(lambda: 0)
+
+        assert "set_app_user_model_id" in call_order
+        assert "create_window" in call_order
+        assert call_order.index("set_app_user_model_id") < call_order.index(
+            "create_window"
+        ), "set_app_user_model_id must be called before create_window"
+
     def test_run_with_orchestrator_missing_frontend(self, monkeypatch) -> None:
         fake_webview = FakeWebviewModule()
         monkeypatch.setitem(sys.modules, "webview", fake_webview)
