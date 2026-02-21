@@ -143,11 +143,11 @@ class AgentRegistry:
     def serialize_all(self) -> list[dict[str, Any]]:
         with self._lock:
             agents = [self._copy_agent(agent, agent.get("agent_id") in self._paused_agents) for agent in self._agents.values()]
+        # Sort by started_at (creation time) for stable card ordering.
+        # Using volatile timestamps (last_updated/last_log_at) caused cards
+        # to jump around on every poll update.
         agents.sort(
-            key=lambda agent: agent.get("last_updated")
-            or agent.get("last_log_at")
-            or agent.get("started_at")
-            or 0.0,
+            key=lambda agent: agent.get("started_at") or 0.0,
             reverse=True,
         )
         return agents
