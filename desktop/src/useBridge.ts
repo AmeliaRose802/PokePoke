@@ -27,7 +27,6 @@ import type {
 
 /** Poll interval in ms — 100ms = responsive without hammering */
 const POLL_INTERVAL_MS = 100;
-const MAX_LOG_ENTRIES = 2000;
 
 /**
  * Shallow-compare two values to avoid unnecessary setState calls.
@@ -306,20 +305,10 @@ export function useBridge(): BridgeState {
     }
 
     if (orchLogs.length > 0) {
-      setOrchestratorLogs((prev) => {
-        const next = [...prev, ...orchLogs];
-        return next.length > MAX_LOG_ENTRIES
-          ? next.slice(next.length - MAX_LOG_ENTRIES)
-          : next;
-      });
+      setOrchestratorLogs((prev) => [...prev, ...orchLogs]);
     }
     if (agLogs.length > 0) {
-      setAgentLogs((prev) => {
-        const next = [...prev, ...agLogs];
-        return next.length > MAX_LOG_ENTRIES
-          ? next.slice(next.length - MAX_LOG_ENTRIES)
-          : next;
-      });
+      setAgentLogs((prev) => [...prev, ...agLogs]);
     }
   }, []);
 

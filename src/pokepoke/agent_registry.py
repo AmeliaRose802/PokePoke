@@ -14,7 +14,7 @@ class AgentRegistry:
         self,
         lock: threading.RLock,
         preview_limit: int = 20,
-        detail_limit: int = 2000,
+        detail_limit: int | None = None,
     ) -> None:
         self._lock = lock
         self._agents: dict[str, dict[str, Any]] = {}
@@ -22,7 +22,7 @@ class AgentRegistry:
         self._detail_limit = detail_limit
         self._paused_agents: set[str] = set()
 
-    def set_limits(self, preview_limit: int, detail_limit: int) -> None:
+    def set_limits(self, preview_limit: int, detail_limit: int | None) -> None:
         with self._lock:
             self._preview_limit = preview_limit
             self._detail_limit = detail_limit
@@ -102,7 +102,7 @@ class AgentRegistry:
                 logs = logs[-self._preview_limit :]
             detail_logs = list(agent.get("log_lines", []))
             detail_logs.append(line)
-            if len(detail_logs) > self._detail_limit:
+            if self._detail_limit is not None and len(detail_logs) > self._detail_limit:
                 detail_logs = detail_logs[-self._detail_limit :]
             now = time.time()
             agent.update(
@@ -191,7 +191,7 @@ class AgentRegistry:
 
         if len(recent_logs) > self._preview_limit:
             recent_logs = recent_logs[-self._preview_limit :]
-        if len(log_lines) > self._detail_limit:
+        if self._detail_limit is not None and len(log_lines) > self._detail_limit:
             log_lines = log_lines[-self._detail_limit :]
 
         sanitized = {
