@@ -99,3 +99,23 @@ test_data:
 # Agents are instructed to use this timeout for long-running commands like pytest.
 # Helps prevent hung commands from wasting agent time.
 command_timeout: 300
+
+# Per-work-item assignment settings (optional)
+# Rules are evaluated in order; the first matching rule wins.
+# When no rule matches, 'fallback' controls model selection:
+#   - "weighted" (default): performance-weighted A/B random selection
+#   - any model name: always use that specific model
+# assignment:
+#   rules:
+#     - match:
+#         issue_type: bug
+#       model: claude-sonnet-4.5          # fast model for simple bug fixes
+#     - match:
+#         issue_type: feature
+#         priority_max: 1                 # P0 and P1 features
+#       model: claude-opus-4.6            # best model for complex features
+#       prompt_template: high-pri-feature # optional custom prompt template
+#     - match:
+#         labels: [refactoring]
+#       model: gpt-5.1-codex
+#   fallback: weighted

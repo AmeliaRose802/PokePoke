@@ -13,6 +13,7 @@ import pytest
 
 from pokepoke.model_selection import select_model_for_item
 from pokepoke.types import (
+    BeadsWorkItem,
     ModelCompletionRecord,
     SessionStats,
     AgentStats,
@@ -28,6 +29,11 @@ def clear_config_cache():
     reset_config()
     yield
     reset_config()
+
+
+def _make_item(item_id: str) -> BeadsWorkItem:
+    """Create a minimal BeadsWorkItem for testing."""
+    return BeadsWorkItem(id=item_id, title="test", status="open", priority=2, issue_type="task")
 
 
 # ─── ModelConfig candidate_models ────────────────────────────────────────────
@@ -76,7 +82,7 @@ class TestSelectModelForItem:
         mock_config.return_value = ProjectConfig(
             models=ModelConfig(default="claude-opus-4.6", candidate_models=[])
         )
-        model = select_model_for_item("item-1")
+        model = select_model_for_item(_make_item("item-1"))
         assert model == "claude-opus-4.6"
 
     @patch("pokepoke.model_selection.get_config")
@@ -85,7 +91,7 @@ class TestSelectModelForItem:
         mock_config.return_value = ProjectConfig(
             models=ModelConfig(candidate_models=candidates)
         )
-        model = select_model_for_item("item-2")
+        model = select_model_for_item(_make_item("item-2"))
         assert model in candidates
 
     @patch("pokepoke.model_selection.get_config")
@@ -96,7 +102,7 @@ class TestSelectModelForItem:
             models=ModelConfig(candidate_models=candidates)
         )
         mock_choices.return_value = ["modelB"]
-        model = select_model_for_item("item-3")
+        model = select_model_for_item(_make_item("item-3"))
         assert model == "modelB"
         mock_choices.assert_called_once()
 
@@ -105,7 +111,7 @@ class TestSelectModelForItem:
         mock_config.return_value = ProjectConfig(
             models=ModelConfig(candidate_models=["only-model"])
         )
-        model = select_model_for_item("item-4")
+        model = select_model_for_item(_make_item("item-4"))
         assert model == "only-model"
 
 

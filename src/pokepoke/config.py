@@ -133,6 +133,35 @@ class TestDataEntry:
 
 
 @dataclass
+class AssignmentRuleMatch:
+    """Criteria for matching a work item to an assignment rule."""
+    issue_type: str | None = None
+    labels: list[str] | None = None
+    priority_max: int | None = None  # Match items with priority <= this value
+
+
+@dataclass
+class AssignmentRule:
+    """A single assignment rule mapping matched work items to models/prompts."""
+    match: AssignmentRuleMatch = field(default_factory=AssignmentRuleMatch)
+    model: str | None = None
+    prompt_template: str | None = None
+
+
+@dataclass
+class AssignmentConfig:
+    """Per-work-item assignment settings.
+
+    Rules are evaluated in order; the first matching rule wins.
+    ``fallback`` controls behaviour when no rule matches:
+      - ``"weighted"`` (default): use performance-weighted A/B selection
+      - any other string: treat as a literal model name
+    """
+    rules: list[AssignmentRule] = field(default_factory=list)
+    fallback: str = "weighted"
+
+
+@dataclass
 class ActivityWatchdogConfig:
     """Configuration for the activity watchdog that detects hung Copilot sessions."""
     enabled: bool = True
@@ -154,6 +183,7 @@ class ProjectConfig:
     max_parallel_agents: int = 1
     command_timeout: int = 300  # Default 5 minutes for long-running commands
     activity_watchdog: ActivityWatchdogConfig = field(default_factory=ActivityWatchdogConfig)
+    assignment: AssignmentConfig = field(default_factory=AssignmentConfig)
 
     @staticmethod
     def from_dict(data: dict[str, Any]) -> 'ProjectConfig':
@@ -230,6 +260,25 @@ class ProjectConfig:
                 for a in agents_data
             ])
         # else: keep defaults from field(default_factory=...)
+
+        # Assignment rules
+        assign_data = data.get("assignment", {})
+        rules_data = assign_data.get("rules", [])
+        config.assignment = AssignmentConfig(
+            rules=[
+                AssignmentRule(
+                    match=AssignmentRuleMatch(
+                        issue_type=r.get("match", {}).get("issue_type"),
+                        labels=r.get("match", {}).get("labels"),
+                        priority_max=r.get("match", {}).get("priority_max"),
+                    ),
+                    model=r.get("model"),
+                    prompt_template=r.get("prompt_template"),
+                )
+                for r in rules_data
+            ],
+            fallback=assign_data.get("fallback", "weighted"),
+        )
 
         return config
 
