@@ -116,10 +116,11 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     item_logger: 'ItemLogger | None' = None,
     idle_timeout: float = 10.0,
     model: str | None = None,
-    cwd: str | None = None
+    cwd: str | None = None,
+    template_name: str | None = None
 ) -> CopilotResult:
     """Invoke GitHub Copilot using the SDK. Falls back to Sonnet on rate limit."""
-    final_prompt = prompt or build_prompt_from_work_item(work_item)
+    final_prompt = prompt or build_prompt_from_work_item(work_item, template_name or "beads-item")
     max_timeout = timeout or 7200.0
     current_model = model or DEFAULT_MODEL
     watchdog_task: asyncio.Task[bool] | None = None  # Initialize early for finally block
@@ -320,7 +321,8 @@ def invoke_copilot_sdk_sync(  # type: ignore[no-any-unimported]
     deny_write: bool = False,
     item_logger: 'ItemLogger | None' = None,
     model: str | None = None,
-    cwd: str | None = None
+    cwd: str | None = None,
+    template_name: str | None = None
 ) -> CopilotResult:
     """Synchronous wrapper around invoke_copilot_sdk."""
     return asyncio.run(invoke_copilot_sdk(
@@ -331,5 +333,6 @@ def invoke_copilot_sdk_sync(  # type: ignore[no-any-unimported]
         deny_write=deny_write,
         item_logger=item_logger,
         model=model,
-        cwd=cwd
+        cwd=cwd,
+        template_name=template_name
     ))

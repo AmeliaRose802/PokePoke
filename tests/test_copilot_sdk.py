@@ -583,13 +583,58 @@ class TestInvokeCopilotSDKAsync:
         mock_session.send = mock_send
         mock_session.destroy = AsyncMock()
 
-        # Don't provide prompt - should generate one
+        # Don't provide prompt - should generate one with default template
         await invoke_copilot_sdk(
             work_item=sample_work_item,
             idle_timeout=0.01
         )
 
-        mock_build_prompt.assert_called_once_with(sample_work_item)
+        mock_build_prompt.assert_called_once_with(sample_work_item, "beads-item")
+
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.copilot_sdk.build_prompt_from_work_item')
+    async def test_invoke_copilot_sdk_with_custom_template_name(
+        self, mock_build_prompt, mock_client_class, sample_work_item
+    ):
+        """Test SDK invocation passes custom template_name to prompt builder."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+
+        mock_build_prompt.return_value = "Custom template prompt"
+
+        mock_client = AsyncMock()
+        mock_session = AsyncMock()
+        mock_session.session_id = "test-session-custom-template"
+
+        mock_client.start = AsyncMock()
+        mock_client.create_session = AsyncMock(return_value=mock_session)
+        mock_client.stop = AsyncMock()
+
+        mock_client_class.return_value = mock_client
+
+        stored_handler = None
+        def mock_on(handler):
+            nonlocal stored_handler
+            stored_handler = handler
+        mock_session.on = mock_on
+
+        async def mock_send(message):
+            if stored_handler:
+                event = MagicMock()
+                event.type.value = "session.idle"
+                stored_handler(event)
+
+        mock_session.send = mock_send
+        mock_session.destroy = AsyncMock()
+
+        # Provide custom template_name
+        await invoke_copilot_sdk(
+            work_item=sample_work_item,
+            template_name="bug-item",
+            idle_timeout=0.01
+        )
+
+        # Verify build_prompt_from_work_item was called with custom template
+        mock_build_prompt.assert_called_once_with(sample_work_item, "bug-item")
 
     @patch('pokepoke.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_tool_execution(self, mock_client_class, sample_work_item):

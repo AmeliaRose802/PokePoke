@@ -169,7 +169,7 @@ def test_claude_backend_builds_prompt_when_none(mock_which, mock_build):
 
     result = backend.invoke(work_item)
 
-    mock_build.assert_called_once_with(work_item)
+    mock_build.assert_called_once_with(work_item, "beads-item")
     assert result.success is False
 
 

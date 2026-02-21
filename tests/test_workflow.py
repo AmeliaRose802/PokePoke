@@ -1760,3 +1760,149 @@ class TestGateAgentDisabled:
         assert gate_runs == 0
         mock_gate_agent.assert_not_called()
 
+
+class TestAssignmentPromptTemplate:
+    """Tests for custom prompt template selection from assignment rules."""
+
+    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
+    @patch('pokepoke.workflow.run_gate_agent')
+    @patch('pokepoke.workflow.run_beta_tester')
+    @patch('pokepoke.workflow.finalize_work_item')
+    @patch('os.chdir')
+    @patch('os.getcwd')
+    @patch('pokepoke.workflow._run_cleanup_with_timeout')
+    @patch('pokepoke.workflow.invoke_copilot')
+    @patch('pokepoke.workflow.has_commits_ahead')
+    @patch('pokepoke.workflow.has_uncommitted_changes')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('builtins.input')
+    @patch('time.time')
+    @patch('pokepoke.workflow.get_assignment_for_item')
+    def test_custom_template_passed_to_invoke_copilot(
+        self,
+        mock_get_assignment: Mock,
+        mock_time: Mock,
+        mock_input: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
+        mock_uncommitted: Mock,
+        mock_commits_ahead: Mock,
+        mock_invoke: Mock,
+        mock_cleanup_timeout: Mock,
+        mock_getcwd: Mock,
+        mock_chdir: Mock,
+        mock_finalize: Mock,
+        mock_beta: Mock,
+        mock_gate_agent: Mock,
+        mock_handoff: Mock,
+    ) -> None:
+        """When assignment rule specifies prompt_template, it should be passed to invoke_copilot."""
+        item = BeadsWorkItem(
+            id="bug-1",
+            title="Fix critical bug",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="bug",
+        )
+
+        # Assignment rule returns custom template for bugs
+        mock_get_assignment.return_value = ("claude-sonnet-4.5", "bug-item")
+
+        mock_time.return_value = 0
+        mock_input.return_value = 'y'
+        mock_assign.return_value = True
+        mock_setup.return_value = Path("/fake/worktree")
+        mock_getcwd.return_value = "/original"
+        mock_uncommitted.return_value = False
+        mock_commits_ahead.return_value = 1
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="bug-1", success=True, output="Done", attempt_count=1,
+        )
+        mock_cleanup_timeout.return_value = (True, 0)
+        mock_finalize.return_value = True
+        mock_beta.return_value = None
+        mock_gate_agent.return_value = (True, "Gate passed", None)
+
+        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+            item, interactive=True,
+        )
+
+        assert success is True
+        # Verify invoke_copilot was called with the custom template
+        mock_invoke.assert_called()
+        call_kwargs = mock_invoke.call_args.kwargs
+        assert call_kwargs.get('template_name') == "bug-item"
+
+    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
+    @patch('pokepoke.workflow.run_gate_agent')
+    @patch('pokepoke.workflow.run_beta_tester')
+    @patch('pokepoke.workflow.finalize_work_item')
+    @patch('os.chdir')
+    @patch('os.getcwd')
+    @patch('pokepoke.workflow._run_cleanup_with_timeout')
+    @patch('pokepoke.workflow.invoke_copilot')
+    @patch('pokepoke.workflow.has_commits_ahead')
+    @patch('pokepoke.workflow.has_uncommitted_changes')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('builtins.input')
+    @patch('time.time')
+    @patch('pokepoke.workflow.get_assignment_for_item')
+    def test_no_template_when_no_rule_matches(
+        self,
+        mock_get_assignment: Mock,
+        mock_time: Mock,
+        mock_input: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
+        mock_uncommitted: Mock,
+        mock_commits_ahead: Mock,
+        mock_invoke: Mock,
+        mock_cleanup_timeout: Mock,
+        mock_getcwd: Mock,
+        mock_chdir: Mock,
+        mock_finalize: Mock,
+        mock_beta: Mock,
+        mock_gate_agent: Mock,
+        mock_handoff: Mock,
+    ) -> None:
+        """When no assignment rule matches, template_name should be None."""
+        item = BeadsWorkItem(
+            id="task-1",
+            title="Task 1",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task",
+        )
+
+        # No matching rule - returns None for template
+        mock_get_assignment.return_value = (None, None)
+
+        mock_time.return_value = 0
+        mock_input.return_value = 'y'
+        mock_assign.return_value = True
+        mock_setup.return_value = Path("/fake/worktree")
+        mock_getcwd.return_value = "/original"
+        mock_uncommitted.return_value = False
+        mock_commits_ahead.return_value = 1
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="task-1", success=True, output="Done", attempt_count=1,
+        )
+        mock_cleanup_timeout.return_value = (True, 0)
+        mock_finalize.return_value = True
+        mock_beta.return_value = None
+        mock_gate_agent.return_value = (True, "Gate passed", None)
+
+        success, count, stats, cleanup_runs, gate_runs, model_completion = process_work_item(
+            item, interactive=True,
+        )
+
+        assert success is True
+        # Verify invoke_copilot was called with None template (will use default)
+        mock_invoke.assert_called()
+        call_kwargs = mock_invoke.call_args.kwargs
+        assert call_kwargs.get('template_name') is None
+

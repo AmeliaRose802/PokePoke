@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 from filelock import Timeout
 
 from pokepoke.copilot import invoke_copilot
-from pokepoke.copilot_sdk import build_prompt_from_work_item
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, ModelCompletionRecord
 from pokepoke.worktrees import create_worktree, cleanup_worktree
 from pokepoke.git_operations import has_uncommitted_changes, has_commits_ahead
@@ -40,19 +39,7 @@ def process_work_item(
     max_timeout_restarts: int = 3,
     agent_id: str | None = None,
 ) -> tuple[bool, int, AgentStats | None, int, int, ModelCompletionRecord | None]:
-    """Process a single work item with timeout protection.
-
-    Args:
-        item: Work item to process
-        interactive: If True, prompt for confirmation before proceeding
-        timeout_hours: Maximum hours before timing out and restarting (default: 2.0)
-        run_beta_test: If True, run beta tester after completion (default: False)
-        run_logger: Optional run logger instance for file logging
-        max_timeout_restarts: Maximum number of timeout restarts before failing (default: 3)
-
-    Returns:
-        Tuple of (success, request_count, stats, cleanup_agent_runs, gate_agent_runs, model_completion)
-    """
+    """Process a single work item with timeout protection and optional beta/gate hooks."""
     # Register this agent for shutdown coordination
     register_agent()
     worktree_path: Path | None = None
@@ -190,11 +177,11 @@ def process_work_item(
 
             terminal_ui.ui.set_current_agent("Work Agent")
             from pokepoke.metrics_context import agent_type_context
-            custom_prompt = build_prompt_from_work_item(item, template_name=selected_prompt_template) if selected_prompt_template else None
             with agent_type_context("work"):
                 result = invoke_copilot(
-                    item, prompt=custom_prompt, timeout=remaining_timeout,
-                    item_logger=item_logger, model=selected_model, cwd=worktree_cwd)
+                    item, prompt=None, timeout=remaining_timeout,
+                    item_logger=item_logger, model=selected_model, cwd=worktree_cwd,
+                    template_name=selected_prompt_template)
             request_count += result.attempt_count
 
             # Aggregate stats
@@ -232,6 +219,10 @@ def process_work_item(
                 return False, request_count, accumulated_stats, cleanup_agent_runs, gate_agent_runs, None
 
             # --- GATE AGENT CHECK ---
+            if not config.gate_agent_enabled:
+                gate_success = True
+                break
+
             # Build handoff context so gate agent skips re-discovering the codebase
             from pokepoke.git_operations import build_handoff_context
             handoff_ctx = build_handoff_context(cwd=worktree_cwd)

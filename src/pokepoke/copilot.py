@@ -22,6 +22,7 @@ def invoke_copilot(
     model: str | None = None,
     cwd: str | None = None,
     provider: str | None = None,
+    template_name: str | None = None,
 ) -> CopilotResult:
     """Invoke GitHub Copilot using SDK.
 
@@ -35,6 +36,7 @@ def invoke_copilot(
         model: Optional model name to use (e.g., 'gpt-5.1-codex', defaults to 'claude-opus-4.6').
         cwd: Optional working directory for the Copilot process (for thread-safe worktree isolation).
         provider: Optional backend provider override (e.g., 'copilot', 'claude-code').
+        template_name: Optional prompt template name from assignment rules.
 
     Returns:
         Result of the Copilot invocation.
@@ -49,5 +51,6 @@ def invoke_copilot(
         item_logger=item_logger,
         model=model,
         cwd=cwd,
+        template_name=template_name,
     )
 

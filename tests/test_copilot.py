@@ -36,7 +36,8 @@ class TestInvokeCopilot:
             deny_write=False,
             item_logger=None,
             model=None,
-            cwd=None
+            cwd=None,
+            template_name=None
         )
 
     @patch('pokepoke.copilot.get_backend')
@@ -70,6 +71,7 @@ class TestInvokeCopilot:
             deny_write=True,
             item_logger=None,
             model=None,
-            cwd=None
+            cwd=None,
+            template_name=None
         )
 

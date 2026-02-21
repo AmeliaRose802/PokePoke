@@ -29,6 +29,7 @@ class AIBackend(Protocol):
         item_logger: Any = None,
         model: str | None = None,
         cwd: str | None = None,
+        template_name: str | None = None,
     ) -> CopilotResult:
         ...
 
@@ -49,6 +50,7 @@ class CopilotBackend:
         item_logger: Any = None,
         model: str | None = None,
         cwd: str | None = None,
+        template_name: str | None = None,
     ) -> CopilotResult:
         return invoke_copilot_sdk_sync(
             work_item=work_item,
@@ -59,6 +61,7 @@ class CopilotBackend:
             item_logger=item_logger,
             model=model,
             cwd=cwd,
+            template_name=template_name,
         )
 
 
@@ -83,8 +86,9 @@ class ClaudeCodeBackend:
         item_logger: Any = None,
         model: str | None = None,
         cwd: str | None = None,
+        template_name: str | None = None,
     ) -> CopilotResult:
-        final_prompt = prompt or build_prompt_from_work_item(work_item)
+        final_prompt = prompt or build_prompt_from_work_item(work_item, template_name or "beads-item")
         # Claude Code is read-only by design; deny_write is inherent.
         if shutil.which(self.cli_path) is None:
             return CopilotResult(
