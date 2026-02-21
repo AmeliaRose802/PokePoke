@@ -124,13 +124,6 @@ class GitConfig:
         return self.fallback_branch
 
 
-@dataclass
-class TestDataEntry:
-    """A single piece of test data for prompt templates."""
-    key: str = ""
-    value: str = ""
-    description: str = ""
-
 
 @dataclass
 class AssignmentRuleMatch:
