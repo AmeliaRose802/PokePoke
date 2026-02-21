@@ -518,6 +518,111 @@ class TestRunParallelLoop:
         assert code == 0
         finalize_fn.assert_called_once()
 
+    @patch("pokepoke.parallel.time.sleep")
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.set_executor")
+    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.parallel.is_shutting_down", return_value=False)
+    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.parallel.get_ready_work_items")
+    @patch("pokepoke.parallel.select_multiple_items")
+    @patch("pokepoke.parallel.process_work_item")
+    def test_single_shot_drain_updates_stats(
+        self, mock_pwi, mock_sel, mock_ready, mock_repo,
+        mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep,
+    ) -> None:
+        """UI stats should update after draining remaining futures in single-shot mode."""
+        mock_sleep.return_value = None
+        fast_item = _make_item("fast")
+        slow_item = _make_item("slow")
+        mock_ready.return_value = [fast_item, slow_item]
+        mock_sel.return_value = [fast_item, slow_item]
+
+        slow_release = threading.Event()
+        threading.Timer(0.05, slow_release.set).start()
+
+        def _process(item: BeadsWorkItem, *args, **kwargs):
+            if item.id == "slow":
+                assert slow_release.wait(timeout=1), "Slow worker never released"
+            return (True, 1, AgentStats(), 0, 0, None)
+
+        mock_pwi.side_effect = _process
+
+        stats = SessionStats(agent_stats=AgentStats())
+        logger = Mock()
+
+        def record_fn(item, success, requests, item_stats, cleanup_runs, gate_runs, mc, s, _logger):
+            if success:
+                s.items_completed += 1
+
+        code = run_parallel_loop(
+            effective_parallel=2, mode_name="Autonomous",
+            main_repo_path="/repo", failed_claim_ids=set(),
+            session_stats=stats, start_time=time.time(),
+            run_logger=logger, continuous=False,
+            record_fn=record_fn, finalize_fn=Mock(),
+        )
+
+        assert code == 0
+        assert slow_release.is_set()
+        # First call happens inside the main loop, second after drain.
+        assert mock_ui.ui.update_stats.call_count >= 2
+        last_stats = mock_ui.ui.update_stats.call_args_list[-1][0][0]
+        assert last_stats.items_completed == 2
+
+    @patch("pokepoke.parallel.time.sleep")
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.set_executor")
+    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.parallel._collect_done_futures")
+    @patch("pokepoke.parallel.is_shutting_down")
+    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.parallel.get_ready_work_items")
+    @patch("pokepoke.parallel.select_multiple_items")
+    @patch("pokepoke.parallel.process_work_item")
+    def test_shutdown_cleanup_updates_stats(
+        self, mock_pwi, mock_sel, mock_ready, mock_repo,
+        mock_shut, mock_collect, mock_stop, mock_set_exec,
+        mock_ui, mock_sleep,
+    ) -> None:
+        """Draining during shutdown should push updated stats to the UI."""
+        mock_sleep.return_value = None
+        slow_item = _make_item("slow-shutdown")
+        mock_ready.return_value = [slow_item]
+        mock_sel.return_value = [slow_item]
+        mock_pwi.return_value = (True, 1, AgentStats(), 0, 0, None)
+
+        shutdown_flag = {"value": False}
+        mock_shut.side_effect = lambda: shutdown_flag["value"]
+
+        def collect_side_effect(futures, failed, total, stats, logger, record_fn):
+            # Simulate shutdown being requested while futures are still pending.
+            shutdown_flag["value"] = True
+            return total, False
+
+        mock_collect.side_effect = collect_side_effect
+
+        stats = SessionStats(agent_stats=AgentStats())
+        logger = Mock()
+
+        def record_fn(item, success, requests, item_stats, cleanup_runs, gate_runs, mc, s, _logger):
+            if success:
+                s.items_completed += 1
+
+        code = run_parallel_loop(
+            effective_parallel=1, mode_name="Autonomous",
+            main_repo_path="/repo", failed_claim_ids=set(),
+            session_stats=stats, start_time=time.time(),
+            run_logger=logger, continuous=True,
+            record_fn=record_fn, finalize_fn=Mock(),
+        )
+
+        assert code == 0
+        # The final snapshot from the cleanup path should include the completed item.
+        assert mock_ui.ui.update_stats.call_count >= 2
+        last_stats = mock_ui.ui.update_stats.call_args_list[-1][0][0]
+        assert last_stats.items_completed == 1
+
 
 class TestCollectDoneFuturesWait:
     """Tests for _collect_done_futures wait fallback path."""
