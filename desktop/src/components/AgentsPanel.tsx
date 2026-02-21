@@ -62,6 +62,7 @@ const UNKNOWN_SESSION = "__unknown__";
 
 /** Format a session_id (epoch timestamp string) as a readable label. */
 function formatSessionLabel(sessionId: string): string {
+  if (sessionId === UNKNOWN_SESSION) return "Previous Session";
   const epoch = parseFloat(sessionId);
   if (isNaN(epoch)) return `Session ${sessionId}`;
   const date = new Date(epoch * 1000);
