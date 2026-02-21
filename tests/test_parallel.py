@@ -586,7 +586,7 @@ class TestRunParallelLoop:
         fast_item = _make_item("fast")
         slow_item = _make_item("slow")
         mock_ready.return_value = [fast_item, slow_item]
-        mock_sel.return_value = [fast_item, slow_item]
+        mock_sel.side_effect = [[fast_item, slow_item], []]
 
         slow_release = threading.Event()
         threading.Timer(0.05, slow_release.set).start()
