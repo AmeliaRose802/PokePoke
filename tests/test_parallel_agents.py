@@ -17,6 +17,8 @@ from pokepoke.merge_queue import MergeQueue, MergeResult, MergeStatus
 from pokepoke.parallel import (
     _collect_done_futures,
     _parallel_process_item,
+    _build_worker_name,
+    _snake_for_work_item,
 )
 from pokepoke.shutdown import (
     is_shutting_down,
@@ -437,14 +439,16 @@ class TestWorkerCounterIncrements:
     """Each submitted item should get a unique worker name with incrementing counter."""
 
     def test_worker_names_are_unique(self) -> None:
-        """Verify that different items submitted get different worker-N suffixes."""
-        submitted_names: list[str] = []
+        """Verify that different items submitted get distinct snake-based worker names."""
+        submitted_names: dict[str, str] = {}
+        expected_names: dict[str, str] = {}
 
         def fake_process(item, **kwargs):
-            submitted_names.append(get_agent_name())
+            submitted_names[item.id] = get_agent_name()
             return _fake_process_result()
 
-        set_agent_name("test-agent")
+        base_name = "test-agent"
+        set_agent_name(base_name)
 
         items = [_make_item(f"WC-{i}") for i in range(3)]
 
@@ -452,9 +456,10 @@ class TestWorkerCounterIncrements:
         logger = MagicMock(spec=RunLogger)
 
         with patch("pokepoke.parallel.process_work_item", side_effect=fake_process):
-            threads = []
-            for i, item in enumerate(items):
-                name = f"test-agent-worker-{i + 1}"
+            threads: list[threading.Thread] = []
+            for i, item in enumerate(items, start=1):
+                name = _build_worker_name(base_name, item.id, i)
+                expected_names[item.id] = name
                 t = threading.Thread(
                     target=_parallel_process_item,
                     args=(item, logger, semaphore, name),
@@ -467,10 +472,19 @@ class TestWorkerCounterIncrements:
         clear_agent_name()
 
         # All names should be unique
-        assert len(set(submitted_names)) == 3
-        # Each should follow the pattern
-        for name in submitted_names:
-            assert name.startswith("test-agent-worker-")
+        assert len(set(submitted_names.values())) == 3
+        # Names should match the snake-derived worker names
+        assert submitted_names == expected_names
+
+    def test_worker_name_includes_snake_type(self) -> None:
+        """Worker names should embed the deterministic snake type for the item ID."""
+        base_name = "alpha"
+        item = _make_item("SNAKE-123")
+        expected_snake = _snake_for_work_item(item.id)
+
+        worker_name = _build_worker_name(base_name, item.id, 1)
+
+        assert worker_name == f"{base_name}-{expected_snake}-worker-1"
 
 
 # ---------------------------------------------------------------------------

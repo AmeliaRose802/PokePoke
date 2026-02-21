@@ -20,6 +20,37 @@ _Future = concurrent.futures.Future[
     tuple[bool, int, AgentStats | None, int, int, ModelCompletionRecord | None]
 ]
 
+_SNAKE_TYPES: tuple[str, ...] = (
+    "cobra",
+    "corn",
+    "rainbow_boa",
+    "rattlesnake",
+    "sea_snake",
+)
+
+
+def _hash_string(value: str) -> int:
+    """Mirror desktop snake hash: deterministic 32-bit string hash (Math.abs())."""
+    hash_val = 0
+    for ch in value:
+        hash_val = ((hash_val << 5) - hash_val + ord(ch)) & 0xFFFFFFFF
+    # Convert to signed 32-bit then absolute value to match JS behavior
+    if hash_val & 0x80000000:
+        hash_val -= 0x100000000
+    return abs(hash_val)
+
+
+def _snake_for_work_item(item_id: str) -> str:
+    """Deterministically pick a snake type for a work item ID."""
+    index = _hash_string(item_id) % len(_SNAKE_TYPES)
+    return _SNAKE_TYPES[index]
+
+
+def _build_worker_name(base_agent_name: str, item_id: str, counter: int) -> str:
+    """Compose a worker name that includes the snake icon type and a unique suffix."""
+    snake_type = _snake_for_work_item(item_id)
+    return f"{base_agent_name}-{snake_type}-worker-{counter}"
+
 
 def _parallel_process_item(
     item: BeadsWorkItem,
@@ -213,16 +244,19 @@ def run_parallel_loop(
             current_active = {i.id for i in futures.values()}
             slots = effective_parallel - len(futures)
 
-            if slots > 0 and not should_stop_after_current():
+            if (
+                slots > 0
+                and not should_stop_after_current()
+                and not (not continuous and any_success)
+            ):
                 selected_items = select_multiple_items(
                     ready_items, count=slots,
                     skip_ids=failed_claim_ids, claimed_ids=current_active,
                 )
                 for item in selected_items:
                     _worker_counter += 1
-                    # Derive a per-worker agent name from the main agent name
                     base_name = get_agent_name(default="pokepoke")
-                    worker_name = f"{base_name}-worker-{_worker_counter}"
+                    worker_name = _build_worker_name(base_name, item.id, _worker_counter)
                     run_logger.log_orchestrator(
                         f"Submitting item: {item.id} - {item.title} (worker: {worker_name})"
                     )
