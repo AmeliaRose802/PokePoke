@@ -5,8 +5,6 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-logger = logging.getLogger(__name__)
-
 from filelock import Timeout
 
 from pokepoke.copilot import invoke_copilot
@@ -25,6 +23,8 @@ from pokepoke.model_selection import select_model_for_item
 from pokepoke.agent_context import get_agent_name
 from pokepoke.config import get_config
 from pokepoke.coordination import worktree_setup_lock
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import RunLogger
@@ -65,7 +65,7 @@ def process_work_item(
 
         # Select model for this work item (A/B testing)
         config = get_config()
-        selected_model = select_model_for_item(item.id)
+        selected_model = select_model_for_item(item)
         base_agent_id = agent_id or item.id
         backend_provider = config.ai_backend.provider
         worktree_lock_timeout = float(config.command_timeout)

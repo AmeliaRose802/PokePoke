@@ -404,3 +404,73 @@ class TestCommandTimeout:
         data = {"command_timeout": 0}
         config = ProjectConfig.from_dict(data)
         assert config.command_timeout == 30
+
+
+class TestAssignmentConfig:
+    """Tests for AssignmentConfig and AssignmentRule parsing."""
+
+    def test_defaults(self):
+        """Default assignment config has no rules and weighted fallback."""
+        config = ProjectConfig()
+        assert config.assignment.rules == []
+        assert config.assignment.fallback == "weighted"
+
+    def test_from_dict_empty(self):
+        """No assignment section yields defaults."""
+        config = ProjectConfig.from_dict({})
+        assert config.assignment.rules == []
+        assert config.assignment.fallback == "weighted"
+
+    def test_from_dict_with_rules(self):
+        """Rules are correctly parsed from dict."""
+        data = {
+            "assignment": {
+                "rules": [
+                    {
+                        "match": {"issue_type": "bug"},
+                        "model": "claude-sonnet-4.5",
+                    },
+                    {
+                        "match": {"issue_type": "feature", "priority_max": 1, "labels": ["critical"]},
+                        "model": "claude-opus-4.6",
+                        "prompt_template": "high-pri-feature",
+                    },
+                ],
+                "fallback": "gpt-5",
+            }
+        }
+        config = ProjectConfig.from_dict(data)
+        assert len(config.assignment.rules) == 2
+        assert config.assignment.fallback == "gpt-5"
+
+        r0 = config.assignment.rules[0]
+        assert r0.match.issue_type == "bug"
+        assert r0.match.labels is None
+        assert r0.match.priority_max is None
+        assert r0.model == "claude-sonnet-4.5"
+        assert r0.prompt_template is None
+
+        r1 = config.assignment.rules[1]
+        assert r1.match.issue_type == "feature"
+        assert r1.match.priority_max == 1
+        assert r1.match.labels == ["critical"]
+        assert r1.model == "claude-opus-4.6"
+        assert r1.prompt_template == "high-pri-feature"
+
+    def test_from_dict_empty_rules_list(self):
+        """Empty rules list is valid."""
+        data = {"assignment": {"rules": []}}
+        config = ProjectConfig.from_dict(data)
+        assert config.assignment.rules == []
+        assert config.assignment.fallback == "weighted"
+
+    def test_rule_with_no_match_section(self):
+        """A rule with no match section gets empty match criteria."""
+        data = {"assignment": {"rules": [{"model": "some-model"}]}}
+        config = ProjectConfig.from_dict(data)
+        assert len(config.assignment.rules) == 1
+        rule = config.assignment.rules[0]
+        assert rule.match.issue_type is None
+        assert rule.match.labels is None
+        assert rule.match.priority_max is None
+        assert rule.model == "some-model"

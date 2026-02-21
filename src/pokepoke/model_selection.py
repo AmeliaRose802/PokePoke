@@ -3,28 +3,84 @@
 Selects models from a configured candidate pool using performance-weighted
 random selection.  Models with higher historical success rates are chosen
 more often, while models with insufficient data get equal opportunity.
+
+When assignment rules are configured, the first matching rule determines the
+model (and optionally the prompt template) for a work item.  If no rule
+matches, the system falls back to weighted A/B selection.
 """
 
 import random
 
-from pokepoke.config import get_config
+from pokepoke.config import get_config, AssignmentRule
 from pokepoke.model_stats_store import get_model_weights
+from pokepoke.types import BeadsWorkItem
 
 
-def select_model_for_item(item_id: str) -> str:
-    """Select a model for a work item from the configured candidate list.
+def _matches_rule(rule: AssignmentRule, item: BeadsWorkItem) -> bool:
+    """Check whether a work item matches an assignment rule's criteria.
 
-    Uses performance-weighted random selection when historical data is
-    available.  Models with fewer than ``min_attempts`` runs are given
-    a neutral weight of 1.0 so they still get sampled.
+    All specified criteria must match (AND logic).  Criteria that are
+    ``None`` are treated as wildcards (always match).
+    """
+    m = rule.match
+
+    if m.issue_type is not None and item.issue_type != m.issue_type:
+        return False
+
+    if m.priority_max is not None and item.priority > m.priority_max:
+        return False
+
+    if m.labels is not None:
+        item_labels = set(item.labels or [])
+        if not item_labels.intersection(m.labels):
+            return False
+
+    return True
+
+
+def get_assignment_for_item(item: BeadsWorkItem) -> tuple[str | None, str | None]:
+    """Return (model, prompt_template) for *item* based on assignment rules.
+
+    Returns ``(None, None)`` when no rule matches so the caller can fall
+    back to default behaviour.
+    """
+    config = get_config()
+    for rule in config.assignment.rules:
+        if _matches_rule(rule, item):
+            return rule.model, rule.prompt_template
+    return None, None
+
+
+def select_model_for_item(item: BeadsWorkItem) -> str:
+    """Select a model for a work item.
+
+    Evaluates assignment rules first; if a rule matches and specifies a
+    model, that model is returned.  Otherwise falls back to
+    performance-weighted random selection from the candidate pool.
 
     Args:
-        item_id: The work item ID (used for logging context).
+        item: The work item to select a model for.
 
     Returns:
         The model name string to use for this work item.
     """
     config = get_config()
+
+    # Check assignment rules first
+    rule_model, _ = get_assignment_for_item(item)
+    if rule_model is not None:
+        print(f"   [A/B] Assigned model '{rule_model}' to {item.id} "
+              f"(matched assignment rule)")
+        return rule_model
+
+    # Check fallback setting
+    fallback = config.assignment.fallback
+    if fallback != "weighted":
+        print(f"   [A/B] Assigned model '{fallback}' to {item.id} "
+              f"(assignment fallback)")
+        return fallback
+
+    # Default: weighted A/B selection
     candidates = config.models.candidate_models
 
     if not candidates:
@@ -39,7 +95,7 @@ def select_model_for_item(item_id: str) -> str:
     # Determine if selection was weighted or uniform
     uniform = all(w == weights[0] for w in weights)
     mode = "uniform" if uniform else "weighted"
-    print(f"   [A/B] Assigned model '{model}' to {item_id} "
+    print(f"   [A/B] Assigned model '{model}' to {item.id} "
           f"({mode}, {len(candidates)} candidates)")
     return model
 
