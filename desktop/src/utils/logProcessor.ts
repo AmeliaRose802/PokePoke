@@ -74,11 +74,11 @@ export function isToolResultMessage(message: string): boolean {
   return message.includes("Result:") || TOOL_RESULT_FALLBACK.test(message);
 }
 
-export function isCopilotToolBatchHeader(message: string): boolean {
+function isCopilotToolBatchHeader(message: string): boolean {
   return COPILOT_TOOL_BATCH_HEADER.test(message);
 }
 
-export function parseCopilotToolBatchHeaderCount(message: string): number | undefined {
+function parseCopilotToolBatchHeaderCount(message: string): number | undefined {
   const match = message.match(COPILOT_TOOL_BATCH_HEADER);
   if (!match) return undefined;
   const n = Number(match[1]);
@@ -106,7 +106,7 @@ export function parseToolLabel(message: string): string {
   return `🌿 ${callMatch[1].trim()}`;
 }
 
-export function parseToolCallParts(message: string): { toolName: string; argsText?: string } {
+function parseToolCallParts(message: string): { toolName: string; argsText?: string } {
   const match = message.match(TOOL_CALL_PATTERN);
   if (!match) return { toolName: message.trim() };
   const rest = match[1].trim();
@@ -166,7 +166,7 @@ function sumReplacementsFromResults(items: ToolItem[]): number {
   return Number.isFinite(total) ? total : 0;
 }
 
-export function buildToolGroupSummary(toolName: string, items: ToolItem[]): string | undefined {
+function buildToolGroupSummary(toolName: string, items: ToolItem[]): string | undefined {
   if (toolName === "edit") {
     const files = new Set(items.flatMap((i) => extractPathsFromArgs(i.argsText)));
     const replacements = sumReplacementsFromResults(items);
@@ -416,7 +416,7 @@ function mergeConsecutiveLogEntries(items: RenderLogItem[]): RenderLogItem[] {
 }
 
 /** Check if a string contains markdown syntax worth rendering. */
-export function containsMarkdown(text: string): boolean {
+function containsMarkdown(text: string): boolean {
   return /(?:^#{1,6}\s|[*_]{1,2}\S|\[.+\]\(.+\)|`[^`]+`|^[-*+]\s|^\d+\.\s|^>\s|^```)/m.test(text);
 }
 
