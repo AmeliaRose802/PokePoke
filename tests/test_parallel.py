@@ -281,7 +281,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.parallel.time.sleep")
     @patch("pokepoke.parallel.terminal_ui")
     @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
+    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True, True])
     @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.parallel.get_ready_work_items")
     @patch("pokepoke.parallel.select_multiple_items")
@@ -313,6 +313,56 @@ class TestRunParallelLoop:
         finalize_fn.assert_called_once()
         # record_fn should be called at least once (from collect or drain)
         assert record_fn.call_count >= 1
+
+    @patch("pokepoke.parallel.time.sleep")
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.set_executor")
+    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.parallel.is_shutting_down")
+    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.parallel.get_ready_work_items")
+    @patch("pokepoke.parallel.select_multiple_items")
+    @patch("pokepoke.parallel._collect_done_futures")
+    @patch("pokepoke.parallel.process_work_item")
+    def test_refills_all_slots_after_completions(
+        self, mock_pwi, mock_collect, mock_sel, mock_ready,
+        mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep,
+    ) -> None:
+        """Regression (PokePoke-qagy): all empty slots refilled after batch completes."""
+        items = [_make_item(f"r{i}") for i in range(6)]
+        mock_ready.return_value = items
+        mock_pwi.return_value = (True, 1, AgentStats(), 0, 0, None)
+
+        # Iteration 1: collect does nothing (no completed futures yet).
+        # Iteration 2: collect clears all 3 futures (simulates 3 completions).
+        call_idx = [0]
+
+        def collect_side(futures, failed, total, stats, logger, record_fn):
+            call_idx[0] += 1
+            if call_idx[0] == 2:
+                futures.clear()
+                return (total, True)
+            return (total, False)
+
+        mock_collect.side_effect = collect_side
+        mock_sel.side_effect = [items[:3], items[3:6]]
+
+        # Enough False for 2 full iterations (1 while + 10 sleep each) + shutdown
+        mock_shut.side_effect = [False] * 22 + [True] * 5
+
+        stats = SessionStats(agent_stats=AgentStats())
+        run_parallel_loop(
+            effective_parallel=3, mode_name="Autonomous",
+            main_repo_path="/repo", failed_claim_ids=set(),
+            session_stats=stats, start_time=time.time(),
+            run_logger=Mock(), continuous=True,
+            record_fn=Mock(), finalize_fn=Mock(),
+        )
+
+        # Both calls to select_multiple_items should request count=3
+        assert mock_sel.call_count >= 2
+        for call in mock_sel.call_args_list[:2]:
+            assert call.kwargs['count'] == 3
 
     @patch("pokepoke.parallel.time.sleep")
     @patch("pokepoke.parallel.terminal_ui")
