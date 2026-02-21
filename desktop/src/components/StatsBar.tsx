@@ -73,7 +73,7 @@ export function StatsBar({ stats, modelLeaderboard, activeAgentModel, onOpenStat
         </div>
         <div className="summary-block">
           <span className="summary-label">Net</span>
-          <span className="summary-value">{netDelta >= 0 ? `+${netDelta}` : netDelta}</span>
+          <span className="summary-value">{netDelta > 0 ? `+${netDelta}` : netDelta}</span>
         </div>
         <div className="summary-block">
           <span className="summary-label">API</span>
