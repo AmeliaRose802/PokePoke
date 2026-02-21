@@ -100,9 +100,6 @@ export function AgentsPanel({
   const [expandedCompletedSections, setExpandedCompletedSections] = useState<Set<string>>(
     new Set()
   );
-  const [collapsedAgentLogs, setCollapsedAgentLogs] = useState<Set<string>>(
-    new Set()
-  );
 
   const toggleSession = (sessionId: string) => {
     setExpandedSessions((prev) => {
@@ -128,14 +125,6 @@ export function AgentsPanel({
     });
   };
 
-  const toggleAgentLogSection = (agentId: string) => {
-    setCollapsedAgentLogs((prev) => {
-      const next = new Set(prev);
-      if (next.has(agentId)) next.delete(agentId);
-      else next.add(agentId);
-      return next;
-    });
-  };
 
   const agentIdSet = new Set(agents.map((a) => a.agent_id));
   const childrenByParent = new Map<string, AgentInfo[]>();
@@ -182,9 +171,6 @@ export function AgentsPanel({
     const agentIconPath = getAgentAvatar(agent);
     const fallbackEmoji = getEmojiAvatar(agent.agent_id);
     const iconAlt = `${agentType ?? "agent"} icon`;
-    const isLogCollapsed = collapsedAgentLogs.has(agent.agent_id);
-    const logToggleLabel = isLogCollapsed ? "Show log" : "Hide log";
-    const logToggleChevron = isLogCollapsed ? "▸" : "▾";
 
     return (
       <div
@@ -287,41 +273,14 @@ export function AgentsPanel({
             </span>
           </div>
         ) : null}
-        <div
-          className={`agent-card-log-section${
-            isLogCollapsed ? " agent-card-log-section-collapsed" : ""
-          }`}
-        >
-          <button
-            type="button"
-            className="agent-card-log-toggle"
-            aria-expanded={!isLogCollapsed}
-            title="Toggle run log visibility"
-            onClick={(evt) => {
-              evt.stopPropagation();
-              toggleAgentLogSection(agent.agent_id);
-            }}
-          >
-            <span className="agent-card-log-toggle-chevron">
-              {logToggleChevron}
-            </span>
-            <span className="agent-card-log-toggle-text">{logToggleLabel}</span>
-          </button>
-          {!isLogCollapsed ? (
-            <div className="agent-card-logs">
-              {agent.recent_logs.length === 0 ? (
-                <span className="agent-card-no-logs">
-                  {isPaused ? "Paused" : "Waiting for output…"}
-                </span>
-              ) : (
-                agent.recent_logs.map((line, i) => (
-                  <div key={i} className="agent-card-log-line">
-                    {line}
-                  </div>
-                ))
-              )}
-            </div>
-          ) : null}
+        <div className="agent-card-logs">
+          {agent.recent_logs.length === 0 ? (
+            <span className="agent-card-no-logs">{isPaused ? "Paused" : "Waiting for output…"}</span>
+          ) : (
+            agent.recent_logs.map((line, i) => (
+              <div key={i} className="agent-card-log-line">{line}</div>
+            ))
+          )}
         </div>
       </div>
     );
