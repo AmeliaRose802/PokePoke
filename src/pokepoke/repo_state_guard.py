@@ -107,9 +107,7 @@ def wait_for_main_repo_clean(
 
 def _truncate_files(files: Iterable[str], limit: int = 3) -> Iterable[str]:
     """Yield up to *limit* formatted file paths for logging."""
-    count = 0
-    for f in files:
+    for count, f in enumerate(files, 1):
         yield f.strip()
-        count += 1
         if count >= limit:
             break

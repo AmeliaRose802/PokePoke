@@ -7,7 +7,6 @@ to help the agent recover.
 
 import time
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Tuple
 
 
 @dataclass
@@ -18,7 +17,7 @@ class ShellReadState:
     first_read_time: float = field(default_factory=time.time)
     last_read_time: float = field(default_factory=time.time)
     total_wait_seconds: float = 0.0
-    last_output_hash: Optional[int] = None
+    last_output_hash: int | None = None
     consecutive_empty_reads: int = 0
 
 
@@ -46,7 +45,7 @@ class HungCommandDetector:
         """
         self.max_retries = max_retries
         self.cumulative_timeout = cumulative_timeout
-        self._shell_states: Dict[str, ShellReadState] = {}
+        self._shell_states: dict[str, ShellReadState] = {}
 
     def record_powershell_start(self, shell_id: str) -> None:
         """Record that a new powershell command was started.
@@ -62,8 +61,8 @@ class HungCommandDetector:
         self,
         shell_id: str,
         delay: float,
-        output: Optional[str] = None,
-    ) -> Tuple[bool, Optional[str]]:
+        output: str | None = None,
+    ) -> tuple[bool, str | None]:
         """Record a read_powershell call and check if command appears hung.
 
         Args:
@@ -122,7 +121,7 @@ class HungCommandDetector:
         """
         self._shell_states.pop(shell_id, None)
 
-    def get_state(self, shell_id: str) -> Optional[ShellReadState]:
+    def get_state(self, shell_id: str) -> ShellReadState | None:
         """Get the current state for a shell session.
 
         Args:

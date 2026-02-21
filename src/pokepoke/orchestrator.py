@@ -2,6 +2,7 @@
 
 import argparse
 import atexit
+import contextlib
 import os
 import sys
 import time
@@ -319,10 +320,8 @@ def run_orchestrator(
         except Exception:
             pass  # Best effort cleanup
         # Clean up signal handlers
-        try:
+        with contextlib.suppress(Exception):
             unregister_shutdown_handlers()
-        except Exception:
-            pass  # Best effort cleanup
 
 def main() -> int:
     """Main entry point for PokePoke CLI."""
