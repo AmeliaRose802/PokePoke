@@ -142,6 +142,10 @@ def create_event_handler(
 
     # Track pending tool calls by name for hung detection
     pending_tools: dict[str, dict[str, Any]] = {}
+    # Track whether message_delta events streamed content for the current
+    # assistant turn so that the final assistant.message event does not
+    # duplicate the same text into output_lines / item_logger.
+    received_deltas = False
 
     def _iter_streaming_chunks(event_obj: Any) -> list[tuple[str, str]]:
         """Extract text chunks from tool streaming/progress events."""
@@ -157,9 +161,11 @@ def create_event_handler(
 
     def handle_event(event: Any) -> None:
         """Handle SDK session events."""
+        nonlocal received_deltas
         event_type= event.type.value if hasattr(event.type, 'value') else str(event.type)
 
         if event_type == "assistant.message_delta":
+            received_deltas = True
             terminal_ui.ui.set_style("green")
             delta = None
             if hasattr(event, 'data'):
@@ -176,11 +182,15 @@ def create_event_handler(
             terminal_ui.ui.set_style("green")
             content = getattr(event.data, 'content', None) if hasattr(event, 'data') else None
             tool_requests = getattr(event.data, 'tool_requests', None) if hasattr(event, 'data') else None
-            if content:
+            if content and not received_deltas:
+                # Only log the full message when it was NOT already streamed
+                # via message_delta events (avoids writing content twice).
                 print(content)
                 output_lines.append(content)
                 if item_logger:
                     item_logger.log_copilot_output(content)
+            # Reset delta tracking for the next assistant turn.
+            received_deltas = False
             terminal_ui.ui.set_style(None)
             if tool_requests and len(tool_requests) > 0:
                 print(f"\n[Copilot] Calling {len(tool_requests)} tool(s)...")
