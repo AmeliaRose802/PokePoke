@@ -16,27 +16,15 @@ except ImportError:
 
 
 def seed_historical_agents(self: Any) -> None:
-    """Load persisted agent logs from disk so the UI shows history on startup."""
-    from pokepoke.agent_history import load_historical_agents
+    """Load persisted agent logs from disk so the UI shows history on startup.
 
-    log_roots = _discover_log_roots()
-    if not log_roots:
-        return
-    try:
-        records = load_historical_agents(
-            log_roots=log_roots,
-            preview_limit=self._agent_max_log_lines_internal,
-            detail_limit=self._agent_detail_max_log_lines_internal,
-        )
-    except Exception as exc:  # Defensive: logs should never block startup
-        self.push_log(f"⚠️ Failed to load historical logs: {exc}", "orchestrator", "yellow")
-        return
-
-    for record in records:
-        try:
-            self._agent_registry.register_historical_agent(record)
-        except ValueError:
-            continue
+    NOTE: Disabled to fix critical memory bloat (35+ GB).  Loading all historical
+    log files at startup and deep-copying them every 100ms poll caused unbounded
+    memory growth.  See PokePoke-6pgw / memory-fix tracking issue.
+    """
+    # Intentionally a no-op until a lazy/paginated history API replaces the
+    # eager bulk-load approach.
+    return
 
 
 def _discover_log_roots() -> list[Path]:

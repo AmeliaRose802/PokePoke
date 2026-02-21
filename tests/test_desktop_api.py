@@ -6,6 +6,7 @@ import time
 import pytest
 
 from pokepoke.desktop_api import DesktopAPI
+from pokepoke.desktop_api_ext import _discover_log_roots as _real_discover_log_roots
 from pokepoke.types import SessionStats, AgentStats, BeadsWorkItem
 
 
@@ -26,8 +27,12 @@ def test_initial_state_defaults() -> None:
     assert state["log_count"] == 0
 
 
-def test_historical_agent_logs_loaded(tmp_path, monkeypatch) -> None:
-    """DesktopAPI should hydrate agents from persisted log files on startup."""
+def test_historical_agent_logs_not_loaded(tmp_path, monkeypatch) -> None:
+    """Historical agent loading is disabled to prevent memory bloat.
+
+    seed_historical_agents is intentionally a no-op.  Past run logs should
+    not be eagerly loaded into memory at startup.
+    """
     logs_root = tmp_path / "logs"
     run_dir = logs_root / "20260218_120000_abcdef12"
     items_dir = run_dir / "items"
@@ -67,13 +72,7 @@ def test_historical_agent_logs_loaded(tmp_path, monkeypatch) -> None:
 
     api = DesktopAPI()
     agents = api.get_state()["agents"]
-    assert agents, "Expected loaders to surface at least one historical agent"
-    matching = [agent for agent in agents if agent.get("work_item_id") == "PokePoke-9ikr"]
-    assert matching, "Historical agent entry missing"
-    agent = matching[0]
-    assert agent["status"] == "success"
-    assert agent["name"] == "pokepoke_pro"
-    assert len(agent["recent_logs"]) > 0
+    assert agents == [], "Historical agents should NOT be loaded at startup (memory fix)"
 
 
 def test_push_log_and_incremental_reads() -> None:
@@ -342,8 +341,8 @@ def test_push_log_buffer_trim_adjusts_read_index() -> None:
     assert len(new_logs) >= 0
 
 
-def test_agent_detail_retains_full_log_history() -> None:
-    """Agent detail responses should keep full logs, not cap at arbitrary limits."""
+def test_agent_detail_caps_log_history() -> None:
+    """Agent detail log_lines should be capped at 500 to prevent memory bloat."""
     api = DesktopAPI()
     api.push_agent_status("agent-1", "AgentOne")
 
@@ -353,8 +352,8 @@ def test_agent_detail_retains_full_log_history() -> None:
     detail = api.get_agent_detail("agent-1")
     assert detail is not None
     assert len(detail["recent_logs"]) == api._agent_max_log_lines  # preview still limited
-    assert len(detail["log_lines"]) == 3000  # full history retained
-    assert detail["log_lines"][0] == "line-0"
+    assert len(detail["log_lines"]) == 500  # capped to prevent memory bloat
+    assert detail["log_lines"][0] == "line-2500"  # oldest retained line
     assert detail["log_lines"][-1] == "line-2999"
 
 
@@ -911,3 +910,90 @@ def test_resume_agent_logs_message() -> None:
 
     logs = api.get_new_logs()
     assert any("resumed" in log["message"].lower() for log in logs)
+
+
+# ─── desktop_api_ext coverage tests ──────────────────────────────────────
+
+
+def test_discover_log_roots_with_env_var(tmp_path, monkeypatch) -> None:
+    """_discover_log_roots should include POKEPOKE_LOGS_DIR when set."""
+    logs_dir = tmp_path / "custom_logs"
+    logs_dir.mkdir()
+    monkeypatch.setenv("POKEPOKE_LOGS_DIR", str(logs_dir))
+    monkeypatch.setattr("pokepoke.config._find_repo_root", lambda: tmp_path)
+
+    roots = _real_discover_log_roots()
+    assert logs_dir.resolve() in roots
+
+
+def test_discover_log_roots_without_env_var(tmp_path, monkeypatch) -> None:
+    """_discover_log_roots should fall back to repo-relative paths."""
+    monkeypatch.delenv("POKEPOKE_LOGS_DIR", raising=False)
+    repo_logs = tmp_path / ".pokepoke" / "logs"
+    repo_logs.mkdir(parents=True)
+    monkeypatch.setattr("pokepoke.config._find_repo_root", lambda: tmp_path)
+
+    roots = _real_discover_log_roots()
+    assert repo_logs.resolve() in roots
+
+
+def test_discover_log_roots_find_repo_root_fails(tmp_path, monkeypatch) -> None:
+    """_discover_log_roots should fall back to cwd when _find_repo_root fails."""
+    monkeypatch.delenv("POKEPOKE_LOGS_DIR", raising=False)
+
+    def _fail():
+        raise RuntimeError("no repo")
+
+    monkeypatch.setattr("pokepoke.config._find_repo_root", _fail)
+
+    roots = _real_discover_log_roots()
+    assert isinstance(roots, list)
+
+
+def test_get_config_no_yaml(monkeypatch) -> None:
+    """get_config should raise ImportError when yaml is not available."""
+    from unittest.mock import patch
+
+    api = DesktopAPI()
+    with patch("pokepoke.config._find_repo_root") as mock_root:
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            cfg = root / ".pokepoke" / "config.yaml"
+            cfg.parent.mkdir(parents=True)
+            cfg.write_text("key: val\n", encoding="utf-8")
+            mock_root.return_value = root
+
+            monkeypatch.setattr("pokepoke.desktop_api_ext._HAS_YAML", False)
+            with pytest.raises(ImportError, match="PyYAML"):
+                api.get_config()
+
+
+def test_get_config_file_not_found(monkeypatch) -> None:
+    """get_config should return exists=False when config file is missing."""
+    from unittest.mock import patch
+
+    api = DesktopAPI()
+    with patch("pokepoke.config._find_repo_root") as mock_root:
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            mock_root.return_value = root
+            result = api.get_config()
+
+    assert result["exists"] is False
+
+
+def test_save_config_no_yaml(monkeypatch) -> None:
+    """save_config should raise ImportError when yaml is not available."""
+    from unittest.mock import patch
+
+    api = DesktopAPI()
+    monkeypatch.setattr("pokepoke.desktop_api_ext._HAS_YAML", False)
+    with patch("pokepoke.config._find_repo_root"):
+        with pytest.raises(ImportError, match="PyYAML"):
+            api.save_config({"key": "val"})
