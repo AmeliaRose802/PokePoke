@@ -58,7 +58,7 @@ export type RenderLogItem =
 
 // ===================== Patterns =====================
 
-const TOOL_CALL_PATTERN = /^\s*(?:🔧|\[Tool\])\s*(.*)$/;
+const TOOL_CALL_PATTERN = /^\s*(?:🌿|\[Tool\])\s*(.*)$/;
 const TOOL_RESULT_PATTERN = /^\s*(✅|❌)\s*Result:\s*(.*)$/;
 const TOOL_RESULT_FALLBACK = /^\s*\[Result\]\s*(.*)$/i;
 const COPILOT_TOOL_BATCH_HEADER = /^\s*\[Copilot\]\s*Calling\s+(\d+)\s+tool\(s\)\.\.\.$/;
@@ -102,8 +102,8 @@ export function parseToolLabel(message: string): string {
   if (!match) return message.trim();
   const rest = match[1].trim();
   const callMatch = rest.match(/^([^(]+)\((.*)\)$/);
-  if (!callMatch) return `🔧 ${rest}`;
-  return `🔧 ${callMatch[1].trim()}`;
+  if (!callMatch) return `🌿 ${rest}`;
+  return `🌿 ${callMatch[1].trim()}`;
 }
 
 export function parseToolCallParts(message: string): { toolName: string; argsText?: string } {
@@ -259,7 +259,7 @@ export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
       const statusClass = hasError ? "log-error" : allDone ? "log-success" : undefined;
       groups.push({
         toolName,
-        toolLabel: `🔧 ${toolName} ×${slice.length}`,
+        toolLabel: `🌿 ${toolName} ×${slice.length}`,
         items: slice,
         statusClass,
         summaryText,

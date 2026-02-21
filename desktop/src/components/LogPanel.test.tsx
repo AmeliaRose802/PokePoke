@@ -43,7 +43,7 @@ describe('LogPanel', () => {
     expect(screen.getByText('2/2')).toBeInTheDocument();
 
     // Grouped tool summary present
-    expect(screen.getByText('🔧 grep ×2')).toBeInTheDocument();
+    expect(screen.getByText('🌿 grep ×2')).toBeInTheDocument();
   });
 
   it('renders a single tool call as a normal tool accordion', () => {
@@ -61,7 +61,7 @@ describe('LogPanel', () => {
       />
     );
 
-    expect(screen.getByText('🔧 view')).toBeInTheDocument();
+    expect(screen.getByText('🌿 view')).toBeInTheDocument();
     expect(screen.queryByText(/Tool batch/)).not.toBeInTheDocument();
   });
 
@@ -86,7 +86,7 @@ describe('LogPanel', () => {
     expect(screen.queryByText(/×1/)).not.toBeInTheDocument();
 
     // Should render as simple tool accordion
-    expect(screen.getByText('🔧 report_intent')).toBeInTheDocument();
+    expect(screen.getByText('🌿 report_intent')).toBeInTheDocument();
   });
 
   it('flattens single-item groups to direct tool accordions', () => {
@@ -115,8 +115,8 @@ describe('LogPanel', () => {
     expect(screen.queryByText(/edit ×1/)).not.toBeInTheDocument();
 
     // Individual tools should be directly visible within the batch
-    expect(screen.getByText('🔧 view')).toBeInTheDocument();
-    expect(screen.getByText('🔧 edit')).toBeInTheDocument();
+    expect(screen.getByText('🌿 view')).toBeInTheDocument();
+    expect(screen.getByText('🌿 edit')).toBeInTheDocument();
   });
 
   it('renders consecutive markdown lines as formatted HTML', () => {

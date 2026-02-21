@@ -27,7 +27,7 @@ interface Props {
 export function MaintenanceAgentsSection({ agents, onUpdate }: Props) {
   return (
     <div className="settings-section">
-      <h3 className="settings-section-title">🔧 Maintenance Agents</h3>
+      <h3 className="settings-section-title">🌳 Maintenance Agents</h3>
 
       {agents.length === 0 ? (
         <div className="settings-no-agents">

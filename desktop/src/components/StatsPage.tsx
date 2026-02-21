@@ -57,7 +57,7 @@ export function StatsPage({
   const sessionCards = [
     { label: "Added", value: addedCount, icon: "➕" },
     { label: "Done", value: doneCount, icon: "✅" },
-    { label: "Net", value: netDelta >= 0 ? `+${netDelta}` : netDelta, icon: "📈" },
+    { label: "Net", value: netDelta >= 0 ? `+${netDelta}` : netDelta, icon: "🌿" },
     { label: "Retries", value: agent?.retries ?? 0, icon: "🔁" },
     { label: "API Calls", value: agent?.premium_requests ?? 0, icon: "📡" },
     { label: "API seconds", value: (agent?.api_duration ?? 0) > 0 ? formatDurationShort(agent?.api_duration) : "—", icon: "⚡" },
@@ -173,7 +173,7 @@ export function StatsPage({
                 </div>
               </div>
               <div className="stats-card">
-                <span className="stats-card-icon">📈</span>
+                <span className="stats-card-icon">🌿</span>
                 <div className="stats-card-body">
                   <span className="stats-card-label">Net</span>
                   <span className="stats-card-value">{lifetimeNet >= 0 ? `+${lifetimeNet}` : lifetimeNet}</span>

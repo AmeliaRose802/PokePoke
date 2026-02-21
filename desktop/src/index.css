@@ -13,12 +13,35 @@
   line-height: 1.5;
   font-weight: 400;
   color-scheme: dark;
-  color: #c0caf5;
-  background-color: #1a1b26;
+  color: #d1fae5;
+  background-color: #1a2e1a;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  
+  /* Jungle/Snake Theme Color Palette */
+  --bg-primary: #1a2e1a;      /* dark forest green */
+  --bg-secondary: #233323;    /* medium forest green */
+  --bg-tertiary: #2d4a2d;     /* lighter forest green */
+  --bg-elevated: #365314;     /* dark olive - for cards/panels */
+  
+  --accent-primary: #4ade80;   /* bright jungle green */
+  --accent-secondary: #65a30d; /* lime green */
+  --accent-warning: #ea580c;   /* sunset orange */
+  --accent-error: #dc2626;     /* danger red */
+  --accent-success: #16a34a;   /* success green */
+  
+  --text-primary: #d1fae5;     /* light mint */
+  --text-secondary: #86efac;   /* medium mint */
+  --text-muted: #4ade80;       /* jungle green */
+  --text-accent: #84cc16;      /* bright lime */
+  
+  --border-primary: #365314;   /* dark olive */
+  --border-secondary: #4ade80; /* bright jungle green */
+  
+  --snake-scale-dark: #365314; /* dark olive for patterns */
+  --snake-scale-light: #84cc16; /* bright lime for patterns */
 }
 
 body {

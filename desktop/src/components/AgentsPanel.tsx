@@ -29,8 +29,8 @@ interface Props {
 }
 
 const ROBOT_AVATARS = [
-  "🤖", "🦾", "⚙️", "🔩", "🛠️", "🧠", "💡", "🔬",
-  "🚀", "🎯", "⚡", "🔮", "🌀", "🏗️", "🧩", "🎲",
+  "🐍", "🦎", "🕷️", "🦇", "🦋", "🐛", "🐝", "🐞",
+  "🌿", "🍃", "🌱", "🌳", "🌴", "🌲", "🎋", "🌾",
 ];
 
 /** Deterministic avatar based on agent_id hash (fallback for agents without work items) */
@@ -427,7 +427,7 @@ export function AgentsPanel({
     return (
       <aside className="agents-panel">
         <div className="agents-panel-header">
-          <span>🤖 Agents</span>
+          <span>🐍 Agents</span>
           <span className="agents-count">0</span>
         </div>
         <div className="agents-empty">No agents running</div>
@@ -438,7 +438,7 @@ export function AgentsPanel({
   return (
     <aside className="agents-panel">
       <div className="agents-panel-header">
-        <span>🤖 Agents</span>
+        <span>🐍 Agents</span>
         <span className="agents-count">{agents.length}</span>
       </div>
       <div className="agents-scroll">
