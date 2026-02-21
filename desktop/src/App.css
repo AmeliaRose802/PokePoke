@@ -2009,6 +2009,19 @@
   border-radius: 3px;
   font-size: 10px;
   font-family: inherit;
+  border: 1px solid var(--border-primary);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.prompt-var-tag:hover {
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  border-color: var(--accent-primary);
+}
+
+.prompt-var-tag:active {
+  opacity: 0.8;
 }
 
 /* ── Prompt Textarea ───────────────────────────────────────────────────── */
@@ -2278,6 +2291,15 @@
   margin-left: auto;
 }
 
+.settings-unsaved-banner {
+  background: var(--accent-error);
+  color: white;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
 /* ── Maintenance Agents ────────────────────────────────────────────────── */
 
 .settings-no-agents {
@@ -2399,6 +2421,23 @@
   padding: 2px 6px;
   border-radius: 3px;
   white-space: nowrap;
+}
+
+.prompt-file-link {
+  cursor: pointer;
+  color: var(--accent-primary);
+  transition: background-color 0.15s, text-decoration 0.15s;
+  user-select: none;
+}
+
+.prompt-file-link:hover {
+  background-color: var(--bg-secondary);
+  text-decoration: underline;
+}
+
+.prompt-file-link:focus {
+  outline: 1px solid var(--accent-primary);
+  outline-offset: 1px;
 }
 
 /* MCP server section */
