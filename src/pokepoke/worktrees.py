@@ -352,14 +352,14 @@ def _sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
                 print("🔧 Committing beads database changes...")
                 subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8', errors='replace', timeout=30)
                 subprocess.run(["git", "commit", "-m", f"chore: sync beads before merge of {branch_name}"],
-                             check=True, encoding='utf-8', errors='replace', timeout=60)
+                             check=True, capture_output=True, encoding='utf-8', errors='replace', timeout=60)
                 print("✅ Beads changes committed")
 
             if changes['worktree']:
                 print("🧹 Committing worktree cleanup changes...")
                 subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8', errors='replace', timeout=30)
                 subprocess.run(["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
-                             check=True, encoding='utf-8', errors='replace', timeout=60)
+                             check=True, capture_output=True, encoding='utf-8', errors='replace', timeout=60)
                 print("✅ Worktree cleanup committed")
 
         return True
