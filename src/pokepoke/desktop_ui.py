@@ -350,6 +350,9 @@ class DesktopUI:
     def set_session_end_time(self, end_time: float) -> None:
         self._api.set_session_end_time(end_time)
 
+    def set_logs_dir(self, logs_dir: str) -> None:
+        self._api.set_logs_dir(logs_dir)
+
     def log_message(
         self, message: str, target: str = "orchestrator", style: str | None = None
     ) -> None:
