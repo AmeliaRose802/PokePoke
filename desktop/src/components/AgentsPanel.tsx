@@ -153,7 +153,7 @@ export function AgentsPanel({
     const pausedClass = isPaused ? " agent-card-paused" : "";
     const parentLabel = parent ? getAgentPrimaryLabel(parent) : null;
     const baseLabel = getAgentPrimaryLabel(agent);
-    const label = isGate && parentLabel ? `Gate · ${parentLabel}` : baseLabel;
+    const label = isGate && parentLabel ? parentLabel : baseLabel;
     const roleLabel = agent.work_item_id ? agent.name : null;
     const gateChildForParent =
       !isGate
