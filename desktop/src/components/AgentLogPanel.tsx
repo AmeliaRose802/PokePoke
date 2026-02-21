@@ -78,7 +78,8 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
     : agentToUse.recent_logs;
   
   const primaryLabel = getAgentPrimaryLabel(agent);
-  const roleLabel = agent.work_item_id ? agent.name : null;
+  // Show the friendly name prominently when it differs from the primary label
+  const friendlyName = agent.name !== primaryLabel ? agent.name : null;
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isUserScrolledUp = useRef(false);
@@ -152,8 +153,8 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
         <div className="agent-log-panel-info">
           <span className="agent-log-panel-name">{primaryLabel}</span>
           <span className="agent-log-panel-iter">v{agent.iteration}</span>
-          {roleLabel ? (
-            <span className="agent-log-panel-role">{roleLabel}</span>
+          {friendlyName ? (
+            <span className="agent-log-panel-friendly-name">{friendlyName}</span>
           ) : null}
         </div>
         <div className="agent-log-panel-status">
