@@ -20,7 +20,7 @@ from pokepoke.agent_context import get_agent_name
 from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner, clear_terminal_banner
 from pokepoke import terminal_ui
 from pokepoke.maintenance_state import increment_items_completed
-from pokepoke.repo_check import check_and_commit_main_repo, check_beads_available
+from pokepoke.repo_check import check_and_commit_main_repo, check_beads_available, initialize_beads_repo
 from pokepoke.maintenance import run_periodic_maintenance
 from pokepoke.shutdown import is_shutting_down, request_shutdown, should_stop_after_current, cancel_stop_after_current
 from pokepoke.model_stats_store import record_completion
@@ -374,15 +374,18 @@ def main() -> int:
 
     # Autonomous flag overrides interactive
     interactive = not args.autonomous
-
     # Check beads availability BEFORE starting any UI
     # so error messages print directly to stdout
     if not check_beads_available():
-        return 1
-
+        if not interactive:
+            return 1
+        choice = input("\nThis directory is not initialized for beads. Run 'bd init' here now? [Y/n]: ").strip().lower() or "y"
+        if choice not in ("y", "yes"):
+            return 1
+        if not (initialize_beads_repo(Path.cwd()) and check_beads_available()):
+            return 1
     from pokepoke.desktop_ui import DesktopUI
     active_ui: DesktopUI = terminal_ui.ui
-
     # Run the orchestrator with the selected UI
     def orchestrator_func() -> int:
         return run_orchestrator(
@@ -393,6 +396,5 @@ def main() -> int:
             max_parallel_agents=args.max_agents,
         )
     return active_ui.run_with_orchestrator(orchestrator_func)
-
 if __name__ == "__main__":
     sys.exit(main())

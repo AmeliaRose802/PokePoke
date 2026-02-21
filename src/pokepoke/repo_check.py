@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 # Maximum number of cleanup agent retries before falling back to stash
 MAX_CLEANUP_RETRIES = 3
 BD_INFO_TIMEOUT = 30
+BD_INIT_TIMEOUT = 120
 
 
 def check_beads_available() -> bool:
@@ -47,6 +48,94 @@ def check_beads_available() -> bool:
     except Exception as e:
         print(f"\nError: Failed to check beads status: {e}", file=sys.stderr)
         print("   Ensure beads is installed and initialized: bd init", file=sys.stderr)
+        return False
+
+    return True
+
+
+def initialize_beads_repo(repo_path: Path) -> bool:
+    """Initialize beads in the given repository directory.
+
+    This is intended for first-run setup flows where PokePoke can
+    proactively run ``bd init`` for the user.
+
+    Args:
+        repo_path: Target repository directory to initialize.
+
+    Returns:
+        True if the repository is (now) initialized for beads.
+    """
+    if not shutil.which('bd'):
+        print("\nError: 'bd' (beads) command not found.", file=sys.stderr)
+        print("   Install beads: pip install beads", file=sys.stderr)
+        return False
+
+    # Already initialized?
+    try:
+        info_result = subprocess.run(
+            ['bd', 'info', '--json'],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            cwd=str(repo_path),
+            timeout=BD_INFO_TIMEOUT,
+        )
+        if info_result.returncode == 0:
+            return True
+    except subprocess.TimeoutExpired:
+        print("\nError: 'bd info' timed out. Beads may not be configured correctly.", file=sys.stderr)
+        return False
+    except Exception as e:
+        print(f"\nError: Failed to check beads status: {e}", file=sys.stderr)
+        return False
+
+    # Initialize
+    try:
+        init_result = subprocess.run(
+            ['bd', 'init', '--quiet'],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            cwd=str(repo_path),
+            timeout=BD_INIT_TIMEOUT,
+        )
+        if init_result.returncode != 0:
+            print(f"\nError: Failed to initialize beads in: {repo_path}", file=sys.stderr)
+            details = (init_result.stderr or init_result.stdout or "").strip()
+            if details:
+                print(details, file=sys.stderr)
+            print("\nTry running manually:", file=sys.stderr)
+            print("   bd init", file=sys.stderr)
+            return False
+    except subprocess.TimeoutExpired:
+        print("\nError: 'bd init' timed out.", file=sys.stderr)
+        return False
+    except Exception as e:
+        print(f"\nError: Failed to run 'bd init': {e}", file=sys.stderr)
+        return False
+
+    # Verify
+    try:
+        verify_result = subprocess.run(
+            ['bd', 'info', '--json'],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            cwd=str(repo_path),
+            timeout=BD_INFO_TIMEOUT,
+        )
+        if verify_result.returncode != 0:
+            print("\nError: Beads initialization did not complete successfully.", file=sys.stderr)
+            print("   'bd info' still fails after initialization.", file=sys.stderr)
+            return False
+    except subprocess.TimeoutExpired:
+        print("\nError: 'bd info' timed out after initialization.", file=sys.stderr)
+        return False
+    except Exception as e:
+        print(f"\nError: Failed to verify beads initialization: {e}", file=sys.stderr)
         return False
 
     return True

@@ -394,22 +394,21 @@ class TestProcessWorkItem:
         # Mock subprocess for bd assign/sync
         def subprocess_side_effect(*args, **kwargs):
             cmd = args[0] if args else kwargs.get('args', [])
-            if isinstance(cmd, list) and len(cmd) > 0:
-                if cmd[0] == 'bd':
-                    if 'show' in cmd:
-                        return Mock(stdout='[{"id": "task-1", "title": "Test", "status": "open", "priority": 1, "issue_type": "task"}]', returncode=0)
-                    elif 'sync' in cmd or 'update' in cmd:
-                        return Mock(stdout="", stderr="", returncode=0)
+            if isinstance(cmd, list) and len(cmd) > 0 and cmd[0] == 'bd':
+                if 'show' in cmd:
+                    return Mock(stdout='[{"id": "task-1", "title": "Test", "status": "open", "priority": 1, "issue_type": "task"}]', returncode=0)
+                elif 'sync' in cmd or 'update' in cmd:
+                    return Mock(stdout="", stderr="", returncode=0)
             return Mock(stdout="", returncode=0)
         mock_subprocess.side_effect = subprocess_side_effect
 
         # Copilot raises an unhandled exception
         mock_invoke.side_effect = RuntimeError("Unexpected crash")
 
-        try:
+        import contextlib
+
+        with contextlib.suppress(RuntimeError):
             process_work_item(item, interactive=False)
-        except RuntimeError:
-            pass
 
         # Worktree cleanup should have been called in the finally block
         mock_cleanup.assert_called_with("task-1", force=True)
@@ -1085,6 +1084,50 @@ class TestOrchestratorMain:
         result = main()
 
         assert result == 1
+
+    @patch('pokepoke.orchestrator.check_beads_available', side_effect=[False, True])
+    @patch('pokepoke.orchestrator.initialize_beads_repo', return_value=True)
+    @patch('builtins.input', return_value='')
+    @patch('pokepoke.orchestrator.run_orchestrator')
+    @patch('pokepoke.terminal_ui.ui')
+    @patch('sys.argv', ['pokepoke'])
+    def test_main_interactive_initializes_beads_when_missing(
+        self,
+        mock_ui: Mock,
+        mock_run: Mock,
+        _mock_input: Mock,
+        mock_init: Mock,
+        mock_beads: Mock,
+    ) -> None:
+        """Test interactive main prompts for bd init and proceeds on success."""
+        from pokepoke.orchestrator import main
+
+        mock_run.return_value = 0
+        mock_ui.run_with_orchestrator.side_effect = lambda f: f()
+
+        result = main()
+
+        assert result == 0
+        mock_init.assert_called_once()
+        assert mock_beads.call_count == 2
+
+    @patch('pokepoke.orchestrator.check_beads_available', return_value=False)
+    @patch('pokepoke.orchestrator.initialize_beads_repo')
+    @patch('builtins.input', return_value='n')
+    @patch('sys.argv', ['pokepoke'])
+    def test_main_interactive_declines_beads_init_exits_1(
+        self,
+        _mock_input: Mock,
+        mock_init: Mock,
+        _mock_beads: Mock,
+    ) -> None:
+        """Test interactive main exits when user declines bd init."""
+        from pokepoke.orchestrator import main
+
+        result = main()
+
+        assert result == 1
+        mock_init.assert_not_called()
 
     @patch('pokepoke.orchestrator.check_beads_available', return_value=True)
     @patch('pokepoke.orchestrator.run_orchestrator')
