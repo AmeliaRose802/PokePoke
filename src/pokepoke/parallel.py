@@ -262,6 +262,9 @@ def run_parallel_loop(
                     total_requests += r
                     record_fn(item, s, r, st, cr, gr, mc, session_stats, run_logger)
                     items_completed = session_stats.items_completed
+                    terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
+                # Ensure UI sees the final snapshot even if no futures remained to drain.
+                terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
                 terminal_ui.ui.stop_and_capture()
                 finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
                 finalized = True
@@ -325,12 +328,14 @@ def run_parallel_loop(
                     total_requests += r
                     record_fn(item, s, r, st, cr, gr, mc, session_stats, run_logger)
                     items_completed = session_stats.items_completed
+                    terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
             except concurrent.futures.TimeoutError:
                 print(f"⚠️  Timeout waiting for {len(futures)} workers after 5 minutes")
                 run_logger.log_orchestrator("Timeout waiting for workers", level="WARNING")
 
             print("✅ All workers completed")
             run_logger.log_orchestrator("All workers completed")
+            terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
 
         # Now shutdown the executor (no need to wait since we already waited above)
         executor.shutdown(wait=False, cancel_futures=False)
