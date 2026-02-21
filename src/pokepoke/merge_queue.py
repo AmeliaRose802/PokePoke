@@ -224,6 +224,53 @@ class MergeQueue:
             request.future.set_result(result)
 
 
+def _abort_rebase(worktree_path: Path) -> None:
+    """Abort a rebase and verify worktree state.
+
+    Attempts to abort an in-progress rebase. If the abort fails,
+    verifies the worktree state and logs any inconsistencies.
+    """
+    try:
+        subprocess.run(
+            ["git", "rebase", "--abort"],
+            cwd=str(worktree_path),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=30,
+            check=True,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as abort_exc:
+        logger.warning(
+            "Failed to abort rebase in %s: %s. Worktree may be in inconsistent state.",
+            worktree_path,
+            abort_exc.stderr if hasattr(abort_exc, "stderr") else str(abort_exc),
+        )
+        # Verify worktree state after abort failure
+        try:
+            status_result = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=str(worktree_path),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=10,
+                check=True,
+            )
+            if status_result.stdout.strip():
+                logger.error(
+                    "Worktree %s is dirty after failed rebase abort: %s",
+                    worktree_path,
+                    status_result.stdout[:200],
+                )
+        except Exception as status_exc:
+            logger.error(
+                "Unable to verify worktree state in %s: %s",
+                worktree_path,
+                str(status_exc),
+            )
+
+
 def _rebase_worktree(worktree_path: Path, target_branch: str | None = None) -> bool:
     """Rebase a worktree onto the latest target branch.
 
@@ -267,89 +314,11 @@ def _rebase_worktree(worktree_path: Path, target_branch: str | None = None) -> b
         logger.warning(
             "Rebase failed in %s: %s", worktree_path, exc.stderr or str(exc)
         )
-        # Abort the rebase to leave worktree in a clean state
-        try:
-            subprocess.run(
-                ["git", "rebase", "--abort"],
-                cwd=str(worktree_path),
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                timeout=30,
-                check=True,
-            )
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as abort_exc:
-            logger.warning(
-                "Failed to abort rebase in %s: %s. Worktree may be in inconsistent state.",
-                worktree_path,
-                abort_exc.stderr if hasattr(abort_exc, "stderr") else str(abort_exc),
-            )
-            # Verify worktree state after abort failure
-            try:
-                status_result = subprocess.run(
-                    ["git", "status", "--porcelain"],
-                    cwd=str(worktree_path),
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    timeout=10,
-                    check=True,
-                )
-                if status_result.stdout.strip():
-                    logger.error(
-                        "Worktree %s is dirty after failed rebase abort: %s",
-                        worktree_path,
-                        status_result.stdout[:200],
-                    )
-            except Exception as status_exc:
-                logger.error(
-                    "Unable to verify worktree state in %s: %s",
-                    worktree_path,
-                    str(status_exc),
-                )
+        _abort_rebase(worktree_path)
         return False
     except subprocess.TimeoutExpired:
         logger.warning("Rebase timed out in %s", worktree_path)
-        # Abort the rebase to leave worktree in a clean state
-        try:
-            subprocess.run(
-                ["git", "rebase", "--abort"],
-                cwd=str(worktree_path),
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                timeout=30,
-                check=True,
-            )
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as abort_exc:
-            logger.warning(
-                "Failed to abort rebase in %s: %s. Worktree may be in inconsistent state.",
-                worktree_path,
-                abort_exc.stderr if hasattr(abort_exc, "stderr") else str(abort_exc),
-            )
-            # Verify worktree state after abort failure
-            try:
-                status_result = subprocess.run(
-                    ["git", "status", "--porcelain"],
-                    cwd=str(worktree_path),
-                    capture_output=True,
-                    text=True,
-                    encoding="utf-8",
-                    timeout=10,
-                    check=True,
-                )
-                if status_result.stdout.strip():
-                    logger.error(
-                        "Worktree %s is dirty after failed rebase abort: %s",
-                        worktree_path,
-                        status_result.stdout[:200],
-                    )
-            except Exception as status_exc:
-                logger.error(
-                    "Unable to verify worktree state in %s: %s",
-                    worktree_path,
-                    str(status_exc),
-                )
+        _abort_rebase(worktree_path)
         return False
 
 
