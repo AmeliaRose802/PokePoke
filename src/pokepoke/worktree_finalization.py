@@ -67,24 +67,17 @@ def check_and_merge_worktree(
             cleanup_worktree(item.id, force=True)
             return True
 
-        # Acquire merge lock to serialize with other parallel agents
-        print("\n🔒 Acquiring merge lock for serialized merge...")
-        logger.info("Waiting for merge lock for item %s", item.id)
-        with merge_lock():
-            logger.info("Acquired merge lock for item %s", item.id)
-            print("   ✅ Lock acquired, proceeding with merge")
-            return merge_worktree_to_dev(item, parent_agent_id=parent_agent_id)
-
     except Exception as e:
         print(f"\n⚠️  Could not check commit count: {e}")
         print("   Attempting merge anyway...")
-        # Still acquire lock even on error path
-        print("\n🔒 Acquiring merge lock for serialized merge...")
-        logger.info("Waiting for merge lock for item %s (error path)", item.id)
-        with merge_lock():
-            logger.info("Acquired merge lock for item %s (error path)", item.id)
-            print("   ✅ Lock acquired, proceeding with merge")
-            return merge_worktree_to_dev(item, parent_agent_id=parent_agent_id)
+
+    # Acquire merge lock to serialize with other parallel agents
+    print("\n🔒 Acquiring merge lock for serialized merge...")
+    logger.info("Waiting for merge lock for item %s", item.id)
+    with merge_lock():
+        logger.info("Acquired merge lock for item %s", item.id)
+        print("   ✅ Lock acquired, proceeding with merge")
+        return merge_worktree_to_dev(item, parent_agent_id=parent_agent_id)
 
 
 def merge_worktree_to_dev(item: BeadsWorkItem, parent_agent_id: str | None = None) -> bool:
