@@ -2,6 +2,7 @@
 
 import signal
 import tempfile
+import threading
 from unittest.mock import Mock, patch
 
 from pokepoke.signal_handlers import register_shutdown_handlers, unregister_shutdown_handlers
@@ -142,6 +143,31 @@ class TestSignalHandlers:
 
             # Clean up
             unregister_shutdown_handlers()
+
+    def test_register_skips_signal_on_non_main_thread(self):
+        """Test that register_shutdown_handlers skips signal registration on non-main thread."""
+        mock_logger = Mock()
+        error_box: list[Exception] = []
+
+        def register_in_thread() -> None:
+            try:
+                # This should NOT raise even though we're not on the main thread
+                register_shutdown_handlers(mock_logger)
+            except Exception as exc:
+                error_box.append(exc)
+
+        t = threading.Thread(target=register_in_thread)
+        t.start()
+        t.join(timeout=5)
+
+        assert not error_box, f"register_shutdown_handlers raised on non-main thread: {error_box[0]}"
+
+        # Logger should still be stored even though signals weren't registered
+        import pokepoke.signal_handlers as sh
+        assert sh._current_logger is mock_logger
+
+        # Clean up
+        unregister_shutdown_handlers()
 
 
 class TestOrchestratorSignalIntegration:
