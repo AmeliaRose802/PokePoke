@@ -262,14 +262,7 @@ export function AgentsPanel({
             </button>
           )}
         </div>
-        {isGate && parentLabel ? (
-          <div className="agent-card-gate-link">
-            <span className="agent-card-link-label">Gate for</span>
-            <span className="agent-card-link-target" title={parentLabel}>
-              {parentLabel}
-            </span>
-          </div>
-        ) : null}
+
         {agent.modified_files && agent.modified_files.length > 0 ? (
           <div className="agent-card-files">
             <span className="agent-card-files-label">
