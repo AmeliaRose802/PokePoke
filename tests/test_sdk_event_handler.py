@@ -123,3 +123,195 @@ def test_beads_create_detected_from_powershell_tool(monkeypatch) -> None:
     ))
 
     assert created == [("PokePoke-99", "T")]
+
+
+def test_streamed_deltas_not_duplicated_by_message(capsys) -> None:
+    """Content already streamed via message_delta must not be re-logged by
+    the subsequent assistant.message event."""
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        done = asyncio.Event()
+        output_lines: list[str] = []
+        errors: list[str] = []
+        logger = DummyLogger()
+
+        handler, _ = create_event_handler(
+            done, output_lines, errors, item_logger=logger, idle_timeout=0.1,
+        )
+
+        # Simulate streaming: two delta chunks followed by the full message
+        handler(_make_event("assistant.message_delta", delta_content="Hello "))
+        handler(_make_event("assistant.message_delta", delta_content="world"))
+        handler(_make_event("assistant.message", content="Hello world"))
+
+        # Deltas should have been logged, but the full message should NOT
+        assert logger.chunks == ["Hello ", "world"]
+        assert output_lines == ["Hello ", "world"]
+    finally:
+        asyncio.set_event_loop(None)
+        loop.close()
+
+
+def test_non_streamed_message_still_logged(capsys) -> None:
+    """When no message_delta events precede assistant.message, it must still
+    be logged (non-streaming path)."""
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        done = asyncio.Event()
+        output_lines: list[str] = []
+        errors: list[str] = []
+        logger = DummyLogger()
+
+        handler, _ = create_event_handler(
+            done, output_lines, errors, item_logger=logger, idle_timeout=0.1,
+        )
+
+        handler(_make_event("assistant.message", content="No streaming"))
+
+        assert logger.chunks == ["No streaming"]
+        assert output_lines == ["No streaming"]
+    finally:
+        asyncio.set_event_loop(None)
+        loop.close()
+
+
+def test_extract_command_non_dict() -> None:
+    assert _extract_command("raw string") == "raw string"
+    assert _extract_command({"no_command": 1}) == str({"no_command": 1})
+
+
+def test_parse_created_items_empty() -> None:
+    assert _parse_created_items("") == []
+    assert _parse_created_items(None) == []  # type: ignore[arg-type]
+
+
+def test_parse_created_items_list_with_non_dict_entries() -> None:
+    content = json.dumps([None, {"id": "PokePoke-ok", "title": "T"}, "skip"])
+    assert _parse_created_items(content) == [("PokePoke-ok", "T")]
+
+
+def test_parse_created_items_json_list_no_valid_ids() -> None:
+    content = json.dumps([{"title": "no id here"}])
+    # Falls through to regex scan when JSON list has no valid ids
+    result = _parse_created_items(content)
+    assert result == []
+
+
+def test_parse_created_items_fallback_regex() -> None:
+    # Non-JSON content → fallback regex
+    result = _parse_created_items("not json but PokePoke-abc123 was created")
+    assert result == [("PokePoke-abc123", "")]
+
+
+def test_assistant_usage_updates_stats() -> None:
+    done = asyncio.Event()
+    output_lines: list[str] = []
+    errors: list[str] = []
+
+    handler, stats = create_event_handler(done, output_lines, errors)
+    handler(_make_event("assistant.usage", input_tokens=100, output_tokens=50,
+                        cache_read_tokens=10, cache_write_tokens=5))
+
+    assert stats['total_input_tokens'] == 100
+    assert stats['total_output_tokens'] == 50
+    assert stats['total_cache_read_tokens'] == 10
+    assert stats['total_cache_write_tokens'] == 5
+
+
+def test_assistant_turn_end_increments_count() -> None:
+    done = asyncio.Event()
+    output_lines: list[str] = []
+    errors: list[str] = []
+
+    handler, stats = create_event_handler(done, output_lines, errors)
+    handler(_make_event("assistant.turn_end"))
+    handler(_make_event("assistant.turn_end"))
+
+    assert stats['turn_count'] == 2
+
+
+def test_session_error_sets_done_and_records_error() -> None:
+    done = asyncio.Event()
+    output_lines: list[str] = []
+    errors: list[str] = []
+
+    handler, _ = create_event_handler(done, output_lines, errors)
+    handler(_make_event("session.error", message="Something went wrong"))
+
+    assert done.is_set()
+    assert "Something went wrong" in errors
+
+
+def test_session_error_rate_limit_triggers_fallback(capsys) -> None:
+    done = asyncio.Event()
+    output_lines: list[str] = []
+    errors: list[str] = []
+
+    handler, stats = create_event_handler(done, output_lines, errors)
+    handler(_make_event("session.error", message="rate limit exceeded"))
+
+    # First rate-limit error should set fallback flag and NOT set done
+    assert not done.is_set()
+    assert errors == []
+    assert stats['tried_fallback'] is True
+
+    # A second session.error should now set done
+    handler(_make_event("session.error", message="another error"))
+    assert done.is_set()
+    assert len(errors) == 1
+
+
+def test_tool_execution_start_tracks_stats() -> None:
+    done = asyncio.Event()
+    output_lines: list[str] = []
+    errors: list[str] = []
+
+    handler, stats = create_event_handler(done, output_lines, errors)
+    handler(_make_event("tool.execution_start", tool_name="run_cmd", arguments={"command": "ls"}, tool_call_id="1"))
+
+    assert stats['total_tool_calls'] == 1
+    assert stats['pending_tool_calls'] == 1
+
+
+def test_tool_execution_complete_decrements_pending() -> None:
+    done = asyncio.Event()
+    output_lines: list[str] = []
+    errors: list[str] = []
+
+    handler, stats = create_event_handler(done, output_lines, errors)
+    handler(_make_event("tool.execution_start", tool_name="run_cmd", arguments={}, tool_call_id="t1"))
+    handler(_make_event("tool.execution_complete", tool_name="run_cmd", arguments={},
+                        result=SimpleNamespace(content="ok"), success=True, tool_call_id="t1"))
+
+    assert stats['pending_tool_calls'] == 0
+
+
+def test_delta_tracking_resets_between_turns() -> None:
+    """After an assistant.message, received_deltas resets so the next
+    turn can still log non-streamed content."""
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        done = asyncio.Event()
+        output_lines: list[str] = []
+        errors: list[str] = []
+        logger = DummyLogger()
+
+        handler, _ = create_event_handler(
+            done, output_lines, errors, item_logger=logger, idle_timeout=0.1,
+        )
+
+        # Turn 1: streamed, so message should be suppressed
+        handler(_make_event("assistant.message_delta", delta_content="streamed"))
+        handler(_make_event("assistant.message", content="streamed"))
+
+        # Turn 2: NOT streamed, so message should be logged
+        handler(_make_event("assistant.message", content="second turn"))
+
+        assert "second turn" in output_lines
+        assert logger.chunks.count("second turn") == 1
+    finally:
+        asyncio.set_event_loop(None)
+        loop.close()
