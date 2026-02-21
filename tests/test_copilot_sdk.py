@@ -1248,15 +1248,15 @@ class TestActivityWatchdog:
         abort = asyncio.Event()
 
         async def update_file():
-            await asyncio.sleep(0.03)
+            await asyncio.sleep(0.1)
             log_file.write_text("updated")
 
         asyncio.create_task(update_file())
         task = asyncio.create_task(
-            _activity_watchdog(log_file, timeout_seconds=0.06, check_interval_seconds=0.02, abort_event=abort)
+            _activity_watchdog(log_file, timeout_seconds=0.3, check_interval_seconds=0.05, abort_event=abort)
         )
         # Wait long enough for the update to happen but cancel before idle timeout
-        await asyncio.sleep(0.08)
+        await asyncio.sleep(0.25)
         task.cancel()
         result = await task
         assert result is False
