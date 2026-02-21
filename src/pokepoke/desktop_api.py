@@ -68,7 +68,7 @@ class DesktopAPI:
 
         # Running agents — keyed by agent_id
         self._agent_max_log_lines_internal = 20
-        self._agent_detail_max_log_lines_internal = 200
+        self._agent_detail_max_log_lines_internal = 2000
         self._agent_registry = AgentRegistry(
             self._lock,
             preview_limit=self._agent_max_log_lines_internal,

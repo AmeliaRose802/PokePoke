@@ -14,7 +14,7 @@ class AgentRegistry:
         self,
         lock: threading.RLock,
         preview_limit: int = 20,
-        detail_limit: int = 200,
+        detail_limit: int = 2000,
     ) -> None:
         self._lock = lock
         self._agents: dict[str, dict[str, Any]] = {}
