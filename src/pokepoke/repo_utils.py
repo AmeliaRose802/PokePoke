@@ -3,7 +3,6 @@
 import re
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 
 def get_repository_name() -> str:
@@ -30,7 +29,7 @@ def get_repository_name() -> str:
         return "Unknown"
 
 
-def _get_repo_name_from_git() -> Optional[str]:
+def _get_repo_name_from_git() -> str | None:
     """Extract repository name from git remote origin URL."""
     try:
         result = subprocess.run(
@@ -52,7 +51,7 @@ def _get_repo_name_from_git() -> Optional[str]:
     return None
 
 
-def _get_repo_name_from_config() -> Optional[str]:
+def _get_repo_name_from_config() -> str | None:
     """Extract repository name from project config."""
     try:
         from pokepoke.config import get_config

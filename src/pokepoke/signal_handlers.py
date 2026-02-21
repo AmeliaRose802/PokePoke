@@ -8,15 +8,15 @@ import signal
 import sys
 import threading
 from types import FrameType
-from typing import Optional, Callable, Any
+from typing import Callable, Any
 from datetime import datetime
 
 from pokepoke.logging_utils import RunLogger
 
 
 # Global reference to the current RunLogger
-_current_logger: Optional[RunLogger] = None
-_original_handlers: dict[int, Optional[Callable[..., Any]]] = {}
+_current_logger: RunLogger | None = None
+_original_handlers: dict[int, Callable[..., Any] | None] = {}
 
 
 def register_shutdown_handlers(run_logger: RunLogger) -> None:
@@ -52,7 +52,7 @@ def register_shutdown_handlers(run_logger: RunLogger) -> None:
     _original_handlers[signal.SIGINT] = original_sigint if callable(original_sigint) else None
 
 
-def _signal_handler(signum: int, frame: Optional[FrameType]) -> None:
+def _signal_handler(signum: int, frame: FrameType | None) -> None:
     """Handle termination signals by logging and then exiting.
 
     Args:
