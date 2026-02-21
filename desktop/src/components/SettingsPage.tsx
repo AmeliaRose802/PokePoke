@@ -222,7 +222,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
       <div className="settings-panel">
         {/* Header */}
         <div className="settings-header">
-          <span>⚙ Settings</span>
+          <span>🍃 Settings</span>
           <button className="prompt-close-btn" onClick={onClose}>
             ✕
           </button>
@@ -238,7 +238,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose }: Props) {
           <div className="settings-body">
             {/* Section: Model Configuration */}
             <div className="settings-section">
-              <h3 className="settings-section-title">🤖 Model Configuration</h3>
+              <h3 className="settings-section-title">🐍 Model Configuration</h3>
 
               {/* A/B Testing toggle */}
               <div className="settings-field">

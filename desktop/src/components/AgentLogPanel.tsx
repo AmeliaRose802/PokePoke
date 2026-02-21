@@ -33,8 +33,8 @@ const STATUS_INDICATOR: Record<string, { dot: string; label: string }> = {
 };
 
 const ROBOT_AVATARS = [
-  "🤖", "🦾", "⚙️", "🔩", "🛠️", "🧠", "💡", "🔬",
-  "🚀", "🎯", "⚡", "🔮", "🌀", "🏗️", "🧩", "🎲",
+  "🐍", "🦎", "🕷️", "🦇", "🦋", "🐛", "🐝", "🐞",
+  "🌿", "🍃", "🌱", "🌳", "🌴", "🌲", "🎋", "🌾",
 ];
 
 function getAvatar(agentId: string): string {
