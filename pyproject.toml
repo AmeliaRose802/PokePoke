@@ -83,8 +83,13 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "W"]
-ignore = ["E501"]  # Line too long - ruff excludes E501 by default
+select = ["E", "F", "W", "B", "UP", "SIM"]
+ignore = [
+    "E402",   # Module-level import not at top - intentional logger-before-imports pattern
+    "E501",   # Line too long
+    "SIM103", # Return condition directly - sometimes less readable
+    "SIM108", # Ternary operator - sometimes less readable
+]
 
 # Mypy type checking configuration
 [tool.mypy]

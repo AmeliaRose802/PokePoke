@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +42,7 @@ def build_model_history_record(
         item_stats: Aggregated AgentStats for this item, if available.
         timestamp: Optional explicit timestamp for testing; defaults to now() UTC.
     """
-    ts = timestamp or datetime.now(timezone.utc)
+    ts = timestamp or datetime.now(UTC)
 
     # Retry attempts are total requests minus the first attempt (never negative)
     retry_attempts = request_count - 1 if request_count > 0 else 0
