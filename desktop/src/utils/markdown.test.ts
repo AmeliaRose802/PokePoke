@@ -30,6 +30,13 @@ describe("renderMarkdown", () => {
     expect(html).toContain("<code>npm test</code>");
   });
 
+  it("renders fenced code blocks", () => {
+    const html = renderMarkdown("```ts\nconst x = 1\n```\n");
+    expect(html).toContain("<pre>");
+    expect(html).toContain("<code");
+    expect(html).toContain("const x = 1");
+  });
+
   it("adds target=_blank to links", () => {
     const html = renderMarkdown("[link](https://example.com)");
     expect(html).toContain('target="_blank"');
