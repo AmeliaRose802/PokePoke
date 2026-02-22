@@ -848,6 +848,130 @@ describe('SettingsPage', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
+  it('should remove maintenance agent when X button clicked', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage
+        getConfig={mockGetConfig}
+        saveConfig={mockSaveConfig}
+        onClose={mockOnClose}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+    });
+
+    const removeButton = screen.getByRole('button', { name: 'Remove Janitor' });
+    await user.click(removeButton);
+
+    // Janitor card should be gone but Janitor may appear in the add dropdown
+    expect(screen.queryByText('Janitor')?.closest('.agent-config')).not.toBeTruthy();
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+  });
+
+  it('should show add-agent dropdown with agents not currently configured', async () => {
+    render(
+      <SettingsPage
+        getConfig={mockGetConfig}
+        saveConfig={mockSaveConfig}
+        onClose={mockOnClose}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+    });
+
+    // Janitor is already configured, so it should not appear in the dropdown
+    const select = screen.getByRole('combobox', { name: 'Select agent to add' });
+    expect(select).toBeInTheDocument();
+    const options = Array.from(select.querySelectorAll('option')).map((o) => o.textContent);
+    expect(options).not.toContain('Janitor');
+    expect(options).toContain('Tech Debt');
+  });
+
+  it('should add a maintenance agent from the dropdown', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage
+        getConfig={mockGetConfig}
+        saveConfig={mockSaveConfig}
+        onClose={mockOnClose}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+    });
+
+    const select = screen.getByRole('combobox', { name: 'Select agent to add' });
+    await user.selectOptions(select, 'Tech Debt');
+
+    const addButton = screen.getByRole('button', { name: '+ Add' });
+    await user.click(addButton);
+
+    expect(screen.getByText('Tech Debt')).toBeInTheDocument();
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+  });
+
+  it('should remove agent from dropdown options once added', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage
+        getConfig={mockGetConfig}
+        saveConfig={mockSaveConfig}
+        onClose={mockOnClose}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+    });
+
+    const select = screen.getByRole('combobox', { name: 'Select agent to add' });
+    await user.selectOptions(select, 'Tech Debt');
+    await user.click(screen.getByRole('button', { name: '+ Add' }));
+
+    // After adding Tech Debt, it should no longer appear in the dropdown
+    const updatedOptions = Array.from(select.querySelectorAll('option')).map((o) => o.textContent);
+    expect(updatedOptions).not.toContain('Tech Debt');
+  });
+
+  it('should include removed and re-added agents in saved config', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage
+        getConfig={mockGetConfig}
+        saveConfig={mockSaveConfig}
+        onClose={mockOnClose}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+    });
+
+    // Remove Janitor
+    await user.click(screen.getByRole('button', { name: 'Remove Janitor' }));
+
+    // Re-add Janitor via dropdown
+    const select = screen.getByRole('combobox', { name: 'Select agent to add' });
+    await user.selectOptions(select, 'Janitor');
+    await user.click(screen.getByRole('button', { name: '+ Add' }));
+
+    // Save and check config
+    await user.click(screen.getByText('💾 Save'));
+
+    await waitFor(() => {
+      expect(mockSaveConfig).toHaveBeenCalledTimes(1);
+    });
+
+    const savedConfig = mockSaveConfig.mock.calls[0][0];
+    const agentNames = savedConfig.maintenance.agents.map((a: { name: string }) => a.name);
+    expect(agentNames).toContain('Janitor');
+  });
+
   it('should call onOpenPromptEditor when prompt file link clicked', async () => {
     const user = userEvent.setup();
     const mockOpenPromptEditor = vi.fn();

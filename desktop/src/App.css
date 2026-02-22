@@ -2558,6 +2558,44 @@
   margin-bottom: 8px;
 }
 
+.agent-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-remove-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  line-height: 1;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.agent-remove-btn:hover {
+  color: var(--accent-danger, #e06c75);
+  background-color: var(--bg-elevated);
+}
+
+.agent-add-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  align-items: center;
+}
+
+.agent-add-select {
+  flex: 1;
+}
+
+.agent-add-btn {
+  white-space: nowrap;
+}
+
 .agent-name {
   font-size: 13px;
   font-weight: 600;
