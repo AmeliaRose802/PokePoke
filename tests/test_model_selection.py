@@ -2,7 +2,7 @@
 
 from unittest.mock import Mock, patch
 
-from pokepoke.model_selection import select_model_for_item, select_gate_model, _matches_rule, get_assignment_for_item
+from pokepoke.model_selection import select_model_for_item, select_gate_model, select_model_for_maintenance, _matches_rule, get_assignment_for_item
 from pokepoke.config import ProjectConfig, ModelConfig, AssignmentConfig, AssignmentRule, AssignmentRuleMatch
 from pokepoke.types import BeadsWorkItem
 
@@ -340,3 +340,64 @@ class TestSelectModelWithAssignmentRules:
         model = select_model_for_item(_make_item("x"))
         assert model == "my-fallback-model"
         mock_weights.assert_not_called()
+
+
+class TestSelectModelForMaintenance:
+    """Test select_model_for_maintenance function."""
+
+    @patch('pokepoke.model_selection.get_model_weights')
+    @patch('pokepoke.model_selection.get_config')
+    def test_returns_none_when_no_candidates(
+        self, mock_get_config: Mock, mock_get_weights: Mock
+    ) -> None:
+        """Returns None when no candidate_models configured (A/B disabled)."""
+        mock_config = ProjectConfig()
+        mock_config.models = ModelConfig(candidate_models=[])
+        mock_get_config.return_value = mock_config
+
+        result = select_model_for_maintenance("Janitor")
+
+        assert result is None
+        mock_get_weights.assert_not_called()
+
+    @patch('pokepoke.model_selection.get_model_weights')
+    @patch('pokepoke.model_selection.get_config')
+    def test_selects_from_candidates(
+        self, mock_get_config: Mock, mock_get_weights: Mock
+    ) -> None:
+        """Selects a model from the candidate pool when A/B is enabled."""
+        mock_config = ProjectConfig()
+        mock_config.models = ModelConfig(
+            candidate_models=["gpt-5.1-codex", "claude-sonnet-4.5"]
+        )
+        mock_get_config.return_value = mock_config
+        mock_get_weights.return_value = {
+            "gpt-5.1-codex": 1.0,
+            "claude-sonnet-4.5": 1.0,
+        }
+
+        result = select_model_for_maintenance("Janitor")
+
+        assert result in ["gpt-5.1-codex", "claude-sonnet-4.5"]
+
+    @patch('pokepoke.model_selection.random.choices')
+    @patch('pokepoke.model_selection.get_model_weights')
+    @patch('pokepoke.model_selection.get_config')
+    def test_respects_weights(
+        self, mock_get_config: Mock, mock_get_weights: Mock, mock_choices: Mock
+    ) -> None:
+        """Uses historical performance weights for selection."""
+        mock_config = ProjectConfig()
+        mock_config.models = ModelConfig(
+            candidate_models=["modelA", "modelB"]
+        )
+        mock_get_config.return_value = mock_config
+        mock_get_weights.return_value = {"modelA": 0.5, "modelB": 1.5}
+        mock_choices.return_value = ["modelB"]
+
+        result = select_model_for_maintenance("Tech Debt")
+
+        assert result == "modelB"
+        mock_choices.assert_called_once_with(
+            ["modelA", "modelB"], weights=[0.5, 1.5], k=1
+        )

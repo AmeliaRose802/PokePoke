@@ -100,6 +100,38 @@ def select_model_for_item(item: BeadsWorkItem) -> str:
     return model
 
 
+def select_model_for_maintenance(agent_name: str) -> str | None:
+    """Select an A/B testing model for a maintenance agent.
+
+    When candidate_models is configured, returns a weighted-random model
+    from the pool so that maintenance agents participate in A/B evaluation.
+    Returns ``None`` when A/B testing is not enabled (no candidates),
+    allowing the caller to fall back to the agent's configured model.
+
+    Args:
+        agent_name: The maintenance agent name (used for logging).
+
+    Returns:
+        A model name if A/B testing is active, otherwise ``None``.
+    """
+    config = get_config()
+    candidates = config.models.candidate_models
+
+    if not candidates:
+        return None
+
+    historical = get_model_weights()
+    weights = [historical.get(m, 1.0) for m in candidates]
+
+    model = random.choices(candidates, weights=weights, k=1)[0]
+
+    uniform = all(w == weights[0] for w in weights)
+    mode = "uniform" if uniform else "weighted"
+    print(f"   [A/B] Assigned model '{model}' to maintenance agent '{agent_name}' "
+          f"({mode}, {len(candidates)} candidates)")
+    return model
+
+
 def select_gate_model(work_model: str, item_id: str) -> str:
     """Select a different model for gate agent verification.
 

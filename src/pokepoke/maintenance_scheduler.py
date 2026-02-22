@@ -18,6 +18,7 @@ from pokepoke.types import SessionStats
 from pokepoke.logging_utils import RunLogger
 from pokepoke.maintenance import _run_special_agent
 from pokepoke.agent_runner import run_maintenance_agent
+from pokepoke.model_selection import select_model_for_maintenance
 from pokepoke.repo_state_guard import wait_for_main_repo_clean
 from pokepoke.terminal_ui import set_terminal_banner
 from pokepoke import terminal_ui
@@ -199,6 +200,12 @@ class MaintenanceScheduler:
 
         # Run the agent with proper output routing
         try:
+            # Override model with A/B selection when candidates are configured
+            effective_model = agent_cfg.model
+            ab_model = select_model_for_maintenance(agent_name)
+            if ab_model is not None:
+                effective_model = ab_model
+
             with terminal_ui.ui.agent_output_for(agent_id):
                 if agent_name in _SPECIAL_AGENTS:
                     result = _run_special_agent(agent_name, pokepoke_repo, item_logger=maint_logger)
@@ -209,7 +216,7 @@ class MaintenanceScheduler:
                         repo_root=pokepoke_repo,
                         needs_worktree=agent_cfg.needs_worktree,
                         merge_changes=agent_cfg.merge_changes,
-                        model=agent_cfg.model,
+                        model=effective_model,
                         item_logger=maint_logger,
                     )
 
