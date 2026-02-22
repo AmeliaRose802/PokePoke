@@ -285,6 +285,7 @@ function App() {
           saveConfig={bridge.saveConfig}
           onClose={() => setShowSettings(false)}
           onOpenPromptEditor={handleOpenPromptEditor}
+          checkForUpdates={bridge.checkForUpdates}
         />
       )}
 

@@ -23,6 +23,7 @@ import type {
   PromptDetail,
   PromptInfo,
   SessionStats,
+  UpdateCheckResult,
   WorkItem,
 } from "./types";
 
@@ -101,6 +102,7 @@ interface PyWebViewAPI {
   spawn_agent(): Promise<{ success: boolean; at_limit: boolean; active: number; max: number }>;
   add_work_item_label(item_id: string, label: string): Promise<{ item_id: string; label: string; labels: string[] }>;
   remove_work_item_label(item_id: string, label: string): Promise<{ item_id: string; label: string; labels: string[] }>;
+  check_for_updates(): Promise<UpdateCheckResult>;
 }
 
 declare global {
@@ -175,6 +177,7 @@ export interface BridgeState {
   cancelStopAfterCurrent: () => Promise<void>;
   addWorkItemLabel: (label: string) => Promise<void>;
   removeWorkItemLabel: (label: string) => Promise<void>;
+  checkForUpdates: () => Promise<UpdateCheckResult | null>;
   getAgentDetail: (agentId: string) => Promise<AgentInfo | null>;
   pauseAgent: (agentId: string) => Promise<boolean>;
   resumeAgent: (agentId: string) => Promise<boolean>;
@@ -333,6 +336,11 @@ export function useBridge(): BridgeState {
     }
   }, []);
 
+  const checkForUpdates = useCallback(async (): Promise<UpdateCheckResult | null> => {
+    if (!window.pywebview?.api) return null;
+    try { return await window.pywebview.api.check_for_updates(); } catch { return null; }
+  }, []);
+
   const appendLogs = useCallback((entries: LogEntry[]) => {
     if (entries.length === 0) return;
 
@@ -486,5 +494,6 @@ export function useBridge(): BridgeState {
     pauseAgent,
     resumeAgent,
     spawnAgent,
+    checkForUpdates,
   };
 }

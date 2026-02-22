@@ -7,18 +7,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import type { ConfigResponse, MaintenanceAgent, McpServerConfig,ModelsConfig, ProjectConfig } from "../types";
+import type { ConfigResponse, MaintenanceAgent, McpServerConfig, ModelsConfig, ProjectConfig, UpdateCheckResult } from "../types";
 import { MaintenanceAgentsSection } from "./MaintenanceAgentsSection";
 import { isAbTestingEnabled,KNOWN_MODELS } from "./settingsHelpers";
+import { UpdatesSection } from "./UpdatesSection";
 
 interface Props {
   getConfig: () => Promise<ConfigResponse | null>;
   saveConfig: (config: ProjectConfig) => Promise<boolean>;
   onClose: () => void;
   onOpenPromptEditor?: (promptName: string) => void;
+  checkForUpdates?: () => Promise<UpdateCheckResult | null>;
 }
 
-export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEditor }: Props) {
+export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEditor, checkForUpdates }: Props) {
   const [config, setConfig] = useState<ProjectConfig | null>(null);
   const [defaultModel, setDefaultModel] = useState("");
   const [fallbackModel, setFallbackModel] = useState("");
@@ -452,6 +454,10 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
               onUpdate={updateMaintenanceAgent}
               onOpenPromptEditor={onOpenPromptEditor}
             />
+
+            {checkForUpdates && (
+              <UpdatesSection checkForUpdates={checkForUpdates} />
+            )}
 
             {/* Footer actions */}
             <div className="settings-footer">
