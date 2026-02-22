@@ -208,7 +208,7 @@ class MaintenanceScheduler:
 
             with terminal_ui.ui.agent_output_for(agent_id):
                 if agent_name in _SPECIAL_AGENTS:
-                    result = _run_special_agent(agent_name, pokepoke_repo, item_logger=maint_logger)
+                    result = _run_special_agent(agent_name, pokepoke_repo, model=effective_model, item_logger=maint_logger)
                 else:
                     result = run_maintenance_agent(
                         agent_name,

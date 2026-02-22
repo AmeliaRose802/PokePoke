@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from pokepoke.logging_utils import ItemLogger
 
 
-def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | None' = None) -> AgentStats | None:
+def run_beta_tester(repo_root: Path | None = None, model: str | None = None, item_logger: 'ItemLogger | None' = None) -> AgentStats | None:
     """Run beta tester agent to test all MCP tools. Restarts MCP server first."""
     from pokepoke.agent_runner import _generate_unique_agent_id, _run_worktree_agent
 
@@ -87,7 +87,7 @@ def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | No
         if repo_root is None:
             repo_root = Path.cwd()
 
-        agent_result = _run_worktree_agent("Beta Tester", worktree_agent_id, beta_item, beta_prompt, repo_root, merge_changes=False, item_logger=item_logger)
+        agent_result = _run_worktree_agent("Beta Tester", worktree_agent_id, beta_item, beta_prompt, repo_root, merge_changes=False, model=model, item_logger=item_logger)
 
         # Update agent status based on result
         status = "success" if agent_result is not None else "failed"
