@@ -369,6 +369,14 @@
   overflow: hidden;
 }
 
+.main-content--resizing {
+  cursor: col-resize;
+}
+
+.main-content--resizing * {
+  user-select: none;
+}
+
 .log-container {
   display: flex;
   flex: 2 1 0;
@@ -376,6 +384,23 @@
   gap: 8px;
   padding: 8px 12px;
   overflow: hidden;
+}
+
+.panel-resizer {
+  flex: 0 0 6px;
+  cursor: col-resize;
+  background: var(--bg-elevated);
+  border-left: 1px solid var(--border-primary);
+  border-right: 1px solid var(--border-primary);
+  user-select: none;
+}
+
+.panel-resizer:hover {
+  background: var(--bg-secondary);
+}
+
+.panel-resizer + .agents-panel {
+  border-left: none;
 }
 
 .log-container--single {
@@ -438,6 +463,11 @@
 }
 
 /* ── Agents Panel ──────────────────────────────────────────────────────── */
+
+.main-content--resized .agents-panel {
+  flex: 0 0 var(--agents-panel-width);
+  width: var(--agents-panel-width);
+}
 
 .agents-panel {
   flex: 1 1 0;

@@ -10,7 +10,7 @@
  * by default and can be expanded by clicking the session header.
  */
 
-import { type ReactElement,useState } from "react";
+import { type ReactElement, useState } from "react";
 
 import type { AgentInfo } from "../types";
 import {

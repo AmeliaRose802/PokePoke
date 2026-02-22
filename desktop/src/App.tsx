@@ -8,7 +8,13 @@
 import "./App.css";
 import "highlight.js/styles/github-dark.css";
 
-import { useCallback, useEffect, useState } from "react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { AgentLogPanel } from "./components/AgentLogPanel";
 import { AgentsPanel } from "./components/AgentsPanel";
@@ -24,6 +30,11 @@ import type { ModelHistoryEntry } from "./types";
 import { useBridge } from "./useBridge";
 import { useDocumentTitle } from "./useDocumentTitle";
 
+const AGENTS_PANEL_WIDTH_KEY = "pokepoke.ui.agentsPanelWidth";
+const MIN_AGENTS_PANEL_WIDTH = 260;
+const MIN_LOG_PANEL_WIDTH = 360;
+const DEFAULT_PANEL_FRACTION = 1 / 3;
+
 function App() {
   const bridge = useBridge();
   const [showPrompts, setShowPrompts] = useState(false);
@@ -34,11 +45,101 @@ function App() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [spawnAtLimit, setSpawnAtLimit] = useState(false);
+  const mainContentRef = useRef<HTMLDivElement | null>(null);
+  const [agentsPanelWidth, setAgentsPanelWidth] = useState<number | null>(() => {
+    const stored =
+      typeof window === "undefined"
+        ? null
+        : window.localStorage.getItem(AGENTS_PANEL_WIDTH_KEY);
+    const parsed = stored ? Number(stored) : NaN;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  });
+  const [isResizingPanels, setIsResizingPanels] = useState(false);
   const repositoryDisplayName = bridge.repositoryName.trim();
   const showRepositoryName = repositoryDisplayName.length > 0;
 
   // Update browser tab title with current agent and project name
   useDocumentTitle(bridge.agentName, bridge.projectName);
+
+  const clampAgentsPanelWidth = useCallback((value: number) => {
+    const containerWidth =
+      mainContentRef.current?.getBoundingClientRect().width ?? 0;
+    if (!containerWidth) {
+      return Math.max(value, MIN_AGENTS_PANEL_WIDTH);
+    }
+    const maxWidth = Math.max(
+      MIN_AGENTS_PANEL_WIDTH,
+      containerWidth - MIN_LOG_PANEL_WIDTH
+    );
+    return Math.min(Math.max(value, MIN_AGENTS_PANEL_WIDTH), maxWidth);
+  }, []);
+
+  useEffect(() => {
+    if (agentsPanelWidth !== null) return;
+    if (!mainContentRef.current) return;
+    const width = mainContentRef.current.getBoundingClientRect().width;
+    const initial = Math.round(width * DEFAULT_PANEL_FRACTION);
+    setAgentsPanelWidth(clampAgentsPanelWidth(initial));
+  }, [agentsPanelWidth, clampAgentsPanelWidth]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setAgentsPanelWidth((current) =>
+        current === null ? current : clampAgentsPanelWidth(current)
+      );
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [clampAgentsPanelWidth]);
+
+  useEffect(() => {
+    if (agentsPanelWidth === null) return;
+    window.localStorage.setItem(
+      AGENTS_PANEL_WIDTH_KEY,
+      String(Math.round(agentsPanelWidth))
+    );
+  }, [agentsPanelWidth]);
+
+  useEffect(() => {
+    if (!mainContentRef.current) return;
+    if (agentsPanelWidth === null) {
+      mainContentRef.current.style.removeProperty("--agents-panel-width");
+      return;
+    }
+    mainContentRef.current.style.setProperty(
+      "--agents-panel-width",
+      `${agentsPanelWidth}px`
+    );
+  }, [agentsPanelWidth]);
+
+  useEffect(() => {
+    if (!isResizingPanels) return;
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    return () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+    };
+  }, [isResizingPanels]);
+
+  useEffect(() => {
+    if (!isResizingPanels) return;
+    const handleMove = (event: MouseEvent) => {
+      if (!mainContentRef.current) return;
+      const rect = mainContentRef.current.getBoundingClientRect();
+      const nextWidth = Math.round(rect.right - event.clientX);
+      setAgentsPanelWidth(clampAgentsPanelWidth(nextWidth));
+    };
+    const handleUp = () => setIsResizingPanels(false);
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
+  }, [clampAgentsPanelWidth, isResizingPanels]);
 
   const hasSelectedAgent =
     selectedAgentId !== null &&
@@ -71,6 +172,14 @@ function App() {
   const handleSelectAgent = useCallback((agentId: string | null) => {
     setSelectedAgentId((prev) => (prev === agentId ? null : agentId));
   }, []);
+
+  const handleResizeStart = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      setIsResizingPanels(true);
+    },
+    []
+  );
 
   const handleOpenPromptEditor = useCallback(() => {
     setShowPrompts(true);
@@ -191,7 +300,12 @@ function App() {
       />
 
       {/* Main content area with logs and agents panel */}
-      <div className="main-content">
+      <div
+        className={`main-content${agentsPanelWidth !== null ? " main-content--resized" : ""}${
+          isResizingPanels ? " main-content--resizing" : ""
+        }`}
+        ref={mainContentRef}
+      >
         {/* Primary log output + secondary (collapsible) orchestrator log */}
         <div className="log-container">
           {selectedAgentDetail ? (
@@ -244,6 +358,14 @@ function App() {
             </details>
           ) : null}
         </div>
+
+        <div
+          className="panel-resizer"
+          onMouseDown={handleResizeStart}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize panels"
+        />
 
         {/* Agents panel */}
         <AgentsPanel
