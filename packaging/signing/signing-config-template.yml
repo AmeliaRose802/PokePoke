@@ -1,0 +1,136 @@
+# PokePoke Code Signing Configuration
+
+# This file defines code signing settings for different environments.
+# Copy to project root as 'signing-config.yml' and customize as needed.
+
+# Default signing configuration
+signing:
+  # Enable/disable code signing globally
+  enabled: true
+  
+  # Default certificate source: Auto, Store, File, Azure, SelfSigned
+  # Auto will try Azure -> Store -> File -> SelfSigned in order
+  certificate_source: Auto
+  
+  # Description and URL for signed files
+  description: "PokePoke - Autonomous Beads + Copilot CLI Orchestrator"
+  url: "https://github.com/AmeliaRose802/PokePoke"
+  
+  # Timestamp server for time-stamping signatures
+  timestamp_server: "http://timestamp.sectigo.com"
+  
+  # Alternative timestamp servers (will try in order if primary fails)
+  timestamp_servers_fallback:
+    - "http://timestamp.globalsign.com/scripts/timstamp.dll"
+    - "http://timestamp.comodoca.com"
+    - "http://time.certum.pl"
+
+# Environment-specific overrides
+environments:
+  # Development environment
+  development:
+    certificate_source: SelfSigned
+    # Skip signing for faster builds if desired
+    # enabled: false
+  
+  # CI/CD environment
+  ci:
+    certificate_source: Azure
+    # CI should fail if signing fails
+    required: true
+  
+  # Production releases
+  production:
+    certificate_source: Auto
+    required: true
+    # Use production timestamp server
+    timestamp_server: "http://timestamp.sectigo.com"
+
+# Certificate source-specific settings
+certificates:
+  # File-based certificate settings
+  file:
+    # Path to certificate file (.pfx)
+    # Can be relative to project root or absolute
+    path: "certificates/code-signing.pfx"
+    
+    # Password can be provided via environment variable CERT_PASSWORD
+    # or will be prompted during signing
+    
+  # Certificate store settings
+  store:
+    # Specific thumbprint to use (optional)
+    # If not specified, will search by subject name
+    thumbprint: ""
+    
+    # Subject name pattern to search for
+    subject_pattern: "PokePoke"
+    
+    # Store location: CurrentUser or LocalMachine
+    store_location: "CurrentUser"
+    
+  # Azure Trusted Signing settings
+  azure:
+    # Azure Key Vault endpoint
+    # Can be provided via environment variable AZURE_TRUSTED_SIGNING_ENDPOINT
+    endpoint: ""
+    
+    # Account name
+    # Can be provided via environment variable AZURE_TRUSTED_SIGNING_ACCOUNT_NAME
+    account_name: ""
+    
+    # Profile name
+    # Can be provided via environment variable AZURE_TRUSTED_SIGNING_PROFILE_NAME
+    profile_name: ""
+    
+  # Self-signed certificate settings
+  self_signed:
+    # Subject name for self-signed certificates
+    subject_name: "PokePoke Development"
+    
+    # Validity period in years
+    validity_years: 5
+    
+    # Whether to install as trusted root (requires admin)
+    install_as_trusted: true
+
+# Build integration settings
+build:
+  # Sign PyInstaller executable
+  sign_executable: true
+  
+  # Sign NSIS installer
+  sign_installer: true
+  
+  # Fail build if signing fails
+  fail_on_signing_error: false
+  
+  # Verification after signing
+  verify_signatures: true
+
+# Environment variable mappings
+environment_variables:
+  # Certificate file password
+  cert_password: "CERT_PASSWORD"
+  
+  # Azure Trusted Signing
+  azure_endpoint: "AZURE_TRUSTED_SIGNING_ENDPOINT"
+  azure_account: "AZURE_TRUSTED_SIGNING_ACCOUNT_NAME"
+  azure_profile: "AZURE_TRUSTED_SIGNING_PROFILE_NAME"
+  
+  # Force specific certificate source
+  cert_source_override: "POKEPOKE_CERT_SOURCE"
+  
+  # Disable signing entirely
+  skip_signing: "POKEPOKE_SKIP_SIGNING"
+
+# Logging and debugging
+logging:
+  # Log level: Verbose, Normal, Quiet
+  level: Normal
+  
+  # Log signing operations to file
+  log_file: "build-logs/signing.log"
+  
+  # Include sensitive information in logs (not recommended for production)
+  include_sensitive: false
