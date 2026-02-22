@@ -1,7 +1,7 @@
 import { describe, expect,it } from 'vitest';
 
-import type { ModelPerformanceSummary, SessionStats } from '../types';
-import { formatDurationWithSpread, getCompletedItems, getDoneCount, inferCurrentModel } from './stats';
+import type { ModelHistoryEntry, ModelPerformanceSummary, SessionStats } from '../types';
+import { buildItemTypeBreakdown, formatDurationWithSpread, getCompletedItems, getDoneCount, inferCurrentModel } from './stats';
 
 describe('stats helpers', () => {
   describe('formatDurationWithSpread', () => {
@@ -120,6 +120,65 @@ describe('stats helpers', () => {
         gatePassed: true,
         successRate: 0.9,
       });
+    });
+  });
+
+  describe('buildItemTypeBreakdown', () => {
+    it('counts items from completed items by issue_type', () => {
+      const completed = [
+        { id: '1', issue_type: 'bug' },
+        { id: '2', issue_type: 'bug' },
+        { id: '3', issue_type: 'task' },
+      ];
+
+      const result = buildItemTypeBreakdown(completed, []);
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toMatchObject({ type: 'bug', count: 2 });
+      expect(result[1]).toMatchObject({ type: 'task', count: 1 });
+    });
+
+    it('counts items from model history by item_type', () => {
+      const history: ModelHistoryEntry[] = [
+        { item_id: 'A', model: 'm', duration_seconds: 10, gate_passed: true, timestamp: '2026-01-01', item_type: 'feature' },
+        { item_id: 'B', model: 'm', duration_seconds: 20, gate_passed: true, timestamp: '2026-01-02', item_type: 'feature' },
+        { item_id: 'C', model: 'm', duration_seconds: 15, gate_passed: false, timestamp: '2026-01-03', item_type: 'bug' },
+      ];
+
+      const result = buildItemTypeBreakdown([], history);
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toMatchObject({ type: 'feature', count: 2 });
+      expect(result[1]).toMatchObject({ type: 'bug', count: 1 });
+    });
+
+    it('combines both sources and defaults missing types to unknown', () => {
+      const completed = [{ id: '1' }]; // no issue_type
+      const history: ModelHistoryEntry[] = [
+        { item_id: 'A', model: 'm', duration_seconds: 10, gate_passed: true, timestamp: '2026-01-01' }, // no item_type
+      ];
+
+      const result = buildItemTypeBreakdown(completed, history);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({ type: 'unknown', count: 2 });
+    });
+
+    it('returns empty array when no items', () => {
+      expect(buildItemTypeBreakdown([], [])).toEqual([]);
+    });
+
+    it('assigns distinct colors per type', () => {
+      const completed = [
+        { id: '1', issue_type: 'bug' },
+        { id: '2', issue_type: 'task' },
+        { id: '3', issue_type: 'feature' },
+      ];
+
+      const result = buildItemTypeBreakdown(completed, []);
+      const colors = result.map((r) => r.color);
+
+      expect(new Set(colors).size).toBe(3);
     });
   });
 });
