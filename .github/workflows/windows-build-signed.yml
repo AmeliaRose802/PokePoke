@@ -125,7 +125,7 @@ jobs:
         $buildParams = @()
         
         # Add certificate source if Azure credentials are available and not skipping signing
-        if ("${{ secrets.AZURE_CLIENT_ID }}" -and "${{ secrets.AZURE_CLIENT_SECRET }}" -and !$${{ github.event.inputs.skip_signing }}) {
+        if ("${{ secrets.AZURE_CLIENT_ID }}" -and "${{ secrets.AZURE_CLIENT_SECRET }}" -and ("${{ github.event.inputs.skip_signing }}" -ne "true")) {
           Write-Host "Using Azure Trusted Signing"
           $buildParams += "-CertificateSource", "Azure"
         } elseif ("${{ github.event.inputs.skip_signing }}" -eq "true") {
@@ -166,7 +166,7 @@ jobs:
         $buildParams = @()
         
         # Add certificate source if Azure credentials are available and not skipping signing
-        if ("${{ secrets.AZURE_CLIENT_ID }}" -and "${{ secrets.AZURE_CLIENT_SECRET }}" -and !$${{ github.event.inputs.skip_signing }}) {
+        if ("${{ secrets.AZURE_CLIENT_ID }}" -and "${{ secrets.AZURE_CLIENT_SECRET }}" -and ("${{ github.event.inputs.skip_signing }}" -ne "true")) {
           Write-Host "Using Azure Trusted Signing for installer"
           $buildParams += "-CertificateSource", "Azure"
         } elseif ("${{ github.event.inputs.skip_signing }}" -eq "true") {
@@ -295,7 +295,11 @@ jobs:
       run: |
         Write-Host "`n=== Build Summary ===" -ForegroundColor Green
         Write-Host "Version: ${{ steps.version.outputs.version }}"
-        Write-Host "Signing: $(${{ secrets.AZURE_CLIENT_ID && !github.event.inputs.skip_signing }} ? 'Azure Trusted Signing' : 'Disabled/Unavailable')"
+        if ("${{ secrets.AZURE_CLIENT_ID }}" -and ("${{ github.event.inputs.skip_signing }}" -ne "true")) {
+          Write-Host "Signing: Azure Trusted Signing"
+        } else {
+          Write-Host "Signing: Disabled/Unavailable"
+        }
         Write-Host "Artifacts:"
         
         Get-ChildItem "dist\" -Recurse -File | ForEach-Object {
