@@ -994,4 +994,118 @@ describe('SettingsPage', () => {
 
     expect(mockOpenPromptEditor).toHaveBeenCalledWith('janitor.md');
   });
+
+  it('should show add custom agent button', async () => {
+    render(
+      <SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />
+    );
+    await waitFor(() => { expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument(); });
+    expect(screen.getByText('➕ Add Custom Agent')).toBeInTheDocument();
+  });
+
+  it('should open create agent form when add button clicked', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />
+    );
+    await waitFor(() => { expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument(); });
+    await user.click(screen.getByText('➕ Add Custom Agent'));
+    expect(screen.getByText('New Custom Agent')).toBeInTheDocument();
+    expect(screen.getByTestId('agent-name-input')).toBeInTheDocument();
+  });
+
+  it('should create a custom agent with form', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />
+    );
+    await waitFor(() => { expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument(); });
+    await user.click(screen.getByText('➕ Add Custom Agent'));
+    await user.type(screen.getByTestId('agent-name-input'), 'Security Scanner');
+    await user.type(screen.getByTestId('agent-description-input'), 'Scans for vulnerabilities');
+    await user.click(screen.getByText('➕ Create Agent'));
+    expect(screen.getByText('Security Scanner')).toBeInTheDocument();
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    expect(screen.queryByText('New Custom Agent')).not.toBeInTheDocument();
+  });
+
+  it('should show error when creating agent without name', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />
+    );
+    await waitFor(() => { expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument(); });
+    await user.click(screen.getByText('➕ Add Custom Agent'));
+    await user.click(screen.getByText('➕ Create Agent'));
+    expect(screen.getByText('Name is required')).toBeInTheDocument();
+  });
+
+  it('should show error when creating agent with duplicate name', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />
+    );
+    await waitFor(() => { expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument(); });
+    await user.click(screen.getByText('➕ Add Custom Agent'));
+    await user.type(screen.getByTestId('agent-name-input'), 'Janitor');
+    await user.click(screen.getByText('➕ Create Agent'));
+    expect(screen.getByText('An agent with this name already exists')).toBeInTheDocument();
+  });
+
+  it('should cancel create form', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />
+    );
+    await waitFor(() => { expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument(); });
+    await user.click(screen.getByText('➕ Add Custom Agent'));
+    expect(screen.getByText('New Custom Agent')).toBeInTheDocument();
+    await user.click(screen.getByText('Cancel'));
+    expect(screen.queryByText('New Custom Agent')).not.toBeInTheDocument();
+  });
+
+  it('should show custom badge on custom agents', async () => {
+    const customConfig: ConfigResponse = {
+      ...defaultConfigResponse,
+      config: { ...defaultConfig, maintenance: { agents: [
+        { name: 'My Custom', enabled: true, frequency: 3, prompt_file: 'my-custom.md', needs_worktree: false, custom: true },
+      ] } },
+    };
+    mockGetConfig.mockResolvedValueOnce(customConfig);
+    render(
+      <SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />
+    );
+    await waitFor(() => { expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument(); });
+    expect(screen.getByText('custom')).toBeInTheDocument();
+  });
+
+  it('should save custom agents with config', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />
+    );
+    await waitFor(() => { expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument(); });
+    await user.click(screen.getByText('➕ Add Custom Agent'));
+    await user.type(screen.getByTestId('agent-name-input'), 'My Agent');
+    await user.click(screen.getByText('➕ Create Agent'));
+    await user.click(screen.getByText('💾 Save'));
+    await waitFor(() => { expect(mockSaveConfig).toHaveBeenCalledTimes(1); });
+    const savedConfig = mockSaveConfig.mock.calls[0][0];
+    const agents = savedConfig.maintenance.agents;
+    expect(agents).toHaveLength(2);
+    expect(agents[1].name).toBe('My Agent');
+    expect(agents[1].custom).toBe(true);
+  });
+
+  it('should auto-generate prompt file from agent name', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />
+    );
+    await waitFor(() => { expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument(); });
+    await user.click(screen.getByText('➕ Add Custom Agent'));
+    await user.type(screen.getByTestId('agent-name-input'), 'Security Scanner');
+    await user.click(screen.getByText('➕ Create Agent'));
+    expect(screen.getByText('📄 security-scanner.md')).toBeInTheDocument();
+  });
 });
