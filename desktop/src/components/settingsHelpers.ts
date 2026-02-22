@@ -2,6 +2,57 @@
  * Shared constants and utilities for Settings page.
  */
 
+import type { MaintenanceAgent } from "../types";
+
+/** Default configurations for all known maintenance agent types. */
+export const KNOWN_MAINTENANCE_AGENTS: MaintenanceAgent[] = [
+  {
+    name: "Tech Debt",
+    prompt_file: "tech-debt.md",
+    frequency: 5,
+    needs_worktree: false,
+    enabled: true,
+  },
+  {
+    name: "Janitor",
+    prompt_file: "janitor.md",
+    frequency: 2,
+    needs_worktree: true,
+    merge_changes: true,
+    enabled: true,
+  },
+  {
+    name: "Backlog Cleanup",
+    prompt_file: "backlog-cleanup.md",
+    frequency: 7,
+    needs_worktree: true,
+    merge_changes: false,
+    enabled: true,
+  },
+  {
+    name: "Beta Tester",
+    prompt_file: "beta-tester.md",
+    frequency: 7,
+    needs_worktree: true,
+    merge_changes: false,
+    enabled: false,
+  },
+  {
+    name: "Code Review",
+    prompt_file: "code-reviewer.md",
+    frequency: 5,
+    needs_worktree: false,
+    enabled: true,
+  },
+  {
+    name: "Worktree Cleanup",
+    prompt_file: "worktree-cleanup.md",
+    frequency: 2,
+    needs_worktree: false,
+    enabled: true,
+  },
+];
+
 export const KNOWN_MODELS = [
   "claude-opus-4.5",
   "claude-opus-4.6",
