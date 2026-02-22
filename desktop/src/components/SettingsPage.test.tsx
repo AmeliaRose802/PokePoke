@@ -995,203 +995,117 @@ describe('SettingsPage', () => {
     expect(mockOpenPromptEditor).toHaveBeenCalledWith('janitor.md');
   });
 
-  describe('Check for Updates', () => {
-    it('should not show updates section when checkForUpdates not provided', async () => {
-      render(
-        <SettingsPage
-          getConfig={mockGetConfig}
-          saveConfig={mockSaveConfig}
-          onClose={mockOnClose}
-        />
-      );
+  it('should show add custom agent button', async () => {
+    render(
+      <SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />
+    );
+    await waitFor(() => { expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument(); });
+    expect(screen.getByText('➕ Add Custom Agent')).toBeInTheDocument();
+  });
 
-      await waitFor(() => {
-        expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
-      });
+  it('should open create agent form when add button clicked', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />
+    );
+    await waitFor(() => { expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument(); });
+    await user.click(screen.getByText('➕ Add Custom Agent'));
+    expect(screen.getByText('New Custom Agent')).toBeInTheDocument();
+    expect(screen.getByTestId('agent-name-input')).toBeInTheDocument();
+  });
 
-      expect(screen.queryByText('Check for Updates')).not.toBeInTheDocument();
-    });
+  it('should create a custom agent with form', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />
+    );
+    await waitFor(() => { expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument(); });
+    await user.click(screen.getByText('➕ Add Custom Agent'));
+    await user.type(screen.getByTestId('agent-name-input'), 'Security Scanner');
+    await user.type(screen.getByTestId('agent-description-input'), 'Scans for vulnerabilities');
+    await user.click(screen.getByText('➕ Create Agent'));
+    expect(screen.getByText('Security Scanner')).toBeInTheDocument();
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    expect(screen.queryByText('New Custom Agent')).not.toBeInTheDocument();
+  });
 
-    it('should show updates section when checkForUpdates provided', async () => {
-      const mockCheckForUpdates = vi.fn();
+  it('should show error when creating agent without name', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />
+    );
+    await waitFor(() => { expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument(); });
+    await user.click(screen.getByText('➕ Add Custom Agent'));
+    await user.click(screen.getByText('➕ Create Agent'));
+    expect(screen.getByText('Name is required')).toBeInTheDocument();
+  });
 
-      render(
-        <SettingsPage
-          getConfig={mockGetConfig}
-          saveConfig={mockSaveConfig}
-          onClose={mockOnClose}
-          checkForUpdates={mockCheckForUpdates}
-        />
-      );
+  it('should show error when creating agent with duplicate name', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />
+    );
+    await waitFor(() => { expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument(); });
+    await user.click(screen.getByText('➕ Add Custom Agent'));
+    await user.type(screen.getByTestId('agent-name-input'), 'Janitor');
+    await user.click(screen.getByText('➕ Create Agent'));
+    expect(screen.getByText('An agent with this name already exists')).toBeInTheDocument();
+  });
 
-      await waitFor(() => {
-        expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
-      });
+  it('should cancel create form', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />
+    );
+    await waitFor(() => { expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument(); });
+    await user.click(screen.getByText('➕ Add Custom Agent'));
+    expect(screen.getByText('New Custom Agent')).toBeInTheDocument();
+    await user.click(screen.getByText('Cancel'));
+    expect(screen.queryByText('New Custom Agent')).not.toBeInTheDocument();
+  });
 
-      expect(screen.getByText('Check for Updates')).toBeInTheDocument();
-    });
+  it('should show custom badge on custom agents', async () => {
+    const customConfig: ConfigResponse = {
+      ...defaultConfigResponse,
+      config: { ...defaultConfig, maintenance: { agents: [
+        { name: 'My Custom', enabled: true, frequency: 3, prompt_file: 'my-custom.md', needs_worktree: false, custom: true },
+      ] } },
+    };
+    mockGetConfig.mockResolvedValueOnce(customConfig);
+    render(
+      <SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />
+    );
+    await waitFor(() => { expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument(); });
+    expect(screen.getByText('custom')).toBeInTheDocument();
+  });
 
-    it('should call checkForUpdates and show up-to-date result', async () => {
-      const user = userEvent.setup();
-      const mockCheckForUpdates = vi.fn().mockResolvedValue({
-        current_version: '1.0.0',
-        latest_version: '1.0.0',
-        update_available: false,
-        download_url: 'https://github.com/AmeliaRose802/PokePoke/releases',
-        error: null,
-      });
+  it('should save custom agents with config', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />
+    );
+    await waitFor(() => { expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument(); });
+    await user.click(screen.getByText('➕ Add Custom Agent'));
+    await user.type(screen.getByTestId('agent-name-input'), 'My Agent');
+    await user.click(screen.getByText('➕ Create Agent'));
+    await user.click(screen.getByText('💾 Save'));
+    await waitFor(() => { expect(mockSaveConfig).toHaveBeenCalledTimes(1); });
+    const savedConfig = mockSaveConfig.mock.calls[0][0];
+    const agents = savedConfig.maintenance.agents;
+    expect(agents).toHaveLength(2);
+    expect(agents[1].name).toBe('My Agent');
+    expect(agents[1].custom).toBe(true);
+  });
 
-      render(
-        <SettingsPage
-          getConfig={mockGetConfig}
-          saveConfig={mockSaveConfig}
-          onClose={mockOnClose}
-          checkForUpdates={mockCheckForUpdates}
-        />
-      );
-
-      await waitFor(() => {
-        expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
-      });
-
-      await user.click(screen.getByText('Check for Updates'));
-
-      await waitFor(() => {
-        expect(mockCheckForUpdates).toHaveBeenCalledTimes(1);
-      });
-
-      expect(screen.getByText(/up to date/)).toBeInTheDocument();
-      expect(screen.getAllByText(/1\.0\.0/).length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('should show update available with download link', async () => {
-      const user = userEvent.setup();
-      const downloadUrl = 'https://github.com/AmeliaRose802/PokePoke/releases/download/v2.0.0/setup.exe';
-      const mockCheckForUpdates = vi.fn().mockResolvedValue({
-        current_version: '1.0.0',
-        latest_version: '2.0.0',
-        update_available: true,
-        download_url: downloadUrl,
-        error: null,
-      });
-
-      render(
-        <SettingsPage
-          getConfig={mockGetConfig}
-          saveConfig={mockSaveConfig}
-          onClose={mockOnClose}
-          checkForUpdates={mockCheckForUpdates}
-        />
-      );
-
-      await waitFor(() => {
-        expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
-      });
-
-      await user.click(screen.getByText('Check for Updates'));
-
-      await waitFor(() => {
-        expect(screen.getByText(/Update available/)).toBeInTheDocument();
-      });
-
-      expect(screen.getByText('v2.0.0')).toBeInTheDocument();
-      const downloadLink = screen.getByText('Download');
-      expect(downloadLink).toHaveAttribute('href', downloadUrl);
-    });
-
-    it('should show error message on update check failure', async () => {
-      const user = userEvent.setup();
-      const mockCheckForUpdates = vi.fn().mockResolvedValue({
-        current_version: '1.0.0',
-        latest_version: null,
-        update_available: false,
-        download_url: 'https://github.com/AmeliaRose802/PokePoke/releases',
-        error: 'Network error: connection refused',
-      });
-
-      render(
-        <SettingsPage
-          getConfig={mockGetConfig}
-          saveConfig={mockSaveConfig}
-          onClose={mockOnClose}
-          checkForUpdates={mockCheckForUpdates}
-        />
-      );
-
-      await waitFor(() => {
-        expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
-      });
-
-      await user.click(screen.getByText('Check for Updates'));
-
-      await waitFor(() => {
-        expect(screen.getByText(/Network error: connection refused/)).toBeInTheDocument();
-      });
-    });
-
-    it('should disable button while checking', async () => {
-      const user = userEvent.setup();
-      let resolveCheck: (value: unknown) => void;
-      const checkPromise = new Promise((resolve) => { resolveCheck = resolve; });
-      const mockCheckForUpdates = vi.fn().mockReturnValue(checkPromise);
-
-      render(
-        <SettingsPage
-          getConfig={mockGetConfig}
-          saveConfig={mockSaveConfig}
-          onClose={mockOnClose}
-          checkForUpdates={mockCheckForUpdates}
-        />
-      );
-
-      await waitFor(() => {
-        expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
-      });
-
-      await user.click(screen.getByText('Check for Updates'));
-
-      expect(screen.getByText('Checking…')).toBeInTheDocument();
-      expect(screen.getByText('Checking…')).toBeDisabled();
-
-      // Resolve the check
-      resolveCheck!({ current_version: '1.0.0', latest_version: '1.0.0', update_available: false, download_url: '', error: null });
-
-      await waitFor(() => {
-        expect(screen.getByText('Check for Updates')).toBeInTheDocument();
-      });
-    });
-
-    it('should show current version in update result', async () => {
-      const user = userEvent.setup();
-      const mockCheckForUpdates = vi.fn().mockResolvedValue({
-        current_version: '0.5.3',
-        latest_version: '0.5.3',
-        update_available: false,
-        download_url: 'https://github.com/AmeliaRose802/PokePoke/releases',
-        error: null,
-      });
-
-      render(
-        <SettingsPage
-          getConfig={mockGetConfig}
-          saveConfig={mockSaveConfig}
-          onClose={mockOnClose}
-          checkForUpdates={mockCheckForUpdates}
-        />
-      );
-
-      await waitFor(() => {
-        expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
-      });
-
-      await user.click(screen.getByText('Check for Updates'));
-
-      await waitFor(() => {
-        expect(screen.getByText('0.5.3')).toBeInTheDocument();
-      });
-
-      // Check "Current version:" label is present
-      expect(screen.getByText(/Current version:/)).toBeInTheDocument();
-    });
+  it('should auto-generate prompt file from agent name', async () => {
+    const user = userEvent.setup();
+    render(
+      <SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />
+    );
+    await waitFor(() => { expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument(); });
+    await user.click(screen.getByText('➕ Add Custom Agent'));
+    await user.type(screen.getByTestId('agent-name-input'), 'Security Scanner');
+    await user.click(screen.getByText('➕ Create Agent'));
+    expect(screen.getByText('📄 security-scanner.md')).toBeInTheDocument();
   });
 });

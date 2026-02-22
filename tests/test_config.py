@@ -53,6 +53,8 @@ class TestMaintenanceAgentConfig:
         assert config.merge_changes is True
         assert config.model is None
         assert config.enabled is True
+        assert config.custom is False
+        assert config.description == ""
 
     def test_custom_values(self):
         config = MaintenanceAgentConfig(
@@ -68,6 +70,17 @@ class TestMaintenanceAgentConfig:
         assert config.frequency == 3
         assert config.model == "gpt-4o"
         assert config.enabled is False
+
+    def test_custom_agent_fields(self):
+        config = MaintenanceAgentConfig(
+            name="My Custom Agent",
+            prompt_file="my-custom-agent.md",
+            frequency=4,
+            custom=True,
+            description="A user-defined agent",
+        )
+        assert config.custom is True
+        assert config.description == "A user-defined agent"
 
 
 class TestMaintenanceConfig:
@@ -372,6 +385,30 @@ class TestMaintenanceAgentDefaults:
         }
         config = ProjectConfig.from_dict(data)
         assert config.maintenance.agents[0].enabled is False
+
+    def test_custom_agent_from_dict(self):
+        data = {
+            "maintenance": {
+                "agents": [
+                    {
+                        "name": "User Agent",
+                        "prompt_file": "user-agent.md",
+                        "frequency": 3,
+                        "custom": True,
+                        "description": "User-defined agent",
+                    }
+                ]
+            }
+        }
+        config = ProjectConfig.from_dict(data)
+        agent = config.maintenance.agents[0]
+        assert agent.custom is True
+        assert agent.description == "User-defined agent"
+
+    def test_builtin_agents_not_custom(self):
+        config = MaintenanceConfig.defaults()
+        for agent in config.agents:
+            assert agent.custom is False
 
 
 class TestCommandTimeout:
