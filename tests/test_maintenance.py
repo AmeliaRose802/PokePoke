@@ -84,7 +84,7 @@ class TestAggregateStats:
         """Test aggregation of multiple items."""
         session_stats = SessionStats(agent_stats=AgentStats())
 
-        for i in range(3):
+        for _ in range(3):
             item_stats = AgentStats(
                 wall_duration=10.0,
                 input_tokens=100
@@ -415,6 +415,7 @@ class TestRunPeriodicMaintenance:
                       if call[0][0] == "Beta Tester"]
         assert len(beta_calls) == 1
 
+    @patch('pokepoke.maintenance_scheduler.select_model_for_maintenance')
     @patch('pokepoke.maintenance_scheduler.try_lock')
     @patch('pokepoke.maintenance_scheduler.get_config')
     @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
@@ -428,11 +429,13 @@ class TestRunPeriodicMaintenance:
         mock_special_agent: Mock,
         mock_maintenance: Mock,
         mock_config: Mock,
-        mock_lock: Mock
+        mock_lock: Mock,
+        mock_select: Mock,
     ) -> None:
         """Test that Code Review agent uses gpt-5.1-codex model."""
         mock_config.return_value = _make_default_config()
         mock_lock.return_value = Mock()
+        mock_select.return_value = None  # No A/B override
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
         mock_maintenance.return_value = None
@@ -561,7 +564,7 @@ class TestRunSpecialAgent:
         from pathlib import Path
         with patch('pokepoke.agent_runner.run_beta_tester', return_value=AgentStats()) as mock_bt:
             result = _run_special_agent("Beta Tester", Path("/repo"))
-            mock_bt.assert_called_once_with(repo_root=Path("/repo"), item_logger=None)
+            mock_bt.assert_called_once_with(repo_root=Path("/repo"), model=None, item_logger=None)
             assert isinstance(result, AgentStats)
 
     def test_worktree_cleanup(self) -> None:
@@ -569,7 +572,7 @@ class TestRunSpecialAgent:
         from pathlib import Path
         with patch('pokepoke.agent_runner.run_worktree_cleanup', return_value=AgentStats()) as mock_wc:
             result = _run_special_agent("Worktree Cleanup", Path("/repo"))
-            mock_wc.assert_called_once_with(repo_root=Path("/repo"), item_logger=None)
+            mock_wc.assert_called_once_with(repo_root=Path("/repo"), model=None, item_logger=None)
             assert isinstance(result, AgentStats)
 
     def test_unknown_agent_returns_none(self) -> None:

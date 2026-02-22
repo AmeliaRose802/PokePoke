@@ -256,12 +256,14 @@ class TestSingletonCoordination:
 class TestRunAgentWithCoordination:
     """Test agent execution and statistics coordination."""
 
+    @patch('pokepoke.maintenance_scheduler.select_model_for_maintenance')
     @patch('pokepoke.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.maintenance_scheduler.terminal_ui')
     @patch('pokepoke.maintenance_scheduler._run_special_agent')
-    def test_runs_special_agent(self, mock_special, mock_ui, mock_banner):
+    def test_runs_special_agent(self, mock_special, mock_ui, mock_banner, mock_select):
         """Test that special agents use their dedicated runners."""
         mock_special.return_value = AgentStats(input_tokens=100)
+        mock_select.return_value = None  # No A/B testing
 
         scheduler = MaintenanceScheduler()
         agent_cfg = MaintenanceAgentConfig(name="Beta Tester", prompt_file="beta-tester.md", frequency=3)
@@ -271,9 +273,36 @@ class TestRunAgentWithCoordination:
 
         scheduler._run_agent_with_coordination("Beta Tester", agent_cfg, pokepoke_repo, session_stats, run_logger)
 
-        mock_special.assert_called_once_with("Beta Tester", pokepoke_repo, item_logger=run_logger.start_maintenance_log.return_value)
+        mock_special.assert_called_once_with("Beta Tester", pokepoke_repo, model=None, item_logger=run_logger.start_maintenance_log.return_value)
         assert session_stats.beta_tester_agent_runs == 1
         assert session_stats.agent_stats.input_tokens == 100
+
+    @patch('pokepoke.maintenance_scheduler.select_model_for_maintenance')
+    @patch('pokepoke.maintenance_scheduler.set_terminal_banner')
+    @patch('pokepoke.maintenance_scheduler.terminal_ui')
+    @patch('pokepoke.maintenance_scheduler._run_special_agent')
+    def test_ab_testing_overrides_special_agent_model(self, mock_special, mock_ui, mock_banner, mock_select):
+        """Test that A/B testing model overrides special agent's configured model."""
+        mock_special.return_value = AgentStats(input_tokens=80)
+        mock_select.return_value = "gpt-5.1-codex"  # A/B selected model
+
+        scheduler = MaintenanceScheduler()
+        agent_cfg = MaintenanceAgentConfig(
+            name="Beta Tester",
+            prompt_file="beta-tester.md",
+            frequency=3,
+            model="claude-opus-4.6",
+        )
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+        pokepoke_repo = Mock()
+
+        scheduler._run_agent_with_coordination("Beta Tester", agent_cfg, pokepoke_repo, session_stats, run_logger)
+
+        mock_special.assert_called_once_with(
+            "Beta Tester", pokepoke_repo, model="gpt-5.1-codex",
+            item_logger=run_logger.start_maintenance_log.return_value,
+        )
 
     @patch('pokepoke.maintenance_scheduler.select_model_for_maintenance')
     @patch('pokepoke.maintenance_scheduler.set_terminal_banner')
