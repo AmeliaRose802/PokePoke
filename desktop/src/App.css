@@ -1221,6 +1221,33 @@
   font-weight: 400;
 }
 
+.log-panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.copy-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+  line-height: 1;
+}
+
+.copy-btn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.copy-btn.success {
+  color: var(--accent-success, #73daca);
+}
+
 .log-entries {
   flex: 1;
   overflow-y: auto;
