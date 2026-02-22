@@ -994,4 +994,204 @@ describe('SettingsPage', () => {
 
     expect(mockOpenPromptEditor).toHaveBeenCalledWith('janitor.md');
   });
+
+  describe('Check for Updates', () => {
+    it('should not show updates section when checkForUpdates not provided', async () => {
+      render(
+        <SettingsPage
+          getConfig={mockGetConfig}
+          saveConfig={mockSaveConfig}
+          onClose={mockOnClose}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+      });
+
+      expect(screen.queryByText('Check for Updates')).not.toBeInTheDocument();
+    });
+
+    it('should show updates section when checkForUpdates provided', async () => {
+      const mockCheckForUpdates = vi.fn();
+
+      render(
+        <SettingsPage
+          getConfig={mockGetConfig}
+          saveConfig={mockSaveConfig}
+          onClose={mockOnClose}
+          checkForUpdates={mockCheckForUpdates}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+      });
+
+      expect(screen.getByText('Check for Updates')).toBeInTheDocument();
+    });
+
+    it('should call checkForUpdates and show up-to-date result', async () => {
+      const user = userEvent.setup();
+      const mockCheckForUpdates = vi.fn().mockResolvedValue({
+        current_version: '1.0.0',
+        latest_version: '1.0.0',
+        update_available: false,
+        download_url: 'https://github.com/AmeliaRose802/PokePoke/releases',
+        error: null,
+      });
+
+      render(
+        <SettingsPage
+          getConfig={mockGetConfig}
+          saveConfig={mockSaveConfig}
+          onClose={mockOnClose}
+          checkForUpdates={mockCheckForUpdates}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('Check for Updates'));
+
+      await waitFor(() => {
+        expect(mockCheckForUpdates).toHaveBeenCalledTimes(1);
+      });
+
+      expect(screen.getByText(/up to date/)).toBeInTheDocument();
+      expect(screen.getAllByText(/1\.0\.0/).length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('should show update available with download link', async () => {
+      const user = userEvent.setup();
+      const downloadUrl = 'https://github.com/AmeliaRose802/PokePoke/releases/download/v2.0.0/setup.exe';
+      const mockCheckForUpdates = vi.fn().mockResolvedValue({
+        current_version: '1.0.0',
+        latest_version: '2.0.0',
+        update_available: true,
+        download_url: downloadUrl,
+        error: null,
+      });
+
+      render(
+        <SettingsPage
+          getConfig={mockGetConfig}
+          saveConfig={mockSaveConfig}
+          onClose={mockOnClose}
+          checkForUpdates={mockCheckForUpdates}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('Check for Updates'));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Update available/)).toBeInTheDocument();
+      });
+
+      expect(screen.getByText('v2.0.0')).toBeInTheDocument();
+      const downloadLink = screen.getByText('Download');
+      expect(downloadLink).toHaveAttribute('href', downloadUrl);
+    });
+
+    it('should show error message on update check failure', async () => {
+      const user = userEvent.setup();
+      const mockCheckForUpdates = vi.fn().mockResolvedValue({
+        current_version: '1.0.0',
+        latest_version: null,
+        update_available: false,
+        download_url: 'https://github.com/AmeliaRose802/PokePoke/releases',
+        error: 'Network error: connection refused',
+      });
+
+      render(
+        <SettingsPage
+          getConfig={mockGetConfig}
+          saveConfig={mockSaveConfig}
+          onClose={mockOnClose}
+          checkForUpdates={mockCheckForUpdates}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('Check for Updates'));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Network error: connection refused/)).toBeInTheDocument();
+      });
+    });
+
+    it('should disable button while checking', async () => {
+      const user = userEvent.setup();
+      let resolveCheck: (value: unknown) => void;
+      const checkPromise = new Promise((resolve) => { resolveCheck = resolve; });
+      const mockCheckForUpdates = vi.fn().mockReturnValue(checkPromise);
+
+      render(
+        <SettingsPage
+          getConfig={mockGetConfig}
+          saveConfig={mockSaveConfig}
+          onClose={mockOnClose}
+          checkForUpdates={mockCheckForUpdates}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('Check for Updates'));
+
+      expect(screen.getByText('Checking…')).toBeInTheDocument();
+      expect(screen.getByText('Checking…')).toBeDisabled();
+
+      // Resolve the check
+      resolveCheck!({ current_version: '1.0.0', latest_version: '1.0.0', update_available: false, download_url: '', error: null });
+
+      await waitFor(() => {
+        expect(screen.getByText('Check for Updates')).toBeInTheDocument();
+      });
+    });
+
+    it('should show current version in update result', async () => {
+      const user = userEvent.setup();
+      const mockCheckForUpdates = vi.fn().mockResolvedValue({
+        current_version: '0.5.3',
+        latest_version: '0.5.3',
+        update_available: false,
+        download_url: 'https://github.com/AmeliaRose802/PokePoke/releases',
+        error: null,
+      });
+
+      render(
+        <SettingsPage
+          getConfig={mockGetConfig}
+          saveConfig={mockSaveConfig}
+          onClose={mockOnClose}
+          checkForUpdates={mockCheckForUpdates}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('Check for Updates'));
+
+      await waitFor(() => {
+        expect(screen.getByText('0.5.3')).toBeInTheDocument();
+      });
+
+      // Check "Current version:" label is present
+      expect(screen.getByText(/Current version:/)).toBeInTheDocument();
+    });
+  });
 });

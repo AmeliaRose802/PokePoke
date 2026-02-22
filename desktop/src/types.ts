@@ -204,6 +204,15 @@ export interface AgentInfo {
   session_id?: string | null;
 }
 
+/** Result of an update check against GitHub Releases */
+export interface UpdateCheckResult {
+  current_version: string;
+  latest_version: string | null;
+  update_available: boolean;
+  download_url: string;
+  error: string | null;
+}
+
 /** State snapshot from the bridge */
 export interface AppState {
   work_item: WorkItem | null;

@@ -210,6 +210,18 @@ def add_work_item_label(self: Any, item_id: str, label: str) -> dict[str, Any]:
     return {"item_id": item_id, "label": label, "labels": labels or []}
 
 
+def check_for_updates(self: Any) -> dict[str, Any]:
+    """Check GitHub Releases for a newer version of PokePoke.
+
+    Returns:
+        Dict with current_version, latest_version, update_available,
+        download_url, and error keys.
+    """
+    from pokepoke.updater import check_for_updates as _check
+
+    return _check()
+
+
 def remove_work_item_label(self: Any, item_id: str, label: str) -> dict[str, Any]:
     """Remove a label from a beads work item and update the cached UI state."""
     if not label.strip():
