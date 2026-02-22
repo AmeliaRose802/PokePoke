@@ -319,9 +319,11 @@ def process_work_item(
 
             item_duration = time.time() - start_time
             gate_passed = gate_success if gate_agent_runs > 0 else None
+            item_api_duration = item_stats.api_duration if item_stats else None
             model_completion = ModelCompletionRecord(
                 item_id=item.id, model=selected_model,
                 duration_seconds=item_duration, gate_passed=gate_passed,
+                api_duration_seconds=item_api_duration,
             ) if success else None
 
             return WorkItemResult(success=success, request_count=request_count, stats=item_stats,
@@ -336,9 +338,9 @@ def process_work_item(
             terminal_ui.ui.set_current_agent(None)
 
             item_duration = time.time() - start_time
-            model_completion = ModelCompletionRecord(
-                item_id=item.id, model=selected_model,
-                duration_seconds=item_duration, gate_passed=False)
+            fail_api_duration = accumulated_stats.api_duration if accumulated_stats.api_duration > 0 else None
+            model_completion = ModelCompletionRecord(item_id=item.id, model=selected_model,
+                duration_seconds=item_duration, gate_passed=False, api_duration_seconds=fail_api_duration)
             return _fail_result(request_count=request_count, cleanup_agent_runs=cleanup_agent_runs,
                                 gate_agent_runs=gate_agent_runs, model_completion=model_completion)
 
