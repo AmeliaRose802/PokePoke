@@ -2,49 +2,37 @@
 
 <#
 .SYNOPSIS
-    Pre-commit file length checker for C# projects
+    Pre-commit file length checker for Python and desktop JS/TS projects
     
 .DESCRIPTION
-    Verifies that C# files don't exceed the maximum line limit.
+    Verifies that source files don't exceed the maximum line limit.
+    Python files: 400 lines (configurable via MAX_LINES env var)
+    Desktop JS/TS files: 500 lines (configurable via MAX_LINES_JS env var)
     This script is designed to be called from a git pre-commit hook.
     
 .PARAMETER MaxLines
-    Maximum lines allowed per file (default: 500)
+    Maximum lines allowed per Python file (default: 400)
+
+.PARAMETER MaxLinesJs
+    Maximum lines allowed per desktop JS/TS file (default: 500)
     
 .EXAMPLE
     .\scripts\check-file-length.ps1
 #>
 
 param(
-    [int]$MaxLines = [int]($env:MAX_LINES ?? 500)
+    [int]$MaxLines = $(if ($env:MAX_LINES) { [int]$env:MAX_LINES } else { 400 }),
+    [int]$MaxLinesJs = $(if ($env:MAX_LINES_JS) { [int]$env:MAX_LINES_JS } else { 500 })
 )
 
 $ErrorActionPreference = "Stop"
 
-# Get list of staged C# files
-function Get-StagedCSharpFiles {
-    try {
-        $output = git diff --cached --name-only --diff-filter=ACM 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "Failed to get staged files"
-            return @()
-        }
-        
-        return $output -split "`n" |
-            Where-Object { $_ -ne '' } |
-            Where-Object { $_ -match '\.cs$' } |
-            Where-Object { $_ -notmatch 'node_modules/' } |
-            Where-Object { $_ -notmatch '^tests/' } |
-            Where-Object { $_ -notmatch '\.Test\.cs$' } |
-            Where-Object { $_ -notmatch '/[Tt]ests?/' } |
-            Where-Object { $_ -notmatch 'icm_queue_tool/' } |
-            ForEach-Object { $_.Trim() }
-    }
-    catch {
-        Write-Error "Failed to get staged files: $_"
-        return @()
-    }
+# Load shared staged-file utilities
+$stagedUtils = Join-Path $PSScriptRoot "staged-files-utils.ps1"
+if (-not (Test-Path $stagedUtils)) {
+    throw "staged-files-utils.ps1 not found at $stagedUtils"
 }
+. $stagedUtils
 
 # Count lines in a file
 function Get-FileLineCount {
@@ -64,9 +52,19 @@ function Get-FileLineCount {
     }
 }
 
+# Get list of staged desktop JS/TS files (source only, no tests)
+function Get-StagedDesktopFilesForLength {
+    return Get-StagedFiles -Pattern '^desktop/src/.*\.(ts|tsx|js|jsx)$' `
+        -DenyPatterns @('node_modules/', 'dist/') `
+        -ExcludeTests
+}
+
 # Check file lengths
 function Test-FileLengths {
-    param([string[]]$Files)
+    param(
+        [string[]]$Files,
+        [int]$Limit
+    )
     
     if ($Files.Count -eq 0) {
         return $true
@@ -78,13 +76,12 @@ function Test-FileLengths {
     foreach ($file in $Files) {
         $lineCount = Get-FileLineCount -FilePath $file
         
-        if ($lineCount -gt $MaxLines) {
+        if ($lineCount -gt $Limit) {
             $violations += [PSCustomObject]@{
                 File = $file
                 Lines = $lineCount
-                Excess = $lineCount - $MaxLines
+                Excess = $lineCount - $Limit
             }
-            Write-Host "  ❌ $file - $lineCount lines (exceeds limit by $($lineCount - $MaxLines))" -ForegroundColor Red
         }
         else {
             $passedCount++
@@ -92,26 +89,44 @@ function Test-FileLengths {
     }
     
     if ($violations.Count -gt 0) {
-        Write-Host "❌ $($violations.Count) file(s) exceed $MaxLines lines:" -ForegroundColor Red
+        Write-Host "❌ $($violations.Count) file(s) exceed $Limit lines:" -ForegroundColor Red
         $violations | ForEach-Object {
             Write-Host "  $($_.File): $($_.Lines) lines (+$($_.Excess))" -ForegroundColor Red
         }
         return $false
     }
     
-    Write-Host "PASS: File length <$MaxLines lines ($passedCount files)" -ForegroundColor Green
+    Write-Host "PASS: File length <$Limit lines ($passedCount files)" -ForegroundColor Green
     return $true
 }
 
 # Main execution
-$stagedFiles = Get-StagedCSharpFiles
+$stagedPythonFiles = Get-StagedFiles -Pattern '\.py$' `
+    -DenyPatterns @('node_modules/', '__pycache__/') `
+    -ExcludeTests
+$stagedDesktopFiles = Get-StagedDesktopFilesForLength
 
-if ($stagedFiles.Count -eq 0) {
+if ($stagedPythonFiles.Count -eq 0 -and $stagedDesktopFiles.Count -eq 0) {
     exit 0
 }
 
-# Check lengths
-if (-not (Test-FileLengths -Files $stagedFiles)) {
+$allPassed = $true
+
+# Check Python file lengths
+if ($stagedPythonFiles.Count -gt 0) {
+    if (-not (Test-FileLengths -Files $stagedPythonFiles -Limit $MaxLines)) {
+        $allPassed = $false
+    }
+}
+
+# Check desktop JS/TS file lengths
+if ($stagedDesktopFiles.Count -gt 0) {
+    if (-not (Test-FileLengths -Files $stagedDesktopFiles -Limit $MaxLinesJs)) {
+        $allPassed = $false
+    }
+}
+
+if (-not $allPassed) {
     exit 1
 }
 

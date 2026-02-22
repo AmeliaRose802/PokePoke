@@ -2,19 +2,19 @@
 
 <#
 .SYNOPSIS
-    Code quality checker using Roslyn analyzers
+    Code quality checker using mypy for Python type checking
     
 .DESCRIPTION
-    Checks staged C# files for:
-    - Code style violations (naming, formatting)
-    - Null safety issues
-    - Async/await antipatterns
-    - Unused variables/imports
+    Checks staged Python files for:
+    - Type annotation completeness
+    - Type checking violations
+    - Type hints best practices
+    - Missing type annotations
     
     This script is designed to be called from a git pre-commit hook.
     
 .EXAMPLE
-    .\scripts\check-code-quality.ps1
+    .\.githooks\check-code-quality.ps1
     
 #>
 
@@ -22,191 +22,40 @@ param()
 
 $ErrorActionPreference = "Stop"
 
-# Get list of staged C# files
-function Get-StagedCSharpFiles {
-    try {
-        $output = git diff --cached --name-only --diff-filter=ACM 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            return @()
-        }
-        
-        return $output -split "`n" |
-            Where-Object { $_ -match '\.cs$' } |
-            Where-Object { $_ -match '^src/' } |
-            Where-Object { $_ -notmatch '\.Test\.cs$' } |
-            Where-Object { $_ -notmatch '/Tests/' } |
-            Where-Object { $_ -notmatch 'icm_queue_tool/' } |
-            ForEach-Object { $_.Trim() } |
-            Where-Object { $_ -ne '' }
-    }
-    catch {
-        Write-Error "Failed to get staged files: $_"
-        return @()
-    }
+# Load shared staged-file utilities
+$stagedUtils = Join-Path $PSScriptRoot "staged-files-utils.ps1"
+if (-not (Test-Path $stagedUtils)) {
+    throw "staged-files-utils.ps1 not found at $stagedUtils"
 }
-
-# Check for null safety issues using basic pattern matching
-function Test-NullSafety {
-    param([string[]]$Files)
-    
-    $issues = @()
-    
-    foreach ($file in $Files) {
-        if (-not (Test-Path $file)) { continue }
-        
-        $content = Get-Content $file -Raw
-        $lineNumber = 0
-        
-        foreach ($line in ($content -split "`n")) {
-            $lineNumber++
-            
-            # Check for null-coalescing on null-returning methods
-            if ($line -match '(?<!\.)\w+\(\)(?!\s*\??\.)' -and $line -notmatch '\?\.' -and $line -notmatch 'null-check|is null|== null|!= null') {
-                # Basic heuristic: method call without null check
-                if ($line -match '=\s*\w+\(\)' -and $line -notmatch 'guard|Guard|null-check|ArgumentNullException') {
-                    $issues += @{
-                        File = $file
-                        Line = $lineNumber
-                        Message = "Potential null dereference - consider null check or null-coalescing operator"
-                        Text = $line.Trim()
-                    }
-                }
-            }
-        }
-    }
-    
-    return $issues
-}
-
-# Check for async/await antipatterns
-function Test-AsyncPatterns {
-    param([string[]]$Files)
-    
-    $issues = @()
-    
-    foreach ($file in $Files) {
-        if (-not (Test-Path $file)) { continue }
-        
-        $content = Get-Content $file -Raw
-        $lineNumber = 0
-        
-        foreach ($line in ($content -split "`n")) {
-            $lineNumber++
-            
-            # Check for .Result on async calls
-            if ($line -match '\.Result\s*;' -and $content -match 'async') {
-                $issues += @{
-                    File = $file
-                    Line = $lineNumber
-                    Message = "❌ CRITICAL: .Result on async call causes deadlocks - use await instead"
-                    Text = $line.Trim()
-                    Severity = "Error"
-                }
-            }
-            
-            # Check for .Wait() on async calls
-            if ($line -match '\.Wait\(\)' -and $content -match 'async') {
-                $issues += @{
-                    File = $file
-                    Line = $lineNumber
-                    Message = "❌ CRITICAL: .Wait() on async call causes deadlocks - use await instead"
-                    Text = $line.Trim()
-                    Severity = "Error"
-                }
-            }
-            
-            # Check for async void (except event handlers)
-            if ($line -match 'async\s+void\s+\w+' -and $line -notmatch 'EventHandler|event_|_Event') {
-                $issues += @{
-                    File = $file
-                    Line = $lineNumber
-                    Message = "⚠️  async void only acceptable for event handlers - use Task instead"
-                    Text = $line.Trim()
-                    Severity = "Warning"
-                }
-            }
-        }
-    }
-    
-    return $issues
-}
-
-# Check for obvious null coalescing improvements
-function Test-CodeStyle {
-    param([string[]]$Files)
-    
-    $issues = @()
-    
-    foreach ($file in $Files) {
-        if (-not (Test-Path $file)) { continue }
-        
-        $content = Get-Content $file -Raw
-        $lineNumber = 0
-        
-        foreach ($line in ($content -split "`n")) {
-            $lineNumber++
-            
-            # Check for old-style null comparison (minor style issue)
-            if ($line -match '== null' -or $line -match '!= null') {
-                $issues += @{
-                    File = $file
-                    Line = $lineNumber
-                    Message = "💡 Consider using 'is null' / 'is not null' (C# 9.0+)"
-                    Text = $line.Trim()
-                    Severity = "Info"
-                }
-            }
-            
-            # Check for extraneous whitespace patterns
-            if ($line -match '\s{2,}\w' -and $line -notmatch '^\s+' -and $line -notmatch 'comment|//') {
-                # This is too noisy, skip for now
-            }
-        }
-    }
-    
-    return $issues
-}
+. $stagedUtils
 
 # Main execution
-$stagedFiles = Get-StagedCSharpFiles
+$stagedFiles = Get-StagedFiles -Pattern '\.py$' `
+    -DenyPatterns @('(venv|.venv|__pycache__|dist|build)')
 
 if ($stagedFiles.Count -eq 0) {
+    Write-Host "No Python files staged for commit" -ForegroundColor Gray
     exit 0
 }
 
-$allIssues = @()
+Write-Host "🔍 Running mypy type checking on $($stagedFiles.Count) file(s)..." -ForegroundColor Cyan
 
-# Run all checks
-$asyncIssues = Test-AsyncPatterns -Files $stagedFiles
-$allIssues += $asyncIssues
+# Run mypy on src/pokepoke package (not individual files) to handle imports properly
+python -m mypy src/pokepoke --strict --show-error-codes --pretty
 
-$nullIssues = Test-NullSafety -Files $stagedFiles
-$allIssues += $nullIssues
+$mypyFailed = $LASTEXITCODE -ne 0
 
-$styleIssues = Test-CodeStyle -Files $stagedFiles
-$allIssues += $styleIssues
-
-# Display results grouped by severity
-$criticalIssues = $allIssues | Where-Object { $_.Severity -eq "Error" }
-$warningIssues = $allIssues | Where-Object { $_.Severity -eq "Warning" -or -not $_.Severity }
-$infoIssues = $allIssues | Where-Object { $_.Severity -eq "Info" }
-
-if ($criticalIssues.Count -gt 0) {
-    Write-Host "❌ CRITICAL:" -ForegroundColor Red
-    foreach ($issue in $criticalIssues) {
-        Write-Host "  $($issue.File):$($issue.Line)" -ForegroundColor Red
-        Write-Host "  $($issue.Message)" -ForegroundColor Red
-    }
+if ($mypyFailed) {
+    Write-Host ""
+    Write-Host "❌ MYPY TYPE ERRORS FOUND" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Fix type checking errors before committing." -ForegroundColor Yellow
+    Write-Host "Tips:" -ForegroundColor Cyan
+    Write-Host "  • Add type annotations to function parameters and returns" -ForegroundColor Cyan
+    Write-Host "  • Use 'from typing import ...' for complex types" -ForegroundColor Cyan
+    Write-Host "  • Run 'python -m mypy src/pokepoke' locally to test" -ForegroundColor Cyan
     exit 1
 }
 
-if ($warningIssues.Count -gt 0) {
-    Write-Host "⚠️  $($warningIssues.Count) warning(s):" -ForegroundColor Yellow
-    foreach ($issue in $warningIssues) {
-        Write-Host "  $($issue.File):$($issue.Line) - $($issue.Message)" -ForegroundColor Yellow
-    }
-    exit 0
-}
-
-Write-Host "PASS: Code quality" -ForegroundColor Green
+Write-Host "✅ Type checking passed" -ForegroundColor Green
 exit 0

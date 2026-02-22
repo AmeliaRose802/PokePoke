@@ -2,16 +2,18 @@
 
 <#
 .SYNOPSIS
-    Git pre-commit hook for ICM Queue C# project
+    Git pre-commit hook for PokePoke Python project
     
 .DESCRIPTION
     Runs the following checks before allowing a commit:
     1. Integrity check (verifies quality scripts haven't been tampered with)
-    2. Build & warnings check (fails if build fails or warnings found)
-    3. MCP server health check (fails if server won't start)
-    4. Code quality check (fails if quality issues found)
-    5. Skipped tests check (fails if skipped tests found)
-    6. Test coverage check (fails if modified files < 80% coverage)
+    2. Build check (Python syntax validation) [sequential]
+    3. Code quality check (mypy type checking) [sequential, after build]
+    4. Test coverage check (modified files must have 80%+ coverage) [sequential, after mypy]
+    5. Skipped tests check (no skipped pytest tests) [parallel]
+    6. Ruff lint check [parallel]
+    7. File length check [parallel]
+    8. Desktop lint check [parallel]
 
 .NOTES
     ⚠️  CRITICAL: This file is protected by CODEOWNERS
@@ -30,6 +32,11 @@ if ($LASTEXITCODE -ne 0) {
     $repoRoot = $PSScriptRoot | Split-Path -Parent
 }
 
+# Ensure CWD is the repo/worktree root for all child scripts.
+# In git worktrees, CWD should already be the worktree root,
+# but we set it explicitly for robustness.
+Set-Location $repoRoot
+
 Write-Host "Pre-commit checks:" -ForegroundColor Cyan
 
 # INTEGRITY CHECK: Verify no bypass parameters exist in quality scripts
@@ -45,7 +52,7 @@ $bypassPatterns = @(
 )
 
 $integrityViolations = @()
-$scriptsToCheck = @("check-coverage.ps1", "check-code-quality.ps1", "check-compile-warnings.ps1", "check-file-length.ps1")
+$scriptsToCheck = @("check-coverage.ps1", "check-code-quality.ps1", "check-file-length.ps1")
 
 foreach ($script in $scriptsToCheck) {
     $scriptPath = Join-Path $hooksDir $script
@@ -96,15 +103,21 @@ $failed = @()
 
 # Checks that don't depend on build artifacts - can run in parallel
 $staticChecks = @(
-    @{ Name = "Code Quality"; Script = "check-code-quality.ps1" }
+    @{ Name = "Pokepoke Boot"; Script = "check-pokepoke-import.ps1" }
+    @{ Name = "Ruff Lint"; Script = "check-ruff.ps1" }
     @{ Name = "Skipped Tests"; Script = "check-skipped-tests.ps1" }
     @{ Name = "File Length"; Script = "check-file-length.ps1" }
+    @{ Name = "Desktop ESLint"; Script = "check-desktop-lint.ps1" }
+    # Desktop TypeScript check removed: check-build.ps1 already runs
+    # tsc -b via "npm run build" (tsc -b && vite build), so running
+    # check-desktop.ps1 separately duplicates TS error output.
 )
 
-# Checks that need build artifacts or must run in sequence
+# Checks that need build artifacts or must run in sequence: build -> mypy -> coverage
+# If build or mypy fails, coverage is skipped (early exit on first failure)
 $buildDependentChecks = @(
-    @{ Name = "Build & Warnings"; Script = "check-build-and-warnings.ps1" }
-    @{ Name = "MCP Health"; Script = "check-mcp-health.ps1" }
+    @{ Name = "Build"; Script = "check-build.ps1" }
+    @{ Name = "Code Quality"; Script = "check-code-quality.ps1" }
     @{ Name = "Test Coverage"; Script = "check-coverage.ps1" }
 )
 
@@ -132,35 +145,45 @@ foreach ($check in $staticChecks) {
     }
 }
 
-# Run build-dependent checks sequentially
+# Run build-dependent checks sequentially (abort on first failure)
+$buildFailed = $false
 foreach ($check in $buildDependentChecks) {
-    Write-Host "  • $($check.Name)... " -NoNewline -ForegroundColor Gray
+    Write-Host "  • $($check.Name)... " -ForegroundColor Gray
     
     try {
         $checkScript = Join-Path $hooksDir $check.Script
-        $output = & $checkScript *>&1 | Out-String
+        # Stream output directly without buffering
+        & $checkScript
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "✓" -ForegroundColor Green
             $passed += $check.Name
         }
         else {
-            Write-Host "✗" -ForegroundColor Red
             $failed += $check.Name
             $allPassed = $false
-            # Show output only for failed checks
-            if ($output.Trim()) {
-                Write-Host ""
-                Write-Host $output.Trim()
-                Write-Host ""
-            }
+            $buildFailed = $true
+            Write-Host "  ⚡ Build/syntax failure — skipping remaining build-dependent checks" -ForegroundColor Yellow
+            break
         }
     }
     catch {
-        Write-Host "✗" -ForegroundColor Red
-        Write-Host "    Error: $_" -ForegroundColor Red
+        Write-Host "Error: $_" -ForegroundColor Red
         $failed += $check.Name
         $allPassed = $false
+        $buildFailed = $true
+        Write-Host "  ⚡ Build/syntax failure — skipping remaining build-dependent checks" -ForegroundColor Yellow
+        break
     }
+}
+
+# If build failed, stop parallel static jobs and exit early
+if ($buildFailed) {
+    foreach ($jobInfo in $staticJobs) {
+        Stop-Job $jobInfo.Job -ErrorAction SilentlyContinue
+        Remove-Job $jobInfo.Job -Force -ErrorAction SilentlyContinue
+    }
+    Write-Host ""
+    Write-Host "❌ Build failed: $($failed -join ', ') — downstream checks skipped" -ForegroundColor Red
+    exit 1
 }
 
 # Wait for and process static checks results

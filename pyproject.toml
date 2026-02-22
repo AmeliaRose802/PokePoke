@@ -1,0 +1,126 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pokepoke"
+version = "0.1.0"
+description = "Autonomous Beads + Copilot CLI Orchestrator"
+authors = [{name = "Amelia Payne"}]
+requires-python = ">=3.12"
+
+[project.scripts]
+pokepoke = "pokepoke.orchestrator:main"
+pokepoke-init = "pokepoke.init:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pokepoke = ["static/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "real_terminal_banner: opt out of the autouse _suppress_terminal_banner fixture",
+]
+
+# Exclude patterns
+norecursedirs = [
+    ".git",
+    ".tox",
+    "dist",
+    "build",
+    "*.egg",
+    "venv",
+    ".venv",
+    "__pycache__",
+    "worktrees"
+]
+timeout = 10
+filterwarnings = ['ignore::pytest.PytestWarning']
+
+# Coverage settings
+[tool.coverage.run]
+source = ["src/pokepoke"]
+parallel = true
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/venv/*",
+    "*/.venv/*"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod"
+]
+
+
+# Ruff linter configuration
+[tool.ruff]
+line-length = 120
+exclude = [
+    ".git",
+    ".tox",
+    "dist",
+    "build",
+    "*.egg",
+    "venv",
+    ".venv",
+    "__pycache__",
+    "worktrees",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "SIM"]
+ignore = [
+    "E402",   # Module-level import not at top - intentional logger-before-imports pattern
+    "E501",   # Line too long
+    "SIM103", # Return condition directly - sometimes less readable
+    "SIM108", # Ternary operator - sometimes less readable
+]
+
+# Mypy type checking configuration
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_any_unimported = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+check_untyped_defs = true
+strict_equality = true
+strict = true
+show_error_codes = true
+pretty = true
+
+# Exclude test files from strict checking (they have different requirements)
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_any_unimported = false
+
+# copilot SDK may not be installed in all environments
+[[tool.mypy.overrides]]
+module = "copilot.*"
+ignore_missing_imports = true
+
+# copilot_sdk uses conditional imports that produce different type: ignore
+# needs depending on whether the copilot SDK is installed
+[[tool.mypy.overrides]]
+module = "pokepoke.copilot_sdk"
+warn_unused_ignores = false

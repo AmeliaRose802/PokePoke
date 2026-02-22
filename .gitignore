@@ -6,3 +6,58 @@ coverage/
 .env
 .vscode/settings.json
 worktrees/
+
+# PokePoke runtime state
+.pokepoke/maintenance_state.json
+.pokepoke/model_stats.json
+.pokepoke/model_history.jsonl
+.pokepoke/uncleaned_worktrees.json
+.pokepoke/beads_item_stats.json
+.pokepoke/beads_item_stats.gw*.json
+.maintenance_state.json
+.pokepoke/locks/
+
+# PokePoke logs
+.pokepoke/logs/
+logs/
+
+# Beads daemon logs
+.beads/daemon-*.log.gz
+.beads/bd.sock.startlock
+
+# Work artifacts (configurable via work_artifacts_dir in .pokepoke/config.yaml)
+ai_incident_reports/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Type checking
+.mypy_cache/
+
+# Testing / Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.json
+htmlcov/
+.tox/
+.nox/

@@ -1,0 +1,75 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "file-gate-label-issue",
+			"type": "shell",
+			"command": "bd create \"Desktop UI: Remove redundant Gate label from gate cards\" -t task -p 1 -d \"Gate label shows 'Gate dot Title' but 'Gate' prefix is redundant when already in a gate card context. Should just show the title.\" --json"
+		},
+		{
+			"label": "fix-gate-issue",
+			"type": "shell",
+			"command": "bd update PokePoke-w67h --title \"Desktop UI: gate card label shows redundant Gate prefix\" --description \"Gate label shows 'Gate dot Title' but the Gate prefix is redundant since the card is already in a gate context. Should just show the title.\" --json"
+		},
+		{
+			"label": "fix-gate-issue2",
+			"type": "shell",
+			"command": "bd update PokePoke-w67h --title 'Desktop UI: gate card label shows redundant Gate prefix' -d 'Gate label shows Gate-dot-Title but the Gate prefix is redundant since the card is already in a gate context. Should just show the title.' --json"
+		},
+		{
+			"label": "update-priority-2z5v",
+			"type": "shell",
+			"command": "bd update PokePoke-2z5v --priority 0 --json"
+		},
+		{
+			"label": "update-priority-81yy",
+			"type": "shell",
+			"command": "bd update PokePoke-81yy --priority 0 --json"
+		},
+		{
+			"label": "file-merge-coordination-issue",
+			"type": "shell",
+			"command": "bd create 'Merge coordination: cleanup agent and merge conflict cleanup can launch simultaneously' -t bug -p 0 -d 'Merge coordination is not fully serialized. One agent process can launch a Cleanup Agent at the same time another agent launches a Merge Conflict Cleanup agent, causing concurrent access to the repo during merge operations. Both should be mutually exclusive with each other and with the merge lock.' --json"
+		},
+		{
+			"label": "file-collapse-run-issue",
+			"type": "shell",
+			"command": "bd create 'Desktop UI: Allow collapsing the run log under each agent card' -t feature -p 2 -d 'Agent cards show a run log/output section below the agent info. Users should be able to collapse and expand this section to reduce visual clutter when monitoring multiple agents.' --json"
+		},
+		{
+			"label": "update-bo3u",
+			"type": "shell",
+			"command": "bd update PokePoke-bo3u --priority 1 --type task --json"
+		},
+		{
+			"label": "file-jungle-theme-issue",
+			"type": "shell",
+			"command": "bd create 'Desktop UI: Jungle and snake theming' -t feature -p 1 -d 'Give the desktop UI a more jungle and snake-themed aesthetic. This could include color palette adjustments toward jungle greens and earthy tones, snake/jungle-themed iconography, and visual styling consistent with the PokePoke brand identity.' --json"
+		},
+		{
+			"label": "file-disable-gate-setting",
+			"type": "shell",
+			"command": "bd create 'Add setting to disable the gate agent' -t feature -p 2 -d 'Allow users to disable the gate agent via a configuration setting. When disabled, the orchestrator should skip launching gate agents after work items complete.' --json"
+		},
+		{
+			"label": "read-agent-logs",
+			"type": "shell",
+			"command": "Get-Content '.pokepoke\\logs\\20260220_170446_6a65c8ac\\items\\PokePoke-81yy_pokepoke_stellar_meowth_bdfe-worker-2.log' -Tail 20 | Write-Output; Write-Output '===89n6==='; Get-Content '.pokepoke\\logs\\20260220_170446_6a65c8ac\\items\\PokePoke-89n6_pokepoke_stellar_meowth_bdfe-worker-1.log' -Tail 20 | Write-Output; Write-Output '===8i6c==='; Get-Content '.pokepoke\\logs\\20260220_170446_6a65c8ac\\items\\PokePoke-8i6c_pokepoke_stellar_meowth_bdfe-worker-3.log' -Tail 20 | Write-Output; Write-Output '===ifkb==='; Get-Content '.pokepoke\\logs\\20260220_170446_6a65c8ac\\items\\PokePoke-ifkb_pokepoke_stellar_meowth_bdfe-worker-4.log' -Tail 20 | Write-Output"
+		},
+		{
+			"label": "read-81yy-log",
+			"type": "shell",
+			"command": "Get-Content '.pokepoke\\logs\\20260220_170446_6a65c8ac\\items\\PokePoke-81yy_pokepoke_stellar_meowth_bdfe-worker-2.log' -Tail 40"
+		},
+		{
+			"label": "file-crash-followup-issues",
+			"type": "shell",
+			"command": "bd create 'Orchestrator crash leaves no shutdown log entry' -t bug -p 0 -d 'When the orchestrator process is killed (hard crash or OOM), the log ends abruptly with no shutdown or completion message. The orchestrator should register a SIGTERM/SIGINT handler to flush a final log entry before dying, so crashes are distinguishable from clean exits.' --json && bd create 'Simultaneous worker commits may cause freeze/hang' -t bug -p 0 -d 'Multiple parallel workers committing at the same time (each running pre-commit hooks with full test suite) can cause resource contention or a deadlock. In a run with 4 workers, 2 workers were simultaneously in git commit at ~17:14 with initial_wait values of 300s and 30s. The orchestrator froze and was killed. Workers should serialize commits through a commit lock, similar to the existing merge lock.' --json"
+		},
+		{
+			"label": "close-u619",
+			"type": "shell",
+			"command": "bd close PokePoke-u619 --reason 'Investigated: no actual contention. Each worktree has its own coverage.json via git rev-parse. Likely pure resource exhaustion from concurrent full pytest runs. Not a coordination bug.' --json"
+		}
+	]
+}

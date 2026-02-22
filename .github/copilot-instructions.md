@@ -68,7 +68,7 @@ If quality checks fail:
 ## Project Overview
 
 **Repository:** PokePoke (https://github.com/AmeliaRose802/PokePoke.git)  
-**Language:** TypeScript/Node.js  
+**Language:** Python  
 **Purpose:** Autonomous workflow orchestrator that integrates Beads issue tracker with GitHub Copilot CLI for automated development
 
 ## PokePoke - Autonomous Beads + Copilot CLI Orchestrator
@@ -119,6 +119,40 @@ This workspace provides **PokePoke**, an autonomous workflow management tool tha
 - Configure maintenance thresholds in `pokepoke.config.json`
 - Use worktrees for isolation - NEVER work directly in main repo during autonomous operation 
 
+## 🚀 RUNNING POKEPOKE
+
+**Installation:**
+```bash
+# Install in editable mode (do this once)
+pip install -e .
+```
+
+**Usage:**
+
+```bash
+# Interactive mode (manual work item selection with prompts)
+python -m pokepoke.orchestrator --interactive
+
+# Autonomous mode (automatic selection, no prompts)
+python -m pokepoke.orchestrator --autonomous
+
+# Continuous mode (process multiple items in a loop)
+python -m pokepoke.orchestrator --interactive --continuous
+python -m pokepoke.orchestrator --autonomous --continuous
+```
+
+**How it works:**
+1. Fetches ready work items from beads database (`bd ready --json`)
+2. Displays available work items with ID, title, type, and priority
+3. In interactive mode: prompts you to select an item by number
+4. In autonomous mode: automatically selects highest priority item
+5. Invokes GitHub Copilot CLI with the work item context
+6. **Streams Copilot output in real-time** so you can see progress
+7. Reports success/failure when complete
+8. In continuous mode: loops to process next item
+
+**Default behavior:** Interactive mode, single-shot (process one item and exit)
+
 ## 🚫 PowerShell Command Safety
 
 **CRITICAL: FORBIDDEN PARAMETERS**
@@ -167,7 +201,15 @@ npm test | Select-Object -First 1                # WILL HANG on slow output
 
 ## 🧪 TESTING
 
-**Note:** Pre-commit hooks automatically run tests on every commit.
+### 🚨 DO NOT RUN THE FULL TEST SUITE MANUALLY
+
+**Pre-commit hooks automatically run ALL tests, coverage checks, linting, and build verification on every `git commit`.** Running `pytest tests/` or the full test suite yourself before committing is **duplicate work that wastes time and money**. The pre-commit hook will catch any failures.
+
+**When to run tests manually:**
+- ✅ Run a **single specific test file** to debug a failure: `pytest tests/test_foo.py -x`
+- ✅ Run a **single test function** during development: `pytest tests/test_foo.py::test_bar -x`
+- ❌ **NEVER** run `pytest tests/` (full suite) — the commit hook does this
+- ❌ **NEVER** run `pytest --cov` manually — the commit hook does this
 
 ### Test Strategy
 
@@ -175,32 +217,32 @@ npm test | Select-Object -First 1                # WILL HANG on slow output
 - Fast, isolated tests that don't require external services
 - Run automatically on every commit via pre-commit hooks
 - Must have 80%+ coverage for modified files
-- Use `npm test` for quick iteration during development
+- Use `pytest` for quick iteration during development
 
 **Integration Tests:**
 - Test interaction between components
 - Test Copilot CLI invocation
 - Test worktree creation and cleanup
 - Test beads database integration
-- Run with `npm run test:integration`
+- Run with `pytest tests/integration/`
 
 ### Testing Usage Examples
 
 ```powershell
 # Run all tests
-npm test
+pytest
 
 # Run tests in watch mode during development
-npm test -- --watch
+pytest --watch
 
 # Run specific test file
-npm test -- path/to/test.spec.ts
+pytest tests/test_orchestrator.py
 
 # Run tests with coverage
-npm run test:coverage
+pytest --cov=src --cov-report=term-missing
 
 # Run integration tests
-npm run test:integration
+pytest tests/integration/
 ```
 
 ### When to Run Integration Tests
@@ -216,6 +258,61 @@ npm run test:integration
 - Testing specific external integrations during development
 - Debugging issues with Copilot CLI or git operations
 - Verifying end-to-end workflows
+
+### 🔧 MCP Server Testing
+
+**When modifying the ICM MCP Server (`C:\Users\ameliapayne\icm_queue_c#`):**
+
+**REQUIRED - Restart and test after changes:**
+
+**Note:** The `Restart-MCP` and `rmcp` commands are automatically available when running through PokePoke. No need to source scripts manually!
+
+1. **Restart the MCP server**:
+   ```powershell
+   Restart-MCP
+   # Or use the short alias:
+   rmcp
+   ```
+
+2. **Test your changes** with Copilot CLI:
+   ```powershell
+   copilot -p "Use the MCP tool I just modified to test if my fix works" --allow-all-tools --no-ask-user
+   ```
+
+**Why restart is required:**
+- The MCP server runs as a background process
+- Code changes require a server restart to take effect
+- The `Restart-MCP` command stops the old server and starts a fresh instance
+- Copilot CLI connects to the running server, so it needs to be restarted to pick up changes
+
+**Testing workflow for MCP server changes:**
+1. ✅ Make your code changes to the MCP server
+2. ✅ Commit your changes (quality gates will run)
+3. ✅ Run `Restart-MCP` or `rmcp` to restart the server with your changes
+4. ✅ Use Copilot CLI to test the modified tool in autonomous mode
+5. ✅ Verify the fix works as expected
+6. ✅ If it doesn't work, make additional changes and repeat
+
+**Example - Testing a bug fix:**
+```powershell
+# 1. Fixed a bug in run_kusto_query tool
+git add .
+git commit -m "fix(mcp): handle null parameters in run_kusto_query"
+
+# 2. Restart server to load changes (commands auto-available!)
+rmcp
+
+# 3. Test the fix with Copilot CLI
+copilot -p "Run a kusto query with null parameters to test my fix" --allow-all-tools --no-ask-user
+
+# 4. Verify the fix worked
+# If it worked: You're done!
+# If it failed: Go back to step 1 and refine the fix
+```
+
+**Available commands (automatically loaded by PokePoke):**
+- `Restart-MCP` - Full restart with status verification
+- `rmcp` - Quick alias for Restart-MCP
 
 ---
 
@@ -322,10 +419,10 @@ bd info --json
 **Examples of good commit frequency:**
 ```bash
 # Good: Small, focused commits
-git commit -m "feat(kusto): add parameter validation to query builder"
-git commit -m "test(kusto): add tests for parameter validation"
-git commit -m "refactor(kusto): extract query formatting logic"
-git commit -m "docs: update query parameter documentation"
+git commit -m "feat(orchestrator): add parameter validation to task handler"
+git commit -m "test(orchestrator): add tests for parameter validation"
+git commit -m "refactor(orchestrator): extract task selection logic"
+git commit -m "docs: update task handling documentation"
 
 # Bad: One huge commit at the end
 git commit -m "feat: add entire new feature with tests and docs"
@@ -727,10 +824,10 @@ Changes to document:
 
 ### Project Structure:
 - `/docs` - User-facing documentation only (update existing files)
-- `/internal_resources` - Query templates (.kql), workflows, and resource files (not documentation)
-- `/src` - C# source code with inline comments
+- `/src` - Python source code with inline comments
 - `/tests` - Unit and integration tests
 - `.beads/` - Beads issue tracker database (auto-managed by bd)
+- `worktrees/` - Isolated git worktrees for task execution
 - Code should be self-documenting with clear naming
 
 ### When Asked to Document Implementation/Analysis:

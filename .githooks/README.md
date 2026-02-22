@@ -43,9 +43,15 @@ This repository uses a **multi-layered defense-in-depth approach** to prevent AI
   - `check-coverage.ps1`
   - `check-file-length.ps1`
   - `check-mcp-health.ps1`
+  - `check-pokepoke-import.ps1`
   - `check-skipped-tests.ps1`
   - `pre-commit.ps1`
   - `run-tests.ps1`
+
+### Zero-Warning Enforcement
+- **Policy:** Compiler and linter warnings now block commits just like errors.
+- **Implementation:** `check-build.ps1` and `check-desktop.ps1` capture tool output via `warning-utils.ps1` and fail if any `npm WARN`, Rollup `(!)`, `SyntaxWarning`, or TypeScript warning lines appear.
+- **Result:** Developers must resolve every warning (even when exit codes remain zero) before a commit can proceed.
 
 ### Layer 5: No Bypass Parameters
 - **All bypass mechanisms removed:** No `SkipCheck` parameters, no `SKIP_*` environment variables

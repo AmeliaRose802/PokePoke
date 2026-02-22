@@ -1,0 +1,14 @@
+# PokePoke Dependencies
+# Python 3.12+ required (see pyproject.toml)
+
+# GitHub Copilot SDK for programmatic CLI integration
+github-copilot-sdk>=0.1.0
+
+# Configuration
+pyyaml>=6.0
+
+# Desktop GUI (native window via Edge WebView2)
+pywebview>=5.0
+
+# Cross-process file locking
+filelock>=3.12

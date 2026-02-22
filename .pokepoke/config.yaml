@@ -1,0 +1,124 @@
+# PokePoke Project Configuration
+# This file defines project-specific settings for PokePoke.
+# See docs/ for full documentation on configuration options.
+
+project_name: PokePoke
+
+# LLM model configuration
+models:
+  default: claude-opus-4.6
+  fallback: claude-sonnet-4.5
+  candidate_models:
+    - claude-haiku-4.5
+    - claude-opus-4.5
+    - claude-opus-4.6
+    - claude-sonnet-4
+    - claude-sonnet-4.5
+    - claude-sonnet-4.6
+    - gemini-3-pro
+    - gpt-5-codex
+    - gpt-5.1
+    - gpt-5.1-codex
+    - gpt-5.1-codex-max
+    - gpt-5.2
+    - gpt-5.2-codex
+
+# Git branch configuration
+git:
+  default_branch: master
+
+# MCP server integration (optional)
+# Set enabled: true and provide restart_script if your project uses MCP servers
+mcp_server:
+  enabled: false
+  # restart_script: scripts/Restart-MCPServer.ps1
+  # name: My MCP Server
+
+# Maintenance agent scheduling
+# Each agent runs every N work items completed.
+# Set enabled: false to disable an agent.
+maintenance:
+  agents:
+    - name: Tech Debt
+      prompt_file: tech-debt.md
+      frequency: 5
+      needs_worktree: false
+      enabled: true
+
+    - name: Janitor
+      prompt_file: janitor.md
+      frequency: 2
+      needs_worktree: true
+      merge_changes: true
+      enabled: true
+
+    - name: Backlog Cleanup
+      prompt_file: backlog-cleanup.md
+      frequency: 7
+      needs_worktree: true
+      merge_changes: false
+      enabled: true
+
+    - name: Beta Tester
+      prompt_file: beta-tester.md
+      frequency: 7
+      needs_worktree: true
+      merge_changes: false
+      enabled: false  # No MCP server to test in self-improvement mode
+
+    - name: Code Review
+      prompt_file: code-reviewer.md
+      frequency: 5
+      needs_worktree: false
+      model: gpt-5.1-codex
+      enabled: true
+
+    - name: Worktree Cleanup
+      prompt_file: worktree-cleanup.md
+      frequency: 2  # Run every 2 items instead of 4 to handle locked worktrees faster
+      needs_worktree: false
+      enabled: true
+
+# Project-specific test data for prompt templates
+# These values are injected into prompt templates that reference test data.
+test_data:
+  a sample orchestrator command: "python -m pokepoke.orchestrator --interactive"
+  a maintenance agent name: "Janitor"
+  a config file path: ".pokepoke/config.yaml"
+  a prompt template: "beads-item.md"
+
+# Work artifacts directory (optional)
+# If set, agents can store artifacts here. If not set, no artifacts directory is created.
+# work_artifacts_dir: work_artifacts
+
+# Maximum concurrent work-item agents (default: 1 = sequential).
+# Requires autonomous + continuous mode. CLI: --max-agents N
+# max_parallel_agents: 1
+
+# Command timeout in seconds (default: 300 = 5 minutes).
+# Agents are instructed to use this timeout for long-running commands like pytest.
+# Helps prevent hung commands from wasting agent time.
+command_timeout: 300
+
+# Per-work-item assignment settings (optional)
+# Rules are evaluated in order; the first matching rule wins.
+# When no rule matches, 'fallback' controls model selection:
+#   - "weighted" (default): performance-weighted A/B random selection
+#   - any model name: always use that specific model
+# assignment:
+#   rules:
+#     - match:
+#         issue_type: bug
+#       model: claude-sonnet-4.5          # fast model for simple bug fixes
+#     - match:
+#         issue_type: feature
+#         priority_max: 1                 # P0 and P1 features
+#       model: claude-opus-4.6            # best model for complex features
+#       prompt_template: high-pri-feature # optional custom prompt template
+#     - match:
+#         labels: [refactoring]
+#       model: gpt-5.1-codex
+#   fallback: weighted
+# Gate agent verification after work items complete.
+# Set to false to skip the gate agent review step.
+# gate_agent_enabled: true
