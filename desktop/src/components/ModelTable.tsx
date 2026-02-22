@@ -1,4 +1,4 @@
-import { formatDurationWithSpread, formatPercent } from "../utils/stats";
+import { formatDurationShort, formatDurationWithSpread, formatPercent } from "../utils/stats";
 
 interface ModelTableRow {
   model: string;
@@ -6,9 +6,10 @@ interface ModelTableRow {
   successRate: number;
   medianDuration: number;
   stddevDuration: number;
+  avgApiSeconds: number;
 }
 
-type SortField = "model" | "runs" | "success" | "duration";
+type SortField = "model" | "runs" | "success" | "duration" | "api";
 
 interface ModelTableProps {
   rows: ModelTableRow[];
@@ -62,6 +63,13 @@ export function ModelTable({
               asc={sortAsc}
               onSort={onSort}
             />
+            <SortableHead
+              label="Avg API"
+              field="api"
+              activeField={sortField}
+              asc={sortAsc}
+              onSort={onSort}
+            />
           </tr>
         </thead>
         <tbody>
@@ -76,6 +84,7 @@ export function ModelTable({
                 />
               </td>
               <td>{formatDurationWithSpread(row.medianDuration, row.stddevDuration)}</td>
+              <td>{row.avgApiSeconds > 0 ? formatDurationShort(row.avgApiSeconds) : "—"}</td>
             </tr>
           ))}
         </tbody>

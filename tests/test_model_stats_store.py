@@ -134,12 +134,21 @@ class TestRecordToDict:
         assert d["model"] == "claude-opus-4.6"
         assert d["duration_seconds"] == 120.5
         assert d["gate_passed"] is False
+        assert d["api_duration_seconds"] is None
         assert "timestamp" in d
 
     def test_none_gate_passed(self):
         rec = ModelCompletionRecord(item_id="X", model="m", duration_seconds=1.0, gate_passed=None)
         d = _record_to_dict(rec)
         assert d["gate_passed"] is None
+
+    def test_api_duration_seconds_included(self):
+        rec = ModelCompletionRecord(
+            item_id="X", model="m", duration_seconds=60.0,
+            gate_passed=True, api_duration_seconds=45.0,
+        )
+        d = _record_to_dict(rec)
+        assert d["api_duration_seconds"] == 45.0
 
 
 # ── _rebuild_summary ─────────────────────────────────────────────────
@@ -221,6 +230,42 @@ class TestRebuildSummary:
         assert s["median_duration"] == 44.0
         assert s["average_duration"] == pytest.approx(1034.4, abs=1.0)
         assert s["stddev_duration"] > 0
+
+    def test_api_duration_tracked(self):
+        """API duration should be aggregated per model."""
+        log = [
+            {"model": "m1", "duration_seconds": 60.0, "gate_passed": True,
+             "api_duration_seconds": 45.0, "timestamp": "2026-01-01T00:00:00"},
+            {"model": "m1", "duration_seconds": 80.0, "gate_passed": True,
+             "api_duration_seconds": 55.0, "timestamp": "2026-01-01T00:01:00"},
+        ]
+        summary = _rebuild_summary(log)
+        s = summary["m1"]
+        assert s["total_api_seconds"] == 100.0
+        assert s["average_api_seconds"] == 50.0
+
+    def test_api_duration_none_entries_skipped(self):
+        """Entries without api_duration_seconds should not affect averages."""
+        log = [
+            {"model": "m1", "duration_seconds": 60.0, "gate_passed": True,
+             "api_duration_seconds": 30.0, "timestamp": "2026-01-01T00:00:00"},
+            {"model": "m1", "duration_seconds": 80.0, "gate_passed": True,
+             "timestamp": "2026-01-01T00:01:00"},
+        ]
+        summary = _rebuild_summary(log)
+        s = summary["m1"]
+        assert s["total_api_seconds"] == 30.0
+        assert s["average_api_seconds"] == 30.0  # only 1 entry with API data
+
+    def test_api_duration_zero_when_no_data(self):
+        """Models with no api_duration data should have zero averages."""
+        log = [
+            {"model": "m1", "duration_seconds": 60.0, "gate_passed": True,
+             "timestamp": "2026-01-01T00:00:00"},
+        ]
+        summary = _rebuild_summary(log)
+        assert summary["m1"]["total_api_seconds"] == 0.0
+        assert summary["m1"]["average_api_seconds"] == 0.0
 
 
 # ── record_completion ────────────────────────────────────────────────

@@ -58,6 +58,7 @@ def _record_to_dict(record: ModelCompletionRecord) -> dict[str, Any]:
         "model": record.model,
         "duration_seconds": record.duration_seconds,
         "gate_passed": record.gate_passed,
+        "api_duration_seconds": record.api_duration_seconds,
         "timestamp": datetime.now(UTC).isoformat(),
     }
 
@@ -74,13 +75,16 @@ def _rebuild_summary(log: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
                 "total_items_succeeded": 0,
                 "total_items_failed": 0,
                 "total_duration_seconds": 0.0,
+                "total_api_seconds": 0.0,
                 "total_retries": 0,
                 "average_duration": 0.0,
                 "median_duration": 0.0,
                 "stddev_duration": 0.0,
+                "average_api_seconds": 0.0,
                 "success_rate": 0.0,
                 "last_used": "",
                 "_durations": [],
+                "_api_durations": [],
             }
         s = buckets[model]
         s["total_items_attempted"] += 1
@@ -92,6 +96,10 @@ def _rebuild_summary(log: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         dur = entry.get("duration_seconds", 0.0)
         s["total_duration_seconds"] += dur
         s["_durations"].append(dur)
+        api_dur = entry.get("api_duration_seconds")
+        if api_dur is not None:
+            s["total_api_seconds"] += api_dur
+            s["_api_durations"].append(api_dur)
         ts = entry.get("timestamp", "")
         if ts and ts > s["last_used"]:
             s["last_used"] = ts
@@ -101,12 +109,15 @@ def _rebuild_summary(log: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     for model, s in buckets.items():
         attempted = s["total_items_attempted"]
         durations = s["_durations"]
+        api_durations = s["_api_durations"]
         s["average_duration"] = round(s["total_duration_seconds"] / attempted, 2) if attempted else 0.0
         s["median_duration"] = round(statistics.median(durations), 2) if durations else 0.0
         s["stddev_duration"] = round(statistics.pstdev(durations), 2) if len(durations) >= 2 else 0.0
+        s["average_api_seconds"] = round(s["total_api_seconds"] / len(api_durations), 2) if api_durations else 0.0
         decided = s["total_items_succeeded"] + s["total_items_failed"]
         s["success_rate"] = round(s["total_items_succeeded"] / decided, 4) if decided else 0.0
         del s["_durations"]
+        del s["_api_durations"]
         summary[model] = s
     return summary
 
@@ -230,6 +241,7 @@ def print_model_leaderboard(path: Path | None = None) -> None:
         avg_dur = s.get("average_duration", 0.0)
         median_dur = s.get("median_duration", avg_dur)
         stddev_dur = s.get("stddev_duration", 0.0)
+        avg_api = s.get("average_api_seconds", 0.0)
         rate = s.get("success_rate", 0.0)
         last = s.get("last_used", "never")
 
@@ -238,6 +250,7 @@ def print_model_leaderboard(path: Path | None = None) -> None:
 
         print(f"\n  #{i} {display_name}")
         print(f"     Attempted: {attempted}  |  ✅ {succeeded}  ❌ {failed}  |  Rate: {rate:.0%}")
-        print(f"     Median:    {median_dur:.1f}s ±{stddev_dur:.1f}s  |  Avg: {avg_dur:.1f}s  |  Last: {last[:19]}")
+        api_info = f"  |  API: {avg_api:.1f}s" if avg_api > 0 else ""
+        print(f"     Median:    {median_dur:.1f}s ±{stddev_dur:.1f}s  |  Avg: {avg_dur:.1f}s{api_info}  |  Last: {last[:19]}")
 
     print("\n" + "=" * 70)

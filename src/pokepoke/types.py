@@ -77,7 +77,6 @@ class RetryConfig:
     backoff_factor: float = 2.0
     jitter: bool = True  # Add random jitter to prevent thundering herd
 
-
 @dataclass
 class AgentStats:
     """Statistics from agent execution."""
@@ -90,6 +89,7 @@ class AgentStats:
     premium_requests: int = 0
     retries: int = 0
     tool_calls: int = 0
+    api_duration_by_model: dict[str, float] = field(default_factory=dict)
 
     def accumulate(self, other: 'AgentStats') -> None:
         """Add all fields from another AgentStats into this one."""
@@ -102,6 +102,8 @@ class AgentStats:
         self.premium_requests += other.premium_requests
         self.retries += other.retries
         self.tool_calls += other.tool_calls
+        for model, dur in other.api_duration_by_model.items():
+            self.api_duration_by_model[model] = self.api_duration_by_model.get(model, 0.0) + dur
 
 
 @dataclass
@@ -121,6 +123,7 @@ class ModelCompletionRecord:
     model: str
     duration_seconds: float
     gate_passed: bool | None = None  # None = gate not run
+    api_duration_seconds: float | None = None
 
 
 @dataclass

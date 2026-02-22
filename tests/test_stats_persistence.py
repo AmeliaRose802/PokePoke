@@ -30,6 +30,7 @@ def _make_session_stats(**overrides) -> SessionStats:
             premium_requests=3,
             retries=1,
             tool_calls=12,
+            api_duration_by_model={"gpt-4o": 25.0, "claude-sonnet": 20.3},
         ),
         items_completed=2,
         work_agent_runs=3,
@@ -86,6 +87,7 @@ class TestSerializeSessionStats:
         assert agent["premium_requests"] == 3
         assert agent["retries"] == 1
         assert agent["tool_calls"] == 12
+        assert agent["api_duration_by_model"] == {"gpt-4o": 25.0, "claude-sonnet": 20.3}
 
     def test_run_counts_included(self):
         stats = _make_session_stats()
@@ -192,7 +194,7 @@ class TestSaveSessionStatsToDisk:
 
             save_session_stats_to_disk(run_dir, stats, 300.0, 2, 5)
 
-            with open(run_dir / "stats.json", "r", encoding="utf-8") as f:
+            with open(run_dir / "stats.json", encoding="utf-8") as f:
                 data = json.load(f)
 
             assert data["items_completed"] == 2
@@ -206,7 +208,7 @@ class TestSaveSessionStatsToDisk:
 
             save_session_stats_to_disk(run_dir, stats, 300.0, 2, 5)
 
-            with open(run_dir / "stats.json", "r", encoding="utf-8") as f:
+            with open(run_dir / "stats.json", encoding="utf-8") as f:
                 data = json.load(f)
 
             assert "beads_delta" in data
@@ -228,7 +230,7 @@ class TestRunLoggerFinalizePersistsStats:
             stats_path = logger.get_run_dir() / "stats.json"
             assert stats_path.exists()
 
-            with open(stats_path, "r", encoding="utf-8") as f:
+            with open(stats_path, encoding="utf-8") as f:
                 data = json.load(f)
 
             assert data["items_completed"] == 2
@@ -252,7 +254,7 @@ class TestRunLoggerFinalizePersistsStats:
 
             logger.finalize(items_completed=1, total_requests=2, elapsed=60.0, session_stats=stats)
 
-            with open(logger.orchestrator_log_path, "r", encoding="utf-8") as f:
+            with open(logger.orchestrator_log_path, encoding="utf-8") as f:
                 content = f.read()
 
             assert "stats.json" in content

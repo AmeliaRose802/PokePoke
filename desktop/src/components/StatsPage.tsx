@@ -31,7 +31,7 @@ interface StatsPageProps {
   onClose: () => void;
 }
 
-type SortField = "model" | "runs" | "success" | "duration";
+type SortField = "model" | "runs" | "success" | "duration" | "api";
 interface TrendPoint { label: string; value: number; }
 interface AgentSegment { label: string; value: number; color: string; }
 interface AgentActivity { total: number; segments: AgentSegment[]; }
@@ -81,6 +81,7 @@ export function StatsPage({
       avgDuration: summary.average_duration ?? 0,
       medianDuration: summary.median_duration ?? summary.average_duration ?? 0,
       stddevDuration: summary.stddev_duration ?? 0,
+      avgApiSeconds: summary.average_api_seconds ?? 0,
     }));
 
     const sorted = [...rows].sort((a, b) => {
@@ -94,6 +95,9 @@ export function StatsPage({
           break;
         case "duration":
           comparison = a.medianDuration - b.medianDuration;
+          break;
+        case "api":
+          comparison = a.avgApiSeconds - b.avgApiSeconds;
           break;
         default:
           comparison = a.model.localeCompare(b.model);

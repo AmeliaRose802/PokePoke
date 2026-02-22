@@ -173,6 +173,7 @@ class TestSessionStats:
             premium_requests=1,
             retries=2,
             tool_calls=7,
+            api_duration_by_model={"model-a": 2.5},
         )
 
         stats.record_agent_stats(item_stats)
@@ -187,6 +188,7 @@ class TestSessionStats:
         assert stats.agent_stats.premium_requests == 1
         assert stats.agent_stats.tool_calls == 7
         assert stats.agent_stats.retries == 5
+        assert stats.agent_stats.api_duration_by_model == {"model-a": 2.5}
 
         stats.record_retries(0)
         assert stats.agent_stats.retries == 5
@@ -276,3 +278,40 @@ class TestSessionStats:
             thread.join()
 
         assert stats.janitor_agent_runs == 200
+
+
+class TestAgentStatsApiDurationByModel:
+    """Test api_duration_by_model accumulation on AgentStats."""
+
+    def test_accumulate_single_model(self) -> None:
+        a = AgentStats(api_duration=10.0, api_duration_by_model={"model-a": 10.0})
+        b = AgentStats(api_duration=5.0, api_duration_by_model={"model-a": 5.0})
+        a.accumulate(b)
+        assert a.api_duration == 15.0
+        assert a.api_duration_by_model == {"model-a": 15.0}
+
+    def test_accumulate_multiple_models(self) -> None:
+        a = AgentStats(api_duration=10.0, api_duration_by_model={"model-a": 10.0})
+        b = AgentStats(api_duration=7.0, api_duration_by_model={"model-b": 7.0})
+        a.accumulate(b)
+        assert a.api_duration == 17.0
+        assert a.api_duration_by_model == {"model-a": 10.0, "model-b": 7.0}
+
+    def test_accumulate_empty_by_model(self) -> None:
+        a = AgentStats(api_duration=10.0, api_duration_by_model={"model-a": 10.0})
+        b = AgentStats(api_duration=3.0)
+        a.accumulate(b)
+        assert a.api_duration == 13.0
+        assert a.api_duration_by_model == {"model-a": 10.0}
+
+    def test_default_empty_dict(self) -> None:
+        a = AgentStats()
+        assert a.api_duration_by_model == {}
+
+    def test_snapshot_includes_api_duration_by_model(self) -> None:
+        stats = SessionStats(agent_stats=AgentStats(
+            api_duration=10.0,
+            api_duration_by_model={"model-a": 10.0},
+        ))
+        snapshot = stats.snapshot()
+        assert snapshot.agent_stats.api_duration_by_model == {"model-a": 10.0}
