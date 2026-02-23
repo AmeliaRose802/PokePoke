@@ -108,8 +108,7 @@ def build_handoff_context(cwd: str | None = None) -> str:
 
     sections.append("### Changed Files")
     sections.append("```")
-    for line in changed_files:
-        sections.append(line)
+    sections.extend(changed_files)
     sections.append("```")
 
     if stat_text:
@@ -123,8 +122,7 @@ def build_handoff_context(cwd: str | None = None) -> str:
         sections.append("")
         sections.append("### Commit History")
         sections.append("```")
-        for line in commit_lines:
-            sections.append(line)
+        sections.extend(commit_lines)
         sections.append("```")
 
     if diff_content:
