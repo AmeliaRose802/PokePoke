@@ -835,6 +835,11 @@
   color: var(--text-muted);
 }
 
+.agent-card-context-icon {
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
 .agent-card-context-bar {
   flex: 1;
   height: 4px;

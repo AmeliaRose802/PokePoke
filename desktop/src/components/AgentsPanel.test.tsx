@@ -468,8 +468,17 @@ describe('AgentsPanel', () => {
         <AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />
       );
       const contextDiv = container.querySelector('.agent-card-context');
+      expect(contextDiv?.getAttribute('title')).toContain('Context window usage');
       expect(contextDiv?.getAttribute('title')).toContain('Input: 50.0K');
       expect(contextDiv?.getAttribute('title')).toContain('Output: 10.0K');
+    });
+
+    it('shows brain emoji indicator for context bar', () => {
+      const agent = mkAgent({ input_tokens: 10000, output_tokens: 2000, context_limit: 128000 });
+      render(
+        <AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />
+      );
+      expect(screen.getByLabelText('Context window')).toBeInTheDocument();
     });
   });
 
