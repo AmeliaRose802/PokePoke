@@ -195,12 +195,20 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
   const updateMaintenanceAgent = useCallback(
     (index: number, updates: Partial<MaintenanceAgent>) => {
       setMaintenanceAgents((prev) =>
-        prev.map((agent, i) => 
-          i === index ? { ...agent, ...updates } : agent
-        )
+        prev.map((agent, i) => (i === index ? { ...agent, ...updates } : agent))
       );
       markDirty();
     },
+    [markDirty]
+  );
+
+  const removeMaintenanceAgent = useCallback(
+    (index: number) => { setMaintenanceAgents((prev) => prev.filter((_, i) => i !== index)); markDirty(); },
+    [markDirty]
+  );
+
+  const addMaintenanceAgent = useCallback(
+    (agent: MaintenanceAgent) => { setMaintenanceAgents((prev) => [...prev, agent]); markDirty(); },
     [markDirty]
   );
 
@@ -387,69 +395,36 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
               <h3 className="settings-section-title">🖧 MCP Server</h3>
 
               <div className="settings-field">
-                <label className="settings-label" htmlFor="mcp-enabled">
-                  Enable MCP server
-                </label>
+                <label className="settings-label" htmlFor="mcp-enabled">Enable MCP server</label>
                 <div className="settings-checkbox-row">
-                  <input
-                    id="mcp-enabled"
-                    type="checkbox"
-                    checked={mcpEnabled}
-                    onChange={(e) => {
-                      setMcpEnabled(e.target.checked);
-                      markDirty();
-                    }}
-                  />
-                  <span className="settings-hint">
-                    Controls MCP server integration and restart script usage.
-                  </span>
+                  <input id="mcp-enabled" type="checkbox" checked={mcpEnabled}
+                    onChange={(e) => { setMcpEnabled(e.target.checked); markDirty(); }} />
+                  <span className="settings-hint">Controls MCP server integration and restart script usage.</span>
                 </div>
               </div>
 
               <div className="settings-field">
-                <label className="settings-label" htmlFor="mcp-name">
-                  MCP server name (optional)
-                </label>
-                <input
-                  id="mcp-name"
-                  className="settings-input"
-                  value={mcpName}
-                  onChange={(e) => {
-                    setMcpName(e.target.value);
-                    markDirty();
-                  }}
-                  placeholder="e.g. My MCP Server"
-                  disabled={!mcpEnabled}
-                />
-                <span className="settings-hint">
-                  Friendly display name for the MCP server.
-                </span>
+                <label className="settings-label" htmlFor="mcp-name">MCP server name (optional)</label>
+                <input id="mcp-name" className="settings-input" value={mcpName}
+                  onChange={(e) => { setMcpName(e.target.value); markDirty(); }}
+                  placeholder="e.g. My MCP Server" disabled={!mcpEnabled} />
+                <span className="settings-hint">Friendly display name for the MCP server.</span>
               </div>
 
               <div className="settings-field">
-                <label className="settings-label" htmlFor="mcp-restart-script">
-                  Restart script (optional)
-                </label>
-                <input
-                  id="mcp-restart-script"
-                  className="settings-input"
-                  value={mcpRestartScript}
-                  onChange={(e) => {
-                    setMcpRestartScript(e.target.value);
-                    markDirty();
-                  }}
-                  placeholder="scripts/Restart-MCPServer.ps1"
-                  disabled={!mcpEnabled}
-                />
-                <span className="settings-hint">
-                  Path to restart the MCP server after configuration changes.
-                </span>
+                <label className="settings-label" htmlFor="mcp-restart-script">Restart script (optional)</label>
+                <input id="mcp-restart-script" className="settings-input" value={mcpRestartScript}
+                  onChange={(e) => { setMcpRestartScript(e.target.value); markDirty(); }}
+                  placeholder="scripts/Restart-MCPServer.ps1" disabled={!mcpEnabled} />
+                <span className="settings-hint">Path to restart the MCP server after configuration changes.</span>
               </div>
             </div>
 
             <MaintenanceAgentsSection
               agents={maintenanceAgents}
               onUpdate={updateMaintenanceAgent}
+              onRemove={removeMaintenanceAgent}
+              onAdd={addMaintenanceAgent}
               onOpenPromptEditor={onOpenPromptEditor}
             />
 
