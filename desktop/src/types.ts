@@ -173,6 +173,15 @@ export interface ConfigResponse {
   exists: boolean;
 }
 
+/** Response from check_for_updates API */
+export interface UpdateCheckResult {
+  current_version: string;
+  latest_version?: string;
+  update_available: boolean;
+  download_url?: string;
+  error?: string;
+}
+
 /** All-time per-model performance summary from persistent storage */
 export interface ModelPerformanceSummary {
   total_items_attempted: number;

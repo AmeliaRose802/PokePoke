@@ -9,13 +9,11 @@ import {
   buildCompletionTimeSeries,
   formatDurationShort,
   formatElapsed,
-  formatPercent,
   formatTokens,
   getAddedCount,
   getCompletedItems,
   getDoneCount,
   getNetDelta,
-  inferCurrentModel,
 } from "../utils/stats";
 import { CompletedItemCard } from "./CompletedItemCard";
 import { CompletionTimeChart } from "./CompletionTimeChart";
@@ -24,7 +22,6 @@ import { ModelTable } from "./ModelTable";
 interface StatsPageProps {
   stats: SessionStats | null;
   modelLeaderboard: Record<string, ModelPerformanceSummary>;
-  activeAgentModel?: string | null;
   modelHistory: ModelHistoryEntry[];
   historyLoading: boolean;
   historyError: string | null;
@@ -41,7 +38,6 @@ interface NormalizedAgentSegment extends AgentSegment { start: number; width: nu
 export function StatsPage({
   stats,
   modelLeaderboard,
-  activeAgentModel,
   modelHistory,
   historyLoading,
   historyError,
@@ -69,8 +65,6 @@ export function StatsPage({
   ];
   const agentActivity = buildAgentActivity(stats);
   const normalizedSegments = normalizeAgentSegments(agentActivity);
-  const currentModel = inferCurrentModel(stats, modelLeaderboard, activeAgentModel);
-
   const [sortField, setSortField] = useState<SortField>("success");
   const [sortAsc, setSortAsc] = useState(false);
 
@@ -197,7 +191,7 @@ export function StatsPage({
             </div>
           </section>
 
-          <section className="stats-flex-row">
+          <section>
             <div className="stats-panel-card">
               <div className="stats-panel-card-header">
                 <h3>Agent activity</h3>
@@ -237,33 +231,6 @@ export function StatsPage({
               ) : (
                 <p className="stats-empty">No agent runs recorded yet.</p>
               )}
-            </div>
-
-            <div className="stats-panel-card">
-              <div className="stats-panel-card-header">
-                <h3>Current model assignment</h3>
-                <span className="stats-panel-subtitle">Live selection + success signal</span>
-              </div>
-              <div className="current-model-card">
-                <div className="model-row">
-                  <span className="model-label">Model</span>
-                  <span className={`model-value ${statusClass(currentModel.gatePassed)}`}>
-                    {currentModel.model ?? "No runs yet"}
-                  </span>
-                </div>
-                <div className="model-row">
-                  <span className="model-label">Gate status</span>
-                  <span className={`model-status-indicator ${statusClass(currentModel.gatePassed)}`}>
-                    {gateStatusText(currentModel.gatePassed)}
-                  </span>
-                </div>
-                <div className="model-row">
-                  <span className="model-label">All-time success</span>
-                  <span className="model-value">
-                    {formatPercent(currentModel.successRate, 1)}
-                  </span>
-                </div>
-              </div>
             </div>
           </section>
 
@@ -459,7 +426,4 @@ function TrendChart({ title, data, color, valueFormatter, emptyLabel }: { title:
   );
 }
 
-const gateStatusText = (v: boolean | null) =>
-  v === true ? "Passed gate" : v === false ? "Failed gate" : "Pending";
-const statusClass = (v: boolean | null) =>
-  v === true ? "status-pass" : v === false ? "status-fail" : "status-neutral";
+
