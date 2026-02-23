@@ -505,9 +505,8 @@ def test_save_config_rejects_invalid_type() -> None:
     import pytest
 
     api = DesktopAPI()
-    with patch("pokepoke.config._find_repo_root"):
-        with pytest.raises(ValueError, match="Config must be a dict or YAML string"):
-            api.save_config(42)
+    with patch("pokepoke.config._find_repo_root"), pytest.raises(ValueError, match="Config must be a dict or YAML string"):
+        api.save_config(42)
 
 
 def test_save_config_rejects_non_dict_yaml() -> None:
@@ -516,9 +515,8 @@ def test_save_config_rejects_non_dict_yaml() -> None:
     import pytest
 
     api = DesktopAPI()
-    with patch("pokepoke.config._find_repo_root"):
-        with pytest.raises(ValueError, match="Config YAML must parse to an object"):
-            api.save_config("- item1\n- item2\n")
+    with patch("pokepoke.config._find_repo_root"), pytest.raises(ValueError, match="Config YAML must parse to an object"):
+        api.save_config("- item1\n- item2\n")
 
 
 def test_push_stats_with_model_completions() -> None:
@@ -1010,6 +1008,5 @@ def test_save_config_no_yaml(monkeypatch) -> None:
 
     api = DesktopAPI()
     monkeypatch.setattr("pokepoke.desktop_api_ext._HAS_YAML", False)
-    with patch("pokepoke.config._find_repo_root"):
-        with pytest.raises(ImportError, match="PyYAML"):
-            api.save_config({"key": "val"})
+    with patch("pokepoke.config._find_repo_root"), pytest.raises(ImportError, match="PyYAML"):
+        api.save_config({"key": "val"})

@@ -192,51 +192,6 @@ export function getNetDelta(stats: SessionStats | null): number {
   return getAddedCount(stats) - getDoneCount(stats);
 }
 
-export interface ItemTypeCount {
-  type: string;
-  count: number;
-  color: string;
-}
-
-const TYPE_COLORS: Record<string, string> = {
-  bug: "#f7768e",
-  task: "#7aa2f7",
-  feature: "#9ece6a",
-  story: "#bb9af7",
-  chore: "#e0af68",
-  spike: "#2ac3de",
-  unknown: "#c0caf5",
-};
-
-function colorForType(type: string): string {
-  return TYPE_COLORS[type.toLowerCase()] ?? TYPE_COLORS.unknown;
-}
-
-/**
- * Build item type breakdown from completed items and/or model history.
- * Counts items by type and assigns a color to each.
- */
-export function buildItemTypeBreakdown(
-  completedItems: CompletedItem[],
-  history: ModelHistoryEntry[]
-): ItemTypeCount[] {
-  const counts = new Map<string, number>();
-
-  for (const item of completedItems) {
-    const type = item.issue_type || "unknown";
-    counts.set(type, (counts.get(type) ?? 0) + 1);
-  }
-
-  for (const entry of history) {
-    const type = entry.item_type || "unknown";
-    counts.set(type, (counts.get(type) ?? 0) + 1);
-  }
-
-  return Array.from(counts.entries())
-    .map(([type, count]) => ({ type, count, color: colorForType(type) }))
-    .sort((a, b) => b.count - a.count);
-}
-
 /**
  * Calculate average completion time by item type with rolling averages
  * Groups historical entries by item type and computes mean duration
@@ -308,4 +263,17 @@ export function buildCompletionTimeSeries(
   }
 
   return result;
+}
+
+/**
+ * Format cost as currency (USD).
+ * @param cost - Cost in USD dollars
+ * @returns Formatted string like "$0.45" or "$1.20"
+ */
+export function formatCost(cost: number | undefined): string {
+  if (!Number.isFinite(cost ?? 0)) return "$0.00";
+  const value = cost ?? 0;
+  if (value === 0) return "$0.00";
+  if (value < 0.01) return "<$0.01";
+  return `$${value.toFixed(2)}`;
 }

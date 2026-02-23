@@ -364,4 +364,3 @@ class DesktopAPI:
     reset_prompt = _ext.reset_prompt
     add_work_item_label = _ext.add_work_item_label
     remove_work_item_label = _ext.remove_work_item_label
-    check_for_updates = _ext.check_for_updates

@@ -63,16 +63,14 @@ class TestSetTerminalBanner:
     @pytest.mark.real_terminal_banner
     def test_set_banner_windows(self):
         """Test setting banner on Windows platform."""
-        with patch('sys.platform', 'win32'):
-            with patch('ctypes.windll.kernel32.SetConsoleTitleW') as mock_title:
-                set_terminal_banner("Test Banner")
-                mock_title.assert_called_with("Test Banner")
+        with patch('sys.platform', 'win32'), patch('ctypes.windll.kernel32.SetConsoleTitleW') as mock_title:
+            set_terminal_banner("Test Banner")
+            mock_title.assert_called_with("Test Banner")
 
     @pytest.mark.real_terminal_banner
     def test_clear_banner_windows(self):
         """Test clearing banner on Windows platform."""
-        with patch('sys.platform', 'win32'):
-            with patch('ctypes.windll.kernel32.SetConsoleTitleW') as mock_title:
-                clear_terminal_banner()
-                mock_title.assert_called_with("PokePoke")
+        with patch('sys.platform', 'win32'), patch('ctypes.windll.kernel32.SetConsoleTitleW') as mock_title:
+            clear_terminal_banner()
+            mock_title.assert_called_with("PokePoke")
 

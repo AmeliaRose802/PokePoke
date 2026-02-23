@@ -363,7 +363,10 @@ class TestProcessWorkItem:
         assert result.request_count == 1  # Records the failed attempt
         # Note: In actual failure scenario, cleanup may not be called if exception is raised
         # The important thing is that success is False
-        assert result.stats is None  # No stats on failure
+        # Stats are now tracked even on failure
+        assert result.stats is not None
+        assert result.model_completion is not None
+        assert result.model_completion.cost == 0.0  # No cost with 0 tokens
         assert result.cleanup_agent_runs == 0  # No cleanup agents run on failure
         mock_invoke.assert_called_once()  # Copilot was invoked
 

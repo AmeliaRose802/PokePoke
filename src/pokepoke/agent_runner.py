@@ -194,7 +194,7 @@ def _run_main_repo_agent(agent_name: str, agent_item: BeadsWorkItem, agent_promp
     return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=False, model=model, cwd=cwd, item_logger=item_logger)
 
 
-def run_worktree_cleanup(repo_root: Path | None = None, model: str | None = None, item_logger: 'ItemLogger | None' = None) -> AgentStats | None:
+def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger | None' = None) -> AgentStats | None:
     """Run worktree cleanup agent to merge/delete stale worktrees."""
     terminal_ui.ui.set_current_agent("Worktree Cleanup")
 
@@ -238,7 +238,7 @@ def run_worktree_cleanup(repo_root: Path | None = None, model: str | None = None
         )
 
         cwd = str(repo_root) if repo_root is not None else None
-        agent_result = _run_main_repo_agent("Worktree Cleanup", cleanup_item, cleanup_prompt, model=model, cwd=cwd, item_logger=item_logger)
+        agent_result = _run_main_repo_agent("Worktree Cleanup", cleanup_item, cleanup_prompt, cwd=cwd, item_logger=item_logger)
 
         status = "success" if agent_result is not None else "failed"
         terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status=status)

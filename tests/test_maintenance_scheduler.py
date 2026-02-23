@@ -241,29 +241,27 @@ class TestSingletonCoordination:
         run_logger = Mock()
 
         with patch('pokepoke.maintenance_scheduler.try_lock') as mock_lock, \
-             patch.object(scheduler, '_run_agent_with_coordination') as mock_run:
-                mock_lock.return_value = Mock()  # Lock available
+                patch.object(scheduler, '_run_agent_with_coordination') as mock_run:
+            mock_lock.return_value = Mock()  # Lock available
 
-                scheduler._maybe_run_agent("Unknown Agent", agent_cfg, Mock(), session_stats, run_logger)
+            scheduler._maybe_run_agent("Unknown Agent", agent_cfg, Mock(), session_stats, run_logger)
 
-                # Should log warning and then run with coordination
-                run_logger.log_maintenance.assert_called_with(
-                    "unknown_agent", "WARNING: Unknown agent classification for Unknown Agent, applying singleton guard"
-                )
-                mock_run.assert_called_once()
+            # Should log warning and then run with coordination
+            run_logger.log_maintenance.assert_called_with(
+                "unknown_agent", "WARNING: Unknown agent classification for Unknown Agent, applying singleton guard"
+            )
+            mock_run.assert_called_once()
 
 
 class TestRunAgentWithCoordination:
     """Test agent execution and statistics coordination."""
 
-    @patch('pokepoke.maintenance_scheduler.select_model_for_maintenance')
     @patch('pokepoke.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.maintenance_scheduler.terminal_ui')
     @patch('pokepoke.maintenance_scheduler._run_special_agent')
-    def test_runs_special_agent(self, mock_special, mock_ui, mock_banner, mock_select):
+    def test_runs_special_agent(self, mock_special, mock_ui, mock_banner):
         """Test that special agents use their dedicated runners."""
         mock_special.return_value = AgentStats(input_tokens=100)
-        mock_select.return_value = None  # No A/B testing
 
         scheduler = MaintenanceScheduler()
         agent_cfg = MaintenanceAgentConfig(name="Beta Tester", prompt_file="beta-tester.md", frequency=3)
@@ -273,45 +271,16 @@ class TestRunAgentWithCoordination:
 
         scheduler._run_agent_with_coordination("Beta Tester", agent_cfg, pokepoke_repo, session_stats, run_logger)
 
-        mock_special.assert_called_once_with("Beta Tester", pokepoke_repo, model=None, item_logger=run_logger.start_maintenance_log.return_value)
+        mock_special.assert_called_once_with("Beta Tester", pokepoke_repo, item_logger=run_logger.start_maintenance_log.return_value)
         assert session_stats.beta_tester_agent_runs == 1
         assert session_stats.agent_stats.input_tokens == 100
 
-    @patch('pokepoke.maintenance_scheduler.select_model_for_maintenance')
-    @patch('pokepoke.maintenance_scheduler.set_terminal_banner')
-    @patch('pokepoke.maintenance_scheduler.terminal_ui')
-    @patch('pokepoke.maintenance_scheduler._run_special_agent')
-    def test_ab_testing_overrides_special_agent_model(self, mock_special, mock_ui, mock_banner, mock_select):
-        """Test that A/B testing model overrides special agent's configured model."""
-        mock_special.return_value = AgentStats(input_tokens=80)
-        mock_select.return_value = "gpt-5.1-codex"  # A/B selected model
-
-        scheduler = MaintenanceScheduler()
-        agent_cfg = MaintenanceAgentConfig(
-            name="Beta Tester",
-            prompt_file="beta-tester.md",
-            frequency=3,
-            model="claude-opus-4.6",
-        )
-        session_stats = SessionStats(agent_stats=AgentStats())
-        run_logger = Mock()
-        pokepoke_repo = Mock()
-
-        scheduler._run_agent_with_coordination("Beta Tester", agent_cfg, pokepoke_repo, session_stats, run_logger)
-
-        mock_special.assert_called_once_with(
-            "Beta Tester", pokepoke_repo, model="gpt-5.1-codex",
-            item_logger=run_logger.start_maintenance_log.return_value,
-        )
-
-    @patch('pokepoke.maintenance_scheduler.select_model_for_maintenance')
     @patch('pokepoke.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.maintenance_scheduler.terminal_ui')
     @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
-    def test_runs_generic_agent(self, mock_maintenance, mock_ui, mock_banner, mock_select):
+    def test_runs_generic_agent(self, mock_maintenance, mock_ui, mock_banner):
         """Test that generic agents use run_maintenance_agent."""
         mock_maintenance.return_value = AgentStats(input_tokens=50)
-        mock_select.return_value = None  # No A/B testing
 
         scheduler = MaintenanceScheduler()
         agent_cfg = MaintenanceAgentConfig(
@@ -339,65 +308,6 @@ class TestRunAgentWithCoordination:
         )
         assert session_stats.janitor_agent_runs == 1
         assert session_stats.agent_stats.input_tokens == 50
-
-    @patch('pokepoke.maintenance_scheduler.select_model_for_maintenance')
-    @patch('pokepoke.maintenance_scheduler.set_terminal_banner')
-    @patch('pokepoke.maintenance_scheduler.terminal_ui')
-    @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
-    def test_ab_testing_overrides_configured_model(self, mock_maintenance, mock_ui, mock_banner, mock_select):
-        """Test that A/B testing model overrides agent's configured model."""
-        mock_maintenance.return_value = AgentStats(input_tokens=50)
-        mock_select.return_value = "gpt-5.1-codex"  # A/B selected model
-
-        scheduler = MaintenanceScheduler()
-        agent_cfg = MaintenanceAgentConfig(
-            name="Janitor",
-            prompt_file="janitor.md",
-            frequency=2,
-            needs_worktree=True,
-            merge_changes=True,
-            model="claude-opus-4.6"
-        )
-        session_stats = SessionStats(agent_stats=AgentStats())
-        run_logger = Mock()
-        pokepoke_repo = Mock()
-
-        scheduler._run_agent_with_coordination("Janitor", agent_cfg, pokepoke_repo, session_stats, run_logger)
-
-        # Model should be the A/B selected one, not the configured one
-        mock_maintenance.assert_called_once_with(
-            "Janitor",
-            "janitor.md",
-            repo_root=pokepoke_repo,
-            needs_worktree=True,
-            merge_changes=True,
-            model="gpt-5.1-codex",
-            item_logger=run_logger.start_maintenance_log.return_value,
-        )
-
-    @patch('pokepoke.maintenance_scheduler.select_model_for_maintenance')
-    @patch('pokepoke.maintenance_scheduler.set_terminal_banner')
-    @patch('pokepoke.maintenance_scheduler.terminal_ui')
-    @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
-    def test_ab_testing_overrides_none_model(self, mock_maintenance, mock_ui, mock_banner, mock_select):
-        """Test A/B override works even when agent has no configured model."""
-        mock_maintenance.return_value = AgentStats()
-        mock_select.return_value = "claude-sonnet-4.5"
-
-        scheduler = MaintenanceScheduler()
-        agent_cfg = MaintenanceAgentConfig(
-            name="Tech Debt",
-            prompt_file="tech-debt.md",
-            frequency=5,
-            model=None,
-        )
-        session_stats = SessionStats(agent_stats=AgentStats())
-        run_logger = Mock()
-
-        scheduler._run_agent_with_coordination("Tech Debt", agent_cfg, Mock(), session_stats, run_logger)
-
-        call_kwargs = mock_maintenance.call_args[1]
-        assert call_kwargs["model"] == "claude-sonnet-4.5"
 
     @patch('pokepoke.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.maintenance_scheduler.terminal_ui')
@@ -515,8 +425,8 @@ class TestConcurrentExecution:
 
         # Patch once at the test level so multiple threads don't race patch/unpatch.
         with patch('pokepoke.maintenance_scheduler.run_maintenance_agent') as mock_run, \
-             patch('pokepoke.maintenance_scheduler.set_terminal_banner'), \
-             patch('pokepoke.maintenance_scheduler.terminal_ui'):
+                patch('pokepoke.maintenance_scheduler.set_terminal_banner'), \
+                patch('pokepoke.maintenance_scheduler.terminal_ui'):
             mock_run.return_value = AgentStats()
 
             def run_agent(agent_name: str):
@@ -536,7 +446,7 @@ class TestConcurrentExecution:
 
             # Start multiple Tech Debt agents simultaneously
             threads = []
-            for _ in range(3):
+            for _i in range(3):
                 t = threading.Thread(target=run_agent, args=("Tech Debt",))
                 threads.append(t)
                 t.start()
@@ -558,9 +468,9 @@ class TestConcurrentExecution:
 
         def run_janitor():
             with patch('pokepoke.maintenance_scheduler.run_maintenance_agent') as mock_run, \
-                 patch('pokepoke.maintenance_scheduler.try_lock') as mock_lock, \
-                 patch('pokepoke.maintenance_scheduler.set_terminal_banner'), \
-                 patch('pokepoke.maintenance_scheduler.terminal_ui'):
+                    patch('pokepoke.maintenance_scheduler.try_lock') as mock_lock, \
+                    patch('pokepoke.maintenance_scheduler.set_terminal_banner'), \
+                    patch('pokepoke.maintenance_scheduler.terminal_ui'):
                 mock_run.return_value = AgentStats()
                 mock_lock.return_value = Mock()  # File lock available
 
@@ -585,7 +495,7 @@ class TestConcurrentExecution:
         try:
             # Start multiple Janitor agents simultaneously - they should all be blocked
             threads = []
-            for _ in range(3):
+            for _i in range(3):
                 t = threading.Thread(target=run_janitor)
                 threads.append(t)
                 t.start()

@@ -1492,7 +1492,7 @@ class TestCleanupAfterMergeNonLockError:
 
             mock_add.assert_called_once()
             call_args = mock_add.call_args
-            assert "x-branch" == call_args[0][0]
+            assert call_args[0][0] == "x-branch"
 
 
 class TestForceRemoveTimeoutBranch:

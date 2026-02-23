@@ -49,8 +49,6 @@ class MaintenanceAgentConfig:
     merge_changes: bool = True
     model: str | None = None
     enabled: bool = True
-    custom: bool = False
-    description: str = ""
 
 
 @dataclass
@@ -257,8 +255,6 @@ class ProjectConfig:
                     merge_changes=a.get("merge_changes", True),
                     model=a.get("model"),
                     enabled=a.get("enabled", True),
-                    custom=a.get("custom", False),
-                    description=a.get("description", ""),
                 )
                 for a in agents_data
             ])
@@ -284,6 +280,8 @@ class ProjectConfig:
         )
 
         return config
+
+
 
 
 def _find_repo_root() -> Path:

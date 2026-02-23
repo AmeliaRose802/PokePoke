@@ -5,7 +5,7 @@
  * matching the main LogPanel's interactive UI.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { AgentInfo } from "../types";
 import { useBridge } from "../useBridge";
@@ -96,18 +96,6 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isUserScrolledUp = useRef(false);
-  const [copySuccess, setCopySuccess] = useState(false);
-
-  const handleCopy = useCallback(async () => {
-    const text = logLines.join("\n");
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy agent logs:", err);
-    }
-  }, [logLines]);
 
   // Fetch detailed agent information when agent changes
   useEffect(() => {
@@ -224,19 +212,9 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
             </ul>
           </div>
         ) : null}
-        <span className="log-panel-header-actions">
-          <button
-            className={`copy-btn ${copySuccess ? "success" : ""}`}
-            onClick={handleCopy}
-            title={copySuccess ? "Copied!" : "Copy agent log output"}
-            aria-label={copySuccess ? "Copied!" : "Copy agent log output"}
-          >
-            {copySuccess ? "✓" : "📋"}
-          </button>
-          <span className="log-count">
-            {isLoadingDetail ? "Loading detailed logs..." : `${logLines.length} lines`}
-            {detailError && " (Error loading details)"}
-          </span>
+        <span className="log-count">
+          {isLoadingDetail ? "Loading detailed logs..." : `${logLines.length} lines`}
+          {detailError && " (Error loading details)"}
         </span>
       </div>
       <div className="agent-log-panel-content log-entries" ref={containerRef} onScroll={handleScroll}>

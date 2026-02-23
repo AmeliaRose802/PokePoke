@@ -37,25 +37,21 @@ class TestAcquireLock:
             assert not lock.is_locked
 
     def test_lock_file_created_in_lock_dir(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
-            with acquire_lock("mylock"):
-                assert (tmp_path / "mylock.lock").exists()
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), acquire_lock("mylock"):
+            assert (tmp_path / "mylock.lock").exists()
 
     def test_timeout_raises(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
-            with acquire_lock("exclusive"):
-                # Same lock with zero timeout should fail
-                with pytest.raises(Timeout):
-                    with acquire_lock("exclusive", timeout=0):
-                        pass  # pragma: no cover
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), acquire_lock("exclusive"):  # noqa: SIM117
+            # Same lock with zero timeout should fail
+            with pytest.raises(Timeout), acquire_lock("exclusive", timeout=0):
+                    pass  # pragma: no cover
 
     def test_release_on_exception(self, tmp_path: Path) -> None:
         with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
             lock_ref = None
-            with pytest.raises(RuntimeError):
-                with acquire_lock("err") as lock:
-                    lock_ref = lock
-                    raise RuntimeError("boom")
+            with pytest.raises(RuntimeError), acquire_lock("err") as lock:
+                lock_ref = lock
+                raise RuntimeError("boom")
             assert lock_ref is not None
             assert not lock_ref.is_locked
 
@@ -71,10 +67,9 @@ class TestTryLock:
             lock.release()
 
     def test_returns_none_when_held(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
-            with acquire_lock("held"):
-                result = try_lock("held")
-                assert result is None
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), acquire_lock("held"):
+            result = try_lock("held")
+            assert result is None
 
     def test_caller_must_release(self, tmp_path: Path) -> None:
         with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
@@ -113,11 +108,9 @@ class TestWorktreeSetupLock:
 
     def test_second_agent_times_out_while_first_holds_lock(self, tmp_path: Path) -> None:
         """Second concurrent agent should raise Timeout when first holds the lock."""
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
-            with worktree_setup_lock(timeout=5):
-                with pytest.raises(Timeout):
-                    with worktree_setup_lock(timeout=0):
-                        pass  # pragma: no cover
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), worktree_setup_lock(timeout=5):  # noqa: SIM117
+            with pytest.raises(Timeout), worktree_setup_lock(timeout=0):
+                    pass  # pragma: no cover
 
     def test_serializes_two_threads(self, tmp_path: Path) -> None:
         """Two threads must not hold worktree_setup_lock simultaneously."""
@@ -127,17 +120,16 @@ class TestWorktreeSetupLock:
         errors: list[str] = []
 
         def worker():
-            with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
-                with worktree_setup_lock(timeout=10):
-                    with lock_obj:
-                        inside_count[0] += 1
-                        if inside_count[0] > 1:
-                            errors.append("overlap!")
-                            overlap_detected.set()
-                    import time
-                    time.sleep(0.05)
-                    with lock_obj:
-                        inside_count[0] -= 1
+            with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), worktree_setup_lock(timeout=10):
+                with lock_obj:
+                    inside_count[0] += 1
+                    if inside_count[0] > 1:
+                        errors.append("overlap!")
+                        overlap_detected.set()
+                import time
+                time.sleep(0.05)
+                with lock_obj:
+                    inside_count[0] -= 1
 
         threads = [threading.Thread(target=worker) for _ in range(2)]
         for t in threads:
@@ -150,10 +142,9 @@ class TestWorktreeSetupLock:
     def test_releases_on_exception(self, tmp_path: Path) -> None:
         with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
             lock_ref = None
-            with pytest.raises(ValueError):
-                with worktree_setup_lock(timeout=5) as lock:
-                    lock_ref = lock
-                    raise ValueError("simulated failure")
+            with pytest.raises(ValueError), worktree_setup_lock(timeout=5) as lock:
+                lock_ref = lock
+                raise ValueError("simulated failure")
             assert lock_ref is not None
             assert not lock_ref.is_locked
 
@@ -169,11 +160,9 @@ class TestMergeLock:
 
     def test_second_agent_times_out_while_first_holds_lock(self, tmp_path: Path) -> None:
         """Second concurrent agent should raise Timeout when first holds the lock."""
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
-            with merge_lock(timeout=5):
-                with pytest.raises(Timeout):
-                    with merge_lock(timeout=0):
-                        pass  # pragma: no cover
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), merge_lock(timeout=5):  # noqa: SIM117
+            with pytest.raises(Timeout), merge_lock(timeout=0):
+                    pass  # pragma: no cover
 
     def test_serializes_two_threads(self, tmp_path: Path) -> None:
         """Two threads must not hold merge_lock simultaneously."""
@@ -183,17 +172,16 @@ class TestMergeLock:
         errors: list[str] = []
 
         def worker():
-            with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
-                with merge_lock(timeout=10):
-                    with lock_obj:
-                        inside_count[0] += 1
-                        if inside_count[0] > 1:
-                            errors.append("overlap!")
-                            overlap_detected.set()
-                    import time
-                    time.sleep(0.05)
-                    with lock_obj:
-                        inside_count[0] -= 1
+            with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), merge_lock(timeout=10):
+                with lock_obj:
+                    inside_count[0] += 1
+                    if inside_count[0] > 1:
+                        errors.append("overlap!")
+                        overlap_detected.set()
+                import time
+                time.sleep(0.05)
+                with lock_obj:
+                    inside_count[0] -= 1
 
         threads = [threading.Thread(target=worker) for _ in range(2)]
         for t in threads:
@@ -206,10 +194,9 @@ class TestMergeLock:
     def test_releases_on_exception(self, tmp_path: Path) -> None:
         with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
             lock_ref = None
-            with pytest.raises(ValueError):
-                with merge_lock(timeout=5) as lock:
-                    lock_ref = lock
-                    raise ValueError("simulated failure")
+            with pytest.raises(ValueError), merge_lock(timeout=5) as lock:
+                lock_ref = lock
+                raise ValueError("simulated failure")
             assert lock_ref is not None
             assert not lock_ref.is_locked
 
@@ -222,6 +209,5 @@ class TestMergeLockActive:
             assert merge_lock_active() is False
 
     def test_returns_true_when_held(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
-            with merge_lock(timeout=5):
-                assert merge_lock_active() is True
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), merge_lock(timeout=5):
+            assert merge_lock_active() is True

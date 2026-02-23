@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import type { LogEntry } from "../types";
 import { processLogsToRenderItems } from "../utils/logProcessor";
@@ -58,19 +58,6 @@ export function LogPanel({
 
   const renderItems = useMemo(() => processLogsToRenderItems(logs), [logs]);
 
-  const [copySuccess, setCopySuccess] = useState(false);
-
-  const handleCopy = useCallback(async () => {
-    const text = logs.map((l) => l.message).join("\n");
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy logs:", err);
-    }
-  }, [logs]);
-
   // Guard: don't steal focus (and trigger re-render) when user is selecting text
   const handleClick = () => {
     if (window.getSelection()?.toString()) return;
@@ -87,17 +74,7 @@ export function LogPanel({
         <span>
           {icon} {title}
         </span>
-        <span className="log-panel-header-actions">
-          <button
-            className={`copy-btn ${copySuccess ? "success" : ""}`}
-            onClick={(e) => { e.stopPropagation(); handleCopy(); }}
-            title={copySuccess ? "Copied!" : "Copy log output"}
-            aria-label={copySuccess ? "Copied!" : "Copy log output"}
-          >
-            {copySuccess ? "✓" : "📋"}
-          </button>
-          <span className="log-count">{logs.length} lines</span>
-        </span>
+        <span className="log-count">{logs.length} lines</span>
       </div>
       <div
         className="log-entries"

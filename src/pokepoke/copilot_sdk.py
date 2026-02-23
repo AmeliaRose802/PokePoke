@@ -267,7 +267,6 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             input_tokens=stats['total_input_tokens'], output_tokens=stats['total_output_tokens'],
             premium_requests=stats['turn_count'], tool_calls=stats['total_tool_calls'],
             api_duration=total_api_duration, wall_duration=total_wall_duration,
-            api_duration_by_model={current_model: total_api_duration},
         )
         return CopilotResult(
             work_item_id=work_item.id, success=success, output=output_text,

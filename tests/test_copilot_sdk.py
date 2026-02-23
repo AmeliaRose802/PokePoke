@@ -1058,7 +1058,7 @@ class TestInvokeCopilotSDKAsync:
             nonlocal stop_call_count
             stop_call_count += 1
             if stop_call_count == 1:
-                raise asyncio.TimeoutError()
+                raise TimeoutError()
         mock_client.stop = mock_stop
         mock_client_class.return_value = mock_client
 
@@ -1137,7 +1137,7 @@ class TestInvokeCopilotSDKAsync:
             nonlocal stop_call_count
             stop_call_count += 1
             if stop_call_count == 1:
-                raise asyncio.TimeoutError()
+                raise TimeoutError()
             raise RuntimeError("Force stop failed")
         mock_client.stop = mock_stop
         mock_client_class.return_value = mock_client

@@ -150,6 +150,35 @@ class TestModelCompletionRecord:
         )
         assert rec.gate_passed is False
 
+    def test_with_all_stats(self):
+        """Test creation with all optional stats fields."""
+        rec = ModelCompletionRecord(
+            item_id="item-4",
+            model="gpt-5.1",
+            duration_seconds=240.0,
+            gate_passed=True,
+            input_tokens=50_000,
+            output_tokens=25_000,
+            agent_turns=3,
+            cost=1.25,
+        )
+        assert rec.input_tokens == 50_000
+        assert rec.output_tokens == 25_000
+        assert rec.agent_turns == 3
+        assert rec.cost == 1.25
+
+    def test_default_values(self):
+        """Test that new fields have proper default values."""
+        rec = ModelCompletionRecord(
+            item_id="item-5",
+            model="claude-opus-4.6",
+            duration_seconds=100.0,
+        )
+        assert rec.input_tokens == 0
+        assert rec.output_tokens == 0
+        assert rec.agent_turns == 0
+        assert rec.cost == 0.0
+
 
 # ─── SessionStats model_completions ──────────────────────────────────────────
 

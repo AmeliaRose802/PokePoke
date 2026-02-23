@@ -30,7 +30,6 @@ def _make_session_stats(**overrides) -> SessionStats:
             premium_requests=3,
             retries=1,
             tool_calls=12,
-            api_duration_by_model={"gpt-4o": 25.0, "claude-sonnet": 20.3},
         ),
         items_completed=2,
         work_agent_runs=3,
@@ -87,7 +86,6 @@ class TestSerializeSessionStats:
         assert agent["premium_requests"] == 3
         assert agent["retries"] == 1
         assert agent["tool_calls"] == 12
-        assert agent["api_duration_by_model"] == {"gpt-4o": 25.0, "claude-sonnet": 20.3}
 
     def test_run_counts_included(self):
         stats = _make_session_stats()

@@ -1008,7 +1008,8 @@ class TestProcessWorkItem:
 
         assert result.success is False
         assert result.request_count == 0
-        assert result.stats is None
+        # Stats are now tracked even on failure/shutdown
+        assert result.stats is not None
         assert result.cleanup_agent_runs == 0
         assert result.gate_agent_runs == 0
         assert result.model_completion is not None

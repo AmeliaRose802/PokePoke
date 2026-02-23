@@ -32,7 +32,6 @@ export interface AgentStats {
   premium_requests: number;
   retries: number;
   tool_calls: number;
-  api_duration_by_model?: Record<string, number>;
 }
 
 /** Record of a single work item completion for model A/B testing */
@@ -41,7 +40,10 @@ export interface ModelCompletionRecord {
   model: string;
   duration_seconds: number;
   gate_passed: boolean | null;
-  api_duration_seconds?: number | null;
+  input_tokens: number;
+  output_tokens: number;
+  agent_turns: number;
+  cost: number;
 }
 
 /** Work item completed during the current session */
@@ -130,8 +132,6 @@ export interface MaintenanceAgent {
   needs_worktree: boolean;
   merge_changes?: boolean;
   model?: string;
-  custom?: boolean;
-  description?: string;
 }
 
 /** Maintenance configuration section */
@@ -179,12 +179,10 @@ export interface ModelPerformanceSummary {
   total_items_succeeded: number;
   total_items_failed: number;
   total_duration_seconds: number;
-  total_api_seconds?: number;
   total_retries: number;
   average_duration: number;
   median_duration?: number;
   stddev_duration?: number;
-  average_api_seconds?: number;
   success_rate: number;
   last_used: string;
 }
@@ -208,15 +206,6 @@ export interface AgentInfo {
   last_log_at?: number | null;
   paused?: boolean;
   session_id?: string | null;
-}
-
-/** Result of an update check against GitHub Releases */
-export interface UpdateCheckResult {
-  current_version: string;
-  latest_version: string | null;
-  update_available: boolean;
-  download_url: string;
-  error: string | null;
 }
 
 /** State snapshot from the bridge */

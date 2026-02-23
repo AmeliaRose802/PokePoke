@@ -114,6 +114,5 @@ def test_replace_with_retry_raises_after_all_retries_exhausted() -> None:
         src.write_text("data", encoding="utf-8")
 
         with patch("pokepoke.file_utils.os.replace", side_effect=PermissionError("locked")), \
-             patch("pokepoke.file_utils.time.sleep"):
-            with pytest.raises(PermissionError):
-                replace_with_retry(src, dst, retries=3, delay=0.001)
+             patch("pokepoke.file_utils.time.sleep"), pytest.raises(PermissionError):
+            replace_with_retry(src, dst, retries=3, delay=0.001)

@@ -7,20 +7,18 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import type { ConfigResponse, MaintenanceAgent, McpServerConfig, ModelsConfig, ProjectConfig, UpdateCheckResult } from "../types";
+import type { ConfigResponse, MaintenanceAgent, McpServerConfig,ModelsConfig, ProjectConfig } from "../types";
 import { MaintenanceAgentsSection } from "./MaintenanceAgentsSection";
 import { isAbTestingEnabled,KNOWN_MODELS } from "./settingsHelpers";
-import { UpdatesSection } from "./UpdatesSection";
 
 interface Props {
   getConfig: () => Promise<ConfigResponse | null>;
   saveConfig: (config: ProjectConfig) => Promise<boolean>;
   onClose: () => void;
   onOpenPromptEditor?: (promptName: string) => void;
-  checkForUpdates?: () => Promise<UpdateCheckResult | null>;
 }
 
-export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEditor, checkForUpdates }: Props) {
+export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEditor }: Props) {
   const [config, setConfig] = useState<ProjectConfig | null>(null);
   const [defaultModel, setDefaultModel] = useState("");
   const [fallbackModel, setFallbackModel] = useState("");
@@ -197,20 +195,12 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
   const updateMaintenanceAgent = useCallback(
     (index: number, updates: Partial<MaintenanceAgent>) => {
       setMaintenanceAgents((prev) =>
-        prev.map((agent, i) => (i === index ? { ...agent, ...updates } : agent))
+        prev.map((agent, i) => 
+          i === index ? { ...agent, ...updates } : agent
+        )
       );
       markDirty();
     },
-    [markDirty]
-  );
-
-  const removeMaintenanceAgent = useCallback(
-    (index: number) => { setMaintenanceAgents((prev) => prev.filter((_, i) => i !== index)); markDirty(); },
-    [markDirty]
-  );
-
-  const addMaintenanceAgent = useCallback(
-    (agent: MaintenanceAgent) => { setMaintenanceAgents((prev) => [...prev, agent]); markDirty(); },
     [markDirty]
   );
 
@@ -431,7 +421,9 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
                   placeholder="e.g. My MCP Server"
                   disabled={!mcpEnabled}
                 />
-                <span className="settings-hint">Friendly display name for the MCP server.</span>
+                <span className="settings-hint">
+                  Friendly display name for the MCP server.
+                </span>
               </div>
 
               <div className="settings-field">
@@ -449,21 +441,17 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
                   placeholder="scripts/Restart-MCPServer.ps1"
                   disabled={!mcpEnabled}
                 />
-                <span className="settings-hint">Path to restart the MCP server after configuration changes.</span>
+                <span className="settings-hint">
+                  Path to restart the MCP server after configuration changes.
+                </span>
               </div>
             </div>
 
             <MaintenanceAgentsSection
               agents={maintenanceAgents}
               onUpdate={updateMaintenanceAgent}
-              onRemove={removeMaintenanceAgent}
-              onAdd={addMaintenanceAgent}
               onOpenPromptEditor={onOpenPromptEditor}
             />
-
-            {checkForUpdates && (
-              <UpdatesSection checkForUpdates={checkForUpdates} />
-            )}
 
             {/* Footer actions */}
             <div className="settings-footer">

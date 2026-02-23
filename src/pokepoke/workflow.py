@@ -11,6 +11,7 @@ from pokepoke.copilot import invoke_copilot
 from pokepoke.copilot_sdk import build_prompt_from_work_item
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, ModelCompletionRecord, WorkItemResult
 from pokepoke.worktrees import create_worktree, cleanup_worktree
+from pokepoke.model_pricing import calculate_cost
 from pokepoke.git_operations import has_uncommitted_changes, has_commits_ahead
 from pokepoke.beads import assign_and_sync_item, unassign_item, add_comment
 from pokepoke.agent_runner import run_cleanup_loop, run_beta_tester, run_gate_agent
@@ -65,19 +66,7 @@ def process_work_item(
     max_timeout_restarts: int = 3,
     agent_id: str | None = None,
 ) -> WorkItemResult:
-    """Process a single work item with timeout protection.
-
-    Args:
-        item: Work item to process
-        interactive: If True, prompt for confirmation before proceeding
-        timeout_hours: Maximum hours before timing out and restarting (default: 2.0)
-        run_beta_test: If True, run beta tester after completion (default: False)
-        run_logger: Optional run logger instance for file logging
-        max_timeout_restarts: Maximum number of timeout restarts before failing (default: 3)
-
-    Returns:
-        WorkItemResult with success status, request count, stats, and agent run counts.
-    """
+    """Process a single work item with timeout protection."""
     # Register this agent for shutdown coordination
     register_agent()
     worktree_path: Path | None = None
@@ -96,15 +85,9 @@ def process_work_item(
         worktree_lock_timeout = float(config.command_timeout)
 
         # Keep the Desktop UI agent card in sync with the selected model.
-        terminal_ui.ui.push_agent_status(
-            base_agent_id,
-            get_agent_name(default="pokepoke"),
-            iteration=1,
-            status="running",
-            model=selected_model,
-            work_item_id=item.id,
-            work_item_title=item.title,
-        )
+        terminal_ui.ui.push_agent_status(base_agent_id, get_agent_name(default="pokepoke"),
+            iteration=1, status="running", model=selected_model,
+            work_item_id=item.id, work_item_title=item.title)
 
         print(f"\n≡ƒÜÇ Processing work item: {item.id} ΓÇö {item.title}")
         print(f"   ≡ƒñû Model: {selected_model} | ≡ƒºá Backend: {backend_provider} | ΓÅ▒∩╕Å  Timeout: {timeout_hours}h\n")
@@ -245,15 +228,9 @@ def process_work_item(
 
             gate_iteration = gate_agent_runs + 1
             gate_agent_id = f"{base_agent_id}-gate-{gate_iteration}"
-            terminal_ui.ui.push_agent_status(
-                gate_agent_id,
-                "Gate Agent",
-                iteration=gate_iteration,
-                status="running",
-                parent_agent_id=base_agent_id,
-                work_item_id=item.id,
-                work_item_title=item.title,
-            )
+            terminal_ui.ui.push_agent_status(gate_agent_id, "Gate Agent",
+                iteration=gate_iteration, status="running",
+                parent_agent_id=base_agent_id, work_item_id=item.id, work_item_title=item.title)
             try:
                 with terminal_ui.ui.agent_output_for(gate_agent_id):
                     gate_success, gate_reason, gate_stats = run_gate_agent(
@@ -263,26 +240,14 @@ def process_work_item(
             except Exception as e:
                 logger.warning(f"Gate agent raised exception: {e}", exc_info=True)
                 gate_agent_runs += 1
-                terminal_ui.ui.push_agent_status(
-                    gate_agent_id,
-                    "Gate Agent",
-                    iteration=gate_agent_runs,
-                    status="failed",
-                    parent_agent_id=base_agent_id,
-                    work_item_id=item.id,
-                    work_item_title=item.title,
-                )
+                terminal_ui.ui.push_agent_status(gate_agent_id, "Gate Agent",
+                    iteration=gate_agent_runs, status="failed",
+                    parent_agent_id=base_agent_id, work_item_id=item.id, work_item_title=item.title)
                 raise
             gate_agent_runs += 1
-            terminal_ui.ui.push_agent_status(
-                gate_agent_id,
-                "Gate Agent",
-                iteration=gate_agent_runs,
-                status="success" if gate_success else "failed",
-                parent_agent_id=base_agent_id,
-                work_item_id=item.id,
-                work_item_title=item.title,
-            )
+            terminal_ui.ui.push_agent_status(gate_agent_id, "Gate Agent",
+                iteration=gate_agent_runs, status="success" if gate_success else "failed",
+                parent_agent_id=base_agent_id, work_item_id=item.id, work_item_title=item.title)
 
             if gate_success:
                 print("\nΓ£à Gate Agent signed off!")
@@ -319,11 +284,21 @@ def process_work_item(
 
             item_duration = time.time() - start_time
             gate_passed = gate_success if gate_agent_runs > 0 else None
-            item_api_duration = item_stats.api_duration if item_stats else None
+
+            # Calculate cost and populate per-item stats
+            input_tokens = item_stats.input_tokens if item_stats else 0
+            output_tokens = item_stats.output_tokens if item_stats else 0
+            cost = calculate_cost(selected_model, input_tokens, output_tokens)
+
             model_completion = ModelCompletionRecord(
-                item_id=item.id, model=selected_model,
-                duration_seconds=item_duration, gate_passed=gate_passed,
-                api_duration_seconds=item_api_duration,
+                item_id=item.id,
+                model=selected_model,
+                duration_seconds=item_duration,
+                gate_passed=gate_passed,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                agent_turns=request_count,
+                cost=cost,
             ) if success else None
 
             return WorkItemResult(success=success, request_count=request_count, stats=item_stats,
@@ -338,11 +313,24 @@ def process_work_item(
             terminal_ui.ui.set_current_agent(None)
 
             item_duration = time.time() - start_time
-            fail_api_duration = accumulated_stats.api_duration if accumulated_stats.api_duration > 0 else None
-            model_completion = ModelCompletionRecord(item_id=item.id, model=selected_model,
-                duration_seconds=item_duration, gate_passed=False, api_duration_seconds=fail_api_duration)
+
+            # Calculate cost for failed items (if stats available)
+            input_tokens = accumulated_stats.input_tokens if accumulated_stats else 0
+            output_tokens = accumulated_stats.output_tokens if accumulated_stats else 0
+            cost = calculate_cost(selected_model, input_tokens, output_tokens)
+
+            model_completion = ModelCompletionRecord(
+                item_id=item.id,
+                model=selected_model,
+                duration_seconds=item_duration,
+                gate_passed=False,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                agent_turns=request_count,
+                cost=cost,
+            )
             return _fail_result(request_count=request_count, cleanup_agent_runs=cleanup_agent_runs,
-                                gate_agent_runs=gate_agent_runs, model_completion=model_completion)
+                                gate_agent_runs=gate_agent_runs, model_completion=model_completion, stats=accumulated_stats)
 
     finally:
         # Best-effort worktree cleanup to prevent resource leaks on unhandled exceptions

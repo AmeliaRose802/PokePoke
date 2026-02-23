@@ -7,7 +7,6 @@ import type {
 } from "../types";
 import {
   buildCompletionTimeSeries,
-  buildItemTypeBreakdown,
   formatDurationShort,
   formatElapsed,
   formatPercent,
@@ -18,9 +17,9 @@ import {
   getNetDelta,
   inferCurrentModel,
 } from "../utils/stats";
+import { CompletedItemCard } from "./CompletedItemCard";
 import { CompletionTimeChart } from "./CompletionTimeChart";
 import { ModelTable } from "./ModelTable";
-import { TrendChart, type TrendPoint } from "./TrendChart";
 
 interface StatsPageProps {
   stats: SessionStats | null;
@@ -33,7 +32,8 @@ interface StatsPageProps {
   onClose: () => void;
 }
 
-type SortField = "model" | "runs" | "success" | "duration" | "api";
+type SortField = "model" | "runs" | "success" | "duration";
+interface TrendPoint { label: string; value: number; }
 interface AgentSegment { label: string; value: number; color: string; }
 interface AgentActivity { total: number; segments: AgentSegment[]; }
 interface NormalizedAgentSegment extends AgentSegment { start: number; width: number; }
@@ -82,7 +82,6 @@ export function StatsPage({
       avgDuration: summary.average_duration ?? 0,
       medianDuration: summary.median_duration ?? summary.average_duration ?? 0,
       stddevDuration: summary.stddev_duration ?? 0,
-      avgApiSeconds: summary.average_api_seconds ?? 0,
     }));
 
     const sorted = [...rows].sort((a, b) => {
@@ -97,9 +96,6 @@ export function StatsPage({
         case "duration":
           comparison = a.medianDuration - b.medianDuration;
           break;
-        case "api":
-          comparison = a.avgApiSeconds - b.avgApiSeconds;
-          break;
         default:
           comparison = a.model.localeCompare(b.model);
       }
@@ -112,22 +108,6 @@ export function StatsPage({
   const completionSeries = useMemo(() => buildCompletionSeries(modelHistory), [modelHistory]);
   const successSeries = useMemo(() => buildSuccessRateSeries(modelHistory), [modelHistory]);
   const completionTimeSeries = useMemo(() => buildCompletionTimeSeries(modelHistory), [modelHistory]);
-
-  const itemTypeBreakdown = useMemo(
-    () => buildItemTypeBreakdown(completedItems, modelHistory),
-    [completedItems, modelHistory]
-  );
-  const itemTypeTotal = itemTypeBreakdown.reduce((sum, t) => sum + t.count, 0);
-  const normalizedItemTypes = useMemo(() => {
-    if (!itemTypeTotal) return [];
-    let cursor = 0;
-    return itemTypeBreakdown.map((entry) => {
-      const width = (entry.count / itemTypeTotal) * 100;
-      const result = { ...entry, start: cursor, width };
-      cursor += width;
-      return result;
-    });
-  }, [itemTypeBreakdown, itemTypeTotal]);
 
   const handleSort = (field: SortField) => {
     if (field === sortField) {
@@ -206,54 +186,11 @@ export function StatsPage({
 
           <section>
             <div className="stats-panel-card">
-              <div className="stats-panel-card-header">
-                <h3>Item type breakdown</h3>
-                <span className="stats-panel-subtitle">Distribution by beads issue type</span>
-              </div>
-              {normalizedItemTypes.length > 0 ? (
-                <>
-                  <div className="agent-activity-bar">
-                    <svg viewBox="0 0 100 10" preserveAspectRatio="none" role="img" aria-label="Item type distribution">
-                      {normalizedItemTypes.map((segment) => (
-                        <rect
-                          key={segment.type}
-                          x={segment.start}
-                          y={0}
-                          width={segment.width}
-                          height={10}
-                          fill={segment.color}
-                        >
-                          <title>{`${segment.type}: ${segment.count} (${segment.width.toFixed(1)}%)`}</title>
-                        </rect>
-                      ))}
-                    </svg>
-                  </div>
-                  <div className="agent-activity-legend">
-                    {normalizedItemTypes.map((segment) => (
-                      <span key={segment.type} className="agent-activity-pill">
-                        <span className="agent-legend-dot" aria-hidden="true">
-                          <svg viewBox="0 0 8 8" preserveAspectRatio="none">
-                            <circle cx="4" cy="4" r="4" fill={segment.color} />
-                          </svg>
-                        </span>
-                        {segment.type}: {segment.count}
-                      </span>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <p className="stats-empty">No items with type data yet.</p>
-              )}
-            </div>
-          </section>
-
-          <section>
-            <div className="stats-panel-card">
               <h3>Completed this session <span className="stats-panel-subtitle">Gate-passed and merged</span></h3>
               {completedItems.length > 0 ? (
                 <ul className="completed-items-list">
                   {completedItems.map((ci) => (
-                    <li key={ci.id}><strong>{ci.id}</strong>{ci.title ? ` — ${ci.title}` : ""}</li>
+                    <CompletedItemCard key={ci.id} item={ci} modelHistory={modelHistory} />
                   ))}
                 </ul>
               ) : <p className="stats-empty">No completed items yet.</p>}
@@ -473,6 +410,53 @@ function aggregateHistory(history: ModelHistoryEntry[]) {
     successCount: map.get(date)?.successCount ?? 0,
     decidedCount: map.get(date)?.decidedCount ?? 0,
   }));
+}
+
+function TrendChart({ title, data, color, valueFormatter, emptyLabel }: { title: string; data: TrendPoint[]; color: string; valueFormatter?: (value: number) => string; emptyLabel: string; }) {
+  if (!data.length) {
+    return (
+      <div className="stats-panel-card trend-card">
+        <div className="stats-panel-card-header">
+          <h3>{title}</h3>
+        </div>
+        <p className="stats-empty">{emptyLabel}</p>
+      </div>
+    );
+  }
+
+  const maxValue = Math.max(...data.map((d) => d.value), 1);
+  const points = data.map((point, index) => {
+    const x = data.length === 1 ? 50 : (index / (data.length - 1)) * 100;
+    const normalized = maxValue === 0 ? 0 : (point.value / maxValue) * 100;
+    const y = 100 - normalized;
+    return `${x},${y}`;
+  });
+
+  return (
+    <div className="stats-panel-card trend-card">
+      <div className="stats-panel-card-header">
+        <h3>{title}</h3>
+      </div>
+      <div className="trend-chart">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+          <polyline
+            fill="none"
+            stroke={color}
+            strokeWidth="2"
+            points={points.join(" ")}
+          />
+        </svg>
+        <ul className="trend-chart-labels">
+          {data.map((point) => (
+            <li key={point.label}>
+              <span>{point.label}</span>
+              <strong>{valueFormatter ? valueFormatter(point.value) : point.value}</strong>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
 }
 
 const gateStatusText = (v: boolean | null) =>

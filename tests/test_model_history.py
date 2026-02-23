@@ -1,7 +1,7 @@
 """Tests for per-model work item completion history logging."""
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 
 from pokepoke.types import AgentStats, BeadsWorkItem, ModelCompletionRecord
@@ -54,7 +54,7 @@ def _make_stats(**overrides) -> AgentStats:
 
 class TestBuildModelHistoryRecord:
     def test_includes_core_fields(self) -> None:
-        ts = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        ts = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
         item = _make_item()
         completion = _make_completion()
         stats = _make_stats()

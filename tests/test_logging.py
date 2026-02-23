@@ -39,7 +39,7 @@ def test_run_logger_orchestrator_logging():
         logger.log_orchestrator("Test error", level="ERROR")
 
         # Read the log file
-        with open(logger.orchestrator_log_path, 'r', encoding='utf-8') as f:
+        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
             content = f.read()
 
         # Check that messages are present
@@ -74,7 +74,7 @@ def test_run_logger_item_logging():
         assert item_log_path.exists()
 
         # Read the log file
-        with open(item_log_path, 'r', encoding='utf-8') as f:
+        with open(item_log_path, encoding='utf-8') as f:
             content = f.read()
 
         # Check that content is present
@@ -95,7 +95,7 @@ def test_run_logger_finalize():
         logger.finalize(items_completed=3, total_requests=15, elapsed=120.5)
 
         # Read the log file
-        with open(logger.orchestrator_log_path, 'r', encoding='utf-8') as f:
+        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
             content = f.read()
 
         # Check that summary is present
@@ -115,7 +115,7 @@ def test_run_logger_maintenance_logging():
         logger.log_maintenance("janitor", "Janitor Agent completed successfully")
 
         # Read the log file
-        with open(logger.orchestrator_log_path, 'r', encoding='utf-8') as f:
+        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
             content = f.read()
 
         # Check that maintenance logs are present
@@ -145,7 +145,7 @@ def test_start_maintenance_log_creates_log_file():
         assert maint_logger.log_path == expected_path
 
         # Header should contain agent name
-        with open(expected_path, 'r', encoding='utf-8') as f:
+        with open(expected_path, encoding='utf-8') as f:
             content = f.read()
         assert "Janitor Maintenance Agent" in content
 
@@ -161,7 +161,7 @@ def test_maintenance_log_captures_output():
         maint_logger.log_error("Rate limit hit")
         maint_logger.log_summary(success=True, request_count=2)
 
-        with open(maint_logger.log_path, 'r', encoding='utf-8') as f:
+        with open(maint_logger.log_path, encoding='utf-8') as f:
             content = f.read()
 
         assert "Analyzing codebase..." in content
@@ -204,7 +204,7 @@ def test_item_logger_sanitizes_agent_name_in_filename():
         assert item_logger.log_path == expected_path
         assert expected_path.exists()
 
-        with open(expected_path, 'r', encoding='utf-8') as f:
+        with open(expected_path, encoding='utf-8') as f:
             content = f.read()
 
         assert f"Agent: {agent_name}" in content
@@ -234,13 +234,13 @@ def test_multiple_item_logs():
         assert (logger.item_logs_dir / "item-2_agent_two.log").exists()
 
         # Read first item log
-        with open(logger.item_logs_dir / "item-1_agent_one.log", 'r', encoding='utf-8') as f:
+        with open(logger.item_logs_dir / "item-1_agent_one.log", encoding='utf-8') as f:
             content1 = f.read()
         assert "First item output" in content1
         assert "SUCCESS" in content1
 
         # Read second item log
-        with open(logger.item_logs_dir / "item-2_agent_two.log", 'r', encoding='utf-8') as f:
+        with open(logger.item_logs_dir / "item-2_agent_two.log", encoding='utf-8') as f:
             content2 = f.read()
         assert "Second item output" in content2
         assert "FAILURE" in content2
@@ -255,7 +255,7 @@ def test_item_logger_log_copilot_output():
         item_logger.log_copilot_output("Hello ")
         item_logger.log_copilot_output("world!")
 
-        with open(item_logger.log_path, 'r', encoding='utf-8') as f:
+        with open(item_logger.log_path, encoding='utf-8') as f:
             content = f.read()
 
         assert "Hello world!" in content
@@ -277,7 +277,7 @@ def test_item_logger_log_tool_call():
             result="Compilation error", success=False
         )
 
-        with open(item_logger.log_path, 'r', encoding='utf-8') as f:
+        with open(item_logger.log_path, encoding='utf-8') as f:
             content = f.read()
 
         assert "[TOOL]" in content
@@ -297,7 +297,7 @@ def test_item_logger_log_error():
 
         item_logger.log_error("Something went wrong")
 
-        with open(item_logger.log_path, 'r', encoding='utf-8') as f:
+        with open(item_logger.log_path, encoding='utf-8') as f:
             content = f.read()
 
         assert "[ERROR]" in content
@@ -323,7 +323,7 @@ def test_item_logger_full_agent_session():
         # Summary
         item_logger.log_summary(success=True, request_count=3)
 
-        with open(item_logger.log_path, 'r', encoding='utf-8') as f:
+        with open(item_logger.log_path, encoding='utf-8') as f:
             content = f.read()
 
         assert "I will fix the bug." in content
