@@ -310,13 +310,12 @@ export function AgentsPanel({
       parent?: AgentInfo
     ): ReactElement[] => {
       const nodes = [renderAgentCard(agent, depth, parent)];
-      const children =
-        sessionChildrenByParent.get(cardIdForAgent(agent)) ??
-        sessionChildrenByParent.get(agent.agent_id) ??
-        [];
-      children.forEach((child) => {
-        nodes.push(...renderSessionAgentTree(child, depth + 1, agent));
-      });
+      // Sort children newest-first, then render recursively
+      [...(sessionChildrenByParent.get(cardIdForAgent(agent)) ?? sessionChildrenByParent.get(agent.agent_id) ?? [])]
+        .sort((a, b) => (b.started_at ?? 0) - (a.started_at ?? 0))
+        .forEach((child) => {
+          nodes.push(...renderSessionAgentTree(child, depth + 1, agent));
+        });
       return nodes;
     };
 
