@@ -1,7 +1,7 @@
 import { describe, expect,it } from 'vitest';
 
-import type { ModelPerformanceSummary, SessionStats } from '../types';
-import { formatDurationWithSpread, getCompletedItems, getDoneCount, inferCurrentModel } from './stats';
+import type { ModelHistoryEntry, ModelPerformanceSummary, SessionStats } from '../types';
+import { aggregateHistory, buildCompletionSeries, buildSuccessRateSeries, formatDurationWithSpread, getCompletedItems, getDoneCount, inferCurrentModel } from './stats';
 
 describe('stats helpers', () => {
   describe('formatDurationWithSpread', () => {
@@ -144,6 +144,121 @@ describe('stats helpers', () => {
         gatePassed: true,
         successRate: 0.9,
       });
+    });
+  });
+
+  function makeEntry(overrides: Partial<ModelHistoryEntry> = {}): ModelHistoryEntry {
+    return {
+      item_id: 'test-1',
+      model: 'test-model',
+      duration_seconds: 100,
+      gate_passed: null,
+      input_tokens: 0,
+      output_tokens: 0,
+      agent_turns: 1,
+      cost: 0,
+      retry_attempts: 0,
+      api_duration: null,
+      lines_added: null,
+      lines_removed: null,
+      timestamp: '2026-02-20T10:00:00+00:00',
+      ...overrides,
+    };
+  }
+
+  describe('aggregateHistory', () => {
+    it('counts entries with success=true as completed', () => {
+      const history = [
+        makeEntry({ timestamp: '2026-02-20T10:00:00+00:00', success: true, gate_passed: true }),
+        makeEntry({ timestamp: '2026-02-20T11:00:00+00:00', success: true, gate_passed: true }),
+        makeEntry({ timestamp: '2026-02-20T12:00:00+00:00', success: false, gate_passed: false }),
+      ];
+      const result = aggregateHistory(history);
+      expect(result).toHaveLength(1);
+      expect(result[0].successCount).toBe(2);
+      expect(result[0].decidedCount).toBe(3);
+    });
+
+    it('uses success field even when gate_passed is null', () => {
+      const history = [
+        makeEntry({ timestamp: '2026-02-20T10:00:00+00:00', success: true, gate_passed: null }),
+        makeEntry({ timestamp: '2026-02-20T11:00:00+00:00', success: true, gate_passed: null }),
+      ];
+      const result = aggregateHistory(history);
+      expect(result[0].successCount).toBe(2);
+      expect(result[0].decidedCount).toBe(2);
+    });
+
+    it('falls back to gate_passed when success is undefined', () => {
+      const history = [
+        makeEntry({ timestamp: '2026-02-20T10:00:00+00:00', gate_passed: true }),
+        makeEntry({ timestamp: '2026-02-20T11:00:00+00:00', gate_passed: false }),
+      ];
+      const result = aggregateHistory(history);
+      expect(result[0].successCount).toBe(1);
+      expect(result[0].decidedCount).toBe(2);
+    });
+
+    it('groups by date across multiple days', () => {
+      const history = [
+        makeEntry({ timestamp: '2026-02-19T10:00:00+00:00', success: true }),
+        makeEntry({ timestamp: '2026-02-20T10:00:00+00:00', success: true }),
+        makeEntry({ timestamp: '2026-02-20T11:00:00+00:00', success: false }),
+      ];
+      const result = aggregateHistory(history);
+      expect(result).toHaveLength(2);
+      expect(result[0].dateLabel).toBe('2026-02-19');
+      expect(result[0].successCount).toBe(1);
+      expect(result[1].dateLabel).toBe('2026-02-20');
+      expect(result[1].successCount).toBe(1);
+      expect(result[1].decidedCount).toBe(2);
+    });
+
+    it('returns empty array for empty history', () => {
+      expect(aggregateHistory([])).toHaveLength(0);
+    });
+  });
+
+  describe('buildCompletionSeries', () => {
+    it('returns success counts per day', () => {
+      const history = [
+        makeEntry({ timestamp: '2026-02-20T10:00:00+00:00', success: true }),
+        makeEntry({ timestamp: '2026-02-20T11:00:00+00:00', success: true }),
+        makeEntry({ timestamp: '2026-02-21T10:00:00+00:00', success: false }),
+      ];
+      const series = buildCompletionSeries(history);
+      expect(series).toHaveLength(2);
+      expect(series[0]).toEqual({ label: '2026-02-20', value: 2 });
+      expect(series[1]).toEqual({ label: '2026-02-21', value: 0 });
+    });
+
+    it('returns empty array for empty history', () => {
+      expect(buildCompletionSeries([])).toHaveLength(0);
+    });
+  });
+
+  describe('buildSuccessRateSeries', () => {
+    it('calculates success percentage per day', () => {
+      const history = [
+        makeEntry({ timestamp: '2026-02-20T10:00:00+00:00', success: true }),
+        makeEntry({ timestamp: '2026-02-20T11:00:00+00:00', success: false }),
+      ];
+      const series = buildSuccessRateSeries(history);
+      expect(series).toHaveLength(1);
+      expect(series[0].value).toBe(50);
+    });
+
+    it('returns 0% when no decided items exist', () => {
+      const history = [
+        makeEntry({ timestamp: '2026-02-20T10:00:00+00:00', gate_passed: null }),
+      ];
+      const series = buildSuccessRateSeries(history);
+      expect(series).toHaveLength(1);
+      expect(series[0].value).toBe(0);
+    });
+
+    it('returns empty array for empty history', () => {
+      expect(buildSuccessRateSeries([])).toHaveLength(0);
     });
   });
 });
