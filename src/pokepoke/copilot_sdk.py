@@ -13,6 +13,7 @@ from . import terminal_ui
 from .shutdown import is_shutting_down
 from .process_utils import wait_for_process_cleanup
 from .sdk_event_handler import create_event_handler
+from .model_pricing import get_context_window
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +155,19 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         done = asyncio.Event()
         output_lines: list[str] = []
         errors: list[str] = []
-        handle_event, stats = create_event_handler(done, output_lines, errors, item_logger, idle_timeout)
+
+        # Build a token-usage callback that pushes live stats to the agent card.
+        context_limit = get_context_window(current_model)
+        def _on_token_usage(input_tokens: int, output_tokens: int) -> None:
+            from .desktop_ui import _thread_output
+            agent_id: str | None = getattr(_thread_output, "agent_id", None)
+            if agent_id:
+                terminal_ui.ui.push_agent_tokens(agent_id, input_tokens, output_tokens, context_limit)
+
+        handle_event, stats = create_event_handler(
+            done, output_lines, errors, item_logger, idle_timeout,
+            on_token_usage=_on_token_usage,
+        )
         stats['current_model'] = current_model
 
         session.on(handle_event)

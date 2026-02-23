@@ -91,6 +91,22 @@ class AgentRegistry:
                 "last_log_at": existing.get("last_log_at") if existing else None,
             }
 
+    def update_token_usage(
+        self,
+        agent_id: str,
+        input_tokens: int,
+        output_tokens: int,
+        context_limit: int,
+    ) -> None:
+        """Update cumulative token usage for an agent."""
+        with self._lock:
+            agent = self._agents.get(agent_id)
+            if agent is None:
+                return
+            agent["input_tokens"] = input_tokens
+            agent["output_tokens"] = output_tokens
+            agent["context_limit"] = context_limit
+
     def append_log(self, agent_id: str, line: str) -> None:
         with self._lock:
             agent = self._agents.get(agent_id)
@@ -178,5 +194,8 @@ class AgentRegistry:
             "last_updated": agent.get("last_updated"),
             "last_log_at": agent.get("last_log_at"),
             "paused": paused,
+            "input_tokens": agent.get("input_tokens", 0),
+            "output_tokens": agent.get("output_tokens", 0),
+            "context_limit": agent.get("context_limit", 0),
         }
 

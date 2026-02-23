@@ -95,3 +95,24 @@ class TestModelPricingData:
         ]
         for model in expected_models:
             assert model in MODEL_PRICING, f"Model {model} should be in pricing table"
+
+
+class TestGetContextWindow:
+    """Tests for context window size lookups."""
+
+    def test_known_model(self):
+        from pokepoke.model_pricing import get_context_window
+        assert get_context_window("claude-sonnet-4.6") == 200_000
+
+    def test_gpt_model(self):
+        from pokepoke.model_pricing import get_context_window
+        assert get_context_window("gpt-5.1") == 128_000
+
+    def test_unknown_model_returns_default(self):
+        from pokepoke.model_pricing import get_context_window, DEFAULT_CONTEXT_WINDOW
+        assert get_context_window("unknown-model-xyz") == DEFAULT_CONTEXT_WINDOW
+
+    def test_all_priced_models_have_context_window(self):
+        from pokepoke.model_pricing import MODEL_CONTEXT_WINDOWS
+        for model in MODEL_PRICING:
+            assert model in MODEL_CONTEXT_WINDOWS, f"Model {model} should have a context window size"

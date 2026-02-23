@@ -315,3 +315,27 @@ def test_delta_tracking_resets_between_turns() -> None:
     finally:
         asyncio.set_event_loop(None)
         loop.close()
+
+
+def test_on_token_usage_callback_invoked_on_usage_event() -> None:
+    """on_token_usage callback should be called with cumulative totals."""
+    done = asyncio.Event()
+    output_lines: list[str] = []
+    errors: list[str] = []
+    usage_calls: list[tuple[int, int]] = []
+
+    def on_usage(input_tokens: int, output_tokens: int) -> None:
+        usage_calls.append((input_tokens, output_tokens))
+
+    handler, stats = create_event_handler(
+        done, output_lines, errors, on_token_usage=on_usage,
+    )
+
+    handler(_make_event("assistant.usage", input_tokens=100, output_tokens=50,
+                        cache_read_tokens=0, cache_write_tokens=0))
+    handler(_make_event("assistant.usage", input_tokens=200, output_tokens=100,
+                        cache_read_tokens=0, cache_write_tokens=0))
+
+    assert usage_calls == [(100, 50), (300, 150)]
+    assert stats['total_input_tokens'] == 300
+    assert stats['total_output_tokens'] == 150

@@ -63,6 +63,45 @@ def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     return input_cost + output_cost
 
 
+# Context window sizes (total tokens) per model
+MODEL_CONTEXT_WINDOWS: dict[str, int] = {
+    # Claude models
+    "claude-opus-4.6": 200_000,
+    "claude-opus-4.5": 200_000,
+    "claude-sonnet-4.6": 200_000,
+    "claude-sonnet-4.5": 200_000,
+    "claude-sonnet-4": 200_000,
+    "claude-haiku-4.5": 200_000,
+
+    # GPT models
+    "gpt-5.3-codex": 256_000,
+    "gpt-5.2-codex": 256_000,
+    "gpt-5.2": 128_000,
+    "gpt-5.1-codex-max": 256_000,
+    "gpt-5.1-codex": 256_000,
+    "gpt-5.1": 128_000,
+    "gpt-5.1-codex-mini": 128_000,
+    "gpt-5-mini": 128_000,
+    "gpt-5-codex": 256_000,
+    "gpt-4.1": 128_000,
+
+    # Gemini models
+    "gemini-3-pro-preview": 1_000_000,
+    "gemini-3-pro": 1_000_000,
+}
+
+DEFAULT_CONTEXT_WINDOW = 128_000
+
+
+def get_context_window(model: str) -> int:
+    """Get the context window size for a model.
+
+    Returns:
+        Context window size in tokens (defaults to 128K for unknown models)
+    """
+    return MODEL_CONTEXT_WINDOWS.get(model, DEFAULT_CONTEXT_WINDOW)
+
+
 def get_model_pricing(model: str) -> tuple[float, float] | None:
     """Get the pricing for a specific model.
 

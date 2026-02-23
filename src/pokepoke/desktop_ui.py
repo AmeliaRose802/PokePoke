@@ -364,18 +364,12 @@ class DesktopUI:
     def log_agent(self, message: str, style: str | None = None) -> None:
         self._api.push_log(message, "agent", style)
 
-    def push_agent_status(
-        self,
-        agent_id: str,
-        name: str,
-        iteration: int = 1,
-        status: str = "running",
-        model: str | None = None,
-        parent_agent_id: str | None = None,
-        work_item_id: str | None = None,
-        work_item_title: str | None = None,
-        modified_files: list[str] | None = None,
-    ) -> None:
+    def push_agent_status(self, agent_id: str, name: str, iteration: int = 1,
+                          status: str = "running", model: str | None = None,
+                          parent_agent_id: str | None = None,
+                          work_item_id: str | None = None,
+                          work_item_title: str | None = None,
+                          modified_files: list[str] | None = None) -> None:
         """Register or update a running agent card."""
         self._api.push_agent_status(
             agent_id, name, iteration, status, model, parent_agent_id,
@@ -384,6 +378,11 @@ class DesktopUI:
 
     def push_agent_log(self, agent_id: str, line: str) -> None:
         self._api.push_agent_log(agent_id, line)
+
+    def push_agent_tokens(self, agent_id: str, input_tokens: int,
+                          output_tokens: int, context_limit: int) -> None:
+        """Update live token usage for an agent card."""
+        self._api.push_agent_tokens(agent_id, input_tokens, output_tokens, context_limit)
 
     def remove_agent(self, agent_id: str) -> None:
         self._api.remove_agent(agent_id)
