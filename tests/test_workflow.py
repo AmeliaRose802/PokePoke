@@ -1761,3 +1761,153 @@ class TestGateAgentDisabled:
         assert result.gate_agent_runs == 0
         mock_gate_agent.assert_not_called()
 
+
+class TestUnassignOnFailure:
+    """Tests that work items are unassigned when processing fails after assignment."""
+
+    @patch('pokepoke.workflow.unassign_item')
+    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
+    @patch('pokepoke.workflow.run_gate_agent')
+    @patch('pokepoke.workflow.run_beta_tester')
+    @patch('pokepoke.workflow.finalize_work_item')
+    @patch('pokepoke.workflow._run_cleanup_with_timeout')
+    @patch('pokepoke.workflow.invoke_copilot')
+    @patch('pokepoke.workflow.has_commits_ahead')
+    @patch('pokepoke.workflow.has_uncommitted_changes')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('time.time')
+    def test_finalization_failure_triggers_unassign(
+        self,
+        mock_time: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
+        mock_uncommitted: Mock,
+        mock_commits_ahead: Mock,
+        mock_invoke: Mock,
+        mock_cleanup_timeout: Mock,
+        mock_finalize: Mock,
+        mock_beta: Mock,
+        mock_gate_agent: Mock,
+        mock_handoff: Mock,
+        mock_cleanup_wt: Mock,
+        mock_unassign: Mock,
+    ) -> None:
+        """When finalize_work_item returns False, item must be unassigned."""
+        item = BeadsWorkItem(
+            id="task-finalize-fail",
+            title="Finalize Fail Task",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task",
+        )
+        mock_time.return_value = 0.0
+        mock_assign.return_value = True
+        mock_setup.return_value = Path("/fake/worktree")
+        mock_uncommitted.return_value = False
+        mock_commits_ahead.return_value = 1
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="task-finalize-fail", success=True, output="Done", attempt_count=1
+        )
+        mock_cleanup_timeout.return_value = (True, 0)
+        mock_gate_agent.return_value = (True, "OK", None)
+        mock_finalize.return_value = False  # Finalization fails
+
+        result = process_work_item(item, interactive=False)
+
+        assert result.success is False
+        mock_unassign.assert_called_once_with(item.id)
+
+    @patch('pokepoke.workflow.unassign_item')
+    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('pokepoke.workflow.invoke_copilot')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('time.time')
+    def test_work_agent_failure_triggers_unassign(
+        self,
+        mock_time: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
+        mock_invoke: Mock,
+        mock_cleanup_wt: Mock,
+        mock_unassign: Mock,
+    ) -> None:
+        """When work agent fails, item must be unassigned."""
+        item = BeadsWorkItem(
+            id="task-agent-fail",
+            title="Agent Fail Task",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task",
+        )
+        mock_time.return_value = 0.0
+        mock_assign.return_value = True
+        mock_setup.return_value = Path("/fake/worktree")
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="task-agent-fail", success=False, error="Agent crashed", attempt_count=1
+        )
+
+        result = process_work_item(item, interactive=False)
+
+        assert result.success is False
+        mock_unassign.assert_called_once_with(item.id)
+
+    @patch('pokepoke.workflow.unassign_item')
+    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
+    @patch('pokepoke.workflow.run_gate_agent')
+    @patch('pokepoke.workflow.run_beta_tester')
+    @patch('pokepoke.workflow.finalize_work_item')
+    @patch('pokepoke.workflow._run_cleanup_with_timeout')
+    @patch('pokepoke.workflow.invoke_copilot')
+    @patch('pokepoke.workflow.has_commits_ahead')
+    @patch('pokepoke.workflow.has_uncommitted_changes')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('time.time')
+    def test_successful_finalization_does_not_unassign(
+        self,
+        mock_time: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
+        mock_uncommitted: Mock,
+        mock_commits_ahead: Mock,
+        mock_invoke: Mock,
+        mock_cleanup_timeout: Mock,
+        mock_finalize: Mock,
+        mock_beta: Mock,
+        mock_gate_agent: Mock,
+        mock_handoff: Mock,
+        mock_cleanup_wt: Mock,
+        mock_unassign: Mock,
+    ) -> None:
+        """When finalization succeeds, item must NOT be unassigned."""
+        item = BeadsWorkItem(
+            id="task-success",
+            title="Success Task",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task",
+        )
+        mock_time.return_value = 0.0
+        mock_assign.return_value = True
+        mock_setup.return_value = Path("/fake/worktree")
+        mock_uncommitted.return_value = False
+        mock_commits_ahead.return_value = 1
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="task-success", success=True, output="Done", attempt_count=1
+        )
+        mock_cleanup_timeout.return_value = (True, 0)
+        mock_gate_agent.return_value = (True, "OK", None)
+        mock_finalize.return_value = True  # Finalization succeeds
+
+        result = process_work_item(item, interactive=False)
+
+        assert result.success is True
+        mock_unassign.assert_not_called()
+
