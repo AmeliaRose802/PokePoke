@@ -71,8 +71,13 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
   const [detailError, setDetailError] = useState<string | null>(null);
   const isGate = isGateAgent(agent);
   const linkedParent =
-    agent.parent_agent_id && isGate
-      ? agents.find((candidate) => candidate.agent_id === agent.parent_agent_id) ?? null
+    isGate
+      ? agents.find((candidate) => {
+          if (agent.parent_card_id) {
+            return (candidate.card_id ?? candidate.agent_id) === agent.parent_card_id;
+          }
+          return candidate.agent_id === agent.parent_agent_id;
+        }) ?? null
       : null;
   const parentLabel = linkedParent
     ? getAgentPrimaryLabel(linkedParent)
@@ -84,7 +89,7 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
   const agentToUse = detailedAgent || agent;
   const agentType = getAgentType(agentToUse);
   const agentIconPath = getAgentAvatar(agentToUse);
-  const fallbackAvatar = getAvatar(agentToUse.agent_id);
+  const fallbackAvatar = getAvatar(agentToUse.base_agent_id ?? agentToUse.agent_id);
   const iconAlt = `${agentType ?? "agent"} icon`;
   const logLines = agentToUse.log_lines && agentToUse.log_lines.length > 0
     ? agentToUse.log_lines
@@ -103,7 +108,8 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
       setIsLoadingDetail(true);
       setDetailError(null);
       try {
-        const detailed = await getAgentDetail(agent.agent_id);
+        const detailKey = agent.card_id ?? agent.agent_id;
+        const detailed = await getAgentDetail(detailKey);
         setDetailedAgent(detailed);
       } catch (error) {
         setDetailError(error instanceof Error ? error.message : 'Failed to load detailed logs');
@@ -114,7 +120,7 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
     }
     
     fetchDetailedAgent();
-  }, [agent.agent_id, getAgentDetail]);
+  }, [agent.card_id, agent.agent_id, getAgentDetail]);
 
   const handleScroll = () => {
     const el = containerRef.current;
@@ -184,7 +190,7 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
         ) : null}
         <div className="agent-log-panel-meta">
           <span className="agent-meta-item">
-            <strong>ID:</strong> {agent.agent_id}
+            <strong>ID:</strong> {agent.base_agent_id ?? agent.agent_id}
           </span>
           <span className="agent-meta-item">
             <strong>Started:</strong> {formatTimestamp(agent.started_at)} ({formatElapsedTime(agent.started_at)})

@@ -18,6 +18,7 @@ class AgentRegistry:
     ) -> None:
         self._lock = lock
         self._agents: dict[str, dict[str, Any]] = {}
+        self._agent_history: dict[str, list[dict[str, Any]]] = {}
         self._preview_limit = preview_limit
         self._detail_limit = detail_limit
         self._paused_agents: set[str] = set()
@@ -43,10 +44,24 @@ class AgentRegistry:
         now = time.time()
         with self._lock:
             existing = self._agents.get(agent_id)
+            is_retry_iteration = (
+                existing is not None
+                and iteration > existing.get("iteration", 1)
+            )
             recent_logs: list[str] = list(existing["recent_logs"]) if existing else []
             log_lines: list[str] = (
                 list(existing.get("log_lines", recent_logs)) if existing else []
             )
+            if is_retry_iteration:
+                # Snapshot the previous attempt so it remains visible as its own card.
+                assert existing is not None  # guaranteed by is_retry_iteration check
+                self._archive_attempt(agent_id, existing)
+                recent_logs = []
+                log_lines = []
+                existing_started_at = now
+            else:
+                existing_started_at = existing.get("started_at", now) if existing else now
+
             current_model = model if model is not None else (existing.get("model") if existing else None)
             current_parent = (
                 parent_agent_id
@@ -73,8 +88,27 @@ class AgentRegistry:
                 if modified_files is not None
                 else (existing.get("modified_files") if existing else None)
             )
+            card_id = (
+                existing.get("card_id")
+                if existing and not is_retry_iteration
+                else self._build_card_id(agent_id, iteration)
+            )
+            parent_card_id = None
+            if current_parent:
+                parent_entry = self._agents.get(current_parent)
+                if parent_entry:
+                    parent_card_id = parent_entry.get("card_id")
+                else:
+                    # Fall back to the most recent archived attempt if the parent has already finished.
+                    history = self._agent_history.get(current_parent) or []
+                    if history:
+                        parent_card_id = history[-1].get("card_id")
+
             self._agents[agent_id] = {
                 "agent_id": agent_id,
+                 "base_agent_id": agent_id,
+                 "card_id": card_id,
+                 "parent_card_id": parent_card_id,
                 "name": name,
                 "iteration": iteration,
                 "status": status,
@@ -86,9 +120,9 @@ class AgentRegistry:
                 "modified_files": current_modified_files,
                 "recent_logs": recent_logs,
                 "log_lines": log_lines,
-                "started_at": existing.get("started_at", now) if existing else now,
+                "started_at": existing_started_at,
                 "last_updated": now,
-                "last_log_at": existing.get("last_log_at") if existing else None,
+                "last_log_at": None if is_retry_iteration else (existing.get("last_log_at") if existing else None),
             }
 
     def update_token_usage(
@@ -158,10 +192,13 @@ class AgentRegistry:
 
     def serialize_all(self) -> list[dict[str, Any]]:
         with self._lock:
-            agents = [self._copy_agent(agent, agent.get("agent_id") in self._paused_agents) for agent in self._agents.values()]
-        # Sort by started_at (creation time) for stable card ordering.
-        # Using volatile timestamps (last_updated/last_log_at) caused cards
-        # to jump around on every poll update.
+            agents = []
+            for attempts in self._agent_history.values():
+                for attempt in attempts:
+                    # Stored attempts are already sanitized copies, but copy again to avoid accidental mutation.
+                    agents.append(dict(attempt))
+            for agent in self._agents.values():
+                agents.append(self._copy_agent(agent, agent.get("agent_id") in self._paused_agents))
         agents.sort(
             key=lambda agent: agent.get("started_at") or 0.0,
             reverse=True,
@@ -172,13 +209,27 @@ class AgentRegistry:
         with self._lock:
             agent = self._agents.get(agent_id)
             if agent is None:
+                # Allow lookups by card_id for archived attempts or selected retries.
+                for live_agent in self._agents.values():
+                    if live_agent.get("card_id") == agent_id:
+                        return self._copy_agent(
+                            live_agent,
+                            live_agent.get("agent_id") in self._paused_agents,
+                        )
+                for attempts in self._agent_history.values():
+                    for attempt in attempts:
+                        if attempt.get("card_id") == agent_id or attempt.get("agent_id") == agent_id:
+                            return dict(attempt)
                 return None
             return self._copy_agent(agent, agent_id in self._paused_agents)
 
     @staticmethod
-    def _copy_agent(agent: dict[str, Any], paused: bool = False) -> dict[str, Any]:
+    def _copy_agent(agent: dict[str, Any], paused: bool = False, *, is_history: bool = False) -> dict[str, Any]:
         return {
             "agent_id": agent.get("agent_id"),
+             "base_agent_id": agent.get("base_agent_id", agent.get("agent_id")),
+            "card_id": agent.get("card_id"),
+            "parent_card_id": agent.get("parent_card_id"),
             "name": agent.get("name"),
             "iteration": agent.get("iteration", 1),
             "status": agent.get("status", "running"),
@@ -197,5 +248,23 @@ class AgentRegistry:
             "input_tokens": agent.get("input_tokens", 0),
             "output_tokens": agent.get("output_tokens", 0),
             "context_limit": agent.get("context_limit", 0),
+            "is_history_entry": is_history,
         }
+
+    @staticmethod
+    def _build_card_id(agent_id: str, iteration: int) -> str:
+        safe_iteration = iteration if iteration > 0 else 1
+        return f"{agent_id}::v{safe_iteration}"
+
+    def _archive_attempt(self, agent_id: str, attempt: dict[str, Any]) -> None:
+        """Persist a completed attempt so it remains visible after retries."""
+        snapshot = self._copy_agent(
+            attempt,
+            paused=agent_id in self._paused_agents,
+            is_history=True,
+        )
+        if snapshot.get("status") == "running":
+            snapshot["status"] = "failed"
+        history = self._agent_history.setdefault(agent_id, [])
+        history.append(snapshot)
 
