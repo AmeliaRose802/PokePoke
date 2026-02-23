@@ -215,8 +215,9 @@ class TestWatchdogThread:
     """Tests for _watchdog_thread."""
 
     @patch("pokepoke.shutdown.os._exit")
+    @patch("pokepoke.shutdown.merge_lock_active", return_value=False)
     @patch("pokepoke.shutdown.time.sleep")
-    def test_force_exits_when_still_shutting_down(self, mock_sleep, mock_exit):
+    def test_force_exits_when_still_shutting_down(self, mock_sleep, _mock_lock, mock_exit):
         from pokepoke.shutdown import _watchdog_thread
         _shutdown_event.set()
         _watchdog_thread(1.0)
@@ -231,6 +232,22 @@ class TestWatchdogThread:
         _watchdog_thread(1.0)
         mock_sleep.assert_called_once_with(1.0)
         mock_exit.assert_not_called()
+
+    @patch("pokepoke.shutdown.os._exit")
+    @patch("pokepoke.shutdown.merge_lock_active")
+    @patch("pokepoke.shutdown.time.sleep")
+    def test_waits_for_merge_lock_before_exit(self, mock_sleep, mock_lock, mock_exit):
+        from pokepoke.shutdown import _watchdog_thread
+        _shutdown_event.set()
+        # First call: lock active; subsequent call: lock released
+        mock_lock.side_effect = [True, False]
+
+        _watchdog_thread(1.0)
+
+        # First call is the initial timeout, then at least one poll while lock is active
+        assert mock_sleep.call_count >= 2
+        mock_sleep.assert_any_call(1.0)
+        mock_exit.assert_called_once_with(130)
 
 
 class TestMergeQueueShutdown:
