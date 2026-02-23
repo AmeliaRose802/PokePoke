@@ -30,6 +30,7 @@ from .beads_hierarchy import (
 from .beads_management import (
     close_item,
     select_next_hierarchical_item,
+    is_item_claimable,
     assign_and_sync_item,
     unassign_item,
     add_comment
@@ -56,6 +57,7 @@ __all__ = [
     # Management operations
     'close_item',
     'select_next_hierarchical_item',
+    'is_item_claimable',
     'assign_and_sync_item',
     'unassign_item',
     'add_comment',

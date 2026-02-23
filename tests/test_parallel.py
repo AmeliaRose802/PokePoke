@@ -278,6 +278,7 @@ class TestRunParallelLoop:
 
         assert code == 1
 
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
     @patch("pokepoke.parallel.time.sleep")
     @patch("pokepoke.parallel.terminal_ui")
     @patch("pokepoke.parallel.set_executor")
@@ -288,7 +289,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.parallel.process_work_item")
     def test_submits_and_collects_item(
         self, mock_pwi, mock_sel, mock_ready,
-        mock_repo, mock_shut, mock_set_exec, mock_ui, mock_sleep,
+        mock_repo, mock_shut, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
         """Submits an item and collects its result in single-shot mode."""
         item = _make_item("x1")
@@ -314,6 +315,7 @@ class TestRunParallelLoop:
         # record_fn should be called at least once (from collect or drain)
         assert record_fn.call_count >= 1
 
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
     @patch("pokepoke.parallel.time.sleep")
     @patch("pokepoke.parallel.terminal_ui")
     @patch("pokepoke.parallel.set_executor")
@@ -327,7 +329,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=3)
     def test_refills_all_slots_after_completions(
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
-        mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep,
+        mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
         """Regression (PokePoke-qagy): all empty slots refilled after batch completes."""
         items = [_make_item(f"r{i}") for i in range(6)]
@@ -365,6 +367,7 @@ class TestRunParallelLoop:
         for call in mock_sel.call_args_list[:2]:
             assert call.kwargs['count'] == 3
 
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
     @patch("pokepoke.parallel.time.sleep")
     @patch("pokepoke.parallel.terminal_ui")
     @patch("pokepoke.parallel.set_executor")
@@ -376,7 +379,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=2)
     def test_cli_override_uses_effective_parallel_over_config(
         self, mock_dyn_max, mock_collect, mock_sel, mock_ready,
-        mock_repo, mock_shut, mock_set_exec, mock_ui, mock_sleep,
+        mock_repo, mock_shut, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
         """Regression (PokePoke-snio): CLI --max-agents must not be capped by config."""
         mock_ready.return_value = [_make_item(f"c{i}") for i in range(10)]
@@ -394,6 +397,7 @@ class TestRunParallelLoop:
         assert mock_sel.call_count >= 1
         assert mock_sel.call_args_list[0].kwargs["count"] == 6
 
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
     @patch("pokepoke.parallel.time.sleep")
     @patch("pokepoke.parallel.terminal_ui")
     @patch("pokepoke.parallel.set_executor")
@@ -407,7 +411,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=1)
     def test_does_not_resubmit_while_future_tracked(
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
-        mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep,
+        mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
         """Regression: slot/claimed tracking must be based on futures (worker count).
 
@@ -440,6 +444,7 @@ class TestRunParallelLoop:
         # Must not submit again while the original future is still tracked.
         assert mock_sel.call_count == 1
 
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
     @patch("pokepoke.parallel.time.sleep")
     @patch("pokepoke.parallel.terminal_ui")
     @patch("pokepoke.parallel.set_executor")
@@ -450,7 +455,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=1)
     def test_submit_exception_releases_resources(
         self, mock_dyn_max, mock_sel, mock_ready, mock_repo,
-        mock_shut, mock_set_exec, mock_ui, mock_sleep,
+        mock_shut, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
         """executor.submit failures should release semaphore and active IDs."""
         item = _make_item("xfail")
@@ -600,6 +605,7 @@ class TestRunParallelLoop:
         assert code == 0
         finalize_fn.assert_called_once()
 
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
     @patch("pokepoke.parallel.time.sleep")
     @patch("pokepoke.parallel.terminal_ui")
     @patch("pokepoke.parallel.set_executor")
@@ -612,7 +618,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=2)
     def test_single_shot_drain_updates_stats(
         self, mock_dyn_max, mock_pwi, mock_sel, mock_ready, mock_repo,
-        mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep,
+        mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
         """UI stats should update after draining remaining futures in single-shot mode."""
         mock_sleep.return_value = None
@@ -653,6 +659,7 @@ class TestRunParallelLoop:
         last_stats = mock_ui.ui.update_stats.call_args_list[-1][0][0]
         assert last_stats.items_completed == 2
 
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
     @patch("pokepoke.parallel.time.sleep")
     @patch("pokepoke.parallel.terminal_ui")
     @patch("pokepoke.parallel.set_executor")
@@ -666,7 +673,7 @@ class TestRunParallelLoop:
     def test_shutdown_cleanup_updates_stats(
         self, mock_pwi, mock_sel, mock_ready, mock_repo,
         mock_shut, mock_collect, mock_stop, mock_set_exec,
-        mock_ui, mock_sleep,
+        mock_ui, mock_sleep, mock_claimable,
     ) -> None:
         """Draining during shutdown should push updated stats to the UI."""
         mock_sleep.return_value = None
