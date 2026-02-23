@@ -848,6 +848,26 @@ describe('SettingsPage', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
+  it('should display special-effect tags section', async () => {
+    render(
+      <SettingsPage
+        getConfig={mockGetConfig}
+        saveConfig={mockSaveConfig}
+        onClose={mockOnClose}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByText('🏷️ Special-Effect Tags')).toBeInTheDocument();
+    expect(screen.getByText('Human required')).toBeInTheDocument();
+    expect(screen.getByText('High conflict risk')).toBeInTheDocument();
+    expect(screen.getByText('Skip this item until a human can handle it.')).toBeInTheDocument();
+    expect(screen.getByText('Runs serially to avoid merge conflicts.')).toBeInTheDocument();
+  });
+
   it('should call onOpenPromptEditor when prompt file link clicked', async () => {
     const user = userEvent.setup();
     const mockOpenPromptEditor = vi.fn();

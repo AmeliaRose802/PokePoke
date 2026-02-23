@@ -11,6 +11,11 @@ import type { ConfigResponse, MaintenanceAgent, McpServerConfig,ModelsConfig, Pr
 import { MaintenanceAgentsSection } from "./MaintenanceAgentsSection";
 import { isAbTestingEnabled,KNOWN_MODELS } from "./settingsHelpers";
 
+const SPECIAL_EFFECT_TAGS = [
+  { id: "human-required", label: "Human required", description: "Skip this item until a human can handle it." },
+  { id: "high-conflict-risk", label: "High conflict risk", description: "Runs serially to avoid merge conflicts." },
+];
+
 interface Props {
   getConfig: () => Promise<ConfigResponse | null>;
   saveConfig: (config: ProjectConfig) => Promise<boolean>;
@@ -386,6 +391,11 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
                   onChange={(e) => { const v = Math.max(1, Math.min(8, parseInt(e.target.value, 10) || 1)); setMaxParallelAgents(v); markDirty(); }}
                 />
                 <span className="settings-hint">Controls how many work items are processed concurrently (1–8).</span>
+                {maxParallelAgents > 1 && (
+                  <span className="settings-hint settings-hint-warning">
+                    ⚠️ Parallel mode is experimental. Use with caution.
+                  </span>
+                )}
               </div>
             </div>
 
@@ -426,6 +436,25 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
               onAdd={addMaintenanceAgent}
               onOpenPromptEditor={onOpenPromptEditor}
             />
+
+            {/* Section: Special-Effect Tags */}
+            <div className="settings-section">
+              <h3 className="settings-section-title">🏷️ Special-Effect Tags</h3>
+              <p className="settings-hint">
+                These tags modify how the orchestrator handles individual beads work items. They represent global orchestrator behaviors, not per-agent settings.
+              </p>
+              <div className="special-tags-grid">
+                {SPECIAL_EFFECT_TAGS.map((tag) => (
+                  <div key={tag.id} className="special-tag-card">
+                    <div className="special-tag-header">
+                      <span className="special-tag-name">{tag.label}</span>
+                      <code className="special-tag-id">{tag.id}</code>
+                    </div>
+                    <div className="special-tag-description">{tag.description}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
 
             {/* Footer actions */}
             <div className="settings-footer">

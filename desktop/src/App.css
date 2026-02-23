@@ -361,6 +361,15 @@
   opacity: 0.6;
 }
 
+.special-tag-id {
+  font-size: 10px;
+  font-family: monospace;
+  color: var(--text-muted);
+  background: var(--bg-tertiary, var(--bg-secondary));
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
 /* ── Log Container ─────────────────────────────────────────────────────── */
 
 .main-content {
