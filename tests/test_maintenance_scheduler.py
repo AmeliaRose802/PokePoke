@@ -344,6 +344,31 @@ class TestRunAgentWithCoordination:
         run_logger.log_maintenance.assert_any_call("janitor", "Janitor Agent failed")
         assert session_stats.janitor_agent_runs == 1  # Count still incremented
 
+    @patch('pokepoke.maintenance_scheduler.set_terminal_banner')
+    @patch('pokepoke.maintenance_scheduler.terminal_ui')
+    @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
+    def test_agent_exception_does_not_propagate(self, mock_maintenance, mock_ui, mock_banner):
+        """Regression PokePoke-5arw: maintenance agent exceptions must not propagate.
+
+        Previously the except clause re-raised the exception, which crashed the
+        orchestrator with exit code 1 after all workers + maintenance finished.
+        """
+        mock_maintenance.side_effect = RuntimeError("janitor crashed")
+
+        scheduler = MaintenanceScheduler()
+        agent_cfg = MaintenanceAgentConfig(name="Janitor", prompt_file="janitor.md", frequency=2)
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        # Must NOT raise - exception is swallowed and logged
+        scheduler._run_agent_with_coordination("Janitor", agent_cfg, Mock(), session_stats, run_logger)
+
+        # Exception should be logged, agent status set to failed
+        mock_ui.ui.push_agent_status.assert_called_with(
+            "maintenance-janitor", "Janitor Agent", iteration=1, status="failed"
+        )
+        run_logger.log_maintenance.assert_any_call("janitor", "Janitor Agent raised exception")
+
 
 class TestGlobalScheduler:
     """Test global scheduler singleton."""

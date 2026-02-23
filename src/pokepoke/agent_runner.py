@@ -260,7 +260,7 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
     except Exception as e:
         logger.warning(f"Worktree cleanup agent raised exception: {e}", exc_info=True)
         terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed")
-        raise
+        return None
 
 
 def _run_worktree_agent(
