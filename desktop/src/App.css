@@ -155,9 +155,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
   flex-wrap: wrap;
-  padding: 6px 16px;
+  padding: 8px 20px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-primary);
   -webkit-app-region: drag; /* make title bar draggable */
@@ -184,10 +184,10 @@
 .app-header-controls {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 16px;
   margin-left: auto;
   flex-wrap: wrap;
-  row-gap: 4px;
+  row-gap: 6px;
   justify-content: flex-end;
 }
 
@@ -221,7 +221,7 @@
 .connection-indicator {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 11px;
   color: var(--text-muted);
   -webkit-app-region: no-drag;
@@ -2304,7 +2304,7 @@
   color: var(--text-secondary);
   cursor: pointer;
   font-size: 12px;
-  padding: 2px 10px;
+  padding: 4px 14px;
   -webkit-app-region: no-drag;
   transition: border-color 0.15s, color 0.15s, background 0.15s;
   white-space: nowrap;
@@ -2335,7 +2335,7 @@
   color: var(--text-secondary);
   cursor: pointer;
   font-size: 14px;
-  padding: 2px 8px;
+  padding: 4px 10px;
   -webkit-app-region: no-drag;
   transition: border-color 0.15s, color 0.15s;
 }
