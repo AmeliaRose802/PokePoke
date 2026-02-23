@@ -18,8 +18,10 @@ import {
   getAgentPrimaryLabel,
   getAgentType,
   isGateAgent,
+  parseGateVerdict,
 } from "../utils/agentHelpers";
 import { ContextBar } from "./ContextBar";
+import { GateVerdictPreview } from "./GateVerdictPreview";
 
 interface Props {
   agents: AgentInfo[];
@@ -288,12 +290,20 @@ export function AgentsPanel({
           );
         })()}
         <div className="agent-card-logs">
-          {agent.recent_logs.length === 0 ? (
-            <span className="agent-card-no-logs">{isPaused ? "Paused" : "Waiting for output…"}</span>
-          ) : (
-            agent.recent_logs.map((line, i) => (
-              <div key={i} className="agent-card-log-line">{line}</div>
-            ))
+          {isGate ? (() => {
+            const verdict = parseGateVerdict(agent.log_lines ?? agent.recent_logs);
+            if (verdict) return <GateVerdictPreview verdict={verdict} />;
+            return agent.recent_logs.length === 0
+              ? <span className="agent-card-no-logs">Running gate check…</span>
+              : agent.recent_logs.map((line, i) => (
+                  <div key={i} className="agent-card-log-line">{line}</div>
+                ));
+          })() : (
+            agent.recent_logs.length === 0
+              ? <span className="agent-card-no-logs">{isPaused ? "Paused" : "Waiting for output…"}</span>
+              : agent.recent_logs.map((line, i) => (
+                  <div key={i} className="agent-card-log-line">{line}</div>
+                ))
           )}
         </div>
       </div>

@@ -409,4 +409,92 @@ describe('AgentsPanel', () => {
       expect(contextDiv?.getAttribute('title')).toContain('Output: 10.0K');
     });
   });
+
+  describe('gate agent verdict preview', () => {
+    const successVerdictJson = JSON.stringify({
+      status: 'success',
+      reason: 'new_work_verified',
+      message: 'All tests pass and implementation looks correct.',
+      recommendation: 'Close the issue.',
+    });
+
+    const failureVerdictJson = JSON.stringify({
+      status: 'failure',
+      reason: 'tests_failing',
+      details: 'Two unit tests are still failing in test_foo.py.',
+    });
+
+    function mkGateAgent(logs: string[]): AgentInfo {
+      return mkAgent({
+        agent_id: 'work-item-gate',
+        name: 'Gate',
+        status: 'success',
+        recent_logs: logs,
+      });
+    }
+
+    it('shows verdict status for gate agent with success JSON in logs', () => {
+      const agent = mkGateAgent([`\`\`\`json\n${successVerdictJson}\n\`\`\``]);
+      render(<AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
+      fireEvent.click(screen.getByRole('button', { name: /completed/i }));
+      expect(screen.getByText('✓ Passed')).toBeInTheDocument();
+    });
+
+    it('shows verdict status for gate agent with failure JSON in logs', () => {
+      const agent = mkGateAgent([`\`\`\`json\n${failureVerdictJson}\n\`\`\``]);
+      render(<AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
+      fireEvent.click(screen.getByRole('button', { name: /completed/i }));
+      expect(screen.getByText('✗ Failed')).toBeInTheDocument();
+    });
+
+    it('shows reason from success verdict', () => {
+      const agent = mkGateAgent([`\`\`\`json\n${successVerdictJson}\n\`\`\``]);
+      render(<AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
+      fireEvent.click(screen.getByRole('button', { name: /completed/i }));
+      expect(screen.getByText('new_work_verified')).toBeInTheDocument();
+    });
+
+    it('shows message from success verdict', () => {
+      const agent = mkGateAgent([`\`\`\`json\n${successVerdictJson}\n\`\`\``]);
+      render(<AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
+      fireEvent.click(screen.getByRole('button', { name: /completed/i }));
+      expect(screen.getByText('All tests pass and implementation looks correct.')).toBeInTheDocument();
+    });
+
+    it('shows details from failure verdict', () => {
+      const agent = mkGateAgent([`\`\`\`json\n${failureVerdictJson}\n\`\`\``]);
+      render(<AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
+      fireEvent.click(screen.getByRole('button', { name: /completed/i }));
+      expect(screen.getByText('Two unit tests are still failing in test_foo.py.')).toBeInTheDocument();
+    });
+
+    it('shows recommendation when present in verdict', () => {
+      const agent = mkGateAgent([`\`\`\`json\n${successVerdictJson}\n\`\`\``]);
+      render(<AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
+      fireEvent.click(screen.getByRole('button', { name: /completed/i }));
+      expect(screen.getByText('Close the issue.')).toBeInTheDocument();
+    });
+
+    it('shows raw logs for gate agent without verdict', () => {
+      const agent = mkGateAgent(['Running tests...', 'Coverage: 85%']);
+      render(<AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
+      fireEvent.click(screen.getByRole('button', { name: /completed/i }));
+      expect(screen.getByText('Running tests...')).toBeInTheDocument();
+      expect(screen.queryByText('✓ Passed')).not.toBeInTheDocument();
+      expect(screen.queryByText('✗ Failed')).not.toBeInTheDocument();
+    });
+
+    it('shows running gate check message for gate agent with no logs', () => {
+      const agent = mkAgent({ agent_id: 'work-item-gate', name: 'Gate', recent_logs: [] });
+      render(<AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
+      expect(screen.getByText('Running gate check\u2026')).toBeInTheDocument();
+    });
+
+    it('does not render verdict card for non-gate agents', () => {
+      const nonGateLog = `\`\`\`json\n${successVerdictJson}\n\`\`\``;
+      const agent = mkAgent({ recent_logs: [nonGateLog] });
+      render(<AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
+      expect(screen.queryByText('✓ Passed')).not.toBeInTheDocument();
+    });
+  });
 });
