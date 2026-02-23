@@ -503,11 +503,12 @@
   display: flex;
   flex: 1;
   overflow: hidden;
+  --left-panel-fraction: 0.667;
 }
 
 .log-container {
   display: flex;
-  flex: 2 1 0;
+  flex: 0 0 calc(var(--left-panel-fraction) * 100%);
   flex-direction: column;
   gap: 8px;
   padding: 8px 12px;
@@ -573,11 +574,32 @@
   display: none;
 }
 
+/* ── Resize Handle ─────────────────────────────────────────────────────── */
+
+.resize-handle {
+  flex: 0 0 6px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 10;
+  transition: background 0.15s ease;
+}
+
+.resize-handle:hover,
+.resize-handle[data-dragging="true"] {
+  background: var(--accent-primary);
+}
+
+.main-content--resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
 /* ── Agents Panel ──────────────────────────────────────────────────────── */
 
 .agents-panel {
   flex: 1 1 0;
-  min-width: 260px;
+  min-width: 200px;
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary);
