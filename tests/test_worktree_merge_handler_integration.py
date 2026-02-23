@@ -170,8 +170,14 @@ class TestPerformWorktreeMergeIntegration:
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
     @patch('pokepoke.worktree_merge_handler.merge_worktree')
     @patch('pokepoke.worktree_cleanup.add_uncleaned_worktree')
+    @patch('pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent')
+    @patch('pokepoke.git_operations.is_merge_in_progress', return_value=False)
+    @patch('pokepoke.git_operations.get_unmerged_files', return_value=[])
     def test_perform_merge_tracks_uncleaned_worktree_on_failure(
         self,
+        mock_get_unmerged,
+        mock_is_merge,
+        mock_conflict_agent,
         mock_add_uncleaned,
         mock_merge,
         mock_check_ready,
@@ -180,6 +186,7 @@ class TestPerformWorktreeMergeIntegration:
         """Test that failed merges track uncleaned worktrees."""
         mock_check_ready.return_value = (True, '')
         mock_merge.return_value = (False, [])  # Failed, no conflicts
+        mock_conflict_agent.return_value = (False, None)
         mock_cleanup_lock.return_value.__enter__ = Mock()
         mock_cleanup_lock.return_value.__exit__ = Mock(return_value=False)
 
