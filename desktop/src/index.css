@@ -13,35 +13,35 @@
   line-height: 1.5;
   font-weight: 400;
   color-scheme: dark;
-  color: #d1fae5;
-  background-color: #1a2e1a;
+  color: #e6edf3;
+  background-color: #0b0f14;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  
-  /* Jungle/Snake Theme Color Palette */
-  --bg-primary: #1a2e1a;      /* dark forest green */
-  --bg-secondary: #233323;    /* medium forest green */
-  --bg-tertiary: #2d4a2d;     /* lighter forest green */
-  --bg-elevated: #365314;     /* dark olive - for cards/panels */
-  
-  --accent-primary: #4ade80;   /* bright jungle green */
-  --accent-secondary: #65a30d; /* lime green */
-  --accent-warning: #ea580c;   /* sunset orange */
-  --accent-error: #dc2626;     /* danger red */
-  --accent-success: #16a34a;   /* success green */
-  
-  --text-primary: #d1fae5;     /* light mint */
-  --text-secondary: #86efac;   /* medium mint */
-  --text-muted: #4ade80;       /* jungle green */
-  --text-accent: #84cc16;      /* bright lime */
-  
-  --border-primary: #365314;   /* dark olive */
-  --border-secondary: #4ade80; /* bright jungle green */
-  
-  --snake-scale-dark: #365314; /* dark olive for patterns */
-  --snake-scale-light: #84cc16; /* bright lime for patterns */
+
+  /* Neutral dark surfaces + green accents */
+  --bg-primary: #0b0f14;      /* app background */
+  --bg-secondary: #111827;    /* header / secondary surfaces */
+  --bg-tertiary: #161b22;     /* section surfaces */
+  --bg-elevated: #1f2937;     /* cards/panels */
+
+  --accent-primary: #22c55e;   /* primary green accent */
+  --accent-secondary: #86efac; /* lighter green accent */
+  --accent-warning: #f59e0b;   /* amber */
+  --accent-error: #ef4444;     /* red */
+  --accent-success: #22c55e;   /* success green */
+
+  --text-primary: #e6edf3;     /* high-contrast text */
+  --text-secondary: #c9d1d9;   /* secondary text */
+  --text-muted: #8b949e;       /* muted text */
+  --text-accent: #7ee787;      /* accent text */
+
+  --border-primary: #30363d;   /* subtle border */
+  --border-secondary: #2ea043; /* accent border */
+
+  --snake-scale-dark: rgba(255 255 255 / 0.04);  /* subtle texture dots */
+  --snake-scale-light: rgba(34 197 94 / 0.06);   /* subtle accent texture */
 }
 
 body {
