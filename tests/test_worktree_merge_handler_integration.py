@@ -31,7 +31,7 @@ class TestPerformWorktreeMergeIntegration:
 
     @patch('pokepoke.worktree_merge_handler.cleanup_lock')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
-    @patch('pokepoke.worktrees.merge_worktree')
+    @patch('pokepoke.worktree_merge_handler.merge_worktree')
     @patch('pokepoke.worktree_cleanup.remove_from_manifest')
     def test_perform_merge_success_path(
         self,
@@ -50,12 +50,10 @@ class TestPerformWorktreeMergeIntegration:
         worktree_path = Path('C:/repos/worktrees/task-test-123')
 
         success, cleaned = perform_worktree_merge(
-            agent_id=agent_item.id,
-            agent_item=agent_item,
-            agent_name='TestAgent',
+            item_id=agent_item.id,
+            item=agent_item,
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
-            agent_stats=None,
             parent_agent_id=None
         )
 
@@ -86,14 +84,12 @@ class TestPerformWorktreeMergeIntegration:
         agent_item = _make_test_item('test-456')
         worktree_path = Path('C:/repos/worktrees/task-test-456')
 
-        with patch('pokepoke.worktrees.merge_worktree', return_value=(True, [])):
+        with patch('pokepoke.worktree_merge_handler.merge_worktree', return_value=(True, [])):
             success, cleaned = perform_worktree_merge(
-                agent_id=agent_item.id,
-                agent_item=agent_item,
-                agent_name='TestAgent',
+                item_id=agent_item.id,
+                item=agent_item,
                 worktree_path=worktree_path,
                 repo_root=Path('C:/repos'),
-                agent_stats=None,
                 parent_agent_id='parent-123'
             )
 
@@ -125,12 +121,10 @@ class TestPerformWorktreeMergeIntegration:
         worktree_path = Path('C:/repos/worktrees/task-test-789')
 
         success, cleaned = perform_worktree_merge(
-            agent_id=agent_item.id,
-            agent_item=agent_item,
-            agent_name='TestAgent',
+            item_id=agent_item.id,
+            item=agent_item,
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
-            agent_stats=None,
             parent_agent_id=None
         )
 
@@ -139,7 +133,7 @@ class TestPerformWorktreeMergeIntegration:
 
     @patch('pokepoke.worktree_merge_handler.cleanup_lock')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
-    @patch('pokepoke.worktrees.merge_worktree')
+    @patch('pokepoke.worktree_merge_handler.merge_worktree')
     @patch('pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent')
     def test_perform_merge_handles_merge_conflicts(
         self,
@@ -159,12 +153,10 @@ class TestPerformWorktreeMergeIntegration:
         worktree_path = Path('C:/repos/worktrees/task-test-conflicts')
 
         success, cleaned = perform_worktree_merge(
-            agent_id=agent_item.id,
-            agent_item=agent_item,
-            agent_name='TestAgent',
+            item_id=agent_item.id,
+            item=agent_item,
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
-            agent_stats=None,
             parent_agent_id=None
         )
 
@@ -176,7 +168,7 @@ class TestPerformWorktreeMergeIntegration:
 
     @patch('pokepoke.worktree_merge_handler.cleanup_lock')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
-    @patch('pokepoke.worktrees.merge_worktree')
+    @patch('pokepoke.worktree_merge_handler.merge_worktree')
     @patch('pokepoke.worktree_cleanup.add_uncleaned_worktree')
     def test_perform_merge_tracks_uncleaned_worktree_on_failure(
         self,
@@ -195,12 +187,10 @@ class TestPerformWorktreeMergeIntegration:
         worktree_path = Path('C:/repos/worktrees/task-test-failed')
 
         success, cleaned = perform_worktree_merge(
-            agent_id=agent_item.id,
-            agent_item=agent_item,
-            agent_name='TestAgent',
+            item_id=agent_item.id,
+            item=agent_item,
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
-            agent_stats=None,
             parent_agent_id=None
         )
 
@@ -210,7 +200,7 @@ class TestPerformWorktreeMergeIntegration:
 
     @patch('pokepoke.worktree_merge_handler.cleanup_lock')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
-    @patch('pokepoke.worktrees.merge_worktree')
+    @patch('pokepoke.worktree_merge_handler.merge_worktree')
     @patch('pokepoke.worktree_cleanup.remove_from_manifest')
     def test_perform_merge_removes_from_manifest_on_success(
         self,
@@ -229,12 +219,10 @@ class TestPerformWorktreeMergeIntegration:
         worktree_path = Path('C:/repos/worktrees/task-test-manifest')
 
         success, cleaned = perform_worktree_merge(
-            agent_id=agent_item.id,
-            agent_item=agent_item,
-            agent_name='TestAgent',
+            item_id=agent_item.id,
+            item=agent_item,
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
-            agent_stats=None,
             parent_agent_id=None
         )
 
@@ -261,12 +249,10 @@ class TestHandleWorktreeMergeIntegration:
         worktree_path = Path('C:/repos/worktrees/task-test-lock')
 
         success, cleaned = handle_worktree_merge(
-            agent_id=agent_item.id,
-            agent_item=agent_item,
-            agent_name='TestAgent',
+            item_id=agent_item.id,
+            item=agent_item,
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
-            agent_stats=None,
             parent_agent_id=None
         )
 
@@ -292,12 +278,10 @@ class TestHandleWorktreeMergeIntegration:
         worktree_path = Path('C:/repos/worktrees/task-test-passthrough')
 
         success, cleaned = handle_worktree_merge(
-            agent_id=agent_item.id,
-            agent_item=agent_item,
-            agent_name='TestAgent',
+            item_id=agent_item.id,
+            item=agent_item,
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
-            agent_stats=None,
             parent_agent_id=None
         )
 
@@ -321,12 +305,10 @@ class TestHandleWorktreeMergeIntegration:
 
         with pytest.raises(RuntimeError, match='Test error'):
             handle_worktree_merge(
-                agent_id=agent_item.id,
-                agent_item=agent_item,
-                agent_name='TestAgent',
+                item_id=agent_item.id,
+                item=agent_item,
                 worktree_path=worktree_path,
                 repo_root=Path('C:/repos'),
-                agent_stats=None,
                 parent_agent_id=None
             )
 
@@ -340,7 +322,7 @@ class TestMergeSequenceErrorRecovery:
     @patch('pokepoke.worktree_merge_handler.cleanup_lock')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
     @patch('pokepoke.worktree_merge_handler.invoke_cleanup_agent')
-    @patch('pokepoke.worktrees.merge_worktree')
+    @patch('pokepoke.worktree_merge_handler.merge_worktree')
     def test_retry_after_successful_cleanup(
         self,
         mock_merge,
@@ -363,12 +345,10 @@ class TestMergeSequenceErrorRecovery:
         worktree_path = Path('C:/repos/worktrees/task-test-retry')
 
         success, cleaned = perform_worktree_merge(
-            agent_id=agent_item.id,
-            agent_item=agent_item,
-            agent_name='TestAgent',
+            item_id=agent_item.id,
+            item=agent_item,
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
-            agent_stats=None,
             parent_agent_id=None
         )
 
@@ -395,14 +375,12 @@ class TestMergeSequenceErrorRecovery:
         agent_item = _make_test_item('test-no-retry')
         worktree_path = Path('C:/repos/worktrees/task-test-no-retry')
 
-        with patch('pokepoke.worktrees.merge_worktree') as mock_merge:
+        with patch('pokepoke.worktree_merge_handler.merge_worktree') as mock_merge:
             success, cleaned = perform_worktree_merge(
-                agent_id=agent_item.id,
-                agent_item=agent_item,
-                agent_name='TestAgent',
+                item_id=agent_item.id,
+                item=agent_item,
                 worktree_path=worktree_path,
                 repo_root=Path('C:/repos'),
-                agent_stats=None,
                 parent_agent_id=None
             )
 
@@ -436,14 +414,12 @@ class TestCleanupAgentInvocation:
         repo_root = Path('C:/repos')
         parent_id = 'parent-agent-123'
 
-        with patch('pokepoke.worktrees.merge_worktree', return_value=(True, [])):
+        with patch('pokepoke.worktree_merge_handler.merge_worktree', return_value=(True, [])):
             perform_worktree_merge(
-                agent_id=agent_item.id,
-                agent_item=agent_item,
-                agent_name='TestAgent',
+                item_id=agent_item.id,
+                item=agent_item,
                 worktree_path=worktree_path,
                 repo_root=repo_root,
-                agent_stats=None,
                 parent_agent_id=parent_id
             )
 
@@ -456,7 +432,7 @@ class TestCleanupAgentInvocation:
     @patch('pokepoke.worktree_merge_handler.cleanup_lock')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
     @patch('pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent')
-    @patch('pokepoke.worktrees.merge_worktree')
+    @patch('pokepoke.worktree_merge_handler.merge_worktree')
     def test_conflict_agent_receives_conflict_files(
         self,
         mock_merge,
@@ -476,12 +452,10 @@ class TestCleanupAgentInvocation:
         worktree_path = Path('C:/repos/worktrees/task-test-conflicts')
 
         perform_worktree_merge(
-            agent_id=agent_item.id,
-            agent_item=agent_item,
-            agent_name='TestAgent',
+            item_id=agent_item.id,
+            item=agent_item,
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
-            agent_stats=None,
             parent_agent_id=None
         )
 

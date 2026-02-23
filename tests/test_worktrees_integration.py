@@ -23,10 +23,10 @@ class TestCreateWorktreeIntegration:
     """Integration tests for create_worktree that exercise real code paths."""
 
     @patch('pokepoke.worktrees.list_worktrees')
-    @patch('pokepoke.git_operations.get_default_branch')
+    @patch('pokepoke.worktrees.get_default_branch')
     @patch('subprocess.run')
     @patch('pathlib.Path.mkdir')
-    @patch('pokepoke.git_operations.sanitize_branch_name', side_effect=lambda x: x)
+    @patch('pokepoke.worktrees.sanitize_branch_name', side_effect=lambda x: x)
     def test_create_new_worktree_success(
         self, mock_sanitize, mock_mkdir, mock_run, mock_get_branch, mock_list
     ):
@@ -77,7 +77,7 @@ class TestCreateWorktreeIntegration:
         assert result == existing_path
 
     @patch('pokepoke.worktrees.list_worktrees')
-    @patch('pokepoke.git_operations.get_default_branch')
+    @patch('pokepoke.worktrees.get_default_branch')
     @patch('subprocess.run')
     @patch('pathlib.Path.mkdir')
     def test_create_worktree_handles_branch_exists_error(
@@ -107,7 +107,7 @@ class TestCreateWorktreeIntegration:
         assert result == Path('C:/repos/worktrees/task-test-789')
 
     @patch('pokepoke.worktrees.list_worktrees')
-    @patch('pokepoke.git_operations.get_default_branch')
+    @patch('pokepoke.worktrees.get_default_branch')
     @patch('subprocess.run')
     @patch('pathlib.Path.mkdir')
     def test_create_worktree_invalid_base_branch_error(
@@ -128,7 +128,7 @@ class TestCreateWorktreeIntegration:
             create_worktree('test-999')
 
     @patch('pokepoke.worktrees.list_worktrees')
-    @patch('pokepoke.git_operations.get_default_branch')
+    @patch('pokepoke.worktrees.get_default_branch')
     @patch('subprocess.run')
     @patch('pathlib.Path.mkdir')
     def test_create_worktree_timeout_error(
@@ -149,7 +149,7 @@ class TestCreateWorktreeIntegration:
 class TestIsWorktreeMergedIntegration:
     """Integration tests for is_worktree_merged."""
 
-    @patch('pokepoke.git_operations.get_default_branch')
+    @patch('pokepoke.worktrees.get_default_branch')
     @patch('subprocess.run')
     def test_is_merged_returns_true_when_branch_in_list(
         self, mock_run, mock_get_branch
@@ -168,7 +168,7 @@ class TestIsWorktreeMergedIntegration:
         args = mock_run.call_args[0][0]
         assert args == ['git', 'branch', '--merged', 'dev']
 
-    @patch('pokepoke.git_operations.get_default_branch')
+    @patch('pokepoke.worktrees.get_default_branch')
     @patch('subprocess.run')
     def test_is_merged_returns_false_when_branch_not_in_list(
         self, mock_run, mock_get_branch
@@ -199,11 +199,11 @@ class TestMergeWorktreeIntegration:
 
     @patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo')
     @patch('pokepoke.worktrees.is_worktree_merged')
-    @patch('pokepoke.git_operations.execute_merge_sequence')
-    @patch('pokepoke.git_operations.validate_post_merge')
-    @patch('pokepoke.git_operations.is_worktree_clean')
-    @patch('pokepoke.git_operations.get_default_branch')
-    @patch('pokepoke.worktree_cleanup.cleanup_after_merge')
+    @patch('pokepoke.worktrees.execute_merge_sequence')
+    @patch('pokepoke.worktrees.validate_post_merge')
+    @patch('pokepoke.worktrees.is_worktree_clean')
+    @patch('pokepoke.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.cleanup_after_merge')
     @patch('subprocess.run')
     def test_merge_worktree_full_success_path(
         self,
@@ -238,8 +238,8 @@ class TestMergeWorktreeIntegration:
         mock_validate.assert_called_once()
         mock_cleanup.assert_called_once()
 
-    @patch('pokepoke.git_operations.is_worktree_clean')
-    @patch('pokepoke.git_operations.get_default_branch')
+    @patch('pokepoke.worktrees.is_worktree_clean')
+    @patch('pokepoke.worktrees.get_default_branch')
     def test_merge_worktree_fails_on_dirty_worktree(
         self, mock_get_branch, mock_is_clean
     ):
@@ -253,8 +253,8 @@ class TestMergeWorktreeIntegration:
         assert conflicts == []
 
     @patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo')
-    @patch('pokepoke.git_operations.is_worktree_clean')
-    @patch('pokepoke.git_operations.get_default_branch')
+    @patch('pokepoke.worktrees.is_worktree_clean')
+    @patch('pokepoke.worktrees.get_default_branch')
     def test_merge_worktree_fails_on_unclean_main_repo(
         self, mock_get_branch, mock_is_clean, mock_sync
     ):
@@ -269,9 +269,9 @@ class TestMergeWorktreeIntegration:
         assert conflicts == []
 
     @patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo')
-    @patch('pokepoke.git_operations.execute_merge_sequence')
-    @patch('pokepoke.git_operations.is_worktree_clean')
-    @patch('pokepoke.git_operations.get_default_branch')
+    @patch('pokepoke.worktrees.execute_merge_sequence')
+    @patch('pokepoke.worktrees.is_worktree_clean')
+    @patch('pokepoke.worktrees.get_default_branch')
     def test_merge_worktree_returns_conflicts_on_merge_failure(
         self, mock_get_branch, mock_is_clean, mock_execute, mock_sync
     ):
@@ -288,10 +288,10 @@ class TestMergeWorktreeIntegration:
 
     @patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo')
     @patch('pokepoke.worktrees.is_worktree_merged')
-    @patch('pokepoke.git_operations.execute_merge_sequence')
-    @patch('pokepoke.git_operations.validate_post_merge')
-    @patch('pokepoke.git_operations.is_worktree_clean')
-    @patch('pokepoke.git_operations.get_default_branch')
+    @patch('pokepoke.worktrees.execute_merge_sequence')
+    @patch('pokepoke.worktrees.validate_post_merge')
+    @patch('pokepoke.worktrees.is_worktree_clean')
+    @patch('pokepoke.worktrees.get_default_branch')
     @patch('subprocess.run')
     def test_merge_worktree_fails_on_push_error(
         self,
@@ -320,10 +320,10 @@ class TestMergeWorktreeIntegration:
 
     @patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo')
     @patch('pokepoke.worktrees.is_worktree_merged')
-    @patch('pokepoke.git_operations.execute_merge_sequence')
-    @patch('pokepoke.git_operations.validate_post_merge')
-    @patch('pokepoke.git_operations.is_worktree_clean')
-    @patch('pokepoke.git_operations.get_default_branch')
+    @patch('pokepoke.worktrees.execute_merge_sequence')
+    @patch('pokepoke.worktrees.validate_post_merge')
+    @patch('pokepoke.worktrees.is_worktree_clean')
+    @patch('pokepoke.worktrees.get_default_branch')
     @patch('subprocess.run')
     def test_merge_worktree_fails_if_not_merged_after_push(
         self,
@@ -351,11 +351,11 @@ class TestMergeWorktreeIntegration:
 
     @patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo')
     @patch('pokepoke.worktrees.is_worktree_merged')
-    @patch('pokepoke.git_operations.execute_merge_sequence')
-    @patch('pokepoke.git_operations.validate_post_merge')
-    @patch('pokepoke.git_operations.is_worktree_clean')
-    @patch('pokepoke.git_operations.get_default_branch')
-    @patch('pokepoke.worktree_cleanup.cleanup_after_merge')
+    @patch('pokepoke.worktrees.execute_merge_sequence')
+    @patch('pokepoke.worktrees.validate_post_merge')
+    @patch('pokepoke.worktrees.is_worktree_clean')
+    @patch('pokepoke.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.cleanup_after_merge')
     @patch('subprocess.run')
     def test_merge_worktree_with_cleanup_disabled(
         self,
@@ -387,7 +387,7 @@ class TestCleanupWorktreeIntegration:
     """Integration tests for cleanup_worktree."""
 
     @patch('pokepoke.worktrees.list_worktrees')
-    @patch('pokepoke.worktree_cleanup.remove_from_manifest')
+    @patch('pokepoke.worktrees.remove_from_manifest')
     @patch('subprocess.run')
     def test_cleanup_success_by_branch_name(
         self, mock_run, mock_remove, mock_list
@@ -420,7 +420,7 @@ class TestCleanupWorktreeIntegration:
         mock_run.return_value = Mock(returncode=0)
         
         with patch.object(Path, 'exists', return_value=False), \
-             patch('pokepoke.worktree_cleanup.remove_from_manifest'):
+             patch('pokepoke.worktrees.remove_from_manifest'):
             result = cleanup_worktree('test-456', force=True)
         
         assert result is True
@@ -429,8 +429,8 @@ class TestCleanupWorktreeIntegration:
         assert '--force' in args
 
     @patch('pokepoke.worktrees.list_worktrees')
-    @patch('pokepoke.worktree_cleanup.add_uncleaned_worktree')
-    @patch('pokepoke.worktree_cleanup.force_remove_directory')
+    @patch('pokepoke.worktrees.add_uncleaned_worktree')
+    @patch('pokepoke.worktrees.force_remove_directory')
     @patch('subprocess.run')
     @patch('time.sleep')  # Mock sleep to avoid timeout
     def test_cleanup_handles_windows_lock_error(
@@ -451,7 +451,7 @@ class TestCleanupWorktreeIntegration:
         mock_force_remove.return_value = True  # Force remove succeeds
         
         with patch.object(Path, 'exists', side_effect=[True, False]), \
-             patch('pokepoke.worktree_cleanup.remove_from_manifest'):
+             patch('pokepoke.worktrees.remove_from_manifest'):
             result = cleanup_worktree('test-789')
         
         # Should call force remove as fallback
@@ -530,7 +530,7 @@ branch refs/heads/task/test-456
 class TestSyncAndEnsureCleanMainRepoIntegration:
     """Integration tests for _sync_and_ensure_clean_main_repo."""
 
-    @patch('pokepoke.beads_management.run_bd_sync_with_retry')
+    @patch('pokepoke.worktrees.run_bd_sync_with_retry')
     @patch('subprocess.run')
     def test_sync_succeeds_when_main_repo_clean(
         self, mock_run, mock_bd_sync
@@ -544,8 +544,8 @@ class TestSyncAndEnsureCleanMainRepoIntegration:
         assert result is True
         mock_bd_sync.assert_called_once()
 
-    @patch('pokepoke.beads_management.run_bd_sync_with_retry')
-    @patch('pokepoke.git_operations.categorize_git_changes')
+    @patch('pokepoke.worktrees.run_bd_sync_with_retry')
+    @patch('pokepoke.worktrees.categorize_git_changes')
     @patch('subprocess.run')
     def test_sync_commits_beads_changes(
         self, mock_run, mock_categorize, mock_bd_sync
@@ -573,8 +573,8 @@ class TestSyncAndEnsureCleanMainRepoIntegration:
         # Verify git add and commit were called
         assert mock_run.call_count == 3
 
-    @patch('pokepoke.beads_management.run_bd_sync_with_retry')
-    @patch('pokepoke.git_operations.categorize_git_changes')
+    @patch('pokepoke.worktrees.run_bd_sync_with_retry')
+    @patch('pokepoke.worktrees.categorize_git_changes')
     @patch('subprocess.run')
     def test_sync_fails_on_non_beads_changes(
         self, mock_run, mock_categorize, mock_bd_sync
@@ -596,7 +596,7 @@ class TestSyncAndEnsureCleanMainRepoIntegration:
         
         assert result is False
 
-    @patch('pokepoke.beads_management.run_bd_sync_with_retry')
+    @patch('pokepoke.worktrees.run_bd_sync_with_retry')
     @patch('subprocess.run')
     def test_sync_handles_bd_sync_timeout(
         self, mock_run, mock_bd_sync
@@ -611,7 +611,7 @@ class TestSyncAndEnsureCleanMainRepoIntegration:
         # Should still return True if repo is clean
         assert result is True
 
-    @patch('pokepoke.beads_management.run_bd_sync_with_retry')
+    @patch('pokepoke.worktrees.run_bd_sync_with_retry')
     @patch('subprocess.run')
     def test_sync_handles_git_status_error(
         self, mock_run, mock_bd_sync
