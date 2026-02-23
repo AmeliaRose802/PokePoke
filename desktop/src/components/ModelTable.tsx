@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { formatDurationWithSpread, formatPercent } from "../utils/stats";
+import { formatDurationWithSpread, formatPercent, formatTokens } from "../utils/stats";
 
 interface ModelTableRow {
   model: string;
@@ -8,9 +8,10 @@ interface ModelTableRow {
   successRate: number;
   medianDuration: number;
   stddevDuration: number;
+  tokens?: number;
 }
 
-type SortField = "model" | "runs" | "success" | "duration";
+type SortField = "model" | "runs" | "success" | "duration" | "tokens";
 
 interface ModelTableProps {
   rows: ModelTableRow[];
@@ -72,6 +73,13 @@ export function ModelTable({
               asc={sortAsc}
               onSort={onSort}
             />
+            <SortableHead
+              label="Tokens"
+              field="tokens"
+              activeField={sortField}
+              asc={sortAsc}
+              onSort={onSort}
+            />
           </tr>
         </thead>
         <tbody>
@@ -86,6 +94,7 @@ export function ModelTable({
                 />
               </td>
               <td>{formatDurationWithSpread(row.medianDuration, row.stddevDuration)}</td>
+              <td>{row.tokens !== undefined ? formatTokens(row.tokens) : "—"}</td>
             </tr>
           ))}
         </tbody>

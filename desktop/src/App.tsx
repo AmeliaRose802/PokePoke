@@ -307,6 +307,7 @@ function App() {
           historyError={historyError}
           onRefreshHistory={loadModelHistory}
           onClose={() => setShowStatsPage(false)}
+          agents={bridge.agents}
         />
       )}
     </div>
