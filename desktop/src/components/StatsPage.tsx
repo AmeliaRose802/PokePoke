@@ -178,105 +178,111 @@ export function StatsPage({
             </div>
           </section>
 
-          <section>
-            <div className="stats-panel-card">
-              <h3>Completed this session <span className="stats-panel-subtitle">Gate-passed and merged</span></h3>
-              {completedItems.length > 0 ? (
+          {completedItems.length > 0 && (
+            <section>
+              <div className="stats-panel-card">
+                <h3>Completed this session <span className="stats-panel-subtitle">Gate-passed and merged</span></h3>
                 <ul className="completed-items-list">
                   {completedItems.map((ci) => (
                     <CompletedItemCard key={ci.id} item={ci} modelHistory={modelHistory} />
                   ))}
                 </ul>
-              ) : <p className="stats-empty">No completed items yet.</p>}
-            </div>
-          </section>
-
-          <section>
-            <div className="stats-panel-card">
-              <div className="stats-panel-card-header">
-                <h3>Agent activity</h3>
-                <span className="stats-panel-subtitle">Work vs maintenance vs review</span>
               </div>
-              {agentActivity.total > 0 ? (
-                <>
-                  <div className="agent-activity-bar">
-                    <svg viewBox="0 0 100 10" preserveAspectRatio="none" role="img" aria-label="Agent activity distribution">
-                      {normalizedSegments.map((segment) => (
-                        <rect
-                          key={segment.label}
-                          x={segment.start}
-                          y={0}
-                          width={segment.width}
-                          height={10}
-                          fill={segment.color}
-                        >
-                          <title>{`${segment.label}: ${segment.width.toFixed(1)}%`}</title>
-                        </rect>
-                      ))}
-                    </svg>
-                  </div>
-                  <div className="agent-activity-legend">
+            </section>
+          )}
+
+          {agentActivity.total > 0 && (
+            <section>
+              <div className="stats-panel-card">
+                <div className="stats-panel-card-header">
+                  <h3>Agent activity</h3>
+                  <span className="stats-panel-subtitle">Work vs maintenance vs review</span>
+                </div>
+                <div className="agent-activity-bar">
+                  <svg viewBox="0 0 100 10" preserveAspectRatio="none" role="img" aria-label="Agent activity distribution">
                     {normalizedSegments.map((segment) => (
-                      <span key={segment.label} className="agent-activity-pill">
-                        <span className="agent-legend-dot" aria-hidden="true">
-                          <svg viewBox="0 0 8 8" preserveAspectRatio="none">
-                            <circle cx="4" cy="4" r="4" fill={segment.color} />
-                          </svg>
-                        </span>
-                        {segment.label}: {segment.width.toFixed(1)}%
-                      </span>
+                      <rect
+                        key={segment.label}
+                        x={segment.start}
+                        y={0}
+                        width={segment.width}
+                        height={10}
+                        fill={segment.color}
+                      >
+                        <title>{`${segment.label}: ${segment.width.toFixed(1)}%`}</title>
+                      </rect>
                     ))}
-                  </div>
-                </>
-              ) : (
-                <p className="stats-empty">No agent runs recorded yet.</p>
+                  </svg>
+                </div>
+                <div className="agent-activity-legend">
+                  {normalizedSegments.map((segment) => (
+                    <span key={segment.label} className="agent-activity-pill">
+                      <span className="agent-legend-dot" aria-hidden="true">
+                        <svg viewBox="0 0 8 8" preserveAspectRatio="none">
+                          <circle cx="4" cy="4" r="4" fill={segment.color} />
+                        </svg>
+                      </span>
+                      {segment.label}: {segment.width.toFixed(1)}%
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {leaderboardRows.length > 0 && (
+            <section>
+              <div className="stats-panel-card">
+                <div className="stats-panel-card-header">
+                  <h3>All-time model performance</h3>
+                  <span className="stats-panel-subtitle">Sortable leaderboard with success bars</span>
+                </div>
+                <ModelTable
+                  rows={leaderboardRows}
+                  sortField={sortField}
+                  sortAsc={sortAsc}
+                  onSort={handleSort}
+                />
+              </div>
+            </section>
+          )}
+
+          {(completionSeries.length > 0 || successSeries.length > 0) && (
+            <section className="stats-flex-row">
+              {completionSeries.length > 0 && (
+                <TrendChart
+                  title="Completed items per day"
+                  data={completionSeries}
+                  emptyLabel=""
+                  color="#7aa2f7"
+                />
               )}
-            </div>
-          </section>
+              {successSeries.length > 0 && (
+                <TrendChart
+                  title="Daily success rate"
+                  data={successSeries}
+                  valueFormatter={(v) => `${v.toFixed(0)}%`}
+                  emptyLabel=""
+                  color="#9ece6a"
+                />
+              )}
+            </section>
+          )}
 
-          <section>
-            <div className="stats-panel-card">
-              <div className="stats-panel-card-header">
-                <h3>All-time model performance</h3>
-                <span className="stats-panel-subtitle">Sortable leaderboard with success bars</span>
+          {Object.values(completionTimeSeries).some((s) => s.length > 0) && (
+            <section>
+              <div className="stats-panel-card">
+                <div className="stats-panel-card-header">
+                  <h3>Average completion time by type</h3>
+                  <span className="stats-panel-subtitle">Trends in item resolution time over last 14 days</span>
+                </div>
+                <CompletionTimeChart
+                  data={completionTimeSeries}
+                  emptyLabel=""
+                />
               </div>
-              <ModelTable
-                rows={leaderboardRows}
-                sortField={sortField}
-                sortAsc={sortAsc}
-                onSort={handleSort}
-              />
-            </div>
-          </section>
-
-          <section className="stats-flex-row">
-            <TrendChart
-              title="Completed items per day"
-              data={completionSeries}
-              emptyLabel={historyLoading ? "Loading…" : "No completion history yet"}
-              color="#7aa2f7"
-            />
-            <TrendChart
-              title="Daily success rate"
-              data={successSeries}
-              valueFormatter={(v) => `${v.toFixed(0)}%`}
-              emptyLabel={historyLoading ? "Loading…" : "No history yet"}
-              color="#9ece6a"
-            />
-          </section>
-
-          <section>
-            <div className="stats-panel-card">
-              <div className="stats-panel-card-header">
-                <h3>Average completion time by type</h3>
-                <span className="stats-panel-subtitle">Trends in item resolution time over last 14 days</span>
-              </div>
-              <CompletionTimeChart
-                data={completionTimeSeries}
-                emptyLabel={historyLoading ? "Loading…" : "No completion time history yet"}
-              />
-            </div>
-          </section>
+            </section>
+          )}
         </div>
       </div>
     </div>
