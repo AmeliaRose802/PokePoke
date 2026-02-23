@@ -51,7 +51,7 @@ describe('stats helpers', () => {
   });
 
   describe('getDoneCount', () => {
-    it('returns completed_items length when available', () => {
+    it('prioritizes items_completed counter over array length', () => {
       const stats: SessionStats = {
         elapsed_time: 0,
         completed_items: [
@@ -62,23 +62,39 @@ describe('stats helpers', () => {
         items_completed: 10,
       };
 
-      expect(getDoneCount(stats)).toBe(2);
+      // Should return 10 (counter), not 2 (deduplicated array length)
+      expect(getDoneCount(stats)).toBe(10);
     });
 
-    it('falls back to items_completed when completed_items is empty or missing', () => {
-      const withEmptyItems: SessionStats = {
+    it('falls back to array length when counter is missing or zero', () => {
+      const withEmptyCounter: SessionStats = {
         elapsed_time: 0,
-        completed_items: [],
-        items_completed: 3,
+        completed_items: [{ id: 'A' }, { id: 'B' }],
+        items_completed: 0,
       };
 
-      const withoutItems: SessionStats = {
+      const withoutCounter: SessionStats = {
         elapsed_time: 0,
+        completed_items: [{ id: 'X' }, { id: 'Y' }, { id: 'Y' }],
+      };
+
+      const withEmptyArray: SessionStats = {
+        elapsed_time: 0,
+        completed_items: [],
         items_completed: 5,
       };
 
-      expect(getDoneCount(withEmptyItems)).toBe(3);
-      expect(getDoneCount(withoutItems)).toBe(5);
+      expect(getDoneCount(withEmptyCounter)).toBe(2);
+      expect(getDoneCount(withoutCounter)).toBe(2); // deduplicated
+      expect(getDoneCount(withEmptyArray)).toBe(5);
+    });
+
+    it('returns zero when both counter and array are missing', () => {
+      const stats: SessionStats = {
+        elapsed_time: 0,
+      };
+
+      expect(getDoneCount(stats)).toBe(0);
     });
   });
 
