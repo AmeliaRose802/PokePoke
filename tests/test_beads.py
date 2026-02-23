@@ -4,7 +4,7 @@ import subprocess
 from unittest.mock import Mock, patch
 import json
 
-from src.pokepoke.beads import get_ready_work_items, get_issue_dependencies
+from src.pokepoke.beads import get_ready_work_items, get_issue_dependencies, is_item_claimable
 from src.pokepoke.types import BeadsWorkItem
 
 
@@ -341,6 +341,73 @@ class TestHasFeatureParent:
         mock_get_issue.side_effect = Exception("Network error")
 
         result = has_feature_parent("task-1")
+
+        assert result is False
+
+
+class TestIsItemClaimable:
+    """Test is_item_claimable function."""
+
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_unassigned_item_claimable(self, mock_run: Mock) -> None:
+        """Test that unassigned item is claimable."""
+        mock_run.return_value = Mock(
+            stdout=json.dumps([{"id": "task-1", "assignee": "", "status": "open"}]),
+            returncode=0
+        )
+
+        result = is_item_claimable("task-1")
+
+        assert result is True
+
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_assigned_item_not_claimable(self, mock_run: Mock) -> None:
+        """Test that item assigned to another agent is not claimable."""
+        mock_run.return_value = Mock(
+            stdout=json.dumps([{"id": "task-1", "assignee": "other-agent", "status": "in_progress"}]),
+            returncode=0
+        )
+
+        result = is_item_claimable("task-1")
+
+        assert result is False
+
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_no_assignee_field_claimable(self, mock_run: Mock) -> None:
+        """Test item with missing assignee field is claimable."""
+        mock_run.return_value = Mock(
+            stdout=json.dumps([{"id": "task-1", "status": "open"}]),
+            returncode=0
+        )
+
+        result = is_item_claimable("task-1")
+
+        assert result is True
+
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_subprocess_error_not_claimable(self, mock_run: Mock) -> None:
+        """Test that subprocess errors return not claimable (safe default)."""
+        mock_run.side_effect = subprocess.CalledProcessError(1, 'bd', stderr="error")
+
+        result = is_item_claimable("task-1")
+
+        assert result is False
+
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_json_decode_error_not_claimable(self, mock_run: Mock) -> None:
+        """Test that JSON decode errors return not claimable (safe default)."""
+        mock_run.return_value = Mock(stdout="invalid json", returncode=0)
+
+        result = is_item_claimable("task-1")
+
+        assert result is False
+
+    @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_none_parse_result_not_claimable(self, mock_run: Mock) -> None:
+        """Test that None parse result returns not claimable."""
+        mock_run.return_value = Mock(stdout="", returncode=0)
+
+        result = is_item_claimable("task-1")
 
         assert result is False
 
