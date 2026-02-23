@@ -2597,6 +2597,91 @@
   margin-bottom: 8px;
 }
 
+.agent-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-remove-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  line-height: 1;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.agent-remove-btn:hover {
+  color: var(--accent-danger, #e06c75);
+  background-color: var(--bg-elevated);
+}
+
+.agent-add-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  align-items: center;
+}
+
+.agent-add-select {
+  flex: 1;
+}
+
+.agent-add-btn {
+  white-space: nowrap;
+}
+
+.custom-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  border-radius: 8px;
+  vertical-align: middle;
+}
+
+.agent-description {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  font-style: italic;
+}
+
+.agent-create-form {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.agent-create-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 10px 0;
+}
+
+.agent-form-error {
+  color: var(--accent-error, #e06c75);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.agent-form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  justify-content: flex-end;
+}
+
 .agent-name {
   font-size: 13px;
   font-weight: 600;

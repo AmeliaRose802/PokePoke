@@ -132,6 +132,8 @@ export interface MaintenanceAgent {
   needs_worktree: boolean;
   merge_changes?: boolean;
   model?: string;
+  custom?: boolean;
+  description?: string;
 }
 
 /** Maintenance configuration section */
