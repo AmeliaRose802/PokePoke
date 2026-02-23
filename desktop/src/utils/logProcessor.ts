@@ -270,9 +270,11 @@ export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
 
     const parts = parseToolCallParts(entry.message);
     const { entries, result, nextIndex } = collectIntermediateLines(logs, index + 1);
+    // Only attach intermediate entries when a result follows; otherwise leave them for separate rendering
+    const hasIntermediate = result && entries.length > 0;
     return {
-      tool: { toolName: parts.toolName, argsText: parts.argsText, entry, result, additionalEntries: entries.length > 0 ? entries : undefined, summary: buildToolSummary(entry.message, result?.message) },
-      nextIndex,
+      tool: { toolName: parts.toolName, argsText: parts.argsText, entry, result, additionalEntries: hasIntermediate ? entries : undefined, summary: buildToolSummary(entry.message, result?.message) },
+      nextIndex: result ? nextIndex : index + 1,
     };
   }
 

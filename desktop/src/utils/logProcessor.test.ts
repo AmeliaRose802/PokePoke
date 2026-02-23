@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { LogEntry } from '../types';
-import { buildToolSummary, parseToolLabel, processLogsToRenderItems, stringsToLogEntries } from './logProcessor';
+import { buildToolSummary, isToolCallMessage, parseToolLabel, processLogsToRenderItems, stringsToLogEntries } from './logProcessor';
 
 function makeEntries(lines: string[]): LogEntry[] {
   return stringsToLogEntries(lines, 1000);
@@ -62,6 +62,18 @@ describe('parseToolLabel', () => {
     expect(label).toContain('…');
   });
 
+  it('parses 🔧 prefixed tool calls', () => {
+    const message = "🔧 grep({'pattern': 'TODO', 'path': 'src/'})";
+    const label = parseToolLabel(message);
+    expect(label).toBe('🔧 grep - TODO');
+  });
+
+  it('parses 🔧 prefixed powershell with leading spaces', () => {
+    const message = "  🔧 powershell({'command': 'npm install'})";
+    const label = parseToolLabel(message);
+    expect(label).toContain('🔧 powershell - npm install');
+  });
+
   it('handles messages without Tool prefix', () => {
     const message = "Some other message";
     const label = parseToolLabel(message);
@@ -82,6 +94,36 @@ describe('buildToolSummary', () => {
     const summary = buildToolSummary(callMessage, resultMessage);
     expect(summary.toolLabel).toBe('🔧 grep - TODO');
     expect(summary.resultSummary).toBe('✅ Found 5 matches');
+  });
+  it('handles 🔧 prefixed tool call', () => {
+    const callMessage = "🔧 powershell({'command': 'npm run build'})";
+    const resultMessage = "✅ Result: Build succeeded";
+    const summary = buildToolSummary(callMessage, resultMessage);
+    expect(summary.toolLabel).toContain('🔧 powershell');
+    expect(summary.resultSummary).toBe('✅ Build succeeded');
+    expect(summary.statusClass).toBe('log-success');
+  });
+});
+
+describe('isToolCallMessage', () => {
+  it('matches [Tool] prefix', () => {
+    expect(isToolCallMessage("[Tool] grep({'pattern': 'foo'})")).toBe(true);
+  });
+
+  it('matches 🌿 prefix', () => {
+    expect(isToolCallMessage("🌿 view({'path': 'README.md'})")).toBe(true);
+  });
+
+  it('matches 🔧 prefix', () => {
+    expect(isToolCallMessage("🔧 powershell({'command': 'npm test'})")).toBe(true);
+  });
+
+  it('matches 🔧 with leading whitespace', () => {
+    expect(isToolCallMessage("  🔧 grep({'pattern': 'TODO'})")).toBe(true);
+  });
+
+  it('does not match regular text', () => {
+    expect(isToolCallMessage("Installing dependencies...")).toBe(false);
   });
 });
 
@@ -146,5 +188,51 @@ describe('processLogsToRenderItems - read tool collapsing', () => {
     expect(items[0].type).toBe('tool');
     const tool = (items[0] as { type: 'tool'; tool: { additionalEntries?: LogEntry[] } }).tool;
     expect(tool.additionalEntries).toBeUndefined();
+  });
+});
+
+describe('processLogsToRenderItems - 🔧 SDK tool format', () => {
+  it('collapses a 🔧 tool call with immediate result', () => {
+    const entries = makeEntries([
+      "🔧 grep({'pattern': 'TODO'})",
+      "✅ Result: Found 5 matches",
+    ]);
+    const items = processLogsToRenderItems(entries);
+    expect(items).toHaveLength(1);
+    expect(items[0].type).toBe('tool');
+    if (items[0].type === 'tool') {
+      expect(items[0].tool.toolName).toBe('grep');
+      expect(items[0].tool.result).toBeDefined();
+      expect(items[0].tool.summary.resultSummary).toContain('Found 5 matches');
+    }
+  });
+
+  it('collapses a 🔧 tool call with streaming output before result', () => {
+    const entries = makeEntries([
+      "🔧 powershell({'command': 'npm install'})",
+      "Installing dependencies...",
+      "added 100 packages",
+      "✅ Result: Packages installed",
+    ]);
+    const items = processLogsToRenderItems(entries);
+    expect(items).toHaveLength(1);
+    expect(items[0].type).toBe('tool');
+    if (items[0].type === 'tool') {
+      expect(items[0].tool.toolName).toBe('powershell');
+      expect(items[0].tool.result).toBeDefined();
+      expect(items[0].tool.additionalEntries).toHaveLength(2);
+    }
+  });
+
+  it('handles multiple 🔧 tool calls in sequence', () => {
+    const entries = makeEntries([
+      "🔧 grep({'pattern': 'TODO'})",
+      "✅ Result: Found 5 matches",
+      "🔧 view({'path': 'README.md'})",
+      "✅ Result: File contents shown",
+    ]);
+    const items = processLogsToRenderItems(entries);
+    expect(items).toHaveLength(1);
+    expect(items[0].type).toBe('tool-batch');
   });
 });
