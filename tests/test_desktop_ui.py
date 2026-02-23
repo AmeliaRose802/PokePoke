@@ -464,6 +464,79 @@ class TestDesktopUIRunWithOrchestrator:
 
         assert result == 130
 
+    def test_run_with_orchestrator_webview_start_exception_after_loaded_is_clean(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        dist_dir = tmp_path / "dist"
+        dist_dir.mkdir()
+        (dist_dir / "index.html").write_text("<html></html>", encoding="utf-8")
+
+        class RaisingAfterLoadedWebview(FakeWebviewModule):
+            def start(self, func=None, debug=False, **kwargs):
+                self.start_kwargs = dict(kwargs)
+                self.started = True
+                if func:
+                    func()
+                raise RuntimeError("join failed")
+
+        fake_webview = RaisingAfterLoadedWebview()
+        monkeypatch.setitem(sys.modules, "webview", fake_webview)
+        monkeypatch.setattr(
+            frontend_discovery_module, "find_frontend_dist", lambda: dist_dir
+        )
+        mock_shutdown = MagicMock()
+        monkeypatch.setattr(desktop_ui_module, "request_shutdown", mock_shutdown)
+        monkeypatch.setattr(desktop_ui_module, "is_shutting_down", lambda: False)
+
+        ui = DesktopUI()
+        ui._api = MagicMock()
+        ui._api.set_window = MagicMock()
+        original_print = builtins.print
+        original_hook = threading.excepthook
+
+        result = ui.run_with_orchestrator(lambda: 0)
+
+        assert result == 0
+        assert builtins.print is original_print
+        assert threading.excepthook is original_hook
+        assert mock_shutdown.called
+
+    def test_run_with_orchestrator_webview_start_exception_before_loaded_fails(
+        self, monkeypatch, tmp_path
+    ) -> None:
+        dist_dir = tmp_path / "dist"
+        dist_dir.mkdir()
+        (dist_dir / "index.html").write_text("<html></html>", encoding="utf-8")
+
+        class RaisingBeforeLoadedWebview(FakeWebviewModule):
+            def start(self, func=None, debug=False, **kwargs):
+                self.start_kwargs = dict(kwargs)
+                self.started = True
+                raise RuntimeError("join failed")
+
+        fake_webview = RaisingBeforeLoadedWebview()
+        monkeypatch.setitem(sys.modules, "webview", fake_webview)
+        monkeypatch.setattr(
+            frontend_discovery_module, "find_frontend_dist", lambda: dist_dir
+        )
+        mock_shutdown = MagicMock()
+        monkeypatch.setattr(desktop_ui_module, "request_shutdown", mock_shutdown)
+        monkeypatch.setattr(desktop_ui_module, "is_shutting_down", lambda: False)
+
+        ui = DesktopUI()
+        ui._api = MagicMock()
+        ui._api.set_window = MagicMock()
+        original_print = builtins.print
+        original_hook = threading.excepthook
+
+        result = ui.run_with_orchestrator(lambda: 0)
+
+        assert result == 1
+        assert builtins.print is original_print
+        assert threading.excepthook is original_hook
+        assert ui._api.push_log.called
+        assert mock_shutdown.called
+
 
 class TestShutdownThreadingExcepthook:
     """Tests for _shutdown_threading_excepthook."""
