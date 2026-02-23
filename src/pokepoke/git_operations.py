@@ -15,7 +15,7 @@ from .merge_conflict import (  # noqa: E402
     get_merge_conflict_details,
 )
 
-from .git_helpers import restore_beads_stash  # noqa: E402
+from .git_helpers import restore_beads_stash, _run_git_status_with_retry  # noqa: E402
 
 __all__ = [
     'is_merge_in_progress', 'get_unmerged_files', 'abort_merge',
@@ -40,17 +40,18 @@ def categorize_git_changes(lines: list[str]) -> dict[str, list[str]]:
         ],
     }
 
+
 def has_uncommitted_changes(cwd: str | None = None) -> bool:
     """Check if there are uncommitted changes in the given directory.
 
     Returns True if changes exist or git status cannot be verified.
     Assumes dirty state on failure to prevent data loss during merge operations.
+    Retries on timeout to handle transient git index.lock contention.
     """
     try:
-        result = subprocess.run(
+        result = _run_git_status_with_retry(
             ["git", "status", "--porcelain"],
-            capture_output=True, text=True, encoding='utf-8',
-            errors='replace', check=True, timeout=10, cwd=cwd
+            cwd=cwd,
         )
         return bool(result.stdout.strip())
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
@@ -95,12 +96,12 @@ def verify_main_repo_clean(cwd: str | None = None) -> tuple[bool, str, list[str]
     """Verify repository has no uncommitted non-beads changes.
 
     Returns (is_clean, uncommitted_output, non_beads_changes).
+    Retries on timeout to handle transient git index.lock contention.
     """
     try:
-        status_result = subprocess.run(
+        status_result = _run_git_status_with_retry(
             ["git", "status", "--porcelain"],
-            capture_output=True, text=True, encoding='utf-8',
-            errors='replace', check=True, timeout=10, cwd=cwd
+            cwd=cwd,
         )
 
         uncommitted = status_result.stdout.strip()
