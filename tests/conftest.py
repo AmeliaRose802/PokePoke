@@ -90,7 +90,6 @@ def _mock_cleanup_lock_global(monkeypatch):
 
     monkeypatch.setattr("pokepoke.repo_state_guard.cleanup_lock", lambda: nullcontext())
     monkeypatch.setattr("pokepoke.repo_check.cleanup_lock", lambda: nullcontext())
-    monkeypatch.setattr("pokepoke.worktree_finalization.cleanup_lock", lambda: nullcontext())
     monkeypatch.setattr("pokepoke.worktree_finalization.merge_lock", lambda: nullcontext())
 
 

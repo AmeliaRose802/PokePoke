@@ -184,7 +184,7 @@ class MergeQueue:
         try:
             from .worktree_finalization import merge_worktree_to_dev
 
-            success = merge_worktree_to_dev(item)
+            success = merge_worktree_to_dev(item, worktree_path=worktree_path)
             if success:
                 result = MergeResult(
                     status=MergeStatus.SUCCESS,
