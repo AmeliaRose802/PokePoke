@@ -278,28 +278,30 @@ def _mutate_work_item_label(
 
 
 def _is_git_repo(path: Path) -> bool:
-    """Check if a directory is (or is inside) a git repository."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--git-dir"],
-            capture_output=True,
-            text=True,
-            cwd=str(path),
-            timeout=10,
-        )
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, OSError):
-        return False
+    from pokepoke.project_utils import is_git_repo
+    return is_git_repo(path)
+
+
+def _resolve_git_toplevel(path: Path) -> Path | None:
+    from pokepoke.project_utils import resolve_git_toplevel
+    return resolve_git_toplevel(path)
+
+
+def _has_pokepoke_config(project_path: Path) -> bool:
+    from pokepoke.project_utils import has_pokepoke_config
+    return has_pokepoke_config(project_path)
+
+
+def _check_beads_available(path: Path) -> bool:
+    from pokepoke.project_utils import check_beads_available
+    return check_beads_available(path)
 
 
 def open_project(self: Any, path: str) -> dict[str, Any]:
-    """Open a project directory, validating it and updating internal state.
-
-    Validates git repo, checks for .pokepoke/ config (returns needs_init
-    if absent), updates config module, and resets session state.
-    """
+    """Open a project directory, validating it and updating internal state."""
     from pokepoke.config import reset_config, load_config
     from pokepoke.repo_utils import get_repository_name
+    from pokepoke.shutdown import cancel_stop_after_current
 
     project_path = Path(path).resolve()
 
@@ -309,19 +311,20 @@ def open_project(self: Any, path: str) -> dict[str, Any]:
     if not _is_git_repo(project_path):
         return {"success": False, "path": str(project_path), "error": "Not a git repository"}
 
-    has_config = (project_path / ".pokepoke").is_dir()
+    # Resolve to git repo root (handles subdirectory picks)
+    repo_root = _resolve_git_toplevel(project_path)
+    if repo_root is not None:
+        project_path = repo_root
 
-    # Switch the process working directory so config/beads pick up the new project
+    has_config = _has_pokepoke_config(project_path)
     os.chdir(project_path)
+    needs_beads_init = not _check_beads_available(project_path)
 
-    # Reset cached config so it reloads from the new cwd
     reset_config()
     config = load_config()
-
-    # Re-extract repository name
     repo_name = get_repository_name()
+    cancel_stop_after_current()
 
-    # Reset session state on the API instance
     with self._lock:
         self._repository_name = repo_name
         self._current_work_item = None
@@ -336,16 +339,15 @@ def open_project(self: Any, path: str) -> dict[str, Any]:
         self._live_session_stats = None
         self._current_logs_dir = None
 
-    self.push_log(
-        f"📂 Opened project: {repo_name} ({project_path})",
-        "orchestrator",
-    )
+    self._agent_registry.clear()
+    self.push_log(f"📂 Opened project: {repo_name} ({project_path})", "orchestrator")
 
     return {
         "success": True,
         "path": str(project_path),
         "project_name": config.project_name or repo_name,
         "needs_init": not has_config,
+        "needs_beads_init": needs_beads_init,
     }
 
 
