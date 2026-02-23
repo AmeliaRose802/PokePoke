@@ -139,6 +139,18 @@ def run_orchestrator(
         from pokepoke.session_stats_registry import set_current_session_stats
         set_current_session_stats(session_stats)
 
+        # Backfill any missing beads item creation events from the beads database
+        # This ensures the Desktop UI's "Lifetime beads throughput" ADDED count is accurate
+        from pokepoke.beads_item_stats_backfill import backfill_from_beads_db
+        try:
+            backfill_result = backfill_from_beads_db(silent=True)
+            if backfill_result["backfilled"] > 0:
+                print(f"✅ Backfilled {backfill_result['backfilled']} beads item creation events")
+                run_logger.log_orchestrator(f"Backfilled {backfill_result['backfilled']} beads item creation events")
+        except Exception as e:
+            logger.warning(f"Failed to backfill beads item stats: {e}")
+            run_logger.log_orchestrator(f"Failed to backfill beads item stats: {e}", level="WARNING")
+
         from pokepoke.beads_item_stats_store import get_summary as _get_beads_summary
         s = _get_beads_summary()
         session_stats.set_lifetime_beads_item_totals(created=int(s.get("total_created", 0)), completed=int(s.get("total_completed", 0)))
