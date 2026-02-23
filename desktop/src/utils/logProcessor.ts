@@ -1,7 +1,6 @@
 /**
  * Log processing utilities for tool call collapsing and batching.
- * Pure functions for parsing and processing log entries - no React components.
- * Used by both LogPanel (main agent/orchestrator logs) and AgentLogPanel (agent detail view).
+ * Used by both LogPanel and AgentLogPanel.
  */
 
 import type { LogEntry } from "../types";
@@ -55,7 +54,7 @@ export type RenderLogItem =
       language?: string;
     };
 
-const TOOL_CALL_PATTERN = /^\s*(?:🌿|\[Tool\])\s*(.*)$/;
+const TOOL_CALL_PATTERN = /^\s*(?:🌿|🔧|\[Tool\])\s*(.*)$/;
 const TOOL_RESULT_PATTERN = /^\s*(✅|❌)\s*Result:\s*(.*)$/;
 const TOOL_RESULT_FALLBACK = /^\s*\[Result\]\s*(.*)$/i;
 const COPILOT_TOOL_BATCH_HEADER = /^\s*\[Copilot\]\s*Calling\s+(\d+)\s+tool\(s\)\.\.\.$/;
@@ -283,18 +282,30 @@ export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
     }
 
     const parts = parseToolCallParts(entry.message);
-    const next = logs[index + 1];
-    const result = next && isToolResultMessage(next.message) ? next : undefined;
-    const nextIndex = result ? index + 2 : index + 1;
+
+    // Scan forward past streaming output (e.g. powershell stdout) to find the result
+    const intermediateEntries: LogEntry[] = [];
+    let j = index + 1;
+    while (j < logs.length) {
+      const line = logs[j];
+      if (isToolCallMessage(line.message) || isCopilotToolBatchHeader(line.message)) break;
+      if (TOOL_RESULT_PATTERN.test(line.message) || TOOL_RESULT_FALLBACK.test(line.message)) break;
+      intermediateEntries.push(line);
+      j += 1;
+    }
+    const resultEntry = logs[j];
+    const result = resultEntry && isToolResultMessage(resultEntry.message) ? resultEntry : undefined;
+    const hasIntermediate = result && intermediateEntries.length > 0;
     return {
       tool: {
         toolName: parts.toolName,
         argsText: parts.argsText,
         entry,
         result,
+        additionalEntries: hasIntermediate ? intermediateEntries : undefined,
         summary: buildToolSummary(entry.message, result?.message),
       },
-      nextIndex,
+      nextIndex: result ? j + 1 : index + 1,
     };
   }
 
@@ -319,6 +330,18 @@ export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
       });
     }
     return groups;
+  }
+
+  function buildBatchFromTools(tools: ToolItem[], startedAt: number, header?: LogEntry, expectedTotal?: number): ToolBatch {
+    const groups = buildToolGroups(tools);
+    const completedCalls = tools.filter((t) => Boolean(t.result)).length;
+    const hasError = tools.some((t) => t.summary.statusClass === "log-error");
+    const allDone = tools.every((t) => Boolean(t.result));
+    return {
+      header, expectedTotal, startedAt, groups,
+      totalCalls: tools.length, completedCalls,
+      statusClass: hasError ? "log-error" : allDone ? "log-success" : undefined,
+    };
   }
 
   let i = 0;
@@ -360,24 +383,7 @@ export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
       }
 
       if (tools.length > 0) {
-        const groups = buildToolGroups(tools);
-        const completedCalls = tools.filter((t) => Boolean(t.result)).length;
-        const totalCalls = tools.length;
-        const hasError = tools.some((t) => t.summary.statusClass === "log-error");
-        const allDone = tools.every((t) => Boolean(t.result));
-        const statusClass = hasError ? "log-error" : allDone ? "log-success" : undefined;
-        items.push({
-          type: "tool-batch",
-          batch: {
-            header,
-            expectedTotal,
-            startedAt,
-            groups,
-            totalCalls,
-            completedCalls,
-            statusClass,
-          },
-        });
+        items.push({ type: "tool-batch", batch: buildBatchFromTools(tools, startedAt, header, expectedTotal) });
         continue;
       }
 
@@ -399,22 +405,7 @@ export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
         continue;
       }
 
-      const groups = buildToolGroups(tools);
-      const completedCalls = tools.filter((t) => Boolean(t.result)).length;
-      const totalCalls = tools.length;
-      const hasError = tools.some((t) => t.summary.statusClass === "log-error");
-      const allDone = tools.every((t) => Boolean(t.result));
-      const statusClass = hasError ? "log-error" : allDone ? "log-success" : undefined;
-      items.push({
-        type: "tool-batch",
-        batch: {
-          startedAt,
-          groups,
-          totalCalls,
-          completedCalls,
-          statusClass,
-        },
-      });
+      items.push({ type: "tool-batch", batch: buildBatchFromTools(tools, startedAt) });
       continue;
     }
 
