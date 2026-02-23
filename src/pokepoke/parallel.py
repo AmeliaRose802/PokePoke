@@ -9,7 +9,7 @@ from typing import Any
 from pokepoke.parallel_runtime import clear_runtime_parallel_limits, compute_effective_max_agents, set_runtime_parallel_limits
 
 from pokepoke.agent_context import get_agent_name, set_agent_name, clear_agent_name
-from pokepoke.beads import get_ready_work_items
+from pokepoke.beads import get_ready_work_items, is_item_claimable
 from pokepoke.types import BeadsWorkItem, SessionStats, WorkItemResult
 from pokepoke.workflow import process_work_item
 from pokepoke.work_item_selection import select_multiple_items
@@ -262,18 +262,17 @@ def run_parallel_loop(
                     skip_ids=failed_claim_ids, claimed_ids=current_active,
                 )
                 for item in selected_items:
+                    if not is_item_claimable(item.id):
+                        run_logger.log_orchestrator(f"Skipping {item.id} - already claimed by another agent")
+                        continue
+
                     _worker_counter += 1
                     base_name = get_agent_name(default="pokepoke")
                     worker_name = _build_worker_name(base_name, item.id, _worker_counter)
-                    run_logger.log_orchestrator(
-                        f"Submitting item: {item.id} - {item.title} (worker: {worker_name})"
-                    )
+                    run_logger.log_orchestrator(f"Submitting item: {item.id} - {item.title} (worker: {worker_name})")
                     semaphore.acquire()
                     try:
-                        fut = executor.submit(
-                            _parallel_process_item,
-                            item, run_logger, semaphore, worker_name,
-                        )
+                        fut = executor.submit(_parallel_process_item, item, run_logger, semaphore, worker_name)
                     except Exception as e:
                         logger.warning(f"Failed to submit work item {item.id} to executor: {e}")
                         semaphore.release()

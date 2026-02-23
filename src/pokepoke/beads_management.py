@@ -50,6 +50,38 @@ def run_bd_sync_with_retry(
     return last_result
 
 
+def is_item_claimable(item_id: str) -> bool:
+    """Quick check if an item is still claimable (unassigned).
+
+    This is a non-locking check used for pre-filtering items before dispatch.
+    It catches obvious cases where an item was already claimed by another agent.
+
+    Note: This is not atomic. Use within assign_and_sync_item's lock for
+    guarantees. This function is meant for quick pre-checks to avoid
+    submitting obviously-taken items to worker threads.
+
+    Args:
+        item_id: The item ID to check.
+
+    Returns:
+        True if item appears unassigned, False if assigned or error querying.
+    """
+    try:
+        result = _run_bd(['show', item_id, '--json'])
+        data = _parse_beads_json(result.stdout)
+        if data is None:
+            return False
+
+        current_item = data[0] if isinstance(data, list) else data
+        current_assignee = current_item.get('assignee', '')
+
+        # Item is claimable if assignee is empty
+        return not current_assignee
+    except (subprocess.CalledProcessError, json.JSONDecodeError):
+        # On error, assume not claimable (safer to skip than to try)
+        return False
+
+
 def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
     """Assign a work item to an agent and sync to prevent parallel conflicts.
 
