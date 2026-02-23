@@ -370,6 +370,9 @@ class DesktopAPI:
             "max": max_agents,
         }
 
+    open_project = _ext.open_project
+    browse_for_project = _ext.browse_for_project
+
     list_prompts = _ext.list_prompts
     get_prompt = _ext.get_prompt
     save_prompt = _ext.save_prompt

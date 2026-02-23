@@ -1182,3 +1182,104 @@ def test_agent_detail_includes_tokens() -> None:
     assert detail["input_tokens"] == 10_000
     assert detail["output_tokens"] == 3_000
     assert detail["context_limit"] == 200_000
+
+
+# ─── open_project / browse_for_project tests ─────────────────────────
+
+
+def test_open_project_nonexistent_directory() -> None:
+    api = DesktopAPI()
+    result = api.open_project("/nonexistent/path/xyz")
+    assert result["success"] is False
+    assert "does not exist" in result["error"]
+
+
+def test_open_project_not_a_git_repo(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "pokepoke.desktop_api_ext._is_git_repo", lambda p: False
+    )
+    result = DesktopAPI().open_project(str(tmp_path))
+    assert result["success"] is False
+    assert "Not a git repository" in result["error"]
+
+
+def test_open_project_success_with_pokepoke_config(tmp_path, monkeypatch) -> None:
+    # Set up a fake project dir with .pokepoke/
+    (tmp_path / ".pokepoke").mkdir()
+    (tmp_path / ".pokepoke" / "config.yaml").write_text(
+        "project_name: test-proj\n", encoding="utf-8"
+    )
+
+    monkeypatch.setattr(
+        "pokepoke.desktop_api_ext._is_git_repo", lambda p: True
+    )
+    monkeypatch.setattr(
+        "pokepoke.repo_utils.get_repository_name", lambda: "test-repo"
+    )
+
+    api = DesktopAPI()
+    result = api.open_project(str(tmp_path))
+
+    assert result["success"] is True
+    assert result["needs_init"] is False
+    assert result["project_name"] == "test-proj"
+    # Session state should be reset
+    state = api.get_state()
+    assert state["work_item"] is None
+    assert state["agent_name"] == ""
+    assert state["repository_name"] == "test-repo"
+
+
+def test_open_project_needs_init_when_no_pokepoke_dir(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "pokepoke.desktop_api_ext._is_git_repo", lambda p: True
+    )
+    monkeypatch.setattr(
+        "pokepoke.repo_utils.get_repository_name", lambda: "bare-repo"
+    )
+
+    result = DesktopAPI().open_project(str(tmp_path))
+    assert result["success"] is True
+    assert result["needs_init"] is True
+
+
+def test_browse_for_project_no_window() -> None:
+    api = DesktopAPI()
+    # _window is None by default
+    result = api.browse_for_project()
+    assert result["success"] is False
+    assert "No window" in result["error"]
+
+
+def test_browse_for_project_cancelled() -> None:
+    api = DesktopAPI()
+    mock_window = Mock()
+    mock_window.create_file_dialog.return_value = None
+    api.set_window(mock_window)
+
+    result = api.browse_for_project()
+    assert result["success"] is False
+    assert result.get("cancelled") is True
+
+
+def test_browse_for_project_delegates_to_open_project(tmp_path, monkeypatch) -> None:
+    (tmp_path / ".pokepoke").mkdir()
+    (tmp_path / ".pokepoke" / "config.yaml").write_text(
+        "project_name: picked\n", encoding="utf-8"
+    )
+
+    monkeypatch.setattr(
+        "pokepoke.desktop_api_ext._is_git_repo", lambda p: True
+    )
+    monkeypatch.setattr(
+        "pokepoke.repo_utils.get_repository_name", lambda: "picked-repo"
+    )
+
+    api = DesktopAPI()
+    mock_window = Mock()
+    mock_window.create_file_dialog.return_value = (str(tmp_path),)
+    api.set_window(mock_window)
+
+    result = api.browse_for_project()
+    assert result["success"] is True
+    assert result["project_name"] == "picked"
