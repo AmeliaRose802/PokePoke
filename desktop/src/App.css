@@ -2566,6 +2566,11 @@
   border-color: var(--accent-primary);
 }
 
+.settings-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .settings-hint {
   display: block;
   font-size: 11px;

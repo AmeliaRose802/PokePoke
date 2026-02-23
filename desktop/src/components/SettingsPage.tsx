@@ -294,7 +294,9 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
                   ))}
                 </datalist>
                 <span className="settings-hint">
-                  Primary model for agent tasks
+                  {abTestingEnabled
+                    ? "Ignored while A/B testing is active"
+                    : "Primary model for agent tasks"}
                 </span>
               </div>
 
