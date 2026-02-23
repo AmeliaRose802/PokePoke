@@ -70,6 +70,8 @@ def process_work_item(
     # Register this agent for shutdown coordination
     register_agent()
     worktree_path: Path | None = None
+    was_assigned = False
+    finalized_successfully = False
 
     try:
         start_time = time.time()
@@ -92,7 +94,6 @@ def process_work_item(
         print(f"\n≡ƒÜÇ Processing work item: {item.id} ΓÇö {item.title}")
         print(f"   ≡ƒñû Model: {selected_model} | ≡ƒºá Backend: {backend_provider} | ΓÅ▒∩╕Å  Timeout: {timeout_hours}h\n")
 
-        # Start item logging
         item_logger = run_logger.start_item_log(item.id, item.title) if run_logger else None
 
         if interactive:
@@ -112,12 +113,11 @@ def process_work_item(
                     print(f"Γ¥î Failed to assign work item {item.id}")
                     _log_failure(run_logger, item_logger)
                     return _fail_result()
-
+                was_assigned = True
                 worktree_path = _setup_worktree(item)
 
                 if worktree_path is None:
                     print(f"Γå⌐∩╕Å  Returning {item.id} to queue (unassigning due to worktree failure)...")
-                    unassign_item(item.id)
                     _log_failure(run_logger, item_logger)
                     return _fail_result()
         except Timeout:
@@ -130,7 +130,6 @@ def process_work_item(
         assert worktree_path is not None
         worktree_cwd = str(worktree_path)
         print(f"   Working directory: {worktree_cwd}\n")
-
         last_feedback = ""
         accumulated_stats = AgentStats()
         gate_success = False
@@ -261,6 +260,7 @@ def process_work_item(
         if result.success:
             set_terminal_banner(format_work_item_banner(item.id, item.title, "Finalizing"))
             success = finalize_work_item(item, worktree_path, parent_agent_id=base_agent_id)
+            finalized_successfully = success
             # Use accumulated stats
             item_stats = accumulated_stats
 
@@ -347,7 +347,12 @@ def process_work_item(
                 cleanup_worktree(item.id, force=True)
         except Exception as e:
             logger.debug(f"Failed to cleanup worktree: {e}")
-        # Always unregister agent when done, regardless of success/failure
+        # Unassign item so other agents can pick it up again
+        if was_assigned and not finalized_successfully:
+            try:
+                unassign_item(item.id)
+            except Exception as e:
+                logger.warning(f"Failed to unassign item {item.id}: {e}")
         unregister_agent()
 
 
