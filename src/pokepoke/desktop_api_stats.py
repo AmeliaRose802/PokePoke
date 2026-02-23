@@ -101,6 +101,11 @@ def get_model_history(self: Any, limit: int = 200) -> list[dict[str, Any]]:
 
     Reads from model_history.jsonl which includes labels and issue_type for better charting.
     Falls back to model_stats.json if history file doesn't exist (backward compatibility).
+
+    Normalizes keys to match frontend ModelHistoryEntry schema:
+    - work_item_id → item_id
+    - wall_time_seconds → duration_seconds
+    - quality_gates_passed → gate_passed
     """
     if limit <= 0:
         return []
@@ -114,12 +119,27 @@ def get_model_history(self: Any, limit: int = 200) -> list[dict[str, Any]]:
 
     # Try to load from detailed history first (includes labels and issue_type)
     from pokepoke.model_history import load_model_history_entries
-    history = load_model_history_entries(limit=limit)
+    raw_history = load_model_history_entries(limit=limit)
 
     # Fall back to model_stats.json if history file doesn't exist
-    if not history:
+    if not raw_history:
         from pokepoke.model_stats_store import get_model_history as _get_model_history
-        history = list(_get_model_history(limit=limit))
+        raw_history = list(_get_model_history(limit=limit))
+
+    # Normalize keys to match frontend schema
+    history = []
+    for entry in raw_history:
+        normalized = dict(entry)
+
+        # Map backend keys to frontend keys
+        if "work_item_id" in normalized:
+            normalized["item_id"] = normalized.pop("work_item_id")
+        if "wall_time_seconds" in normalized:
+            normalized["duration_seconds"] = normalized.pop("wall_time_seconds")
+        if "quality_gates_passed" in normalized:
+            normalized["gate_passed"] = normalized.pop("quality_gates_passed")
+
+        history.append(normalized)
 
     self._history_cache = history
     self._history_cache_limit = limit

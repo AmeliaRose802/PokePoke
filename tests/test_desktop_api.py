@@ -443,14 +443,27 @@ def test_get_model_leaderboard() -> None:
 
 
 def test_get_model_history_delegates() -> None:
-    """get_model_history should proxy to model_stats_store."""
+    """get_model_history should proxy to model_history.load_model_history_entries and normalize keys."""
     from unittest.mock import patch
 
     api = DesktopAPI()
-    with patch("pokepoke.model_stats_store.get_model_history", return_value=[{"item_id": "A"}]) as mock_history:
+    # Mock raw data from model_history
+    raw_data = [{"work_item_id": "A", "wall_time_seconds": 30.0, "quality_gates_passed": True}]
+
+    with patch("pokepoke.model_history.load_model_history_entries", return_value=raw_data) as mock_history:
         history = api.get_model_history(limit=5)
+
     mock_history.assert_called_once_with(limit=5)
-    assert history == [{"item_id": "A"}]
+
+    # Verify normalization happened
+    assert len(history) == 1
+    assert history[0]["item_id"] == "A"
+    assert history[0]["duration_seconds"] == 30.0
+    assert history[0]["gate_passed"] is True
+    assert "work_item_id" not in history[0]
+    assert "wall_time_seconds" not in history[0]
+    assert "quality_gates_passed" not in history[0]
+
 
 
 def test_get_model_history_empty_for_non_positive_limit() -> None:

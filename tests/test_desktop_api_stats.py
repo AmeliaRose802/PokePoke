@@ -233,7 +233,8 @@ class TestGetModelHistory:
         assert get_model_history(obj, limit=-1) == []
 
     def test_returns_cached_history(self) -> None:
-        cached = [{"item_id": "x"}]
+        # Cached data should already be normalized
+        cached = [{"item_id": "x", "duration_seconds": 45.0, "gate_passed": False}]
         obj = _make_self(
             _history_cache=cached,
             _history_cache_limit=200,
@@ -244,13 +245,61 @@ class TestGetModelHistory:
 
     def test_fetches_and_stores_new_history(self) -> None:
         obj = _make_self()
-        fresh = [{"item_id": "new"}]
-        # Mock both the primary source (model_history) and fallback (model_stats)
-        with patch("pokepoke.model_history.load_model_history_entries", return_value=fresh):
+        # Mock raw data from backend (before normalization)
+        raw_data = [{"work_item_id": "new", "wall_time_seconds": 30.0, "quality_gates_passed": True}]
+        # Expected normalized data
+        normalized = [{"item_id": "new", "duration_seconds": 30.0, "gate_passed": True}]
+
+        with patch("pokepoke.model_history.load_model_history_entries", return_value=raw_data):
             result = get_model_history(obj, limit=10)
-        assert result == fresh
-        assert obj._history_cache == fresh
+
+        assert result == normalized
+        assert obj._history_cache == normalized
         assert obj._history_cache_limit == 10
+
+    def test_normalizes_model_history_keys(self) -> None:
+        """Test that backend keys are mapped to frontend schema."""
+        obj = _make_self()
+        # Raw data with backend keys
+        raw_data = [
+            {
+                "timestamp": "2024-01-01T00:00:00",
+                "model": "gpt-4",
+                "work_item_id": "PokePoke-123",
+                "title": "Fix bug",
+                "issue_type": "bug",
+                "labels": ["backend", "critical"],
+                "wall_time_seconds": 45.5,
+                "quality_gates_passed": True,
+                "success": True,
+                "retry_attempts": 0,
+            }
+        ]
+
+        with patch("pokepoke.model_history.load_model_history_entries", return_value=raw_data):
+            result = get_model_history(obj, limit=10)
+
+        assert len(result) == 1
+        entry = result[0]
+
+        # Check normalized keys exist
+        assert entry["item_id"] == "PokePoke-123"
+        assert entry["duration_seconds"] == 45.5
+        assert entry["gate_passed"] is True
+
+        # Check old keys are removed
+        assert "work_item_id" not in entry
+        assert "wall_time_seconds" not in entry
+        assert "quality_gates_passed" not in entry
+
+        # Check other fields are preserved
+        assert entry["timestamp"] == "2024-01-01T00:00:00"
+        assert entry["model"] == "gpt-4"
+        assert entry["title"] == "Fix bug"
+        assert entry["issue_type"] == "bug"
+        assert entry["labels"] == ["backend", "critical"]
+        assert entry["success"] is True
+        assert entry["retry_attempts"] == 0
 
 
 class TestPushStats:
