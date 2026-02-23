@@ -85,15 +85,24 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
 
   const statusInfo = STATUS_INDICATOR[agent.status] ?? STATUS_INDICATOR.running;
   
-  // Use detailed agent logs if available, otherwise fall back to basic agent info
+  // Prioritize live agent data for logs, but use detailed agent for metadata if available
   const agentToUse = detailedAgent || agent;
   const agentType = getAgentType(agentToUse);
   const agentIconPath = getAgentAvatar(agentToUse);
   const fallbackAvatar = getAvatar(agentToUse.base_agent_id ?? agentToUse.agent_id);
   const iconAlt = `${agentType ?? "agent"} icon`;
-  const logLines = agentToUse.log_lines && agentToUse.log_lines.length > 0
-    ? agentToUse.log_lines
-    : agentToUse.recent_logs;
+  
+  // Memoize logLines to prevent dependency changes on every render
+  const logLines = useMemo(() => {
+    // Priority: 1) Live agent recent_logs, 2) Detailed agent log_lines, 3) Fallback to empty
+    if (agent.recent_logs && agent.recent_logs.length > 0) {
+      return agent.recent_logs;
+    }
+    if (detailedAgent?.log_lines && detailedAgent.log_lines.length > 0) {
+      return detailedAgent.log_lines;
+    }
+    return [];
+  }, [agent.recent_logs, detailedAgent?.log_lines]);
   
   const primaryLabel = getAgentPrimaryLabel(agent);
   // Show the friendly name prominently when it differs from the primary label
@@ -121,6 +130,29 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
     
     fetchDetailedAgent();
   }, [agent.card_id, agent.agent_id, getAgentDetail]);
+
+  // Re-poll detailed agent data periodically for running agents to keep logs fresh
+  useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    
+    const shouldRepoll = agent.status === 'running' && !agent.paused;
+    if (shouldRepoll) {
+      intervalId = setInterval(async () => {
+        try {
+          const detailKey = agent.card_id ?? agent.agent_id;
+          const detailed = await getAgentDetail(detailKey);
+          setDetailedAgent(detailed);
+        } catch (error) {
+          console.warn('Failed to refresh agent detail:', error);
+          // Don't update error state for background refreshes
+        }
+      }, 5000); // Re-poll every 5 seconds for running agents
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [agent.status, agent.paused, agent.card_id, agent.agent_id, getAgentDetail]);
 
   const handleScroll = () => {
     const el = containerRef.current;
