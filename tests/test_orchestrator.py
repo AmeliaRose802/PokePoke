@@ -1019,11 +1019,11 @@ class TestOrchestratorHelperFunctions:
 class TestOrchestratorMain:
     """Test main entry point."""
 
-    @patch('pokepoke.orchestrator.check_beads_available', return_value=True)
+    @patch('pokepoke.project_utils.ensure_project_ready', return_value=True)
     @patch('pokepoke.orchestrator.run_orchestrator')
     @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke', '--autonomous'])
-    def test_main_autonomous(self, mock_ui: Mock, mock_run: Mock, _mock_beads: Mock) -> None:
+    def test_main_autonomous(self, mock_ui: Mock, mock_run: Mock, _mock_ready: Mock) -> None:
         """Test main with autonomous flag."""
         from pokepoke.orchestrator import main
 
@@ -1041,11 +1041,11 @@ class TestOrchestratorMain:
             max_parallel_agents=1,
         )
 
-    @patch('pokepoke.orchestrator.check_beads_available', return_value=True)
+    @patch('pokepoke.project_utils.ensure_project_ready', return_value=True)
     @patch('pokepoke.orchestrator.run_orchestrator')
     @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke', '--continuous'])
-    def test_main_continuous(self, mock_ui: Mock, mock_run: Mock, _mock_beads: Mock) -> None:
+    def test_main_continuous(self, mock_ui: Mock, mock_run: Mock, _mock_ready: Mock) -> None:
         """Test main with continuous flag."""
         from pokepoke.orchestrator import main
 
@@ -1063,11 +1063,11 @@ class TestOrchestratorMain:
             max_parallel_agents=1,
         )
 
-    @patch('pokepoke.orchestrator.check_beads_available', return_value=True)
+    @patch('pokepoke.project_utils.ensure_project_ready', return_value=True)
     @patch('pokepoke.orchestrator.run_orchestrator')
     @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke', '--autonomous', '--continuous'])
-    def test_main_both_flags(self, mock_ui: Mock, mock_run: Mock, _mock_beads: Mock) -> None:
+    def test_main_both_flags(self, mock_ui: Mock, mock_run: Mock, _mock_ready: Mock) -> None:
         """Test main with both flags."""
         from pokepoke.orchestrator import main
 
@@ -1085,19 +1085,20 @@ class TestOrchestratorMain:
             max_parallel_agents=1,
         )
 
-    @patch('pokepoke.orchestrator.check_beads_available', return_value=False)
+    @patch('pokepoke.project_utils.ensure_project_ready', return_value=False)
+    @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke', '--autonomous'])
-    def test_main_exits_when_beads_unavailable(self, _mock_beads: Mock) -> None:
+    def test_main_exits_when_beads_unavailable(self, mock_ui: Mock, _mock_ready: Mock) -> None:
         """Test main exits with code 1 when beads is not available."""
         from pokepoke.orchestrator import main
+
+        mock_ui.run_with_orchestrator.side_effect = lambda f: f()
 
         result = main()
 
         assert result == 1
 
-    @patch('pokepoke.orchestrator.check_beads_available', side_effect=[False, True])
-    @patch('pokepoke.orchestrator.initialize_beads_repo', return_value=True)
-    @patch('builtins.input', return_value='')
+    @patch('pokepoke.project_utils.ensure_project_ready', return_value=True)
     @patch('pokepoke.orchestrator.run_orchestrator')
     @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke'])
@@ -1105,11 +1106,9 @@ class TestOrchestratorMain:
         self,
         mock_ui: Mock,
         mock_run: Mock,
-        _mock_input: Mock,
-        mock_init: Mock,
-        mock_beads: Mock,
+        _mock_ready: Mock,
     ) -> None:
-        """Test interactive main prompts for bd init and proceeds on success."""
+        """Test interactive main proceeds when project is ready."""
         from pokepoke.orchestrator import main
 
         mock_run.return_value = 0
@@ -1118,32 +1117,29 @@ class TestOrchestratorMain:
         result = main()
 
         assert result == 0
-        mock_init.assert_called_once()
-        assert mock_beads.call_count == 2
 
-    @patch('pokepoke.orchestrator.check_beads_available', return_value=False)
-    @patch('pokepoke.orchestrator.initialize_beads_repo')
-    @patch('builtins.input', return_value='n')
+    @patch('pokepoke.project_utils.ensure_project_ready', return_value=False)
+    @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke'])
     def test_main_interactive_declines_beads_init_exits_1(
         self,
-        _mock_input: Mock,
-        mock_init: Mock,
-        _mock_beads: Mock,
+        mock_ui: Mock,
+        _mock_ready: Mock,
     ) -> None:
-        """Test interactive main exits when user declines bd init."""
+        """Test interactive main exits when project is not ready."""
         from pokepoke.orchestrator import main
+
+        mock_ui.run_with_orchestrator.side_effect = lambda f: f()
 
         result = main()
 
         assert result == 1
-        mock_init.assert_not_called()
 
-    @patch('pokepoke.orchestrator.check_beads_available', return_value=True)
+    @patch('pokepoke.project_utils.ensure_project_ready', return_value=True)
     @patch('pokepoke.orchestrator.run_orchestrator')
     @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke', '--autonomous', '--beta-first'])
-    def test_main_beta_first(self, mock_ui: Mock, mock_run: Mock, _mock_beads: Mock) -> None:
+    def test_main_beta_first(self, mock_ui: Mock, mock_run: Mock, _mock_ready: Mock) -> None:
         """Test main with beta-first flag."""
         from pokepoke.orchestrator import main
 
@@ -2016,11 +2012,11 @@ class TestRunOrchestratorWorktreeCoverage:
 class TestMainWorktreeCoverage:
     """Tests for main() using src.pokepoke.orchestrator for coverage."""
 
-    @patch('pokepoke.orchestrator.check_beads_available', return_value=True)
+    @patch('pokepoke.project_utils.ensure_project_ready', return_value=True)
     @patch('src.pokepoke.orchestrator.run_orchestrator')
     @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke', '--autonomous'])
-    def test_main_autonomous(self, mock_ui: Mock, mock_run: Mock, _mock_beads: Mock) -> None:
+    def test_main_autonomous(self, mock_ui: Mock, mock_run: Mock, _mock_ready: Mock) -> None:
         """Test main with autonomous flag."""
         from src.pokepoke.orchestrator import main
 
@@ -2030,11 +2026,11 @@ class TestMainWorktreeCoverage:
         result = main()
         assert result == 0
 
-    @patch('pokepoke.orchestrator.check_beads_available', return_value=True)
+    @patch('pokepoke.project_utils.ensure_project_ready', return_value=True)
     @patch('src.pokepoke.orchestrator.run_orchestrator')
     @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke', '--autonomous', '--beta-first'])
-    def test_main_beta_first(self, mock_ui: Mock, mock_run: Mock, _mock_beads: Mock) -> None:
+    def test_main_beta_first(self, mock_ui: Mock, mock_run: Mock, _mock_ready: Mock) -> None:
         """Test main with beta-first flag."""
         from src.pokepoke.orchestrator import main
 
@@ -2051,11 +2047,14 @@ class TestMainWorktreeCoverage:
             max_parallel_agents=1,
         )
 
-    @patch('src.pokepoke.orchestrator.check_beads_available', return_value=False)
+    @patch('pokepoke.project_utils.ensure_project_ready', return_value=False)
+    @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke', '--autonomous'])
-    def test_main_beads_unavailable(self, _mock_beads: Mock) -> None:
-        """Test main returns 1 when beads unavailable."""
+    def test_main_beads_unavailable(self, mock_ui: Mock, _mock_ready: Mock) -> None:
+        """Test main returns 1 when project not ready."""
         from src.pokepoke.orchestrator import main
+
+        mock_ui.run_with_orchestrator.side_effect = lambda f: f()
 
         result = main()
         assert result == 1
@@ -2069,11 +2068,11 @@ class TestMainWorktreeCoverage:
         result = main()
         assert result == 0
 
-    @patch('pokepoke.orchestrator.check_beads_available', return_value=True)
+    @patch('pokepoke.project_utils.ensure_project_ready', return_value=True)
     @patch('src.pokepoke.orchestrator.run_orchestrator')
     @patch('pokepoke.terminal_ui.ui')
     @patch('sys.argv', ['pokepoke', '--autonomous', '--continuous'])
-    def test_main_continuous(self, mock_ui: Mock, mock_run: Mock, _mock_beads: Mock) -> None:
+    def test_main_continuous(self, mock_ui: Mock, mock_run: Mock, _mock_ready: Mock) -> None:
         """Test main with continuous flag."""
         from src.pokepoke.orchestrator import main
 
@@ -2105,7 +2104,8 @@ class TestOrchestratorCleanupDetection:
         mock_check_repo.return_value = True  # Repo check passes (cleanup succeeded or continued)
         mock_get_items.return_value = []  # No work items available
 
-        result = run_orchestrator(interactive=False, continuous=False)
+        with patch('pokepoke.orchestrator.is_shutting_down', return_value=False):
+            result = run_orchestrator(interactive=False, continuous=False)
 
         # Should return 0 because repo check passes
         assert result == 0
@@ -2134,7 +2134,8 @@ class TestOrchestratorCleanupDetection:
         mock_check_repo.return_value = True
         mock_get_items.return_value = []
 
-        result = run_orchestrator(interactive=False, continuous=False)
+        with patch('pokepoke.orchestrator.is_shutting_down', return_value=False):
+            result = run_orchestrator(interactive=False, continuous=False)
 
         mock_check_repo.assert_called_once()
         assert result == 0
@@ -2393,7 +2394,8 @@ class TestSingleAgentPanelRegistration:
             mock_output_for.return_value.__enter__ = Mock(return_value=None)
             mock_output_for.return_value.__exit__ = Mock(return_value=False)
 
-            run_orchestrator(interactive=False, continuous=False)
+            with patch('pokepoke.orchestrator.is_shutting_down', return_value=False):
+                run_orchestrator(interactive=False, continuous=False)
 
             # Should register agent as running, then update to success
             assert mock_push.call_count == 2

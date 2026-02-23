@@ -20,7 +20,7 @@ from pokepoke.agent_context import get_agent_name
 from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner, clear_terminal_banner
 from pokepoke import terminal_ui
 from pokepoke.maintenance_state import increment_items_completed
-from pokepoke.repo_check import check_and_commit_main_repo, check_beads_available, initialize_beads_repo
+from pokepoke.repo_check import check_and_commit_main_repo
 from pokepoke.maintenance import run_periodic_maintenance
 from pokepoke.shutdown import is_shutting_down, request_shutdown, should_stop_after_current, cancel_stop_after_current
 from pokepoke.model_stats_store import record_completion
@@ -327,45 +327,20 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="PokePoke - Autonomous Beads + Copilot CLI Orchestrator"
     )
-    parser.add_argument(
-        "--interactive",
-        action="store_true",
-        default=True,
-        help="Interactive mode: prompt for user input (default)",
-    )
-    parser.add_argument(
-        "--autonomous",
-        action="store_true",
-        help="Autonomous mode: automatic decision making",
-    )
-    parser.add_argument(
-        "--continuous",
-        action="store_true",
-        help="Continuous mode: loop through multiple items instead of single-shot",
-    )
-    parser.add_argument(
-        "--beta-first",
-        action="store_true",
-        help="Run beta tester at startup before processing work items",
-    )
-    parser.add_argument(
-        "--agent-name",
-        type=str,
-        default=None,
-        help="Custom agent name to use instead of auto-generating one",
-    )
-    parser.add_argument(
-        "--init",
-        action="store_true",
-        help="Initialize .pokepoke/ directory with sample config and templates",
-    )
-    parser.add_argument(
-        "--max-agents",
-        type=int,
-        default=1,
-        metavar="N",
-        help="Max concurrent work-item agents (default: 1, sequential)",
-    )
+    parser.add_argument("--interactive", action="store_true", default=True,
+                        help="Interactive mode: prompt for user input (default)")
+    parser.add_argument("--autonomous", action="store_true",
+                        help="Autonomous mode: automatic decision making")
+    parser.add_argument("--continuous", action="store_true",
+                        help="Continuous mode: loop through multiple items")
+    parser.add_argument("--beta-first", action="store_true",
+                        help="Run beta tester at startup before work items")
+    parser.add_argument("--agent-name", type=str, default=None,
+                        help="Custom agent name instead of auto-generating")
+    parser.add_argument("--init", action="store_true",
+                        help="Initialize .pokepoke/ directory with sample config")
+    parser.add_argument("--max-agents", type=int, default=1, metavar="N",
+                        help="Max concurrent work-item agents (default: 1)")
     args = parser.parse_args()
 
     if args.init:
@@ -374,20 +349,17 @@ def main() -> int:
 
     # Autonomous flag overrides interactive
     interactive = not args.autonomous
-    # Check beads availability BEFORE starting any UI
-    # so error messages print directly to stdout
-    if not check_beads_available():
-        if not interactive:
-            return 1
-        choice = input("\nThis directory is not initialized for beads. Run 'bd init' here now? [Y/n]: ").strip().lower() or "y"
-        if choice not in ("y", "yes"):
-            return 1
-        if not (initialize_beads_repo(Path.cwd()) and check_beads_available()):
-            return 1
+
     from pokepoke.desktop_ui import DesktopUI
+    from pokepoke.project_utils import ensure_project_ready
     active_ui: DesktopUI = terminal_ui.ui
+
+    desktop_ui_ref = active_ui if isinstance(active_ui, DesktopUI) else None
+
     # Run the orchestrator with the selected UI
     def orchestrator_func() -> int:
+        if not ensure_project_ready(interactive, desktop_ui_ref):
+            return 1
         return run_orchestrator(
             interactive=interactive,
             continuous=args.continuous,
@@ -395,6 +367,7 @@ def main() -> int:
             agent_name_override=args.agent_name,
             max_parallel_agents=args.max_agents,
         )
+
     return active_ui.run_with_orchestrator(orchestrator_func)
 if __name__ == "__main__":
     sys.exit(main())
