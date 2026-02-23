@@ -273,12 +273,12 @@ export function StatsPage({
             <section>
               <div className="stats-panel-card">
                 <div className="stats-panel-card-header">
-                  <h3>Average completion time by type</h3>
+                  <h3>Average completion time by tag</h3>
                   <span className="stats-panel-subtitle">Trends in item resolution time over last 14 days</span>
                 </div>
                 <CompletionTimeChart
                   data={completionTimeSeries}
-                  emptyLabel=""
+                  emptyLabel={historyLoading ? "Loading…" : "No completion time history yet"}
                 />
               </div>
             </section>

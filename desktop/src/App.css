@@ -1229,7 +1229,7 @@
 
 .agent-log-panel-content {
   flex: 1;
-  overflow-y: auto;
+  overflow: auto;
   padding: 8px 12px;
   font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
   font-size: 12px;
@@ -1303,7 +1303,7 @@
 
 .log-entries {
   flex: 1;
-  overflow-y: auto;
+  overflow: auto;
   padding: 4px 8px;
   font-size: 12px;
   line-height: 1.5;
