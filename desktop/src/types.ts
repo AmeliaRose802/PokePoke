@@ -207,6 +207,9 @@ export interface ModelPerformanceSummary {
 /** Running agent info from the orchestrator */
 export interface AgentInfo {
   agent_id: string;
+  base_agent_id?: string | null;
+  card_id?: string | null;
+  parent_card_id?: string | null;
   name: string;
   iteration: number;
   status: "running" | "success" | "failed";
@@ -226,6 +229,7 @@ export interface AgentInfo {
   input_tokens?: number;
   output_tokens?: number;
   context_limit?: number;
+  is_history_entry?: boolean;
 }
 
 /** State snapshot from the bridge */

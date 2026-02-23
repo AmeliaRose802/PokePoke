@@ -398,6 +398,62 @@ def test_push_log_buffer_trim_adjusts_read_index() -> None:
     assert len(new_logs) >= 0
 
 
+def test_retry_attempt_creates_history_cards() -> None:
+    """Each retry iteration should become its own card instead of overwriting."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", iteration=1, status="running")
+    api.push_agent_log("agent-1", "first line")
+    api.push_agent_status("agent-1", "Worker", iteration=2, status="running")
+
+    agents = api.get_state()["agents"]
+    assert len(agents) == 2
+    history = next(agent for agent in agents if agent["is_history_entry"])
+    current = next(agent for agent in agents if not agent["is_history_entry"])
+
+    assert history["iteration"] == 1
+    assert history["card_id"].endswith("::v1")
+    assert history["recent_logs"] == ["first line"]
+    assert current["iteration"] == 2
+    assert current["card_id"].endswith("::v2")
+    assert current["recent_logs"] == []
+
+
+def test_get_agent_detail_handles_history_card_id() -> None:
+    """Archived attempts should be fetchable via get_agent_detail(card_id)."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", iteration=1, status="running")
+    api.push_agent_log("agent-1", "attempt log")
+    api.push_agent_status("agent-1", "Worker", iteration=2, status="running")
+
+    history = next(
+        agent for agent in api.get_state()["agents"] if agent["is_history_entry"]
+    )
+    detail = api.get_agent_detail(history["card_id"])
+    assert detail is not None
+    assert detail["is_history_entry"] is True
+    assert detail["recent_logs"] == ["attempt log"]
+
+
+def test_gate_parent_card_tracks_retry_iteration() -> None:
+    """Gate cards should stay linked to the specific attempt they validated."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", iteration=1, status="running")
+    api.push_agent_status(
+        "agent-1-gate-1",
+        "Gate Agent",
+        iteration=1,
+        status="failed",
+        parent_agent_id="agent-1",
+    )
+    api.push_agent_status("agent-1", "Worker", iteration=2, status="running")
+
+    agents = api.get_state()["agents"]
+    history = next(agent for agent in agents if agent["is_history_entry"])
+    gate_card = next(agent for agent in agents if agent["agent_id"].startswith("agent-1-gate"))
+
+    assert gate_card["parent_card_id"] == history["card_id"]
+
+
 def test_agent_detail_caps_log_history() -> None:
     """Agent detail log_lines should be capped at 500 to prevent memory bloat."""
     api = DesktopAPI()
@@ -694,13 +750,22 @@ def test_push_agent_status_updates_existing(monkeypatch) -> None:
     api.push_agent_status("agent-1", "Gate Agent", iteration=2, status="success")
 
     agents = api.get_agents()
-    assert len(agents) == 1
-    assert agents[0]["iteration"] == 2
-    assert agents[0]["status"] == "success"
-    assert agents[0]["model"] == "gpt-5"
-    assert agents[0]["work_item_id"] == "item-123"
-    assert agents[0]["work_item_title"] == "Title"
-    assert agents[0]["recent_logs"] == ["line 1"]
+    assert len(agents) == 2
+
+    current = next(agent for agent in agents if not agent["is_history_entry"])
+    history = next(agent for agent in agents if agent["is_history_entry"])
+
+    assert current["iteration"] == 2
+    assert current["status"] == "success"
+    assert current["model"] == "gpt-5"
+    assert current["work_item_id"] == "item-123"
+    assert current["work_item_title"] == "Title"
+    assert current["recent_logs"] == []
+
+    assert history["iteration"] == 1
+    assert history["status"] == "failed"
+    assert history["recent_logs"] == ["line 1"]
+    assert history["is_history_entry"] is True
 
 
 def test_push_agent_status_preserves_parent() -> None:
@@ -719,9 +784,16 @@ def test_push_agent_status_preserves_parent() -> None:
 
     api.push_agent_status("agent-1", "Gate Agent", iteration=2, status="success")
     agents = api.get_agents()
-    assert agents[0]["parent_agent_id"] == "work-1"
-    assert agents[0]["iteration"] == 2
-    assert agents[0]["status"] == "success"
+    current = next(agent for agent in agents if not agent["is_history_entry"])
+    history = next(agent for agent in agents if agent["is_history_entry"])
+
+    assert current["parent_agent_id"] == "work-1"
+    assert current["iteration"] == 2
+    assert current["status"] == "success"
+
+    assert history["parent_agent_id"] == "work-1"
+    assert history["iteration"] == 1
+    assert history["is_history_entry"] is True
 
 
 def test_push_agent_log_appends_lines() -> None:

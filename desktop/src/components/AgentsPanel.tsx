@@ -19,12 +19,22 @@ import {
   getAgentType,
   isGateAgent,
 } from "../utils/agentHelpers";
+import {
+  cardIdForAgent,
+  formatSessionLabel,
+  GATE_STATUS_COPY,
+  getEmojiAvatar,
+  groupBySession,
+  isHistoryAgent,
+  parentKeysForAgent,
+  STATUS_INDICATOR,
+} from "../utils/agentsPanelHelpers";
 import { ContextBar } from "./ContextBar";
 
 interface Props {
   agents: AgentInfo[];
   currentSessionId?: string | null;
-  selectedAgentId?: string | null;
+  selectedCardId?: string | null;
   onSelectAgent?: (agentId: string | null) => void;
   onPauseAgent?: (agentId: string) => void;
   onResumeAgent?: (agentId: string) => void;
@@ -33,69 +43,10 @@ interface Props {
   spawnAtLimit?: boolean;
 }
 
-const ROBOT_AVATARS = [
-  "🐍", "🦎", "🕷️", "🦇", "🦋", "🐛", "🐝", "🐞",
-  "🤖", "🔧", "⚡", "🎯", "🔮", "🎲", "🔬", "🧩",
-];
-
-/** Deterministic avatar based on agent_id hash (fallback for agents without work items) */
-function getEmojiAvatar(agentId: string): string {
-  let hash = 0;
-  for (let i = 0; i < agentId.length; i++) {
-    hash = ((hash << 5) - hash + agentId.charCodeAt(i)) | 0;
-  }
-  return ROBOT_AVATARS[Math.abs(hash) % ROBOT_AVATARS.length];
-}
-
-const STATUS_INDICATOR: Record<string, { dot: string; label: string }> = {
-  running: { dot: "agent-dot-running", label: "Running" },
-  success: { dot: "agent-dot-success", label: "Done" },
-  failed: { dot: "agent-dot-failed", label: "Failed" },
-};
-
-const GATE_STATUS_COPY: Record<AgentInfo["status"], string> = {
-  running: "Gate running",
-  success: "Gate passed",
-  failed: "Gate failed",
-};
-
-const UNKNOWN_SESSION = "__unknown__";
-
-/** Format a session_id (epoch timestamp string) as a readable label. */
-function formatSessionLabel(sessionId: string): string {
-  if (sessionId === UNKNOWN_SESSION) return "Previous Session";
-  const epoch = parseFloat(sessionId);
-  if (isNaN(epoch)) return `Session ${sessionId}`;
-  const date = new Date(epoch * 1000);
-  const ymd = date.toLocaleDateString(undefined, { year: "numeric", month: "2-digit", day: "2-digit" });
-  const hm = date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  return `Session ${ymd} ${hm}`;
-}
-
-/** Group agents by session_id, preserving order (most recent last). */
-function groupBySession(
-  agents: AgentInfo[]
-): { sessionId: string; agents: AgentInfo[] }[] {
-  const map = new Map<string, AgentInfo[]>();
-  for (const agent of agents) {
-    const sid = agent.session_id ?? UNKNOWN_SESSION;
-    const group = map.get(sid);
-    if (group) {
-      group.push(agent);
-    } else {
-      map.set(sid, [agent]);
-    }
-  }
-  return Array.from(map.entries()).map(([sessionId, sessionAgents]) => ({
-    sessionId,
-    agents: sessionAgents,
-  }));
-}
-
 export function AgentsPanel({
   agents,
   currentSessionId,
-  selectedAgentId,
+  selectedCardId,
   onSelectAgent,
   onPauseAgent,
   onResumeAgent,
@@ -135,15 +86,20 @@ export function AgentsPanel({
   };
 
 
-  const agentIdSet = new Set(agents.map((a) => a.agent_id));
+  const agentKeySet = new Set<string>();
+  agents.forEach((agent) => {
+    agentKeySet.add(cardIdForAgent(agent));
+    agentKeySet.add(agent.agent_id);
+  });
   const childrenByParent = new Map<string, AgentInfo[]>();
 
   for (const agent of agents) {
-    const parentId = agent.parent_agent_id ?? null;
-    if (parentId && agentIdSet.has(parentId)) {
-      const siblings = childrenByParent.get(parentId) ?? [];
+    const parentKey =
+      parentKeysForAgent(agent).find((key) => agentKeySet.has(key)) ?? null;
+    if (parentKey) {
+      const siblings = childrenByParent.get(parentKey) ?? [];
       siblings.push(agent);
-      childrenByParent.set(parentId, siblings);
+      childrenByParent.set(parentKey, siblings);
     }
   }
 
@@ -154,19 +110,26 @@ export function AgentsPanel({
   ) => {
     const statusInfo =
       STATUS_INDICATOR[agent.status] ?? STATUS_INDICATOR.running;
-    const isSelected = selectedAgentId === agent.agent_id;
+    const cardId = cardIdForAgent(agent);
+    const isSelected = selectedCardId === cardId;
+    const isHistory = isHistoryAgent(agent);
     const isPaused = agent.paused === true;
     const depthClass = depth > 0 ? " agent-card-child" : "";
     const isGate = isGateAgent(agent);
     const gateClass = isGate ? " agent-card-gate" : "";
     const pausedClass = isPaused ? " agent-card-paused" : "";
+    const historyClass = isHistory ? " agent-card-history" : "";
     const parentLabel = parent ? getAgentPrimaryLabel(parent) : null;
     const baseLabel = getAgentPrimaryLabel(agent);
     const label = isGate && parentLabel ? parentLabel : baseLabel;
     const roleLabel = agent.work_item_id ? agent.name : null;
     const gateChildForParent =
       !isGate
-        ? (childrenByParent.get(agent.agent_id) ?? []).find(isGateAgent) ?? null
+        ? (
+            childrenByParent.get(cardId) ??
+            childrenByParent.get(agent.agent_id) ??
+            []
+          ).find(isGateAgent) ?? null
         : null;
     const gateSummary = gateChildForParent
       ? GATE_STATUS_COPY[gateChildForParent.status] ??
@@ -183,17 +146,17 @@ export function AgentsPanel({
 
     return (
       <div
-        key={agent.agent_id}
+        key={agent.card_id ?? agent.agent_id}
         className={`agent-card agent-card-${agent.status}${
           isSelected ? " agent-card-selected" : ""
-        }${depthClass}${gateClass}${pausedClass}`}
+        }${depthClass}${gateClass}${pausedClass}${historyClass}`}
         role={onSelectAgent ? "button" : undefined}
         tabIndex={onSelectAgent ? 0 : undefined}
-        onClick={() => onSelectAgent?.(agent.agent_id)}
+        onClick={() => onSelectAgent?.(cardId)}
         onKeyDown={(evt) => {
           if (evt.key === "Enter" || evt.key === " ") {
             evt.preventDefault();
-            onSelectAgent?.(agent.agent_id);
+            onSelectAgent?.(cardId);
           }
         }}
       >
@@ -246,7 +209,7 @@ export function AgentsPanel({
             />
           </div>
           {isPaused && <span className="agent-paused-badge" title="Paused">⏸</span>}
-          {agent.status === "running" && (
+          {agent.status === "running" && !isHistory && (
             <button
               className={`agent-pause-btn${isPaused ? " paused" : ""}`}
               title={isPaused ? "Resume agent" : "Pause agent"}
@@ -312,12 +275,18 @@ export function AgentsPanel({
       isCurrent || expandedSessions.has(group.sessionId);
 
     // Build trees for this session's agents
-    const sessionAgentIdSet = new Set(group.agents.map((a) => a.agent_id));
+    const sessionAgentIdSet = new Set<string>();
+    group.agents.forEach((agent) => {
+      sessionAgentIdSet.add(cardIdForAgent(agent));
+      sessionAgentIdSet.add(agent.agent_id);
+    });
     const sessionChildrenByParent = new Map<string, AgentInfo[]>();
     const sessionRootAgents: AgentInfo[] = [];
     for (const agent of group.agents) {
-      const parentId = agent.parent_agent_id ?? null;
-      if (parentId && sessionAgentIdSet.has(parentId)) {
+      const parentId =
+        parentKeysForAgent(agent).find((key) => sessionAgentIdSet.has(key)) ??
+        null;
+      if (parentId) {
         const siblings = sessionChildrenByParent.get(parentId) ?? [];
         siblings.push(agent);
         sessionChildrenByParent.set(parentId, siblings);
@@ -332,28 +301,42 @@ export function AgentsPanel({
       parent?: AgentInfo
     ): ReactElement[] => {
       const nodes = [renderAgentCard(agent, depth, parent)];
-      const children = sessionChildrenByParent.get(agent.agent_id) ?? [];
+      const children =
+        sessionChildrenByParent.get(cardIdForAgent(agent)) ??
+        sessionChildrenByParent.get(agent.agent_id) ??
+        [];
       children.forEach((child) => {
         nodes.push(...renderSessionAgentTree(child, depth + 1, agent));
       });
       return nodes;
     };
 
+    const nodeHasRunningStatus = (candidate: AgentInfo): boolean =>
+      candidate.status === "running" && !isHistoryAgent(candidate);
+
     const treeHasRunning = (agent: AgentInfo): boolean => {
-      if (agent.status === "running") return true;
-      const children = sessionChildrenByParent.get(agent.agent_id) ?? [];
+      if (nodeHasRunningStatus(agent)) return true;
+      const children =
+        sessionChildrenByParent.get(cardIdForAgent(agent)) ??
+        sessionChildrenByParent.get(agent.agent_id) ??
+        [];
       return children.some(treeHasRunning);
     };
 
     const treeHasFailure = (agent: AgentInfo): boolean => {
       if (agent.status === "failed") return true;
-      const children = sessionChildrenByParent.get(agent.agent_id) ?? [];
+      const children =
+        sessionChildrenByParent.get(cardIdForAgent(agent)) ??
+        sessionChildrenByParent.get(agent.agent_id) ??
+        [];
       return children.some(treeHasFailure);
     };
 
-    const activeRootAgents = sessionRootAgents.filter(treeHasRunning);
+    const activeRootAgents = sessionRootAgents.filter(
+      (agent) => isHistoryAgent(agent) || treeHasRunning(agent)
+    );
     const completedRootAgents = sessionRootAgents.filter(
-      (agent) => !treeHasRunning(agent)
+      (agent) => !isHistoryAgent(agent) && !treeHasRunning(agent)
     );
 
     const renderedActiveAgents = activeRootAgents.flatMap((agent) =>

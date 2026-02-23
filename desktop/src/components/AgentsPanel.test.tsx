@@ -9,13 +9,19 @@ import type { AgentInfo } from '../types';
 import { AgentsPanel } from './AgentsPanel';
 
 function mkAgent(overrides: Partial<AgentInfo> = {}): AgentInfo {
+  const iteration = overrides.iteration ?? 1;
+  const agentId = overrides.agent_id ?? 'agent-1';
   return {
-    agent_id: 'agent-1',
+    agent_id: agentId,
+    base_agent_id: overrides.base_agent_id ?? agentId,
+    card_id: overrides.card_id ?? `${agentId}::v${iteration}`,
+    parent_card_id: overrides.parent_card_id,
     name: 'Worker',
-    iteration: 1,
+    iteration,
     status: 'running',
     recent_logs: [],
     paused: false,
+    is_history_entry: overrides.is_history_entry ?? false,
     ...overrides,
   };
 }
@@ -29,6 +35,63 @@ describe('AgentsPanel', () => {
     const pauseBtn = screen.getByTitle('Pause agent');
     expect(pauseBtn).toBeInTheDocument();
     expect(pauseBtn.textContent).toBe('⏸');
+  });
+
+  describe('retry attempt cards', () => {
+    it('renders distinct cards for each attempt of the same agent', () => {
+      const first = mkAgent({
+        agent_id: 'agent-1',
+        iteration: 1,
+        card_id: 'agent-1::v1',
+        is_history_entry: true,
+        status: 'failed',
+      });
+      const second = mkAgent({
+        agent_id: 'agent-1',
+        iteration: 2,
+        card_id: 'agent-1::v2',
+      });
+      const { container } = render(
+        <AgentsPanel agents={[first, second]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />
+      );
+      const cards = container.querySelectorAll('.agent-card');
+      expect(cards.length).toBe(2);
+      expect(screen.getByText('v1')).toBeInTheDocument();
+      expect(screen.getByText('v2')).toBeInTheDocument();
+    });
+
+    it('omits pause/resume controls for historical attempts', () => {
+      const history = mkAgent({
+        agent_id: 'agent-1',
+        iteration: 1,
+        card_id: 'agent-1::v1',
+        is_history_entry: true,
+        status: 'failed',
+      });
+      render(
+        <AgentsPanel agents={[history]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />
+      );
+      expect(screen.queryByTitle('Pause agent')).not.toBeInTheDocument();
+      expect(screen.queryByTitle('Resume agent')).not.toBeInTheDocument();
+    });
+
+    it('calls onSelectAgent with the card identifier', () => {
+      const agent = mkAgent({
+        agent_id: 'agent-1',
+        card_id: 'agent-1::v5',
+      });
+      const onSelect = vi.fn();
+      render(
+        <AgentsPanel
+          agents={[agent]}
+          onSelectAgent={onSelect}
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+      screen.getByText('Worker').click();
+      expect(onSelect).toHaveBeenCalledWith('agent-1::v5');
+    });
   });
 
   it('renders agent type icon when provided', () => {

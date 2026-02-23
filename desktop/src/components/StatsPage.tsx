@@ -273,7 +273,7 @@ export function StatsPage({
             <section>
               <div className="stats-panel-card">
                 <div className="stats-panel-card-header">
-                  <h3>Average completion time by type</h3>
+                  <h3>Average completion time by tag</h3>
                   <span className="stats-panel-subtitle">Trends in item resolution time over last 14 days</span>
                 </div>
                 <CompletionTimeChart
@@ -281,48 +281,8 @@ export function StatsPage({
                   emptyLabel=""
                 />
               </div>
-<<<<<<< HEAD
             </section>
           )}
-=======
-              <ModelTable
-                rows={leaderboardRows}
-                sortField={sortField}
-                sortAsc={sortAsc}
-                onSort={handleSort}
-              />
-            </div>
-          </section>
-
-          <section className="stats-flex-row">
-            <TrendChart
-              title="Completed items per day"
-              data={completionSeries}
-              emptyLabel={historyLoading ? "Loading…" : "No completion history yet"}
-              color="#7aa2f7"
-            />
-            <TrendChart
-              title="Daily success rate"
-              data={successSeries}
-              valueFormatter={(v) => `${v.toFixed(0)}%`}
-              emptyLabel={historyLoading ? "Loading…" : "No history yet"}
-              color="#9ece6a"
-            />
-          </section>
-
-          <section>
-            <div className="stats-panel-card">
-              <div className="stats-panel-card-header">
-                <h3>Average completion time by tag</h3>
-                <span className="stats-panel-subtitle">Trends in item resolution time over last 14 days</span>
-              </div>
-              <CompletionTimeChart
-                data={completionTimeSeries}
-                emptyLabel={historyLoading ? "Loading…" : "No completion time history yet"}
-              />
-            </div>
-          </section>
->>>>>>> 778c594 (fix(desktop): Change completion time chart to group by tag instead of type)
         </div>
       </div>
     </div>

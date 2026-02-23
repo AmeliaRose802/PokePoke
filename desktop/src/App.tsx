@@ -29,7 +29,7 @@ function App() {
   const [showPrompts, setShowPrompts] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showStatsPage, setShowStatsPage] = useState(false);
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [modelHistory, setModelHistory] = useState<ModelHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -41,12 +41,16 @@ function App() {
   useDocumentTitle(bridge.agentName, bridge.projectName);
 
   const hasSelectedAgent =
-    selectedAgentId !== null &&
-    bridge.agents.some((agent) => agent.agent_id === selectedAgentId);
-  const displayedAgentId = hasSelectedAgent ? selectedAgentId : null;
+    selectedCardId !== null &&
+    bridge.agents.some(
+      (agent) => (agent.card_id ?? agent.agent_id) === selectedCardId
+    );
+  const displayedCardId = hasSelectedAgent ? selectedCardId : null;
   const selectedAgentDetail =
-    displayedAgentId !== null
-      ? bridge.agents.find((agent) => agent.agent_id === displayedAgentId) ?? null
+    displayedCardId !== null
+      ? bridge.agents.find(
+          (agent) => (agent.card_id ?? agent.agent_id) === displayedCardId
+        ) ?? null
       : null;
 
   // Auto-follow: pick the most recently started agent when none is manually selected.
@@ -54,8 +58,11 @@ function App() {
   // last_log_at / last_updated would cause the selection to jump on every poll.
   const autoFollowAgent = (() => {
     if (selectedAgentDetail) return null; // manual selection takes priority
-    if (bridge.agents.length === 0) return null;
-    const sorted = [...bridge.agents].sort((a, b) => {
+    const liveAgents = bridge.agents.filter(
+      (agent) => agent.is_history_entry !== true
+    );
+    if (liveAgents.length === 0) return null;
+    const sorted = [...liveAgents].sort((a, b) => {
       if (a.status === "running" && b.status !== "running") return -1;
       if (b.status === "running" && a.status !== "running") return 1;
       const aTime = a.started_at ?? 0;
@@ -67,9 +74,9 @@ function App() {
 
   // Toggle manual selection: deselect if already manually selected, otherwise select.
   // This correctly handles the auto-follow case where the card appears highlighted
-  // but selectedAgentId is still null — clicking should open full-screen, not deselect.
-  const handleSelectAgent = useCallback((agentId: string | null) => {
-    setSelectedAgentId((prev) => (prev === agentId ? null : agentId));
+  // but selectedCardId is still null — clicking should open full-screen, not deselect.
+  const handleSelectAgent = useCallback((cardId: string | null) => {
+    setSelectedCardId((prev) => (prev === cardId ? null : cardId));
   }, []);
 
   const handleOpenPromptEditor = useCallback(() => {
@@ -197,7 +204,7 @@ function App() {
           {selectedAgentDetail ? (
             <AgentLogPanel
               agent={selectedAgentDetail}
-              onClose={() => setSelectedAgentId(null)}
+              onClose={() => setSelectedCardId(null)}
             />
           ) : autoFollowAgent ? (
             <AgentLogPanel
@@ -249,7 +256,12 @@ function App() {
         <AgentsPanel
           agents={bridge.agents}
           currentSessionId={bridge.currentSessionId}
-          selectedAgentId={displayedAgentId ?? autoFollowAgent?.agent_id ?? null}
+          selectedCardId={
+            displayedCardId ??
+            autoFollowAgent?.card_id ??
+            autoFollowAgent?.agent_id ??
+            null
+          }
           onSelectAgent={handleSelectAgent}
           onPauseAgent={bridge.pauseAgent}
           onResumeAgent={bridge.resumeAgent}
