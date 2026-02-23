@@ -1,12 +1,6 @@
 /**
- * pywebview bridge hook for the PokePoke desktop app.
- *
- * Communicates with the Python orchestrator via direct in-process
- * method calls through window.pywebview.api — no WebSocket, no server.
- *
- * The frontend polls for new logs/state on a fast timer. The Python
- * side buffers everything and the poll returns only new entries since
- * the last call (incremental).
+ * pywebview bridge hook — polls the Python orchestrator via direct
+ * in-process calls through window.pywebview.api (no network).
  */
 
 import { useCallback,useEffect, useState } from "react";
@@ -23,8 +17,12 @@ import type {
   PromptDetail,
   PromptInfo,
   SessionStats,
+  SetupConfigPayload,
+  SetupStatus,
   WorkItem,
 } from "./types";
+import type { SetupBridgeMethods } from "./useSetupBridge";
+import { useSetupBridge } from "./useSetupBridge";
 
 /** Poll interval in ms — 100ms = responsive without hammering */
 const POLL_INTERVAL_MS = 100;
@@ -101,6 +99,14 @@ interface PyWebViewAPI {
   spawn_agent(): Promise<{ success: boolean; at_limit: boolean; active: number; max: number }>;
   add_work_item_label(item_id: string, label: string): Promise<{ item_id: string; label: string; labels: string[] }>;
   remove_work_item_label(item_id: string, label: string): Promise<{ item_id: string; label: string; labels: string[] }>;
+
+  // First-time setup wizard API
+  check_setup_status(): Promise<SetupStatus>;
+  git_init(default_branch?: string): Promise<{ success: boolean; error?: string; stdout?: string | null; stderr?: string | null }>;
+  bd_init(): Promise<{ success: boolean }>;
+  create_default_config(config: SetupConfigPayload): Promise<{ path: string; saved: boolean }>;
+  scaffold_prompt_overrides(templates?: string[], force?: boolean): Promise<{ success: boolean; written: string[] }>;
+  complete_setup(): Promise<{ success: boolean; error?: string }>;
 }
 
 declare global {
@@ -111,44 +117,31 @@ declare global {
   }
 }
 
-/**
- * Sleeps for the specified number of milliseconds
- */
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Retries an async function with exponential backoff
- */
+/** Retries an async function with exponential backoff */
 async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   config = INITIAL_RETRY_CONFIG
 ): Promise<T> {
   let lastError: Error | null = null;
   let delay = config.BASE_DELAY_MS;
-  
   for (let attempt = 0; attempt <= config.MAX_RETRIES; attempt++) {
     try {
       return await fn();
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      
-      // If this was our last attempt, throw the error
-      if (attempt === config.MAX_RETRIES) {
-        throw lastError;
-      }
-      
-      // Wait before retrying (exponential backoff with max delay)
+      if (attempt === config.MAX_RETRIES) throw lastError;
       await sleep(Math.min(delay, config.MAX_DELAY_MS));
       delay = Math.floor(delay * config.BACKOFF_MULTIPLIER);
     }
   }
-  
   throw lastError || new Error('Retry failed');
 }
 
-export interface BridgeState {
+export interface BridgeStateBase {
   connectionStatus: ConnectionStatus;
   orchestratorLogs: LogEntry[];
   agentLogs: LogEntry[];
@@ -180,6 +173,8 @@ export interface BridgeState {
   resumeAgent: (agentId: string) => Promise<boolean>;
   spawnAgent: () => Promise<{ success: boolean; at_limit: boolean; active: number; max: number } | null>;
 }
+
+export type BridgeState = BridgeStateBase & SetupBridgeMethods;
 
 /**
  * React hook that polls the Python DesktopAPI for orchestrator state.
@@ -332,6 +327,9 @@ export function useBridge(): BridgeState {
       return null;
     }
   }, []);
+
+  // Setup wizard bridge (extracted to useSetupBridge.ts)
+  const setupBridge = useSetupBridge();
 
   const appendLogs = useCallback((entries: LogEntry[]) => {
     if (entries.length === 0) return;
@@ -486,5 +484,7 @@ export function useBridge(): BridgeState {
     pauseAgent,
     resumeAgent,
     spawnAgent,
+
+    ...setupBridge,
   };
 }

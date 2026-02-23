@@ -182,6 +182,25 @@ export interface ConfigResponse {
   exists: boolean;
 }
 
+export interface SetupStatus {
+  cwd: string;
+  project_root: string;
+  is_git_repo: boolean;
+  beads_installed: boolean;
+  beads_initialized: boolean;
+  config_exists: boolean;
+  config_path: string;
+  needs_setup: boolean;
+}
+
+export interface SetupConfigPayload {
+  project_name: string;
+  default_model: string;
+  fallback_model?: string;
+  max_parallel_agents: number;
+  default_branch?: string;
+}
+
 /** Response from check_for_updates API */
 export interface UpdateCheckResult {
   current_version: string;

@@ -62,3 +62,68 @@ def check_beads_available(path: Path) -> bool:
         return result.returncode == 0
     except (subprocess.TimeoutExpired, OSError):
         return False
+
+
+def ensure_project_ready(
+    interactive: bool,
+    desktop_ui: object | None = None,
+) -> bool:
+    """Check that the project environment is set up and ready.
+
+    When running in desktop mode and setup is needed, waits for the
+    setup wizard to complete. In CLI interactive mode, offers to run
+    ``bd init`` if beads is not available.
+
+    Args:
+        interactive: Whether the orchestrator is in interactive mode.
+        desktop_ui: A DesktopUI instance (or None for CLI mode).
+
+    Returns:
+        True if the project is ready to run.
+    """
+    from pokepoke.repo_check import (
+        check_beads_available as check_beads_cli,
+        initialize_beads_repo,
+    )
+
+    cwd = Path.cwd().resolve()
+    git_root = resolve_git_toplevel(cwd)
+    project_root = git_root or cwd
+
+    needs_setup = (
+        (not is_git_repo(cwd))
+        or (not has_pokepoke_config(project_root))
+        or (not check_beads_available(project_root))
+    )
+
+    # Desktop mode: delegate to the setup wizard UI
+    if needs_setup and desktop_ui is not None:
+        wait_fn = getattr(desktop_ui, "wait_for_setup_complete", None)
+        if wait_fn is None:
+            return False
+        ok = wait_fn(None)
+        if not ok:
+            return False
+
+        cwd = Path.cwd().resolve()
+        git_root = resolve_git_toplevel(cwd)
+        project_root = git_root or cwd
+        return (
+            is_git_repo(cwd)
+            and has_pokepoke_config(project_root)
+            and check_beads_available(project_root)
+        )
+
+    # CLI mode: check beads availability
+    if not check_beads_cli():
+        if not interactive:
+            return False
+        choice = input(
+            "\nThis directory is not initialized for beads. "
+            "Run 'bd init' here now? [Y/n]: "
+        ).strip().lower() or "y"
+        if choice not in ("y", "yes"):
+            return False
+        return bool(initialize_beads_repo(Path.cwd()) and check_beads_cli())
+
+    return True

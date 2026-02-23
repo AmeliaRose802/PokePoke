@@ -17,6 +17,7 @@ import { LogPanel } from "./components/LogPanel";
 import { LogsLocationBox } from "./components/LogsLocationBox";
 import { PromptEditor } from "./components/PromptEditor";
 import { SettingsPage } from "./components/SettingsPage";
+import { SetupWizard } from "./components/SetupWizard";
 import { StatsBar } from "./components/StatsBar";
 import { StatsPage } from "./components/StatsPage";
 import { WorkItemHeader } from "./components/WorkItemHeader";
@@ -130,6 +131,8 @@ function App() {
 
   return (
     <div className="app">
+      <SetupWizard bridge={bridge} />
+
       {/* Title bar */}
       <div className="app-header">
         <div className="app-title-group">
