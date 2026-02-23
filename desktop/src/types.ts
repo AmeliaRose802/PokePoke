@@ -44,6 +44,10 @@ export interface ModelCompletionRecord {
   output_tokens: number;
   agent_turns: number;
   cost: number;
+  retry_attempts: number;
+  api_duration: number | null;
+  lines_added: number | null;
+  lines_removed: number | null;
 }
 
 /** Work item completed during the current session */

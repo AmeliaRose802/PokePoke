@@ -113,6 +113,10 @@ describe('stats helpers', () => {
             output_tokens: 500,
             agent_turns: 2,
             cost: 0.05,
+            retry_attempts: 0,
+            api_duration: null,
+            lines_added: null,
+            lines_removed: null,
           },
         ],
       };

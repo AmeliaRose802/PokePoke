@@ -1466,8 +1466,11 @@ class TestRunOrchestratorModelCompletion:
         mock_select.return_value = item
 
         completion = ModelCompletionRecord(
-            model="claude-opus-4.6", item_id="task-1",
-            duration_seconds=10.0, gate_passed=True
+            model="claude-opus-4.6",
+            item_id="task-1",
+            duration_seconds=10.0,
+            gate_passed=True,
+
         )
         mock_process.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats(), model_completion=completion)
 
@@ -1720,8 +1723,11 @@ class TestRunOrchestratorWorktreeCoverage:
         mock_select.return_value = item
 
         completion = ModelCompletionRecord(
-            model="claude-opus-4.6", item_id="task-1",
-            duration_seconds=10.0, gate_passed=True
+            model="claude-opus-4.6",
+            item_id="task-1",
+            duration_seconds=10.0,
+            gate_passed=True,
+
         )
         mock_process.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats(), model_completion=completion)
 
@@ -2223,7 +2229,11 @@ class TestRecordItemResult:
         stats = SessionStats(agent_stats=AgentStats())
         item = BeadsWorkItem(id="t1", title="T1", status="open", priority=1, issue_type="task")
         logger = Mock()
-        mc = ModelCompletionRecord(item_id="t1", model="m", duration_seconds=1.0)
+        mc = ModelCompletionRecord(
+            item_id="t1",
+            model="m",
+            duration_seconds=1.0,
+        )
 
         success, completed = _record_item_result(
             item, WorkItemResult(success=True, request_count=1, stats=AgentStats(), gate_agent_runs=1, model_completion=mc), stats, logger,
@@ -2459,4 +2469,5 @@ class TestSingleAgentPanelRegistration:
                 work_item_id="task-99",
                 work_item_title="Failing task",
             )
+
 

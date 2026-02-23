@@ -124,6 +124,10 @@ class ModelCompletionRecord:
     output_tokens: int = 0
     agent_turns: int = 0
     cost: float = 0.0
+    retry_attempts: int = 0
+    api_duration: float | None = None
+    lines_added: int | None = None
+    lines_removed: int | None = None
 
 
 @dataclass

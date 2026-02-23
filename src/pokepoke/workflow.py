@@ -299,6 +299,10 @@ def process_work_item(
                 output_tokens=output_tokens,
                 agent_turns=request_count,
                 cost=cost,
+                retry_attempts=max(0, request_count - 1),
+                api_duration=item_stats.api_duration if item_stats else None,
+                lines_added=item_stats.lines_added if item_stats else None,
+                lines_removed=item_stats.lines_removed if item_stats else None,
             ) if success else None
 
             return WorkItemResult(success=success, request_count=request_count, stats=item_stats,
@@ -328,6 +332,10 @@ def process_work_item(
                 output_tokens=output_tokens,
                 agent_turns=request_count,
                 cost=cost,
+                retry_attempts=max(0, request_count - 1),
+                api_duration=accumulated_stats.api_duration if accumulated_stats else None,
+                lines_added=accumulated_stats.lines_added if accumulated_stats else None,
+                lines_removed=accumulated_stats.lines_removed if accumulated_stats else None,
             )
             return _fail_result(request_count=request_count, cleanup_agent_runs=cleanup_agent_runs,
                                 gate_agent_runs=gate_agent_runs, model_completion=model_completion, stats=accumulated_stats)
