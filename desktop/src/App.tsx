@@ -162,21 +162,21 @@ function App() {
             onClick={() => setShowStatsPage(true)}
             title="Open stats"
           >
-            🌿
+            📊
           </button>
           <button
             className="prompt-editor-toggle"
             onClick={() => setShowPrompts(true)}
             title="Edit prompt templates"
           >
-            🌱
+            ✏️
           </button>
           <button
             className="prompt-editor-toggle"
             onClick={() => setShowSettings(true)}
             title="Settings"
           >
-            🍃
+            ⚙️
           </button>
         </div>
       </div>
