@@ -115,9 +115,15 @@ export function getCompletedItems(stats: SessionStats | null): CompletedItem[] {
 }
 
 export function getDoneCount(stats: SessionStats | null): number {
+  // Prioritize items_completed counter (authoritative source) over array length
+  // The array may have been filtered/deduplicated by getCompletedItems()
+  if (stats?.items_completed != null && stats.items_completed > 0) {
+    return stats.items_completed;
+  }
+  
+  // Fallback to array length if counter not available
   const completed = getCompletedItems(stats);
-  if (completed.length > 0) return completed.length;
-  return stats?.items_completed ?? 0;
+  return completed.length;
 }
 
 export interface AgentRunCounts {
@@ -182,9 +188,15 @@ export function getCreatedItems(stats: SessionStats | null): CreatedItem[] {
 }
 
 export function getAddedCount(stats: SessionStats | null): number {
+  // Prioritize items_created counter (authoritative source) over array length
+  // The array may have been filtered/deduplicated by getCreatedItems()
+  if (stats?.items_created != null && stats.items_created > 0) {
+    return stats.items_created;
+  }
+  
+  // Fallback to array length if counter not available
   const created = getCreatedItems(stats);
-  if (created.length > 0) return created.length;
-  return stats?.items_created ?? 0;
+  return created.length;
 }
 
 export function getNetDelta(stats: SessionStats | null): number {
