@@ -162,21 +162,21 @@ function App() {
             onClick={() => setShowStatsPage(true)}
             title="Open stats"
           >
-            🌿
+            📊
           </button>
           <button
             className="prompt-editor-toggle"
             onClick={() => setShowPrompts(true)}
             title="Edit prompt templates"
           >
-            🌱
+            ✏️
           </button>
           <button
             className="prompt-editor-toggle"
             onClick={() => setShowSettings(true)}
             title="Settings"
           >
-            🍃
+            ⚙️
           </button>
         </div>
       </div>
@@ -217,7 +217,7 @@ function App() {
           ) : (
             <LogPanel
               title="Orchestrator"
-              icon="🌳"
+              icon="🎛️"
               logs={bridge.orchestratorLogs}
               accentColor="var(--accent-warning)"
             />
@@ -227,7 +227,7 @@ function App() {
             <details className="orchestrator-collapsible">
               <summary className="orchestrator-collapsible-summary">
                 <span className="orchestrator-collapsible-title">
-                  🌳 Orchestrator
+                  🎛️ Orchestrator
                 </span>
                 <span className="log-count">
                   {bridge.orchestratorLogs.length} lines
@@ -236,7 +236,7 @@ function App() {
               <div className="orchestrator-collapsible-content">
                 <LogPanel
                   title="Orchestrator"
-                  icon="🌳"
+                  icon="🎛️"
                   logs={bridge.orchestratorLogs}
                   accentColor="var(--accent-warning)"
                 />

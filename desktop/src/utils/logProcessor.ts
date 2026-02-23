@@ -55,7 +55,7 @@ export type RenderLogItem =
       language?: string;
     };
 
-const TOOL_CALL_PATTERN = /^\s*(?:🌿|\[Tool\])\s*(.*)$/;
+const TOOL_CALL_PATTERN = /^\s*(?:🔧|🌿|\[Tool\])\s*(.*)$/;
 const TOOL_RESULT_PATTERN = /^\s*(✅|❌)\s*Result:\s*(.*)$/;
 const TOOL_RESULT_FALLBACK = /^\s*\[Result\]\s*(.*)$/i;
 const COPILOT_TOOL_BATCH_HEADER = /^\s*\[Copilot\]\s*Calling\s+(\d+)\s+tool\(s\)\.\.\.$/;
@@ -102,10 +102,10 @@ export function parseToolLabel(message: string): string {
   if (!match) return message.trim();
   const rest = match[1].trim();
   const callMatch = rest.match(/^([^(]+)\((.*)\)$/);
-  if (!callMatch) return `🌿 ${rest}`;
+  if (!callMatch) return `🔧 ${rest}`;
   const toolName = callMatch[1].trim();
   const description = extractDescriptionFromArgs(toolName, callMatch[2].trim());
-  const label = `🌿 ${toolName}`;
+  const label = `🔧 ${toolName}`;
   return description ? `${label} - ${truncateText(description, 50)}` : label;
 }
 
@@ -264,7 +264,7 @@ export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
       const fileLabel = filePaths.length > 0
         ? ` — ${filePaths.map(p => p.replace(/^.*[/\\]/, "")).join(", ")}`
         : "";
-      const toolLabel = `🌿 apply_patch${fileLabel}`;
+      const toolLabel = `🔧 apply_patch${fileLabel}`;
 
       return {
         tool: {
@@ -312,7 +312,7 @@ export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
       const statusClass = hasError ? "log-error" : allDone ? "log-success" : undefined;
       groups.push({
         toolName,
-        toolLabel: `🌿 ${toolName} ×${slice.length}`,
+        toolLabel: `🔧 ${toolName} ×${slice.length}`,
         items: slice,
         statusClass,
         summaryText,

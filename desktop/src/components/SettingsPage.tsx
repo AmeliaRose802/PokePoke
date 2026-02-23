@@ -224,7 +224,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
       <div className="settings-panel">
         {/* Header */}
         <div className="settings-header">
-          <span>🍃 Settings</span>
+          <span>⚙️ Settings</span>
           <button className="prompt-close-btn" onClick={handleCloseClick}>
             ✕
           </button>
