@@ -364,4 +364,49 @@ describe('AgentsPanel', () => {
       expect(screen.getByText('📁 1 file')).toBeInTheDocument();
     });
   });
+
+  describe('context window usage', () => {
+    it('shows context bar when agent has token usage', () => {
+      const agent = mkAgent({ input_tokens: 10000, output_tokens: 2000, context_limit: 128000 });
+      const { container } = render(
+        <AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />
+      );
+      expect(container.querySelector('.agent-card-context')).not.toBeNull();
+      expect(screen.getByText('12.0K / 128.0K')).toBeInTheDocument();
+    });
+
+    it('does not show context bar when no tokens', () => {
+      const agent = mkAgent();
+      const { container } = render(
+        <AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />
+      );
+      expect(container.querySelector('.agent-card-context')).toBeNull();
+    });
+
+    it('shows warning class when usage is high', () => {
+      const agent = mkAgent({ input_tokens: 100000, output_tokens: 10000, context_limit: 128000 });
+      const { container } = render(
+        <AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />
+      );
+      expect(container.querySelector('.agent-card-context-warn')).not.toBeNull();
+    });
+
+    it('does not show warning class when usage is low', () => {
+      const agent = mkAgent({ input_tokens: 5000, output_tokens: 1000, context_limit: 128000 });
+      const { container } = render(
+        <AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />
+      );
+      expect(container.querySelector('.agent-card-context-warn')).toBeNull();
+    });
+
+    it('shows tooltip with input and output breakdown', () => {
+      const agent = mkAgent({ input_tokens: 50000, output_tokens: 10000, context_limit: 200000 });
+      const { container } = render(
+        <AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />
+      );
+      const contextDiv = container.querySelector('.agent-card-context');
+      expect(contextDiv?.getAttribute('title')).toContain('Input: 50.0K');
+      expect(contextDiv?.getAttribute('title')).toContain('Output: 10.0K');
+    });
+  });
 });

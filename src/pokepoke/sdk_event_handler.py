@@ -106,6 +106,7 @@ def create_event_handler(
     item_logger: Any | None = None,
     idle_timeout: float = 10.0,
     hung_command_detector: HungCommandDetector | None = None,
+    on_token_usage: Callable[[int, int], None] | None = None,
 ) -> tuple[Callable[[Any], None], SessionStats]:
     """Create an event handler for SDK session events.
 
@@ -117,6 +118,8 @@ def create_event_handler(
         idle_timeout: Seconds to wait before confirming session is idle.
         hung_command_detector: Optional detector for hung commands. If None,
             a default one is created using config settings.
+        on_token_usage: Optional callback invoked on each usage event with
+            (total_input_tokens, total_output_tokens).
 
     Returns:
         tuple: (event_handler_function, stats_dict)
@@ -291,6 +294,8 @@ def create_event_handler(
                 stats['total_output_tokens'] += getattr(event.data, 'output_tokens', 0) or 0
                 stats['total_cache_read_tokens'] += getattr(event.data, 'cache_read_tokens', 0) or 0
                 stats['total_cache_write_tokens'] += getattr(event.data, 'cache_write_tokens', 0) or 0
+                if on_token_usage is not None:
+                    on_token_usage(stats['total_input_tokens'], stats['total_output_tokens'])
 
         elif event_type == "assistant.turn_end":
             stats['turn_count'] += 1

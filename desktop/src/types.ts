@@ -221,6 +221,9 @@ export interface AgentInfo {
   last_log_at?: number | null;
   paused?: boolean;
   session_id?: string | null;
+  input_tokens?: number;
+  output_tokens?: number;
+  context_limit?: number;
 }
 
 /** State snapshot from the bridge */

@@ -10,7 +10,7 @@
  * by default and can be expanded by clicking the session header.
  */
 
-import { type ReactElement,useState } from "react";
+import { type ReactElement, useState } from "react";
 
 import type { AgentInfo } from "../types";
 import {
@@ -19,6 +19,7 @@ import {
   getAgentType,
   isGateAgent,
 } from "../utils/agentHelpers";
+import { ContextBar } from "./ContextBar";
 
 interface Props {
   agents: AgentInfo[];
@@ -274,6 +275,18 @@ export function AgentsPanel({
             </span>
           </div>
         ) : null}
+        {(() => {
+          const totalTokens = (agent.input_tokens ?? 0) + (agent.output_tokens ?? 0);
+          const limit = agent.context_limit ?? 0;
+          if (totalTokens === 0 && limit === 0) return null;
+          return (
+            <ContextBar
+              inputTokens={agent.input_tokens ?? 0}
+              outputTokens={agent.output_tokens ?? 0}
+              contextLimit={limit}
+            />
+          );
+        })()}
         <div className="agent-card-logs">
           {agent.recent_logs.length === 0 ? (
             <span className="agent-card-no-logs">{isPaused ? "Paused" : "Waiting for output…"}</span>

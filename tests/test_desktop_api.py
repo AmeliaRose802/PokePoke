@@ -1051,3 +1051,49 @@ def test_save_config_no_yaml(monkeypatch) -> None:
     monkeypatch.setattr("pokepoke.desktop_api_ext._HAS_YAML", False)
     with patch("pokepoke.config._find_repo_root"), pytest.raises(ImportError, match="PyYAML"):
         api.save_config({"key": "val"})
+
+
+# ─── Agent token usage tests ─────────────────────────────────────────────
+
+
+def test_push_agent_tokens_updates_agent() -> None:
+    """push_agent_tokens should store token counts on the agent."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    api.push_agent_tokens("agent-1", 5000, 2000, 128_000)
+
+    agents = api.get_agents()
+    assert agents[0]["input_tokens"] == 5000
+    assert agents[0]["output_tokens"] == 2000
+    assert agents[0]["context_limit"] == 128_000
+
+
+def test_push_agent_tokens_defaults_to_zero() -> None:
+    """Agents without token pushes should have zero token fields."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+
+    agents = api.get_agents()
+    assert agents[0]["input_tokens"] == 0
+    assert agents[0]["output_tokens"] == 0
+    assert agents[0]["context_limit"] == 0
+
+
+def test_push_agent_tokens_ignores_unknown_agent() -> None:
+    """push_agent_tokens should silently ignore unknown agent IDs."""
+    api = DesktopAPI()
+    api.push_agent_tokens("nonexistent", 100, 200, 128_000)
+    assert api.get_agents() == []
+
+
+def test_agent_detail_includes_tokens() -> None:
+    """get_agent_detail should include token fields."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    api.push_agent_tokens("agent-1", 10_000, 3_000, 200_000)
+
+    detail = api.get_agent_detail("agent-1")
+    assert detail is not None
+    assert detail["input_tokens"] == 10_000
+    assert detail["output_tokens"] == 3_000
+    assert detail["context_limit"] == 200_000

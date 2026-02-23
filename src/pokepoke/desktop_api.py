@@ -274,6 +274,18 @@ class DesktopAPI:
         """Append a log line to an agent's recent log preview."""
         self._agent_registry.append_log(agent_id, line)
 
+    def push_agent_tokens(
+        self,
+        agent_id: str,
+        input_tokens: int,
+        output_tokens: int,
+        context_limit: int,
+    ) -> None:
+        """Update live token usage for an agent."""
+        self._agent_registry.update_token_usage(
+            agent_id, input_tokens, output_tokens, context_limit,
+        )
+
     def remove_agent(self, agent_id: str) -> None:
         """Remove a finished agent from the tracked set."""
         self._agent_registry.remove(agent_id)
