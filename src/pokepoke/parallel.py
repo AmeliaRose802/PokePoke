@@ -6,6 +6,8 @@ import threading
 import time
 from typing import Any
 
+from pokepoke.parallel_runtime import clear_runtime_parallel_limits, compute_effective_max_agents, set_runtime_parallel_limits
+
 from pokepoke.agent_context import get_agent_name, set_agent_name, clear_agent_name
 from pokepoke.beads import get_ready_work_items
 from pokepoke.types import BeadsWorkItem, SessionStats, WorkItemResult
@@ -43,6 +45,11 @@ def _get_dynamic_max_agents() -> int:
     return max(1, get_config().max_parallel_agents)
 
 
+def get_effective_max_agents() -> int:
+    """Return max agents to enforce right now."""
+    return compute_effective_max_agents(_get_dynamic_max_agents())
+
+
 def request_spawn_agent() -> None:
     """Signal the parallel loop to spawn an additional agent immediately."""
     _spawn_wakeup.set()
@@ -77,11 +84,7 @@ def _parallel_process_item(
     semaphore: threading.Semaphore,
     worker_agent_name: str | None = None,
 ) -> WorkItemResult:
-    """Wrapper for process_work_item used by the thread pool.
-
-    Sets a per-thread agent name, registers the agent in the desktop UI,
-    and releases the semaphore when done.
-    """
+    """Thread-pool wrapper for process_work_item."""
     agent_id = f"{item.id}:{worker_agent_name}" if worker_agent_name else item.id
     display_name = worker_agent_name or "agent"
 
@@ -147,11 +150,7 @@ def _collect_done_futures(
     run_logger: RunLogger,
     record_fn: Any,
 ) -> tuple[int, bool]:
-    """Collect completed futures and record results.
-
-    Returns:
-        (updated total_requests, any_success)
-    """
+    """Collect completed futures and record results."""
     done_futs: set[_Future] = set()
     for fut in list(futures):
         if fut.done():
@@ -200,12 +199,9 @@ def run_parallel_loop(
     continuous: bool,
     record_fn: Any,
     finalize_fn: Any,
+    *, cli_override: bool = False,
 ) -> int:
-    """Run the parallel orchestrator loop with a ThreadPoolExecutor.
-
-    Returns:
-        Exit code (0 for success, 1 for failure).
-    """
+    """Run the parallel orchestrator loop with a ThreadPoolExecutor."""
     total_requests = 0
     items_completed = 0
     semaphore = threading.Semaphore(_MAX_PARALLEL_CEILING)
@@ -215,6 +211,7 @@ def run_parallel_loop(
         thread_name_prefix="pokepoke-agent",
     )
     set_executor(executor)
+    set_runtime_parallel_limits(effective_parallel, cli_override, baseline=_get_dynamic_max_agents() if cli_override else None)
 
     _worker_counter = 0
     finalized = False
@@ -252,7 +249,7 @@ def run_parallel_loop(
             terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
 
             current_active = {i.id for i in futures.values()}
-            current_max = _get_dynamic_max_agents()
+            current_max = get_effective_max_agents()
             slots = current_max - len(futures)
 
             if (
@@ -390,6 +387,7 @@ def run_parallel_loop(
         # Now shutdown the executor (no need to wait since we already waited above)
         executor.shutdown(wait=False, cancel_futures=False)
         set_executor(None)
+        clear_runtime_parallel_limits()
 
         # Call finalize if it hasn't been called yet (e.g., on shutdown or exception)
         if not finalized:

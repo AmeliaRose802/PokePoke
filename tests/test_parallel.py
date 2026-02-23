@@ -368,6 +368,35 @@ class TestRunParallelLoop:
     @patch("pokepoke.parallel.time.sleep")
     @patch("pokepoke.parallel.terminal_ui")
     @patch("pokepoke.parallel.set_executor")
+    @patch("pokepoke.parallel.is_shutting_down", side_effect=([False] + ([False] * 10) + [True]))
+    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.parallel.get_ready_work_items")
+    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    @patch("pokepoke.parallel._collect_done_futures", return_value=(0, False))
+    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=2)
+    def test_cli_override_uses_effective_parallel_over_config(
+        self, mock_dyn_max, mock_collect, mock_sel, mock_ready,
+        mock_repo, mock_shut, mock_set_exec, mock_ui, mock_sleep,
+    ) -> None:
+        """Regression (PokePoke-snio): CLI --max-agents must not be capped by config."""
+        mock_ready.return_value = [_make_item(f"c{i}") for i in range(10)]
+
+        stats = SessionStats(agent_stats=AgentStats())
+        run_parallel_loop(
+            effective_parallel=6, mode_name="Autonomous",
+            main_repo_path="/repo", failed_claim_ids=set(),
+            session_stats=stats, start_time=time.time(),
+            run_logger=Mock(), continuous=True,
+            record_fn=Mock(), finalize_fn=Mock(),
+            cli_override=True,
+        )
+
+        assert mock_sel.call_count >= 1
+        assert mock_sel.call_args_list[0].kwargs["count"] == 6
+
+    @patch("pokepoke.parallel.time.sleep")
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.set_executor")
     @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
     @patch("pokepoke.parallel.is_shutting_down")
     @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
@@ -727,124 +756,6 @@ class TestRunParallelLoop:
         assert mock_sel.call_args_list[0].kwargs['count'] == 2
         # Second call: count=4 (dynamic max=4, 0 active after clear)
         assert mock_sel.call_args_list[1].kwargs['count'] == 4
-
-
-class TestContinuousModeLoopBack:
-    """Regression tests for PokePoke-5arw: continuous mode should loop after all workers finish."""
-
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
-    def test_continuous_mode_loops_back_when_no_items(
-        self, mock_sel, mock_ready, mock_repo, mock_shut,
-        mock_set_exec, mock_ui, mock_sleep,
-    ) -> None:
-        """In continuous mode, no ready items triggers sleep+retry rather than exit.
-
-        Regression for PokePoke-5arw: after all workers + maintenance finish,
-        the orchestrator should loop back to wait for new work instead of exiting.
-        """
-        stats = SessionStats(agent_stats=AgentStats())
-        finalize_fn = Mock()
-        logger = Mock()
-
-        code = run_parallel_loop(
-            effective_parallel=2, mode_name="Autonomous",
-            main_repo_path="/repo", failed_claim_ids=set(),
-            session_stats=stats, start_time=time.time(),
-            run_logger=logger, continuous=True,
-            record_fn=Mock(), finalize_fn=finalize_fn,
-        )
-
-        assert code == 0
-        # Must have slept (the retry sleep) before the shutdown check exited the loop.
-        mock_sleep.assert_called()
-        # Logger should note the retry, not an exit.
-        retry_logged = any(
-            "retry" in str(call) or "sleeping" in str(call)
-            for call in logger.log_orchestrator.call_args_list
-        )
-        assert retry_logged, "Expected continuous-mode retry log message"
-
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
-    def test_non_continuous_mode_exits_when_no_items(
-        self, mock_sel, mock_ready, mock_repo, mock_shut,
-        mock_set_exec, mock_ui, mock_sleep,
-    ) -> None:
-        """Non-continuous mode exits (not loop back) when no items available."""
-        stats = SessionStats(agent_stats=AgentStats())
-        logger = Mock()
-        finalize_fn = Mock()
-
-        code = run_parallel_loop(
-            effective_parallel=2, mode_name="Autonomous",
-            main_repo_path="/repo", failed_claim_ids=set(),
-            session_stats=stats, start_time=time.time(),
-            run_logger=logger, continuous=False,
-            record_fn=Mock(), finalize_fn=finalize_fn,
-        )
-
-        # Non-continuous mode exits without looping; no items = no success → code 1
-        assert code == 1
-        finalize_fn.assert_called_once()
-        # Should NOT have done a retry sleep; exited immediately.
-        retry_logged = any(
-            "retry" in str(call)
-            for call in logger.log_orchestrator.call_args_list
-        )
-        assert not retry_logged, "Non-continuous mode should not retry"
-
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
-    def test_record_fn_exception_does_not_crash_loop(
-        self, mock_sel, mock_ready, mock_repo, mock_shut,
-        mock_set_exec, mock_ui, mock_sleep,
-    ) -> None:
-        """record_fn raising an exception must not propagate out of _collect_done_futures.
-
-        Regression for PokePoke-5arw: maintenance agent exceptions were re-raised
-        inside record_fn, crashing the parallel orchestrator loop.
-        """
-        fut: concurrent.futures.Future = concurrent.futures.Future()
-        fut.set_result(WorkItemResult(success=True, request_count=1))
-        item = _make_item("boom")
-
-        # Simulate a maintenance agent exception propagating through record_fn
-        exploding_record_fn = Mock(side_effect=RuntimeError("maintenance exploded"))
-        stats = SessionStats(agent_stats=AgentStats())
-        logger = Mock()
-
-        # Manually call _collect_done_futures with the exploding record_fn.
-        # It must NOT raise, it must swallow the exception and log it.
-        futures: dict[concurrent.futures.Future, BeadsWorkItem] = {fut: item}
-        total, any_ok = _collect_done_futures(
-            futures, set(), 0, stats, logger, exploding_record_fn,
-        )
-
-        # The exception was swallowed; collect_done_futures returned normally.
-        assert total == 1
-        # Logger should have captured the error.
-        logger.log_orchestrator.assert_called()
-        error_logged = any(
-            "Error recording" in str(call) or "error" in str(call).lower()
-            for call in logger.log_orchestrator.call_args_list
-        )
-        assert error_logged
 
 
 class TestContinuousModeLoopBack:

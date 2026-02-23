@@ -135,6 +135,33 @@ def test_push_state_updates() -> None:
     assert state["progress"] == {"active": True, "status": "Working"}
 
 
+def test_spawn_agent_honors_effective_max_agents(monkeypatch) -> None:
+    api = DesktopAPI()
+    api.push_agent_status("a1", "agent-1", status="running")
+    api.push_agent_status("a2", "agent-2", status="running")
+
+    mock_request = Mock()
+    monkeypatch.setattr("pokepoke.parallel.request_spawn_agent", mock_request)
+    monkeypatch.setattr("pokepoke.parallel.get_effective_max_agents", lambda: 3)
+
+    result = api.spawn_agent()
+    assert result["success"] is True
+    assert result["at_limit"] is False
+    assert result["active"] == 2
+    assert result["max"] == 3
+    mock_request.assert_called_once()
+
+    mock_request.reset_mock()
+    monkeypatch.setattr("pokepoke.parallel.get_effective_max_agents", lambda: 2)
+
+    result = api.spawn_agent()
+    assert result["success"] is False
+    assert result["at_limit"] is True
+    assert result["active"] == 2
+    assert result["max"] == 2
+    mock_request.assert_not_called()
+
+
 def test_add_remove_work_item_label(monkeypatch) -> None:
     api = DesktopAPI()
     api.push_work_item("PokePoke-1", "Title", "open", ["urgent"])

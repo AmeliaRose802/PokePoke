@@ -51,25 +51,15 @@ def _finalize_session(
     clear_terminal_banner()
 
 
-def _record_item_result(
-    selected_item: BeadsWorkItem, result: WorkItemResult,
-    session_stats: SessionStats, run_logger: RunLogger,
-) -> tuple[bool, int]:
-    """Record the result of processing a single work item.
-
-    Returns:
-        (success, items_completed) after recording.
-    """
+def _record_item_result(selected_item: BeadsWorkItem, result: WorkItemResult, session_stats: SessionStats, run_logger: RunLogger) -> tuple[bool, int]:
+    """Record the result of processing a single work item."""
     if result.request_count > 1:
         session_stats.record_retries(result.request_count - 1)
-
     session_stats.record_agent_run("work")
     session_stats.record_agent_run("cleanup", result.cleanup_agent_runs)
     session_stats.record_agent_run("gate", result.gate_agent_runs)
-
     if result.stats:
         session_stats.record_agent_stats(result.stats)
-
     if result.model_completion:
         session_stats.record_model_completion(result.model_completion)
         record_completion(result.model_completion)
@@ -81,19 +71,16 @@ def _record_item_result(
             gate_runs=result.gate_agent_runs,
             item_stats=result.stats,
         )
-
     items_completed = 0
     if result.success:
         items_completed = session_stats.record_completion(selected_item, agent_type="work")
         from pokepoke.beads_item_stats_store import record_item_completed
         beads_summary = record_item_completed(selected_item.id, agent_type="work")
         session_stats.set_lifetime_beads_item_totals(created=int(beads_summary.get("total_created", 0)), completed=int(beads_summary.get("total_completed", 0)))
-
         total_persistent_count = increment_items_completed()
         print(f"\n≡ƒôê Items completed this session: {items_completed}\n≡ƒôê Total items completed (lifetime): {total_persistent_count}\n≡ƒôê Beads created (lifetime): {session_stats.lifetime_items_created}\n≡ƒôê Beads net delta (lifetime): {session_stats.lifetime_items_created - session_stats.lifetime_items_completed:+d}")
         run_logger.log_orchestrator(f"Items completed this session: {items_completed}")
         run_periodic_maintenance(total_persistent_count, session_stats, run_logger)
-
     return result.success, session_stats.items_completed
 
 
@@ -193,6 +180,7 @@ def run_orchestrator(
                 continuous=continuous,
                 record_fn=_record_item_result,
                 finalize_fn=_finalize_session,
+                cli_override=(max_parallel_agents > 1),
             )
             items_completed = session_stats.items_completed
             terminal_ui.ui.stop_and_capture()

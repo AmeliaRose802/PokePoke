@@ -335,13 +335,11 @@ class DesktopAPI:
           - success: bool — True if a spawn was requested
           - at_limit: bool — True if already at max_parallel_agents
           - active: int — number of currently running agents
-          - max: int — configured max_parallel_agents
+          - max: int — effective max agents
         """
-        from pokepoke.config import get_config
-        from pokepoke.parallel import request_spawn_agent
+        from pokepoke.parallel import request_spawn_agent, get_effective_max_agents
 
-        config = get_config()
-        max_agents = config.max_parallel_agents
+        max_agents = get_effective_max_agents()
 
         with self._lock:
             running_agents = [
