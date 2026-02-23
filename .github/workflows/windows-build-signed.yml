@@ -45,6 +45,10 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+        cache-dependency-path: |
+          requirements.txt
+          requirements-dev.txt
 
     - name: Setup Node.js
       uses: actions/setup-node@v4
@@ -74,7 +78,7 @@ jobs:
       working-directory: ./desktop
 
     - name: Install AzureSignTool (if not skipping signing)
-      if: ${{ !github.event.inputs.skip_signing }}
+      if: ${{ github.event.inputs.skip_signing != 'true' }}
       run: |
         Write-Host "Installing AzureSignTool..."
         dotnet tool install --global AzureSignTool
