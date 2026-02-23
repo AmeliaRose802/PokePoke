@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 
+import { useCopyCompletedItems } from "../hooks/useCopyCompletedItems";
 import type {
   AgentInfo,
   ModelHistoryEntry,
   ModelPerformanceSummary,
   SessionStats,
 } from "../types";
+import { buildAgentActivity, normalizeAgentSegments, type NormalizedAgentSegment } from "../utils/agentActivity";
 import {
   buildCompletionSeries,
   buildCompletionTimeSeries,
@@ -34,9 +36,6 @@ interface StatsPageProps {
 }
 
 type SortField = "model" | "runs" | "success" | "duration" | "tokens";
-interface AgentSegment { label: string; value: number; color: string; }
-interface AgentActivity { total: number; segments: AgentSegment[]; }
-interface NormalizedAgentSegment extends AgentSegment { start: number; width: number; }
 
 interface AgentTokenSegment { label: string; tokens: number; color: string; }
 
@@ -70,9 +69,14 @@ export function StatsPage({
     { label: "Uptime", value: formatElapsed(stats?.elapsed_time ?? 0), icon: "⏱️" },
   ];
   const agentActivity = buildAgentActivity(stats);
-  const normalizedSegments = normalizeAgentSegments(agentActivity);
+  const normalizedSegments: NormalizedAgentSegment[] = normalizeAgentSegments(agentActivity);
   const [sortField, setSortField] = useState<SortField>("success");
   const [sortAsc, setSortAsc] = useState(false);
+  const { copyStatus, copyCompletedItems } = useCopyCompletedItems();
+
+  const handleCopyCompletedItems = () => {
+    copyCompletedItems(completedItems, modelHistory);
+  };
 
   const tokensByModel = useMemo(() => {
     const map: Record<string, number> = {};
@@ -202,7 +206,21 @@ export function StatsPage({
           {completedItems.length > 0 && (
             <section>
               <div className="stats-panel-card">
-                <h3>Completed this session <span className="stats-panel-subtitle">Gate-passed and merged</span></h3>
+                <div className="stats-panel-card-header">
+                  <h3>Completed this session <span className="stats-panel-subtitle">Gate-passed and merged</span></h3>
+                  <button
+                    className={`copy-button ${copyStatus}`}
+                    onClick={handleCopyCompletedItems}
+                    title="Copy completed items to clipboard"
+                    aria-label={
+                      copyStatus === 'success' ? 'Copied to clipboard!' 
+                      : copyStatus === 'error' ? 'Failed to copy' 
+                      : 'Copy completed items to clipboard'
+                    }
+                  >
+                    {copyStatus === 'success' ? '✅' : copyStatus === 'error' ? '❌' : '📋'}
+                  </button>
+                </div>
                 <ul className="completed-items-list">
                   {completedItems.map((ci) => (
                     <CompletedItemCard key={ci.id} item={ci} modelHistory={modelHistory} />
@@ -320,61 +338,6 @@ export function StatsPage({
       </div>
     </div>
   );
-}
-
-function buildAgentActivity(stats: SessionStats | null): AgentActivity {
-  const elapsed = stats?.agent_type_elapsed_seconds ?? {};
-
-  // Map from internal key → display label and color
-  const definitions: { key: string; label: string; color: string }[] = [
-    { key: "work",             label: "Work",      color: "#7aa2f7" },
-    { key: "gate",             label: "Gate",      color: "#f7768e" },
-    { key: "tech_debt",        label: "Tech Debt", color: "#e0af68" },
-    { key: "janitor",          label: "Janitor",   color: "#9ece6a" },
-    { key: "backlog_cleanup",  label: "Backlog",   color: "#ff9e64" },
-    { key: "cleanup",          label: "Cleanup",   color: "#bb9af7" },
-    { key: "beta_tester",      label: "Beta",      color: "#2ac3de" },
-    { key: "code_review",      label: "Review",    color: "#c0caf5" },
-  ];
-
-  const segments: AgentSegment[] = definitions
-    .map(({ key, label, color }) => ({ label, value: elapsed[key] ?? 0, color }))
-    .filter((segment) => segment.value > 0);
-
-  // Fall back to counts when no elapsed time is recorded (e.g. legacy data)
-  if (segments.length === 0) {
-    return buildAgentActivityFromCounts(stats);
-  }
-
-  const total = segments.reduce((sum, seg) => sum + seg.value, 0);
-  return { total, segments };
-}
-
-function buildAgentActivityFromCounts(stats: SessionStats | null): AgentActivity {
-  const segments: AgentSegment[] = [
-    { label: "Work",      value: stats?.work_agent_runs ?? 0,           color: "#7aa2f7" },
-    { label: "Gate",      value: stats?.gate_agent_runs ?? 0,           color: "#f7768e" },
-    { label: "Tech Debt", value: stats?.tech_debt_agent_runs ?? 0,      color: "#e0af68" },
-    { label: "Janitor",   value: stats?.janitor_agent_runs ?? 0,        color: "#9ece6a" },
-    { label: "Backlog",   value: stats?.backlog_cleanup_agent_runs ?? 0, color: "#ff9e64" },
-    { label: "Cleanup",   value: stats?.cleanup_agent_runs ?? 0,        color: "#bb9af7" },
-    { label: "Beta",      value: stats?.beta_tester_agent_runs ?? 0,    color: "#2ac3de" },
-    { label: "Review",    value: stats?.code_review_agent_runs ?? 0,    color: "#c0caf5" },
-  ].filter((segment) => segment.value > 0);
-
-  const total = segments.reduce((sum, seg) => sum + seg.value, 0);
-  return { total, segments };
-}
-
-function normalizeAgentSegments(agentActivity: AgentActivity): NormalizedAgentSegment[] {
-  if (!agentActivity.total) return [];
-  let cursor = 0;
-  return agentActivity.segments.map((segment) => {
-    const width = agentActivity.total ? (segment.value / agentActivity.total) * 100 : 0;
-    const normalized = { ...segment, width, start: cursor };
-    cursor += width;
-    return normalized;
-  });
 }
 
 function TrendChart({ title, data, color, valueFormatter, emptyLabel }: { title: string; data: { label: string; value: number }[]; color: string; valueFormatter?: (value: number) => string; emptyLabel: string; }) {
