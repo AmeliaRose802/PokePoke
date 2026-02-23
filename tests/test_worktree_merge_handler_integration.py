@@ -60,7 +60,7 @@ class TestPerformWorktreeMergeIntegration:
         assert success is True
         assert cleaned is True
         mock_check_ready.assert_called_once()
-        mock_merge.assert_called_once_with(agent_item.id)
+        mock_merge.assert_called_once_with(agent_item.id, cleanup=True)
 
     @patch('pokepoke.worktree_merge_handler.cleanup_lock')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
@@ -216,7 +216,7 @@ class TestPerformWorktreeMergeIntegration:
         mock_check_ready,
         mock_cleanup_lock
     ):
-        """Test that successful merge removes worktree from manifest."""
+        """Test that successful merge completes cleanly."""
         mock_check_ready.return_value = (True, '')
         mock_merge.return_value = (True, [])
         mock_cleanup_lock.return_value.__enter__ = Mock()
@@ -234,7 +234,8 @@ class TestPerformWorktreeMergeIntegration:
         )
 
         assert success is True
-        mock_remove_manifest.assert_called_once_with(agent_item.id)
+        assert cleaned is True
+        mock_merge.assert_called_once_with(agent_item.id, cleanup=True)
 
 
 class TestHandleWorktreeMergeIntegration:
@@ -256,10 +257,12 @@ class TestHandleWorktreeMergeIntegration:
         worktree_path = Path('C:/repos/worktrees/task-test-lock')
 
         success, cleaned = handle_worktree_merge(
-            item_id=agent_item.id,
-            item=agent_item,
+            agent_id=agent_item.id,
+            agent_item=agent_item,
+            agent_name='TestAgent',
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
+            agent_stats=None,
             parent_agent_id=None
         )
 
@@ -285,10 +288,12 @@ class TestHandleWorktreeMergeIntegration:
         worktree_path = Path('C:/repos/worktrees/task-test-passthrough')
 
         success, cleaned = handle_worktree_merge(
-            item_id=agent_item.id,
-            item=agent_item,
+            agent_id=agent_item.id,
+            agent_item=agent_item,
+            agent_name='TestAgent',
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
+            agent_stats=None,
             parent_agent_id=None
         )
 
@@ -312,10 +317,12 @@ class TestHandleWorktreeMergeIntegration:
 
         with pytest.raises(RuntimeError, match='Test error'):
             handle_worktree_merge(
-                item_id=agent_item.id,
-                item=agent_item,
+                agent_id=agent_item.id,
+                agent_item=agent_item,
+                agent_name='TestAgent',
                 worktree_path=worktree_path,
                 repo_root=Path('C:/repos'),
+                agent_stats=None,
                 parent_agent_id=None
             )
 
@@ -432,9 +439,9 @@ class TestCleanupAgentInvocation:
 
         # Verify cleanup agent was called with correct parameters
         mock_invoke_cleanup.assert_called_once()
-        call_kwargs = mock_invoke_cleanup.call_args[1]
-        assert call_kwargs['repo_root'] == repo_root
-        assert call_kwargs['parent_agent_id'] == parent_id
+        call_args = mock_invoke_cleanup.call_args
+        assert call_args[0][1] == repo_root  # repo_root is 2nd positional arg
+        assert call_args[1]['parent_agent_id'] == parent_id
 
     @patch('pokepoke.worktree_merge_handler.cleanup_lock')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
