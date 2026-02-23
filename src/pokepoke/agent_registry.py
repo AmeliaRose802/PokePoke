@@ -180,36 +180,3 @@ class AgentRegistry:
             "paused": paused,
         }
 
-    def register_historical_agent(self, agent_state: dict[str, Any]) -> None:
-        """Insert a pre-existing agent (loaded from disk) into the registry."""
-        agent_id = agent_state.get("agent_id")
-        if not agent_id:
-            raise ValueError("agent_state must include agent_id")
-
-        recent_logs = list(agent_state.get("recent_logs", []))
-        log_lines = list(agent_state.get("log_lines", recent_logs))
-
-        if len(recent_logs) > self._preview_limit:
-            recent_logs = recent_logs[-self._preview_limit :]
-        if self._detail_limit is not None and len(log_lines) > self._detail_limit:
-            log_lines = log_lines[-self._detail_limit :]
-
-        sanitized = {
-            "agent_id": agent_id,
-            "name": agent_state.get("name") or agent_id,
-            "iteration": agent_state.get("iteration", 1) or 1,
-            "status": agent_state.get("status", "success"),
-            "model": agent_state.get("model"),
-            "parent_agent_id": agent_state.get("parent_agent_id"),
-            "work_item_id": agent_state.get("work_item_id"),
-            "work_item_title": agent_state.get("work_item_title"),
-            "recent_logs": recent_logs,
-            "log_lines": log_lines,
-            "started_at": agent_state.get("started_at"),
-            "last_updated": agent_state.get("last_updated") or agent_state.get("started_at"),
-            "last_log_at": agent_state.get("last_log_at") or agent_state.get("last_updated"),
-        }
-
-        with self._lock:
-            if agent_id not in self._agents:
-                self._agents[agent_id] = sanitized
