@@ -24,6 +24,7 @@ import { WorkItemHeader } from "./components/WorkItemHeader";
 import type { ModelHistoryEntry } from "./types";
 import { useBridge } from "./useBridge";
 import { useDocumentTitle } from "./useDocumentTitle";
+import { useResizable } from "./useResizable";
 
 function App() {
   const bridge = useBridge();
@@ -35,6 +36,7 @@ function App() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [spawnAtLimit, setSpawnAtLimit] = useState(false);
+  const { isDragging, containerRef, handleProps } = useResizable();
   const repositoryDisplayName = bridge.repositoryName.trim();
   const showRepositoryName = repositoryDisplayName.length > 0;
 
@@ -199,7 +201,10 @@ function App() {
       />
 
       {/* Main content area with logs and agents panel */}
-      <div className="main-content">
+      <div
+        className={`main-content${isDragging ? " main-content--resizing" : ""}`}
+        ref={containerRef}
+      >
         {/* Primary log output + secondary (collapsible) orchestrator log */}
         <div className="log-container">
           {selectedAgentDetail ? (
@@ -252,6 +257,9 @@ function App() {
             </details>
           ) : null}
         </div>
+
+        {/* Resize handle */}
+        <div className="resize-handle" {...handleProps} />
 
         {/* Agents panel */}
         <AgentsPanel
