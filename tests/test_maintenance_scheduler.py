@@ -525,3 +525,49 @@ class TestConcurrentExecution:
             "janitor",
             "Skipping Janitor Agent - main repo still dirty after wait",
         )
+
+    @patch("pokepoke.maintenance_scheduler.get_active_agent_count")
+    def test_singleton_agent_deferred_when_agents_active(self, mock_active_count):
+        """Singleton agents should be deferred when other agents are retrying."""
+        mock_active_count.return_value = 2
+        scheduler = MaintenanceScheduler()
+        agent_cfg = MaintenanceAgentConfig(name="Janitor", prompt_file="janitor.md", frequency=2)
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        with patch.object(scheduler, '_run_with_singleton_guard') as mock_run:
+            scheduler._maybe_run_agent("Janitor", agent_cfg, Path.cwd(), session_stats, run_logger)
+            mock_run.assert_not_called()
+
+        run_logger.log_maintenance.assert_called_with(
+            "janitor",
+            "Deferring Janitor Agent - 2 agent(s) still active",
+        )
+
+    @patch("pokepoke.maintenance_scheduler.get_active_agent_count")
+    def test_singleton_agent_runs_when_no_agents_active(self, mock_active_count):
+        """Singleton agents should run normally when no agents are active."""
+        mock_active_count.return_value = 0
+        scheduler = MaintenanceScheduler()
+        agent_cfg = MaintenanceAgentConfig(name="Janitor", prompt_file="janitor.md", frequency=2)
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        with patch('pokepoke.maintenance_scheduler.try_lock') as mock_lock, \
+                patch.object(scheduler, '_run_agent_with_coordination') as mock_run:
+            mock_lock.return_value = Mock()
+            scheduler._maybe_run_agent("Janitor", agent_cfg, Path.cwd(), session_stats, run_logger)
+            mock_run.assert_called_once()
+
+    @patch("pokepoke.maintenance_scheduler.get_active_agent_count")
+    def test_parallel_safe_agent_not_deferred_by_active_agents(self, mock_active_count):
+        """Parallel-safe agents should NOT be deferred by active agents."""
+        mock_active_count.return_value = 3
+        scheduler = MaintenanceScheduler()
+        agent_cfg = MaintenanceAgentConfig(name="Tech Debt", prompt_file="tech-debt.md", frequency=5)
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        with patch.object(scheduler, '_run_agent_with_coordination') as mock_run:
+            scheduler._maybe_run_agent("Tech Debt", agent_cfg, Path.cwd(), session_stats, run_logger)
+            mock_run.assert_called_once()

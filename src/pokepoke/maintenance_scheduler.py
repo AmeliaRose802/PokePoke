@@ -19,6 +19,7 @@ from pokepoke.logging_utils import RunLogger
 from pokepoke.maintenance import _run_special_agent
 from pokepoke.agent_runner import run_maintenance_agent
 from pokepoke.repo_state_guard import wait_for_main_repo_clean
+from pokepoke.shutdown import get_active_agent_count
 from pokepoke.terminal_ui import set_terminal_banner
 from pokepoke import terminal_ui
 
@@ -113,6 +114,18 @@ class MaintenanceScheduler:
             run_logger: Logger for maintenance events
         """
         log_key = agent_name.lower().replace(" ", "_")
+
+        # Defer singleton agents when other agents are actively processing
+        # (e.g. retrying after gate failures) to avoid interfering with
+        # in-progress work.
+        if agent_name in _SINGLETON_AGENTS:
+            active_count = get_active_agent_count()
+            if active_count > 0:
+                run_logger.log_maintenance(
+                    log_key,
+                    f"Deferring {agent_name} Agent - {active_count} agent(s) still active",
+                )
+                return
 
         def log_fn(msg: str) -> None:
             run_logger.log_maintenance(log_key, msg)
