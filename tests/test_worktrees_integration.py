@@ -400,7 +400,7 @@ class TestCleanupWorktreeIntegration:
         }]
         mock_run.return_value = Mock(returncode=0)
         
-        with patch.object(Path, 'exists', return_value=False):
+        with patch.object(Path, 'exists', side_effect=[True, False]):
             result = cleanup_worktree('test-123')
         
         assert result is True
@@ -419,14 +419,15 @@ class TestCleanupWorktreeIntegration:
         }]
         mock_run.return_value = Mock(returncode=0)
         
-        with patch.object(Path, 'exists', return_value=False), \
+        with patch.object(Path, 'exists', side_effect=[True, False]), \
              patch('pokepoke.worktrees.remove_from_manifest'):
             result = cleanup_worktree('test-456', force=True)
         
         assert result is True
-        # Verify force flag was passed
-        args = mock_run.call_args_list[0][0][0]
-        assert '--force' in args
+        # Verify force flag was passed to git worktree remove
+        worktree_remove_args = mock_run.call_args_list[0][0][0]
+        assert worktree_remove_args[0:3] == ['git', 'worktree', 'remove']
+        assert '--force' in worktree_remove_args
 
     @patch('pokepoke.worktrees.list_worktrees')
     @patch('pokepoke.worktrees.add_uncleaned_worktree')
