@@ -47,9 +47,8 @@ class TestSignalHandlers:
         register_shutdown_handlers(mock_logger)
 
     @patch('pokepoke.shutdown.request_shutdown')
-    @patch('pokepoke.signal_handlers.sys.exit')
-    def test_sigterm_handler_logs_and_exits(self, mock_exit, mock_request_shutdown):
-        """Test that SIGTERM handler logs appropriately and exits."""
+    def test_sigterm_handler_logs_and_exits(self, mock_request_shutdown):
+        """Test that SIGTERM handler logs appropriately and requests shutdown."""
         mock_logger = Mock()
         register_shutdown_handlers(mock_logger)
 
@@ -72,13 +71,11 @@ class TestSignalHandlers:
 
         mock_request_shutdown.assert_called_once()
 
-        # Verify sys.exit was called with appropriate code (128 + signal number)
-        mock_exit.assert_called_once_with(128 + signal.SIGTERM)
+        # sys.exit() must NOT be called; the main loop handles shutdown cleanly
 
     @patch('pokepoke.shutdown.request_shutdown')
-    @patch('pokepoke.signal_handlers.sys.exit')
-    def test_sigint_handler_logs_and_exits(self, mock_exit, mock_request_shutdown):
-        """Test that SIGINT handler logs appropriately and exits."""
+    def test_sigint_handler_logs_and_exits(self, mock_request_shutdown):
+        """Test that SIGINT handler logs appropriately and requests shutdown."""
         mock_logger = Mock()
         register_shutdown_handlers(mock_logger)
 
@@ -95,13 +92,11 @@ class TestSignalHandlers:
 
         mock_request_shutdown.assert_called_once()
 
-        # Verify sys.exit was called with appropriate code
-        mock_exit.assert_called_once_with(128 + signal.SIGINT)
+        # sys.exit() must NOT be called; the main loop handles shutdown cleanly
 
     @patch('pokepoke.shutdown.request_shutdown')
-    @patch('pokepoke.signal_handlers.sys.exit')
     @patch('pokepoke.signal_handlers.print')
-    def test_signal_handler_fallback_when_no_logger(self, mock_print, mock_exit, mock_request_shutdown):
+    def test_signal_handler_fallback_when_no_logger(self, mock_print, mock_request_shutdown):
         """Test that signal handler falls back to stderr when no logger available."""
         # Don't register a logger
         from pokepoke.signal_handlers import _signal_handler
@@ -118,11 +113,10 @@ class TestSignalHandlers:
         assert len(signal_messages) > 0
 
         mock_request_shutdown.assert_called_once()
-        mock_exit.assert_called_once_with(128 + signal.SIGTERM)
+        # sys.exit() must NOT be called; the main loop handles shutdown cleanly
 
     @patch('pokepoke.shutdown.request_shutdown')
-    @patch('pokepoke.signal_handlers.sys.exit')
-    def test_signal_handler_handles_logger_exception(self, mock_exit, mock_request_shutdown):
+    def test_signal_handler_handles_logger_exception(self, mock_request_shutdown):
         """Test that signal handler handles logging exceptions gracefully."""
         # Create a mock logger that raises an exception
         mock_logger = Mock()
@@ -137,8 +131,7 @@ class TestSignalHandlers:
 
         mock_request_shutdown.assert_called_once()
 
-        # Should still exit despite logging failure
-        mock_exit.assert_called_once_with(128 + signal.SIGTERM)
+        # sys.exit() must NOT be called; shutdown watchdog handles force-exit
 
     def test_integration_with_real_logger(self):
         """Test integration with actual RunLogger."""

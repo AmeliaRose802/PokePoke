@@ -97,11 +97,11 @@ def _signal_handler(signum: int, frame: FrameType | None) -> None:
         # Signal handlers must never fail; best-effort log to stderr.
         print(f"[{timestamp}] [ERROR] Failed to request graceful shutdown: {e}", file=sys.stderr)
 
-    # Exit with appropriate code
-    # SIGTERM/SIGINT should result in exit code 128 + signal number
-    # This is the standard convention for processes killed by signals
-    exit_code = 128 + signum
-    sys.exit(exit_code)
+    # Do NOT call sys.exit() here. Raising SystemExit from the signal handler
+    # bypasses the orchestrator's except KeyboardInterrupt / except Exception
+    # blocks, preventing _finalize_session() from running.
+    # Instead, request_shutdown() signals the main loop to exit cleanly.
+    # The shutdown watchdog in shutdown.py handles force-exit for hung processes.
 
 
 def unregister_shutdown_handlers() -> None:
