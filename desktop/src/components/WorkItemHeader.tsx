@@ -76,11 +76,17 @@ export function WorkItemHeader({
     }
   };
 
-  const tagHint = !workItem
-    ? "Waiting for a work item..."
+  const tagEditDisabledReason = !workItem
+    ? "Select a beads work item first to apply special-effect tags."
     : !isBeadsItem
-      ? "Special-effect tags are only editable for beads items."
-      : "Toggle these to adjust how the orchestrator handles this item.";
+      ? "Special-effect tags can only be applied to beads items."
+      : !onAddLabel || !onRemoveLabel
+        ? "Tag editing is unavailable in this view."
+        : null;
+
+  const tagHint =
+    tagEditDisabledReason ??
+    "Toggle these to adjust how the orchestrator handles this item.";
 
   return (
     <header className="work-item-header">
@@ -151,18 +157,28 @@ export function WorkItemHeader({
                 </div>
                 <div className="special-tag-description">{tag.description}</div>
                 <div className="special-tag-actions">
-                  <button
-                    className={`special-tag-toggle${isActive ? " active" : ""}`}
-                    type="button"
-                    onClick={() => handleToggleTag(tag.id, isActive)}
-                    disabled={!canEditTags || isPending}
+                  <span
+                    title={
+                      !canEditTags
+                        ? tagEditDisabledReason ?? "Tag editing is disabled."
+                        : isPending
+                          ? "Updating tag..."
+                          : undefined
+                    }
                   >
-                    {isPending
-                      ? "Updating..."
-                      : isActive
-                        ? "Remove tag"
-                        : "Add tag"}
-                  </button>
+                    <button
+                      className={`special-tag-toggle${isActive ? " active" : ""}`}
+                      type="button"
+                      onClick={() => handleToggleTag(tag.id, isActive)}
+                      disabled={!canEditTags || isPending}
+                    >
+                      {isPending
+                        ? "Updating..."
+                        : isActive
+                          ? "Remove tag"
+                          : "Apply to current item"}
+                    </button>
+                  </span>
                 </div>
               </div>
             );
