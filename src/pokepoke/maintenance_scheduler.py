@@ -214,7 +214,7 @@ class MaintenanceScheduler:
         try:
             with terminal_ui.ui.agent_output_for(agent_id):
                 if agent_name in _SPECIAL_AGENTS:
-                    result = _run_special_agent(agent_name, pokepoke_repo, item_logger=maint_logger)
+                    result = _run_special_agent(agent_name, pokepoke_repo, item_logger=maint_logger, parent_agent_id=agent_id)
                 else:
                     result = run_maintenance_agent(
                         agent_name,
@@ -224,6 +224,7 @@ class MaintenanceScheduler:
                         merge_changes=agent_cfg.merge_changes,
                         model=agent_cfg.model,
                         item_logger=maint_logger,
+                        parent_agent_id=agent_id,
                     )
 
             success = result is not None

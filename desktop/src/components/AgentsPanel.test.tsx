@@ -560,4 +560,83 @@ describe('AgentsPanel', () => {
       expect(screen.queryByText('✓ Passed')).not.toBeInTheDocument();
     });
   });
+
+  describe('maintenance sub-agent nesting', () => {
+    it('renders maintenance sub-agent nested under parent agent', () => {
+      const janitorAgent = mkAgent({
+        agent_id: 'janitor-123',
+        name: 'Janitor',
+        agent_type: 'janitor',
+      });
+      const mergeConflictAgent = mkAgent({
+        agent_id: 'merge-conflict-456',
+        name: 'Merge Conflict Cleanup',
+        agent_type: 'merge_conflict_cleanup',
+        parent_agent_id: 'janitor-123',
+      });
+      const { container } = render(
+        <AgentsPanel
+          agents={[janitorAgent, mergeConflictAgent]}
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+      // Sub-agent should have child class (indented under parent)
+      const childCard = container.querySelector('.agent-card-child');
+      expect(childCard).not.toBeNull();
+      // Parent should not have child class
+      const allCards = container.querySelectorAll('.agent-card');
+      expect(allCards).toHaveLength(2);
+      // First card (parent) should not have child class
+      expect(allCards[0].classList.contains('agent-card-child')).toBe(false);
+      // Second card (child) should have child class
+      expect(allCards[1].classList.contains('agent-card-child')).toBe(true);
+    });
+
+    it('renders multiple maintenance sub-agents under same parent', () => {
+      const janitorAgent = mkAgent({
+        agent_id: 'janitor-123',
+        name: 'Janitor',
+        agent_type: 'janitor',
+      });
+      const subAgent1 = mkAgent({
+        agent_id: 'sub-1',
+        name: 'Sub Agent 1',
+        parent_agent_id: 'janitor-123',
+      });
+      const subAgent2 = mkAgent({
+        agent_id: 'sub-2',
+        name: 'Sub Agent 2',
+        parent_agent_id: 'janitor-123',
+      });
+      const { container } = render(
+        <AgentsPanel
+          agents={[janitorAgent, subAgent1, subAgent2]}
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+      const childCards = container.querySelectorAll('.agent-card-child');
+      expect(childCards).toHaveLength(2);
+    });
+
+    it('does not nest agent when parent is not in agent list', () => {
+      // Sub-agent with parent_agent_id pointing to non-existent agent
+      const orphanAgent = mkAgent({
+        agent_id: 'orphan-123',
+        name: 'Orphan Agent',
+        parent_agent_id: 'missing-parent',
+      });
+      const { container } = render(
+        <AgentsPanel
+          agents={[orphanAgent]}
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+      // Should render as root (no child class) since parent doesn't exist
+      const childCard = container.querySelector('.agent-card-child');
+      expect(childCard).toBeNull();
+    });
+  });
 });

@@ -561,7 +561,7 @@ class TestRunSpecialAgent:
         from pathlib import Path
         with patch('pokepoke.agent_runner.run_beta_tester', return_value=AgentStats()) as mock_bt:
             result = _run_special_agent("Beta Tester", Path("/repo"))
-            mock_bt.assert_called_once_with(repo_root=Path("/repo"), item_logger=None)
+            mock_bt.assert_called_once_with(repo_root=Path("/repo"), item_logger=None, parent_agent_id=None)
             assert isinstance(result, AgentStats)
 
     def test_worktree_cleanup(self) -> None:
@@ -569,7 +569,7 @@ class TestRunSpecialAgent:
         from pathlib import Path
         with patch('pokepoke.agent_runner.run_worktree_cleanup', return_value=AgentStats()) as mock_wc:
             result = _run_special_agent("Worktree Cleanup", Path("/repo"))
-            mock_wc.assert_called_once_with(repo_root=Path("/repo"), item_logger=None)
+            mock_wc.assert_called_once_with(repo_root=Path("/repo"), item_logger=None, parent_agent_id=None)
             assert isinstance(result, AgentStats)
 
     def test_unknown_agent_returns_none(self) -> None:

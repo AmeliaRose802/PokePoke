@@ -18,7 +18,8 @@ def handle_worktree_merge(
     agent_name: str,
     worktree_path: Path,
     repo_root: Path,
-    agent_stats: AgentStats | None
+    agent_stats: AgentStats | None,
+    parent_agent_id: str | None = None
 ) -> tuple[bool, bool]:
     """Handle worktree merge with conflict resolution.
 
@@ -32,6 +33,7 @@ def handle_worktree_merge(
         worktree_path: Path to the worktree
         repo_root: Repository root path
         agent_stats: Agent statistics to return
+        parent_agent_id: Optional parent agent ID for UI nesting of sub-agents
 
     Returns:
         Tuple of (merge_success, worktree_cleaned)
@@ -43,7 +45,8 @@ def handle_worktree_merge(
         logger.info("Acquired merge lock for agent %s", agent_id)
         print("   ✅ Lock acquired, proceeding with merge")
         return _handle_worktree_merge_inner(
-            agent_id, agent_item, agent_name, worktree_path, repo_root, agent_stats
+            agent_id, agent_item, agent_name, worktree_path, repo_root, agent_stats,
+            parent_agent_id=parent_agent_id
         )
 
 
@@ -53,7 +56,8 @@ def _handle_worktree_merge_inner(
     agent_name: str,
     worktree_path: Path,
     repo_root: Path,
-    agent_stats: AgentStats | None
+    agent_stats: AgentStats | None,
+    parent_agent_id: str | None = None
 ) -> tuple[bool, bool]:
     """Inner merge logic, called while holding the merge lock."""
     from pokepoke.git_operations import (
@@ -63,6 +67,9 @@ def _handle_worktree_merge_inner(
         abort_merge
     )
     from pokepoke.worktree_cleanup import add_uncleaned_worktree, remove_from_manifest
+
+    # Use parent_agent_id for sub-agent nesting if provided, otherwise agent_id
+    cleanup_parent_id = parent_agent_id if parent_agent_id else agent_id
 
     # Check if main repo is ready for merge
     print("\n🔍 Checking if main repo is ready for merge...")
@@ -84,7 +91,7 @@ def _handle_worktree_merge_inner(
             cleanup_success, _ = invoke_cleanup_agent(
                 agent_item,
                 repo_root,
-                parent_agent_id=agent_id,
+                parent_agent_id=cleanup_parent_id,
             )
 
         if cleanup_success:
@@ -132,7 +139,7 @@ def _handle_worktree_merge_inner(
                 repo_root,
                 f"Merge conflict detected in {len(unmerged_files)} file(s)",
                 unmerged_files=unmerged_files,
-                parent_agent_id=agent_id,
+                parent_agent_id=cleanup_parent_id,
             )
 
         if success:
