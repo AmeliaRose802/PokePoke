@@ -4,7 +4,10 @@ import json
 import subprocess
 import time
 
+from filelock import Timeout
+
 from .agent_context import get_agent_name
+from .coordination import acquire_lock
 from .types import BeadsWorkItem
 from .beads_hierarchy import resolve_to_leaf_task, HUMAN_REQUIRED_LABEL
 from .beads_query import _parse_beads_json
@@ -72,65 +75,99 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
     if agent_name is None:
         agent_name = get_agent_name()
 
-    # CRITICAL: Check current ownership RIGHT BEFORE claiming
-    # This catches race conditions where another agent claimed between fetch and now
+    safe_id = ''.join(c if c.isalnum() or c in ('-', '_') else '_' for c in item_id)
+    lock_name = f"beads-claim-{safe_id}"
+
     try:
-        result = subprocess.run(
-            ['bd', 'show', item_id, '--json'],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True,
-            timeout=30
-        )
+        # Serialize check+claim across parallel agents to eliminate TOCTOU.
+        with acquire_lock(lock_name, timeout=0):
+            # CRITICAL: Check current ownership RIGHT BEFORE claiming
+            # This catches race conditions where another agent claimed between fetch and now
+            try:
+                result = subprocess.run(
+                    ['bd', 'show', item_id, '--json'],
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    check=True,
+                    timeout=30
+                )
 
-        # Parse current item state
-        data = _parse_beads_json(result.stdout)
-        if data is not None:
-            current_item = data[0] if isinstance(data, list) else data
+                # Parse current item state
+                data = _parse_beads_json(result.stdout)
+                if data is not None:
+                    current_item = data[0] if isinstance(data, list) else data
 
-            # CRITICAL: Check 'assignee' field, NOT 'owner' field!
-            # - assignee: The specific agent currently working on it (pokepoke_agent_123)
-            # - owner: The human user who owns it (e.g., user@example.com)
-            current_assignee = current_item.get('assignee', '')
+                    # CRITICAL: Check 'assignee' field, NOT 'owner' field!
+                    # - assignee: The specific agent currently working on it (pokepoke_agent_123)
+                    # - owner: The human user who owns it (e.g., user@example.com)
+                    current_assignee = current_item.get('assignee', '')
 
-            # Check if already assigned to another agent
-            if current_assignee:
-                is_ours = (current_assignee.lower() == agent_name.lower())
+                    # Check if already assigned to another agent
+                    if current_assignee:
+                        is_ours = (current_assignee.lower() == agent_name.lower())
 
-                if not is_ours:
-                    print(f"⚠️  RACE CONDITION DETECTED: {item_id} already assigned to {current_assignee}")
+                        if not is_ours:
+                            print(f"⚠️  RACE CONDITION DETECTED: {item_id} already assigned to {current_assignee}")
+                            return False
+
+            except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+                print(f"⚠️  Failed to verify {item_id} ownership: {e}")
+                return False
+
+            try:
+                # Now safe to claim - we verified it's unassigned or ours
+                subprocess.run(
+                    ['bd', 'update', item_id, '--status', 'in_progress', '-a', agent_name, '--json'],
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    check=True,
+                    timeout=30
+                )
+                print(f"✅ Assigned {item_id} to {agent_name} and marked in_progress")
+
+                # Detect-and-abort: re-read and verify the assignee is actually us.
+                verify_result = subprocess.run(
+                    ['bd', 'show', item_id, '--json'],
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    check=True,
+                    timeout=30
+                )
+                verify_data = _parse_beads_json(verify_result.stdout)
+                if verify_data is None:
+                    print(f"⚠️  CLAIM VERIFICATION FAILED: {item_id} could not be re-read after update")
                     return False
 
-    except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
-        print(f"⚠️  Failed to verify {item_id} ownership: {e}")
-        return False
+                verify_item = verify_data[0] if isinstance(verify_data, list) else verify_data
+                verify_assignee = verify_item.get('assignee', '')
+                if verify_assignee.lower() != agent_name.lower():
+                    print(
+                        f"⚠️  CLAIM VERIFICATION FAILED: {item_id} assignee is '{verify_assignee}', "
+                        f"expected '{agent_name}'"
+                    )
+                    return False
 
-    try:
-        # Now safe to claim - we verified it's unassigned or ours
-        subprocess.run(
-            ['bd', 'update', item_id, '--status', 'in_progress', '-a', agent_name, '--json'],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True,
-            timeout=30
-        )
-        print(f"✅ Assigned {item_id} to {agent_name} and marked in_progress")
+                # Sync to push assignment to other agents
+                sync_result = run_bd_sync_with_retry()
 
-        # Sync to push assignment to other agents
-        sync_result = run_bd_sync_with_retry()
+                if sync_result.returncode == 0:
+                    print(f"✅ Synced assignment - other agents will see {item_id} is claimed")
+                else:
+                    print(f"⚠️  bd sync returned non-zero: {sync_result.returncode}")
+                    print("   Assignment may not be immediately visible to other agents")
 
-        if sync_result.returncode == 0:
-            print(f"✅ Synced assignment - other agents will see {item_id} is claimed")
-        else:
-            print(f"⚠️  bd sync returned non-zero: {sync_result.returncode}")
-            print("   Assignment may not be immediately visible to other agents")
+                return True
 
-        return True
+            except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+                stderr = e.stderr if isinstance(e, subprocess.CalledProcessError) else str(e)
+                print(f"⚠️  Failed to assign {item_id}: {stderr}")
+                return False
 
-    except subprocess.CalledProcessError as e:
-        print(f"⚠️  Failed to assign {item_id}: {e.stderr}")
+    except Timeout:
+        print(f"⚠️  Claim lock busy ('{lock_name}') — another agent is claiming this item")
         return False
 
 

@@ -295,34 +295,44 @@ class TestAssignAndSyncItem:
         """Test successfully assigning an unassigned item."""
         from src.pokepoke.beads import assign_and_sync_item
 
+        item_id = "task-assign-success"
+
         # Mock bd show returns unassigned item
         show_result = Mock(
-            stdout=json.dumps([{"id": "task-1", "owner": "", "status": "open"}]),
+            stdout=json.dumps([{"id": item_id, "owner": "", "status": "open"}]),
             returncode=0
         )
 
         # Mock bd update succeeds
         update_result = Mock(returncode=0)
 
+        # Mock post-claim verify show returns item assigned to us
+        verify_show_result = Mock(
+            stdout=json.dumps([{"id": item_id, "assignee": "test-agent", "status": "in_progress"}]),
+            returncode=0
+        )
+
         # Mock bd sync succeeds
         sync_result = Mock(returncode=0)
 
-        mock_run.side_effect = [show_result, update_result, sync_result]
+        mock_run.side_effect = [show_result, update_result, verify_show_result, sync_result]
 
-        result = assign_and_sync_item("task-1", "test-agent")
+        result = assign_and_sync_item(item_id, "test-agent")
 
         assert result is True
-        assert mock_run.call_count == 3
+        assert mock_run.call_count == 4
 
     @patch('src.pokepoke.beads_management.subprocess.run')
     def test_assign_detects_race_condition(self, mock_run: Mock) -> None:
         """Test detection of race condition when another agent claimed item."""
         from src.pokepoke.beads import assign_and_sync_item
 
+        item_id = "task-assign-race"
+
         # Mock bd show returns item assigned to OTHER agent (via assignee field)
         show_result = Mock(
             stdout=json.dumps([{
-                "id": "task-1",
+                "id": item_id,
                 "assignee": "other-agent",  # CRITICAL: assignee field, not owner!
                 "status": "in_progress"
             }]),
@@ -331,7 +341,7 @@ class TestAssignAndSyncItem:
 
         mock_run.return_value = show_result
 
-        result = assign_and_sync_item("task-1", "my-agent")
+        result = assign_and_sync_item(item_id, "my-agent")
 
         # Should detect race condition and return False
         assert result is False
@@ -339,15 +349,41 @@ class TestAssignAndSyncItem:
         assert mock_run.call_count == 1
 
     @patch('src.pokepoke.beads_management.subprocess.run')
+    def test_assign_claim_verification_detects_stolen_claim(self, mock_run: Mock) -> None:
+        """Test that we abort if post-claim verification shows another assignee."""
+        from src.pokepoke.beads import assign_and_sync_item
+
+        item_id = "task-assign-verify"
+
+        show_result = Mock(
+            stdout=json.dumps([{"id": item_id, "owner": "", "status": "open"}]),
+            returncode=0
+        )
+        update_result = Mock(returncode=0)
+        verify_show_result = Mock(
+            stdout=json.dumps([{"id": item_id, "assignee": "other-agent", "status": "in_progress"}]),
+            returncode=0
+        )
+
+        mock_run.side_effect = [show_result, update_result, verify_show_result]
+
+        result = assign_and_sync_item(item_id, "agent-1")
+
+        assert result is False
+        assert mock_run.call_count == 3
+
+    @patch('src.pokepoke.beads_management.subprocess.run')
     def test_assign_allows_claiming_own_item(self, mock_run: Mock) -> None:
         """Test that agent can update items already assigned to them."""
         from src.pokepoke.beads import assign_and_sync_item
 
+        item_id = "task-assign-own"
+
         # Mock bd show returns item already assigned to THIS agent
         show_result = Mock(
             stdout=json.dumps([{
-                "id": "task-1",
-                "owner": "my-agent",
+                "id": item_id,
+                "assignee": "my-agent",
                 "status": "in_progress"
             }]),
             returncode=0
@@ -356,55 +392,64 @@ class TestAssignAndSyncItem:
         # Mock bd update succeeds
         update_result = Mock(returncode=0)
 
+        verify_show_result = Mock(
+            stdout=json.dumps([{"id": item_id, "assignee": "my-agent", "status": "in_progress"}]),
+            returncode=0
+        )
+
         # Mock bd sync succeeds
         sync_result = Mock(returncode=0)
 
-        mock_run.side_effect = [show_result, update_result, sync_result]
+        mock_run.side_effect = [show_result, update_result, verify_show_result, sync_result]
 
-        result = assign_and_sync_item("task-1", "my-agent")
+        result = assign_and_sync_item(item_id, "my-agent")
 
         # Should allow updating own item
         assert result is True
-        assert mock_run.call_count == 3
+        assert mock_run.call_count == 4
 
     @patch('src.pokepoke.beads_management.subprocess.run')
     def test_assign_allows_claiming_by_username(self, mock_run: Mock) -> None:
-        """Test that agent can claim items assigned to their username."""
+        """Test that agent can claim unassigned items owned by a human user."""
         from src.pokepoke.beads import assign_and_sync_item
 
-        # Mock bd show returns item assigned to username (email format)
+        item_id = "task-assign-owned"
+
+        # Owned by a human (owner field), but not assigned to any agent.
         show_result = Mock(
             stdout=json.dumps([{
-                "id": "task-1",
+                "id": item_id,
                 "owner": "ameliapayne@microsoft.com",
-                "status": "in_progress"
+                "status": "open"
             }]),
             returncode=0
         )
 
-        # Mock bd update succeeds
         update_result = Mock(returncode=0)
-
-        # Mock bd sync succeeds
+        verify_show_result = Mock(
+            stdout=json.dumps([{"id": item_id, "assignee": "agent-1", "status": "in_progress"}]),
+            returncode=0
+        )
         sync_result = Mock(returncode=0)
 
-        mock_run.side_effect = [show_result, update_result, sync_result]
+        mock_run.side_effect = [show_result, update_result, verify_show_result, sync_result]
 
-        result = assign_and_sync_item("task-1", "agent-1")
+        result = assign_and_sync_item(item_id, "agent-1")
 
-        # Should allow claiming item assigned to username in email
         assert result is True
-        assert mock_run.call_count == 3
+        assert mock_run.call_count == 4
 
     @patch('src.pokepoke.beads_management.subprocess.run')
     def test_assign_handles_show_failure(self, mock_run: Mock) -> None:
         """Test handling of bd show command failure."""
         from src.pokepoke.beads import assign_and_sync_item
 
+        item_id = "task-assign-show-fail"
+
         # Mock bd show fails
         mock_run.side_effect = subprocess.CalledProcessError(1, 'bd', stderr="not found")
 
-        result = assign_and_sync_item("task-1", "agent-1")
+        result = assign_and_sync_item(item_id, "agent-1")
 
         # Should return False on verification failure
         assert result is False
@@ -414,9 +459,11 @@ class TestAssignAndSyncItem:
         """Test handling of bd update command failure."""
         from src.pokepoke.beads import assign_and_sync_item
 
+        item_id = "task-assign-update-fail"
+
         # Mock bd show succeeds (unassigned)
         show_result = Mock(
-            stdout=json.dumps([{"id": "task-1", "owner": "", "status": "open"}]),
+            stdout=json.dumps([{"id": item_id, "owner": "", "status": "open"}]),
             returncode=0
         )
 
@@ -425,7 +472,7 @@ class TestAssignAndSyncItem:
 
         mock_run.side_effect = [show_result, update_failure]
 
-        result = assign_and_sync_item("task-1", "agent-1")
+        result = assign_and_sync_item(item_id, "agent-1")
 
         # Should return False on update failure
         assert result is False
@@ -435,6 +482,8 @@ class TestAssignAndSyncItem:
         """Test handling of malformed JSON from bd show."""
         from src.pokepoke.beads import assign_and_sync_item
 
+        item_id = "task-assign-json-error"
+
         # Mock bd show returns invalid JSON (has { but malformed)
         show_result = Mock(
             stdout='{"id": "task-1", "owner": INVALID}',
@@ -443,7 +492,7 @@ class TestAssignAndSyncItem:
 
         mock_run.return_value = show_result
 
-        result = assign_and_sync_item("task-1", "agent-1")
+        result = assign_and_sync_item(item_id, "agent-1")
 
         # Should return False on parse error
         assert result is False
@@ -453,23 +502,25 @@ class TestAssignAndSyncItem:
         """Test that assignment succeeds even if sync fails."""
         from src.pokepoke.beads import assign_and_sync_item
 
-        # Mock bd show returns unassigned
+        item_id = "task-assign-sync-failure"
+
         show_result = Mock(
-            stdout=json.dumps([{"id": "task-1", "owner": "", "status": "open"}]),
+            stdout=json.dumps([{"id": item_id, "owner": "", "status": "open"}]),
             returncode=0
         )
-
-        # Mock bd update succeeds
         update_result = Mock(returncode=0)
+        verify_show_result = Mock(
+            stdout=json.dumps([{"id": item_id, "assignee": "agent-1", "status": "in_progress"}]),
+            returncode=0
+        )
 
         # Mock bd sync fails (non-zero return)
         sync_result = Mock(returncode=1)
 
-        mock_run.side_effect = [show_result, update_result, sync_result]
+        mock_run.side_effect = [show_result, update_result, verify_show_result, sync_result]
 
-        result = assign_and_sync_item("task-1", "agent-1")
+        result = assign_and_sync_item(item_id, "agent-1")
 
-        # Should still return True - assignment succeeded even if sync failed
         assert result is True
 
     @patch('src.pokepoke.beads_management.time.sleep')
@@ -478,11 +529,17 @@ class TestAssignAndSyncItem:
         """Test that sync retries when JSONL file is locked."""
         from src.pokepoke.beads import assign_and_sync_item
 
+        item_id = "task-assign-sync-retry"
+
         show_result = Mock(
-            stdout=json.dumps([{"id": "task-1", "owner": "", "status": "open"}]),
+            stdout=json.dumps([{"id": item_id, "owner": "", "status": "open"}]),
             returncode=0
         )
         update_result = Mock(returncode=0)
+        verify_show_result = Mock(
+            stdout=json.dumps([{"id": item_id, "assignee": "agent-1", "status": "in_progress"}]),
+            returncode=0
+        )
         sync_failure = Mock(
             returncode=1,
             stdout="",
@@ -490,12 +547,12 @@ class TestAssignAndSyncItem:
         )
         sync_success = Mock(returncode=0)
 
-        mock_run.side_effect = [show_result, update_result, sync_failure, sync_success]
+        mock_run.side_effect = [show_result, update_result, verify_show_result, sync_failure, sync_success]
 
-        result = assign_and_sync_item("task-1", "agent-1")
+        result = assign_and_sync_item(item_id, "agent-1")
 
         assert result is True
-        assert mock_run.call_count == 4
+        assert mock_run.call_count == 5
         mock_sleep.assert_called_once()
 
     @patch('src.pokepoke.beads_management.subprocess.run')
@@ -504,18 +561,24 @@ class TestAssignAndSyncItem:
         import os
         from src.pokepoke.beads import assign_and_sync_item
 
+        item_id = "task-assign-env-default"
+
         show_result = Mock(
-            stdout=json.dumps([{"id": "task-1", "owner": "", "status": "open"}]),
+            stdout=json.dumps([{"id": item_id, "owner": "", "status": "open"}]),
             returncode=0
         )
         update_result = Mock(returncode=0)
+        verify_show_result = Mock(
+            stdout=json.dumps([{"id": item_id, "assignee": "env_agent", "status": "in_progress"}]),
+            returncode=0
+        )
         sync_result = Mock(returncode=0)
-        mock_run.side_effect = [show_result, update_result, sync_result]
+        mock_run.side_effect = [show_result, update_result, verify_show_result, sync_result]
 
         old_val = os.environ.get('AGENT_NAME')
         os.environ['AGENT_NAME'] = 'env_agent'
         try:
-            result = assign_and_sync_item("task-1")
+            result = assign_and_sync_item(item_id)
             assert result is True
         finally:
             if old_val is not None:
