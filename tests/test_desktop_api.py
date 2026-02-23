@@ -1,5 +1,6 @@
 """Tests for DesktopAPI state buffering and retrieval."""
 
+import subprocess
 import textwrap
 import time
 from unittest.mock import Mock
@@ -143,9 +144,49 @@ def test_add_remove_work_item_label(monkeypatch) -> None:
 
     added = api.add_work_item_label("PokePoke-1", "human-required")
     assert added["labels"] == ["urgent", "human-required"]
+    assert added["success"] is True
 
     removed = api.remove_work_item_label("PokePoke-1", "urgent")
     assert removed["labels"] == ["human-required"]
+    assert removed["success"] is True
+
+
+def test_add_label_returns_error_on_called_process_error(monkeypatch) -> None:
+    api = DesktopAPI()
+    api.push_work_item("PokePoke-1", "Title", "open", ["urgent"])
+
+    def _raise(*args, **kwargs):
+        raise subprocess.CalledProcessError(
+            returncode=1,
+            cmd=args[0],
+            stderr="network unavailable",
+        )
+
+    monkeypatch.setattr("pokepoke.desktop_api_ext.subprocess.run", _raise)
+
+    result = api.add_work_item_label("PokePoke-1", "human-required")
+    assert result["success"] is False
+    assert "network unavailable" in result["error"]
+    # UI cache should remain unchanged
+    state = api.get_state()
+    assert state["work_item"]["labels"] == ["urgent"]
+
+
+def test_remove_label_returns_error_on_timeout(monkeypatch) -> None:
+    api = DesktopAPI()
+    api.push_work_item("PokePoke-1", "Title", "open", ["urgent"])
+
+    def _timeout(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=30, stderr="timed out")
+
+    monkeypatch.setattr("pokepoke.desktop_api_ext.subprocess.run", _timeout)
+
+    result = api.remove_work_item_label("PokePoke-1", "urgent")
+    assert result["success"] is False
+    assert "timed out" in result["error"]
+    # Cached labels should not have been modified
+    state = api.get_state()
+    assert state["work_item"]["labels"] == ["urgent"]
 
 
 def test_clear_logs() -> None:

@@ -8,7 +8,7 @@ import logging
 import os
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
@@ -194,33 +194,98 @@ def _update_current_labels(self: Any, item_id: str, label: str, action: str) -> 
         return labels
 
 
+def _coerce_process_output(output: str | None) -> str | None:
+    if output is None:
+        return None
+    stripped = output.strip()
+    return stripped or None
+
+
+def _build_label_error_result(
+    item_id: str,
+    label: str,
+    message: str,
+    *,
+    stderr: str | None = None,
+    returncode: int | None = None,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "item_id": item_id,
+        "label": label,
+        "success": False,
+        "error": message,
+    }
+    if stderr:
+        result["stderr"] = stderr
+    if returncode is not None:
+        result["returncode"] = returncode
+    return result
+
+
+def _mutate_work_item_label(
+    self: Any,
+    item_id: str,
+    label: str,
+    action: Literal["add", "remove"],
+) -> dict[str, Any]:
+    flag = "--add-label" if action == "add" else "--remove-label"
+    command = ["bd", "update", item_id, flag, label, "--json"]
+    try:
+        subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired as exc:
+        logger.warning(
+            "Label %s for %s timed out after %ss",
+            action,
+            item_id,
+            exc.timeout,
+        )
+        return _build_label_error_result(
+            item_id,
+            label,
+            "Label update timed out",
+            stderr=_coerce_process_output(getattr(exc, "stderr", None)),
+        )
+    except subprocess.CalledProcessError as exc:
+        stderr = _coerce_process_output(exc.stderr)
+        message = stderr or f"'bd update' failed with exit code {exc.returncode}"
+        logger.warning(
+            "Label %s for %s failed: %s",
+            action,
+            item_id,
+            message,
+        )
+        return _build_label_error_result(
+            item_id,
+            label,
+            message,
+            stderr=stderr,
+            returncode=exc.returncode,
+        )
+    except OSError as exc:
+        message = f"Failed to execute 'bd': {exc}"
+        logger.warning("Label %s for %s failed: %s", action, item_id, message)
+        return _build_label_error_result(item_id, label, message)
+
+    labels = _update_current_labels(self, item_id, label, action)
+    return {"item_id": item_id, "label": label, "labels": labels or [], "success": True}
+
+
 def add_work_item_label(self: Any, item_id: str, label: str) -> dict[str, Any]:
     """Add a label to a beads work item and update the cached UI state."""
     if not label.strip():
         raise ValueError("Label cannot be empty")
-    subprocess.run(
-        ["bd", "update", item_id, "--add-label", label, "--json"],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=True,
-        timeout=30,
-    )
-    labels = _update_current_labels(self, item_id, label, "add")
-    return {"item_id": item_id, "label": label, "labels": labels or []}
+    return _mutate_work_item_label(self, item_id, label, "add")
 
 
 def remove_work_item_label(self: Any, item_id: str, label: str) -> dict[str, Any]:
     """Remove a label from a beads work item and update the cached UI state."""
     if not label.strip():
         raise ValueError("Label cannot be empty")
-    subprocess.run(
-        ["bd", "update", item_id, "--remove-label", label, "--json"],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=True,
-        timeout=30,
-    )
-    labels = _update_current_labels(self, item_id, label, "remove")
-    return {"item_id": item_id, "label": label, "labels": labels or []}
+    return _mutate_work_item_label(self, item_id, label, "remove")
