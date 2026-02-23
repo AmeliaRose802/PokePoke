@@ -6,7 +6,9 @@ import type {
   SessionStats,
 } from "../types";
 import {
+  buildCompletionSeries,
   buildCompletionTimeSeries,
+  buildSuccessRateSeries,
   formatDurationShort,
   formatElapsed,
   formatTokens,
@@ -30,7 +32,6 @@ interface StatsPageProps {
 }
 
 type SortField = "model" | "runs" | "success" | "duration";
-interface TrendPoint { label: string; value: number; }
 interface AgentSegment { label: string; value: number; color: string; }
 interface AgentActivity { total: number; segments: AgentSegment[]; }
 interface NormalizedAgentSegment extends AgentSegment { start: number; width: number; }
@@ -344,48 +345,7 @@ function normalizeAgentSegments(agentActivity: AgentActivity): NormalizedAgentSe
   });
 }
 
-function buildCompletionSeries(history: ModelHistoryEntry[]): TrendPoint[] {
-  const byDay = aggregateHistory(history);
-  if (byDay.length === 0) return [];
-  return byDay.map((entry) => ({
-    label: entry.dateLabel,
-    value: entry.successCount,
-  }));
-}
-
-function buildSuccessRateSeries(history: ModelHistoryEntry[]): TrendPoint[] {
-  const byDay = aggregateHistory(history);
-  if (byDay.length === 0) return [];
-  return byDay.map((entry) => ({
-    label: entry.dateLabel,
-    value: entry.decidedCount > 0 ? (entry.successCount / entry.decidedCount) * 100 : 0,
-  }));
-}
-
-function aggregateHistory(history: ModelHistoryEntry[]) {
-  const map = new Map<string, { successCount: number; decidedCount: number }>();
-  for (const entry of history) {
-    const dateKey = (entry.timestamp ?? "").slice(0, 10) || "unknown";
-    const bucket = map.get(dateKey) ?? { successCount: 0, decidedCount: 0 };
-    if (entry.gate_passed === true) {
-      bucket.successCount += 1;
-      bucket.decidedCount += 1;
-    } else if (entry.gate_passed === false) {
-      bucket.decidedCount += 1;
-    }
-    map.set(dateKey, bucket);
-  }
-
-  const dates = Array.from(map.keys()).sort();
-  const trimmed = dates.slice(-14);
-  return trimmed.map((date) => ({
-    dateLabel: date,
-    successCount: map.get(date)?.successCount ?? 0,
-    decidedCount: map.get(date)?.decidedCount ?? 0,
-  }));
-}
-
-function TrendChart({ title, data, color, valueFormatter, emptyLabel }: { title: string; data: TrendPoint[]; color: string; valueFormatter?: (value: number) => string; emptyLabel: string; }) {
+function TrendChart({ title, data, color, valueFormatter, emptyLabel }: { title: string; data: { label: string; value: number }[]; color: string; valueFormatter?: (value: number) => string; emptyLabel: string; }) {
   if (!data.length) {
     return (
       <div className="stats-panel-card trend-card">

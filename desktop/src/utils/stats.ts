@@ -295,3 +295,60 @@ export function formatCost(cost: number | undefined): string {
   if (value < 0.01) return "<$0.01";
   return `$${value.toFixed(2)}`;
 }
+
+export interface TrendPoint { label: string; value: number; }
+
+interface AggregatedDay {
+  dateLabel: string;
+  successCount: number;
+  decidedCount: number;
+}
+
+/**
+ * Aggregate model history entries by day, counting successes and decided items.
+ * Uses `success` (overall outcome) as the primary indicator, falling back to
+ * `gate_passed` for backward compatibility with older history entries.
+ */
+export function aggregateHistory(history: ModelHistoryEntry[]): AggregatedDay[] {
+  const map = new Map<string, { successCount: number; decidedCount: number }>();
+  for (const entry of history) {
+    const dateKey = (entry.timestamp ?? "").slice(0, 10) || "unknown";
+    const bucket = map.get(dateKey) ?? { successCount: 0, decidedCount: 0 };
+    // Use `success` (overall outcome) as primary indicator; fall back to
+    // `gate_passed` for backward compatibility with older history entries.
+    const succeeded = entry.success ?? entry.gate_passed;
+    if (succeeded === true) {
+      bucket.successCount += 1;
+      bucket.decidedCount += 1;
+    } else if (succeeded === false) {
+      bucket.decidedCount += 1;
+    }
+    map.set(dateKey, bucket);
+  }
+
+  const dates = Array.from(map.keys()).sort();
+  const trimmed = dates.slice(-14);
+  return trimmed.map((date) => ({
+    dateLabel: date,
+    successCount: map.get(date)?.successCount ?? 0,
+    decidedCount: map.get(date)?.decidedCount ?? 0,
+  }));
+}
+
+export function buildCompletionSeries(history: ModelHistoryEntry[]): TrendPoint[] {
+  const byDay = aggregateHistory(history);
+  if (byDay.length === 0) return [];
+  return byDay.map((entry) => ({
+    label: entry.dateLabel,
+    value: entry.successCount,
+  }));
+}
+
+export function buildSuccessRateSeries(history: ModelHistoryEntry[]): TrendPoint[] {
+  const byDay = aggregateHistory(history);
+  if (byDay.length === 0) return [];
+  return byDay.map((entry) => ({
+    label: entry.dateLabel,
+    value: entry.decidedCount > 0 ? (entry.successCount / entry.decidedCount) * 100 : 0,
+  }));
+}
