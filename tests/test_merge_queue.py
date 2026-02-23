@@ -184,7 +184,7 @@ class TestMergeQueue:
         merge_order: list[str] = []
         merge_lock = threading.Lock()
 
-        def mock_merge(item):
+        def mock_merge(item, **kwargs):
             with merge_lock:
                 merge_order.append(item.id)
             time.sleep(0.05)  # Simulate merge work

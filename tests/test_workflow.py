@@ -581,7 +581,7 @@ class TestCheckAndMergeWorktree:
         result = check_and_merge_worktree(item, worktree_path)
 
         assert result is True
-        mock_merge.assert_called_once_with(item, parent_agent_id=None)
+        mock_merge.assert_called_once_with(item, parent_agent_id=None, worktree_path=worktree_path)
 
     @patch('pokepoke.worktree_finalization.merge_lock')
     @patch('pokepoke.worktree_finalization.merge_worktree_to_dev')
@@ -610,19 +610,14 @@ class TestCheckAndMergeWorktree:
 
         # Should attempt merge anyway
         assert result is True
-        mock_merge.assert_called_once_with(item, parent_agent_id=None)
+        mock_merge.assert_called_once_with(item, parent_agent_id=None, worktree_path=worktree_path)
 
 
 class TestMergeWorktreeToDev:
-    """Test merge_worktree_to_dev function."""
+    """Test merge_worktree_to_dev function (delegates to perform_worktree_merge)."""
 
-    @patch('pokepoke.worktree_finalization.merge_worktree')
-    @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
-    def test_successful_merge(
-        self,
-        mock_check: Mock,
-        mock_merge: Mock
-    ) -> None:
+    @patch('pokepoke.worktree_merge_handler.perform_worktree_merge')
+    def test_successful_merge(self, mock_perform: Mock) -> None:
         """Test successful worktree merge."""
         item = BeadsWorkItem(
             id="task-1",
@@ -633,87 +628,48 @@ class TestMergeWorktreeToDev:
             issue_type="task"
         )
 
-        mock_check.return_value = (True, "")
-        mock_merge.return_value = (True, [])  # Updated to return tuple
+        mock_perform.return_value = (True, True)
 
         result = merge_worktree_to_dev(item)
 
         assert result is True
-        mock_merge.assert_called_once_with("task-1", cleanup=True)
+        mock_perform.assert_called_once()
 
-    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent')
-    @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
-    def test_repo_not_ready_autofix_fails(self, mock_check: Mock, mock_cleanup: Mock) -> None:
-        """Test when main repo is not ready and cleanup fails."""
+    @patch('pokepoke.worktree_merge_handler.perform_worktree_merge')
+    def test_merge_fails_autofix_succeeds(self, mock_perform: Mock) -> None:
+        """Test merge returns True when perform_worktree_merge succeeds."""
+        item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
+        mock_perform.return_value = (True, True)
+
+        result = merge_worktree_to_dev(item)
+        assert result is True
+
+    @patch('pokepoke.worktree_merge_handler.perform_worktree_merge')
+    def test_repo_not_ready_autofix_fails(self, mock_perform: Mock) -> None:
+        """Test when merge fails."""
         item = BeadsWorkItem(id="task-1", title="Task 1", description="", status="open", priority=1, issue_type="task")
-
-        mock_check.return_value = (False, "Uncommitted changes")
-        mock_cleanup.return_value = (False, "Reason")
+        mock_perform.return_value = (False, False)
 
         result = merge_worktree_to_dev(item)
-
         assert result is False
-        mock_cleanup.assert_called_once()
 
-    @patch('pokepoke.worktree_finalization.merge_worktree')
-    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent')
-    @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
-    def test_repo_not_ready_autofix_succeeds(self, mock_check: Mock, mock_cleanup: Mock, mock_merge: Mock) -> None:
-        """Test when main repo not ready, cleanup succeeds, merge proceeds."""
+    @patch('pokepoke.worktree_merge_handler.perform_worktree_merge')
+    def test_repo_not_ready_autofix_succeeds(self, mock_perform: Mock) -> None:
+        """Test merge returns True after successful recovery."""
         item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
-
-        mock_check.side_effect = [(False, "Changes"), (True, "")]
-        mock_cleanup.return_value = (True, "Fixed")
-        mock_merge.return_value = (True, [])  # Updated to return tuple
+        mock_perform.return_value = (True, True)
 
         result = merge_worktree_to_dev(item)
-
         assert result is True
-        mock_cleanup.assert_called_once()
-        mock_merge.assert_called_once()
 
-    @patch('pokepoke.git_operations.abort_merge')
-    @patch('pokepoke.git_operations.is_merge_in_progress')
-    @patch('pokepoke.git_operations.get_unmerged_files')
-    @patch('pokepoke.cleanup_agents.invoke_merge_conflict_cleanup_agent')
-    @patch('pokepoke.worktree_finalization.merge_worktree')
-    @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
-    def test_merge_fails_autofix_fails(self, mock_check: Mock, mock_merge: Mock, mock_cleanup: Mock, mock_get_unmerged: Mock, mock_is_merging: Mock, mock_abort: Mock) -> None:
-        """Test when merge fails and cleanup fails."""
+    @patch('pokepoke.worktree_merge_handler.perform_worktree_merge')
+    def test_merge_fails_autofix_fails(self, mock_perform: Mock) -> None:
+        """Test when merge fails and recovery fails."""
         item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
-
-        mock_check.return_value = (True, "")
-        mock_merge.return_value = (False, ["conflict.py"])  # Updated to return tuple
-        mock_cleanup.return_value = (False, "Failed")
-        mock_is_merging.return_value = True
-        mock_get_unmerged.return_value = ["conflict.py"]
-        mock_abort.return_value = (True, "")
+        mock_perform.return_value = (False, False)
 
         result = merge_worktree_to_dev(item)
-
         assert result is False
-        mock_cleanup.assert_called_once()
-
-    @patch('pokepoke.git_operations.abort_merge')
-    @patch('pokepoke.git_operations.is_merge_in_progress')
-    @patch('pokepoke.git_operations.get_unmerged_files')
-    @patch('pokepoke.cleanup_agents.invoke_merge_conflict_cleanup_agent')
-    @patch('pokepoke.worktree_finalization.merge_worktree')
-    @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
-    def test_merge_fails_autofix_succeeds(self, mock_check: Mock, mock_merge: Mock, mock_cleanup: Mock, mock_get_unmerged: Mock, mock_is_merging: Mock, mock_abort: Mock) -> None:
-        """Test when merge fails, cleanup succeeds, retry works."""
-        item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
-
-        mock_check.return_value = (True, "")
-        mock_merge.side_effect = [(False, ["conflict.py"]), (True, [])]  # Updated to return tuples
-        mock_cleanup.return_value = (True, "Fixed")
-        mock_is_merging.side_effect = [True, False]
-        mock_get_unmerged.return_value = ["conflict.py"]
-
-        result = merge_worktree_to_dev(item)
-
-        assert result is True
-        assert mock_merge.call_count == 2
 
 
 class TestCloseWorkItemAndParents:

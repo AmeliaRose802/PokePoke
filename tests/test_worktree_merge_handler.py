@@ -1,4 +1,4 @@
-"""Tests for handle_worktree_merge cleanup retry behavior."""
+"""Tests for worktree merge handling — perform_worktree_merge and handle_worktree_merge."""
 
 from contextlib import nullcontext
 from pathlib import Path
@@ -7,17 +7,22 @@ from unittest.mock import patch
 import pytest
 
 from pokepoke.types import BeadsWorkItem
-from pokepoke.worktree_merge_handler import handle_worktree_merge
+from pokepoke.worktree_merge_handler import handle_worktree_merge, perform_worktree_merge
 
 
-def _make_agent_item() -> BeadsWorkItem:
+def _make_agent_item(item_id: str = "maintenance-test") -> BeadsWorkItem:
     return BeadsWorkItem(
-        id="maintenance-test",
+        id=item_id,
         title="Maintenance item",
         status="ready",
         priority=1,
         issue_type="task",
     )
+
+
+# ---------------------------------------------------------------------------
+# Tests for handle_worktree_merge (the public entry-point with merge-lock)
+# ---------------------------------------------------------------------------
 
 
 @patch("pokepoke.worktree_cleanup.remove_from_manifest")
@@ -110,7 +115,7 @@ def test_handle_worktree_merge_conflict_cleanup_retry_succeeds(
     mock_merge_worktree.side_effect = [(False, []), (True, [])]
     mock_invoke_conflict_cleanup.return_value = (True, None)
     mock_get_unmerged_files.return_value = ["conflict.txt"]
-    mock_is_merge_in_progress.side_effect = [True]
+    mock_is_merge_in_progress.side_effect = [True, True]
     mock_abort_merge.return_value = (True, "")
 
     agent_item = _make_agent_item()
@@ -128,7 +133,6 @@ def test_handle_worktree_merge_conflict_cleanup_retry_succeeds(
     assert mock_merge_worktree.call_count == 2
     mock_add_manifest.assert_called_once()
     mock_remove_manifest.assert_called_once_with(agent_item.id)
-    mock_get_unmerged_files.assert_called_once()
     mock_invoke_conflict_cleanup.assert_called_once()
     mock_abort_merge.assert_called_once()
 
@@ -172,6 +176,246 @@ def test_handle_worktree_merge_conflict_cleanup_failure(
     mock_remove_manifest.assert_not_called()
     mock_invoke_conflict_cleanup.assert_called_once()
     mock_abort_merge.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Tests for perform_worktree_merge (the core shared logic)
+# ---------------------------------------------------------------------------
+
+
+@patch("pokepoke.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+def test_perform_first_merge_succeeds(
+    mock_check, mock_merge, mock_add, mock_remove,
+) -> None:
+    """Direct success on first merge attempt."""
+    mock_check.return_value = (True, "")
+    mock_merge.return_value = (True, [])
+
+    success, cleaned = perform_worktree_merge(
+        "item-1", _make_agent_item("item-1"),
+        Path("C:/wt"), Path("C:/repo"),
+    )
+    assert success is True
+    assert cleaned is True
+    mock_add.assert_not_called()
+
+
+@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktree_merge_handler.invoke_cleanup_agent")
+@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+def test_perform_pre_merge_cleanup_fails(
+    mock_check, mock_cleanup, mock_add,
+) -> None:
+    """Pre-merge cleanup failure returns (False, False)."""
+    mock_check.return_value = (False, "dirty")
+    mock_cleanup.return_value = (False, None)
+
+    success, cleaned = perform_worktree_merge(
+        "item-1", _make_agent_item("item-1"),
+        Path("C:/wt"), Path("C:/repo"),
+    )
+    assert success is False
+    assert cleaned is False
+    mock_add.assert_called_once()
+
+
+@patch("pokepoke.git_operations.abort_merge")
+@patch("pokepoke.git_operations.is_merge_in_progress")
+@patch("pokepoke.git_operations.get_unmerged_files")
+@patch("pokepoke.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+def test_perform_abort_merge_failure_returns_false(
+    mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
+    mock_get_unmerged, mock_is_merging, mock_abort,
+) -> None:
+    """When abort_merge fails after cleanup, return (False, False)."""
+    mock_check.return_value = (True, "")
+    mock_merge.return_value = (False, ["file.py"])
+    mock_is_merging.return_value = True
+    mock_get_unmerged.return_value = ["file.py"]
+    mock_conflict_cleanup.return_value = (True, None)
+    mock_abort.return_value = (False, "Cannot abort")
+
+    success, cleaned = perform_worktree_merge(
+        "item-1", _make_agent_item("item-1"),
+        Path("C:/wt"), Path("C:/repo"),
+    )
+    assert success is False
+    assert cleaned is False
+    mock_abort.assert_called_once()
+    assert mock_merge.call_count == 1
+
+
+@patch("pokepoke.git_operations.abort_merge")
+@patch("pokepoke.git_operations.is_merge_in_progress")
+@patch("pokepoke.git_operations.get_unmerged_files")
+@patch("pokepoke.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+def test_perform_retry_merge_succeeds_after_cleanup(
+    mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
+    mock_get_unmerged, mock_is_merging, mock_abort,
+) -> None:
+    """Retry merge succeeds when cleanup resolves merge state."""
+    mock_check.return_value = (True, "")
+    mock_merge.side_effect = [(False, ["file.py"]), (True, [])]
+    mock_is_merging.side_effect = [True, False]
+    mock_get_unmerged.return_value = ["file.py"]
+    mock_conflict_cleanup.return_value = (True, None)
+
+    success, cleaned = perform_worktree_merge(
+        "item-1", _make_agent_item("item-1"),
+        Path("C:/wt"), Path("C:/repo"),
+    )
+    assert success is True
+    assert cleaned is True
+    mock_abort.assert_not_called()
+    mock_remove.assert_called_once_with("item-1")
+
+
+@patch("pokepoke.git_operations.abort_merge")
+@patch("pokepoke.git_operations.is_merge_in_progress")
+@patch("pokepoke.git_operations.get_unmerged_files")
+@patch("pokepoke.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+def test_perform_retry_merge_fails_aborts(
+    mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
+    mock_get_unmerged, mock_is_merging, mock_abort,
+) -> None:
+    """Retry merge failure triggers abort when merge still in progress."""
+    mock_check.return_value = (True, "")
+    mock_merge.side_effect = [(False, ["f.py"]), (False, ["f.py"])]
+    mock_is_merging.side_effect = [True, False, True]
+    mock_get_unmerged.return_value = ["f.py"]
+    mock_conflict_cleanup.return_value = (True, None)
+    mock_abort.return_value = (True, "")
+
+    success, cleaned = perform_worktree_merge(
+        "item-1", _make_agent_item("item-1"),
+        Path("C:/wt"), Path("C:/repo"),
+    )
+    assert success is False
+    assert cleaned is False
+    mock_abort.assert_called_once()
+
+
+@patch("pokepoke.git_operations.abort_merge")
+@patch("pokepoke.git_operations.is_merge_in_progress")
+@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+def test_perform_cleanup_failure_no_abort_when_not_merging(
+    mock_check, mock_merge, mock_conflict_cleanup, mock_add,
+    mock_is_merging, mock_abort,
+) -> None:
+    """No abort when cleanup fails and not in merge state."""
+    mock_check.return_value = (True, "")
+    mock_merge.return_value = (False, ["file.py"])
+    mock_is_merging.side_effect = [True, False]
+    mock_conflict_cleanup.return_value = (False, None)
+
+    success, _ = perform_worktree_merge(
+        "item-1", _make_agent_item("item-1"),
+        Path("C:/wt"), Path("C:/repo"),
+    )
+    assert success is False
+    mock_abort.assert_not_called()
+
+
+@patch("pokepoke.git_operations.is_merge_in_progress")
+@patch("pokepoke.git_operations.get_unmerged_files")
+@patch("pokepoke.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+def test_perform_conflict_details_in_cleanup_prompt(
+    mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
+    mock_get_unmerged, mock_is_merging,
+) -> None:
+    """Verify conflict_details with file list is passed to cleanup agent."""
+    mock_check.return_value = (True, "")
+    files = ["src/a.py", "src/b.py", "tests/c.py"]
+    mock_merge.side_effect = [(False, files), (True, [])]
+    mock_is_merging.side_effect = [True, False]
+    mock_get_unmerged.return_value = files
+    mock_conflict_cleanup.return_value = (True, None)
+
+    perform_worktree_merge(
+        "item-1", _make_agent_item("item-1"),
+        Path("C:/wt"), Path("C:/repo"),
+    )
+
+    call_args = mock_conflict_cleanup.call_args
+    error_msg = call_args[0][2]
+    assert "Conflicted Files" in error_msg
+    assert "src/a.py" in error_msg
+    assert call_args.kwargs["unmerged_files"] == files
+
+
+@patch("pokepoke.git_operations.is_merge_in_progress")
+@patch("pokepoke.git_operations.get_unmerged_files")
+@patch("pokepoke.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+def test_perform_handles_many_conflict_files(
+    mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
+    mock_get_unmerged, mock_is_merging,
+) -> None:
+    """15+ files should all be included in the cleanup prompt."""
+    mock_check.return_value = (True, "")
+    many_files = [f"src/module{i}.py" for i in range(15)]
+    mock_merge.side_effect = [(False, many_files), (True, [])]
+    mock_is_merging.side_effect = [True, False]
+    mock_get_unmerged.return_value = many_files
+    mock_conflict_cleanup.return_value = (True, None)
+
+    perform_worktree_merge(
+        "item-1", _make_agent_item("item-1"),
+        Path("C:/wt"), Path("C:/repo"),
+    )
+
+    call_kwargs = mock_conflict_cleanup.call_args
+    assert len(call_kwargs.kwargs["unmerged_files"]) == 15
+
+
+@patch("pokepoke.git_operations.is_merge_in_progress")
+@patch("pokepoke.git_operations.get_unmerged_files")
+@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+def test_perform_fetches_fresh_unmerged_when_not_merging(
+    mock_check, mock_merge, mock_conflict_cleanup, mock_add,
+    mock_get_unmerged, mock_is_merging,
+) -> None:
+    """get_unmerged_files called when merge fails without merge-in-progress."""
+    mock_check.return_value = (True, "")
+    mock_merge.side_effect = [(False, []), (True, [])]
+    mock_is_merging.return_value = False
+    mock_get_unmerged.return_value = ["stale.py"]
+    mock_conflict_cleanup.return_value = (True, None)
+
+    success, _ = perform_worktree_merge(
+        "item-1", _make_agent_item("item-1"),
+        Path("C:/wt"), Path("C:/repo"),
+    )
+    assert success is True
+    mock_get_unmerged.assert_called_once()
 @pytest.fixture(autouse=True)
 def _mock_cleanup_lock(monkeypatch):
     """Ensure cleanup lock is a no-op for tests."""

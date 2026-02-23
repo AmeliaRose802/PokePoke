@@ -1,4 +1,8 @@
-"""Worktree merge handling for maintenance agents."""
+"""Worktree merge handling — single source of truth for merge-attempt-cleanup-retry logic.
+
+Both the task-finalization path (worktree_finalization.merge_worktree_to_dev) and
+the maintenance-agent path (handle_worktree_merge) delegate to perform_worktree_merge.
+"""
 
 import logging
 from pathlib import Path
@@ -32,7 +36,7 @@ def handle_worktree_merge(
         agent_name: Display name of the agent
         worktree_path: Path to the worktree
         repo_root: Repository root path
-        agent_stats: Agent statistics to return
+        agent_stats: Agent statistics (unused, kept for API compatibility)
         parent_agent_id: Optional parent agent ID for UI nesting of sub-agents
 
     Returns:
@@ -44,54 +48,63 @@ def handle_worktree_merge(
     with merge_lock():
         logger.info("Acquired merge lock for agent %s", agent_id)
         print("   ✅ Lock acquired, proceeding with merge")
-        return _handle_worktree_merge_inner(
-            agent_id, agent_item, agent_name, worktree_path, repo_root, agent_stats,
-            parent_agent_id=parent_agent_id
+        # Fall back to agent_id for cleanup parent if no parent_agent_id
+        cleanup_parent_id = parent_agent_id if parent_agent_id else agent_id
+        return perform_worktree_merge(
+            agent_id, agent_item, worktree_path, repo_root,
+            parent_agent_id=cleanup_parent_id,
         )
 
 
-def _handle_worktree_merge_inner(
-    agent_id: str,
-    agent_item: BeadsWorkItem,
-    agent_name: str,
+def perform_worktree_merge(
+    item_id: str,
+    item: BeadsWorkItem,
     worktree_path: Path,
     repo_root: Path,
-    agent_stats: AgentStats | None,
-    parent_agent_id: str | None = None
+    parent_agent_id: str | None = None,
 ) -> tuple[bool, bool]:
-    """Inner merge logic, called while holding the merge lock."""
+    """Core merge-attempt-cleanup-retry logic (single source of truth).
+
+    Called by both the task-finalization path and the maintenance-agent path.
+
+    Args:
+        item_id: Identifier used for the worktree branch (e.g. item.id).
+        item: Work item associated with the merge.
+        worktree_path: Absolute path to the worktree directory.
+        repo_root: Repository root path passed to cleanup agents.
+        parent_agent_id: Optional parent agent ID for UI nesting of sub-agents.
+
+    Returns:
+        Tuple of (merge_success, worktree_cleaned).
+    """
     from pokepoke.git_operations import (
         check_main_repo_ready_for_merge,
         is_merge_in_progress,
         get_unmerged_files,
-        abort_merge
+        abort_merge,
     )
     from pokepoke.worktree_cleanup import add_uncleaned_worktree, remove_from_manifest
 
-    # Use parent_agent_id for sub-agent nesting if provided, otherwise agent_id
-    cleanup_parent_id = parent_agent_id if parent_agent_id else agent_id
-
-    # Check if main repo is ready for merge
+    # --- pre-merge readiness check ---
     print("\n🔍 Checking if main repo is ready for merge...")
     is_ready, error_msg = check_main_repo_ready_for_merge()
 
     if not is_ready:
         print(f"\n⚠️  Cannot merge: {error_msg}")
-        print(f"   Worktree preserved at worktrees/task-{agent_id} for manual intervention")
+        print(f"   Worktree preserved at worktrees/task-{item_id} - requires cleanup")
 
-        # Track preserved worktree in manifest
         add_uncleaned_worktree(
-            agent_id,
+            item_id,
             str(worktree_path),
-            f"Main repo not ready for merge: {error_msg}"
+            f"Main repo not ready for merge: {error_msg}",
         )
 
         print("   Invoking cleanup agent to resolve uncommitted changes before merge...")
         with cleanup_lock():
             cleanup_success, _ = invoke_cleanup_agent(
-                agent_item,
+                item,
                 repo_root,
-                parent_agent_id=cleanup_parent_id,
+                parent_agent_id=parent_agent_id,
             )
 
         if cleanup_success:
@@ -101,50 +114,57 @@ def _handle_worktree_merge_inner(
                 print(f"   Still failing after cleanup: {error_msg}")
                 return False, False
             print("   ✅ Repo is ready after cleanup, continuing with merge.")
-            remove_from_manifest(agent_id)
+            remove_from_manifest(item_id)
         else:
             print("   Cleanup failed.")
             return False, False
 
-    # Attempt merge
-    print(f"\n🔀 Merging worktree for {agent_id}...")
-    merge_success, unmerged_files = merge_worktree(agent_id, cleanup=True)
+    # --- attempt merge ---
+    print(f"\n🔀 Merging worktree for {item_id}...")
+    merge_success, unmerged_files = merge_worktree(item_id, cleanup=True)
 
     if not merge_success:
-        print("\n❌ Worktree merge failed!")
+        if is_merge_in_progress():
+            print("\n❌ Worktree merge has conflicts!")
+        else:
+            print("\n❌ Worktree merge failed!")
+            if not unmerged_files:
+                unmerged_files = get_unmerged_files()
+
         if unmerged_files:
             print(f"   Conflicted files ({len(unmerged_files)}):")
-            for f in unmerged_files[:5]:
+            for f in unmerged_files[:10]:
                 print(f"      - {f}")
-            if len(unmerged_files) > 5:
-                print(f"      ... and {len(unmerged_files) - 5} more")
-        print(f"   Worktree preserved at worktrees/task-{agent_id} for manual intervention")
+            if len(unmerged_files) > 10:
+                print(f"      ... and {len(unmerged_files) - 10} more")
 
-        # Track preserved worktree in manifest
+        print(f"   Worktree preserved at worktrees/task-{item_id} - requires conflict resolution")
+
         add_uncleaned_worktree(
-            agent_id,
+            item_id,
             str(worktree_path),
-            f"Merge conflict in {len(unmerged_files) if unmerged_files else 0} file(s)"
+            f"Merge conflict in {len(unmerged_files) if unmerged_files else 0} file(s)",
         )
 
+        # Build detailed conflict info for the cleanup agent prompt
+        conflict_details = ""
+        if unmerged_files:
+            conflict_details = "\n**Conflicted Files:**\n" + "\n".join(
+                f"- `{f}`" for f in unmerged_files
+            )
+
         print("   Invoking cleanup agent to resolve conflicts...")
-
-        # Get fresh unmerged files if not provided
-        if not unmerged_files:
-            unmerged_files = get_unmerged_files()
-
         with cleanup_lock():
             success, _ = invoke_merge_conflict_cleanup_agent(
-                agent_item,
+                item,
                 repo_root,
-                f"Merge conflict detected in {len(unmerged_files)} file(s)",
+                f"Merge conflict detected in {len(unmerged_files)} file(s){conflict_details}",
                 unmerged_files=unmerged_files,
-                parent_agent_id=cleanup_parent_id,
+                parent_agent_id=parent_agent_id,
             )
 
         if success:
             print("   Cleanup successful, retrying merge...")
-            # Check if merge is still in progress (agent may have completed it)
             if is_merge_in_progress():
                 print("   ⚠️  Merge still in progress after cleanup - aborting to reset state")
                 abort_success, abort_error = abort_merge()
@@ -153,26 +173,22 @@ def _handle_worktree_merge_inner(
                     return False, False
                 print("   ✅ Merge aborted, will retry")
 
-            merge_success, _ = merge_worktree(agent_id, cleanup=True)
+            merge_success, _ = merge_worktree(item_id, cleanup=True)
             if merge_success:
-                # Successful merge - remove from manifest and mark as cleaned
-                remove_from_manifest(agent_id)
+                remove_from_manifest(item_id)
                 print("   Merged and cleaned up worktree")
                 return True, True
             else:
                 print("   Merge failed again after cleanup.")
-                # Abort the merge to leave clean state
                 if is_merge_in_progress():
                     abort_merge()
                 return False, False
         else:
             print("   Cleanup failed.")
-            # Abort the merge to leave clean state
             if is_merge_in_progress():
                 print("   Aborting merge to reset state...")
                 abort_merge()
             return False, False
-    else:
-        # Successful merge - worktree already cleaned by merge_worktree
-        print("   Merged and cleaned up worktree")
-        return True, True
+
+    print("   Merged and cleaned up worktree")
+    return True, True

@@ -140,8 +140,7 @@ class TestProcessWorkItem:
     @patch('pokepoke.worktree_finalization.close_item')  # Patch where it's used
     @patch('subprocess.run')
     @patch('pokepoke.workflow.cleanup_worktree')
-    @patch('pokepoke.worktree_finalization.merge_worktree')
-    @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
+    @patch('pokepoke.worktree_merge_handler.perform_worktree_merge')
     @patch('pokepoke.git_operations.has_uncommitted_changes')
     @patch('os.chdir')
     @patch('os.getcwd')
@@ -160,8 +159,7 @@ class TestProcessWorkItem:
         mock_getcwd: Mock,
         mock_chdir: Mock,
         mock_uncommitted: Mock,
-        mock_check_ready: Mock,
-        mock_merge: Mock,
+        mock_perform: Mock,
         mock_cleanup: Mock,
         mock_subprocess: Mock,
         mock_close: Mock,
@@ -182,8 +180,7 @@ class TestProcessWorkItem:
         mock_create_wt.return_value = '/tmp/worktree'
         mock_getcwd.return_value = '/original'
         mock_uncommitted.return_value = False
-        mock_check_ready.return_value = (True, "")
-        mock_merge.return_value = (True, [])  # Updated to return tuple
+        mock_perform.return_value = (True, True)
         mock_close.return_value = True
         mock_gate_agent.return_value = (True, "Gate passed", None)  # Gate agent passes
         mock_invoke.return_value = CopilotResult(
@@ -226,8 +223,7 @@ class TestProcessWorkItem:
     @patch('pokepoke.worktree_finalization.close_item')  # Patch where it's used
     @patch('subprocess.run')
     @patch('pokepoke.workflow.cleanup_worktree')
-    @patch('pokepoke.worktree_finalization.merge_worktree')
-    @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
+    @patch('pokepoke.worktree_merge_handler.perform_worktree_merge')
     @patch('os.chdir')
     @patch('os.getcwd')
     @patch('pokepoke.workflow.create_worktree')
@@ -242,8 +238,7 @@ class TestProcessWorkItem:
         mock_create_wt: Mock,
         mock_getcwd: Mock,
         mock_chdir: Mock,
-        mock_check_ready: Mock,
-        mock_merge: Mock,
+        mock_perform: Mock,
         mock_cleanup: Mock,
         mock_subprocess: Mock,
         mock_close: Mock,
@@ -262,8 +257,7 @@ class TestProcessWorkItem:
         )
         mock_create_wt.return_value = '/tmp/worktree'
         mock_getcwd.return_value = '/original'
-        mock_check_ready.return_value = (True, "")
-        mock_merge.return_value = (True, [])  # Updated to return tuple
+        mock_perform.return_value = (True, True)
         mock_close.return_value = True
         mock_gate_agent.return_value = (True, "Gate passed", None)  # Gate agent passes
         mock_invoke.return_value = CopilotResult(
@@ -305,8 +299,7 @@ class TestProcessWorkItem:
     @patch('pokepoke.workflow.run_gate_agent')  # Mock gate agent to avoid actual copilot calls
     @patch('subprocess.run')
     @patch('pokepoke.workflow.cleanup_worktree')
-    @patch('pokepoke.worktree_finalization.merge_worktree')
-    @patch('pokepoke.worktree_finalization.check_main_repo_ready_for_merge')
+    @patch('pokepoke.worktree_merge_handler.perform_worktree_merge')
     @patch('pokepoke.git_operations.has_uncommitted_changes')
     @patch('os.chdir')
     @patch('os.getcwd')
@@ -323,8 +316,7 @@ class TestProcessWorkItem:
         mock_getcwd: Mock,
         mock_chdir: Mock,
         mock_uncommitted: Mock,
-        mock_check_ready: Mock,
-        mock_merge: Mock,
+        mock_perform: Mock,
         mock_cleanup: Mock,
         mock_subprocess: Mock,
         mock_gate_agent: Mock
@@ -341,8 +333,7 @@ class TestProcessWorkItem:
         mock_create_wt.return_value = '/tmp/worktree'
         mock_getcwd.return_value = '/original'
         mock_uncommitted.return_value = False
-        mock_check_ready.return_value = (True, "")
-        mock_merge.return_value = (True, [])  # Updated to return tuple
+        mock_perform.return_value = (True, True)
         mock_gate_agent.return_value = (True, "Gate passed", None)  # Gate agent passes
 
         # Copilot fails
