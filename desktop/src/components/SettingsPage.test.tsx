@@ -125,6 +125,7 @@ describe('SettingsPage', () => {
     expect(defaultInput).toBeDisabled();
     expect(fallbackInput).toBeDisabled();
     expect(screen.getByPlaceholderText('Add model…')).toBeEnabled();
+    expect(screen.getByText('Ignored while A/B testing is active')).toBeInTheDocument();
 
     await user.click(abToggle);
 
@@ -133,6 +134,7 @@ describe('SettingsPage', () => {
     expect(fallbackInput).not.toBeDisabled();
     expect(screen.queryByPlaceholderText('Add model…')).not.toBeInTheDocument();
     expect(screen.getByText('Enable A/B testing to configure candidate models')).toBeInTheDocument();
+    expect(screen.getByText('Primary model for agent tasks')).toBeInTheDocument();
   });
 
   it('should disable MCP inputs when MCP server disabled', async () => {
