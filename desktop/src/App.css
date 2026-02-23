@@ -1799,7 +1799,8 @@
   gap: 12px;
 }
 
-.completed-items-list {
+.completed-items-list,
+.in-progress-items-list {
   list-style: none;
   padding: 0;
   margin: 0;
@@ -1808,7 +1809,8 @@
   gap: 8px;
 }
 
-.completed-item-card {
+.completed-item-card,
+.in-progress-item-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-primary);
   border-radius: 6px;
@@ -1818,7 +1820,8 @@
   gap: 6px;
 }
 
-.completed-item-header {
+.completed-item-header,
+.in-progress-item-header {
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -1826,12 +1829,14 @@
   font-size: 13px;
 }
 
-.completed-item-header strong {
+.completed-item-header strong,
+.in-progress-item-header strong {
   color: var(--accent-primary);
   font-weight: 600;
 }
 
-.completed-item-title {
+.completed-item-title,
+.in-progress-item-title {
   color: var(--text-muted);
   flex: 1;
   overflow: hidden;

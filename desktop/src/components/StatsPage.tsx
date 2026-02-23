@@ -6,6 +6,7 @@ import type {
   ModelPerformanceSummary,
   SessionStats,
 } from "../types";
+import { getInProgressItems } from "../utils/inProgressItems";
 import {
   buildCompletionSeries,
   buildCompletionTimeSeries,
@@ -20,7 +21,9 @@ import {
 } from "../utils/stats";
 import { CompletedItemCard } from "./CompletedItemCard";
 import { CompletionTimeChart } from "./CompletionTimeChart";
+import { InProgressItemsSection } from "./InProgressItemsSection";
 import { ModelTable } from "./ModelTable";
+import { TrendChart } from "./TrendChart";
 
 interface StatsPageProps {
   stats: SessionStats | null;
@@ -52,6 +55,7 @@ export function StatsPage({
 }: StatsPageProps) {
   const agent = stats?.agent_stats;
   const [completedItems, doneCount] = [getCompletedItems(stats), getDoneCount(stats)];
+  const inProgressItems = useMemo(() => getInProgressItems(agents), [agents]);
   const addedCount = getAddedCount(stats);
   const netDelta = getNetDelta(stats);
   const lifetimeAdded = stats?.lifetime_items_created ?? 0;
@@ -199,16 +203,21 @@ export function StatsPage({
             </div>
           </section>
 
-          {completedItems.length > 0 && (
-            <section>
-              <div className="stats-panel-card">
-                <h3>Completed this session <span className="stats-panel-subtitle">Gate-passed and merged</span></h3>
-                <ul className="completed-items-list">
-                  {completedItems.map((ci) => (
-                    <CompletedItemCard key={ci.id} item={ci} modelHistory={modelHistory} />
-                  ))}
-                </ul>
-              </div>
+          {(completedItems.length > 0 || inProgressItems.length > 0) && (
+            <section className="stats-flex-row">
+              {inProgressItems.length > 0 && (
+                <InProgressItemsSection items={inProgressItems} />
+              )}
+              {completedItems.length > 0 && (
+                <div className="stats-panel-card">
+                  <h3>Completed this session <span className="stats-panel-subtitle">Gate-passed and merged</span></h3>
+                  <ul className="completed-items-list">
+                    {completedItems.map((ci) => (
+                      <CompletedItemCard key={ci.id} item={ci} modelHistory={modelHistory} />
+                    ))}
+                  </ul>
+                </div>
+              )}
             </section>
           )}
 
@@ -321,7 +330,6 @@ export function StatsPage({
     </div>
   );
 }
-
 function buildAgentActivity(stats: SessionStats | null): AgentActivity {
   const elapsed = stats?.agent_type_elapsed_seconds ?? {};
 
@@ -375,53 +383,6 @@ function normalizeAgentSegments(agentActivity: AgentActivity): NormalizedAgentSe
     cursor += width;
     return normalized;
   });
-}
-
-function TrendChart({ title, data, color, valueFormatter, emptyLabel }: { title: string; data: { label: string; value: number }[]; color: string; valueFormatter?: (value: number) => string; emptyLabel: string; }) {
-  if (!data.length) {
-    return (
-      <div className="stats-panel-card trend-card">
-        <div className="stats-panel-card-header">
-          <h3>{title}</h3>
-        </div>
-        <p className="stats-empty">{emptyLabel}</p>
-      </div>
-    );
-  }
-
-  const maxValue = Math.max(...data.map((d) => d.value), 1);
-  const points = data.map((point, index) => {
-    const x = data.length === 1 ? 50 : (index / (data.length - 1)) * 100;
-    const normalized = maxValue === 0 ? 0 : (point.value / maxValue) * 100;
-    const y = 100 - normalized;
-    return `${x},${y}`;
-  });
-
-  return (
-    <div className="stats-panel-card trend-card">
-      <div className="stats-panel-card-header">
-        <h3>{title}</h3>
-      </div>
-      <div className="trend-chart">
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-          <polyline
-            fill="none"
-            stroke={color}
-            strokeWidth="2"
-            points={points.join(" ")}
-          />
-        </svg>
-        <ul className="trend-chart-labels">
-          {data.map((point) => (
-            <li key={point.label}>
-              <span>{point.label}</span>
-              <strong>{valueFormatter ? valueFormatter(point.value) : point.value}</strong>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
 }
 
 const AGENT_TOKEN_DEFS: { key: string; label: string; color: string }[] = [
