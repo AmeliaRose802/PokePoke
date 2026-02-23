@@ -51,7 +51,7 @@ class _MergeRequest:
     """Internal merge request placed on the queue."""
     worktree_path: Path
     item: BeadsWorkItem
-    future: Future  # type: ignore[type-arg]
+    future: Future[MergeResult]
 
 
 class MergeQueue:
