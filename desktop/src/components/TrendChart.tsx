@@ -1,6 +1,12 @@
-export interface TrendPoint { label: string; value: number; }
+interface TrendChartProps {
+  title: string;
+  data: { label: string; value: number }[];
+  color: string;
+  valueFormatter?: (value: number) => string;
+  emptyLabel: string;
+}
 
-export function TrendChart({ title, data, color, valueFormatter, emptyLabel }: { title: string; data: TrendPoint[]; color: string; valueFormatter?: (value: number) => string; emptyLabel: string; }) {
+export function TrendChart({ title, data, color, valueFormatter, emptyLabel }: TrendChartProps) {
   if (!data.length) {
     return (
       <div className="stats-panel-card trend-card">
