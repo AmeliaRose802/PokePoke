@@ -185,6 +185,13 @@ class AgentRegistry:
         with self._lock:
             return agent_id in self._paused_agents
 
+    def clear(self) -> None:
+        """Clear all agents, history, and paused state."""
+        with self._lock:
+            self._agents.clear()
+            self._agent_history.clear()
+            self._paused_agents.clear()
+
     def remove(self, agent_id: str) -> None:
         with self._lock:
             self._agents.pop(agent_id, None)
