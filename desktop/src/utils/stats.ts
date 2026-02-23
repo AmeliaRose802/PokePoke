@@ -193,32 +193,35 @@ export function getNetDelta(stats: SessionStats | null): number {
 }
 
 /**
- * Calculate average completion time by item type with rolling averages
- * Groups historical entries by item type and computes mean duration
+ * Calculate average completion time by tag with rolling averages
+ * Groups historical entries by primary tag (first label) and computes mean duration
  */
 export function buildCompletionTimeByType(
   history: ModelHistoryEntry[]
 ): Record<string, number> {
-  const byType = new Map<string, number[]>();
+  const byTag = new Map<string, number[]>();
 
   for (const entry of history) {
-    const type = entry.item_type || "unknown";
-    const durations = byType.get(type) ?? [];
+    // Use first label as primary tag, or "untagged" if no labels
+    const tag = (entry.labels && entry.labels.length > 0) 
+      ? entry.labels[0] 
+      : "untagged";
+    const durations = byTag.get(tag) ?? [];
     durations.push(entry.duration_seconds);
-    byType.set(type, durations);
+    byTag.set(tag, durations);
   }
 
   const result: Record<string, number> = {};
-  for (const [type, durations] of byType.entries()) {
+  for (const [tag, durations] of byTag.entries()) {
     const avg = durations.reduce((a, b) => a + b, 0) / durations.length;
-    result[type] = avg;
+    result[tag] = avg;
   }
   return result;
 }
 
 /**
- * Build time series data for completion time trends by item type
- * Returns data grouped by type for multi-series chart
+ * Build time series data for completion time trends by tag/label
+ * Returns data grouped by primary tag (first label) for multi-series chart
  */
 export function buildCompletionTimeSeries(
   history: ModelHistoryEntry[]
@@ -226,34 +229,37 @@ export function buildCompletionTimeSeries(
   string,
   Array<{ label: string; value: number }>
 > {
-  const byTypeAndDay = new Map<
+  const byTagAndDay = new Map<
     string,
     Map<string, { durations: number[]; count: number }>
   >();
 
   for (const entry of history) {
-    const type = entry.item_type || "unknown";
+    // Use first label as primary tag, or "untagged" if no labels
+    const tag = (entry.labels && entry.labels.length > 0) 
+      ? entry.labels[0] 
+      : "untagged";
     const dateKey = (entry.timestamp ?? "").slice(0, 10) || "unknown";
 
-    if (!byTypeAndDay.has(type)) {
-      byTypeAndDay.set(type, new Map());
+    if (!byTagAndDay.has(tag)) {
+      byTagAndDay.set(tag, new Map());
     }
 
-    const typeMap = byTypeAndDay.get(type)!;
-    const bucket = typeMap.get(dateKey) ?? { durations: [], count: 0 };
+    const tagMap = byTagAndDay.get(tag)!;
+    const bucket = tagMap.get(dateKey) ?? { durations: [], count: 0 };
     bucket.durations.push(entry.duration_seconds);
     bucket.count += 1;
-    typeMap.set(dateKey, bucket);
+    tagMap.set(dateKey, bucket);
   }
 
   const result: Record<string, Array<{ label: string; value: number }>> = {};
 
-  for (const [type, typeMap] of byTypeAndDay.entries()) {
-    const dates = Array.from(typeMap.keys()).sort();
+  for (const [tag, tagMap] of byTagAndDay.entries()) {
+    const dates = Array.from(tagMap.keys()).sort();
     const trimmed = dates.slice(-14); // Last 14 days
 
-    result[type] = trimmed.map((date) => {
-      const bucket = typeMap.get(date)!;
+    result[tag] = trimmed.map((date) => {
+      const bucket = tagMap.get(date)!;
       const avg =
         bucket.durations.length > 0
           ? bucket.durations.reduce((a, b) => a + b, 0) / bucket.durations.length

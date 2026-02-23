@@ -245,7 +245,8 @@ class TestGetModelHistory:
     def test_fetches_and_stores_new_history(self) -> None:
         obj = _make_self()
         fresh = [{"item_id": "new"}]
-        with patch("pokepoke.model_stats_store.get_model_history", return_value=fresh):
+        # Mock both the primary source (model_history) and fallback (model_stats)
+        with patch("pokepoke.model_history.load_model_history_entries", return_value=fresh):
             result = get_model_history(obj, limit=10)
         assert result == fresh
         assert obj._history_cache == fresh

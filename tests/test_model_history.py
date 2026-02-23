@@ -8,6 +8,7 @@ from pokepoke.types import AgentStats, BeadsWorkItem, ModelCompletionRecord
 from pokepoke.model_history import (
     build_model_history_record,
     append_model_history_entry,
+    load_model_history_entries,
 )
 
 
@@ -180,3 +181,93 @@ class TestAppendModelHistoryEntry:
         assert rec1["success"] is True
         assert rec2["work_item_id"] == "PP-2"
         assert rec2["retry_attempts"] == 1  # 2 requests → 1 retry
+
+
+class TestLoadModelHistoryEntries:
+    def test_returns_empty_list_when_file_missing(self, tmp_path: Path) -> None:
+        history_path = tmp_path / "model_history.jsonl"
+        result = load_model_history_entries(path=history_path)
+        assert result == []
+
+    def test_loads_entries_from_jsonl(self, tmp_path: Path) -> None:
+        history_path = tmp_path / "model_history.jsonl"
+        item1 = _make_item(id="PP-1", labels=["backend"])
+        item2 = _make_item(id="PP-2", labels=["frontend", "ui"])
+        completion1 = _make_completion(item_id="PP-1")
+        completion2 = _make_completion(item_id="PP-2")
+
+        append_model_history_entry(
+            item=item1,
+            model_completion=completion1,
+            success=True,
+            request_count=1,
+            gate_runs=1,
+            item_stats=_make_stats(),
+            path=history_path,
+        )
+
+        append_model_history_entry(
+            item=item2,
+            model_completion=completion2,
+            success=True,
+            request_count=1,
+            gate_runs=1,
+            item_stats=_make_stats(),
+            path=history_path,
+        )
+
+        result = load_model_history_entries(path=history_path)
+        assert len(result) == 2
+        assert result[0]["work_item_id"] == "PP-1"
+        assert result[0]["labels"] == ["backend"]
+        assert result[1]["work_item_id"] == "PP-2"
+        assert result[1]["labels"] == ["frontend", "ui"]
+
+    def test_respects_limit(self, tmp_path: Path) -> None:
+        history_path = tmp_path / "model_history.jsonl"
+
+        # Create 5 entries
+        for i in range(5):
+            item = _make_item(id=f"PP-{i}")
+            completion = _make_completion(item_id=f"PP-{i}")
+            append_model_history_entry(
+                item=item,
+                model_completion=completion,
+                success=True,
+                request_count=1,
+                gate_runs=1,
+                item_stats=None,
+                path=history_path,
+            )
+
+        # Load only last 2
+        result = load_model_history_entries(path=history_path, limit=2)
+        assert len(result) == 2
+        assert result[0]["work_item_id"] == "PP-3"
+        assert result[1]["work_item_id"] == "PP-4"
+
+    def test_skips_malformed_lines(self, tmp_path: Path) -> None:
+        history_path = tmp_path / "model_history.jsonl"
+
+        # Write one valid entry
+        item = _make_item(id="PP-1")
+        completion = _make_completion(item_id="PP-1")
+        append_model_history_entry(
+            item=item,
+            model_completion=completion,
+            success=True,
+            request_count=1,
+            gate_runs=1,
+            item_stats=None,
+            path=history_path,
+        )
+
+        # Append malformed JSON
+        with history_path.open("a", encoding="utf-8") as f:
+            f.write("{ invalid json\n")
+            f.write("\n")  # blank line
+
+        result = load_model_history_entries(path=history_path)
+        # Should only get the valid entry
+        assert len(result) == 1
+        assert result[0]["work_item_id"] == "PP-1"

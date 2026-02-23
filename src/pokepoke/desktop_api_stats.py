@@ -97,7 +97,11 @@ def get_model_leaderboard(self: Any) -> dict[str, Any]:
 
 
 def get_model_history(self: Any, limit: int = 200) -> list[dict[str, Any]]:
-    """Return recent model completion history for trend charts."""
+    """Return recent model completion history for trend charts.
+
+    Reads from model_history.jsonl which includes labels and issue_type for better charting.
+    Falls back to model_stats.json if history file doesn't exist (backward compatibility).
+    """
     if limit <= 0:
         return []
     now = time.time()
@@ -108,9 +112,15 @@ def get_model_history(self: Any, limit: int = 200) -> list[dict[str, Any]]:
     ):
         return list(self._history_cache)
 
-    from pokepoke.model_stats_store import get_model_history as _get_model_history
+    # Try to load from detailed history first (includes labels and issue_type)
+    from pokepoke.model_history import load_model_history_entries
+    history = load_model_history_entries(limit=limit)
 
-    history = list(_get_model_history(limit=limit))
+    # Fall back to model_stats.json if history file doesn't exist
+    if not history:
+        from pokepoke.model_stats_store import get_model_history as _get_model_history
+        history = list(_get_model_history(limit=limit))
+
     self._history_cache = history
     self._history_cache_limit = limit
     self._history_cache_time = now

@@ -5,19 +5,36 @@ interface CompletionTimeChartProps {
   emptyLabel: string;
 }
 
-const typeColors: Record<string, string> = {
-  bug: "#f7768e",
-  feature: "#7aa2f7",
-  task: "#9ece6a",
-  unknown: "#565f89",
-};
+// Color palette for tags (cycle through these colors)
+const tagColors = [
+  "#7aa2f7", // blue
+  "#9ece6a", // green
+  "#f7768e", // red/pink
+  "#e0af68", // orange
+  "#bb9af7", // purple
+  "#2ac3de", // cyan
+  "#ff9e64", // orange
+  "#c0caf5", // light blue
+  "#565f89", // gray (for untagged)
+];
 
-const typeColorClasses: Record<string, string> = {
-  bug: "color-bug",
-  feature: "color-feature",
-  task: "color-task",
-  unknown: "color-unknown",
-};
+const tagColorClasses = [
+  "color-feature",
+  "color-task",
+  "color-bug",
+  "color-unknown",
+];
+
+// Get color for a tag (consistent across renders)
+function getTagColor(tag: string, index: number): string {
+  if (tag === "untagged") return "#565f89"; // gray for untagged
+  return tagColors[index % tagColors.length];
+}
+
+function getTagColorClass(tag: string, index: number): string {
+  if (tag === "untagged") return "color-unknown";
+  return tagColorClasses[index % tagColorClasses.length];
+}
 
 export function CompletionTimeChart({ data, emptyLabel }: CompletionTimeChartProps) {
   const hasData = Object.values(data).some((series) => series.length > 0);
@@ -33,7 +50,7 @@ export function CompletionTimeChart({ data, emptyLabel }: CompletionTimeChartPro
   }
   const labels = Array.from(allLabels).sort();
 
-  // Build normalized data for each type
+  // Build normalized data for each tag
   const typeSeriesData: Array<{
     type: string;
     color: string;
@@ -42,18 +59,20 @@ export function CompletionTimeChart({ data, emptyLabel }: CompletionTimeChartPro
     maxValue: number;
   }> = [];
 
-  for (const [type, series] of Object.entries(data)) {
+  let tagIndex = 0;
+  for (const [tag, series] of Object.entries(data)) {
     if (series.length === 0) continue;
     const valuesByLabel = new Map(series.map((p) => [p.label, p.value]));
     const values = labels.map((label) => valuesByLabel.get(label) ?? 0);
     const maxValue = Math.max(...values, 1);
     typeSeriesData.push({
-      type,
-      color: typeColors[type] || "#c0caf5",
-      colorClass: typeColorClasses[type] || "color-unknown",
+      type: tag,
+      color: getTagColor(tag, tagIndex),
+      colorClass: getTagColorClass(tag, tagIndex),
       values,
       maxValue,
     });
+    tagIndex++;
   }
 
   const overallMax = Math.max(...typeSeriesData.map((s) => s.maxValue), 1);
