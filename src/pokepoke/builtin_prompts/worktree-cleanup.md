@@ -21,6 +21,24 @@ Your job is to find unmerged worktrees with meaningful work, merge them, and del
 
 This worktree is managed automatically by the beads issue tracker. Leave it alone.
 
+## ⛔ CRITICAL: NEVER Kill or Stop Any Running Processes
+
+**Your job is ONLY to manage git worktrees. You are NOT a system administrator.**
+
+**ABSOLUTELY FORBIDDEN — violation will crash the orchestrator:**
+- ❌ `Stop-Process` / `Kill-Process` / `kill` / `taskkill` — NEVER run these
+- ❌ `Get-Process | ... | Stop-Process` — NEVER build pipelines that kill processes
+- ❌ Killing "stale" python, node, copilot, or any other processes
+- ❌ Any process termination commands of any kind
+- ❌ Cleaning up "orphaned" or "zombie" processes
+
+**Why this is forbidden:** The orchestrator and other agents run as long-lived processes.
+Killing processes that appear "stale" (e.g., running for hours) WILL kill the orchestrator
+itself and all active worker agents, causing catastrophic data loss.
+
+**If you see processes you think are stale:** IGNORE THEM. They are not your responsibility.
+Focus exclusively on git worktrees, branches, and beads issues.
+
 ## Your Process
 
 ### 1. List All Worktrees

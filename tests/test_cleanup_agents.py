@@ -428,3 +428,61 @@ class TestRunCleanupLoop:
         assert cleanup_runs == 1
         assert result.success is False
         assert "Cleanup agent failed" in result.error
+
+
+class TestWorktreeCleanupPromptSafety:
+    """Tests to verify the worktree cleanup prompt prohibits process killing."""
+
+    def test_prompt_prohibits_stop_process(self):
+        """The worktree-cleanup prompt must explicitly forbid Stop-Process."""
+        prompt_path = Path(__file__).parent.parent / "src" / "pokepoke" / "builtin_prompts" / "worktree-cleanup.md"
+        content = prompt_path.read_text(encoding='utf-8')
+        assert "Stop-Process" in content, "Prompt must explicitly mention Stop-Process as forbidden"
+
+    def test_prompt_prohibits_kill(self):
+        """The worktree-cleanup prompt must explicitly forbid kill commands."""
+        prompt_path = Path(__file__).parent.parent / "src" / "pokepoke" / "builtin_prompts" / "worktree-cleanup.md"
+        content = prompt_path.read_text(encoding='utf-8')
+        assert "taskkill" in content, "Prompt must explicitly mention taskkill as forbidden"
+
+    def test_prompt_prohibits_process_killing_section(self):
+        """The worktree-cleanup prompt must have a NEVER kill processes section."""
+        prompt_path = Path(__file__).parent.parent / "src" / "pokepoke" / "builtin_prompts" / "worktree-cleanup.md"
+        content = prompt_path.read_text(encoding='utf-8')
+        assert "NEVER Kill or Stop Any Running Processes" in content
+
+    def test_prompt_forbids_stale_process_cleanup(self):
+        """The worktree-cleanup prompt must forbid killing 'stale' processes."""
+        prompt_path = Path(__file__).parent.parent / "src" / "pokepoke" / "builtin_prompts" / "worktree-cleanup.md"
+        content = prompt_path.read_text(encoding='utf-8')
+        # Must mention stale processes as forbidden
+        assert "stale" in content.lower()
+        assert "zombie" in content.lower() or "orphan" in content.lower()
+
+    @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
+    @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
+    @patch('pokepoke.agent_runner._run_main_repo_agent')
+    @patch('pokepoke.agent_runner.terminal_ui')
+    def test_worktree_cleanup_injects_orchestrator_pid(
+        self, mock_ui, mock_run_agent, mock_prompts_dir, mock_has_unmerged, tmp_path
+    ):
+        """run_worktree_cleanup must inject the orchestrator PID into the prompt."""
+        import os
+        from pokepoke.agent_runner import run_worktree_cleanup
+
+        # Create a minimal prompt file
+        prompt_file = tmp_path / "worktree-cleanup.md"
+        prompt_file.write_text("# Cleanup\nDo stuff.", encoding='utf-8')
+        mock_prompts_dir.return_value = tmp_path
+
+        # Mock the retry/count functions at their source module (they are locally imported)
+        with patch('pokepoke.worktree_cleanup.retry_failed_cleanups', return_value=0), \
+             patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=0):
+            mock_run_agent.return_value = None
+            run_worktree_cleanup()
+
+        # Verify the prompt passed to _run_main_repo_agent includes the PID
+        call_args = mock_run_agent.call_args
+        prompt_passed = call_args[1].get('agent_prompt') or call_args[0][2]
+        assert str(os.getpid()) in prompt_passed, "Orchestrator PID must be injected into cleanup prompt"
+        assert "DO NOT TOUCH" in prompt_passed

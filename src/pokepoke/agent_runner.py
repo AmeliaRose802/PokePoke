@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -231,6 +232,18 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
             return None
 
         cleanup_prompt = prompt_path.read_text(encoding='utf-8')
+
+        # Inject orchestrator PID as defense-in-depth against process killing.
+        # The prompt prohibits process killing entirely, but if the agent ignores
+        # that rule, at minimum it should know the orchestrator PID is sacred.
+        orchestrator_pid = os.getpid()
+        cleanup_prompt += (
+            f"\n\n## ⚠️ Orchestrator Process (DO NOT TOUCH)\n\n"
+            f"The PokePoke orchestrator is running as PID **{orchestrator_pid}**.\n"
+            f"This process and ALL of its child processes are **absolutely off-limits**.\n"
+            f"But remember: you should NEVER kill ANY processes at all.\n"
+        )
+
         cleanup_item = BeadsWorkItem(
             id=agent_id, title="Worktree Cleanup and Merge", description=cleanup_prompt,
             status="in_progress", priority=0, issue_type="task",
