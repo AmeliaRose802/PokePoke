@@ -386,6 +386,9 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
                   onChange={(e) => { const v = Math.max(1, Math.min(8, parseInt(e.target.value, 10) || 1)); setMaxParallelAgents(v); markDirty(); }}
                 />
                 <span className="settings-hint">Controls how many work items are processed concurrently (1–8).</span>
+                {maxParallelAgents > 1 && (
+                  <span className="settings-hint">⚠️ Parallel mode is experimental.</span>
+                )}
               </div>
             </div>
 
