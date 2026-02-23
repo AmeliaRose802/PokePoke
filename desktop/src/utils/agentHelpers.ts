@@ -1,6 +1,67 @@
 import type { AgentInfo } from "../types";
 import { getAgentSnakeIcon } from "./snakeIcons";
 
+/** Structured JSON verdict produced by a gate agent */
+export interface GateVerdict {
+  status: "success" | "failure";
+  reason?: string;
+  message?: string;
+  details?: string;
+  recommendation?: string;
+}
+
+/**
+ * Parse a gate agent JSON verdict from log lines.
+ * Looks for a JSON block in the format: ```json { ... } ```
+ * Falls back to searching for a bare JSON object with a status field.
+ * Returns null if no valid verdict is found.
+ */
+export function parseGateVerdict(logLines: string[]): GateVerdict | null {
+  const combinedText = logLines.join("\n");
+
+  // Primary: find ```json ... ``` block
+  const jsonBlockMatch = combinedText.match(/```json\s*([\s\S]*?)\s*```/);
+  if (jsonBlockMatch) {
+    try {
+      const parsed = JSON.parse(jsonBlockMatch[1].trim()) as unknown;
+      if (
+        parsed !== null &&
+        typeof parsed === "object" &&
+        "status" in parsed &&
+        ((parsed as Record<string, unknown>).status === "success" ||
+          (parsed as Record<string, unknown>).status === "failure")
+      ) {
+        return parsed as GateVerdict;
+      }
+    } catch {
+      // Ignore parse errors and fall through
+    }
+  }
+
+  // Fallback: search for a JSON object containing a status field
+  const rawJsonMatch = combinedText.match(
+    /\{\s*"status"\s*:\s*"(?:success|failure)"[\s\S]*?\}/
+  );
+  if (rawJsonMatch) {
+    try {
+      const parsed = JSON.parse(rawJsonMatch[0]) as unknown;
+      if (
+        parsed !== null &&
+        typeof parsed === "object" &&
+        "status" in parsed &&
+        ((parsed as Record<string, unknown>).status === "success" ||
+          (parsed as Record<string, unknown>).status === "failure")
+      ) {
+        return parsed as GateVerdict;
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }
+
+  return null;
+}
+
 const GATE_SUFFIX = "-gate";
 
 const AGENT_ICON_MAP: Record<string, string> = {
