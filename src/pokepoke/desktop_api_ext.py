@@ -301,7 +301,7 @@ def open_project(self: Any, path: str) -> dict[str, Any]:
     """Open a project directory, validating it and updating internal state."""
     from pokepoke.config import reset_config, load_config
     from pokepoke.repo_utils import get_repository_name
-    from pokepoke.shutdown import cancel_stop_after_current
+    from pokepoke.shutdown import cancel_stop_after_current, has_active_agents
 
     project_path = Path(path).resolve()
 
@@ -310,6 +310,10 @@ def open_project(self: Any, path: str) -> dict[str, Any]:
 
     if not _is_git_repo(project_path):
         return {"success": False, "path": str(project_path), "error": "Not a git repository"}
+
+    # Prevent switching projects while agents are active (would break relative-path locks)
+    if has_active_agents():
+        return {"success": False, "path": str(project_path), "error": "Cannot switch projects while agents are running. Wait for agents to complete."}
 
     # Resolve to git repo root (handles subdirectory picks)
     repo_root = _resolve_git_toplevel(project_path)
