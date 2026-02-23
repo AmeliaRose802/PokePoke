@@ -20,6 +20,7 @@ from pokepoke.shutdown import (
 
 from pokepoke import desktop_api_ext as _ext
 from pokepoke import desktop_api_stats as _stats
+from pokepoke import desktop_api_setup as _setup
 
 if TYPE_CHECKING:
     from pokepoke.types import SessionStats
@@ -79,6 +80,10 @@ class DesktopAPI:
 
         # Extract repository name at initialization
         self._repository_name = get_repository_name()
+
+        # Setup wizard gating — orchestrator can wait for the UI to complete
+        # first-time project initialization steps.
+        self._setup_complete_event = threading.Event()
 
     def set_window(self, window: Any) -> None:
         """Called once after pywebview creates the window."""
@@ -372,6 +377,15 @@ class DesktopAPI:
 
     open_project = _ext.open_project
     browse_for_project = _ext.browse_for_project
+
+    # First-time setup wizard API
+    check_setup_status = _setup.check_setup_status
+    git_init = _setup.git_init
+    bd_init = _setup.bd_init
+    create_default_config = _setup.create_default_config
+    scaffold_prompt_overrides = _setup.scaffold_prompt_overrides
+    complete_setup = _setup.complete_setup
+    wait_for_setup_complete = _setup.wait_for_setup_complete
 
     list_prompts = _ext.list_prompts
     get_prompt = _ext.get_prompt

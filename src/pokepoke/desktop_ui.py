@@ -62,6 +62,10 @@ class DesktopUI:
     def is_running(self) -> bool:
         return self._is_running
 
+    def wait_for_setup_complete(self, timeout: float | None = None) -> bool:
+        """Block until the setup wizard signals completion."""
+        return self._api.wait_for_setup_complete(timeout)
+
     def run_with_orchestrator(self, orchestrator_func: Callable[[], int]) -> int:
         """Run orchestrator on a background thread while pywebview runs on the main thread."""
         import webview

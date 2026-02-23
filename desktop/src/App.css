@@ -6,6 +6,133 @@
 
 /* ── Layout ────────────────────────────────────────────────────────────── */
 
+/* ── First-time setup wizard ───────────────────────────────────────────── */
+
+.setup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+  -webkit-app-region: no-drag;
+}
+
+.setup-modal {
+  width: min(760px, 92vw);
+  max-height: 88vh;
+  overflow: auto;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+.setup-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.setup-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--accent-primary);
+}
+
+.setup-subtitle {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.setup-body {
+  padding: 14px 16px 18px;
+}
+
+.setup-status {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 6px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+}
+
+.setup-status-row {
+  display: contents;
+}
+
+.setup-status-label {
+  color: var(--text-muted);
+}
+
+.setup-status-value {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setup-error {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 70, 70, 0.4);
+  background: rgba(255, 70, 70, 0.08);
+  border-radius: 8px;
+  color: var(--accent-error);
+}
+
+.setup-step {
+  margin-top: 14px;
+}
+
+.setup-step h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.setup-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.setup-field input {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.setup-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.setup-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.setup-actions button {
+  -webkit-app-region: no-drag;
+}
+
+.setup-summary {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--text-primary);
+}
+
 .app {
   display: flex;
   flex-direction: column;
