@@ -18,6 +18,7 @@ from pokepoke.desktop_api import DesktopAPI
 from pokepoke.shutdown import is_shutting_down, request_shutdown
 from pokepoke.frontend_discovery import find_dev_server_url, find_frontend_dist
 from pokepoke.native_icon import set_native_window_icon, set_app_user_model_id
+from pokepoke.pywebview_patches import apply_runtime_patches
 
 if TYPE_CHECKING:
     from pokepoke.types import SessionStats
@@ -65,6 +66,8 @@ class DesktopUI:
     def run_with_orchestrator(self, orchestrator_func: Callable[[], int]) -> int:
         """Run orchestrator on a background thread while pywebview runs on the main thread."""
         import webview
+
+        apply_runtime_patches()
 
         # Install a threading excepthook that suppresses UnicodeDecodeError
         # during shutdown (the Copilot SDK subprocess can emit non-UTF-8
