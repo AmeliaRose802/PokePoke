@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from pokepoke.logging_utils import ItemLogger
 
 
-def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | None' = None) -> AgentStats | None:
+def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | None' = None, parent_agent_id: str | None = None) -> AgentStats | None:
     """Run beta tester agent to test all MCP tools. Restarts MCP server first."""
     from pokepoke.agent_runner import _generate_unique_agent_id, _run_worktree_agent
 
@@ -25,7 +25,7 @@ def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | No
 
     # Register Beta Tester agent in the Agents panel (if not already registered by maintenance)
     agent_id = "beta-tester"
-    terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="running")
+    terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="running", parent_agent_id=parent_agent_id)
 
     print(f"\n{'='*60}\n🧪 Running Beta Tester Agent\n{'='*60}")
 
@@ -65,12 +65,12 @@ def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | No
             prompt_path = prompts_dir / "beta-tester.md"
         except FileNotFoundError as e:
             print(f"❌ {e}")
-            terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed")
+            terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed", parent_agent_id=parent_agent_id)
             return None
 
         if not prompt_path.exists():
             print(f"❌ Prompt not found at {prompt_path}")
-            terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed")
+            terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed", parent_agent_id=parent_agent_id)
             return None
 
         beta_prompt = prompt_path.read_text(encoding='utf-8')
@@ -87,15 +87,16 @@ def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | No
         if repo_root is None:
             repo_root = Path.cwd()
 
-        agent_result = _run_worktree_agent("Beta Tester", worktree_agent_id, beta_item, beta_prompt, repo_root, merge_changes=False, item_logger=item_logger)
+        # Pass parent_agent_id so any sub-agents nest under the maintenance scheduler's UI card
+        agent_result = _run_worktree_agent("Beta Tester", worktree_agent_id, beta_item, beta_prompt, repo_root, merge_changes=False, item_logger=item_logger, parent_agent_id=parent_agent_id)
 
         # Update agent status based on result
         status = "success" if agent_result is not None else "failed"
-        terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status=status)
+        terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status=status, parent_agent_id=parent_agent_id)
 
         return agent_result
 
     except Exception as e:
         logger.warning(f"Beta Tester agent raised exception: {e}", exc_info=True)
-        terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed")
+        terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed", parent_agent_id=parent_agent_id)
         raise

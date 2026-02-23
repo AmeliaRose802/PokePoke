@@ -124,7 +124,8 @@ def run_gate_agent(
 def run_maintenance_agent(
     agent_name: str, prompt_file: str, repo_root: Path | None = None,
     needs_worktree: bool = True, merge_changes: bool = True,
-    model: str | None = None, item_logger: 'ItemLogger | None' = None
+    model: str | None = None, item_logger: 'ItemLogger | None' = None,
+    parent_agent_id: str | None = None
 ) -> AgentStats | None:
     """Run a maintenance agent with optional worktree isolation."""
     terminal_ui.ui.set_current_agent(f"{agent_name} Agent")
@@ -166,7 +167,8 @@ def run_maintenance_agent(
 
     return _run_worktree_agent(
         agent_name, agent_id, agent_item, agent_prompt, repo_root,
-        merge_changes=merge_changes, model=model, item_logger=item_logger
+        merge_changes=merge_changes, model=model, item_logger=item_logger,
+        parent_agent_id=parent_agent_id
     )
 
 
@@ -195,7 +197,7 @@ def _run_main_repo_agent(agent_name: str, agent_item: BeadsWorkItem, agent_promp
     return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=False, model=model, cwd=cwd, item_logger=item_logger)
 
 
-def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger | None' = None) -> AgentStats | None:
+def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger | None' = None, parent_agent_id: str | None = None) -> AgentStats | None:
     """Run worktree cleanup agent to merge/delete stale worktrees."""
     terminal_ui.ui.set_current_agent("Worktree Cleanup")
 
@@ -207,7 +209,7 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
         return None
 
     agent_id = "worktree-cleanup"
-    terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="running")
+    terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="running", parent_agent_id=parent_agent_id)
     print(f"\n{'='*60}\n🌳 Running Worktree Cleanup Agent\n{'='*60}")
 
     # First, try to clean up any worktrees that previously failed
@@ -223,12 +225,12 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
             prompt_path = prompts_dir / "worktree-cleanup.md"
         except FileNotFoundError as e:
             print(f"❌ {e}")
-            terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed")
+            terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed", parent_agent_id=parent_agent_id)
             return None
 
         if not prompt_path.exists():
             print(f"❌ Prompt not found at {prompt_path}")
-            terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed")
+            terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed", parent_agent_id=parent_agent_id)
             return None
 
         cleanup_prompt = prompt_path.read_text(encoding='utf-8')
@@ -254,18 +256,19 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
         agent_result = _run_main_repo_agent("Worktree Cleanup", cleanup_item, cleanup_prompt, cwd=cwd, item_logger=item_logger)
 
         status = "success" if agent_result is not None else "failed"
-        terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status=status)
+        terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status=status, parent_agent_id=parent_agent_id)
         return agent_result
 
     except Exception as e:
         logger.warning(f"Worktree cleanup agent raised exception: {e}", exc_info=True)
-        terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed")
+        terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed", parent_agent_id=parent_agent_id)
         raise
 
 
 def _run_worktree_agent(
     agent_name: str, agent_id: str, agent_item: BeadsWorkItem, agent_prompt: str, repo_root: Path,
-    merge_changes: bool = True, model: str | None = None, item_logger: 'ItemLogger | None' = None
+    merge_changes: bool = True, model: str | None = None, item_logger: 'ItemLogger | None' = None,
+    parent_agent_id: str | None = None
 ) -> AgentStats | None:
     """Run a code-modifying maintenance agent in a worktree."""
     print(f"\n🌳 Creating worktree for {agent_id}...")
@@ -282,6 +285,10 @@ def _run_worktree_agent(
         print(f"   Model: {model}")
 
     worktree_cleaned = False
+
+    # Use the scheduler's parent_agent_id if provided, otherwise fall back to agent_id
+    # This ensures sub-agents nest under the UI-visible maintenance agent card
+    cleanup_parent_id = parent_agent_id if parent_agent_id else agent_id
 
     try:
         # Main agent execution block
@@ -302,7 +309,7 @@ def _run_worktree_agent(
             result,
             repo_root,
             cwd=worktree_cwd,
-            parent_agent_id=agent_id,
+            parent_agent_id=cleanup_parent_id,
         )
 
         if not cleanup_success:
@@ -324,7 +331,8 @@ def _run_worktree_agent(
             # Handle worktree merge
             from pokepoke.worktree_merge_handler import handle_worktree_merge
             merge_success, worktree_cleaned = handle_worktree_merge(
-                agent_id, agent_item, agent_name, worktree_path, repo_root, agent_stats
+                agent_id, agent_item, agent_name, worktree_path, repo_root, agent_stats,
+                parent_agent_id=cleanup_parent_id
             )
 
             if not merge_success:

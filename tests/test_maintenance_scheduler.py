@@ -271,7 +271,7 @@ class TestRunAgentWithCoordination:
 
         scheduler._run_agent_with_coordination("Beta Tester", agent_cfg, pokepoke_repo, session_stats, run_logger)
 
-        mock_special.assert_called_once_with("Beta Tester", pokepoke_repo, item_logger=run_logger.start_maintenance_log.return_value)
+        mock_special.assert_called_once_with("Beta Tester", pokepoke_repo, item_logger=run_logger.start_maintenance_log.return_value, parent_agent_id='maintenance-beta_tester')
         assert session_stats.beta_tester_agent_runs == 1
         assert session_stats.agent_stats.input_tokens == 100
 
@@ -305,6 +305,7 @@ class TestRunAgentWithCoordination:
             merge_changes=True,
             model="claude-opus-4.6",
             item_logger=run_logger.start_maintenance_log.return_value,
+            parent_agent_id="maintenance-janitor",
         )
         assert session_stats.janitor_agent_runs == 1
         assert session_stats.agent_stats.input_tokens == 50
