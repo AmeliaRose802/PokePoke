@@ -205,8 +205,19 @@ def _watchdog_thread(timeout: float) -> None:
     # Best-effort: avoid killing the process while a merge is actively
     # holding the cross-process merge lock. We wait until the lock is no
     # longer reported as active before performing a hard exit.
+    # Cap the wait at _MERGE_LOCK_WAIT_MAX_SECONDS so that a stuck lock
+    # holder (e.g. hung subprocess) cannot prevent the watchdog from ever
+    # firing.
+    _MERGE_LOCK_WAIT_MAX_SECONDS = 120
     try:
+        lock_wait_start = time.monotonic()
         while merge_lock_active():
+            if time.monotonic() - lock_wait_start >= _MERGE_LOCK_WAIT_MAX_SECONDS:
+                logger.warning(
+                    "Merge lock still held after %ds; proceeding with force-exit.",
+                    _MERGE_LOCK_WAIT_MAX_SECONDS,
+                )
+                break
             time.sleep(1.0)
     except Exception:
         # If merge_lock_active or its underlying file-lock machinery fails,
