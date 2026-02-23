@@ -18,6 +18,9 @@ from pokepoke.shutdown import is_shutting_down, set_executor, should_stop_after_
 
 logger = logging.getLogger(__name__)
 
+# Upper bound for executor/semaphore so they never bottleneck dynamic changes.
+_MAX_PARALLEL_CEILING = 8
+
 # Type alias to satisfy mypy strict generics
 _Future = concurrent.futures.Future[WorkItemResult]
 
@@ -34,12 +37,14 @@ _SNAKE_TYPES: tuple[str, ...] = (
 )
 
 
-def request_spawn_agent() -> None:
-    """Signal the parallel loop to attempt spawning an additional agent immediately.
+def _get_dynamic_max_agents() -> int:
+    """Re-read max_parallel_agents from config so UI changes take effect immediately."""
+    from pokepoke.config import get_config
+    return max(1, get_config().max_parallel_agents)
 
-    Called from the desktop UI when the user clicks the Spawn Agent button.
-    The loop will wake up early from its sleep and try to fill available slots.
-    """
+
+def request_spawn_agent() -> None:
+    """Signal the parallel loop to spawn an additional agent immediately."""
     _spawn_wakeup.set()
 
 
@@ -75,8 +80,7 @@ def _parallel_process_item(
     """Wrapper for process_work_item used by the thread pool.
 
     Sets a per-thread agent name, registers the agent in the desktop UI,
-    and routes print output to the agent's own log buffer so parallel
-    output is not interleaved. Releases the semaphore when done.
+    and releases the semaphore when done.
     """
     agent_id = f"{item.id}:{worker_agent_name}" if worker_agent_name else item.id
     display_name = worker_agent_name or "agent"
@@ -203,10 +207,10 @@ def run_parallel_loop(
     """
     total_requests = 0
     items_completed = 0
-    semaphore = threading.Semaphore(effective_parallel)
+    semaphore = threading.Semaphore(_MAX_PARALLEL_CEILING)
     futures: dict[_Future, BeadsWorkItem] = {}
     executor = concurrent.futures.ThreadPoolExecutor(
-        max_workers=effective_parallel,
+        max_workers=_MAX_PARALLEL_CEILING,
         thread_name_prefix="pokepoke-agent",
     )
     set_executor(executor)
@@ -247,7 +251,8 @@ def run_parallel_loop(
             terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
 
             current_active = {i.id for i in futures.values()}
-            slots = effective_parallel - len(futures)
+            current_max = _get_dynamic_max_agents()
+            slots = current_max - len(futures)
 
             if (
                 slots > 0

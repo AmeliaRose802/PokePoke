@@ -324,8 +324,9 @@ class TestRunParallelLoop:
     @patch("pokepoke.parallel.select_multiple_items")
     @patch("pokepoke.parallel._collect_done_futures")
     @patch("pokepoke.parallel.process_work_item")
+    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=3)
     def test_refills_all_slots_after_completions(
-        self, mock_pwi, mock_collect, mock_sel, mock_ready,
+        self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
         """Regression (PokePoke-qagy): all empty slots refilled after batch completes."""
@@ -374,8 +375,9 @@ class TestRunParallelLoop:
     @patch("pokepoke.parallel.select_multiple_items")
     @patch("pokepoke.parallel._collect_done_futures")
     @patch("pokepoke.parallel.process_work_item")
+    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=1)
     def test_does_not_resubmit_while_future_tracked(
-        self, mock_pwi, mock_collect, mock_sel, mock_ready,
+        self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
         """Regression: slot/claimed tracking must be based on futures (worker count).
@@ -416,8 +418,9 @@ class TestRunParallelLoop:
     @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.parallel.get_ready_work_items")
     @patch("pokepoke.parallel.select_multiple_items")
+    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=1)
     def test_submit_exception_releases_resources(
-        self, mock_sel, mock_ready, mock_repo,
+        self, mock_dyn_max, mock_sel, mock_ready, mock_repo,
         mock_shut, mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
         """executor.submit failures should release semaphore and active IDs."""
@@ -577,8 +580,9 @@ class TestRunParallelLoop:
     @patch("pokepoke.parallel.get_ready_work_items")
     @patch("pokepoke.parallel.select_multiple_items")
     @patch("pokepoke.parallel.process_work_item")
+    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=2)
     def test_single_shot_drain_updates_stats(
-        self, mock_pwi, mock_sel, mock_ready, mock_repo,
+        self, mock_dyn_max, mock_pwi, mock_sel, mock_ready, mock_repo,
         mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
         """UI stats should update after draining remaining futures in single-shot mode."""
@@ -672,6 +676,57 @@ class TestRunParallelLoop:
         assert mock_ui.ui.update_stats.call_count >= 2
         last_stats = mock_ui.ui.update_stats.call_args_list[-1][0][0]
         assert last_stats.items_completed == 1
+
+    @patch("pokepoke.parallel.time.sleep")
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.set_executor")
+    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.parallel.is_shutting_down")
+    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.parallel.get_ready_work_items")
+    @patch("pokepoke.parallel.select_multiple_items")
+    @patch("pokepoke.parallel._collect_done_futures")
+    @patch("pokepoke.parallel.process_work_item")
+    def test_dynamic_max_agents_change_respected(
+        self, mock_pwi, mock_collect, mock_sel, mock_ready,
+        mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep,
+    ) -> None:
+        """Slot count should reflect dynamic config changes without restart."""
+        items = [_make_item(f"d{i}") for i in range(6)]
+        mock_ready.return_value = items
+        mock_pwi.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
+
+        call_idx = [0]
+
+        def collect_side(futures, failed, total, stats, logger, record_fn):
+            call_idx[0] += 1
+            if call_idx[0] == 2:
+                futures.clear()
+                return (total, True)
+            return (total, False)
+
+        mock_collect.side_effect = collect_side
+
+        # First iteration returns 2, second returns 4 (simulates UI change)
+        dynamic_values = iter([2, 4])
+        mock_sel.side_effect = [items[:2], items[2:6]]
+
+        mock_shut.side_effect = [False] * 22 + [True] * 5
+
+        with patch("pokepoke.parallel._get_dynamic_max_agents", side_effect=dynamic_values):
+            stats = SessionStats(agent_stats=AgentStats())
+            run_parallel_loop(
+                effective_parallel=2, mode_name="Autonomous",
+                main_repo_path="/repo", failed_claim_ids=set(),
+                session_stats=stats, start_time=time.time(),
+                run_logger=Mock(), continuous=True,
+                record_fn=Mock(), finalize_fn=Mock(),
+            )
+
+        # First call: count=2 (dynamic max=2, 0 active)
+        assert mock_sel.call_args_list[0].kwargs['count'] == 2
+        # Second call: count=4 (dynamic max=4, 0 active after clear)
+        assert mock_sel.call_args_list[1].kwargs['count'] == 4
 
 
 class TestCollectDoneFuturesWait:
