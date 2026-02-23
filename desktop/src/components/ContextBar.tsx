@@ -21,7 +21,8 @@ export function ContextBar({ inputTokens, outputTokens, contextLimit }: {
   }, [pct]);
 
   return (
-    <div className="agent-card-context" title={`Input: ${formatTokens(inputTokens)} · Output: ${formatTokens(outputTokens)}`}>
+    <div className="agent-card-context" title={`Context window usage — Input: ${formatTokens(inputTokens)} · Output: ${formatTokens(outputTokens)}`}>
+      <span className="agent-card-context-icon" aria-label="Context window">🧠</span>
       <div className="agent-card-context-bar">
         <div
           ref={fillRef}
