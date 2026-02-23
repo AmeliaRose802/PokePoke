@@ -290,7 +290,7 @@ class TestHierarchicalWorkAssignment:
 
         assert result is True
 
-    @patch('pokepoke.beads_hierarchy.subprocess.run')
+    @patch('pokepoke.beads_query.subprocess.run')
     @patch('pokepoke.beads_hierarchy.all_children_complete')
     def test_close_parent_if_complete_not_complete(
         self,
@@ -305,7 +305,7 @@ class TestHierarchicalWorkAssignment:
         assert result is False
         mock_run.assert_not_called()
 
-    @patch('pokepoke.beads_hierarchy.subprocess.run')
+    @patch('pokepoke.beads_query.subprocess.run')
     @patch('pokepoke.beads_hierarchy.all_children_complete')
     def test_close_parent_if_complete_success(
         self,
@@ -325,10 +325,11 @@ class TestHierarchicalWorkAssignment:
             text=True,
             encoding='utf-8',
             check=True,
-            timeout=30
+            timeout=30,
+            cwd=None
         )
 
-    @patch('pokepoke.beads_hierarchy.subprocess.run')
+    @patch('pokepoke.beads_query.subprocess.run')
     def test_close_item_success(self, mock_run: Mock) -> None:
         """Test closing an item successfully."""
         mock_run.return_value = Mock(returncode=0)
@@ -342,10 +343,11 @@ class TestHierarchicalWorkAssignment:
             text=True,
             encoding='utf-8',
             check=True,
-            timeout=30
+            timeout=30,
+            cwd=None
         )
 
-    @patch('pokepoke.beads_hierarchy.subprocess.run')
+    @patch('pokepoke.beads_query.subprocess.run')
     def test_close_item_failure(self, mock_run: Mock) -> None:
         """Test handling close item failure."""
         mock_run.side_effect = subprocess.CalledProcessError(

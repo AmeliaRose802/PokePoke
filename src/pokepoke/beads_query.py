@@ -9,6 +9,25 @@ from typing import Any
 from .types import BeadsWorkItem, IssueWithDependencies, Dependency, BeadsStats
 
 
+def _run_bd(
+    args: list[str],
+    *,
+    check: bool = True,
+    timeout: int | None = 30,
+    cwd: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run a ``bd`` CLI command with standard options."""
+    return subprocess.run(
+        ['bd'] + args,
+        capture_output=True,
+        text=True,
+        encoding='utf-8',
+        check=check,
+        timeout=timeout,
+        cwd=cwd,
+    )
+
+
 def _filter_to_dataclass(cls: type, data: dict[str, Any]) -> Any:
     """Construct a dataclass instance, keeping only fields defined on *cls*."""
     valid = {f.name for f in dataclasses.fields(cls)}
@@ -61,14 +80,7 @@ def get_ready_work_items() -> list[BeadsWorkItem]:
         List of ready work items. Returns empty list if beads command fails.
     """
     try:
-        result = subprocess.run(
-            ['bd', 'ready', '--json'],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True,
-            timeout=30
-        )
+        result = _run_bd(['ready', '--json'])
     except subprocess.CalledProcessError as e:
         # Log error but don't crash the orchestrator
         # This can happen when beads database is temporarily unavailable
@@ -107,14 +119,7 @@ def get_issue_dependencies(issue_id: str) -> IssueWithDependencies | None:
         Issue with dependencies, or None if not found.
     """
     try:
-        result = subprocess.run(
-            ['bd', 'show', issue_id, '--json'],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True,
-            timeout=30
-        )
+        result = _run_bd(['show', issue_id, '--json'])
     except subprocess.CalledProcessError:
         return None
 
@@ -182,15 +187,7 @@ def get_beads_stats() -> BeadsStats | None:
         main_repo = _get_main_repo_root()
         cwd = str(main_repo) if main_repo else None
 
-        result = subprocess.run(
-            ['bd', 'stats', '--json'],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True,
-            cwd=cwd,
-            timeout=30
-        )
+        result = _run_bd(['stats', '--json'], cwd=cwd)
 
         data = json.loads(result.stdout)
         summary = data.get('summary', {})

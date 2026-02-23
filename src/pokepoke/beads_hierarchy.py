@@ -1,9 +1,9 @@
 """Beads hierarchy operations - parent-child relationships."""
 
-import subprocess
+from subprocess import CalledProcessError
 
 from .types import BeadsWorkItem
-from .beads_query import get_issue_dependencies
+from .beads_query import get_issue_dependencies, _run_bd
 
 # Label that marks items as requiring human intervention - agents will skip these
 HUMAN_REQUIRED_LABEL = 'human-required'
@@ -286,17 +286,10 @@ def close_parent_if_complete(parent_id: str) -> bool:
         return False
 
     try:
-        subprocess.run(
-            ['bd', 'close', parent_id, '-r', 'All child items completed'],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True,
-            timeout=30
-        )
+        _run_bd(['close', parent_id, '-r', 'All child items completed'])
         print(f"✅ Auto-closed parent {parent_id} - all children complete")
         return True
-    except subprocess.CalledProcessError as e:
+    except CalledProcessError as e:
         print(f"⚠️  Failed to close parent {parent_id}: {e.stderr}")
         return False
 

@@ -28,7 +28,8 @@ class TestBeadsIntegration:
             text=True,
             encoding='utf-8',
             check=True,
-            timeout=30
+            timeout=30,
+            cwd=None
         )
 
     @patch('src.pokepoke.beads_query.subprocess.run')
@@ -192,6 +193,63 @@ class TestBeadsIntegration:
         result = get_issue_dependencies("task-1")
 
         assert result is None
+
+    @patch('src.pokepoke.beads_query.subprocess.run')
+    def test_get_ready_work_items_empty_stdout(self, mock_run: Mock) -> None:
+        """Test get_ready_work_items returns empty list for empty stdout."""
+        mock_run.return_value = Mock(stdout="", returncode=0)
+
+        assert get_ready_work_items() == []
+
+    @patch('src.pokepoke.beads_query.subprocess.run')
+    def test_get_ready_work_items_key_error(self, mock_run: Mock) -> None:
+        """Test get_ready_work_items handles KeyError from malformed data."""
+        mock_run.return_value = Mock(stdout='[{"unexpected": "data"}]', returncode=0)
+
+        assert get_ready_work_items() == []
+
+    @patch('src.pokepoke.beads_query.subprocess.run')
+    def test_get_issue_dependencies_empty_stdout(self, mock_run: Mock) -> None:
+        """Test get_issue_dependencies returns None for empty stdout."""
+        mock_run.return_value = Mock(stdout="", returncode=0)
+
+        assert get_issue_dependencies("task-1") is None
+
+    @patch('src.pokepoke.beads_query.subprocess.run')
+    def test_has_unmet_blocking_dependencies_no_blockers(self, mock_run: Mock) -> None:
+        """Test has_unmet_blocking_dependencies returns False with no blockers."""
+        from src.pokepoke.beads import has_unmet_blocking_dependencies
+
+        mock_run.return_value = Mock(
+            stdout=json.dumps([{
+                "id": "task-1", "title": "T", "status": "open",
+                "priority": 1, "issue_type": "task",
+                "dependencies": [{"id": "dep-1", "title": "D",
+                                  "dependency_type": "blocks", "status": "closed",
+                                  "issue_type": "task", "priority": 1}]
+            }]),
+            returncode=0
+        )
+
+        assert has_unmet_blocking_dependencies("task-1") is False
+
+    @patch('src.pokepoke.beads_query.subprocess.run')
+    def test_has_unmet_blocking_dependencies_with_blocker(self, mock_run: Mock) -> None:
+        """Test has_unmet_blocking_dependencies returns True with open blocker."""
+        from src.pokepoke.beads import has_unmet_blocking_dependencies
+
+        mock_run.return_value = Mock(
+            stdout=json.dumps([{
+                "id": "task-1", "title": "T", "status": "open",
+                "priority": 1, "issue_type": "task",
+                "dependencies": [{"id": "dep-1", "title": "D",
+                                  "dependency_type": "blocks", "status": "open",
+                                  "issue_type": "task", "priority": 1}]
+            }]),
+            returncode=0
+        )
+
+        assert has_unmet_blocking_dependencies("task-1") is True
 
 
 class TestHasFeatureParent:
@@ -606,7 +664,8 @@ class TestCloseItem:
             text=True,
             encoding='utf-8',
             check=True,
-            timeout=30
+            timeout=30,
+            cwd=None
         )
 
     @patch('src.pokepoke.beads_management.subprocess.run')
@@ -642,7 +701,8 @@ class TestAddComment:
             text=True,
             encoding='utf-8',
             check=True,
-            timeout=30
+            timeout=30,
+            cwd=None
         )
 
     @patch('src.pokepoke.beads_management.subprocess.run')
@@ -728,6 +788,7 @@ class TestUnassignItem:
             encoding='utf-8',
             check=True,
             timeout=30,
+            cwd=None,
         )
         mock_sync.assert_called_once()
 
@@ -758,6 +819,7 @@ class TestUnassignItem:
             encoding='utf-8',
             check=True,
             timeout=30,
+            cwd=None,
         )
         mock_sync.assert_called_once()
 

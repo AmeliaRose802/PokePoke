@@ -10,7 +10,7 @@ from .agent_context import get_agent_name
 from .coordination import acquire_lock
 from .types import BeadsWorkItem
 from .beads_hierarchy import resolve_to_leaf_task, HUMAN_REQUIRED_LABEL
-from .beads_query import _parse_beads_json
+from .beads_query import _parse_beads_json, _run_bd
 
 
 def _is_transient_jsonl_sync_error(output: str) -> bool:
@@ -28,13 +28,7 @@ def run_bd_sync_with_retry(
     """Run bd sync with retries for transient JSONL lock errors."""
     last_result: subprocess.CompletedProcess[str] | None = None
     for attempt in range(1, max_attempts + 1):
-        result = subprocess.run(
-            ['bd', 'sync'],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            timeout=timeout
-        )
+        result = _run_bd(['sync'], check=False, timeout=timeout)
         last_result = result
         if result.returncode == 0:
             if attempt > 1:
@@ -84,14 +78,7 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
             # CRITICAL: Check current ownership RIGHT BEFORE claiming
             # This catches race conditions where another agent claimed between fetch and now
             try:
-                result = subprocess.run(
-                    ['bd', 'show', item_id, '--json'],
-                    capture_output=True,
-                    text=True,
-                    encoding='utf-8',
-                    check=True,
-                    timeout=30
-                )
+                result = _run_bd(['show', item_id, '--json'])
 
                 # Parse current item state
                 data = _parse_beads_json(result.stdout)
@@ -117,25 +104,11 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
 
             try:
                 # Now safe to claim - we verified it's unassigned or ours
-                subprocess.run(
-                    ['bd', 'update', item_id, '--status', 'in_progress', '-a', agent_name, '--json'],
-                    capture_output=True,
-                    text=True,
-                    encoding='utf-8',
-                    check=True,
-                    timeout=30
-                )
+                _run_bd(['update', item_id, '--status', 'in_progress', '-a', agent_name, '--json'])
                 print(f"✅ Assigned {item_id} to {agent_name} and marked in_progress")
 
                 # Detect-and-abort: re-read and verify the assignee is actually us.
-                verify_result = subprocess.run(
-                    ['bd', 'show', item_id, '--json'],
-                    capture_output=True,
-                    text=True,
-                    encoding='utf-8',
-                    check=True,
-                    timeout=30
-                )
+                verify_result = _run_bd(['show', item_id, '--json'])
                 verify_data = _parse_beads_json(verify_result.stdout)
                 if verify_data is None:
                     print(f"⚠️  CLAIM VERIFICATION FAILED: {item_id} could not be re-read after update")
@@ -186,26 +159,12 @@ def unassign_item(item_id: str) -> bool:
     agent_name = get_agent_name()
     # Try resetting status and clearing the assignee in one command.
     try:
-        subprocess.run(
-            ['bd', 'update', item_id, '--status', 'new', '-a', ''],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True,
-            timeout=30,
-        )
+        _run_bd(['update', item_id, '--status', 'new', '-a', ''])
         print(f"↩️  Unassigned {item_id} from {agent_name} and reset to 'new'")
     except subprocess.CalledProcessError:
         # Some bd versions may not accept an empty -a; fall back to status-only reset.
         try:
-            subprocess.run(
-                ['bd', 'update', item_id, '--status', 'new'],
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                check=True,
-                timeout=30,
-            )
+            _run_bd(['update', item_id, '--status', 'new'])
             print(f"↩️  Reset {item_id} to 'new' (assignee field may still reference {agent_name})")
         except subprocess.CalledProcessError as e:
             print(f"⚠️  Failed to unassign {item_id}: {e.stderr}")
@@ -231,14 +190,7 @@ def close_item(item_id: str, message: str = "Completed") -> bool:
         True if successful, False otherwise.
     """
     try:
-        subprocess.run(
-            ['bd', 'close', item_id, '--reason', message],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True,
-            timeout=30
-        )
+        _run_bd(['close', item_id, '--reason', message])
         print(f"✅ Closed {item_id}")
         return True
     except subprocess.CalledProcessError as e:
@@ -257,14 +209,7 @@ def add_comment(item_id: str, comment: str) -> bool:
         True if successful, False otherwise.
     """
     try:
-        subprocess.run(
-            ['bd', 'comments', 'add', item_id, comment],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True,
-            timeout=30
-        )
+        _run_bd(['comments', 'add', item_id, comment])
         print(f"💬 Added comment to {item_id}")
         return True
     except subprocess.CalledProcessError as e:
