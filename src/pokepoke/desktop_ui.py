@@ -24,14 +24,7 @@ if TYPE_CHECKING:
 
 
 def _shutdown_threading_excepthook(args: threading.ExceptHookArgs) -> None:
-    """Suppress UnicodeDecodeError in background threads during shutdown.
-
-    When the pywebview window closes, the Copilot SDK subprocess may emit
-    non-UTF-8 bytes as it is forcefully terminated.  Python's
-    ``subprocess._readerthread`` tries to decode with strict UTF-8 and
-    raises ``UnicodeDecodeError`` in a daemon thread.  This hook
-    silences that traceback so the user sees a clean exit with stats.
-    """
+    """Suppress noisy UnicodeDecodeError tracebacks from background threads during shutdown."""
     if is_shutting_down() and isinstance(args.exc_value, UnicodeDecodeError):
         # Swallow the noisy traceback — the process is exiting anyway.
         return
@@ -53,14 +46,7 @@ _thread_output = threading.local()
 
 
 class DesktopUI:
-    """UI adapter that opens a native pywebview window.
-
-    The orchestrator calls the standard UI methods — this adapter pushes
-    state to the DesktopAPI which the frontend reads via direct
-    in-process calls (window.pywebview.api).
-
-    Single process. No server. No ports.
-    """
+    """UI adapter that opens a native pywebview window and forwards state/logs to DesktopAPI."""
 
     def __init__(self) -> None:
         self._api = DesktopAPI()
@@ -77,13 +63,7 @@ class DesktopUI:
         return self._is_running
 
     def run_with_orchestrator(self, orchestrator_func: Callable[[], int]) -> int:
-        """Run the orchestrator with a native desktop window.
-
-        pywebview must own the main thread (Windows requirement), so:
-        1. Start the orchestrator on a background thread
-        2. Create the pywebview window on the main thread
-        3. When the window closes, signal shutdown
-        """
+        """Run orchestrator on a background thread while pywebview runs on the main thread."""
         import webview
 
         # Install a threading excepthook that suppresses UnicodeDecodeError
@@ -96,106 +76,121 @@ class DesktopUI:
         self._is_running = True
         builtins.print = self._print_redirect
 
-        self._api.push_log(
-            "🖥️  PokePoke Desktop started (pywebview native window)",
-            "orchestrator",
-        )
-
-        # Find the frontend — prefer Vite dev server for hot reload
-        dev_url = find_dev_server_url()
-        if dev_url:
+        try:
             self._api.push_log(
-                f"🔥 Hot reload enabled — loading from {dev_url}",
+                "🖥️  PokePoke Desktop started (pywebview native window)",
                 "orchestrator",
             )
-            window_url = dev_url
-            dist_dir = find_frontend_dist()  # still needed for icon
-        else:
-            dist_dir = find_frontend_dist()
-            if dist_dir is None:
-                builtins.print = self._original_print
-                print("❌ Desktop frontend not built. Run:", file=sys.stderr)
-                print("   cd desktop && npm install && npm run build", file=sys.stderr)
-                return 1
-            window_url = str(dist_dir / "index.html")
 
-        # Result container for the orchestrator thread
-        exit_code_box: list[int] = [0]
+            # Find the frontend — prefer Vite dev server for hot reload
+            dev_url = find_dev_server_url()
+            if dev_url:
+                self._api.push_log(
+                    f"🔥 Hot reload enabled — loading from {dev_url}",
+                    "orchestrator",
+                )
+                window_url = dev_url
+                dist_dir = find_frontend_dist()  # still needed for icon
+            else:
+                dist_dir = find_frontend_dist()
+                if dist_dir is None:
+                    builtins.print = self._original_print
+                    print("❌ Desktop frontend not built. Run:", file=sys.stderr)
+                    print("   cd desktop && npm install && npm run build", file=sys.stderr)
+                    return 1
+                window_url = str(dist_dir / "index.html")
 
-        def run_orchestrator() -> None:
+            # Result container for the orchestrator thread
+            exit_code_box: list[int] = [0]
+
+            def run_orchestrator() -> None:
+                try:
+                    exit_code_box[0] = orchestrator_func()
+                except KeyboardInterrupt:
+                    request_shutdown()
+                    exit_code_box[0] = 130
+                except Exception as e:
+                    self._api.push_log(f"❌ Orchestrator error: {e}", "orchestrator", "red")
+                    exit_code_box[0] = 1
+                finally:
+                    builtins.print = self._original_print
+                    self._is_running = False
+
+            # Start orchestrator on background thread
+            orch_thread = threading.Thread(
+                target=run_orchestrator,
+                daemon=True,
+                name="orchestrator",
+            )
+
+            orchestrator_started = False
+
+            # Create native window pointing at the built React app
+            icon_path = dist_dir / "pokepoke.ico" if dist_dir else None
+
+            def on_window_loaded() -> None:
+                """Called after the webview window is ready."""
+                nonlocal orchestrator_started
+                # pywebview's icon parameter only works on GTK/QT — on Windows
+                # the WinForms backend extracts the icon from sys.executable
+                # (python.exe → Python logo).  Override it via the native form.
+                if icon_path is not None:
+                    set_native_window_icon(window, icon_path)
+                self._api.set_window(window)
+                orch_thread.start()
+                orchestrator_started = True
+
+            window_kwargs: dict[str, Any] = {
+                "title": "PokePoke - Autonomous Workflow Manager",
+                "url": window_url,
+                "js_api": self._api,
+                "width": 1280,
+                "height": 800,
+                "min_size": (900, 600),
+                "text_select": True,
+            }
+
+            # Register the App User Model ID before creating the window so that
+            # Windows associates the taskbar button with this app identity and
+            # displays the PokePoke icon instead of the python.exe icon.
+            set_app_user_model_id()
+
+            window = webview.create_window(**window_kwargs)
+
+            # Run pywebview on the main thread (blocks until window closes)
+            start_kwargs: dict[str, Any] = {
+                "func": on_window_loaded,
+                "debug": dev_url is not None or os.environ.get("POKEPOKE_DEBUG", "").lower() in ("1", "true"),
+            }
+            if icon_path and icon_path.exists():
+                start_kwargs["icon"] = str(icon_path)
+
             try:
-                exit_code_box[0] = orchestrator_func()
-            except KeyboardInterrupt:
-                request_shutdown()
-                exit_code_box[0] = 130
+                webview.start(**start_kwargs)
             except Exception as e:
-                self._api.push_log(f"❌ Orchestrator error: {e}", "orchestrator", "red")
-                exit_code_box[0] = 1
-            finally:
-                builtins.print = self._original_print
-                self._is_running = False
+                # pywebview can throw during teardown on window-close (WinForms
+                # backend uses a blocking Join). Treat this as a clean close
+                # path if the orchestrator was already running.
+                if not orchestrator_started and not is_shutting_down():
+                    self._api.push_log(f"❌ Desktop UI error: {e}", "orchestrator", "red")
+                    exit_code_box[0] = 1
 
-        # Start orchestrator on background thread
-        orch_thread = threading.Thread(
-            target=run_orchestrator,
-            daemon=True,
-            name="orchestrator",
-        )
+            # Window closed (or UI failed) — tell orchestrator to shut down
+            request_shutdown()
+            self._is_running = False
+            builtins.print = self._original_print
 
-        # Create native window pointing at the built React app
-        icon_path = dist_dir / "pokepoke.ico" if dist_dir else None
+            # Wait for orchestrator to finish (needs enough time to collect
+            # beads stats and print the session summary).
+            if orch_thread.is_alive():
+                orch_thread.join(timeout=15.0)
 
-        def on_window_loaded() -> None:
-            """Called after the webview window is ready."""
-            # pywebview's icon parameter only works on GTK/QT — on Windows
-            # the WinForms backend extracts the icon from sys.executable
-            # (python.exe → Python logo).  Override it via the native form.
-            if icon_path is not None:
-                set_native_window_icon(window, icon_path)
-            self._api.set_window(window)
-            orch_thread.start()
-
-        window_kwargs: dict[str, Any] = {
-            "title": "PokePoke - Autonomous Workflow Manager",
-            "url": window_url,
-            "js_api": self._api,
-            "width": 1280,
-            "height": 800,
-            "min_size": (900, 600),
-            "text_select": True,
-        }
-
-        # Register the App User Model ID before creating the window so that
-        # Windows associates the taskbar button with this app identity and
-        # displays the PokePoke icon instead of the python.exe icon.
-        set_app_user_model_id()
-
-        window = webview.create_window(**window_kwargs)
-
-        # Run pywebview on the main thread (blocks until window closes)
-        start_kwargs: dict[str, Any] = {
-            "func": on_window_loaded,
-            "debug": dev_url is not None or os.environ.get("POKEPOKE_DEBUG", "").lower() in ("1", "true"),
-        }
-        if icon_path and icon_path.exists():
-            start_kwargs["icon"] = str(icon_path)
-        webview.start(**start_kwargs)
-
-        # Window closed — tell orchestrator to shut down
-        request_shutdown()
-        self._is_running = False
-        builtins.print = self._original_print
-
-        # Wait for orchestrator to finish (needs enough time to collect
-        # beads stats and print the session summary).
-        if orch_thread.is_alive():
-            orch_thread.join(timeout=15.0)
-
-        # Restore the original threading excepthook
-        if _original_excepthook is not None:
-            threading.excepthook = _original_excepthook
-
-        return exit_code_box[0]
+            return exit_code_box[0]
+        finally:
+            self._is_running = False
+            builtins.print = self._original_print
+            if _original_excepthook is not None:
+                threading.excepthook = _original_excepthook
 
     def start(self) -> None:
         """Resume UI output capture (after interactive prompt pause)."""
