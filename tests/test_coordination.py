@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 from filelock import Timeout
 
-from pokepoke.coordination import acquire_lock, try_lock, worktree_setup_lock, merge_lock, merge_lock_active, _lock_dir, _lock_path
+from pokepoke.coordination import acquire_lock, try_lock, worktree_setup_lock, merge_lock, merge_lock_active, manifest_lock, _lock_dir, _lock_path
 
 
 class TestLockDir:
@@ -211,3 +211,141 @@ class TestMergeLockActive:
     def test_returns_true_when_held(self, tmp_path: Path) -> None:
         with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), merge_lock(timeout=5):
             assert merge_lock_active() is True
+
+
+class TestManifestLock:
+    """Tests for manifest_lock – serializes worktree manifest updates."""
+
+    def test_acquires_and_releases(self, tmp_path: Path) -> None:
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+            with manifest_lock(timeout=5) as lock:
+                assert lock.is_locked
+            assert not lock.is_locked
+
+    def test_second_agent_times_out_while_first_holds_lock(self, tmp_path: Path) -> None:
+        """Second concurrent agent should raise Timeout when first holds the lock."""
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), manifest_lock(timeout=5):  # noqa: SIM117
+            with pytest.raises(Timeout), manifest_lock(timeout=0):
+                    pass  # pragma: no cover
+
+    def test_serializes_two_threads(self, tmp_path: Path) -> None:
+        """Two threads must not hold manifest_lock simultaneously."""
+        overlap_detected = threading.Event()
+        inside_count = [0]
+        lock_obj = threading.Lock()
+        errors: list[str] = []
+
+        def worker():
+            with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), manifest_lock(timeout=10):
+                with lock_obj:
+                    inside_count[0] += 1
+                    if inside_count[0] > 1:
+                        errors.append("overlap!")
+                        overlap_detected.set()
+                import time
+                time.sleep(0.05)
+                with lock_obj:
+                    inside_count[0] -= 1
+
+        threads = [threading.Thread(target=worker) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=15)
+
+        assert not errors, "Two threads were inside manifest_lock simultaneously"
+
+    def test_releases_on_exception(self, tmp_path: Path) -> None:
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+            lock_ref = None
+            with pytest.raises(ValueError), manifest_lock(timeout=5) as lock:
+                lock_ref = lock
+                raise ValueError("simulated failure")
+            assert lock_ref is not None
+            assert not lock_ref.is_locked
+
+
+class TestManifestFunctionsUseLocking:
+    """Tests that manifest operations use file locking to prevent race conditions."""
+
+    def test_add_uncleaned_worktree_acquires_lock(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """add_uncleaned_worktree should acquire manifest_lock during read-modify-write."""
+        from pokepoke.worktree_cleanup import add_uncleaned_worktree
+
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".pokepoke").mkdir(exist_ok=True)
+
+        lock_acquired = []
+
+        original_manifest_lock = manifest_lock
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def tracking_manifest_lock(timeout=30.0):
+            lock_acquired.append(True)
+            with original_manifest_lock(timeout=timeout) as lock:
+                yield lock
+
+        # Patch at the coordination module level where it's defined
+        with patch("pokepoke.coordination.manifest_lock", tracking_manifest_lock):
+            add_uncleaned_worktree("test-id", "/path/to/worktree", "test reason")
+
+        assert len(lock_acquired) == 1, "manifest_lock should be acquired exactly once"
+
+    def test_remove_from_manifest_acquires_lock(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """remove_from_manifest should acquire manifest_lock during read-modify-write."""
+        from pokepoke.worktree_cleanup import add_uncleaned_worktree, remove_from_manifest
+
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".pokepoke").mkdir(exist_ok=True)
+
+        # First add an entry
+        add_uncleaned_worktree("test-id", "/path/to/worktree", "test reason")
+
+        lock_acquired = []
+
+        original_manifest_lock = manifest_lock
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def tracking_manifest_lock(timeout=30.0):
+            lock_acquired.append(True)
+            with original_manifest_lock(timeout=timeout) as lock:
+                yield lock
+
+        # Patch at the coordination module level where it's defined
+        with patch("pokepoke.coordination.manifest_lock", tracking_manifest_lock):
+            remove_from_manifest("test-id")
+
+        assert len(lock_acquired) == 1, "manifest_lock should be acquired exactly once"
+
+    def test_concurrent_add_operations_serialized(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Concurrent add_uncleaned_worktree calls should not lose entries due to race conditions."""
+        from pokepoke.worktree_cleanup import add_uncleaned_worktree, load_worktree_manifest
+
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".pokepoke").mkdir(exist_ok=True)
+
+        errors: list[str] = []
+
+        def add_entry(entry_id: str):
+            try:
+                add_uncleaned_worktree(entry_id, f"/path/{entry_id}", f"reason for {entry_id}")
+            except Exception as e:
+                errors.append(str(e))
+
+        # Run multiple adds concurrently
+        threads = [threading.Thread(target=add_entry, args=(f"entry-{i}",)) for i in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+
+        assert not errors, f"Errors during concurrent adds: {errors}"
+
+        # All entries should be present (no lost writes)
+        manifest = load_worktree_manifest()
+        for i in range(5):
+            assert f"entry-{i}" in manifest, f"Entry entry-{i} was lost in race condition"

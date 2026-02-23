@@ -148,22 +148,36 @@ def save_worktree_manifest(manifest: dict[str, dict[str, str]]) -> None:
 
 
 def add_uncleaned_worktree(worktree_id: str, worktree_path: str, reason: str) -> None:
-    """Add a worktree to the uncleaned manifest."""
-    manifest = load_worktree_manifest()
-    manifest[worktree_id] = {
-        "path": worktree_path,
-        "reason": reason,
-        "timestamp": datetime.now().isoformat()
-    }
-    save_worktree_manifest(manifest)
+    """Add a worktree to the uncleaned manifest.
+
+    Uses file locking to prevent race conditions when multiple agents
+    concurrently update the manifest.
+    """
+    from pokepoke.coordination import manifest_lock
+
+    with manifest_lock():
+        manifest = load_worktree_manifest()
+        manifest[worktree_id] = {
+            "path": worktree_path,
+            "reason": reason,
+            "timestamp": datetime.now().isoformat()
+        }
+        save_worktree_manifest(manifest)
 
 
 def remove_from_manifest(worktree_id: str) -> None:
-    """Remove a worktree from the uncleaned manifest."""
-    manifest = load_worktree_manifest()
-    if worktree_id in manifest:
-        del manifest[worktree_id]
-        save_worktree_manifest(manifest)
+    """Remove a worktree from the uncleaned manifest.
+
+    Uses file locking to prevent race conditions when multiple agents
+    concurrently update the manifest.
+    """
+    from pokepoke.coordination import manifest_lock
+
+    with manifest_lock():
+        manifest = load_worktree_manifest()
+        if worktree_id in manifest:
+            del manifest[worktree_id]
+            save_worktree_manifest(manifest)
 
 
 def cleanup_after_merge(worktree_path: Path, branch_name: str) -> None:

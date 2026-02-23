@@ -69,6 +69,7 @@ def try_lock(name: str) -> FileLock | None:
 
 _WORKTREE_SETUP_LOCK = "worktree-setup"
 _MERGE_LOCK = "merge-queue"
+_MANIFEST_LOCK = "worktree-manifest"
 
 
 @contextmanager
@@ -108,3 +109,23 @@ def merge_lock_active() -> bool:
         return True
     lock.release()
     return False
+
+
+@contextmanager
+def manifest_lock(timeout: float = 30.0) -> Generator[FileLock, None, None]:
+    """Serialize worktree manifest read-modify-write operations.
+
+    This lock prevents race conditions when multiple agents concurrently
+    update the uncleaned worktrees manifest. Without this lock, parallel
+    agents could read the same manifest, both add their entry, and the
+    last writer would silently overwrite the other's entry.
+
+    Args:
+        timeout: Seconds to wait. Default 30s should be ample since
+                 manifest operations are fast (just JSON read/write).
+
+    Yields:
+        The acquired FileLock instance.
+    """
+    with acquire_lock(_MANIFEST_LOCK, timeout=timeout) as lock:
+        yield lock
