@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import type {
+  AgentInfo,
   ModelHistoryEntry,
   ModelPerformanceSummary,
   SessionStats,
@@ -29,12 +30,15 @@ interface StatsPageProps {
   historyError: string | null;
   onRefreshHistory: () => void;
   onClose: () => void;
+  agents?: AgentInfo[];
 }
 
-type SortField = "model" | "runs" | "success" | "duration";
+type SortField = "model" | "runs" | "success" | "duration" | "tokens";
 interface AgentSegment { label: string; value: number; color: string; }
 interface AgentActivity { total: number; segments: AgentSegment[]; }
 interface NormalizedAgentSegment extends AgentSegment { start: number; width: number; }
+
+interface AgentTokenSegment { label: string; tokens: number; color: string; }
 
 export function StatsPage({
   stats,
@@ -44,6 +48,7 @@ export function StatsPage({
   historyError,
   onRefreshHistory,
   onClose,
+  agents = [],
 }: StatsPageProps) {
   const agent = stats?.agent_stats;
   const [completedItems, doneCount] = [getCompletedItems(stats), getDoneCount(stats)];
@@ -69,6 +74,15 @@ export function StatsPage({
   const [sortField, setSortField] = useState<SortField>("success");
   const [sortAsc, setSortAsc] = useState(false);
 
+  const tokensByModel = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const entry of modelHistory) {
+      const total = (entry.input_tokens ?? 0) + (entry.output_tokens ?? 0);
+      map[entry.model] = (map[entry.model] ?? 0) + total;
+    }
+    return map;
+  }, [modelHistory]);
+
   const leaderboardRows = useMemo(() => {
     const rows = Object.entries(modelLeaderboard ?? {}).map(([model, summary]) => ({
       model,
@@ -77,6 +91,7 @@ export function StatsPage({
       avgDuration: summary.average_duration ?? 0,
       medianDuration: summary.median_duration ?? summary.average_duration ?? 0,
       stddevDuration: summary.stddev_duration ?? 0,
+      tokens: tokensByModel[model] ?? 0,
     }));
 
     const sorted = [...rows].sort((a, b) => {
@@ -91,6 +106,9 @@ export function StatsPage({
         case "duration":
           comparison = a.medianDuration - b.medianDuration;
           break;
+        case "tokens":
+          comparison = a.tokens - b.tokens;
+          break;
         default:
           comparison = a.model.localeCompare(b.model);
       }
@@ -98,7 +116,9 @@ export function StatsPage({
     });
 
     return sorted;
-  }, [modelLeaderboard, sortField, sortAsc]);
+  }, [modelLeaderboard, tokensByModel, sortField, sortAsc]);
+
+  const agentTokenSegments = useMemo(() => buildTokensByAgentType(agents), [agents]);
 
   const completionSeries = useMemo(() => buildCompletionSeries(modelHistory), [modelHistory]);
   const successSeries = useMemo(() => buildSuccessRateSeries(modelHistory), [modelHistory]);
@@ -227,6 +247,18 @@ export function StatsPage({
                     </span>
                   ))}
                 </div>
+              </div>
+            </section>
+          )}
+
+          {agentTokenSegments.length > 0 && (
+            <section>
+              <div className="stats-panel-card">
+                <div className="stats-panel-card-header">
+                  <h3>Tokens per agent</h3>
+                  <span className="stats-panel-subtitle">Token usage broken down by agent type this session</span>
+                </div>
+                <TokensPerAgentChart segments={agentTokenSegments} />
               </div>
             </section>
           )}
@@ -392,4 +424,74 @@ function TrendChart({ title, data, color, valueFormatter, emptyLabel }: { title:
   );
 }
 
+const AGENT_TOKEN_DEFS: { key: string; label: string; color: string }[] = [
+  { key: "work",            label: "Work",      color: "#7aa2f7" },
+  { key: "gate",            label: "Gate",      color: "#f7768e" },
+  { key: "tech_debt",       label: "Tech Debt", color: "#e0af68" },
+  { key: "janitor",         label: "Janitor",   color: "#9ece6a" },
+  { key: "backlog_cleanup", label: "Backlog",   color: "#ff9e64" },
+  { key: "cleanup",         label: "Cleanup",   color: "#bb9af7" },
+  { key: "beta_tester",     label: "Beta",      color: "#2ac3de" },
+  { key: "code_review",     label: "Review",    color: "#c0caf5" },
+];
+
+function buildTokensByAgentType(agents: AgentInfo[]): AgentTokenSegment[] {
+  const totals = new Map<string, number>();
+  for (const agent of agents) {
+    const type = agent.agent_type ?? "other";
+    const total = (agent.input_tokens ?? 0) + (agent.output_tokens ?? 0);
+    if (total > 0) {
+      totals.set(type, (totals.get(type) ?? 0) + total);
+    }
+  }
+
+  const result: AgentTokenSegment[] = [];
+  for (const def of AGENT_TOKEN_DEFS) {
+    const tokens = totals.get(def.key);
+    if (tokens !== undefined && tokens > 0) {
+      result.push({ label: def.label, tokens, color: def.color });
+      totals.delete(def.key);
+    }
+  }
+  // Append any agent types not in the known list
+  for (const [key, tokens] of totals.entries()) {
+    if (tokens > 0) {
+      result.push({ label: key, tokens, color: "#7dcfff" });
+    }
+  }
+
+  return result.sort((a, b) => b.tokens - a.tokens);
+}
+
+function TokensPerAgentChart({ segments }: { segments: AgentTokenSegment[] }) {
+  const maxTokens = Math.max(...segments.map((s) => s.tokens), 1);
+  return (
+    <div className="tokens-per-agent-chart" role="list">
+      {segments.map((segment) => {
+        const barWidth = (segment.tokens / maxTokens) * 100;
+        return (
+          <div key={segment.label} className="tokens-per-agent-row" role="listitem">
+            <span className="tokens-per-agent-label">{segment.label}</span>
+            <div className="tokens-per-agent-bar-container">
+              <svg viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true">
+                <rect
+                  x={0}
+                  y={0}
+                  width={barWidth}
+                  height={10}
+                  fill={segment.color}
+                  rx={4}
+                  ry={4}
+                >
+                  <title>{`${segment.label}: ${formatTokens(segment.tokens)} tokens`}</title>
+                </rect>
+              </svg>
+            </div>
+            <span className="tokens-per-agent-value">{formatTokens(segment.tokens)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
