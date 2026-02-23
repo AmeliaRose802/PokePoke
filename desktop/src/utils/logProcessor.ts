@@ -229,71 +229,49 @@ export function formatTime(ts: number): string {
   return d.toLocaleTimeString("en-US", { hour12: false });
 }
 
+/** Collect lines between a tool call and its result/next-call boundary. */
+function collectIntermediateLines(
+  logs: LogEntry[],
+  start: number,
+  stopOnPatchEnd = false,
+): { entries: LogEntry[]; result?: LogEntry; nextIndex: number } {
+  const entries: LogEntry[] = [];
+  let j = start;
+  while (j < logs.length) {
+    const msg = logs[j].message;
+    if (isToolCallMessage(msg) || isCopilotToolBatchHeader(msg) || isToolResultMessage(msg)) break;
+    entries.push(logs[j]);
+    if (stopOnPatchEnd && PATCH_END_RE.test(msg)) { j += 1; break; }
+    j += 1;
+  }
+  const result = logs[j] && isToolResultMessage(logs[j].message) ? logs[j] : undefined;
+  return { entries, result, nextIndex: result ? j + 1 : j };
+}
+
 export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
   const items: RenderLogItem[] = [];
 
   function parseToolAt(index: number): { tool: ToolItem; nextIndex: number } {
     const entry = logs[index];
-    // Handle multiline apply_patch tool calls
     if (isApplyPatchToolCall(entry.message)) {
-      const additionalEntries: LogEntry[] = [];
-      const filePaths: string[] = [];
-      let j = index + 1;
-
-      while (j < logs.length) {
-        const line = logs[j];
-        if (isToolCallMessage(line.message) || isCopilotToolBatchHeader(line.message)) break;
-        if (isToolResultMessage(line.message)) break;
-
-        const fileMatch = line.message.match(PATCH_UPDATE_FILE_RE);
-        if (fileMatch) filePaths.push(fileMatch[1].trim());
-
-        additionalEntries.push(line);
-
-        if (PATCH_END_RE.test(line.message)) {
-          j += 1;
-          break;
-        }
-        j += 1;
-      }
-
-      const nextEntry = logs[j];
-      const result = nextEntry && isToolResultMessage(nextEntry.message) ? nextEntry : undefined;
-      const nextIndex = result ? j + 1 : j;
-
+      const { entries: additionalEntries, result, nextIndex } = collectIntermediateLines(logs, index + 1, true);
+      const filePaths = additionalEntries.flatMap(e => {
+        const m = e.message.match(PATCH_UPDATE_FILE_RE);
+        return m ? [m[1].trim()] : [];
+      });
       const fileLabel = filePaths.length > 0
-        ? ` — ${filePaths.map(p => p.replace(/^.*[/\\]/, "")).join(", ")}`
-        : "";
-      const toolLabel = `🌿 apply_patch${fileLabel}`;
-
+        ? ` — ${filePaths.map(p => p.replace(/^.*[/\\]/, "")).join(", ")}` : "";
+      const rs = result ? buildToolSummary("", result.message) : undefined;
       return {
-        tool: {
-          toolName: "apply_patch",
-          entry,
-          result,
-          additionalEntries,
-          summary: {
-            toolLabel,
-            resultSummary: result ? buildToolSummary("", result.message).resultSummary : undefined,
-            statusClass: result ? buildToolSummary("", result.message).statusClass : undefined,
-          },
-        },
+        tool: { toolName: "apply_patch", entry, result, additionalEntries, summary: { toolLabel: `🌿 apply_patch${fileLabel}`, resultSummary: rs?.resultSummary, statusClass: rs?.statusClass } },
         nextIndex,
       };
     }
 
     const parts = parseToolCallParts(entry.message);
-    const next = logs[index + 1];
-    const result = next && isToolResultMessage(next.message) ? next : undefined;
-    const nextIndex = result ? index + 2 : index + 1;
+    const { entries, result, nextIndex } = collectIntermediateLines(logs, index + 1);
     return {
-      tool: {
-        toolName: parts.toolName,
-        argsText: parts.argsText,
-        entry,
-        result,
-        summary: buildToolSummary(entry.message, result?.message),
-      },
+      tool: { toolName: parts.toolName, argsText: parts.argsText, entry, result, additionalEntries: entries.length > 0 ? entries : undefined, summary: buildToolSummary(entry.message, result?.message) },
       nextIndex,
     };
   }
