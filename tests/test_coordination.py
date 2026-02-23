@@ -1,13 +1,17 @@
 """Tests for pokepoke.coordination module."""
 
 import threading
+import time
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from filelock import Timeout
 
-from pokepoke.coordination import acquire_lock, try_lock, worktree_setup_lock, merge_lock, merge_lock_active, manifest_lock, _lock_dir, _lock_path
+from pokepoke.coordination import (
+    acquire_lock, try_lock, worktree_setup_lock, merge_lock, merge_lock_active,
+    manifest_lock, git_main_repo_lock, _lock_dir, _lock_path, _MERGE_LOCK_STALE_AGE,
+)
 
 
 class TestLockDir:
@@ -349,3 +353,99 @@ class TestManifestFunctionsUseLocking:
         manifest = load_worktree_manifest()
         for i in range(5):
             assert f"entry-{i}" in manifest, f"Entry entry-{i} was lost in race condition"
+
+
+class TestStaleLockRecovery:
+    """Tests for stale lock detection and forced removal in acquire_lock."""
+
+    def test_stale_lock_file_removed_before_acquire(self, tmp_path: Path) -> None:
+        """A lock file older than stale_timeout is removed so acquire succeeds."""
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+            lock_file = tmp_path / "stale.lock"
+            # Create an orphan lock file (no real lock held)
+            lock_file.write_text("")
+            # Backdate modification time so it looks ancient
+            old_mtime = time.time() - 1800  # 30 minutes ago
+            import os
+            os.utime(lock_file, (old_mtime, old_mtime))
+
+            # Should succeed because the stale file is removed first
+            with acquire_lock("stale", timeout=0, stale_timeout=900) as lock:
+                assert lock.is_locked
+
+    def test_fresh_lock_file_not_removed(self, tmp_path: Path) -> None:
+        """A recently-modified lock file is left alone (not treated as stale)."""
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+            # Hold a real lock in a background thread to simulate a live process
+            acquired = threading.Event()
+            release = threading.Event()
+
+            def holder():
+                with acquire_lock("fresh", timeout=5) as _:
+                    acquired.set()
+                    release.wait(timeout=5)
+
+            t = threading.Thread(target=holder, daemon=True)
+            t.start()
+            acquired.wait(timeout=5)
+            try:
+                # A fresh stale_timeout (1s) should not clear a lock held seconds ago
+                with pytest.raises(Timeout), acquire_lock("fresh", timeout=0, stale_timeout=3600) as _:
+                    pass
+            finally:
+                release.set()
+                t.join(timeout=5)
+
+    def test_merge_lock_stale_age_constant(self) -> None:
+        """_MERGE_LOCK_STALE_AGE should be well above 10 minutes."""
+        assert _MERGE_LOCK_STALE_AGE >= 600, "Stale age must be >= merge lock timeout"
+
+
+class TestGitMainRepoLock:
+    """Tests for git_main_repo_lock – serializes main-repo git operations."""
+
+    def test_acquires_and_releases(self, tmp_path: Path) -> None:
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+            with git_main_repo_lock(timeout=5) as lock:
+                assert lock.is_locked
+            assert not lock.is_locked
+
+    def test_second_holder_times_out(self, tmp_path: Path) -> None:
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), git_main_repo_lock(timeout=5):  # noqa: SIM117
+            with pytest.raises(Timeout), git_main_repo_lock(timeout=0):
+                pass  # pragma: no cover
+
+    def test_serializes_two_threads(self, tmp_path: Path) -> None:
+        """Two threads must not hold git_main_repo_lock simultaneously."""
+        overlap_detected = threading.Event()
+        inside_count = [0]
+        lock_obj = threading.Lock()
+        errors: list[str] = []
+
+        def worker():
+            with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), git_main_repo_lock(timeout=10):
+                with lock_obj:
+                    inside_count[0] += 1
+                    if inside_count[0] > 1:
+                        errors.append("overlap!")
+                        overlap_detected.set()
+                time.sleep(0.05)
+                with lock_obj:
+                    inside_count[0] -= 1
+
+        threads = [threading.Thread(target=worker) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=15)
+
+        assert not errors, "Two threads were inside git_main_repo_lock simultaneously"
+
+    def test_releases_on_exception(self, tmp_path: Path) -> None:
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+            lock_ref = None
+            with pytest.raises(ValueError), git_main_repo_lock(timeout=5) as lock:
+                lock_ref = lock
+                raise ValueError("simulated failure")
+            assert lock_ref is not None
+            assert not lock_ref.is_locked
