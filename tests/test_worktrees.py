@@ -818,15 +818,30 @@ class TestCleanupWorktree:
 
     def test_cleanup_worktree_success(self):
         """Test successful worktree cleanup."""
+        exists_state = {'present': True}
+
+        def exists_side_effect(self: Path) -> bool:
+            normalized = str(self).replace('\\', '/')
+            if normalized.endswith('worktrees/task-incredible_icm-42'):
+                return exists_state['present']
+            return True
+
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
              patch('pokepoke.worktrees.remove_from_manifest') as mock_rm_manifest, \
-             patch('pathlib.Path.exists', return_value=True):
+             patch('pathlib.Path.exists', new=exists_side_effect):
 
             mock_list.return_value = [
                 {'path': 'worktrees/task-incredible_icm-42', 'branch': 'refs/heads/task/incredible_icm-42'}
             ]
-            mock_run.return_value = Mock(returncode=0, stderr='', stdout='')
+
+            def run_side_effect(*args, **kwargs):
+                cmd = args[0]
+                if cmd[0:3] == ['git', 'worktree', 'remove']:
+                    exists_state['present'] = False
+                return Mock(returncode=0, stderr='', stdout='')
+
+            mock_run.side_effect = run_side_effect
 
             result = cleanup_worktree('incredible_icm-42')
 
@@ -847,15 +862,30 @@ class TestCleanupWorktree:
 
     def test_cleanup_worktree_force(self):
         """Test forced worktree cleanup."""
+        exists_state = {'present': True}
+
+        def exists_side_effect(self: Path) -> bool:
+            normalized = str(self).replace('\\', '/')
+            if normalized.endswith('worktrees/task-incredible_icm-42'):
+                return exists_state['present']
+            return True
+
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
              patch('pokepoke.worktrees.remove_from_manifest') as mock_rm_manifest, \
-             patch('pathlib.Path.exists', return_value=True):
+             patch('pathlib.Path.exists', new=exists_side_effect):
 
             mock_list.return_value = [
                 {'path': 'worktrees/task-incredible_icm-42', 'branch': 'refs/heads/task/incredible_icm-42'}
             ]
-            mock_run.return_value = Mock(returncode=0, stderr='', stdout='')
+
+            def run_side_effect(*args, **kwargs):
+                cmd = args[0]
+                if cmd[0:3] == ['git', 'worktree', 'remove']:
+                    exists_state['present'] = False
+                return Mock(returncode=0, stderr='', stdout='')
+
+            mock_run.side_effect = run_side_effect
 
             result = cleanup_worktree('incredible_icm-42', force=True)
 
@@ -893,9 +923,17 @@ class TestCleanupWorktree:
 
     def test_cleanup_worktree_subprocess_error(self):
         """Test cleanup continues despite subprocess errors for non-existent items."""
+        exists_state = {'present': True}
+
+        def exists_side_effect(self: Path) -> bool:
+            normalized = str(self).replace('\\', '/')
+            if normalized.endswith('worktrees/task-incredible_icm-42'):
+                return exists_state['present']
+            return True
+
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
-             patch('pathlib.Path.exists', return_value=True), \
+             patch('pathlib.Path.exists', new=exists_side_effect), \
              patch('builtins.print') as mock_print:
 
             mock_list.return_value = [
@@ -906,6 +944,7 @@ class TestCleanupWorktree:
             def run_side_effect(*args, **kwargs):
                 cmd = args[0]
                 if 'worktree' in cmd and 'remove' in cmd:
+                    exists_state['present'] = False
                     return Mock(returncode=0, stderr='', stdout='')
                 else:
                     # Branch deletion fails with real error
@@ -924,10 +963,22 @@ class TestCleanupWorktree:
 
     def test_cleanup_worktree_permission_denied_retries_with_force(self):
         """Test that permission denied triggers force_remove_directory fallback."""
+        exists_state = {'present': True}
+
+        def exists_side_effect(self: Path) -> bool:
+            normalized = str(self).replace('\\', '/')
+            if normalized.endswith('worktrees/task-incredible_icm-42'):
+                return exists_state['present']
+            return True
+
+        def force_side_effect(*args, **kwargs):
+            exists_state['present'] = False
+            return True
+
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
-             patch('pathlib.Path.exists', return_value=True), \
-             patch('pokepoke.worktrees.force_remove_directory', return_value=True) as mock_force, \
+             patch('pathlib.Path.exists', new=exists_side_effect), \
+             patch('pokepoke.worktrees.force_remove_directory', side_effect=force_side_effect) as mock_force, \
              patch('pokepoke.worktrees.remove_from_manifest'), \
              patch('builtins.print'):
 
@@ -954,10 +1005,22 @@ class TestCleanupWorktree:
 
     def test_cleanup_worktree_invalid_argument_retries_with_force(self):
         """Test that invalid argument triggers force_remove_directory fallback (Windows)."""
+        exists_state = {'present': True}
+
+        def exists_side_effect(self: Path) -> bool:
+            normalized = str(self).replace('\\', '/')
+            if normalized.endswith('worktrees/task-incredible_icm-42'):
+                return exists_state['present']
+            return True
+
+        def force_side_effect(*args, **kwargs):
+            exists_state['present'] = False
+            return True
+
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
-             patch('pathlib.Path.exists', return_value=True), \
-             patch('pokepoke.worktrees.force_remove_directory', return_value=True) as mock_force, \
+             patch('pathlib.Path.exists', new=exists_side_effect), \
+             patch('pokepoke.worktrees.force_remove_directory', side_effect=force_side_effect) as mock_force, \
              patch('pokepoke.worktrees.remove_from_manifest') as mock_rm_manifest, \
              patch('builtins.print'):
 
@@ -984,9 +1047,15 @@ class TestCleanupWorktree:
 
     def test_cleanup_worktree_being_used_by_another_process(self):
         """Test that 'being used by another process' triggers force removal."""
+        def exists_side_effect(self: Path) -> bool:
+            normalized = str(self).replace('\\', '/')
+            if normalized.endswith('worktrees/task-incredible_icm-42'):
+                return True
+            return True
+
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
-             patch('pathlib.Path.exists', return_value=True), \
+             patch('pathlib.Path.exists', new=exists_side_effect), \
              patch('pokepoke.worktrees.force_remove_directory', return_value=False) as mock_force, \
              patch('pokepoke.worktrees.add_uncleaned_worktree') as mock_manifest, \
              patch('builtins.print') as mock_print:
@@ -1010,10 +1079,10 @@ class TestCleanupWorktree:
 
             result = cleanup_worktree('incredible_icm-42')
 
-            # Should still return True because branch deletion succeeded
-            assert result is True
+            assert result is False
             mock_force.assert_called_once()
             mock_manifest.assert_called_once()
+            assert mock_run.call_count == 1
             print_calls = [str(c) for c in mock_print.call_args_list]
             assert any('Could not remove worktree directory after retries' in c for c in print_calls)
 

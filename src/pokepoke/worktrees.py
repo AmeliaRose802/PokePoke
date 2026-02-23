@@ -238,6 +238,12 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
                     add_uncleaned_worktree(item_id, str(actual_worktree_path), f"Worktree removal warning: {stderr}")
                 # Continue to try branch deletion
 
+    # If the worktree directory still exists, do not delete the branch.
+    # Deleting the branch while the worktree remains creates a dangling worktree.
+    if actual_worktree_path is not None and actual_worktree_path.exists():
+        print(f"⚠️  Skipping branch deletion because worktree directory still exists: {actual_worktree_path}")
+        return False
+
     # Delete branch (try both sanitized and unsanitized branch names)
     delete_flag = "-D" if force else "-d"
 
