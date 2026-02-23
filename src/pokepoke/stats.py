@@ -6,6 +6,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from pokepoke.file_utils import replace_with_retry
 from pokepoke.types import AgentStats, SessionStats, ModelCompletionRecord
 
 
@@ -324,6 +325,10 @@ def save_session_stats_to_disk(
         session_stats, elapsed_seconds, items_completed, total_requests
     )
     stats_path = run_dir / "stats.json"
-    with stats_path.open("w", encoding="utf-8") as f:
+    tmp_path = stats_path.with_suffix(".tmp")
+    with tmp_path.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
+    # Retry os.replace on Windows where the destination file may be briefly
+    # locked by a previous operation, causing PermissionError.
+    replace_with_retry(tmp_path, stats_path)
     return stats_path

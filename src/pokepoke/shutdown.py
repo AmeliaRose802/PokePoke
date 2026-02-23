@@ -20,6 +20,8 @@ import os
 import threading
 import time
 
+from pokepoke.coordination import merge_lock_active
+
 logger = logging.getLogger(__name__)
 
 # Global shutdown event - checked by all loops
@@ -185,10 +187,33 @@ def should_stop_after_current() -> bool:
 def _watchdog_thread(timeout: float) -> None:
     """Force-terminate the process if graceful shutdown stalls.
 
+    The watchdog waits for a grace period, then (if shutdown is still in
+    progress) waits for any in-flight merge protected by the merge lock to
+    complete before performing a last-resort hard exit. This avoids killing
+    the process mid-merge while still providing a safety net for truly hung
+    shutdowns.
+
     Args:
-        timeout: Grace period in seconds before force-exit.
+        timeout: Grace period in seconds before considering force-exit.
     """
+    # Initial grace period for normal cooperative shutdown
     time.sleep(timeout)
+    if not _shutdown_event.is_set():
+        # Shutdown was cancelled or never requested; nothing to do.
+        return
+
+    # Best-effort: avoid killing the process while a merge is actively
+    # holding the cross-process merge lock. We wait until the lock is no
+    # longer reported as active before performing a hard exit.
+    try:
+        while merge_lock_active():
+            time.sleep(1.0)
+    except Exception:
+        # If merge_lock_active or its underlying file-lock machinery fails,
+        # fall back to the original behaviour rather than hanging forever.
+        pass
+
+    # Still shutting down after grace period (and no active merge lock) –
+    # force exit as a last resort. 130 = 128 + SIGINT.
     if _shutdown_event.is_set():
-        # Still shutting down after grace period - force exit
-        os._exit(130)  # 130 = 128 + SIGINT
+        os._exit(130)
