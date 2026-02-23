@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pokepoke.desktop_ui as desktop_ui_module
 import pokepoke.frontend_discovery as frontend_discovery_module
+from pokepoke import pywebview_patches
 from pokepoke.desktop_ui import DesktopUI, _shutdown_threading_excepthook
 
 
@@ -580,3 +581,88 @@ class TestShutdownThreadingExcepthook:
         )
         _shutdown_threading_excepthook(args)
         mock_hook.assert_called_once_with(args)
+
+
+def _build_stub_edge_module(tmp_path, module_suffix, *, private_mode=True):
+    class _DummyLogger:
+        def debug(self, *_, **__):
+            return None
+
+        def warning(self, *_, **__):
+            return None
+
+    class _DummyWebview:
+        def __init__(self, core):
+            self.CoreWebView2 = core
+            self.disposed = False
+
+        def Dispose(self):
+            self.disposed = True
+
+    base_dir = tmp_path / module_suffix
+
+    class _DummyEdgeChrome:
+        def __init__(self, core=None):
+            self.webview = _DummyWebview(core)
+            self.user_data_folder = str(base_dir)
+            base_dir.mkdir(exist_ok=True)
+
+        def clear_user_data(self):
+            raise AssertionError("edgechromium stub should be patched before use")
+
+    class _ProcessAPI:
+        last_proc = None
+
+        @staticmethod
+        def GetProcessById(pid):
+            proc = SimpleNamespace(pid=pid, waited=False, timeout=None)
+
+            def _wait(timeout):
+                proc.waited = True
+                proc.timeout = timeout
+
+            proc.WaitForExit = _wait
+            _ProcessAPI.last_proc = proc
+            return proc
+
+    convert = SimpleNamespace(ToInt32=lambda value: int(value) if value is not None else 0)
+
+    module = SimpleNamespace(
+        __name__=f"stub_edgechromium_{module_suffix}",
+        EdgeChrome=_DummyEdgeChrome,
+        _state={"private_mode": private_mode},
+        Convert=convert,
+        Process=_ProcessAPI,
+        logger=_DummyLogger(),
+    )
+    return module, _ProcessAPI, base_dir
+
+
+class TestPywebviewPatches:
+    def test_edge_patch_handles_missing_core(self, tmp_path, monkeypatch) -> None:
+        module, process_api, data_dir = _build_stub_edge_module(tmp_path, "no_core")
+        monkeypatch.setattr(pywebview_patches, "_PATCHED_EDGE_MODULES", set())
+        pywebview_patches._patch_edgechromium_clear_user_data(module)
+
+        edge = module.EdgeChrome(core=None)
+        edge.clear_user_data()
+
+        assert edge.webview.disposed is True
+        assert process_api.last_proc is None
+        assert not data_dir.exists()
+
+    def test_edge_patch_waits_for_browser_process(self, tmp_path, monkeypatch) -> None:
+        module, process_api, data_dir = _build_stub_edge_module(tmp_path, "has_core")
+        monkeypatch.setattr(pywebview_patches, "_PATCHED_EDGE_MODULES", set())
+        pywebview_patches._patch_edgechromium_clear_user_data(module)
+
+        edge = module.EdgeChrome(core=SimpleNamespace(BrowserProcessId=77))
+        edge.clear_user_data()
+
+        proc = process_api.last_proc
+        assert proc is not None
+        assert proc.pid == 77
+        assert proc.waited is True
+        assert proc.timeout == 3000
+        assert not data_dir.exists()
+
