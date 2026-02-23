@@ -597,7 +597,8 @@
   user-select: none;
 }
 
-.agent-section-active .agent-section-title {
+.agent-section-active .agent-section-title,
+.agent-section-active .agent-section-header {
   color: var(--accent-primary);
 }
 

@@ -56,21 +56,15 @@ export function AgentsPanel({
   orchestratorRunning = false,
   spawnAtLimit = false,
 }: Props) {
-  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(
-    new Set()
-  );
-  const [expandedCompletedSections, setExpandedCompletedSections] = useState<Set<string>>(
-    new Set()
-  );
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
+  const [expandedCompletedSections, setExpandedCompletedSections] = useState<Set<string>>(new Set());
+  const [collapsedActiveSections, setCollapsedActiveSections] = useState<Set<string>>(new Set());
 
   const toggleSession = (sessionId: string) => {
     setExpandedSessions((prev) => {
       const next = new Set(prev);
-      if (next.has(sessionId)) {
-        next.delete(sessionId);
-      } else {
-        next.add(sessionId);
-      }
+      if (next.has(sessionId)) next.delete(sessionId);
+      else next.add(sessionId);
       return next;
     });
   };
@@ -78,15 +72,20 @@ export function AgentsPanel({
   const toggleCompletedSection = (sessionId: string) => {
     setExpandedCompletedSections((prev) => {
       const next = new Set(prev);
-      if (next.has(sessionId)) {
-        next.delete(sessionId);
-      } else {
-        next.add(sessionId);
-      }
+      if (next.has(sessionId)) next.delete(sessionId);
+      else next.add(sessionId);
       return next;
     });
   };
 
+  const toggleActiveSection = (sessionId: string) => {
+    setCollapsedActiveSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) next.delete(sessionId);
+      else next.add(sessionId);
+      return next;
+    });
+  };
 
   const agentKeySet = new Set<string>();
   agents.forEach((agent) => {
@@ -360,19 +359,36 @@ export function AgentsPanel({
     const completedSuccessCount = completedRootAgents.length - completedFailedCount;
 
     const isCompletedExpanded = expandedCompletedSections.has(group.sessionId);
+    const isActiveExpanded = !collapsedActiveSections.has(group.sessionId);
+    const activeSectionId = `active-agents-${group.sessionId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 
     const renderedSections = (
       <div className="agent-sections">
         <div className="agent-section agent-section-active">
-          <div className="agent-section-title">
-            <span className="agent-section-label">Active</span>
+          <button
+            className="agent-section-header"
+            onClick={() => toggleActiveSection(group.sessionId)}
+            aria-expanded={isActiveExpanded}
+            aria-controls={isActiveExpanded ? activeSectionId : undefined}
+            type="button"
+          >
+            <span className="agent-section-chevron">
+              {isActiveExpanded ? "▾" : "▸"}
+            </span>
+            <span className="agent-section-label">Active agents</span>
             <span className="agent-section-count">{activeRootAgents.length}</span>
-          </div>
-          {renderedActiveAgents.length > 0 ? (
-            <div className="agent-section-content">{renderedActiveAgents}</div>
-          ) : (
-            <div className="agent-section-empty">No active agents</div>
-          )}
+          </button>
+          {isActiveExpanded ? (
+            renderedActiveAgents.length > 0 ? (
+              <div id={activeSectionId} className="agent-section-content">
+                {renderedActiveAgents}
+              </div>
+            ) : (
+              <div id={activeSectionId} className="agent-section-empty">
+                No active agents
+              </div>
+            )
+          ) : null}
         </div>
 
         {completedRootAgents.length > 0 ? (

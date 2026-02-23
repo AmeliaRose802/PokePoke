@@ -142,6 +142,23 @@ describe('AgentsPanel', () => {
     expect(screen.getByText('DoneWorker')).toBeInTheDocument();
   });
 
+  it('collapses active agents on click and expands again', () => {
+    const running = mkAgent({ agent_id: 'running-1', name: 'RunningWorker' });
+
+    render(
+      <AgentsPanel agents={[running]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />
+    );
+
+    expect(screen.getByText('RunningWorker')).toBeInTheDocument();
+
+    const activeHeader = screen.getByRole('button', { name: /active/i });
+    fireEvent.click(activeHeader);
+    expect(screen.queryByText('RunningWorker')).not.toBeInTheDocument();
+
+    fireEvent.click(activeHeader);
+    expect(screen.getByText('RunningWorker')).toBeInTheDocument();
+  });
+
   it('calls onPauseAgent when pause button is clicked', () => {
     const onPause = vi.fn();
     const agent = mkAgent();
