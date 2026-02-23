@@ -34,7 +34,7 @@ interface Props {
 
 const ROBOT_AVATARS = [
   "🐍", "🦎", "🕷️", "🦇", "🦋", "🐛", "🐝", "🐞",
-  "🌿", "🍃", "🌱", "🌳", "🌴", "🌲", "🎋", "🌾",
+  "🤖", "🔧", "⚡", "🎯", "🔮", "🎲", "🔬", "🧩",
 ];
 
 /** Deterministic avatar based on agent_id hash (fallback for agents without work items) */

@@ -115,7 +115,7 @@ export function PromptEditor({
       <div className="prompt-editor">
         {/* Header */}
         <div className="prompt-editor-header">
-          <span>🌱 Prompt Editor</span>
+          <span>✏️ Prompt Editor</span>
           <button className="prompt-close-btn" onClick={onClose}>
             ✕
           </button>

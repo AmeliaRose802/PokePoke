@@ -52,7 +52,7 @@ export function MaintenanceAgentsSection({ agents, onUpdate, onRemove, onAdd, on
 
   return (
     <div className="settings-section">
-      <h3 className="settings-section-title">🌳 Maintenance Agents</h3>
+      <h3 className="settings-section-title">🛠️ Maintenance Agents</h3>
 
       {agents.length === 0 && !showForm ? (
         <div className="settings-no-agents">No maintenance agents configured</div>
@@ -100,7 +100,7 @@ export function MaintenanceAgentsSection({ agents, onUpdate, onRemove, onAdd, on
                       e.preventDefault(); onOpenPromptEditor?.(agent.prompt_file); } }}>
                     📄 {agent.prompt_file}
                   </span>
-                  {agent.needs_worktree && <span className="metadata-item">🌳 Needs worktree</span>}
+                  {agent.needs_worktree && <span className="metadata-item">📂 Needs worktree</span>}
                   {agent.merge_changes && <span className="metadata-item">🔀 Merges changes</span>}
                 </div>
               </div>

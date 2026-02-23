@@ -151,7 +151,7 @@ export function ToolBatchAccordion({ batch, keyPrefix }: ToolBatchAccordionProps
         <span className="log-accordion-chevron">▸</span>
         <span className="log-timestamp">{formatTime(batch.startedAt)}</span>
         <span className="log-message">
-          🌿 Tool batch ({batch.totalCalls} call{batch.totalCalls === 1 ? "" : "s"})
+          🔧 Tool batch ({batch.totalCalls} call{batch.totalCalls === 1 ? "" : "s"})
           {byTool ? ` — ${byTool}` : ""}
         </span>
         <span className="log-accordion-result">{progress}</span>

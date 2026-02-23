@@ -198,7 +198,7 @@ describe('SettingsPage', () => {
       expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
     });
 
-    const closeButton = screen.getByText('🍃 Settings').parentElement?.querySelector('.prompt-close-btn');
+    const closeButton = screen.getByText('⚙️ Settings').parentElement?.querySelector('.prompt-close-btn');
     expect(closeButton).toBeInTheDocument();
     await userEvent.click(closeButton!);
 
@@ -793,7 +793,7 @@ describe('SettingsPage', () => {
 
     await user.click(screen.getByLabelText('Enable A/B testing mode'));
 
-    const closeButton = screen.getByText('🍃 Settings').parentElement?.querySelector('.prompt-close-btn');
+    const closeButton = screen.getByText('⚙️ Settings').parentElement?.querySelector('.prompt-close-btn');
     await user.click(closeButton!);
 
     expect(window.confirm).toHaveBeenCalledWith('Close without saving?');
@@ -818,7 +818,7 @@ describe('SettingsPage', () => {
 
     await user.click(screen.getByLabelText('Enable A/B testing mode'));
 
-    const closeButton = screen.getByText('🍃 Settings').parentElement?.querySelector('.prompt-close-btn');
+    const closeButton = screen.getByText('⚙️ Settings').parentElement?.querySelector('.prompt-close-btn');
     await user.click(closeButton!);
 
     expect(window.confirm).toHaveBeenCalledWith('Close without saving?');
@@ -841,7 +841,7 @@ describe('SettingsPage', () => {
       expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
     });
 
-    const closeButton = screen.getByText('🍃 Settings').parentElement?.querySelector('.prompt-close-btn');
+    const closeButton = screen.getByText('⚙️ Settings').parentElement?.querySelector('.prompt-close-btn');
     await user.click(closeButton!);
 
     expect(window.confirm).not.toHaveBeenCalled();
