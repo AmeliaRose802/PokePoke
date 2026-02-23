@@ -1593,14 +1593,19 @@ class TestRunWorktreeCleanup:
     @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
-    def test_worktree_cleanup_error_propagates(
+    def test_worktree_cleanup_error_returns_none(
         self,
         mock_get_prompts: Mock,
         mock_main_repo_agent: Mock,
         mock_has_worktrees: Mock,
         mock_uncleaned_count: Mock
     ) -> None:
-        """Test worktree cleanup propagates agent errors without chdir."""
+        """Worktree cleanup swallows agent exceptions and returns None (PokePoke-5arw).
+
+        Previously the exception was re-raised, causing the orchestrator to crash
+        with exit code 1. Now it is logged and None is returned so the orchestrator
+        can continue processing items.
+        """
         mock_dir = MagicMock()
         mock_get_prompts.return_value = mock_dir
         mock_file = Mock()
@@ -1611,8 +1616,10 @@ class TestRunWorktreeCleanup:
         mock_main_repo_agent.side_effect = RuntimeError("Agent exploded")
 
         from pokepoke.agent_runner import run_worktree_cleanup
-        with pytest.raises(RuntimeError, match="Agent exploded"):
-            run_worktree_cleanup(repo_root=Path("/main/repo"))
+        result = run_worktree_cleanup(repo_root=Path("/main/repo"))
+
+        # Must NOT raise; must return None so the orchestrator keeps running.
+        assert result is None
 
     @patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=0)
     @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)

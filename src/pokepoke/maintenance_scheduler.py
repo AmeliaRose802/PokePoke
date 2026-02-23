@@ -246,7 +246,6 @@ class MaintenanceScheduler:
             logger.warning(f"Maintenance agent {agent_name} raised exception: {e}", exc_info=True)
             terminal_ui.ui.push_agent_status(agent_id, f"{agent_name} Agent", iteration=1, status="failed")
             run_logger.log_maintenance(log_key, f"{agent_name} Agent raised exception")
-            raise
 
 
 # Global scheduler instance and initialization lock

@@ -180,10 +180,11 @@ def _collect_done_futures(
             any_success = True
 
         total_requests += result.request_count
-        record_fn(
-            item, result,
-            session_stats, run_logger,
-        )
+        try:
+            record_fn(item, result, session_stats, run_logger)
+        except Exception as exc:
+            logger.warning(f"record_fn raised for {item.id}: {exc}", exc_info=True)
+            run_logger.log_orchestrator(f"Error recording result for {item.id}: {exc}", level="ERROR")
 
     return total_requests, any_success
 
@@ -318,23 +319,25 @@ def run_parallel_loop(
                 break
 
             # Only exit if no workers are active AND we have no ready items
-            # This ensures we wait for in-flight workers to complete
             if not futures and not ready_items:
-                # Double-check that we really have no work before exiting
-                # Sometimes beads queries can temporarily fail
-                print("\n≡ƒöä No active workers or ready items - double-checking beads...")
-                run_logger.log_orchestrator("Double-checking beads before exit")
+                run_logger.log_orchestrator("No ready items - double-checking beads")
                 try:
                     final_check = get_ready_work_items()
                     if final_check:
-                        print(f"≡ƒôï Found {len(final_check)} items on final check - continuing...")
-                        run_logger.log_orchestrator(f"Found {len(final_check)} items on final check")
+                        run_logger.log_orchestrator(f"Found {len(final_check)} items on re-check")
                         continue  # Go back to main loop to process these items
                 except Exception as e:
                     run_logger.log_orchestrator(f"Final beads check failed: {e}", level="WARNING")
 
+                if continuous:
+                    # In continuous mode, wait for new work instead of exiting.
+                    run_logger.log_orchestrator("Continuous mode: sleeping before retry (no ready items)")
+                    terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", "Waiting for work...")
+                    time.sleep(5)
+                    continue
+
                 terminal_ui.ui.stop_and_capture()
-                print("\n≡ƒæï Exiting PokePoke - no work items available.")
+                print("\n👋 Exiting PokePoke - no work items available.")
                 run_logger.log_orchestrator("No work items available - exiting")
                 finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
                 finalized = True
