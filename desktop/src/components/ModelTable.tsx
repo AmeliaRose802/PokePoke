@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import { formatDurationWithSpread, formatPercent } from "../utils/stats";
 
 interface ModelTableRow {
@@ -16,6 +18,7 @@ interface ModelTableProps {
   sortAsc: boolean;
   onSort: (field: SortField) => void;
   emptyMessage?: string;
+  collapsedCount?: number;
 }
 
 export function ModelTable({
@@ -24,10 +27,17 @@ export function ModelTable({
   sortAsc,
   onSort,
   emptyMessage = "No model history yet.",
+  collapsedCount = 5,
 }: ModelTableProps) {
+  const [expanded, setExpanded] = useState(false);
+
   if (rows.length === 0) {
     return <p className="stats-empty">{emptyMessage}</p>;
   }
+
+  const hasMoreRows = rows.length > collapsedCount;
+  const displayedRows = expanded ? rows : rows.slice(0, collapsedCount);
+  const hiddenCount = rows.length - collapsedCount;
 
   return (
     <div className="model-table-wrapper">
@@ -65,7 +75,7 @@ export function ModelTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {displayedRows.map((row) => (
             <tr key={row.model}>
               <td>{row.model}</td>
               <td>{row.runs}</td>
@@ -80,6 +90,15 @@ export function ModelTable({
           ))}
         </tbody>
       </table>
+      {hasMoreRows && (
+        <button
+          type="button"
+          className="model-table-expand-btn"
+          onClick={() => setExpanded((prev) => !prev)}
+        >
+          {expanded ? "Show less" : `Show ${hiddenCount} more model${hiddenCount === 1 ? "" : "s"}`}
+        </button>
+      )}
     </div>
   );
 }

@@ -2058,6 +2058,25 @@
   color: var(--text-primary);
 }
 
+.model-table-expand-btn {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.model-table-expand-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 .trend-card {
   flex: 1;
   min-width: 280px;
