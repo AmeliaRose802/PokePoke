@@ -197,7 +197,7 @@ export function StatsPage({
               <div className="stats-panel-card">
                 <div className="stats-panel-card-header">
                   <h3>Agent activity</h3>
-                  <span className="stats-panel-subtitle">Work vs maintenance vs review</span>
+                  <span className="stats-panel-subtitle">Time spent per agent type</span>
                 </div>
                 <div className="agent-activity-bar">
                   <svg viewBox="0 0 100 10" preserveAspectRatio="none" role="img" aria-label="Agent activity distribution">
