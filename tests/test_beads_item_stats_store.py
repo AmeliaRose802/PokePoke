@@ -116,3 +116,40 @@ def test_replace_with_retry_raises_after_all_retries_exhausted() -> None:
         with patch("pokepoke.file_utils.os.replace", side_effect=PermissionError("locked")), \
              patch("pokepoke.file_utils.time.sleep"), pytest.raises(PermissionError):
             replace_with_retry(src, dst, retries=3, delay=0.001)
+
+
+def test_summary_deduplicates_events_by_item_id() -> None:
+    """Test that recording the same item multiple times only counts once."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "stats.json"
+
+        # Record same item completed multiple times (simulating retries/duplicates)
+        s1 = record_item_completed("PokePoke-0001", agent_type="work", path=path)
+        assert s1["total_completed"] == 1
+
+        s2 = record_item_completed("PokePoke-0001", agent_type="work", path=path)
+        assert s2["total_completed"] == 1  # Still 1, not 2
+
+        s3 = record_item_completed("PokePoke-0001", agent_type="work", path=path)
+        assert s3["total_completed"] == 1  # Still 1, not 3
+
+        # Record a different item
+        s4 = record_item_completed("PokePoke-0002", agent_type="work", path=path)
+        assert s4["total_completed"] == 2  # Now 2 unique items
+
+        # Same for created events
+        s5 = record_item_created("PokePoke-0003", agent_type="janitor", path=path)
+        assert s5["total_created"] == 1
+
+        s6 = record_item_created("PokePoke-0003", agent_type="janitor", path=path)
+        assert s6["total_created"] == 1  # Still 1, not 2
+
+        s7 = record_item_created("PokePoke-0004", agent_type="janitor", path=path)
+        assert s7["total_created"] == 2  # Now 2 unique items
+
+        # Verify final state
+        summary = get_summary(path)
+        assert summary["total_created"] == 2
+        assert summary["total_completed"] == 2
+        assert summary["net_delta"] == 0
+

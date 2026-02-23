@@ -65,22 +65,35 @@ def _empty_store() -> dict[str, Any]:
 
 
 def _rebuild_summary(log: list[dict[str, Any]]) -> dict[str, Any]:
-    total_created = 0
-    total_completed = 0
+    """Rebuild summary from log entries.
+
+    Counts unique items (deduplicates by item_id + event type to prevent
+    duplicate event recording from inflating counts).
+    """
+    created_items: set[str] = set()
+    completed_items: set[str] = set()
     by_agent: dict[str, dict[str, int]] = {}
 
     for entry in log:
         event = entry.get("event")
+        item_id = entry.get("item_id")
         agent = entry.get("agent_type") or "unknown"
+
+        if not item_id:
+            continue
+
         if agent not in by_agent:
             by_agent[agent] = {"created": 0, "completed": 0}
 
-        if event == "created":
-            total_created += 1
+        if event == "created" and item_id not in created_items:
+            created_items.add(item_id)
             by_agent[agent]["created"] += 1
-        elif event == "completed":
-            total_completed += 1
+        elif event == "completed" and item_id not in completed_items:
+            completed_items.add(item_id)
             by_agent[agent]["completed"] += 1
+
+    total_created = len(created_items)
+    total_completed = len(completed_items)
 
     by_agent_out: dict[str, dict[str, int]] = {}
     for agent, counts in by_agent.items():

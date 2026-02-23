@@ -18,9 +18,9 @@ from pathlib import Path
 def main():
     """Main build process."""
     project_root = Path(__file__).parent.parent
-    
+
     print("🚀 Starting PokePoke production build...")
-    
+
     # Step 1: Build the React frontend
     print("\n📦 Step 1: Building React frontend...")
     try:
@@ -29,7 +29,7 @@ def main():
     except subprocess.CalledProcessError as e:
         print(f"❌ Frontend build failed: {e}")
         sys.exit(1)
-    
+
     # Step 2: Build the Python wheel
     print("\n🐍 Step 2: Building Python wheel...")
     try:
@@ -38,7 +38,7 @@ def main():
     except subprocess.CalledProcessError as e:
         print(f"❌ Python wheel build failed: {e}")
         sys.exit(1)
-    
+
     print("\n🎉 Build completed successfully!")
     print("📁 Output: dist/pokepoke-*.whl")
     print("\nNext steps for PyInstaller:")
