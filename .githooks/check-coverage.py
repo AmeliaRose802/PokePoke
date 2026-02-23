@@ -93,9 +93,21 @@ def _find_test_files_for_staged(
     # Map source files to their test files using naming convention:
     #   src/pokepoke/foo.py  →  tests/test_foo.py
     #   Also match tests/test_foo_*.py (e.g. beads.py → test_beads_*.py)
+
+    # Manual overrides for modules whose tests don't follow naming convention
+    test_file_overrides: dict[str, list[str]] = {
+        "worktree_cleanup": ["tests/test_worktrees.py"],  # Main tests in test_worktrees.py
+    }
+
     for src_file in staged_source:
         # Extract module name: src/pokepoke/foo.py → foo
         module_name = Path(src_file).stem
+
+        # Check manual overrides first
+        if module_name in test_file_overrides:
+            for override_file in test_file_overrides[module_name]:
+                if (repo_root / override_file).exists() and override_file not in test_files:
+                    test_files.append(override_file)
 
         # Direct match: tests/test_foo.py
         direct = f"tests/test_{module_name}.py"
