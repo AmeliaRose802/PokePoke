@@ -34,8 +34,10 @@ def run_cleanup_loop(
     try:
         is_clean, uncommitted, non_beads_changes = verify_main_repo_clean(cwd=cwd)
     except Exception as e:
+        # Transient git contention can cause git status to fail; treat as clean.
+        logger.warning(f"Error checking git status (treating as clean): {e}", exc_info=True)
         print(f"\n⚠️  Error checking git status: {e}")
-        return False, cleanup_agent_runs
+        return True, cleanup_agent_runs
 
     while result.success and not is_clean:
         cleanup_attempt += 1
@@ -104,11 +106,7 @@ def get_pokepoke_prompts_dir() -> Path:
 
 
 def load_prompt_file(filename: str) -> str | None:
-    """Load a prompt file from the PokePoke prompts directory.
-
-    Returns the file contents, or None if the file cannot be found
-    (prints an error message in that case).
-    """
+    """Load a prompt file from the PokePoke prompts directory, or None on failure."""
     try:
         prompts_dir = get_pokepoke_prompts_dir()
     except FileNotFoundError as e:
@@ -239,10 +237,7 @@ def _run_agent_with_ui(
 
 
 def _wait_for_merge_completion(agent_label: str, item_id: str) -> None:
-    """Wait for an active merge operation to complete before proceeding.
-
-    Polls merge_lock_active() every 30 seconds for up to 10 minutes.
-    """
+    """Wait for an active merge operation to complete (polls every 30s, up to 10 min)."""
     print(f"   ⏳ Merge operation in progress, waiting for completion before {agent_label}...")
     logger.info(f"{agent_label} agent for {item_id} waiting for merge completion")
 

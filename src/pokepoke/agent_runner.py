@@ -100,8 +100,9 @@ def run_gate_agent(
     # Parse output for decision
     output = result.output or ""
 
-    # Try to find JSON block
-    json_match = re.search(r'```json\s*(\{.*?\})\s*```', output, re.DOTALL)
+    # Try to find JSON block (use greedy match to capture the full outer object,
+    # including any nested objects, rather than stopping at the first closing brace)
+    json_match = re.search(r'```json\s*(\{.*\})\s*```', output, re.DOTALL)
     if json_match:
         try:
             data = json.loads(json_match.group(1))
@@ -127,8 +128,9 @@ def run_gate_agent(
         except json.JSONDecodeError:
             pass
 
-    # Fallback to text matching if JSON fails
-    if "VERIFICATION SUCCESSFUL" in output:
+    # Fallback to text matching if JSON fails. Check for known approval strings
+    # that gate agents may emit (e.g. NEW_WORK_VERIFIED from older prompt versions).
+    if "VERIFICATION SUCCESSFUL" in output or "NEW_WORK_VERIFIED" in output:
         return True, "Verification successful (text match)", stats
 
     return False, "Gate Agent did not explicitly approve the fix. Check logs.", stats

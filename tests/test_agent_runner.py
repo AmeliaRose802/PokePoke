@@ -202,6 +202,78 @@ class TestRunGateAgent:
         assert success is True
         assert "text match" in reason
 
+    @patch('pokepoke.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.PromptService')
+    def test_new_work_verified_text_fallback(
+        self,
+        mock_service_cls: Mock,
+        mock_invoke: Mock,
+        mock_parse: Mock,
+        work_item: BeadsWorkItem
+    ) -> None:
+        """Test successful verification using NEW_WORK_VERIFIED text fallback."""
+        mock_service = Mock()
+        mock_service.load_and_render.return_value = "Gate prompt"
+        mock_service_cls.return_value = mock_service
+
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="test-123",
+            success=True,
+            output="NEW_WORK_VERIFIED - All verification steps passed",
+            attempt_count=1
+        )
+        mock_parse.return_value = None
+
+        success, reason, stats = run_gate_agent(work_item)
+
+        assert success is True
+        assert "text match" in reason
+
+    @patch('pokepoke.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.PromptService')
+    def test_multiline_json_with_nested_objects(
+        self,
+        mock_service_cls: Mock,
+        mock_invoke: Mock,
+        mock_parse: Mock,
+        work_item: BeadsWorkItem
+    ) -> None:
+        """Test JSON parsing succeeds when output contains nested JSON objects.
+
+        Regression test: the non-greedy regex {.*?} would stop at the first closing
+        brace, incorrectly matching only an inner nested object. The greedy {.*} fix
+        ensures the full outer object is captured.
+        """
+        mock_service = Mock()
+        mock_service.load_and_render.return_value = "Gate prompt"
+        mock_service_cls.return_value = mock_service
+
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="test-123",
+            success=True,
+            output=(
+                'Analysis complete.\n'
+                '```json\n'
+                '{\n'
+                '  "status": "success",\n'
+                '  "reason": "new_work_verified",\n'
+                '  "message": "All verification steps passed",\n'
+                '  "details": {"tests_run": 47, "tests_passed": 47}\n'
+                '}\n'
+                '```'
+            ),
+            attempt_count=1
+        )
+        mock_parse.return_value = None
+
+        success, reason, stats = run_gate_agent(work_item)
+
+        assert success is True
+        assert "new_work_verified" in reason
+        assert "All verification steps passed" in reason
+
     @patch('pokepoke.agent_runner.invoke_copilot')
     @patch('pokepoke.agent_runner.PromptService')
     def test_copilot_invocation_failure(
