@@ -28,14 +28,14 @@ def backfill_created_events(dry_run: bool = False) -> int:
         print("\n📊 Loading beads items from database...")
         from pokepoke.beads_item_stats_backfill import _get_all_beads_items
         from pokepoke.beads_item_stats_store import load_beads_item_stats
-        
+
         all_items = _get_all_beads_items()
         print(f"✅ Found {len(all_items)} items in beads database")
-        
+
         stats_path = Path('.pokepoke') / 'beads_item_stats.json'
         stats = load_beads_item_stats(stats_path)
         log = stats.get('log', [])
-        
+
         created_items = {
             entry['item_id']
             for entry in log
@@ -46,10 +46,10 @@ def backfill_created_events(dry_run: bool = False) -> int:
             for entry in log
             if entry.get('event') == 'completed'
         }
-        
+
         print(f"✅ Found {len(created_items)} items with 'created' events")
         print(f"✅ Found {len(completed_items)} items with 'completed' events")
-        
+
         items_from_db = [
             item for item in all_items
             if item.get('id') and item['id'] not in created_items
@@ -58,47 +58,47 @@ def backfill_created_events(dry_run: bool = False) -> int:
             item_id for item_id in completed_items
             if item_id not in created_items
         ]
-        
+
         total_to_backfill = len(items_from_db) + len(items_from_completed)
-        
+
         if total_to_backfill == 0:
             print("✅ All items already have 'created' events - nothing to backfill")
             return 0
-        
+
         print(f"\n🔄 Would backfill {total_to_backfill} items:")
         print(f"   • {len(items_from_db)} from current beads database")
         print(f"   • {len(items_from_completed)} from completed history (no longer in DB)")
-        
+
         print("\nFrom current beads database:")
         for item in items_from_db[:5]:
             print(f"  • {item['id']}: {item.get('title', 'untitled')}")
         if len(items_from_db) > 5:
             print(f"  ... and {len(items_from_db) - 5} more")
-        
+
         print("\nFrom completed history (archived items):")
         for item_id in list(items_from_completed)[:5]:
             print(f"  • {item_id}")
         if len(items_from_completed) > 5:
             print(f"  ... and {len(items_from_completed) - 5} more")
-        
+
         return total_to_backfill
-    
+
     # Real backfill
     print("📊 Starting beads item stats backfill...")
     from pokepoke.beads_item_stats_backfill import backfill_from_beads_db
-    
+
     result = backfill_from_beads_db(silent=False)
-    
+
     if result['already_complete']:
         print("✅ All items already have 'created' events - nothing to backfill")
         return 0
-    
-    print(f"\n✅ Backfill complete!")
+
+    print("\n✅ Backfill complete!")
     print(f"   • Backfilled: {result['backfilled']} items")
     print(f"   • Created: {result['total_created']}")
     print(f"   • Completed: {result['total_completed']}")
     print(f"   • Net delta: {result['net_delta']:+d}")
-    
+
     return result['backfilled']
 
 
