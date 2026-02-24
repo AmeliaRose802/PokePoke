@@ -10,6 +10,7 @@ import time
 from typing import Any, TYPE_CHECKING
 
 from pokepoke.agent_registry import AgentRegistry
+from pokepoke.metrics_context import get_current_agent_type
 from pokepoke.repo_utils import get_repository_name
 
 from pokepoke.shutdown import (
@@ -257,10 +258,13 @@ class DesktopAPI:
         work_item_id: str | None = None,
         work_item_title: str | None = None,
         modified_files: list[str] | None = None,
+        agent_type: str | None = None,
     ) -> None:
         """Register or update a running agent."""
         with self._lock:
             session_id = self._current_session_id
+        resolved_type = agent_type or get_current_agent_type(default="")
+        normalized_agent_type: str | None = resolved_type if resolved_type else None
 
         self._agent_registry.update_status(
             agent_id,
@@ -273,6 +277,7 @@ class DesktopAPI:
             work_item_title=work_item_title,
             session_id=session_id,
             modified_files=modified_files,
+            agent_type=normalized_agent_type,
         )
 
     def push_agent_log(self, agent_id: str, line: str) -> None:
