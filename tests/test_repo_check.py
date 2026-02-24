@@ -7,7 +7,13 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from pokepoke.repo_check import check_and_commit_main_repo, _try_auto_commit
+from pokepoke.repo_check import (
+    check_and_commit_main_repo,
+    _try_auto_commit,
+    _stash_uncommitted_changes,
+    check_beads_available,
+    initialize_beads_repo,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -156,7 +162,8 @@ class TestCheckAndCommitMainRepo:
         repo_path = Path("/fake/repo")
 
         with patch('subprocess.run') as mock_run, \
-             patch('pokepoke.agent_runner.invoke_cleanup_agent') as mock_cleanup:
+             patch('pokepoke.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.repo_check.merge_lock_active', return_value=False):
             # git status, git add (auto-commit), git commit fails, then cleanup agent
             mock_run.side_effect = [
                 Mock(returncode=0, stdout=" M src/module.py\n M README.md", stderr=""),
@@ -180,7 +187,8 @@ class TestCheckAndCommitMainRepo:
         repo_path = Path("/fake/repo")
 
         with patch('subprocess.run') as mock_run, \
-             patch('pokepoke.agent_runner.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.repo_check.merge_lock_active', return_value=False), \
              patch('pokepoke.repo_check.time.sleep'):  # Speed up test
             # git status, auto-commit (add + commit fail), then stash commands
             mock_run.side_effect = [
@@ -208,7 +216,8 @@ class TestCheckAndCommitMainRepo:
         repo_path = Path("/fake/repo")
 
         with patch('subprocess.run') as mock_run, \
-             patch('pokepoke.agent_runner.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.repo_check.merge_lock_active', return_value=False), \
              patch('pokepoke.repo_check.time.sleep'):  # Speed up test
             # git status, auto-commit fails, then stash also fails
             mock_run.side_effect = [
@@ -236,7 +245,8 @@ class TestCheckAndCommitMainRepo:
         repo_path = Path("/fake/repo")
 
         with patch('subprocess.run') as mock_run, \
-             patch('pokepoke.agent_runner.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.repo_check.merge_lock_active', return_value=False), \
              patch('pokepoke.repo_check.time.sleep'):  # Speed up test
             # git status, auto-commit fails
             mock_run.side_effect = [
@@ -397,3 +407,308 @@ class TestTryAutoCommit:
 
             assert result is False
             mock_logger.log_orchestrator.assert_any_call("Auto-commit timed out", level="WARNING")
+
+    def test_auto_commit_unexpected_exception(self):
+        """Test auto-commit handles unexpected exceptions."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run:
+            mock_run.side_effect = OSError("Unexpected error")
+
+            result = _try_auto_commit(repo_path, mock_logger)
+
+            assert result is False
+
+
+class TestStashUncommittedChanges:
+    """Test _stash_uncommitted_changes function."""
+
+    def test_stash_success(self):
+        """Test successful stash."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run:
+            mock_run.side_effect = [
+                Mock(returncode=0),  # git add --all
+                Mock(returncode=0, stdout="", stderr=""),  # git stash push
+            ]
+
+            result = _stash_uncommitted_changes(repo_path, mock_logger)
+
+            assert result is True
+
+    def test_stash_failure(self):
+        """Test stash when git stash fails."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run:
+            mock_run.side_effect = [
+                Mock(returncode=0),  # git add --all
+                Mock(returncode=1, stdout="", stderr="cannot stash"),  # git stash fails
+            ]
+
+            result = _stash_uncommitted_changes(repo_path, mock_logger)
+
+            assert result is False
+
+    def test_stash_timeout(self):
+        """Test stash when git stash times out."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run:
+            mock_run.side_effect = [
+                Mock(returncode=0),  # git add --all
+                subprocess.TimeoutExpired(cmd="git", timeout=60),
+            ]
+
+            result = _stash_uncommitted_changes(repo_path, mock_logger)
+
+            assert result is False
+
+    def test_stash_git_add_fails(self):
+        """Test stash when git add fails."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run:
+            mock_run.side_effect = subprocess.CalledProcessError(
+                returncode=128, cmd=["git", "add"], stderr="error"
+            )
+
+            result = _stash_uncommitted_changes(repo_path, mock_logger)
+
+            assert result is False
+
+    def test_stash_unexpected_exception(self):
+        """Test stash when unexpected exception occurs."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run:
+            mock_run.side_effect = OSError("Unexpected")
+
+            result = _stash_uncommitted_changes(repo_path, mock_logger)
+
+            assert result is False
+
+
+class TestCheckBeadsAvailable:
+    """Test check_beads_available function."""
+
+    @patch('shutil.which')
+    def test_bd_not_installed(self, mock_which):
+        """Test when bd command is not installed."""
+        mock_which.return_value = None
+
+        result = check_beads_available()
+
+        assert result is False
+
+    @patch('shutil.which', return_value='/usr/bin/bd')
+    @patch('subprocess.run')
+    def test_bd_available_and_initialized(self, mock_run, mock_which):
+        """Test when bd is available and initialized."""
+        mock_run.return_value = Mock(returncode=0, stdout='{}', stderr='')
+
+        result = check_beads_available()
+
+        assert result is True
+
+    @patch('shutil.which', return_value='/usr/bin/bd')
+    @patch('subprocess.run')
+    def test_bd_not_initialized(self, mock_run, mock_which):
+        """Test when bd is installed but not initialized."""
+        mock_run.return_value = Mock(returncode=1, stdout='', stderr='not initialized')
+
+        result = check_beads_available()
+
+        assert result is False
+
+    @patch('shutil.which', return_value='/usr/bin/bd')
+    @patch('subprocess.run')
+    def test_bd_info_timeout(self, mock_run, mock_which):
+        """Test when bd info times out."""
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="bd", timeout=30)
+
+        result = check_beads_available()
+
+        assert result is False
+
+    @patch('shutil.which', return_value='/usr/bin/bd')
+    @patch('subprocess.run')
+    def test_bd_info_exception(self, mock_run, mock_which):
+        """Test when bd info raises unexpected exception."""
+        mock_run.side_effect = OSError("Permission denied")
+
+        result = check_beads_available()
+
+        assert result is False
+
+
+class TestInitializeBeadsRepo:
+    """Test initialize_beads_repo function."""
+
+    @patch('shutil.which')
+    def test_bd_not_installed(self, mock_which):
+        """Test when bd command is not installed."""
+        mock_which.return_value = None
+
+        result = initialize_beads_repo(Path("/repo"))
+
+        assert result is False
+
+    @patch('shutil.which', return_value='/usr/bin/bd')
+    @patch('subprocess.run')
+    def test_already_initialized(self, mock_run, mock_which):
+        """Test when beads is already initialized."""
+        mock_run.return_value = Mock(returncode=0, stdout='{}', stderr='')
+
+        result = initialize_beads_repo(Path("/repo"))
+
+        assert result is True
+
+    @patch('shutil.which', return_value='/usr/bin/bd')
+    @patch('subprocess.run')
+    def test_init_success(self, mock_run, mock_which):
+        """Test successful beads initialization."""
+        mock_run.side_effect = [
+            Mock(returncode=1, stdout='', stderr='not init'),  # bd info (not initialized)
+            Mock(returncode=0, stdout='', stderr=''),  # bd init
+            Mock(returncode=0, stdout='{}', stderr=''),  # bd info (verify)
+        ]
+
+        result = initialize_beads_repo(Path("/repo"))
+
+        assert result is True
+
+    @patch('shutil.which', return_value='/usr/bin/bd')
+    @patch('subprocess.run')
+    def test_init_fails(self, mock_run, mock_which):
+        """Test when bd init fails."""
+        mock_run.side_effect = [
+            Mock(returncode=1, stdout='', stderr='not init'),  # bd info
+            Mock(returncode=1, stdout='', stderr='init failed'),  # bd init fails
+        ]
+
+        result = initialize_beads_repo(Path("/repo"))
+
+        assert result is False
+
+    @patch('shutil.which', return_value='/usr/bin/bd')
+    @patch('subprocess.run')
+    def test_info_timeout_before_init(self, mock_run, mock_which):
+        """Test when bd info times out before init."""
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="bd", timeout=30)
+
+        result = initialize_beads_repo(Path("/repo"))
+
+        assert result is False
+
+    @patch('shutil.which', return_value='/usr/bin/bd')
+    @patch('subprocess.run')
+    def test_info_exception_before_init(self, mock_run, mock_which):
+        """Test when bd info raises exception before init."""
+        mock_run.side_effect = OSError("Permission denied")
+
+        result = initialize_beads_repo(Path("/repo"))
+
+        assert result is False
+
+    @patch('shutil.which', return_value='/usr/bin/bd')
+    @patch('subprocess.run')
+    def test_init_timeout(self, mock_run, mock_which):
+        """Test when bd init times out."""
+        mock_run.side_effect = [
+            Mock(returncode=1, stdout='', stderr='not init'),
+            subprocess.TimeoutExpired(cmd="bd", timeout=120),
+        ]
+
+        result = initialize_beads_repo(Path("/repo"))
+
+        assert result is False
+
+    @patch('shutil.which', return_value='/usr/bin/bd')
+    @patch('subprocess.run')
+    def test_init_exception(self, mock_run, mock_which):
+        """Test when bd init raises exception."""
+        mock_run.side_effect = [
+            Mock(returncode=1, stdout='', stderr='not init'),
+            OSError("Cannot run bd init"),
+        ]
+
+        result = initialize_beads_repo(Path("/repo"))
+
+        assert result is False
+
+    @patch('shutil.which', return_value='/usr/bin/bd')
+    @patch('subprocess.run')
+    def test_verify_fails_after_init(self, mock_run, mock_which):
+        """Test when verification after init fails."""
+        mock_run.side_effect = [
+            Mock(returncode=1, stdout='', stderr='not init'),  # bd info
+            Mock(returncode=0, stdout='', stderr=''),  # bd init succeeds
+            Mock(returncode=1, stdout='', stderr='still not init'),  # bd info verify fails
+        ]
+
+        result = initialize_beads_repo(Path("/repo"))
+
+        assert result is False
+
+    @patch('shutil.which', return_value='/usr/bin/bd')
+    @patch('subprocess.run')
+    def test_verify_timeout_after_init(self, mock_run, mock_which):
+        """Test when verification after init times out."""
+        mock_run.side_effect = [
+            Mock(returncode=1, stdout='', stderr='not init'),
+            Mock(returncode=0, stdout='', stderr=''),  # bd init succeeds
+            subprocess.TimeoutExpired(cmd="bd", timeout=30),  # verify times out
+        ]
+
+        result = initialize_beads_repo(Path("/repo"))
+
+        assert result is False
+
+    @patch('shutil.which', return_value='/usr/bin/bd')
+    @patch('subprocess.run')
+    def test_verify_exception_after_init(self, mock_run, mock_which):
+        """Test when verification after init raises exception."""
+        mock_run.side_effect = [
+            Mock(returncode=1, stdout='', stderr='not init'),
+            Mock(returncode=0, stdout='', stderr=''),  # bd init succeeds
+            OSError("verify failed"),  # verify raises exception
+        ]
+
+        result = initialize_beads_repo(Path("/repo"))
+
+        assert result is False
+
+
+class TestMergeLockDeferral:
+    """Test merge lock deferral in check_and_commit_main_repo."""
+
+    def test_defers_cleanup_when_merge_active(self):
+        """Test that cleanup is deferred when merge lock is active."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.repo_check.merge_lock_active', return_value=True):
+            # git status shows changes, auto-commit fails
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout=" M src/module.py", stderr=""),
+                Mock(returncode=0),  # git add --all
+                Mock(returncode=1, stdout="", stderr="hook failed"),  # git commit fails
+            ]
+
+            result = check_and_commit_main_repo(repo_path, mock_logger)
+
+            # Should return True (deferred)
+            assert result is True
+            mock_logger.log_orchestrator.assert_any_call(
+                "Deferring cleanup due to active merge operation"
+            )
+
