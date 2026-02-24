@@ -98,13 +98,16 @@ class TestCheckCopilotProcesses:
 
     @patch('pokepoke.process_utils.os')
     @patch('pokepoke.process_utils.subprocess.run')
-    def test_caches_zero_on_exception(self, mock_run, mock_os):
-        """Exceptions are cached as 0 to prevent retry flooding."""
+    def test_does_not_cache_exception_result(self, mock_run, mock_os):
+        """Transient tasklist failures must not be cached as 0 (would mask running processes)."""
         mock_os.name = 'nt'
-        mock_run.side_effect = subprocess.TimeoutExpired(cmd='tasklist', timeout=30)
-        check_copilot_processes()
-        check_copilot_processes()
-        assert mock_run.call_count == 1
+        mock_run.side_effect = [
+            subprocess.TimeoutExpired(cmd='tasklist', timeout=30),
+            MagicMock(stdout='"Image Name","PID"\n"copilot.exe","1234"'),
+        ]
+        assert check_copilot_processes() == 0
+        assert check_copilot_processes() == 1
+        assert mock_run.call_count == 2
 
 
 class TestWaitForProcessCleanup:

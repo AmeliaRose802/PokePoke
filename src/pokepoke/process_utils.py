@@ -6,9 +6,13 @@ import time
 
 logger = logging.getLogger(__name__)
 
-# Cache tasklist results to avoid flooding the console with timeout messages
+# Cache *successful* tasklist results to avoid flooding the console with timeout messages
 # under high parallelism. Stores (timestamp, count) or None if uncached.
 _copilot_process_cache: tuple[float, int] | None = None
+
+# Rate-limit warning logs for tasklist failures (we still re-run tasklist immediately).
+_copilot_last_tasklist_failure_log: float | None = None
+
 _COPILOT_CACHE_TTL = 5.0  # seconds between actual tasklist invocations
 
 
@@ -20,7 +24,7 @@ def check_copilot_processes() -> int:
 
     Returns the number of processes found.
     """
-    global _copilot_process_cache
+    global _copilot_process_cache, _copilot_last_tasklist_failure_log
 
     if os.name != 'nt':
         return 0
@@ -40,12 +44,18 @@ def check_copilot_processes() -> int:
         # Count lines excluding header
         lines = result.stdout.strip().split('\n')
         count = max(0, len(lines) - 1) if len(lines) > 1 else 0
-    except Exception as e:
-        logger.warning(f"Failed to check for Copilot processes: {e}")
-        count = 0  # Assume no processes if check fails
 
-    _copilot_process_cache = (now, count)
-    return count
+        _copilot_process_cache = (now, count)
+        return count
+    except Exception as e:
+        # Do not cache failures: a transient tasklist error must not mask still-running processes.
+        if (
+            _copilot_last_tasklist_failure_log is None
+            or now - _copilot_last_tasklist_failure_log >= _COPILOT_CACHE_TTL
+        ):
+            logger.warning(f"Failed to check for Copilot processes: {e}")
+            _copilot_last_tasklist_failure_log = now
+        return 0
 
 
 def wait_for_process_cleanup(max_wait: float = 3.0) -> None:
