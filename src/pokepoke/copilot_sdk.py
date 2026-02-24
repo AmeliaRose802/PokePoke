@@ -312,9 +312,17 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             except TimeoutError:
                 print("[SDK] Client stop timed out after 10s - forcing shutdown")
                 try:
-                    await client.stop()
+                    await asyncio.wait_for(client.stop(), timeout=5.0)
                     if os.name == 'nt':
                         wait_for_process_cleanup(max_wait=1.0)
+                except TimeoutError:
+                    logger.warning("Force-killing copilot process after double timeout")
+                    try:
+                        await client.force_stop()
+                        if os.name == 'nt':
+                            wait_for_process_cleanup(max_wait=1.0)
+                    except Exception as force_error:
+                        logger.error(f"Failed to force stop client: {force_error}")
                 except Exception as e:
                     logger.debug(f"Failed to force stop client: {e}")
         except UnicodeDecodeError:
