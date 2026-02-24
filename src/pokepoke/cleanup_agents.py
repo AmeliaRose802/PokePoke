@@ -209,6 +209,7 @@ def _run_agent_with_ui(
                 modified_files=modified_files,
                 parent_agent_id=parent_agent_id,
                 agent_type=agent_type_key,
+                agent_prompt=cleanup_prompt,
             )
             copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd)
 

@@ -91,6 +91,9 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
   const agentIconPath = getAgentAvatar(agentToUse);
   const fallbackAvatar = getAvatar(agentToUse.base_agent_id ?? agentToUse.agent_id);
   const iconAlt = `${agentType ?? "agent"} icon`;
+  const agentPrompt = agentToUse.agent_prompt;
+  const hasPrompt = Boolean(agentPrompt && agentPrompt.trim().length > 0);
+  const promptLineCount = hasPrompt ? agentPrompt!.split(/\r?\n/).length : 0;
   
   // Memoize logLines to prevent dependency changes on every render
   const logLines = useMemo(() => {
@@ -249,6 +252,19 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
               ))}
             </ul>
           </div>
+        ) : null}
+        {hasPrompt ? (
+          <details className="log-accordion agent-log-panel-prompt">
+            <summary className="log-accordion-summary">
+              <span className="log-accordion-chevron">▸</span>
+              <span className="log-message">
+                Agent Prompt{promptLineCount ? ` — ${promptLineCount} lines` : ""}
+              </span>
+            </summary>
+            <div className="log-accordion-details">
+              <pre className="agent-log-panel-prompt-content">{agentPrompt}</pre>
+            </div>
+          </details>
         ) : null}
         <span className="log-count">
           {isLoadingDetail ? "Loading detailed logs..." : `${logLines.length} lines`}
