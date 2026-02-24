@@ -7,7 +7,6 @@ This script:
 3. Can be called during package building or manually
 """
 
-import os
 import shutil
 import subprocess
 import sys
@@ -31,22 +30,22 @@ def build_frontend() -> None:
     # Determine project root (where this script is located)
     script_dir = Path(__file__).parent
     project_root = script_dir
-    
+
     desktop_dir = project_root / "desktop"
     dist_dir = desktop_dir / "dist"
     static_dir = project_root / "src" / "pokepoke" / "static"
-    
+
     # Verify directories exist
     if not desktop_dir.exists():
         print(f"❌ Desktop directory not found: {desktop_dir}")
         sys.exit(1)
-    
+
     if not static_dir.exists():
         print(f"❌ Static directory not found: {static_dir}")
         sys.exit(1)
-    
+
     print(f"🔨 Building React frontend in {desktop_dir}")
-    
+
     # Check if npm is available
     try:
         result = subprocess.run(["npm", "--version"], capture_output=True, check=True, shell=True)
@@ -54,21 +53,21 @@ def build_frontend() -> None:
     except (subprocess.CalledProcessError, FileNotFoundError):
         print("❌ npm not found. Please install Node.js")
         sys.exit(1)
-    
+
     # Install dependencies if node_modules doesn't exist
     if not (desktop_dir / "node_modules").exists():
         print("📦 Installing npm dependencies...")
         run_command(["npm", "install"], cwd=desktop_dir)
-    
+
     # Build the frontend
     print("🏗️  Building frontend...")
     run_command(["npm", "run", "build"], cwd=desktop_dir)
-    
+
     # Verify build output exists
     if not dist_dir.exists() or not (dist_dir / "index.html").exists():
         print(f"❌ Build failed - no output found in {dist_dir}")
         sys.exit(1)
-    
+
     # Clear existing static assets (except __init__.py)
     print("🧹 Clearing old static assets...")
     for item in static_dir.iterdir():
@@ -77,7 +76,7 @@ def build_frontend() -> None:
                 shutil.rmtree(item)
             else:
                 item.unlink()
-    
+
     # Copy built assets to static directory
     print(f"📁 Copying built assets from {dist_dir} to {static_dir}")
     for item in dist_dir.iterdir():
@@ -88,7 +87,7 @@ def build_frontend() -> None:
         else:
             shutil.copy2(item, dest)
             print(f"   📄 {item.name}")
-    
+
     print("✅ Frontend build and copy completed successfully!")
 
 

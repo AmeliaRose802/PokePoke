@@ -75,10 +75,11 @@ class TestCleanupAgents:
         assert branch == "unknown"
         assert is_worktree is False
 
+    @patch('pokepoke.cleanup_agents.merge_lock_active', return_value=False)
     @patch('pokepoke.cleanup_agents.get_pokepoke_prompts_dir')
     @patch('pokepoke.cleanup_agents._get_current_git_context')
     @patch('pokepoke.cleanup_agents.invoke_copilot')
-    def test_invoke_cleanup_agent(self, mock_invoke, mock_context, mock_get_dir):
+    def test_invoke_cleanup_agent(self, mock_invoke, mock_context, mock_get_dir, mock_merge_active):
         """Test invoking cleanup agent."""
         mock_dir = MagicMock()
         mock_file = Mock()
@@ -116,8 +117,9 @@ class TestCleanupAgents:
         assert "feature" in prompt
         assert "True" in prompt
 
+    @patch('pokepoke.cleanup_agents.merge_lock_active', return_value=False)
     @patch('pokepoke.cleanup_agents.get_pokepoke_prompts_dir')
-    def test_invoke_cleanup_agent_no_prompt(self, mock_get_dir):
+    def test_invoke_cleanup_agent_no_prompt(self, mock_get_dir, mock_merge_active):
         """Test invoking cleanup agent failing due to missing prompt."""
         mock_get_dir.side_effect = FileNotFoundError("Not found")
 
@@ -127,10 +129,11 @@ class TestCleanupAgents:
         assert success is False
         assert stats is None
 
+    @patch('pokepoke.cleanup_agents.merge_lock_active', return_value=False)
     @patch('pokepoke.cleanup_agents.get_pokepoke_prompts_dir')
     @patch('pokepoke.cleanup_agents._get_current_git_context')
     @patch('pokepoke.cleanup_agents.invoke_copilot')
-    def test_invoke_merge_conflict_cleanup_agent(self, mock_invoke, mock_context, mock_get_dir):
+    def test_invoke_merge_conflict_cleanup_agent(self, mock_invoke, mock_context, mock_get_dir, mock_merge_active):
         """Test invoking merge conflict cleanup agent."""
         mock_dir = MagicMock()
         mock_file = Mock()
@@ -165,9 +168,10 @@ class TestCleanupAgents:
         prompt = args[1]['prompt']
         assert "Merge error" in prompt
 
+    @patch('pokepoke.cleanup_agents.merge_lock_active', return_value=False)
     @patch('pokepoke.cleanup_agents.get_pokepoke_prompts_dir')
     @patch('pokepoke.cleanup_agents.invoke_cleanup_agent')
-    def test_invoke_merge_conflict_fallback(self, mock_invoke_cleanup, mock_get_dir):
+    def test_invoke_merge_conflict_fallback(self, mock_invoke_cleanup, mock_get_dir, mock_merge_active):
         """Test fallback to standard cleanup if merge prompt missing."""
         mock_dir = MagicMock()
         mock_file = Mock()
