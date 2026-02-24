@@ -35,6 +35,7 @@ import {
   type RenderLogItem,
   type ToolBatch,
   type ToolItem,
+  type ToolSummary,
 } from "../utils/logProcessor";
 import { renderMarkdown } from "../utils/markdown";
 
@@ -52,6 +53,23 @@ export function LogEntryRenderer({ entry, keyPrefix, className }: LogEntryRender
       <span className="log-timestamp">{formatTime(entry.timestamp)}</span>
       <span className="log-message">{entry.message}</span>
     </div>
+  );
+}
+
+interface ToolDescriptionProps {
+  summary: ToolSummary;
+}
+
+function ToolDescription({ summary }: ToolDescriptionProps) {
+  if (!summary.description) return null;
+  return (
+    <details className="log-tool-description">
+      <summary className="log-tool-description-summary">
+        <span className="log-accordion-chevron">▸</span>
+        <span className="log-tool-description-label">Description</span>
+      </summary>
+      <div className="log-tool-description-content">{summary.description}</div>
+    </details>
   );
 }
 
@@ -78,6 +96,7 @@ export function ToolAccordion({ tool, keyPrefix, nested = false }: ToolAccordion
         )}
       </summary>
       <div className="log-accordion-details">
+        <ToolDescription summary={tool.summary} />
         {detailsEntries.map((entry, detailIndex) => (
           <LogEntryRenderer
             key={`${keyPrefix}-${detailIndex}`}
