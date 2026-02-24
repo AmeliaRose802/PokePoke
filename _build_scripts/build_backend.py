@@ -4,7 +4,6 @@ This module wraps the standard setuptools build backend and adds
 a pre-build step that runs our frontend build script.
 """
 
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -19,11 +18,11 @@ def _run_frontend_build():
     # Find the build script in the project root
     project_root = Path.cwd()
     build_script = project_root / "build_frontend.py"
-    
+
     if not build_script.exists():
         print("⚠️  Frontend build script not found, skipping frontend build")
         return
-    
+
     print("🔨 Running pre-build step: building React frontend...")
     try:
         result = subprocess.run([sys.executable, str(build_script)], check=True, capture_output=True, text=True)
