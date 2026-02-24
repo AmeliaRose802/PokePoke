@@ -111,10 +111,7 @@ def run_orchestrator(
         run_logger.log_orchestrator(f"PokePoke started in {mode_name} mode with agent name: {agent_name}")
 
         register_shutdown_handlers(run_logger)
-        run_logger.log_orchestrator("Signal handlers registered for graceful shutdown logging")
-
         atexit.register(lambda: print(f"\n📁 Logs saved to: {run_dir}"))
-
         main_repo_path = Path.cwd()
         print(f"📁 Repository: {main_repo_path}")
         run_logger.log_orchestrator(f"Repository: {main_repo_path}")
@@ -126,17 +123,14 @@ def run_orchestrator(
         from pokepoke.session_stats_registry import set_current_session_stats
         set_current_session_stats(session_stats)
 
-        # Backfill any missing beads item creation events from the beads database
-        # This ensures the Desktop UI's "Lifetime beads throughput" ADDED count is accurate
+        # Backfill missing beads item creation events for Desktop UI accuracy
         from pokepoke.beads_item_stats_backfill import backfill_from_beads_db
         try:
             backfill_result = backfill_from_beads_db(silent=True)
             if backfill_result["backfilled"] > 0:
                 print(f"✅ Backfilled {backfill_result['backfilled']} beads item creation events")
-                run_logger.log_orchestrator(f"Backfilled {backfill_result['backfilled']} beads item creation events")
         except Exception as e:
             logger.warning(f"Failed to backfill beads item stats: {e}")
-            run_logger.log_orchestrator(f"Failed to backfill beads item stats: {e}", level="WARNING")
 
         from pokepoke.beads_item_stats_store import get_summary as _get_beads_summary
         s = _get_beads_summary()
@@ -147,13 +141,10 @@ def run_orchestrator(
         stuck_count = get_failed_unassign_count()
         if stuck_count > 0:
             print(f"🔧 Recovering {stuck_count} item(s) stuck from failed unassigns...")
-            run_logger.log_orchestrator(f"Retrying {stuck_count} failed unassign(s)")
             recovered = retry_failed_unassigns()
             if recovered:
                 run_logger.log_orchestrator(f"Recovered {recovered}/{stuck_count} stuck item(s)")
 
-        print("📊 Recording starting beads statistics...")
-        run_logger.log_orchestrator("Recording starting beads statistics")
         session_stats.set_starting_beads_stats(get_beads_stats())
         terminal_ui.ui.set_session_start_time(start_time)
         terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
@@ -359,7 +350,25 @@ def main() -> int:
                         help="Initialize .pokepoke/ directory with sample config")
     parser.add_argument("--max-agents", type=int, default=1, metavar="N",
                         help="Max concurrent work-item agents (default: 1)")
+    parser.add_argument("--repo", type=str, default=None, metavar="PATH",
+                        help="Path to the repository to work in (changes cwd)")
     args = parser.parse_args()
+
+    # --repo changes working directory before anything else
+    if args.repo:
+        repo_path = Path(args.repo).resolve()
+        if not repo_path.is_dir():
+            print(f"\u274c  --repo path does not exist: {repo_path}", file=sys.stderr)
+            return 1
+        os.chdir(repo_path)
+    elif getattr(sys, 'frozen', False):
+        from pokepoke.repo_picker import pick_repo_directory
+        launch_config = pick_repo_directory()
+        if launch_config is None:
+            return 0
+        os.chdir(launch_config.repo_path)
+        if args.max_agents <= 1 and launch_config.max_agents > 1:
+            args.max_agents = launch_config.max_agents
 
     if args.init:
         from pokepoke.init import init_project

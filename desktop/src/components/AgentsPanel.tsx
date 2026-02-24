@@ -108,14 +108,16 @@ export function AgentsPanel({
     const baseLabel = getAgentPrimaryLabel(agent);
     const label = isGate && parentLabel ? parentLabel : baseLabel;
     const roleLabel = agent.work_item_id ? agent.name : null;
-    const gateChildForParent =
+    // Use the *latest* gate child so a retry that passes overrides an earlier rejection.
+    const gateChildren =
       !isGate
         ? (
             sessionChildrenMap.get(cardId) ??
             sessionChildrenMap.get(agent.agent_id) ??
             []
-          ).find(isGateAgent) ?? null
-        : null;
+          ).filter(isGateAgent)
+        : [];
+    const gateChildForParent = gateChildren.length > 0 ? gateChildren[gateChildren.length - 1] : null;
     const gateSummary = gateChildForParent
       ? GATE_STATUS_COPY[gateChildForParent.status] ??
         GATE_STATUS_COPY.running

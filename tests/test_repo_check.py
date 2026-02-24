@@ -508,41 +508,44 @@ class TestCheckBeadsAvailable:
 
         assert result is False
 
-    @patch('shutil.which', return_value='/usr/bin/bd')
-    @patch('subprocess.run')
-    def test_bd_available_and_initialized(self, mock_run, mock_which):
-        """Test when bd is available and initialized."""
-        mock_run.return_value = Mock(returncode=0, stdout='{}', stderr='')
+    @patch('pokepoke.repo_check.shutil.which', return_value='/usr/bin/bd')
+    def test_bd_available_and_initialized(self, mock_which, tmp_path, monkeypatch):
+        """Test when bd is available and .beads directory is initialized."""
+        monkeypatch.chdir(tmp_path)
+        beads_dir = tmp_path / ".beads"
+        beads_dir.mkdir()
+        (beads_dir / "config.yaml").write_text("test: true")
 
         result = check_beads_available()
 
         assert result is True
 
-    @patch('shutil.which', return_value='/usr/bin/bd')
-    @patch('subprocess.run')
-    def test_bd_not_initialized(self, mock_run, mock_which):
-        """Test when bd is installed but not initialized."""
-        mock_run.return_value = Mock(returncode=1, stdout='', stderr='not initialized')
+    @patch('pokepoke.repo_check.shutil.which', return_value='/usr/bin/bd')
+    def test_bd_not_initialized(self, mock_which, tmp_path, monkeypatch):
+        """Test when bd is installed but .beads directory doesn't exist."""
+        monkeypatch.chdir(tmp_path)
 
         result = check_beads_available()
 
         assert result is False
 
-    @patch('shutil.which', return_value='/usr/bin/bd')
-    @patch('subprocess.run')
-    def test_bd_info_timeout(self, mock_run, mock_which):
-        """Test when bd info times out."""
-        mock_run.side_effect = subprocess.TimeoutExpired(cmd="bd", timeout=30)
+    @patch('pokepoke.repo_check.shutil.which', return_value='/usr/bin/bd')
+    def test_bd_info_timeout(self, mock_which, tmp_path, monkeypatch):
+        """Test returns False when .beads directory has no marker files."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".beads").mkdir()
 
         result = check_beads_available()
 
         assert result is False
 
-    @patch('shutil.which', return_value='/usr/bin/bd')
-    @patch('subprocess.run')
-    def test_bd_info_exception(self, mock_run, mock_which):
-        """Test when bd info raises unexpected exception."""
-        mock_run.side_effect = OSError("Permission denied")
+    @patch('pokepoke.repo_check.shutil.which', return_value='/usr/bin/bd')
+    def test_bd_info_exception(self, mock_which, tmp_path, monkeypatch):
+        """Test returns False when .beads directory is incomplete."""
+        monkeypatch.chdir(tmp_path)
+        beads_dir = tmp_path / ".beads"
+        beads_dir.mkdir()
+        (beads_dir / "random.txt").write_text("not a marker")
 
         result = check_beads_available()
 

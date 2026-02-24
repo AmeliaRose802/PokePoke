@@ -5,7 +5,12 @@ import logging
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from copilot import CopilotClient  # type: ignore
+
+try:
+    from copilot import CopilotClient  # type: ignore
+except ImportError:
+    CopilotClient = None  # SDK not installed; guarded at call sites
+
 from .config import get_config, DEFAULT_MODEL, FALLBACK_MODEL
 from .types import BeadsWorkItem, CopilotResult, RetryConfig, AgentStats
 from .prompts import PromptService
@@ -136,6 +141,11 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     }
     if cwd:
         client_opts["cwd"] = cwd
+    if CopilotClient is None:
+        raise ImportError(
+            "The 'copilot' SDK package is required but not installed. "
+            "Install it or use a different AI backend."
+        )
     client = CopilotClient(client_opts)  # type: ignore[arg-type]
 
     try:

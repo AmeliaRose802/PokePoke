@@ -6,7 +6,8 @@ from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files
 
-project_root = Path(__file__).resolve().parents[1]
+# SPECPATH is provided by PyInstaller at spec-execution time
+project_root = Path(SPECPATH).resolve().parent.parent
 src_root = project_root / "src"
 icon_path = project_root / "desktop" / "public" / "pokepoke.ico"
 version_file = project_root / "packaging" / "pyinstaller" / "version_info.txt"
@@ -20,7 +21,7 @@ a = Analysis(
     pathex=[str(src_root)],
     binaries=[],
     datas=datas,
-    hiddenimports=[],
+    hiddenimports=["tkinter", "tkinter.filedialog"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

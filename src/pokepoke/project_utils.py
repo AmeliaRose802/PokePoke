@@ -50,18 +50,20 @@ def has_pokepoke_config(project_path: Path) -> bool:
 
 
 def check_beads_available(path: Path) -> bool:
-    """Check if beads is initialized for the given project directory."""
-    try:
-        result = subprocess.run(
-            ["bd", "info", "--json"],
-            capture_output=True,
-            text=True,
-            cwd=str(path),
-            timeout=10,
-        )
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, OSError):
+    """Check if beads is initialized for the given project directory.
+
+    Since beads v0.56+ uses a Dolt server, ``bd info --json`` fails when the
+    server isn't running.  Instead we check for the ``.beads/`` directory
+    which is a reliable filesystem indicator that ``bd init`` has been run.
+    """
+    beads_dir = path / ".beads"
+    if not beads_dir.is_dir():
         return False
+    # Verify it has at least a config file (not just an empty directory)
+    return any(
+        (beads_dir / name).exists()
+        for name in ("config.yaml", "config.yml", "issues.jsonl", "beads.db")
+    )
 
 
 def ensure_project_ready(

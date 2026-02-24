@@ -170,6 +170,19 @@ class TestInvokeCopilotSDKSync:
         mock_asyncio_run.assert_called_once()
 
 
+class TestCopilotClientNone:
+    """Test behavior when CopilotClient SDK is not installed."""
+
+    @patch('pokepoke.copilot_sdk.CopilotClient', None)
+    def test_invoke_sync_raises_when_sdk_missing(self, sample_work_item):
+        """Test that invoke_copilot_sdk_sync raises ImportError when SDK not installed."""
+        with pytest.raises(ImportError, match="copilot.*SDK.*not installed"):
+            invoke_copilot_sdk_sync(
+                work_item=sample_work_item,
+                prompt="test prompt",
+            )
+
+
 @pytest.mark.asyncio
 class TestInvokeCopilotSDKAsync:
     """Tests for invoke_copilot_sdk async function."""

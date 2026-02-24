@@ -11,6 +11,7 @@ from pokepoke.project_utils import (
     resolve_git_toplevel,
     has_pokepoke_config,
     check_beads_available,
+    ensure_project_ready,
 )
 
 
@@ -98,25 +99,95 @@ class TestHasPokpokeConfig:
 
 class TestCheckBeadsAvailable:
     def test_returns_true_when_bd_succeeds(self, tmp_path: Path) -> None:
-        mock_result = MagicMock(returncode=0)
-        with patch("pokepoke.project_utils.subprocess.run", return_value=mock_result):
-            assert check_beads_available(tmp_path) is True
+        beads_dir = tmp_path / ".beads"
+        beads_dir.mkdir()
+        (beads_dir / "config.yaml").write_text("test: true")
+        assert check_beads_available(tmp_path) is True
 
     def test_returns_false_when_bd_fails(self, tmp_path: Path) -> None:
-        mock_result = MagicMock(returncode=1)
-        with patch("pokepoke.project_utils.subprocess.run", return_value=mock_result):
-            assert check_beads_available(tmp_path) is False
+        assert check_beads_available(tmp_path) is False
 
     def test_returns_false_on_timeout(self, tmp_path: Path) -> None:
-        with patch(
-            "pokepoke.project_utils.subprocess.run",
-            side_effect=subprocess.TimeoutExpired(cmd="bd", timeout=10),
-        ):
-            assert check_beads_available(tmp_path) is False
+        (tmp_path / ".beads").mkdir()
+        assert check_beads_available(tmp_path) is False
 
     def test_returns_false_on_os_error(self, tmp_path: Path) -> None:
-        with patch(
-            "pokepoke.project_utils.subprocess.run",
-            side_effect=OSError("bd not found"),
-        ):
-            assert check_beads_available(tmp_path) is False
+        beads_dir = tmp_path / ".beads"
+        beads_dir.mkdir()
+        (beads_dir / "random.txt").write_text("not a marker")
+        assert check_beads_available(tmp_path) is False
+
+
+class TestEnsureProjectReady:
+    """Test ensure_project_ready function."""
+
+    @patch("pokepoke.project_utils.check_beads_available", return_value=True)
+    @patch("pokepoke.project_utils.has_pokepoke_config", return_value=True)
+    @patch("pokepoke.project_utils.is_git_repo", return_value=True)
+    @patch("pokepoke.project_utils.resolve_git_toplevel")
+    @patch("pokepoke.repo_check.check_beads_available", return_value=True)
+    def test_returns_true_when_all_checks_pass(
+        self, mock_beads_cli, mock_toplevel, mock_git, mock_config, mock_beads
+    ) -> None:
+        mock_toplevel.return_value = Path.cwd()
+        assert ensure_project_ready(interactive=False) is True
+
+    @patch("pokepoke.project_utils.check_beads_available", return_value=False)
+    @patch("pokepoke.project_utils.has_pokepoke_config", return_value=False)
+    @patch("pokepoke.project_utils.is_git_repo", return_value=False)
+    @patch("pokepoke.project_utils.resolve_git_toplevel", return_value=None)
+    @patch("pokepoke.repo_check.check_beads_available", return_value=False)
+    def test_desktop_ui_no_wait_fn(
+        self, mock_beads_cli, mock_toplevel, mock_git, mock_config, mock_beads
+    ) -> None:
+        desktop_ui = MagicMock(spec=[])  # no wait_for_setup_complete attr
+        assert ensure_project_ready(interactive=False, desktop_ui=desktop_ui) is False
+
+    @patch("pokepoke.project_utils.check_beads_available", return_value=False)
+    @patch("pokepoke.project_utils.has_pokepoke_config", return_value=False)
+    @patch("pokepoke.project_utils.is_git_repo", return_value=False)
+    @patch("pokepoke.project_utils.resolve_git_toplevel", return_value=None)
+    @patch("pokepoke.repo_check.check_beads_available", return_value=False)
+    def test_desktop_ui_setup_fails(
+        self, mock_beads_cli, mock_toplevel, mock_git, mock_config, mock_beads
+    ) -> None:
+        desktop_ui = MagicMock()
+        desktop_ui.wait_for_setup_complete.return_value = False
+        assert ensure_project_ready(interactive=False, desktop_ui=desktop_ui) is False
+
+    @patch("pokepoke.project_utils.check_beads_available", return_value=False)
+    @patch("pokepoke.project_utils.has_pokepoke_config", return_value=False)
+    @patch("pokepoke.project_utils.is_git_repo", return_value=False)
+    @patch("pokepoke.project_utils.resolve_git_toplevel", return_value=None)
+    @patch("pokepoke.repo_check.check_beads_available", return_value=False)
+    def test_cli_non_interactive_returns_false(
+        self, mock_beads_cli, mock_toplevel, mock_git, mock_config, mock_beads
+    ) -> None:
+        assert ensure_project_ready(interactive=False) is False
+
+    @patch("pokepoke.project_utils.check_beads_available", return_value=False)
+    @patch("pokepoke.project_utils.has_pokepoke_config", return_value=True)
+    @patch("pokepoke.project_utils.is_git_repo", return_value=True)
+    @patch("pokepoke.project_utils.resolve_git_toplevel")
+    @patch("pokepoke.repo_check.check_beads_available", return_value=False)
+    @patch("builtins.input", return_value="n")
+    def test_cli_interactive_user_declines(
+        self, mock_input, mock_beads_cli, mock_toplevel, mock_git, mock_config, mock_beads
+    ) -> None:
+        mock_toplevel.return_value = Path.cwd()
+        assert ensure_project_ready(interactive=True) is False
+
+    @patch("pokepoke.project_utils.check_beads_available", return_value=False)
+    @patch("pokepoke.project_utils.has_pokepoke_config", return_value=True)
+    @patch("pokepoke.project_utils.is_git_repo", return_value=True)
+    @patch("pokepoke.project_utils.resolve_git_toplevel")
+    @patch("pokepoke.repo_check.check_beads_available")
+    @patch("pokepoke.repo_check.initialize_beads_repo", return_value=True)
+    @patch("builtins.input", return_value="y")
+    def test_cli_interactive_user_accepts(
+        self, mock_input, mock_init, mock_beads_cli, mock_toplevel,
+        mock_git, mock_config, mock_beads
+    ) -> None:
+        mock_toplevel.return_value = Path.cwd()
+        mock_beads_cli.side_effect = [False, True]
+        assert ensure_project_ready(interactive=True) is True

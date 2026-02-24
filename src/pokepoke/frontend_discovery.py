@@ -53,13 +53,11 @@ def find_frontend_dist() -> Path | None:
     try:
         # Handle both regular Python execution and PyInstaller frozen execution
         if getattr(sys, 'frozen', False):
-            # Running as PyInstaller bundle - resources should be extracted to filesystem
-            import importlib.util
-            pokepoke_spec = importlib.util.find_spec('pokepoke.static')
-            if pokepoke_spec and pokepoke_spec.origin:
-                static_dir = Path(pokepoke_spec.origin).parent
-                if static_dir.is_dir() and (static_dir / "index.html").exists():
-                    return static_dir
+            # Running as PyInstaller bundle — data files are extracted under sys._MEIPASS
+            meipass = Path(getattr(sys, '_MEIPASS', ''))
+            static_dir = meipass / "pokepoke" / "static"
+            if static_dir.is_dir() and (static_dir / "index.html").exists():
+                return static_dir
         else:
             # Regular Python execution - check filesystem location first
             # Get the directory of the desktop_ui module

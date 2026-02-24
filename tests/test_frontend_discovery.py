@@ -64,21 +64,11 @@ class TestFindFrontendDist:
 
     def test_frozen_execution_mode(self, monkeypatch, tmp_path) -> None:
         """Test behavior when running as frozen executable (PyInstaller)."""
-        # Mock sys.frozen to True
+        # Mock sys.frozen and sys._MEIPASS for PyInstaller bundle
         monkeypatch.setattr("sys.frozen", True, raising=False)
+        monkeypatch.setattr("sys._MEIPASS", str(tmp_path), raising=False)
 
-        # Mock importlib.util.find_spec
-        fake_spec = MagicMock()
-        fake_spec.origin = str(tmp_path / "pokepoke" / "static" / "__init__.py")
-
-        def mock_find_spec(name):
-            if name == 'pokepoke.static':
-                return fake_spec
-            return None
-
-        monkeypatch.setattr("importlib.util.find_spec", mock_find_spec)
-
-        # Create the static directory structure
+        # Create the static directory structure under _MEIPASS
         static_dir = tmp_path / "pokepoke" / "static"
         static_dir.mkdir(parents=True)
         (static_dir / "index.html").write_text("<html>frozen</html>", encoding="utf-8")
