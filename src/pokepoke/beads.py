@@ -36,6 +36,12 @@ from .beads_management import (
     add_comment
 )
 
+from .beads_recovery import (
+    unassign_with_retry,
+    retry_failed_unassigns,
+    get_failed_unassign_count,
+)
+
 __all__ = [
     # Query operations
     'get_ready_work_items',
@@ -60,5 +66,8 @@ __all__ = [
     'is_item_claimable',
     'assign_and_sync_item',
     'unassign_item',
+    'unassign_with_retry',
+    'retry_failed_unassigns',
+    'get_failed_unassign_count',
     'add_comment',
 ]

@@ -1611,7 +1611,7 @@ class TestProcessWorkItemCoordination:
         assert result.request_count == 0
         assert result.stats is None
 
-    @patch('pokepoke.workflow.unassign_item')
+    @patch('pokepoke.workflow.unassign_with_retry')
     @patch('pokepoke.workflow._setup_worktree')
     @patch('pokepoke.workflow.assign_and_sync_item')
     @patch('time.time')
@@ -1721,7 +1721,7 @@ class TestGateAgentDisabled:
 class TestUnassignOnFailure:
     """Tests that work items are unassigned when processing fails after assignment."""
 
-    @patch('pokepoke.workflow.unassign_item')
+    @patch('pokepoke.workflow.unassign_with_retry')
     @patch('pokepoke.workflow.cleanup_worktree')
     @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.run_gate_agent')
@@ -1776,7 +1776,7 @@ class TestUnassignOnFailure:
         assert result.success is False
         mock_unassign.assert_called_once_with(item.id)
 
-    @patch('pokepoke.workflow.unassign_item')
+    @patch('pokepoke.workflow.unassign_with_retry')
     @patch('pokepoke.workflow.cleanup_worktree')
     @patch('pokepoke.workflow.invoke_copilot')
     @patch('pokepoke.workflow._setup_worktree')
@@ -1812,7 +1812,7 @@ class TestUnassignOnFailure:
         assert result.success is False
         mock_unassign.assert_called_once_with(item.id)
 
-    @patch('pokepoke.workflow.unassign_item')
+    @patch('pokepoke.workflow.unassign_with_retry')
     @patch('pokepoke.workflow.cleanup_worktree')
     @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.run_gate_agent')

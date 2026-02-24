@@ -142,6 +142,16 @@ def run_orchestrator(
         s = _get_beads_summary()
         session_stats.set_lifetime_beads_item_totals(created=int(s.get("total_created", 0)), completed=int(s.get("total_completed", 0)))
 
+        # Recover any items that failed to unassign in previous runs
+        from pokepoke.beads import retry_failed_unassigns, get_failed_unassign_count
+        stuck_count = get_failed_unassign_count()
+        if stuck_count > 0:
+            print(f"🔧 Recovering {stuck_count} item(s) stuck from failed unassigns...")
+            run_logger.log_orchestrator(f"Retrying {stuck_count} failed unassign(s)")
+            recovered = retry_failed_unassigns()
+            if recovered:
+                run_logger.log_orchestrator(f"Recovered {recovered}/{stuck_count} stuck item(s)")
+
         print("📊 Recording starting beads statistics...")
         run_logger.log_orchestrator("Recording starting beads statistics")
         session_stats.set_starting_beads_stats(get_beads_stats())
