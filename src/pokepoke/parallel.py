@@ -29,14 +29,7 @@ _Future = concurrent.futures.Future[WorkItemResult]
 # Threading event used to wake up the parallel loop immediately when a
 # spawn agent request arrives from the desktop UI.
 _spawn_wakeup = threading.Event()
-
-_SNAKE_TYPES: tuple[str, ...] = (
-    "cobra",
-    "corn",
-    "rainbow_boa",
-    "rattlesnake",
-    "sea_snake",
-)
+_SNAKE_TYPES: tuple[str, ...] = ("cobra", "corn", "rainbow_boa", "rattlesnake", "sea_snake")
 
 
 def _get_dynamic_max_agents() -> int:
@@ -74,8 +67,7 @@ def _snake_for_work_item(item_id: str) -> str:
 
 def _build_worker_name(base_agent_name: str, item_id: str, counter: int) -> str:
     """Compose a worker name that includes the snake icon type and a unique suffix."""
-    snake_type = _snake_for_work_item(item_id)
-    return f"{base_agent_name}-{snake_type}-worker-{counter}"
+    return f"{base_agent_name}-{_snake_for_work_item(item_id)}-worker-{counter}"
 
 
 def _parallel_process_item(
@@ -304,7 +296,11 @@ def run_parallel_loop(
                         logger.warning(f"Future raised exception: {e}")
                         result = WorkItemResult(success=False, request_count=0)
                     total_requests += result.request_count
-                    record_fn(item, result, session_stats, run_logger)
+                    try:
+                        record_fn(item, result, session_stats, run_logger)
+                    except Exception as exc:
+                        logger.warning(f"record_fn raised for {item.id}: {exc}", exc_info=True)
+                        run_logger.log_orchestrator(f"Error recording result for {item.id}: {exc}", level="ERROR")
                     items_completed = session_stats.items_completed
                     terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
                 # Ensure UI sees the final snapshot even if no futures remained to drain.
@@ -373,7 +369,11 @@ def run_parallel_loop(
                         result = WorkItemResult(success=False, request_count=0)
 
                     total_requests += result.request_count
-                    record_fn(item, result, session_stats, run_logger)
+                    try:
+                        record_fn(item, result, session_stats, run_logger)
+                    except Exception as exc:
+                        logger.warning(f"record_fn raised for {item.id}: {exc}", exc_info=True)
+                        run_logger.log_orchestrator(f"Error recording result for {item.id}: {exc}", level="ERROR")
                     items_completed = session_stats.items_completed
                     terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
             except concurrent.futures.TimeoutError:
