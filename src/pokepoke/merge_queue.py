@@ -73,11 +73,14 @@ class MergeQueue:
         """Start the merge worker thread."""
         with self._lock:
             if self._started:
-                return
+                if self._worker is not None and self._worker.is_alive():
+                    return
+                self._started = False
+                self._worker = None
             self._shutdown_event.clear()
             self._worker = threading.Thread(
                 target=self._worker_loop,
-                daemon=True,
+                daemon=False,
                 name="merge-queue-worker",
             )
             self._worker.start()
@@ -93,7 +96,7 @@ class MergeQueue:
         Returns:
             A Future that resolves to a MergeResult when the merge completes.
         """
-        if not self._started:
+        if not self.is_running:
             self.start()
 
         future: Future[MergeResult] = Future()
@@ -121,10 +124,17 @@ class MergeQueue:
             # Send sentinel to unblock worker if waiting on queue.get()
             self._queue.put(None)
 
-        if self._worker is not None:
-            self._worker.join(timeout=timeout)
+        worker = self._worker
+        if worker is not None:
+            worker.join(timeout=timeout)
 
         with self._lock:
+            if worker is not None and worker.is_alive():
+                logger.warning(
+                    "Merge queue worker did not stop within %.1fs; shutdown will continue in background.",
+                    timeout,
+                )
+                return
             self._started = False
             self._worker = None
 
@@ -136,7 +146,8 @@ class MergeQueue:
     @property
     def is_running(self) -> bool:
         """Whether the merge worker thread is currently running."""
-        return self._started
+        worker = self._worker
+        return worker is not None and worker.is_alive()
 
     def _worker_loop(self) -> None:
         """Main loop for the merge worker thread."""

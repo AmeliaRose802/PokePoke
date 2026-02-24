@@ -14,9 +14,9 @@ Multi-agent shutdown coordination:
 
 from __future__ import annotations
 
+import _thread
 import concurrent.futures
 import logging
-import os
 import threading
 import time
 
@@ -68,19 +68,15 @@ def request_shutdown() -> None:
     if _executor is not None:
         _executor.shutdown(wait=False, cancel_futures=True)
 
-    # Shutdown merge queue to drain pending merges
-    # Give merge queue 30 seconds to finish current merge
+    # Shutdown merge queue to drain pending merges.
+    # This is intentionally synchronous so we don't lose pending merges due to
+    # daemon thread teardown during interpreter shutdown.
     try:
         from pokepoke.merge_queue import get_merge_queue
+
         merge_queue = get_merge_queue()
         if merge_queue.is_running:
-            # Start shutdown asynchronously - watchdog will enforce timeout
-            threading.Thread(
-                target=merge_queue.shutdown,
-                args=(30.0,),
-                daemon=True,
-                name="merge-queue-shutdown"
-            ).start()
+            merge_queue.shutdown(timeout=180.0)
     except Exception as e:
         logger.debug(f"Failed to shutdown merge queue: {e}")
 
@@ -90,7 +86,8 @@ def request_shutdown() -> None:
 
     watchdog_timeout = _WATCHDOG_BASE_SECONDS + (_WATCHDOG_PER_AGENT_SECONDS * agent_count)
 
-    # Start a daemon watchdog thread that will hard-kill after grace period
+    # Start a daemon watchdog thread that will *cooperatively* nudge the main
+    # thread to exit if shutdown appears stalled.
     watchdog = threading.Thread(
         target=_watchdog_thread,
         args=(watchdog_timeout,),
@@ -209,46 +206,41 @@ def should_stop_after_current() -> bool:
 
 
 def _watchdog_thread(timeout: float) -> None:
-    """Force-terminate the process if graceful shutdown stalls.
+    """Cooperatively accelerate shutdown if it appears stalled.
 
-    The watchdog waits for a grace period, then (if shutdown is still in
-    progress) waits for any in-flight merge protected by the merge lock to
-    complete before performing a last-resort hard exit. This avoids killing
-    the process mid-merge while still providing a safety net for truly hung
-    shutdowns.
+    After a grace period, the watchdog waits for any in-flight merge (as
+    signaled by the cross-process merge lock) to complete. Once no merge is
+    active, it triggers a main-thread KeyboardInterrupt via
+    ``_thread.interrupt_main()`` to help unwind normal ``try/finally``
+    cleanup paths.
+
+    This intentionally avoids ``os._exit`` because hard-exiting from a
+    background thread bypasses finally blocks/context managers and can leave
+    the repository in a half-merged state.
 
     Args:
-        timeout: Grace period in seconds before considering force-exit.
+        timeout: Grace period in seconds before considering shutdown stalled.
     """
-    # Initial grace period for normal cooperative shutdown
     time.sleep(timeout)
     if not _shutdown_event.is_set():
-        # Shutdown was cancelled or never requested; nothing to do.
         return
 
-    # Best-effort: avoid killing the process while a merge is actively
-    # holding the cross-process merge lock. We wait until the lock is no
-    # longer reported as active before performing a hard exit.
-    # Cap the wait at _MERGE_LOCK_WAIT_MAX_SECONDS so that a stuck lock
-    # holder (e.g. hung subprocess) cannot prevent the watchdog from ever
-    # firing.
-    _MERGE_LOCK_WAIT_MAX_SECONDS = 120
+    _MERGE_LOCK_WAIT_MAX_SECONDS = 120.0
     try:
         lock_wait_start = time.monotonic()
         while merge_lock_active():
             if time.monotonic() - lock_wait_start >= _MERGE_LOCK_WAIT_MAX_SECONDS:
                 logger.warning(
-                    "Merge lock still held after %ds; proceeding with force-exit.",
-                    _MERGE_LOCK_WAIT_MAX_SECONDS,
+                    "Merge lock still held after %ds; proceeding with cooperative interrupt.",
+                    int(_MERGE_LOCK_WAIT_MAX_SECONDS),
                 )
                 break
             time.sleep(1.0)
-    except Exception:
-        # If merge_lock_active or its underlying file-lock machinery fails,
-        # fall back to the original behaviour rather than hanging forever.
-        pass
+    except Exception as e:
+        logger.debug("Watchdog merge lock check failed: %s", e)
 
-    # Still shutting down after grace period (and no active merge lock) –
-    # force exit as a last resort. 130 = 128 + SIGINT.
     if _shutdown_event.is_set():
-        os._exit(130)
+        try:
+            _thread.interrupt_main()
+        except Exception as e:
+            logger.debug("Watchdog could not interrupt main thread: %s", e)

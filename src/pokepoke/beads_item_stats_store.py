@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -153,6 +154,9 @@ def save_beads_item_stats(data: dict[str, Any], path: Path | None = None) -> Non
     tmp_path = stats_path.with_suffix(".tmp")
     with tmp_path.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
+        f.flush()
+        with suppress(OSError):
+            os.fsync(f.fileno())
     # Retry os.replace on Windows where the destination file may be briefly
     # locked by a previous operation, causing PermissionError.
     replace_with_retry(tmp_path, stats_path)
