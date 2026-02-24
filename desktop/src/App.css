@@ -1720,6 +1720,45 @@
   gap: 2px;
 }
 
+.log-tool-description {
+  margin: 2px 0;
+  border-radius: 3px;
+  border: 1px solid var(--border-secondary, #333);
+  background: var(--bg-secondary);
+}
+
+.log-tool-description-summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-muted);
+  list-style: none;
+  user-select: none;
+}
+
+.log-tool-description-summary::-webkit-details-marker {
+  display: none;
+}
+
+.log-tool-description-label {
+  font-style: italic;
+}
+
+.log-tool-description[open] .log-accordion-chevron {
+  transform: rotate(90deg);
+}
+
+.log-tool-description-content {
+  padding: 4px 8px 4px 20px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ── Stats Bar ─────────────────────────────────────────────────────────── */
 
 .stats-bar {

@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { LogEntry } from '../types';
-import { buildToolSummary, isToolCallMessage, parseToolLabel, processLogsToRenderItems, stringsToLogEntries } from './logProcessor';
+import { buildToolSummary, isToolCallMessage, parseToolLabel, parseToolLabelAndDescription, processLogsToRenderItems, stringsToLogEntries } from './logProcessor';
 
 function makeEntries(lines: string[]): LogEntry[] {
   return stringsToLogEntries(lines, 1000);
@@ -82,26 +82,59 @@ describe('parseToolLabel', () => {
 });
 
 describe('buildToolSummary', () => {
-  it('includes description from tool call message', () => {
+  it('includes description from tool call message as separate field', () => {
     const callMessage = "[Tool] view({'path': 'README.md'})";
     const summary = buildToolSummary(callMessage);
-    expect(summary.toolLabel).toBe('🔧 view - README.md');
+    expect(summary.toolLabel).toBe('🔧 view');
+    expect(summary.description).toBe('README.md');
   });
 
   it('includes both description and result summary', () => {
     const callMessage = "[Tool] grep({'pattern': 'TODO'})";
     const resultMessage = "✅ Result: Found 5 matches";
     const summary = buildToolSummary(callMessage, resultMessage);
-    expect(summary.toolLabel).toBe('🔧 grep - TODO');
+    expect(summary.toolLabel).toBe('🔧 grep');
+    expect(summary.description).toBe('TODO');
     expect(summary.resultSummary).toBe('✅ Found 5 matches');
   });
   it('handles 🔧 prefixed tool call', () => {
     const callMessage = "🔧 powershell({'command': 'npm run build'})";
     const resultMessage = "✅ Result: Build succeeded";
     const summary = buildToolSummary(callMessage, resultMessage);
-    expect(summary.toolLabel).toContain('🔧 powershell');
+    expect(summary.toolLabel).toBe('🔧 powershell');
+    expect(summary.description).toBe('npm run build');
     expect(summary.resultSummary).toBe('✅ Build succeeded');
     expect(summary.statusClass).toBe('log-success');
+  });
+});
+
+describe('parseToolLabelAndDescription', () => {
+  it('separates tool name and description for view tool', () => {
+    const message = "[Tool] view({'path': 'README.md'})";
+    const result = parseToolLabelAndDescription(message);
+    expect(result.label).toBe('🔧 view');
+    expect(result.description).toBe('README.md');
+  });
+
+  it('separates tool name and command for powershell tool', () => {
+    const message = "[Tool] powershell({'command': 'npm run build', 'shellId': 'shell-1'})";
+    const result = parseToolLabelAndDescription(message);
+    expect(result.label).toBe('🔧 powershell');
+    expect(result.description).toBe('npm run build');
+  });
+
+  it('returns description field when present for powershell', () => {
+    const message = `[Tool] powershell({'description': 'Install deps', 'command': 'npm install'})`;
+    const result = parseToolLabelAndDescription(message);
+    expect(result.label).toBe('🔧 powershell');
+    expect(result.description).toBe('Install deps');
+  });
+
+  it('returns undefined description when none available', () => {
+    const message = "[Tool] report_intent({'intent': 'Testing'})";
+    const result = parseToolLabelAndDescription(message);
+    expect(result.label).toBe('🔧 report_intent');
+    expect(result.description).toBeUndefined();
   });
 });
 

@@ -62,8 +62,10 @@ describe('LogPanel', () => {
       />
     );
 
-    expect(screen.getByText('🔧 view - README.md')).toBeInTheDocument();
+    expect(screen.getByText('🔧 view')).toBeInTheDocument();
     expect(screen.queryByText(/Tool batch/)).not.toBeInTheDocument();
+    // Description should be in a collapsible section
+    expect(screen.getByText('Description')).toBeInTheDocument();
   });
 
   it('flattens single-tool batch to simple tool accordion (no extra nesting)', () => {
@@ -115,9 +117,9 @@ describe('LogPanel', () => {
     expect(screen.queryByText(/view ×1/)).not.toBeInTheDocument();
     expect(screen.queryByText(/edit ×1/)).not.toBeInTheDocument();
 
-    // Individual tools should be directly visible within the batch with descriptions
-    expect(screen.getByText('🔧 view - a.txt')).toBeInTheDocument();
-    expect(screen.getByText('🔧 edit - b.txt')).toBeInTheDocument();
+    // Individual tools should be directly visible within the batch
+    expect(screen.getByText('🔧 view')).toBeInTheDocument();
+    expect(screen.getByText('🔧 edit')).toBeInTheDocument();
   });
 
   it('displays tool call descriptions in accordion titles for various tool types', () => {
@@ -140,13 +142,16 @@ describe('LogPanel', () => {
       />
     );
 
-    // Verify descriptions are shown in tool labels - descriptions extracted from args
-    // powershell shows the command
-    expect(screen.getByText(/powershell - npm run build/)).toBeInTheDocument();
-    // grep shows the pattern
-    expect(screen.getByText(/grep - TODO/)).toBeInTheDocument();
-    // view shows the file path
-    expect(screen.getByText(/view - src.*Button\.tsx/)).toBeInTheDocument();
+    // Verify descriptions are in collapsible sections, not inline in labels
+    // powershell description is in a collapsible section
+    expect(screen.getByText('🔧 powershell')).toBeInTheDocument();
+    // grep description is in a collapsible section
+    expect(screen.getByText('🔧 grep')).toBeInTheDocument();
+    // view description is in a collapsible section
+    expect(screen.getByText('🔧 view')).toBeInTheDocument();
+    // Descriptions should appear in collapsible Description sections
+    const descLabels = screen.getAllByText('Description');
+    expect(descLabels.length).toBe(3);
   });
 
   it('collapses multiline apply_patch tool call into accordion', () => {

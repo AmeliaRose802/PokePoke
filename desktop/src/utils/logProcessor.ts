@@ -9,6 +9,7 @@ import { extractDescriptionFromArgs } from "./toolDescriptions";
 
 export interface ToolSummary {
   toolLabel: string;
+  description?: string;
   resultSummary?: string;
   statusClass?: string;
 }
@@ -97,15 +98,20 @@ function isApplyPatchToolCall(message: string): boolean {
   return isToolCallMessage(message) && APPLY_PATCH_RE.test(message);
 }
 
-export function parseToolLabel(message: string): string {
+export function parseToolLabelAndDescription(message: string): { label: string; description?: string } {
   const match = message.match(TOOL_CALL_PATTERN);
-  if (!match) return message.trim();
+  if (!match) return { label: message.trim() };
   const rest = match[1].trim();
   const callMatch = rest.match(/^([^(]+)\((.*)\)$/);
-  if (!callMatch) return `🔧 ${rest}`;
+  if (!callMatch) return { label: `🔧 ${rest}` };
   const toolName = callMatch[1].trim();
   const description = extractDescriptionFromArgs(toolName, callMatch[2].trim());
   const label = `🔧 ${toolName}`;
+  return { label, description: description || undefined };
+}
+
+export function parseToolLabel(message: string): string {
+  const { label, description } = parseToolLabelAndDescription(message);
   return description ? `${label} - ${truncateText(description, 50)}` : label;
 }
 
@@ -124,9 +130,9 @@ export function truncateText(text: string, maxLength: number): string {
 }
 
 export function buildToolSummary(callMessage: string, resultMessage?: string): ToolSummary {
-  const toolLabel = parseToolLabel(callMessage);
+  const { label: toolLabel, description } = parseToolLabelAndDescription(callMessage);
   if (!resultMessage) {
-    return { toolLabel };
+    return { toolLabel, description };
   }
   const resultMatch = resultMessage.match(TOOL_RESULT_PATTERN);
   const fallbackMatch = resultMessage.match(TOOL_RESULT_FALLBACK);
@@ -140,6 +146,7 @@ export function buildToolSummary(callMessage: string, resultMessage?: string): T
   )}`.trim();
   return {
     toolLabel,
+    description,
     resultSummary,
     statusClass,
   };
