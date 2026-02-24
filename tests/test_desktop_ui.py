@@ -302,7 +302,7 @@ class TestDesktopUIStateUpdates:
         ui._api = MagicMock()
         ui.push_agent_status("agent-1", "Gate Agent", iteration=2, status="running")
         ui._api.push_agent_status.assert_called_once_with(
-            "agent-1", "Gate Agent", 2, "running", None, None, None, None, None
+            "agent-1", "Gate Agent", 2, "running", None, None, None, None, None, None
         )
 
     def test_push_agent_log(self) -> None:

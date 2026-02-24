@@ -25,7 +25,6 @@ def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | No
 
     # Register Beta Tester agent in the Agents panel (if not already registered by maintenance)
     agent_id = "beta-tester"
-    terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="running", parent_agent_id=parent_agent_id)
 
     print(f"\n{'='*60}\n🧪 Running Beta Tester Agent\n{'='*60}")
 
@@ -65,12 +64,12 @@ def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | No
             prompt_path = prompts_dir / "beta-tester.md"
         except FileNotFoundError as e:
             print(f"❌ {e}")
-            terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed", parent_agent_id=parent_agent_id)
+            terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed", parent_agent_id=parent_agent_id, agent_type="beta_tester")
             return None
 
         if not prompt_path.exists():
             print(f"❌ Prompt not found at {prompt_path}")
-            terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed", parent_agent_id=parent_agent_id)
+            terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed", parent_agent_id=parent_agent_id, agent_type="beta_tester")
             return None
 
         beta_prompt = prompt_path.read_text(encoding='utf-8')
@@ -92,11 +91,11 @@ def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | No
 
         # Update agent status based on result
         status = "success" if agent_result is not None else "failed"
-        terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status=status, parent_agent_id=parent_agent_id)
+        terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status=status, parent_agent_id=parent_agent_id, agent_type="beta_tester")
 
         return agent_result
 
     except Exception as e:
         logger.warning(f"Beta Tester agent raised exception: {e}", exc_info=True)
-        terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed", parent_agent_id=parent_agent_id)
+        terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed", parent_agent_id=parent_agent_id, agent_type="beta_tester")
         raise
