@@ -866,7 +866,8 @@
   border-radius: 2px;
 }
 
-.agent-card-snake-icon {
+/* Snake icon should be larger for better visibility - override generic icon size */
+.agent-card-avatar.agent-card-snake-icon {
   width: 40px;
   height: 40px;
 }
