@@ -340,7 +340,7 @@ def invoke_merge_conflict_cleanup_agent(
             parent_agent_id=parent_agent_id,
             agent_type="merge_conflict_cleanup",
         )
-        return invoke_cleanup_agent(item, repo_root, parent_agent_id=parent_agent_id)
+        return invoke_cleanup_agent(item, repo_root, parent_agent_id=parent_agent_id, wait_for_merge=wait_for_merge)
 
     current_dir, current_branch, is_worktree = _get_current_git_context(cwd=cwd)
 
