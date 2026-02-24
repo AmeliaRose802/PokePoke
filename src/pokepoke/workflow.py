@@ -13,7 +13,7 @@ from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, ModelComple
 from pokepoke.worktrees import create_worktree, cleanup_worktree
 from pokepoke.model_pricing import calculate_cost
 from pokepoke.git_operations import has_uncommitted_changes, has_commits_ahead
-from pokepoke.beads import assign_and_sync_item, unassign_item, add_comment
+from pokepoke.beads import assign_and_sync_item, add_comment, unassign_with_retry
 from pokepoke.agent_runner import run_cleanup_loop, run_beta_tester, run_gate_agent
 from pokepoke.worktree_finalization import finalize_work_item
 from pokepoke.work_item_selection import select_work_item  # noqa: F401  # re-exported
@@ -350,7 +350,7 @@ def process_work_item(
         # Unassign item so other agents can pick it up again
         if was_assigned and not finalized_successfully:
             try:
-                unassign_item(item.id)
+                unassign_with_retry(item.id)
             except Exception as e:
                 logger.warning(f"Failed to unassign item {item.id}: {e}")
         unregister_agent()
