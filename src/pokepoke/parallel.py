@@ -20,8 +20,8 @@ from pokepoke.shutdown import is_shutting_down, set_executor, should_stop_after_
 
 logger = logging.getLogger(__name__)
 
-# Upper bound for executor/semaphore so they never bottleneck dynamic changes.
-_MAX_PARALLEL_CEILING = 8
+# Default pool size; raised when effective_parallel exceeds this.
+_DEFAULT_PARALLEL_CEILING = 8
 
 # Type alias to satisfy mypy strict generics
 _Future = concurrent.futures.Future[WorkItemResult]
@@ -197,10 +197,15 @@ def run_parallel_loop(
     """Run the parallel orchestrator loop with a ThreadPoolExecutor."""
     total_requests = 0
     items_completed = 0
-    semaphore = threading.Semaphore(_MAX_PARALLEL_CEILING)
+    pool_size = max(effective_parallel, _DEFAULT_PARALLEL_CEILING)
+    if effective_parallel > _DEFAULT_PARALLEL_CEILING:
+        logger.warning(
+            "max_parallel_agents (%d) exceeds default ceiling (%d); pool sized to %d",
+            effective_parallel, _DEFAULT_PARALLEL_CEILING, pool_size)
+    semaphore = threading.Semaphore(pool_size)
     futures: dict[_Future, BeadsWorkItem] = {}
     executor = concurrent.futures.ThreadPoolExecutor(
-        max_workers=_MAX_PARALLEL_CEILING,
+        max_workers=pool_size,
         thread_name_prefix="pokepoke-agent",
     )
     set_executor(executor)
@@ -224,8 +229,7 @@ def run_parallel_loop(
             try:
                 ready_items = get_ready_work_items()
             except Exception as e:
-                # This should not happen now that get_ready_work_items handles errors,
-                # but keep as additional safety measure
+                # Safety: get_ready_work_items handles errors internally
                 run_logger.log_orchestrator(f"Failed to fetch ready items: {e}", level="ERROR")
                 print(f"⚠️  Warning: failed to fetch ready items: {e}")
                 ready_items = []
@@ -351,8 +355,6 @@ def run_parallel_loop(
         if futures:
             print(f"\n⏳ Waiting for {len(futures)} active workers to complete...")
             run_logger.log_orchestrator(f"Waiting for {len(futures)} active workers to complete")
-
-            # Wait for all remaining futures to complete (with reasonable timeout)
             remaining = list(futures.keys())
             try:
                 for fut in concurrent.futures.as_completed(remaining, timeout=300):  # 5 minute timeout
@@ -384,12 +386,10 @@ def run_parallel_loop(
             run_logger.log_orchestrator("All workers completed")
             terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
 
-        # Now shutdown the executor (no need to wait since we already waited above)
         executor.shutdown(wait=False, cancel_futures=False)
         set_executor(None)
         clear_runtime_parallel_limits()
 
-        # Call finalize if it hasn't been called yet (e.g., on shutdown or exception)
         if not finalized:
             print("\n🏁 Finalizing session...")
             run_logger.log_orchestrator("Finalizing session on exit")
