@@ -2094,15 +2094,21 @@ class TestOrchestratorCleanupDetection:
     """Test orchestrator's main repo cleanup detection."""
 
     @patch('pokepoke.orchestrator.check_and_commit_main_repo')
+    @patch('pokepoke.orchestrator.get_beads_stats')
     @patch('pokepoke.orchestrator.get_ready_work_items')
     def test_detects_uncommitted_changes_and_invokes_cleanup(
         self,
         mock_get_items: Mock,
+        mock_beads_stats: Mock,
         mock_check_repo: Mock
     ) -> None:
         """Test that orchestrator invokes check_and_commit_main_repo."""
         mock_check_repo.return_value = True  # Repo check passes (cleanup succeeded or continued)
         mock_get_items.return_value = []  # No work items available
+        mock_beads_stats.return_value = BeadsStats(
+            total_issues=0, open_issues=0, in_progress_issues=0,
+            closed_issues=0, ready_issues=0
+        )
 
         with patch('pokepoke.orchestrator.is_shutting_down', return_value=False):
             result = run_orchestrator(interactive=False, continuous=False)
