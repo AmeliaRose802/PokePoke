@@ -124,6 +124,7 @@ class TestGetMainRepoRoot:
                 capture_output=True,
                 text=True,
                 encoding='utf-8',
+                errors='replace',
                 check=True,
                 timeout=30
             )
@@ -173,6 +174,7 @@ class TestIsWorktreeClean:
                 capture_output=True,
                 text=True,
                 encoding='utf-8',
+                errors='replace',
                 check=True,
                 timeout=30
             )
@@ -224,6 +226,7 @@ class TestVerifyBranchPushed:
                 capture_output=True,
                 text=True,
                 encoding='utf-8',
+                errors='replace',
                 check=True,
                 timeout=120
             )
@@ -391,6 +394,7 @@ class TestIsWorktreeMerged:
                 capture_output=True,
                 text=True,
                 encoding='utf-8',
+                errors='replace',
                 timeout=30
             )
 
@@ -423,6 +427,7 @@ class TestIsWorktreeMerged:
                 capture_output=True,
                 text=True,
                 encoding='utf-8',
+                errors='replace',
                 timeout=30
             )
 
@@ -1350,6 +1355,7 @@ class TestListWorktrees:
                 capture_output=True,
                 text=True,
                 encoding='utf-8',
+                errors='replace',
                 timeout=30
             )
 

@@ -107,6 +107,8 @@ class ClaudeCodeBackend:
                 args,
                 input=final_prompt,
                 text=True,
+                encoding='utf-8',
+                errors='replace',
                 capture_output=True,
                 timeout=timeout or 7200.0,
                 cwd=cwd,

@@ -42,7 +42,8 @@ def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | No
                 else:
                     result = subprocess.run(
                         ["pwsh", "-NoProfile", "-File", str(restart_script)],
-                        capture_output=True, text=True, encoding='utf-8', timeout=60
+                        capture_output=True, text=True, encoding='utf-8', timeout=60,
+                        errors='replace',
                     )
                     if result.returncode == 0:
                         print("✓ MCP server restarted successfully")

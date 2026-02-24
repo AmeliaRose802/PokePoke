@@ -54,6 +54,8 @@ def check_and_merge_worktree(
             ["git", "rev-list", "--count", "HEAD", f"^{target_branch}"],
             capture_output=True,
             text=True,
+            encoding='utf-8',
+            errors='replace',
             check=True,
             cwd=str(worktree_path),
             timeout=30
@@ -122,6 +124,8 @@ def close_work_item_and_parents(item: BeadsWorkItem) -> None:
             ["bd", "show", item.id, "--json"],
             capture_output=True,
             text=True,
+            encoding='utf-8',
+            errors='replace',
             check=True,
             timeout=30
         )

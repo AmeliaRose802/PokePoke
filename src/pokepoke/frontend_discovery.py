@@ -125,6 +125,8 @@ def find_frontend_dist() -> Path | None:
             cwd=src_root,
             capture_output=True,
             text=True,
+            encoding='utf-8',
+            errors='replace',
             check=True,
         )
         # First worktree in the list is the main repo

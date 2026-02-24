@@ -51,6 +51,7 @@ def force_remove_directory(dir_path: Path) -> bool:
             subprocess.run(
                 ["git", "worktree", "remove", "--force", str(dir_path)],
                 check=True, capture_output=True, text=True, encoding='utf-8',
+                errors='replace',
                 timeout=30
             )
             print("   ✅ Git worktree remove successful")
@@ -73,6 +74,7 @@ def force_remove_directory(dir_path: Path) -> bool:
             subprocess.run(
                 ["git", "worktree", "prune"],
                 check=False, capture_output=True, text=True, encoding='utf-8',
+                errors='replace',
                 timeout=30
             )
             print("   ✅ Direct removal and git prune successful")
@@ -187,6 +189,7 @@ def cleanup_after_merge(worktree_path: Path, branch_name: str) -> None:
             subprocess.run(
                 ["git", "worktree", "remove", str(worktree_path)],
                 check=True, capture_output=True, text=True, encoding='utf-8',
+                errors='replace',
                 timeout=30
             )
             print(f"✅ Removed worktree at {worktree_path}")
@@ -214,6 +217,7 @@ def cleanup_after_merge(worktree_path: Path, branch_name: str) -> None:
         subprocess.run(
             ["git", "branch", "-d", branch_name],
             check=True, capture_output=True, text=True, encoding='utf-8',
+            errors='replace',
             timeout=30
         )
         print(f"✅ Deleted branch {branch_name}")

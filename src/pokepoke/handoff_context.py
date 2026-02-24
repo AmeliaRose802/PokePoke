@@ -32,6 +32,7 @@ def build_handoff_context(cwd: str | None = None) -> str:
         name_status = subprocess.run(
             ["git", "diff", "--name-status", f"{target_branch}...HEAD"],
             capture_output=True, text=True, encoding="utf-8",
+            errors='replace',
             timeout=15, cwd=cwd,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -52,6 +53,7 @@ def build_handoff_context(cwd: str | None = None) -> str:
         diff_stat = subprocess.run(
             ["git", "diff", "--stat", f"{target_branch}...HEAD"],
             capture_output=True, text=True, encoding="utf-8",
+            errors='replace',
             timeout=15, cwd=cwd,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -66,6 +68,7 @@ def build_handoff_context(cwd: str | None = None) -> str:
         log_result = subprocess.run(
             ["git", "log", "--oneline", f"{target_branch}..HEAD"],
             capture_output=True, text=True, encoding="utf-8",
+            errors='replace',
             timeout=10, cwd=cwd,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -83,6 +86,7 @@ def build_handoff_context(cwd: str | None = None) -> str:
         diff_result = subprocess.run(
             ["git", "diff", f"{target_branch}...HEAD"],
             capture_output=True, text=True, encoding="utf-8",
+            errors='replace',
             timeout=30, cwd=cwd,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError):

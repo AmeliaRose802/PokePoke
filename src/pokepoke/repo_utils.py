@@ -40,6 +40,8 @@ def _get_repo_name_from_git() -> str | None:
             ["git", "config", "--get", "remote.origin.url"],
             capture_output=True,
             text=True,
+            encoding='utf-8',
+            errors='replace',
             timeout=5
         )
         if result.returncode == 0 and result.stdout.strip():

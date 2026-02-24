@@ -72,8 +72,7 @@ def commit_all_changes(message: str = "Auto-commit by PokePoke", cwd: str | None
             ["git", "commit", "-m", message],
             capture_output=True,
             text=True,
-            encoding='utf-8',
-            errors='replace',
+            encoding='utf-8', errors='replace',
             timeout=300,  # 5 minutes for pre-commit hooks
             cwd=cwd
         )
@@ -133,8 +132,7 @@ def handle_beads_auto_commit() -> None:
             ["git", "commit", "-m", "chore: sync beads before worktree merge"],
             check=True,
             capture_output=True,
-            encoding='utf-8',
-            errors='replace',
+            encoding='utf-8', errors='replace',
             timeout=300
         )
         print("✅ Beads changes committed")
@@ -180,7 +178,7 @@ def branch_exists(branch_name: str) -> bool:
             ["git", "show-ref", "--verify", f"refs/heads/{branch_name}"],
             capture_output=True,
             text=True,
-            encoding='utf-8',
+            encoding='utf-8', errors='replace',
             timeout=30
         )
         return result.returncode == 0
@@ -210,15 +208,16 @@ def get_default_branch(preferred: str | None = None, fallback: str | None = None
             subprocess.run(
                 ["git", "show-ref", "--verify", f"refs/remotes/origin/{preferred}"],
                 capture_output=True,
+                encoding='utf-8', errors='replace',
                 check=True,
                 timeout=30
             )
-
             # Found on remote, create local tracking branch
             print(f"   ✨ Creating local tracking branch for {preferred}...")
             subprocess.run(
                 ["git", "branch", "--track", preferred, f"origin/{preferred}"],
                 capture_output=True,
+                encoding='utf-8', errors='replace',
                 check=True,
                 timeout=30
             )
@@ -231,7 +230,7 @@ def get_default_branch(preferred: str | None = None, fallback: str | None = None
             ["git", "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"],
             capture_output=True,
             text=True,
-            encoding='utf-8',
+            encoding='utf-8', errors='replace',
             check=True,
             timeout=30
         )
@@ -246,7 +245,7 @@ def get_default_branch(preferred: str | None = None, fallback: str | None = None
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             capture_output=True,
             text=True,
-            encoding='utf-8',
+            encoding='utf-8', errors='replace',
             check=True,
             timeout=30
         )
@@ -264,6 +263,7 @@ def get_main_repo_root() -> Path:
         result = subprocess.run(
             ["git", "rev-parse", "--git-common-dir"],
             capture_output=True, text=True, encoding='utf-8', check=True,
+            errors='replace',
             timeout=30
         )
         git_common_dir = Path(result.stdout.strip())
@@ -278,7 +278,7 @@ def is_worktree_clean(worktree_path: Path) -> bool:
             ["git", "-C", str(worktree_path), "status", "--porcelain"],
             capture_output=True,
             text=True,
-            encoding='utf-8',
+            encoding='utf-8', errors='replace',
             check=True,
             timeout=30
         )
@@ -297,7 +297,7 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, 
     """
     try:
         subprocess.run(["git", "checkout", target_branch],
-                     check=True, capture_output=True, text=True, encoding='utf-8',
+                     check=True, capture_output=True, text=True, encoding='utf-8', errors='replace',
                      timeout=30)
     except subprocess.CalledProcessError as e:
         return False, f"Failed to checkout {target_branch}: {e.stderr or str(e)}", []
@@ -310,12 +310,13 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, 
         status = subprocess.run(
             ["git", "status", "--porcelain", ".beads/"],
             capture_output=True, text=True, encoding='utf-8', check=True,
+            errors='replace',
             timeout=30
         ).stdout.strip()
         if status:
             subprocess.run(
                 ["git", "stash", "push", "-m", "beads-daemon-changes-during-merge", "--", ".beads/"],
-                check=True, capture_output=True, text=True, encoding='utf-8',
+                check=True, capture_output=True, text=True, encoding='utf-8', errors='replace',
                 timeout=30
             )
             stashed = True
@@ -324,7 +325,7 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, 
 
     try:
         subprocess.run(["git", "pull", "--rebase", "origin", target_branch],
-                     check=True, capture_output=True, text=True, encoding='utf-8',
+                     check=True, capture_output=True, text=True, encoding='utf-8', errors='replace',
                      timeout=120)
     except subprocess.CalledProcessError as e:
         # Restore stash if we had one
@@ -338,7 +339,7 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, 
 
     try:
         subprocess.run(["git", "merge", "--no-ff", branch_name, "-m", f"Merge {branch_name}"],
-                     check=True, capture_output=True, text=True, encoding='utf-8',
+                     check=True, capture_output=True, text=True, encoding='utf-8', errors='replace',
                      timeout=60)
         return True, "", []
     except subprocess.CalledProcessError as e:
@@ -356,6 +357,7 @@ def validate_post_merge(target_branch: str) -> bool:
     current_branch = subprocess.run(
         ["git", "branch", "--show-current"],
         capture_output=True, text=True, encoding='utf-8', check=True,
+        errors='replace',
         timeout=30
     ).stdout.strip()
 
@@ -366,6 +368,7 @@ def validate_post_merge(target_branch: str) -> bool:
     status_result = subprocess.run(
         ["git", "status", "--porcelain"],
         capture_output=True, text=True, encoding='utf-8', check=True,
+        errors='replace',
         timeout=30
     )
 
@@ -383,7 +386,7 @@ def has_commits_ahead(target_branch: str | None = None, cwd: str | None = None) 
     try:
         result = subprocess.run(
             ["git", "rev-list", "--count", f"{target_branch}..HEAD"],
-            capture_output=True, text=True, encoding='utf-8',
+            capture_output=True, text=True, encoding='utf-8', errors='replace',
             timeout=10,
             cwd=cwd
         )

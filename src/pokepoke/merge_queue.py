@@ -258,6 +258,7 @@ def _abort_rebase(worktree_path: Path) -> None:
             capture_output=True,
             text=True,
             encoding="utf-8",
+            errors='replace',
             timeout=30,
             check=True,
         )
@@ -275,6 +276,7 @@ def _abort_rebase(worktree_path: Path) -> None:
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
+                errors='replace',
                 timeout=10,
                 check=True,
             )
@@ -318,6 +320,7 @@ def _rebase_worktree(worktree_path: Path, target_branch: str | None = None) -> b
             capture_output=True,
             text=True,
             encoding="utf-8",
+            errors='replace',
             timeout=60,
         )
         subprocess.run(
@@ -327,6 +330,7 @@ def _rebase_worktree(worktree_path: Path, target_branch: str | None = None) -> b
             capture_output=True,
             text=True,
             encoding="utf-8",
+            errors='replace',
             timeout=120,
         )
         logger.info("Rebased worktree %s onto origin/%s successfully", worktree_path, target_branch)

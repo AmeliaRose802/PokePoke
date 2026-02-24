@@ -129,11 +129,8 @@ def _get_current_git_context(cwd: str | None = None) -> tuple[str, str, bool]:
     try:
         branch_result = subprocess.run(
             ["git", "branch", "--show-current"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            errors='replace',
-            cwd=cwd
+            capture_output=True, text=True, timeout=10,
+            encoding='utf-8', errors='replace', cwd=cwd,
         )
         current_branch = branch_result.stdout.strip() if branch_result.returncode == 0 else "unknown"
     except Exception as e:
@@ -144,11 +141,8 @@ def _get_current_git_context(cwd: str | None = None) -> tuple[str, str, bool]:
     try:
         worktree_result = subprocess.run(
             ["git", "rev-parse", "--is-inside-work-tree"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            errors='replace',
-            cwd=cwd
+            capture_output=True, text=True, timeout=10,
+            encoding='utf-8', errors='replace', cwd=cwd,
         )
         is_worktree = worktree_result.returncode == 0 and worktree_result.stdout.strip() == "true"
     except Exception as e:
