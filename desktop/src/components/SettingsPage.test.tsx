@@ -137,7 +137,7 @@ describe('SettingsPage', () => {
     expect(screen.getByText('Primary model for agent tasks')).toBeInTheDocument();
   });
 
-  it('should disable MCP inputs when MCP server disabled', async () => {
+  it('should hide MCP inputs when MCP server disabled', async () => {
     const disabledMcpConfig: ConfigResponse = {
       ...defaultConfigResponse,
       config: {
@@ -163,12 +163,9 @@ describe('SettingsPage', () => {
       expect(screen.queryByText('Loading configuration…')).not.toBeInTheDocument();
     });
 
-    const nameInput = screen.getByLabelText('MCP server name (optional)');
-    const scriptInput = screen.getByLabelText('Restart script (optional)');
-
     expect(screen.getByLabelText('Enable MCP server')).not.toBeChecked();
-    expect(nameInput).toBeDisabled();
-    expect(scriptInput).toBeDisabled();
+    expect(screen.queryByLabelText('MCP server name (optional)')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Restart script (optional)')).not.toBeInTheDocument();
   });
 
   it('should display error when config fails to load', async () => {
