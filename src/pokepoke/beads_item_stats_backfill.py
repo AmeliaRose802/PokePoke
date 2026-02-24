@@ -33,9 +33,11 @@ def _get_all_beads_items() -> list[dict[str, Any]]:
             check=True,
             timeout=30,
         )
+        if not result.stdout:
+            return []
         items = json.loads(result.stdout)
         return items if isinstance(items, list) else []
-    except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError, subprocess.TimeoutExpired) as e:
+    except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError, subprocess.TimeoutExpired, TypeError) as e:
         logger.warning(f"Failed to fetch beads items for backfill: {e}")
         return []
 

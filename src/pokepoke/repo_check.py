@@ -36,8 +36,8 @@ def check_beads_available() -> bool:
     try:
         result = subprocess.run(
             ['bd', 'info', '--json'],
-            capture_output=True, text=True, encoding='utf-8',
-            timeout=BD_INFO_TIMEOUT
+            capture_output=True, text=True,
+            encoding='utf-8', errors='replace', timeout=BD_INFO_TIMEOUT,
         )
         if result.returncode != 0:
             print("\nError: This directory is not a beads repository.", file=sys.stderr)

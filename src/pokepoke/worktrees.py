@@ -56,6 +56,7 @@ def create_worktree(item_id: str, base_branch: str | None = None) -> Path:
             capture_output=True,
             text=True,
             encoding='utf-8',
+            errors='replace',
             timeout=30
         )
     except subprocess.CalledProcessError as e:
@@ -93,6 +94,7 @@ def is_worktree_merged(item_id: str, target_branch: str | None = None) -> bool:
         result = subprocess.run(
             ["git", "branch", "--merged", target_branch],
             check=True, capture_output=True, text=True, encoding='utf-8',
+            errors='replace',
             timeout=30
         )
         return any(branch_name in branch for branch in result.stdout.splitlines())
@@ -149,7 +151,7 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
     print(f"✅ Post-merge validation passed: {target_branch} is clean")
 
     try:
-        subprocess.run(["git", "push"], check=True, capture_output=True, text=True, encoding='utf-8', timeout=120)
+        subprocess.run(["git", "push"], check=True, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120)
         print(f"✅ Pushed {target_branch} to remote")
     except subprocess.CalledProcessError as e:
         print(f"❌ Push failed: {e.stderr if e.stderr else str(e)}")
@@ -214,6 +216,7 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
                 capture_output=True,
                 text=True,
                 encoding='utf-8',
+                errors='replace',
                 timeout=30
             )
             remove_from_manifest(item_id)
@@ -255,6 +258,7 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
             capture_output=True,
             text=True,
             encoding='utf-8',
+            errors='replace',
             timeout=30
         )
     except subprocess.CalledProcessError:
@@ -267,6 +271,7 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
                 capture_output=True,
                 text=True,
                 encoding='utf-8',
+                errors='replace',
                 timeout=30
             )
         except subprocess.CalledProcessError as e2:
@@ -292,6 +297,7 @@ def list_worktrees() -> list[dict[str, str]]:
             capture_output=True,
             text=True,
             encoding='utf-8',
+            errors='replace',
             timeout=30
         )
 
@@ -336,6 +342,7 @@ def _sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
             capture_output=True,
             text=True,
             encoding='utf-8',
+            errors='replace',
             check=True,
             timeout=30
         ).stdout.strip()

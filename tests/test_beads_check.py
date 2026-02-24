@@ -73,8 +73,8 @@ class TestCheckBeadsAvailable:
         assert result is True
         mock_run.assert_called_once_with(
             ['bd', 'info', '--json'],
-            capture_output=True, text=True, encoding='utf-8',
-            timeout=30
+            capture_output=True, text=True,
+            encoding='utf-8', errors='replace', timeout=30,
         )
 
 

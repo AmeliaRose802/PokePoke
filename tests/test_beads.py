@@ -27,6 +27,7 @@ class TestBeadsIntegration:
             capture_output=True,
             text=True,
             encoding='utf-8',
+            errors='replace',
             check=True,
             timeout=30,
             cwd=None
@@ -730,6 +731,7 @@ class TestCloseItem:
             capture_output=True,
             text=True,
             encoding='utf-8',
+            errors='replace',
             check=True,
             timeout=30,
             cwd=None
@@ -767,6 +769,7 @@ class TestAddComment:
             capture_output=True,
             text=True,
             encoding='utf-8',
+            errors='replace',
             check=True,
             timeout=30,
             cwd=None
@@ -853,6 +856,7 @@ class TestUnassignItem:
             capture_output=True,
             text=True,
             encoding='utf-8',
+            errors='replace',
             check=True,
             timeout=30,
             cwd=None,
@@ -884,6 +888,7 @@ class TestUnassignItem:
             capture_output=True,
             text=True,
             encoding='utf-8',
+            errors='replace',
             check=True,
             timeout=30,
             cwd=None,
