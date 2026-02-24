@@ -222,6 +222,7 @@ def run_orchestrator(
                     status="running",
                     work_item_id=selected_item.id,
                     work_item_title=selected_item.title,
+                    agent_type="work",
                 )
                 success = False
                 try:
@@ -236,6 +237,7 @@ def run_orchestrator(
                         status="success" if success else "failed",
                         work_item_id=selected_item.id,
                         work_item_title=selected_item.title,
+                        agent_type="work",
                     )
 
                 if not wi_result.success and wi_result.request_count == 0:

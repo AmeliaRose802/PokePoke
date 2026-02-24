@@ -2412,6 +2412,7 @@ class TestSingleAgentPanelRegistration:
                 status="running",
                 work_item_id="task-42",
                 work_item_title="Fix bug",
+                agent_type="work",
             )
             assert mock_push.call_args_list[1] == call(
                 "task-42",
@@ -2420,6 +2421,7 @@ class TestSingleAgentPanelRegistration:
                 status="success",
                 work_item_id="task-42",
                 work_item_title="Fix bug",
+                agent_type="work",
             )
 
             # Should wrap process_work_item with agent_output_for
@@ -2475,6 +2477,7 @@ class TestSingleAgentPanelRegistration:
                 status="running",
                 work_item_id="task-99",
                 work_item_title="Failing task",
+                agent_type="work",
             )
             assert mock_push.call_args_list[1] == call(
                 "task-99",
@@ -2483,6 +2486,7 @@ class TestSingleAgentPanelRegistration:
                 status="failed",
                 work_item_id="task-99",
                 work_item_title="Failing task",
+                agent_type="work",
             )
 
 

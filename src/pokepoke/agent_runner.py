@@ -37,6 +37,9 @@ def run_gate_agent(
     cwd: str | None = None,
     work_model: str | None = None,
     handoff_context: str | None = None,
+    agent_id: str | None = None,
+    agent_iteration: int = 1,
+    parent_agent_id: str | None = None,
 ) -> tuple[bool, str, AgentStats | None]:
     """Run the Gate Agent to verify a fixed work item.
 
@@ -48,6 +51,9 @@ def run_gate_agent(
         handoff_context: Optional structured context from the work agent
                         (changed files, diff stats, commit history) to inject
                         into the gate prompt so it skips re-discovering the codebase.
+        agent_id: Optional agent ID for UI status tracking.
+        agent_iteration: Iteration number for UI status tracking.
+        parent_agent_id: Optional parent agent ID for UI status tracking.
 
     Returns:
         Tuple of (success, reason, stats).
@@ -77,6 +83,13 @@ def run_gate_agent(
     # deny_write=True ensures it only reads/runs tests but doesn't modify code
     from pokepoke.metrics_context import agent_type_context
     with agent_type_context("gate"):
+        # Push agent status inside context so get_current_agent_type() returns "gate"
+        if agent_id:
+            terminal_ui.ui.push_agent_status(
+                agent_id, "Gate Agent", iteration=agent_iteration, status="running",
+                parent_agent_id=parent_agent_id, work_item_id=item.id, work_item_title=item.title,
+                agent_type="gate"
+            )
         result = invoke_copilot(item, prompt=final_prompt, deny_write=True, cwd=cwd, model=gate_model)
 
     stats = parse_agent_stats(result.output) if result.output else None
@@ -209,7 +222,7 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
         return None
 
     agent_id = "worktree-cleanup"
-    terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="running", parent_agent_id=parent_agent_id)
+    terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="running", parent_agent_id=parent_agent_id, agent_type="worktree_cleanup")
     print(f"\n{'='*60}\n🌳 Running Worktree Cleanup Agent\n{'='*60}")
 
     # First, try to clean up any worktrees that previously failed
@@ -225,12 +238,12 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
             prompt_path = prompts_dir / "worktree-cleanup.md"
         except FileNotFoundError as e:
             print(f"❌ {e}")
-            terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed", parent_agent_id=parent_agent_id)
+            terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed", parent_agent_id=parent_agent_id, agent_type="worktree_cleanup")
             return None
 
         if not prompt_path.exists():
             print(f"❌ Prompt not found at {prompt_path}")
-            terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed", parent_agent_id=parent_agent_id)
+            terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed", parent_agent_id=parent_agent_id, agent_type="worktree_cleanup")
             return None
 
         cleanup_prompt = prompt_path.read_text(encoding='utf-8')
@@ -256,12 +269,12 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
         agent_result = _run_main_repo_agent("Worktree Cleanup", cleanup_item, cleanup_prompt, cwd=cwd, item_logger=item_logger)
 
         status = "success" if agent_result is not None else "failed"
-        terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status=status, parent_agent_id=parent_agent_id)
+        terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status=status, parent_agent_id=parent_agent_id, agent_type="worktree_cleanup")
         return agent_result
 
     except Exception as e:
         logger.warning(f"Worktree cleanup agent raised exception: {e}", exc_info=True)
-        terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed", parent_agent_id=parent_agent_id)
+        terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed", parent_agent_id=parent_agent_id, agent_type="worktree_cleanup")
         return None
 
 
@@ -296,6 +309,12 @@ def _run_worktree_agent(
             from pokepoke.metrics_context import agent_type_context
             normalized = agent_name.lower().replace(" ", "_")
             with agent_type_context(normalized):
+                # Push agent status inside context so get_current_agent_type() returns the agent type
+                terminal_ui.ui.push_agent_status(
+                    agent_id, f"{agent_name} Agent", iteration=1, status="running",
+                    parent_agent_id=parent_agent_id,
+                    agent_type=normalized,
+                )
                 result = invoke_copilot(agent_item, prompt=agent_prompt, model=model, cwd=worktree_cwd, item_logger=item_logger)
         except Exception as e:
             print(f"❌ Error invoking Copilot: {e}")

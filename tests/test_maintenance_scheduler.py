@@ -366,7 +366,7 @@ class TestRunAgentWithCoordination:
 
         # Exception should be logged, agent status set to failed
         mock_ui.ui.push_agent_status.assert_called_with(
-            "maintenance-janitor", "Janitor Agent", iteration=1, status="failed"
+            "maintenance-janitor", "Janitor Agent", iteration=1, status="failed", agent_type="janitor"
         )
         run_logger.log_maintenance.assert_any_call("janitor", "Janitor Agent raised exception")
 

@@ -1,8 +1,4 @@
-"""Desktop UI adapter for PokePoke orchestrator using pywebview.
-
-Opens a native window running the React frontend and exposes DesktopAPI
-methods directly in-process via window.pywebview.api.
-"""
+"""Desktop UI adapter for PokePoke orchestrator using pywebview."""
 
 from __future__ import annotations
 
@@ -371,11 +367,12 @@ class DesktopUI:
                           parent_agent_id: str | None = None,
                           work_item_id: str | None = None,
                           work_item_title: str | None = None,
-                          modified_files: list[str] | None = None) -> None:
+                          modified_files: list[str] | None = None,
+                          agent_type: str | None = None) -> None:
         """Register or update a running agent card."""
         self._api.push_agent_status(
             agent_id, name, iteration, status, model, parent_agent_id,
-            work_item_id, work_item_title, modified_files,
+            work_item_id, work_item_title, modified_files, agent_type,
         )
 
     def push_agent_log(self, agent_id: str, line: str) -> None:
