@@ -174,6 +174,11 @@ class TestInvokeCopilotSDKSync:
 class TestInvokeCopilotSDKAsync:
     """Tests for invoke_copilot_sdk async function."""
 
+    @pytest.fixture(autouse=True)
+    def _mock_process_cleanup(self):
+        with patch('pokepoke.copilot_sdk.wait_for_process_cleanup'):
+            yield
+
     @patch('pokepoke.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_success(self, mock_client_class, sample_work_item):
         """Test successful SDK invocation."""
