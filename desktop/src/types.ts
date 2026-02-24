@@ -241,6 +241,7 @@ export interface AgentInfo {
   modified_files?: string[];
   recent_logs: string[];
   log_lines?: string[];
+  agent_prompt?: string | null;
   started_at?: number;
   last_updated?: number;
   last_log_at?: number | null;

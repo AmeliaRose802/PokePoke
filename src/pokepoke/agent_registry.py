@@ -39,6 +39,7 @@ class AgentRegistry:
         parent_agent_id: str | None = None,
         work_item_id: str | None = None,
         work_item_title: str | None = None,
+        agent_prompt: str | None = None,
         session_id: str | None = None,
         modified_files: list[str] | None = None,
         agent_type: str | None = None,
@@ -79,6 +80,11 @@ class AgentRegistry:
                 work_item_title
                 if work_item_title is not None
                 else (existing.get("work_item_title") if existing else None)
+            )
+            current_prompt = (
+                agent_prompt
+                if agent_prompt is not None
+                else (existing.get("agent_prompt") if existing else None)
             )
             current_session_id = (
                 session_id
@@ -121,6 +127,7 @@ class AgentRegistry:
                 "parent_agent_id": current_parent,
                 "work_item_id": current_work_item_id,
                 "work_item_title": current_work_item_title,
+                "agent_prompt": current_prompt,
                 "session_id": current_session_id,
                 "modified_files": current_modified_files,
                 "agent_type": current_agent_type,
@@ -250,6 +257,7 @@ class AgentRegistry:
             "parent_agent_id": agent.get("parent_agent_id"),
             "work_item_id": agent.get("work_item_id"),
             "work_item_title": agent.get("work_item_title"),
+            "agent_prompt": agent.get("agent_prompt"),
             "session_id": agent.get("session_id"),
             "agent_type": agent.get("agent_type"),
             "modified_files": list(agent.get("modified_files") or []),

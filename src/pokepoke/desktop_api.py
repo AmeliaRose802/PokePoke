@@ -257,6 +257,7 @@ class DesktopAPI:
         parent_agent_id: str | None = None,
         work_item_id: str | None = None,
         work_item_title: str | None = None,
+        agent_prompt: str | None = None,
         modified_files: list[str] | None = None,
         agent_type: str | None = None,
     ) -> None:
@@ -275,6 +276,7 @@ class DesktopAPI:
             parent_agent_id=parent_agent_id,
             work_item_id=work_item_id,
             work_item_title=work_item_title,
+            agent_prompt=agent_prompt,
             session_id=session_id,
             modified_files=modified_files,
             agent_type=normalized_agent_type,

@@ -88,7 +88,8 @@ def run_gate_agent(
             terminal_ui.ui.push_agent_status(
                 agent_id, "Gate Agent", iteration=agent_iteration, status="running",
                 parent_agent_id=parent_agent_id, work_item_id=item.id, work_item_title=item.title,
-                agent_type="gate"
+                agent_type="gate",
+                agent_prompt=final_prompt,
             )
         result = invoke_copilot(item, prompt=final_prompt, deny_write=True, cwd=cwd, model=gate_model)
 
@@ -260,6 +261,11 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
             f"This process and ALL of its child processes are **absolutely off-limits**.\n"
             f"But remember: you should NEVER kill ANY processes at all.\n"
         )
+        terminal_ui.ui.push_agent_status(
+            agent_id, "Worktree Cleanup", iteration=1, status="running",
+            parent_agent_id=parent_agent_id, agent_type="worktree_cleanup",
+            agent_prompt=cleanup_prompt,
+        )
 
         cleanup_item = BeadsWorkItem(
             id=agent_id, title="Worktree Cleanup and Merge", description=cleanup_prompt,
@@ -316,6 +322,7 @@ def _run_worktree_agent(
                     agent_id, f"{agent_name} Agent", iteration=1, status="running",
                     parent_agent_id=parent_agent_id,
                     agent_type=normalized,
+                    agent_prompt=agent_prompt,
                 )
                 result = invoke_copilot(agent_item, prompt=agent_prompt, model=model, cwd=worktree_cwd, item_logger=item_logger)
         except Exception as e:
