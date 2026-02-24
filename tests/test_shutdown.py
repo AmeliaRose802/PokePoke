@@ -17,6 +17,7 @@ from pokepoke.shutdown import (
     register_agent,
     unregister_agent,
     get_active_agent_count,
+    has_active_agents,
     set_executor,
     _shutdown_event,
 )
@@ -249,6 +250,36 @@ class TestWatchdogThread:
         mock_sleep.assert_any_call(1.0)
         mock_exit.assert_called_once_with(130)
 
+    @patch("pokepoke.shutdown.os._exit")
+    @patch("pokepoke.shutdown.merge_lock_active")
+    @patch("pokepoke.shutdown.time.sleep")
+    @patch("pokepoke.shutdown.time.monotonic")
+    def test_merge_lock_wait_cap(self, mock_monotonic, mock_sleep, mock_lock, mock_exit):
+        """Watchdog force-exits after merge lock wait cap even if lock is still held."""
+        from pokepoke.shutdown import _watchdog_thread
+        _shutdown_event.set()
+        # Lock is always active
+        mock_lock.return_value = True
+        # Simulate time progression past the 120s cap
+        mock_monotonic.side_effect = [0.0, 121.0]
+
+        _watchdog_thread(1.0)
+
+        mock_exit.assert_called_once_with(130)
+
+    @patch("pokepoke.shutdown.os._exit")
+    @patch("pokepoke.shutdown.merge_lock_active")
+    @patch("pokepoke.shutdown.time.sleep")
+    def test_merge_lock_exception_falls_through(self, mock_sleep, mock_lock, mock_exit):
+        """Watchdog still force-exits if merge_lock_active raises an exception."""
+        from pokepoke.shutdown import _watchdog_thread
+        _shutdown_event.set()
+        mock_lock.side_effect = RuntimeError("file lock broken")
+
+        _watchdog_thread(1.0)
+
+        mock_exit.assert_called_once_with(130)
+
 
 class TestMergeQueueShutdown:
     """Tests for merge queue shutdown coordination in request_shutdown."""
@@ -280,3 +311,37 @@ class TestMergeQueueShutdown:
         with patch("pokepoke.merge_queue.get_merge_queue", return_value=mock_mq):
             request_shutdown()
             assert "merge-queue-shutdown" not in calls
+
+    @patch("pokepoke.shutdown.threading.Thread")
+    def test_shutdown_handles_merge_queue_exception(self, mock_thread_cls):
+        """request_shutdown continues if merge queue raises."""
+        mock_thread_cls.return_value.start = lambda: None
+        with patch("pokepoke.merge_queue.get_merge_queue", side_effect=RuntimeError("no queue")):
+            request_shutdown()
+            # Should still start the watchdog thread
+            assert any(
+                call.kwargs.get("name") == "shutdown-watchdog"
+                for call in mock_thread_cls.call_args_list
+            )
+
+
+class TestHasActiveAgents:
+    """Tests for has_active_agents()."""
+
+    def test_false_when_no_agents_and_no_executor(self):
+        assert has_active_agents() is False
+
+    def test_true_when_agents_registered(self):
+        register_agent()
+        assert has_active_agents() is True
+
+    def test_true_when_executor_set(self):
+        import pokepoke.shutdown as mod
+        mock_executor = object()
+        mod._executor = mock_executor
+        assert has_active_agents() is True
+
+    def test_false_after_agents_unregistered_and_no_executor(self):
+        register_agent()
+        unregister_agent()
+        assert has_active_agents() is False

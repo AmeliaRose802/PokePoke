@@ -1,7 +1,196 @@
 
 from unittest.mock import Mock, patch
-from pokepoke.work_item_selection import select_work_item
+from pokepoke.work_item_selection import (
+    select_work_item,
+    _is_human_required,
+    interactive_selection,
+    autonomous_selection,
+    select_multiple_items,
+)
 from pokepoke.types import BeadsWorkItem
+
+
+def _make_item(id: str = "task-1", title: str = "Task", labels: list[str] | None = None,
+               description: str | None = "Desc", priority: int = 1) -> BeadsWorkItem:
+    return BeadsWorkItem(
+        id=id, title=title, description=description,
+        status="open", priority=priority, issue_type="task",
+        labels=labels,
+    )
+
+
+class TestIsHumanRequired:
+    """Tests for _is_human_required helper."""
+
+    def test_no_labels_returns_false(self):
+        assert _is_human_required(_make_item(labels=None)) is False
+
+    def test_empty_labels_returns_false(self):
+        assert _is_human_required(_make_item(labels=[])) is False
+
+    def test_human_required_label_returns_true(self):
+        assert _is_human_required(_make_item(labels=["human-required"])) is True
+
+    def test_other_labels_returns_false(self):
+        assert _is_human_required(_make_item(labels=["tech-debt", "bug"])) is False
+
+
+class TestSelectWorkItem:
+    """Tests for select_work_item filtering logic."""
+
+    @patch('builtins.print')
+    def test_empty_ready_items(self, mock_print: Mock):
+        result = select_work_item([], interactive=False)
+        assert result is None
+        printed = " ".join(str(c) for c in mock_print.call_args_list)
+        assert "No ready work" in printed
+
+    @patch('builtins.print')
+    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    def test_skip_ids_filters_items(self, mock_select: Mock, mock_print: Mock):
+        items = [_make_item(id="a"), _make_item(id="b")]
+        mock_select.return_value = items[1]
+        result = select_work_item(items, interactive=False, skip_ids={"a"})
+        assert result is items[1]
+        # select_next_hierarchical_item should only receive item "b"
+        call_args = mock_select.call_args[0][0]
+        assert len(call_args) == 1
+        assert call_args[0].id == "b"
+
+    @patch('builtins.print')
+    def test_all_items_skipped(self, mock_print: Mock):
+        items = [_make_item(id="a")]
+        result = select_work_item(items, interactive=False, skip_ids={"a"})
+        assert result is None
+        printed = " ".join(str(c) for c in mock_print.call_args_list)
+        assert "previously skipped" in printed
+
+    @patch('builtins.print')
+    @patch('pokepoke.work_item_selection.is_assigned_to_current_user', return_value=False)
+    def test_filters_items_assigned_to_other_agents(self, _mock_assigned: Mock, mock_print: Mock):
+        items = [_make_item(id="a")]
+        result = select_work_item(items, interactive=False)
+        assert result is None
+        printed = " ".join(str(c) for c in mock_print.call_args_list)
+        assert "Skipped" in printed
+
+    @patch('builtins.print')
+    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
+    @patch('pokepoke.work_item_selection.is_assigned_to_current_user', return_value=True)
+    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    def test_filters_human_required_items(self, mock_select: Mock, _m1: Mock, _m2: Mock, mock_print: Mock):
+        human = _make_item(id="h", labels=["human-required"])
+        normal = _make_item(id="n")
+        mock_select.return_value = normal
+        result = select_work_item([human, normal], interactive=False)
+        assert result is normal
+        printed = " ".join(str(c) for c in mock_print.call_args_list)
+        assert "human-required" in printed
+
+    @patch('builtins.print')
+    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=True)
+    @patch('pokepoke.work_item_selection.is_assigned_to_current_user', return_value=True)
+    def test_filters_items_with_unmet_dependencies(self, _m1: Mock, _m2: Mock, mock_print: Mock):
+        items = [_make_item(id="a")]
+        result = select_work_item(items, interactive=False)
+        assert result is None
+        printed = " ".join(str(c) for c in mock_print.call_args_list)
+        assert "blocking dependencies" in printed
+
+    @patch('builtins.print')
+    @patch('builtins.input')
+    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
+    @patch('pokepoke.work_item_selection.is_assigned_to_current_user', return_value=True)
+    def test_interactive_long_description_truncated(self, _m1: Mock, _m2: Mock, mock_input: Mock, mock_print: Mock):
+        """Items with descriptions > 80 chars get truncated with '...'."""
+        long_desc = "A" * 100
+        items = [_make_item(id="a", description=long_desc)]
+        mock_input.return_value = '1'
+        select_work_item(items, interactive=True)
+        printed = " ".join(str(c) for c in mock_print.call_args_list)
+        assert "..." in printed
+
+
+class TestInteractiveSelection:
+    """Tests for interactive_selection."""
+
+    @patch('builtins.input', return_value='q')
+    def test_quit(self, _mock_input: Mock):
+        result = interactive_selection([_make_item()])
+        assert result is None
+
+    @patch('builtins.input', side_effect=['2', '1'])
+    @patch('builtins.print')
+    def test_out_of_range_then_valid(self, _mock_print: Mock, _mock_input: Mock):
+        items = [_make_item()]
+        result = interactive_selection(items)
+        assert result is items[0]
+
+    @patch('builtins.input', side_effect=['abc', '1'])
+    @patch('builtins.print')
+    def test_invalid_input_then_valid(self, _mock_print: Mock, _mock_input: Mock):
+        items = [_make_item()]
+        result = interactive_selection(items)
+        assert result is items[0]
+
+    @patch('builtins.input', side_effect=KeyboardInterrupt)
+    @patch('builtins.print')
+    def test_keyboard_interrupt(self, _mock_print: Mock, _mock_input: Mock):
+        result = interactive_selection([_make_item()])
+        assert result is None
+
+
+class TestAutonomousSelection:
+    """Tests for autonomous_selection."""
+
+    @patch('builtins.print')
+    @patch('pokepoke.work_item_selection.select_next_hierarchical_item', return_value=None)
+    def test_returns_none_when_no_selection(self, _mock_select: Mock, _mock_print: Mock):
+        result = autonomous_selection([_make_item()])
+        assert result is None
+
+
+class TestSelectMultipleItems:
+    """Tests for select_multiple_items."""
+
+    def test_empty_items_returns_empty(self):
+        assert select_multiple_items([], 3) == []
+
+    def test_zero_count_returns_empty(self):
+        assert select_multiple_items([_make_item()], 0) == []
+
+    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
+    @patch('pokepoke.work_item_selection.is_assigned_to_current_user', return_value=True)
+    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    def test_selects_up_to_count(self, mock_select: Mock, _m1: Mock, _m2: Mock):
+        a, b = _make_item(id="a"), _make_item(id="b")
+        mock_select.side_effect = [a, b]
+        result = select_multiple_items([a, b], 2)
+        assert len(result) == 2
+
+    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
+    @patch('pokepoke.work_item_selection.is_assigned_to_current_user', return_value=True)
+    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    def test_skips_claimed_ids(self, mock_select: Mock, _m1: Mock, _m2: Mock):
+        a, b = _make_item(id="a"), _make_item(id="b")
+        mock_select.return_value = b
+        select_multiple_items([a, b], 2, claimed_ids={"a"})
+        # Only b should be available
+        call_args = mock_select.call_args[0][0]
+        assert all(i.id != "a" for i in call_args)
+
+    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
+    @patch('pokepoke.work_item_selection.is_assigned_to_current_user', return_value=True)
+    @patch('pokepoke.work_item_selection.select_next_hierarchical_item', return_value=None)
+    def test_returns_empty_when_hierarchical_returns_none(self, _m1: Mock, _m2: Mock, _m3: Mock):
+        assert select_multiple_items([_make_item()], 3) == []
+
+    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=True)
+    @patch('pokepoke.work_item_selection.is_assigned_to_current_user', return_value=True)
+    def test_filters_items_with_blocking_deps(self, _m1: Mock, _m2: Mock):
+        result = select_multiple_items([_make_item()], 1)
+        assert result == []
+
 
 class TestWorkItemSelectionOutput:
     """Test output behavior of work item selection."""

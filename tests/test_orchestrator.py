@@ -932,18 +932,29 @@ class TestRunOrchestratorContinuousMode:
 class TestOrchestratorHelperFunctions:
     """Test orchestrator helper functions."""
 
-    @patch('pokepoke.agent_runner.invoke_cleanup_agent')
+    @patch('pokepoke.repo_state_guard.cleanup_lock')
+    @patch('pokepoke.repo_check.merge_lock_active', return_value=False)
+    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent')
     @patch('subprocess.run')
     def test_check_and_commit_main_repo_with_non_beads_changes(
         self,
         mock_subprocess: Mock,
-        mock_cleanup: Mock
+        mock_cleanup: Mock,
+        _mock_merge_lock: Mock,
+        mock_cleanup_lock: Mock,
     ) -> None:
         """Test check_and_commit_main_repo with non-beads changes - tries auto-commit first, then cleanup agent."""
+        from contextlib import contextmanager
         from pokepoke.repo_check import check_and_commit_main_repo
         from pokepoke.logging_utils import RunLogger
         from pathlib import Path
         import tempfile
+
+        # Make cleanup_lock() a no-op context manager
+        @contextmanager
+        def _noop_lock():
+            yield
+        mock_cleanup_lock.return_value = _noop_lock()
 
         # git status returns changes, auto-commit (add succeeds, commit fails), then cleanup agent
         mock_subprocess.side_effect = [
