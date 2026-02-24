@@ -46,6 +46,7 @@ class TestParallelProcessItem:
             status="running",
             work_item_id="t1",
             work_item_title="Title-t1",
+            agent_type="work",
         )
         mock_ui.ui.push_agent_status.assert_any_call(
             "t1",
@@ -54,6 +55,7 @@ class TestParallelProcessItem:
             status="success",
             work_item_id="t1",
             work_item_title="Title-t1",
+            agent_type="work",
         )
 
     @patch("pokepoke.parallel.terminal_ui")
@@ -73,6 +75,7 @@ class TestParallelProcessItem:
             status="failed",
             work_item_id="t1",
             work_item_title="Title-t1",
+            agent_type="work",
         )
 
     @patch("pokepoke.parallel.terminal_ui")
@@ -92,6 +95,7 @@ class TestParallelProcessItem:
             status="failed",
             work_item_id="t1",
             work_item_title="Title-t1",
+            agent_type="work",
         )
 
     @patch("pokepoke.parallel.terminal_ui")

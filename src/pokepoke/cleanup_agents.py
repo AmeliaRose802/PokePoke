@@ -200,17 +200,29 @@ def _run_agent_with_ui(
     cleanup_prompt: str,
     cwd: str | None,
     parent_agent_id: str | None,
+    work_item_id: str | None = None,
+    work_item_title: str | None = None,
+    modified_files: list[str] | None = None,
 ) -> tuple[bool, AgentStats | None]:
     """Invoke copilot with UI status tracking and metrics context."""
     try:
         from pokepoke.metrics_context import agent_type_context
         with terminal_ui.ui.agent_output_for(agent_id), agent_type_context(agent_type_key):
+            # Push agent status inside context so get_current_agent_type() returns the agent type
+            terminal_ui.ui.push_agent_status(
+                agent_id, agent_label, iteration=1, status="running",
+                work_item_id=work_item_id, work_item_title=work_item_title,
+                modified_files=modified_files,
+                parent_agent_id=parent_agent_id,
+                agent_type=agent_type_key,
+            )
             copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd)
 
         status = "success" if copilot_result.success else "failed"
         terminal_ui.ui.push_agent_status(
             agent_id, agent_label, iteration=1, status=status,
             parent_agent_id=parent_agent_id,
+            agent_type=agent_type_key,
         )
 
         return copilot_result.success, copilot_result.stats
@@ -219,6 +231,7 @@ def _run_agent_with_ui(
         terminal_ui.ui.push_agent_status(
             agent_id, agent_label, iteration=1, status="failed",
             parent_agent_id=parent_agent_id,
+            agent_type=agent_type_key,
         )
         raise
 
@@ -234,18 +247,13 @@ def invoke_cleanup_agent(
     terminal_ui.ui.set_current_agent("Cleanup Agent")
 
     agent_id = f"{item.id}-cleanup"
-    terminal_ui.ui.push_agent_status(
-        agent_id, "Cleanup Agent", iteration=1, status="running",
-        work_item_id=item.id, work_item_title=item.title,
-        modified_files=modified_files,
-        parent_agent_id=parent_agent_id,
-    )
 
     cleanup_prompt_template = load_prompt_file("cleanup.md")
     if cleanup_prompt_template is None:
         terminal_ui.ui.push_agent_status(
             agent_id, "Cleanup Agent", iteration=1, status="failed",
             parent_agent_id=parent_agent_id,
+            agent_type="cleanup",
         )
         return False, None
 
@@ -272,6 +280,8 @@ def invoke_cleanup_agent(
     return _run_agent_with_ui(
         agent_id, "Cleanup Agent", "cleanup",
         cleanup_item, cleanup_prompt, cwd, parent_agent_id,
+        work_item_id=item.id, work_item_title=item.title,
+        modified_files=modified_files,
     )
 
 
@@ -296,11 +306,6 @@ def invoke_merge_conflict_cleanup_agent(
     terminal_ui.ui.set_current_agent("Merge Conflict Cleanup")
 
     agent_id = f"{item.id}-merge-fix"
-    terminal_ui.ui.push_agent_status(
-        agent_id, "Merge Conflict Cleanup", iteration=1, status="running",
-        work_item_id=item.id, work_item_title=item.title,
-        parent_agent_id=parent_agent_id,
-    )
 
     from pokepoke.git_operations import is_merge_in_progress, get_unmerged_files as git_get_unmerged
 
@@ -310,6 +315,7 @@ def invoke_merge_conflict_cleanup_agent(
         terminal_ui.ui.push_agent_status(
             agent_id, "Merge Conflict Cleanup", iteration=1, status="failed",
             parent_agent_id=parent_agent_id,
+            agent_type="merge_conflict_cleanup",
         )
         return invoke_cleanup_agent(item, repo_root, parent_agent_id=parent_agent_id)
 
@@ -366,4 +372,6 @@ def invoke_merge_conflict_cleanup_agent(
     return _run_agent_with_ui(
         agent_id, "Merge Conflict Cleanup", "merge_conflict_cleanup",
         cleanup_item, cleanup_prompt, cwd, parent_agent_id,
+        work_item_id=item.id, work_item_title=item.title,
+        modified_files=unmerged_files,
     )

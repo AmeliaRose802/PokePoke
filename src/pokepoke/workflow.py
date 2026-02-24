@@ -86,10 +86,9 @@ def process_work_item(
         backend_provider = config.ai_backend.provider
         worktree_lock_timeout = float(config.command_timeout)
 
-        # Keep the Desktop UI agent card in sync with the selected model.
         terminal_ui.ui.push_agent_status(base_agent_id, get_agent_name(default="pokepoke"),
             iteration=1, status="running", model=selected_model,
-            work_item_id=item.id, work_item_title=item.title)
+            work_item_id=item.id, work_item_title=item.title, agent_type="work")
 
         print(f"\n🚀 Processing work item: {item.id} — {item.title}")
         print(f"   🤖 Model: {selected_model} | 🧠 Backend: {backend_provider} | ⏱️  Timeout: {timeout_hours}h\n")
@@ -169,14 +168,14 @@ def process_work_item(
                 current_desc += f"\n- {last_feedback}"
                 item.description = current_desc
                 work_agent_iteration += 1
-                terminal_ui.ui.push_agent_status(base_agent_id, get_agent_name(default="pokepoke"),
-                    iteration=work_agent_iteration, status="running", model=selected_model,
-                    work_item_id=item.id, work_item_title=item.title)
 
             terminal_ui.ui.set_current_agent("Work Agent")
             from pokepoke.metrics_context import agent_type_context
             custom_prompt = build_prompt_from_work_item(item, template_name=selected_prompt_template) if selected_prompt_template else None
             with agent_type_context("work"):
+                terminal_ui.ui.push_agent_status(base_agent_id, get_agent_name(default="pokepoke"),
+                    iteration=work_agent_iteration, status="running", model=selected_model,
+                    work_item_id=item.id, work_item_title=item.title, agent_type="work")
                 result = invoke_copilot(
                     item, prompt=custom_prompt, timeout=remaining_timeout,
                     item_logger=item_logger, model=selected_model, cwd=worktree_cwd)
@@ -227,26 +226,27 @@ def process_work_item(
 
             gate_iteration = gate_agent_runs + 1
             gate_agent_id = f"{base_agent_id}-gate-{gate_iteration}"
-            terminal_ui.ui.push_agent_status(gate_agent_id, "Gate Agent",
-                iteration=gate_iteration, status="running",
-                parent_agent_id=base_agent_id, work_item_id=item.id, work_item_title=item.title)
             try:
                 with terminal_ui.ui.agent_output_for(gate_agent_id):
                     gate_success, gate_reason, gate_stats = run_gate_agent(
                         item, cwd=worktree_cwd, work_model=selected_model,
                         handoff_context=handoff_ctx,
+                        agent_id=gate_agent_id, agent_iteration=gate_iteration,
+                        parent_agent_id=base_agent_id,
                     )
             except Exception as e:
                 logger.warning(f"Gate agent raised exception: {e}", exc_info=True)
                 gate_agent_runs += 1
                 terminal_ui.ui.push_agent_status(gate_agent_id, "Gate Agent",
                     iteration=gate_agent_runs, status="failed",
-                    parent_agent_id=base_agent_id, work_item_id=item.id, work_item_title=item.title)
+                    parent_agent_id=base_agent_id, work_item_id=item.id, work_item_title=item.title,
+                    agent_type="gate")
                 raise
             gate_agent_runs += 1
             terminal_ui.ui.push_agent_status(gate_agent_id, "Gate Agent",
                 iteration=gate_agent_runs, status="success" if gate_success else "failed",
-                parent_agent_id=base_agent_id, work_item_id=item.id, work_item_title=item.title)
+                parent_agent_id=base_agent_id, work_item_id=item.id, work_item_title=item.title,
+                agent_type="gate")
 
             if gate_success:
                 print("\n✅ Gate Agent signed off!")

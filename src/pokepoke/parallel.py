@@ -91,7 +91,6 @@ def _parallel_process_item(
     if worker_agent_name:
         set_agent_name(worker_agent_name)
 
-    # Register agent in the UI panel
     terminal_ui.ui.push_agent_status(
         agent_id,
         display_name,
@@ -99,6 +98,7 @@ def _parallel_process_item(
         status="running",
         work_item_id=item.id,
         work_item_title=item.title,
+        agent_type="work",
     )
     terminal_ui.ui.log_orchestrator(f"\U0001f680 Agent {display_name} started item {item.id}: {item.title}")
 
@@ -110,7 +110,6 @@ def _parallel_process_item(
                 run_logger=run_logger,
                 agent_id=agent_id,
             )
-        # Update agent status based on result
         success = result.success
         terminal_ui.ui.push_agent_status(
             agent_id,
@@ -119,6 +118,7 @@ def _parallel_process_item(
             status="success" if success else "failed",
             work_item_id=item.id,
             work_item_title=item.title,
+            agent_type="work",
         )
         status_emoji = "\u2705" if success else "\u274c"
         terminal_ui.ui.log_orchestrator(
@@ -134,6 +134,7 @@ def _parallel_process_item(
             status="failed",
             work_item_id=item.id,
             work_item_title=item.title,
+            agent_type="work",
         )
         terminal_ui.ui.log_orchestrator(f"\u274c Agent {display_name} raised exception on item {item.id}")
         raise
