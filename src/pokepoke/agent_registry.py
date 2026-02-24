@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 from typing import Any
@@ -40,6 +41,7 @@ class AgentRegistry:
         work_item_title: str | None = None,
         session_id: str | None = None,
         modified_files: list[str] | None = None,
+        agent_type: str | None = None,
     ) -> None:
         now = time.time()
         with self._lock:
@@ -88,6 +90,9 @@ class AgentRegistry:
                 if modified_files is not None
                 else (existing.get("modified_files") if existing else None)
             )
+            current_agent_type = self._normalize_agent_type(agent_type) or (
+                self._normalize_agent_type(existing.get("agent_type")) if existing else None
+            )
             card_id = (
                 existing.get("card_id")
                 if existing and not is_retry_iteration
@@ -118,6 +123,7 @@ class AgentRegistry:
                 "work_item_title": current_work_item_title,
                 "session_id": current_session_id,
                 "modified_files": current_modified_files,
+                "agent_type": current_agent_type,
                 "recent_logs": recent_logs,
                 "log_lines": log_lines,
                 "started_at": existing_started_at,
@@ -245,6 +251,7 @@ class AgentRegistry:
             "work_item_id": agent.get("work_item_id"),
             "work_item_title": agent.get("work_item_title"),
             "session_id": agent.get("session_id"),
+            "agent_type": agent.get("agent_type"),
             "modified_files": list(agent.get("modified_files") or []),
             "recent_logs": list(agent.get("recent_logs", [])),
             "log_lines": list(agent.get("log_lines", [])),
@@ -274,4 +281,11 @@ class AgentRegistry:
             snapshot["status"] = "failed"
         history = self._agent_history.setdefault(agent_id, [])
         history.append(snapshot)
+
+    @staticmethod
+    def _normalize_agent_type(agent_type: str | None) -> str | None:
+        if not agent_type:
+            return None
+        normalized = re.sub(r"[^a-z0-9]+", "_", agent_type.strip().lower()).strip("_")
+        return normalized or None
 

@@ -8,6 +8,7 @@ import type {
   SessionStats,
 } from "../types";
 import { buildAgentActivity, normalizeAgentSegments, type NormalizedAgentSegment } from "../utils/agentActivity";
+import { getAgentType } from "../utils/agentHelpers";
 import { getInProgressItems } from "../utils/inProgressItems";
 import {
   buildCompletionSeries,
@@ -360,10 +361,58 @@ const AGENT_TOKEN_DEFS: { key: string; label: string; color: string }[] = [
   { key: "code_review",     label: "Review",    color: "#c0caf5" },
 ];
 
+const AGENT_TOKEN_KEYS = new Set(AGENT_TOKEN_DEFS.map((def) => def.key));
+const AGENT_TYPE_TOKEN_ALIASES: Record<string, string> = {
+  beta_test: "beta_tester",
+  beta_test_agent: "beta_tester",
+  beta_tester_agent: "beta_tester",
+  cleanup_agent: "cleanup",
+  merge_conflict: "cleanup",
+  merge_conflict_cleanup: "cleanup",
+  code_conflict: "cleanup",
+  code_conflict_agent: "cleanup",
+  janitor_agent: "janitor",
+  maintenance_janitor: "janitor",
+  techdebt: "tech_debt",
+  tech_debt_agent: "tech_debt",
+  maintenance_tech_debt: "tech_debt",
+  backlog_cleanup_agent: "backlog_cleanup",
+};
+
+function normalizeAgentTypeKey(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const normalized = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return normalized || null;
+}
+
+function resolveAgentType(agent: AgentInfo): string {
+  const candidates = [
+    agent.agent_type,
+    agent.base_agent_id,
+    agent.agent_id,
+    agent.name,
+    getAgentType(agent),
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeAgentTypeKey(candidate);
+    if (!normalized) continue;
+    const aliased = AGENT_TYPE_TOKEN_ALIASES[normalized] ?? normalized;
+    if (AGENT_TOKEN_KEYS.has(aliased)) {
+      return aliased;
+    }
+  }
+
+  return "other";
+}
+
 function buildTokensByAgentType(agents: AgentInfo[]): AgentTokenSegment[] {
   const totals = new Map<string, number>();
   for (const agent of agents) {
-    const type = agent.agent_type ?? "other";
+    const type = resolveAgentType(agent);
     const total = (agent.input_tokens ?? 0) + (agent.output_tokens ?? 0);
     if (total > 0) {
       totals.set(type, (totals.get(type) ?? 0) + total);
