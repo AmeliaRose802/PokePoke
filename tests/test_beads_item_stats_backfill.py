@@ -2,10 +2,7 @@
 
 import json
 import subprocess
-from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from pokepoke.beads_item_stats_backfill import (
     _determine_agent_type,
@@ -29,7 +26,7 @@ def test_determine_agent_type_unknown():
     assert _determine_agent_type("system") == "unknown"
 
 
-@patch("subprocess.run")
+@patch("pokepoke.beads_item_stats_backfill.subprocess.run")
 def test_get_all_beads_items_success(mock_run):
     """Test fetching beads items successfully."""
     mock_run.return_value = MagicMock(
@@ -48,12 +45,14 @@ def test_get_all_beads_items_success(mock_run):
         ["bd", "list", "--json"],
         capture_output=True,
         text=True,
+        encoding='utf-8',
+        errors='replace',
         check=True,
         timeout=30,
     )
 
 
-@patch("subprocess.run")
+@patch("pokepoke.beads_item_stats_backfill.subprocess.run")
 def test_get_all_beads_items_failure(mock_run):
     """Test handling of beads fetch failure."""
     mock_run.side_effect = subprocess.CalledProcessError(1, "bd list")
@@ -63,7 +62,7 @@ def test_get_all_beads_items_failure(mock_run):
     assert items == []
 
 
-@patch("subprocess.run")
+@patch("pokepoke.beads_item_stats_backfill.subprocess.run")
 def test_get_all_beads_items_timeout(mock_run):
     """Test handling of beads fetch timeout."""
     mock_run.side_effect = subprocess.TimeoutExpired("bd list", 30)
