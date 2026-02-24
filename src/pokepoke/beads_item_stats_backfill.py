@@ -28,6 +28,8 @@ def _get_all_beads_items() -> list[dict[str, Any]]:
             ["bd", "list", "--json"],
             capture_output=True,
             text=True,
+            encoding='utf-8',
+            errors='replace',
             check=True,
             timeout=30,
         )

@@ -22,6 +22,7 @@ def _run_bd(
         capture_output=True,
         text=True,
         encoding='utf-8',
+        errors='replace',
         check=check,
         timeout=timeout,
         cwd=cwd,
