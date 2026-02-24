@@ -91,8 +91,8 @@ def process_work_item(
             iteration=1, status="running", model=selected_model,
             work_item_id=item.id, work_item_title=item.title)
 
-        print(f"\n≡ƒÜÇ Processing work item: {item.id} ΓÇö {item.title}")
-        print(f"   ≡ƒñû Model: {selected_model} | ≡ƒºá Backend: {backend_provider} | ΓÅ▒∩╕Å  Timeout: {timeout_hours}h\n")
+        print(f"\n🚀 Processing work item: {item.id} — {item.title}")
+        print(f"   🤖 Model: {selected_model} | 🧠 Backend: {backend_provider} | ⏱️  Timeout: {timeout_hours}h\n")
 
         item_logger = run_logger.start_item_log(item.id, item.title) if run_logger else None
 
@@ -101,28 +101,28 @@ def process_work_item(
             confirm = input("Proceed with this item? [Y/n]: ").strip().lower()
             terminal_ui.ui.start()
             if confirm and confirm != 'y':
-                print("ΓÅ¡∩╕Å  Skipped.")
+                print("⏭️  Skipped.")
                 _log_failure(run_logger, item_logger)
                 return _fail_result()
 
         # Assign and sync BEFORE creating worktree to prevent parallel conflicts
-        print("\n≡ƒöÆ Claiming work item...")
+        print("\n🔒 Claiming work item...")
         try:
             with worktree_setup_lock(timeout=worktree_lock_timeout):
                 if not assign_and_sync_item(item.id):
-                    print(f"Γ¥î Failed to assign work item {item.id}")
+                    print(f"❌ Failed to assign work item {item.id}")
                     _log_failure(run_logger, item_logger)
                     return _fail_result()
                 was_assigned = True
                 worktree_path = _setup_worktree(item)
 
                 if worktree_path is None:
-                    print(f"Γå⌐∩╕Å  Returning {item.id} to queue (unassigning due to worktree failure)...")
+                    print(f"↩️  Returning {item.id} to queue (unassigning due to worktree failure)...")
                     _log_failure(run_logger, item_logger)
                     return _fail_result()
         except Timeout:
             wait_seconds = int(worktree_lock_timeout)
-            print(f"Γ¥î Timed out waiting {wait_seconds}s for worktree setup lock (another agent is claiming an item).")
+            print(f"❌ Timed out waiting {wait_seconds}s for worktree setup lock (another agent is claiming an item).")
             _log_failure(run_logger, item_logger)
             return _fail_result()
 
@@ -146,14 +146,14 @@ def process_work_item(
             if elapsed >= timeout_seconds:
                 timeout_restart_count += 1
                 if timeout_restart_count > max_timeout_restarts:
-                    print(f"\nΓÅ▒∩╕Å  TIMEOUT: Exceeded max restarts ({max_timeout_restarts})")
+                    print(f"\n⏱️  TIMEOUT: Exceeded max restarts ({max_timeout_restarts})")
                     print(f"   Failing item {item.id} after {timeout_restart_count - 1} timeout restart(s).\n")
                     _log_failure(run_logger, item_logger, request_count)
                     cleanup_worktree(item.id, force=True)
                     terminal_ui.ui.set_current_agent(None)
                     return _fail_result(request_count=request_count, stats=accumulated_stats,
                                         cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs)
-                print(f"\nΓÅ▒∩╕Å  TIMEOUT: Execution exceeded {timeout_hours} hours")
+                print(f"\n⏱️  TIMEOUT: Execution exceeded {timeout_hours} hours")
                 print(f"   Restarting item {item.id} (attempt {timeout_restart_count}/{max_timeout_restarts})...\n")
                 start_time = time.time()
                 elapsed = 0
@@ -162,7 +162,7 @@ def process_work_item(
 
             # Append feedback if retrying
             if last_feedback:
-                print("\n≡ƒöä Restarting Work Agent with feedback...")
+                print("\n🔄 Restarting Work Agent with feedback...")
                 current_desc = item.description or ""
                 if "**PREVIOUS GATE AGENT FEEDBACK:**" not in current_desc:
                     current_desc += "\n\n**PREVIOUS GATE AGENT FEEDBACK:**\n"
@@ -194,10 +194,10 @@ def process_work_item(
             if not has_uncommitted_changes(cwd=worktree_cwd):
                 commits_ahead = has_commits_ahead(cwd=worktree_cwd)
                 if commits_ahead > 0:
-                    print(f"\nΓ£à All changes already committed ({commits_ahead} commit{'s' if commits_ahead != 1 else ''} ahead)")
+                    print(f"\n✅ All changes already committed ({commits_ahead} commit{'s' if commits_ahead != 1 else ''} ahead)")
                     print("   Skipping cleanup and commit steps")
                 else:
-                    print("\nΓ£à No changes made - work item may already be complete")
+                    print("\n✅ No changes made - work item may already be complete")
                     print("   Skipping cleanup and commit steps")
 
             # Run cleanup loop with timeout checking
@@ -217,7 +217,7 @@ def process_work_item(
 
             # --- GATE AGENT CHECK ---
             if not config.gate_agent_enabled:
-                print("\nΓÅ¡∩╕Å  Gate Agent disabled via config ΓÇö skipping verification")
+                print("\n⏭️  Gate Agent disabled via config — skipping verification")
                 gate_success = True
                 break
 
@@ -249,10 +249,10 @@ def process_work_item(
                 parent_agent_id=base_agent_id, work_item_id=item.id, work_item_title=item.title)
 
             if gate_success:
-                print("\nΓ£à Gate Agent signed off!")
+                print("\n✅ Gate Agent signed off!")
                 break
             else:
-                print(f"\nΓ¥î Gate Agent rejected fix: {gate_reason}")
+                print(f"\n❌ Gate Agent rejected fix: {gate_reason}")
                 add_comment(item.id, f"Gate Agent Rejection:\n{gate_reason}")
                 last_feedback = gate_reason
                 # Loop continues...
@@ -358,13 +358,13 @@ def process_work_item(
 
 def _setup_worktree(item: BeadsWorkItem) -> Path | None:
     """Create worktree for work item processing."""
-    print(f"\n≡ƒî│ Creating worktree for {item.id}...")
+    print(f"\n🌳 Creating worktree for {item.id}...")
     try:
         worktree_path = create_worktree(item.id)
         print(f"   Created at: {worktree_path}")
         return worktree_path
     except Exception as e:
-        print(f"\nΓ¥î Failed to create worktree: {e}")
+        print(f"\n❌ Failed to create worktree: {e}")
         return None
 
 
@@ -379,7 +379,7 @@ def _run_cleanup_with_timeout(
     while result.success and has_uncommitted_changes(cwd=cwd):
         elapsed = time.time() - start_time
         if elapsed >= timeout_seconds:
-            print(f"\nΓÅ▒∩╕Å  TIMEOUT: Execution exceeded {timeout_hours} hours during cleanup")
+            print(f"\n⏱️  TIMEOUT: Execution exceeded {timeout_hours} hours during cleanup")
             print(f"   Restarting item {item.id} in same worktree...\n")
             return False, cleanup_agent_runs
 

@@ -168,7 +168,7 @@ def _collect_done_futures(
         try:
             result = fut.result()
         except Exception as exc:
-            print(f"\nΓ¥î Agent for {item.id} raised: {exc}")
+            print(f"\n❌ Agent for {item.id} raised: {exc}")
             run_logger.log_orchestrator(f"Agent error for {item.id}: {exc}", level="ERROR")
             result = WorkItemResult(success=False, request_count=0)
 
@@ -234,7 +234,7 @@ def run_parallel_loop(
                 # This should not happen now that get_ready_work_items handles errors,
                 # but keep as additional safety measure
                 run_logger.log_orchestrator(f"Failed to fetch ready items: {e}", level="ERROR")
-                print(f"ΓÜá∩╕Å  Warning: failed to fetch ready items: {e}")
+                print(f"⚠️  Warning: failed to fetch ready items: {e}")
                 ready_items = []
 
             # Collect completed futures BEFORE calculating slots so the
@@ -283,7 +283,7 @@ def run_parallel_loop(
             if should_stop_after_current() and not futures:
                 cancel_stop_after_current()
                 terminal_ui.ui.stop_and_capture()
-                print("\nΓÅ╕∩╕Å  Stopping after current item (user requested).")
+                print("\n⏸️  Stopping after current item (user requested).")
                 run_logger.log_orchestrator("Stop after current item requested - exiting")
                 finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
                 finalized = True
@@ -352,7 +352,7 @@ def run_parallel_loop(
     finally:
         # Wait for all workers to complete before shutting down
         if futures:
-            print(f"\nΓÅ│ Waiting for {len(futures)} active workers to complete...")
+            print(f"\n⏳ Waiting for {len(futures)} active workers to complete...")
             run_logger.log_orchestrator(f"Waiting for {len(futures)} active workers to complete")
 
             # Wait for all remaining futures to complete (with reasonable timeout)
@@ -364,10 +364,10 @@ def run_parallel_loop(
                     ))
                     try:
                         result = fut.result()
-                        print(f"Γ£à Worker completed item {item.id}")
+                        print(f"✅ Worker completed item {item.id}")
                         run_logger.log_orchestrator(f"Worker completed item {item.id}")
                     except Exception as e:
-                        print(f"Γ¥î Worker failed for item {item.id}: {e}")
+                        print(f"❌ Worker failed for item {item.id}: {e}")
                         run_logger.log_orchestrator(f"Worker failed for item {item.id}: {e}", level="ERROR")
                         result = WorkItemResult(success=False, request_count=0)
 
@@ -376,10 +376,10 @@ def run_parallel_loop(
                     items_completed = session_stats.items_completed
                     terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
             except concurrent.futures.TimeoutError:
-                print(f"ΓÜá∩╕Å  Timeout waiting for {len(futures)} workers after 5 minutes")
+                print(f"⚠️  Timeout waiting for {len(futures)} workers after 5 minutes")
                 run_logger.log_orchestrator("Timeout waiting for workers", level="WARNING")
 
-            print("Γ£à All workers completed")
+            print("✅ All workers completed")
             run_logger.log_orchestrator("All workers completed")
             terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
 
@@ -390,7 +390,7 @@ def run_parallel_loop(
 
         # Call finalize if it hasn't been called yet (e.g., on shutdown or exception)
         if not finalized:
-            print("\n≡ƒÅü Finalizing session...")
+            print("\n🏁 Finalizing session...")
             run_logger.log_orchestrator("Finalizing session on exit")
             if terminal_ui.ui._is_running:
                 terminal_ui.ui.stop_and_capture()

@@ -41,7 +41,7 @@ def _finalize_session(
     try:
         session_stats.set_ending_beads_stats(get_beads_stats())
     except KeyboardInterrupt:
-        print("ΓÜá∩╕Å  Stats collection interrupted, skipping...")
+        print("⚠️  Stats collection interrupted, skipping...")
         session_stats.set_ending_beads_stats(None)
     elapsed = end_time - start_time
     print_stats(items_completed, total_requests, elapsed, session_stats)
@@ -78,7 +78,7 @@ def _record_item_result(selected_item: BeadsWorkItem, result: WorkItemResult, se
         beads_summary = record_item_completed(selected_item.id, agent_type="work")
         session_stats.set_lifetime_beads_item_totals(created=int(beads_summary.get("total_created", 0)), completed=int(beads_summary.get("total_completed", 0)))
         total_persistent_count = increment_items_completed()
-        print(f"\n≡ƒôê Items completed this session: {items_completed}\n≡ƒôê Total items completed (lifetime): {total_persistent_count}\n≡ƒôê Beads created (lifetime): {session_stats.lifetime_items_created}\n≡ƒôê Beads net delta (lifetime): {session_stats.lifetime_items_created - session_stats.lifetime_items_completed:+d}")
+        print(f"\n📈 Items completed this session: {items_completed}\n📈 Total items completed (lifetime): {total_persistent_count}\n📈 Beads created (lifetime): {session_stats.lifetime_items_created}\n📈 Beads net delta (lifetime): {session_stats.lifetime_items_created - session_stats.lifetime_items_completed:+d}")
         run_logger.log_orchestrator(f"Items completed this session: {items_completed}")
         run_periodic_maintenance(total_persistent_count, session_stats, run_logger)
     return result.success, session_stats.items_completed
@@ -98,7 +98,7 @@ def run_orchestrator(
         from pokepoke.agent_context import set_agent_name
         set_agent_name(agent_name)
         mode_name = "Interactive" if interactive else "Autonomous"
-        print(f"≡ƒÄ» PokePoke {mode_name} Mode | ≡ƒñû Agent: {agent_name}")
+        print(f"🎯 PokePoke {mode_name} Mode | 🤖 Agent: {agent_name}")
         print("=" * 50)
         set_terminal_banner(f"PokePoke {mode_name} - {agent_name}")
         terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", agent_name)
@@ -106,17 +106,17 @@ def run_orchestrator(
         run_logger = RunLogger()
         run_id = run_logger.get_run_id()
         run_dir = run_logger.get_run_dir()
-        print(f"≡ƒô¥ Run ID: {run_id} | ≡ƒôü Logs: {run_dir}")
+        print(f"📝 Run ID: {run_id} | 📁 Logs: {run_dir}")
         terminal_ui.ui.set_logs_dir(str(run_dir))
         run_logger.log_orchestrator(f"PokePoke started in {mode_name} mode with agent name: {agent_name}")
 
         register_shutdown_handlers(run_logger)
         run_logger.log_orchestrator("Signal handlers registered for graceful shutdown logging")
 
-        atexit.register(lambda: print(f"\n≡ƒôü Logs saved to: {run_dir}"))
+        atexit.register(lambda: print(f"\n📁 Logs saved to: {run_dir}"))
 
         main_repo_path = Path.cwd()
-        print(f"≡ƒôü Repository: {main_repo_path}")
+        print(f"📁 Repository: {main_repo_path}")
         run_logger.log_orchestrator(f"Repository: {main_repo_path}")
 
         start_time = time.time()
@@ -142,31 +142,31 @@ def run_orchestrator(
         s = _get_beads_summary()
         session_stats.set_lifetime_beads_item_totals(created=int(s.get("total_created", 0)), completed=int(s.get("total_completed", 0)))
 
-        print("≡ƒôè Recording starting beads statistics...")
+        print("📊 Recording starting beads statistics...")
         run_logger.log_orchestrator("Recording starting beads statistics")
         session_stats.set_starting_beads_stats(get_beads_stats())
         terminal_ui.ui.set_session_start_time(start_time)
         terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
 
         if run_beta_first:
-            print("\n≡ƒº¬ Running Beta Tester at startup...")
+            print("\n🧪 Running Beta Tester at startup...")
             run_logger.log_orchestrator("Running Beta Tester at startup")
             from pokepoke.agent_runner import run_beta_tester
             beta_stats = run_beta_tester(repo_root=main_repo_path)
             if beta_stats:
                 session_stats.record_agent_stats(beta_stats)
-            print("Γ£à Beta Tester completed\n")
+            print("✅ Beta Tester completed\n")
         failed_claim_ids: set[str] = set()
         # Resolve effective parallelism: CLI arg > config > 1
         cfg = load_config()
         effective_parallel = max(1, max_parallel_agents if max_parallel_agents > 1 else cfg.max_parallel_agents)
         if effective_parallel > 1 and interactive:
-            print(f"ΓÜá∩╕Å  Parallel mode (--max-agents {effective_parallel}) requires autonomous mode; forcing parallel=1")
+            print(f"⚠️  Parallel mode (--max-agents {effective_parallel}) requires autonomous mode; forcing parallel=1")
             effective_parallel = 1
         if effective_parallel > 1:
-            print(f"≡ƒöÇ Parallel mode: up to {effective_parallel} concurrent agents")
+            print(f"🔀 Parallel mode: up to {effective_parallel} concurrent agents")
             run_logger.log_orchestrator(f"Parallel mode enabled: max_parallel_agents={effective_parallel}")
-        # ΓöÇΓöÇ Parallel orchestrator loop ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+        # ── Parallel orchestrator loop ──────────────────────────────
         if effective_parallel > 1:
             from pokepoke.parallel import run_parallel_loop
             exit_code = run_parallel_loop(
@@ -186,7 +186,7 @@ def run_orchestrator(
             terminal_ui.ui.stop_and_capture()
             if exit_code is not None:
                 return exit_code
-        # ΓöÇΓöÇ Sequential orchestrator loop (original behaviour) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+        # ── Sequential orchestrator loop (original behaviour) ──────
         else:
             while not is_shutting_down():
                 print("\n\ud83d\udd0d Checking main repository status...")
@@ -204,7 +204,7 @@ def run_orchestrator(
                     terminal_ui.ui.start()
                 if selected_item is None:
                     terminal_ui.ui.stop_and_capture()
-                    print("\n≡ƒæï Exiting PokePoke - no work items available.")
+                    print("\n👋 Exiting PokePoke - no work items available.")
                     run_logger.log_orchestrator("No work items available - exiting")
                     _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
                     return 0
@@ -258,7 +258,7 @@ def run_orchestrator(
                 if should_stop_after_current():
                     cancel_stop_after_current()
                     terminal_ui.ui.stop_and_capture()
-                    print("\nΓÅ╕∩╕Å  Stopping after current item (user requested).")
+                    print("\n⏸️  Stopping after current item (user requested).")
                     run_logger.log_orchestrator("Stop after current item requested - exiting")
                     _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
                     return 0
@@ -276,12 +276,12 @@ def run_orchestrator(
                     terminal_ui.ui.start()
                     if cont and cont != 'y':
                         terminal_ui.ui.stop_and_capture()
-                        print("\n≡ƒæï Exiting PokePoke.")
+                        print("\n👋 Exiting PokePoke.")
                         _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
                         return 0
                 else:
                     terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", "Sleeping...")
-                    print("\nΓÅ│ Waiting 5 seconds before next iteration...")
+                    print("\n⏳ Waiting 5 seconds before next iteration...")
                     for _ in range(10):
                         if is_shutting_down():
                             break
@@ -295,14 +295,14 @@ def run_orchestrator(
         # Clean shutdown on Ctrl+C
         request_shutdown()
         terminal_ui.ui.stop_and_capture()
-        print("\n\nΓÜá∩╕Å  Interrupted by user (Ctrl+C)")
-        print("≡ƒôè Collecting final statistics...")
-        print("\n≡ƒæï Exiting PokePoke.")
+        print("\n\n⚠️  Interrupted by user (Ctrl+C)")
+        print("📊 Collecting final statistics...")
+        print("\n👋 Exiting PokePoke.")
         _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
         return 0
     except Exception as e:
         terminal_ui.ui.stop_and_capture()
-        print(f"\nΓ¥î Error: {e}")
+        print(f"\n❌ Error: {e}")
         import traceback
         traceback.print_exc()
         run_logger.log_orchestrator(f"Error: {e}", level="ERROR")
@@ -324,6 +324,12 @@ def run_orchestrator(
 
 def main() -> int:
     """Main entry point for PokePoke CLI."""
+    # Ensure stdout/stderr use UTF-8 so emoji display correctly on Windows
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser(
         description="PokePoke - Autonomous Beads + Copilot CLI Orchestrator"
     )
