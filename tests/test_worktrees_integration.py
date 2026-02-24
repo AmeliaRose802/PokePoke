@@ -6,7 +6,7 @@ and related modules to improve coverage of critical data-integrity paths.
 
 import subprocess
 from pathlib import Path
-from unittest.mock import patch, Mock, MagicMock, call
+from unittest.mock import patch, Mock
 import pytest
 
 from pokepoke.worktrees import (
@@ -35,10 +35,10 @@ class TestCreateWorktreeIntegration:
         mock_list.return_value = []
         mock_get_branch.return_value = 'dev'
         mock_run.return_value = Mock(returncode=0, stdout='', stderr='')
-        
+
         # Execute
         result = create_worktree('test-123')
-        
+
         # Verify
         assert result == Path('worktrees/task-test-123')
         mock_mkdir.assert_called_once_with(exist_ok=True)
@@ -54,10 +54,10 @@ class TestCreateWorktreeIntegration:
             'path': str(Path('worktrees/task-test-123').resolve()),
             'branch': 'refs/heads/task/test-123'
         }]
-        
+
         # Execute
         result = create_worktree('test-123')
-        
+
         # Verify - should return existing path without creating new
         assert result == Path('worktrees/task-test-123').resolve()
 
@@ -69,10 +69,10 @@ class TestCreateWorktreeIntegration:
             'path': str(existing_path),
             'branch': 'refs/heads/task/test-456'
         }]
-        
+
         # Execute
         result = create_worktree('test-456')
-        
+
         # Verify
         assert result == existing_path
 
@@ -93,16 +93,16 @@ class TestCreateWorktreeIntegration:
             }]
         ]
         mock_get_branch.return_value = 'dev'
-        
+
         # Simulate branch already exists error
         error = subprocess.CalledProcessError(
             1, ['git'], stderr="fatal: a branch named 'task/test-789' already exists"
         )
         mock_run.side_effect = error
-        
+
         # Execute
         result = create_worktree('test-789')
-        
+
         # Verify recovery
         assert result == Path('C:/repos/worktrees/task-test-789')
 
@@ -116,13 +116,13 @@ class TestCreateWorktreeIntegration:
         """Test error when base branch doesn't exist."""
         mock_list.return_value = []
         mock_get_branch.return_value = 'nonexistent-branch'
-        
+
         # Simulate invalid reference error
         error = subprocess.CalledProcessError(
             1, ['git'], stderr="fatal: invalid reference: nonexistent-branch"
         )
         mock_run.side_effect = error
-        
+
         # Execute and verify
         with pytest.raises(RuntimeError, match="Base branch .* does not exist"):
             create_worktree('test-999')
@@ -137,10 +137,10 @@ class TestCreateWorktreeIntegration:
         """Test timeout handling during worktree creation."""
         mock_list.return_value = []
         mock_get_branch.return_value = 'dev'
-        
+
         # Simulate timeout
         mock_run.side_effect = subprocess.TimeoutExpired(['git'], 30)
-        
+
         # Execute and verify
         with pytest.raises(RuntimeError, match="Timed out creating worktree"):
             create_worktree('test-timeout')
@@ -160,9 +160,9 @@ class TestIsWorktreeMergedIntegration:
             returncode=0,
             stdout='  task/test-123\n  task/other-456\n'
         )
-        
+
         result = is_worktree_merged('test-123')
-        
+
         assert result is True
         mock_run.assert_called_once()
         args = mock_run.call_args[0][0]
@@ -179,18 +179,18 @@ class TestIsWorktreeMergedIntegration:
             returncode=0,
             stdout='  task/other-456\n  task/another-789\n'
         )
-        
+
         result = is_worktree_merged('test-123')
-        
+
         assert result is False
 
     @patch('subprocess.run')
     def test_is_merged_handles_subprocess_error(self, mock_run):
         """Test error handling in is_worktree_merged."""
         mock_run.side_effect = subprocess.CalledProcessError(1, ['git'])
-        
+
         result = is_worktree_merged('test-123', 'dev')
-        
+
         assert result is False
 
 
@@ -225,10 +225,10 @@ class TestMergeWorktreeIntegration:
         mock_validate.return_value = True
         mock_run.return_value = Mock(returncode=0)
         mock_is_merged.return_value = True
-        
+
         # Execute
         success, conflicts = merge_worktree('test-123')
-        
+
         # Verify
         assert success is True
         assert conflicts == []
@@ -246,9 +246,9 @@ class TestMergeWorktreeIntegration:
         """Test that merge fails if worktree has uncommitted changes."""
         mock_get_branch.return_value = 'dev'
         mock_is_clean.return_value = False
-        
+
         success, conflicts = merge_worktree('test-123')
-        
+
         assert success is False
         assert conflicts == []
 
@@ -262,9 +262,9 @@ class TestMergeWorktreeIntegration:
         mock_get_branch.return_value = 'dev'
         mock_is_clean.return_value = True
         mock_sync.return_value = False
-        
+
         success, conflicts = merge_worktree('test-123')
-        
+
         assert success is False
         assert conflicts == []
 
@@ -280,9 +280,9 @@ class TestMergeWorktreeIntegration:
         mock_is_clean.return_value = True
         mock_sync.return_value = True
         mock_execute.return_value = (False, 'Conflict error', ['file1.py', 'file2.py'])
-        
+
         success, conflicts = merge_worktree('test-123')
-        
+
         assert success is False
         assert conflicts == ['file1.py', 'file2.py']
 
@@ -312,9 +312,9 @@ class TestMergeWorktreeIntegration:
         mock_run.side_effect = subprocess.CalledProcessError(
             1, ['git'], stderr='Push failed'
         )
-        
+
         success, conflicts = merge_worktree('test-123')
-        
+
         assert success is False
         assert conflicts == []
 
@@ -343,9 +343,9 @@ class TestMergeWorktreeIntegration:
         mock_validate.return_value = True
         mock_run.return_value = Mock(returncode=0)
         mock_is_merged.return_value = False  # Not merged!
-        
+
         success, conflicts = merge_worktree('test-123')
-        
+
         assert success is False
         assert conflicts == []
 
@@ -376,9 +376,9 @@ class TestMergeWorktreeIntegration:
         mock_validate.return_value = True
         mock_run.return_value = Mock(returncode=0)
         mock_is_merged.return_value = True
-        
+
         success, conflicts = merge_worktree('test-123', cleanup=False)
-        
+
         assert success is True
         mock_cleanup.assert_not_called()
 
@@ -399,10 +399,10 @@ class TestCleanupWorktreeIntegration:
             'branch': 'refs/heads/task/test-123'
         }]
         mock_run.return_value = Mock(returncode=0)
-        
+
         with patch.object(Path, 'exists', side_effect=[True, False]):
             result = cleanup_worktree('test-123')
-        
+
         assert result is True
         # Should call git worktree remove
         assert mock_run.call_count >= 1
@@ -418,11 +418,11 @@ class TestCleanupWorktreeIntegration:
             'branch': 'refs/heads/task/test-456'
         }]
         mock_run.return_value = Mock(returncode=0)
-        
+
         with patch.object(Path, 'exists', side_effect=[True, False]), \
              patch('pokepoke.worktrees.remove_from_manifest'):
             result = cleanup_worktree('test-456', force=True)
-        
+
         assert result is True
         # Verify force flag was passed to git worktree remove
         worktree_remove_args = mock_run.call_args_list[0][0][0]
@@ -443,18 +443,18 @@ class TestCleanupWorktreeIntegration:
             'path': str(worktree_path),
             'branch': 'refs/heads/task/test-789'
         }]
-        
+
         # Simulate Windows lock error
         error = subprocess.CalledProcessError(
             1, ['git'], stderr='Permission denied'
         )
         mock_run.side_effect = error
         mock_force_remove.return_value = True  # Force remove succeeds
-        
+
         with patch.object(Path, 'exists', side_effect=[True, False]), \
              patch('pokepoke.worktrees.remove_from_manifest'):
-            result = cleanup_worktree('test-789')
-        
+            cleanup_worktree('test-789')
+
         # Should call force remove as fallback
         mock_force_remove.assert_called_once()
 
@@ -470,11 +470,11 @@ class TestCleanupWorktreeIntegration:
             'branch': 'refs/heads/task/test-999'
         }]
         mock_run.return_value = Mock(returncode=0)
-        
+
         # Worktree directory still exists after removal attempt
         with patch.object(Path, 'exists', return_value=True):
             result = cleanup_worktree('test-999')
-        
+
         assert result is False
 
 
@@ -499,9 +499,9 @@ HEAD ghi345jkl678
 branch refs/heads/task/test-456
 """
         )
-        
+
         result = list_worktrees()
-        
+
         assert len(result) == 3
         assert result[0]['path'] == 'C:/repos/main'
         assert result[0]['branch'] == 'refs/heads/main'
@@ -513,18 +513,18 @@ branch refs/heads/task/test-456
     def test_list_worktrees_returns_empty_on_error(self, mock_run):
         """Test that empty list is returned on subprocess error."""
         mock_run.side_effect = subprocess.CalledProcessError(1, ['git'])
-        
+
         result = list_worktrees()
-        
+
         assert result == []
 
     @patch('subprocess.run')
     def test_list_worktrees_handles_timeout(self, mock_run):
         """Test handling of timeout."""
         mock_run.side_effect = subprocess.TimeoutExpired(['git'], 30)
-        
+
         result = list_worktrees()
-        
+
         assert result == []
 
 
@@ -539,9 +539,9 @@ class TestSyncAndEnsureCleanMainRepoIntegration:
         """Test successful sync when main repo is clean."""
         mock_bd_sync.return_value = Mock(returncode=0, stdout='', stderr='')
         mock_run.return_value = Mock(returncode=0, stdout='')
-        
+
         result = _sync_and_ensure_clean_main_repo('task/test-123')
-        
+
         assert result is True
         mock_bd_sync.assert_called_once()
 
@@ -553,7 +553,7 @@ class TestSyncAndEnsureCleanMainRepoIntegration:
     ):
         """Test that beads changes are automatically committed."""
         mock_bd_sync.return_value = Mock(returncode=0, stdout='', stderr='')
-        
+
         # First call: status shows beads changes
         # Subsequent calls: git add, git commit
         mock_run.side_effect = [
@@ -561,15 +561,15 @@ class TestSyncAndEnsureCleanMainRepoIntegration:
             Mock(returncode=0),  # git add
             Mock(returncode=0),  # git commit
         ]
-        
+
         mock_categorize.return_value = {
             'beads': [' M .beads/database.db'],
             'worktree': [],
             'other': []
         }
-        
+
         result = _sync_and_ensure_clean_main_repo('task/test-123')
-        
+
         assert result is True
         # Verify git add and commit were called
         assert mock_run.call_count == 3
@@ -586,15 +586,15 @@ class TestSyncAndEnsureCleanMainRepoIntegration:
             returncode=0,
             stdout=' M src/somefile.py\n'
         )
-        
+
         mock_categorize.return_value = {
             'beads': [],
             'worktree': [],
             'other': [' M src/somefile.py']
         }
-        
+
         result = _sync_and_ensure_clean_main_repo('task/test-123')
-        
+
         assert result is False
 
     @patch('pokepoke.worktrees.run_bd_sync_with_retry')
@@ -605,10 +605,10 @@ class TestSyncAndEnsureCleanMainRepoIntegration:
         """Test handling of bd sync timeout."""
         mock_bd_sync.side_effect = subprocess.TimeoutExpired(['bd'], 30)
         mock_run.return_value = Mock(returncode=0, stdout='')
-        
+
         # Should continue despite timeout
         result = _sync_and_ensure_clean_main_repo('task/test-123')
-        
+
         # Should still return True if repo is clean
         assert result is True
 
@@ -622,7 +622,7 @@ class TestSyncAndEnsureCleanMainRepoIntegration:
         mock_run.side_effect = subprocess.CalledProcessError(
             1, ['git'], stderr='Git error'
         )
-        
+
         result = _sync_and_ensure_clean_main_repo('task/test-123')
-        
+
         assert result is False
