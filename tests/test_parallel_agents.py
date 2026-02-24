@@ -132,7 +132,8 @@ class TestMergeQueueSerialization:
         # we'll test the queue property: both futures eventually resolve
         # This validates the queue processes items (serialization is by design
         # since it uses a single-threaded worker).
-        with patch("pokepoke.worktree_finalization.merge_worktree_to_dev") as mock_merge:
+        with patch("pokepoke.worktree_finalization.merge_worktree_to_dev") as mock_merge, \
+             patch("pokepoke.merge_queue._rebase_worktree", return_value=True):
             mock_merge.return_value = True
 
             fut_a = mq2.submit(Path("/fake/a"), item_a)
@@ -499,7 +500,8 @@ class TestStressConcurrentMerges:
         n_agents = 8
         mq = MergeQueue()
 
-        with patch("pokepoke.worktree_finalization.merge_worktree_to_dev") as mock_merge:
+        with patch("pokepoke.worktree_finalization.merge_worktree_to_dev") as mock_merge, \
+             patch("pokepoke.merge_queue._rebase_worktree", return_value=True):
             mock_merge.return_value = True
 
             futures = []
