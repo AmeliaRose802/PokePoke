@@ -157,14 +157,10 @@ export function ToolBatchAccordion({ batch, keyPrefix }: ToolBatchAccordionProps
     );
   }
 
-  // Flatten: single group → skip group accordion, render tools directly
-  const singleGroup = batch.groups.length === 1;
-
   return (
     <details
       key={keyPrefix}
       className={`log-tool-batch ${batch.statusClass ?? ""}`.trim()}
-      open={singleGroup}
     >
       <summary className="log-accordion-summary">
         <span className="log-accordion-chevron">▸</span>
@@ -193,7 +189,6 @@ export function ToolBatchAccordion({ batch, keyPrefix }: ToolBatchAccordionProps
             <details
               key={`${keyPrefix}-group-${gIndex}`}
               className={`log-tool-group ${group.statusClass ?? ""}`.trim()}
-              open={batch.groups.length === 1}
             >
               <summary className="log-accordion-summary">
                 <span className="log-accordion-chevron">▸</span>
