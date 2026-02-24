@@ -908,3 +908,96 @@ class TestCollectDoneFuturesWait:
 
             assert any_ok is True
             assert record_fn.call_count == 1
+
+
+# -- Dynamic parallel ceiling (PokePoke-4yvi) ---------------------------------
+
+class TestDynamicParallelCeiling:
+    """Pool/semaphore should scale to effective_parallel, not a hardcoded ceiling."""
+
+    @patch("pokepoke.parallel.time.sleep")
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.set_executor")
+    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
+    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
+    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    def test_pool_sized_above_default_when_effective_parallel_exceeds_ceiling(
+        self, mock_sel, mock_ready, mock_repo, mock_shut,
+        mock_set_exec, mock_ui, mock_sleep,
+    ) -> None:
+        """ThreadPoolExecutor should have max_workers >= effective_parallel."""
+        stats = SessionStats(agent_stats=AgentStats())
+
+        with patch("pokepoke.parallel.concurrent.futures.ThreadPoolExecutor") as MockTPE:
+            mock_executor = MagicMock()
+            MockTPE.return_value = mock_executor
+
+            run_parallel_loop(
+                effective_parallel=12, mode_name="Autonomous",
+                main_repo_path="/repo", failed_claim_ids=set(),
+                session_stats=stats, start_time=time.time(),
+                run_logger=Mock(), continuous=True,
+                record_fn=Mock(), finalize_fn=Mock(),
+            )
+
+            MockTPE.assert_called_once()
+            call_kwargs = MockTPE.call_args
+            assert call_kwargs[1]["max_workers"] == 12
+
+    @patch("pokepoke.parallel.time.sleep")
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.set_executor")
+    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
+    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
+    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    def test_pool_uses_default_ceiling_when_effective_parallel_is_small(
+        self, mock_sel, mock_ready, mock_repo, mock_shut,
+        mock_set_exec, mock_ui, mock_sleep,
+    ) -> None:
+        """When effective_parallel < default ceiling, pool uses ceiling."""
+        from pokepoke.parallel import _DEFAULT_PARALLEL_CEILING
+        stats = SessionStats(agent_stats=AgentStats())
+
+        with patch("pokepoke.parallel.concurrent.futures.ThreadPoolExecutor") as MockTPE:
+            mock_executor = MagicMock()
+            MockTPE.return_value = mock_executor
+
+            run_parallel_loop(
+                effective_parallel=3, mode_name="Autonomous",
+                main_repo_path="/repo", failed_claim_ids=set(),
+                session_stats=stats, start_time=time.time(),
+                run_logger=Mock(), continuous=True,
+                record_fn=Mock(), finalize_fn=Mock(),
+            )
+
+            call_kwargs = MockTPE.call_args
+            assert call_kwargs[1]["max_workers"] == _DEFAULT_PARALLEL_CEILING
+
+    @patch("pokepoke.parallel.time.sleep")
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.set_executor")
+    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
+    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
+    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    def test_warning_logged_when_exceeding_default_ceiling(
+        self, mock_sel, mock_ready, mock_repo, mock_shut,
+        mock_set_exec, mock_ui, mock_sleep,
+    ) -> None:
+        """A warning should be logged when effective_parallel > default ceiling."""
+        stats = SessionStats(agent_stats=AgentStats())
+
+        with patch("pokepoke.parallel.logger") as mock_logger:
+            run_parallel_loop(
+                effective_parallel=10, mode_name="Autonomous",
+                main_repo_path="/repo", failed_claim_ids=set(),
+                session_stats=stats, start_time=time.time(),
+                run_logger=Mock(), continuous=True,
+                record_fn=Mock(), finalize_fn=Mock(),
+            )
+
+            mock_logger.warning.assert_called_once()
+            warning_msg = mock_logger.warning.call_args[0][0]
+            assert "exceeds default ceiling" in warning_msg
