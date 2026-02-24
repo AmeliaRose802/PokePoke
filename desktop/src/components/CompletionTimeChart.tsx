@@ -29,7 +29,6 @@ function getTagColor(tag: string, index: number): string {
 interface TagSeriesData {
   type: string;
   color: string;
-  colorIndex: number;
   values: number[];
   maxValue: number;
   avgValue: number;
@@ -65,7 +64,6 @@ export function CompletionTimeChart({ data, emptyLabel }: CompletionTimeChartPro
     allSeriesData.push({
       type: tag,
       color: getTagColor(tag, tagIndex),
-      colorIndex: tag === "untagged" ? tagColors.length - 1 : tagIndex % tagColors.length,
       values,
       maxValue,
       avgValue,

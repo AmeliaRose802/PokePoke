@@ -497,6 +497,16 @@
   border-radius: 3px;
 }
 
+.special-tag-id.copyable {
+  cursor: pointer;
+  user-select: all;
+}
+
+.special-tag-id.copyable:hover {
+  color: var(--accent, #58a6ff);
+  background: var(--bg-hover, rgba(255,255,255,0.08));
+}
+
 /* ── Log Container ─────────────────────────────────────────────────────── */
 
 .main-content {

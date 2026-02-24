@@ -1,11 +1,6 @@
-/**
- * Settings page with model configuration section.
- *
- * Reads from and writes to pokepoke.config.yaml via the DesktopAPI
- * bridge methods (get_config / save_config).
- */
+/** Settings page — reads/writes pokepoke.config.yaml via DesktopAPI bridge. */
 
-import { useCallback, useEffect, useState } from "react";
+import{ useCallback, useEffect, useState } from "react";
 
 import type { ConfigResponse, MaintenanceAgent, McpServerConfig,ModelsConfig, ProjectConfig } from "../types";
 import { MaintenanceAgentsSection } from "./MaintenanceAgentsSection";
@@ -449,7 +444,11 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
                   <div key={tag.id} className="special-tag-card">
                     <div className="special-tag-header">
                       <span className="special-tag-name">{tag.label}</span>
-                      <code className="special-tag-id">{tag.id}</code>
+                      <code
+                        className="special-tag-id copyable"
+                        title="Click to copy tag ID"
+                        onClick={() => navigator.clipboard.writeText(tag.id)}
+                      >{tag.id} 📋</code>
                     </div>
                     <div className="special-tag-description">{tag.description}</div>
                   </div>
