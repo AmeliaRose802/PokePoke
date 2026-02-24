@@ -145,9 +145,11 @@ class TestMergeQueue:
         assert result.status == MergeStatus.FAILED
         assert "git exploded" in result.message
 
+    @patch("pokepoke.merge_queue.is_worktree_clean", return_value=True)
     @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
     @patch("pokepoke.merge_queue._rebase_worktree", return_value=False)
-    def test_rebase_failure_still_attempts_merge(self, mock_rebase, mock_shutdown):
+    def test_rebase_failure_clean_worktree_attempts_merge(self, mock_rebase, mock_shutdown, mock_clean):
+        """If rebase fails but worktree is clean (abort succeeded), merge proceeds."""
         with patch(
             "pokepoke.worktree_finalization.merge_worktree_to_dev", return_value=True
         ):
@@ -157,6 +159,32 @@ class TestMergeQueue:
             result = future.result(timeout=10)
 
         assert result.status == MergeStatus.SUCCESS
+
+    @patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
+    @patch("pokepoke.merge_queue.is_worktree_clean", return_value=False)
+    @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
+    @patch("pokepoke.merge_queue._rebase_worktree", return_value=False)
+    def test_rebase_failure_dirty_worktree_skips_merge(
+        self, mock_rebase, mock_shutdown, mock_clean, mock_add_uncleaned
+    ):
+        """If rebase fails and worktree is dirty, skip merge and track worktree."""
+        with patch(
+            "pokepoke.worktree_finalization.merge_worktree_to_dev"
+        ) as mock_merge:
+            self.queue.start()
+            item = _make_item()
+            future = self.queue.submit(Path("worktrees/task-TEST-001"), item)
+            result = future.result(timeout=10)
+
+            mock_merge.assert_not_called()
+
+        assert result.status == MergeStatus.FAILED
+        assert "dirty state" in result.message
+        mock_add_uncleaned.assert_called_once_with(
+            worktree_id="TEST-001",
+            worktree_path="worktrees\\task-TEST-001",
+            reason="Rebase failed and abort left worktree in dirty state",
+        )
 
     @patch("pokepoke.merge_queue.time.sleep")
     @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)

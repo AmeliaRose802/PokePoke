@@ -19,7 +19,7 @@ from enum import Enum
 from pathlib import Path
 from queue import Empty, Queue
 
-from .git_operations import get_default_branch
+from .git_operations import get_default_branch, is_worktree_clean
 from .shutdown import is_shutting_down
 from .types import BeadsWorkItem
 from .beads import is_high_conflict_risk
@@ -177,8 +177,29 @@ class MergeQueue:
             rebase_ok = _rebase_worktree(worktree_path, target_branch=target_branch) and rebase_ok
             time.sleep(1.0)
         if not rebase_ok:
+            if not is_worktree_clean(worktree_path):
+                logger.error(
+                    "Worktree %s is dirty after failed rebase for %s - skipping merge",
+                    worktree_path,
+                    item.id,
+                )
+                from .worktree_cleanup import add_uncleaned_worktree
+
+                add_uncleaned_worktree(
+                    worktree_id=item.id,
+                    worktree_path=str(worktree_path),
+                    reason="Rebase failed and abort left worktree in dirty state",
+                )
+                request.future.set_result(
+                    MergeResult(
+                        status=MergeStatus.FAILED,
+                        item_id=item.id,
+                        message="Rebase failed and worktree is in dirty state after abort",
+                    )
+                )
+                return
             logger.warning(
-                "Rebase failed for %s - attempting merge anyway", item.id
+                "Rebase failed for %s but worktree is clean - attempting merge", item.id
             )
 
         try:
