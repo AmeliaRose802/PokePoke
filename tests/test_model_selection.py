@@ -112,6 +112,25 @@ class TestSelectGateModel:
         # Should use fallback since no candidates
         assert gate_model == "claude-sonnet-4.5"
 
+    @patch('pokepoke.model_selection.get_model_weights')
+    @patch('pokepoke.model_selection.get_config')
+    def test_warns_when_all_models_same(
+        self, mock_get_config: Mock, mock_get_weights: Mock
+    ) -> None:
+        """Covers lines 133-134: warning when default, fallback, and work model are all the same."""
+        mock_config = ProjectConfig()
+        mock_config.models = ModelConfig(
+            default="same-model",
+            fallback="same-model",
+            candidate_models=["same-model"]
+        )
+        mock_get_config.return_value = mock_config
+        mock_get_weights.return_value = {}
+
+        gate_model = select_gate_model("same-model", "test-123")
+        # Should still return the model (better than failing)
+        assert gate_model == "same-model"
+
     @patch('pokepoke.model_selection.random.choices')
     @patch('pokepoke.model_selection.get_model_weights')
     @patch('pokepoke.model_selection.get_config')

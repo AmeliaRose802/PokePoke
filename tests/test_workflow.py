@@ -1867,3 +1867,140 @@ class TestUnassignOnFailure:
         assert result.success is True
         mock_unassign.assert_not_called()
 
+
+class TestLogFailure:
+    """Tests for _log_failure helper."""
+
+    def test_calls_loggers_when_both_present(self) -> None:
+        """Covers lines 38-39: both loggers are called."""
+        from pokepoke.workflow import _log_failure
+        run_logger = Mock()
+        item_logger = Mock()
+        _log_failure(run_logger, item_logger, request_count=3)
+        item_logger.log_summary.assert_called_once_with(False, 3)
+        run_logger.log_orchestrator.assert_called_once()
+
+    def test_skips_when_no_loggers(self) -> None:
+        """Covers lines 37: no-op when loggers are None."""
+        from pokepoke.workflow import _log_failure
+        _log_failure(None, None, request_count=1)  # Should not raise
+
+
+class TestWorkflowGateException:
+    """Tests for gate agent exception handling."""
+
+    @patch('pokepoke.workflow.unassign_with_retry')
+    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
+    @patch('pokepoke.workflow.run_gate_agent', side_effect=RuntimeError("gate crashed"))
+    @patch('pokepoke.workflow._run_cleanup_with_timeout')
+    @patch('pokepoke.workflow.invoke_copilot')
+    @patch('pokepoke.workflow.has_commits_ahead')
+    @patch('pokepoke.workflow.has_uncommitted_changes')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('time.time')
+    def test_gate_agent_exception_triggers_cleanup(
+        self,
+        mock_time: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
+        mock_uncommitted: Mock,
+        mock_commits_ahead: Mock,
+        mock_invoke: Mock,
+        mock_cleanup_timeout: Mock,
+        mock_gate_agent: Mock,
+        mock_handoff: Mock,
+        mock_cleanup_wt: Mock,
+        mock_unassign: Mock,
+    ) -> None:
+        """Covers lines 237-244: gate agent exception is logged, re-raised,
+        and finally block handles cleanup."""
+        import pytest
+        item = BeadsWorkItem(
+            id="task-gate-ex", title="Gate Ex Task", description="",
+            status="open", priority=1, issue_type="task",
+        )
+        mock_time.return_value = 0.0
+        mock_assign.return_value = True
+        mock_setup.return_value = Path("/fake/worktree")
+        mock_uncommitted.return_value = False
+        mock_commits_ahead.return_value = 1
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="task-gate-ex", success=True, output="Done", attempt_count=1
+        )
+        mock_cleanup_timeout.return_value = (True, 0)
+
+        with pytest.raises(RuntimeError, match="gate crashed"):
+            process_work_item(item, interactive=False)
+
+        # Finally block should have run cleanup and unassign
+        mock_cleanup_wt.assert_called()
+        mock_unassign.assert_called()
+
+
+class TestWorkflowCleanupException:
+    """Tests for worktree cleanup and unassign exception in finally."""
+
+    @patch('pokepoke.workflow.unassign_with_retry')
+    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('pokepoke.workflow.invoke_copilot')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('time.time')
+    def test_cleanup_worktree_exception_in_finally_handled(
+        self,
+        mock_time: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
+        mock_invoke: Mock,
+        mock_cleanup_wt: Mock,
+        mock_unassign: Mock,
+    ) -> None:
+        """Covers lines 348-349: cleanup_worktree exception in finally is caught."""
+        item = BeadsWorkItem(
+            id="task-cleanup-ex", title="Cleanup Ex", description="",
+            status="open", priority=1, issue_type="task",
+        )
+        mock_time.return_value = 0.0
+        mock_assign.return_value = True
+        mock_setup.return_value = Path("/fake/worktree")
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="task-cleanup-ex", success=False, error="Failed", attempt_count=1
+        )
+        # First call at line 315 succeeds, second call in finally raises
+        mock_cleanup_wt.side_effect = [None, RuntimeError("cleanup exploded")]
+
+        result = process_work_item(item, interactive=False)
+        assert result.success is False
+
+    @patch('pokepoke.workflow.unassign_with_retry', side_effect=RuntimeError("unassign failed"))
+    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('pokepoke.workflow.invoke_copilot')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('time.time')
+    def test_unassign_exception_handled(
+        self,
+        mock_time: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
+        mock_invoke: Mock,
+        mock_cleanup_wt: Mock,
+        mock_unassign: Mock,
+    ) -> None:
+        """Covers lines 354-355: unassign exception in finally."""
+        item = BeadsWorkItem(
+            id="task-unassign-ex", title="Unassign Ex", description="",
+            status="open", priority=1, issue_type="task",
+        )
+        mock_time.return_value = 0.0
+        mock_assign.return_value = True
+        mock_setup.return_value = Path("/fake/worktree")
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="task-unassign-ex", success=False, error="Failed", attempt_count=1
+        )
+
+        result = process_work_item(item, interactive=False)
+        assert result.success is False
+

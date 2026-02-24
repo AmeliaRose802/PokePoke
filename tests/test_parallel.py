@@ -1001,3 +1001,69 @@ class TestDynamicParallelCeiling:
             mock_logger.warning.assert_called_once()
             warning_msg = mock_logger.warning.call_args[0][0]
             assert "exceeds default ceiling" in warning_msg
+
+
+class TestRequestSpawnAgent:
+    """Test request_spawn_agent function."""
+
+    def test_sets_wakeup_event(self) -> None:
+        """Covers line 48: _spawn_wakeup.set()."""
+        from pokepoke.parallel import request_spawn_agent, _spawn_wakeup
+        _spawn_wakeup.clear()
+        request_spawn_agent()
+        assert _spawn_wakeup.is_set()
+        _spawn_wakeup.clear()
+
+
+class TestParallelDrainFutureEdgeCases:
+    """Tests for drain future edge cases in run_parallel_loop."""
+
+    @patch("pokepoke.parallel.time.sleep")
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.set_executor")
+    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
+    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
+    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    def test_no_items_continuous_mode_sleeps(
+        self, mock_sel, mock_ready, mock_repo, mock_shut,
+        mock_set_exec, mock_ui, mock_sleep,
+    ) -> None:
+        """Covers lines 329-334: continuous mode sleeps when no items."""
+        stats = SessionStats(agent_stats=AgentStats())
+
+        result = run_parallel_loop(
+            effective_parallel=2, mode_name="Autonomous",
+            main_repo_path="/repo", failed_claim_ids=set(),
+            session_stats=stats, start_time=time.time(),
+            run_logger=Mock(), continuous=True,
+            record_fn=Mock(), finalize_fn=Mock(),
+        )
+        # Should have been shut down, not exit with specific code
+        assert result is None or result == 0
+
+    @patch("pokepoke.parallel.time.sleep")
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.set_executor")
+    @patch("pokepoke.parallel.is_shutting_down", return_value=False)
+    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
+    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    def test_no_items_non_continuous_exits(
+        self, mock_sel, mock_ready, mock_repo, mock_shut,
+        mock_set_exec, mock_ui, mock_sleep,
+    ) -> None:
+        """Covers lines 336-342: non-continuous mode exits when no items."""
+        stats = SessionStats(agent_stats=AgentStats())
+        finalize_fn = Mock()
+
+        result = run_parallel_loop(
+            effective_parallel=2, mode_name="Autonomous",
+            main_repo_path="/repo", failed_claim_ids=set(),
+            session_stats=stats, start_time=time.time(),
+            run_logger=Mock(), continuous=False,
+            record_fn=Mock(), finalize_fn=finalize_fn,
+        )
+
+        assert result == 1  # No items processed = failure exit
+        finalize_fn.assert_called_once()

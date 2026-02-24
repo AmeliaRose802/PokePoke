@@ -200,3 +200,9 @@ def test_check_for_updates_returns_current_version_on_error(monkeypatch: pytest.
 
     assert result["current_version"] == "2.0.0"
     assert result["download_url"] == RELEASES_PAGE_URL
+
+
+def test_parse_version_handles_v_prefix() -> None:
+    """Verify _parse_version strips the 'v' prefix from version strings."""
+    assert _parse_version("v1.2.3") == (1, 2, 3)
+    assert _parse_version("1.2.3") == (1, 2, 3)

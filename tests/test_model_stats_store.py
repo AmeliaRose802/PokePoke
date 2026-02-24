@@ -431,3 +431,15 @@ class TestCrossProcessLocking:
                 )
         finally:
             os.chdir(original_cwd)
+
+
+class TestGetModelHistoryEdgeCases:
+    """Tests for get_model_history edge cases."""
+
+    def test_returns_empty_for_non_list_log(self, tmp_path: Path) -> None:
+        """Covers line 184: non-list log value."""
+        stats_path = tmp_path / "model_stats.json"
+        stats_path.write_text(json.dumps({"log": "not-a-list", "summary": {}}),
+                              encoding="utf-8")
+        result = get_model_history(limit=10, path=stats_path)
+        assert result == []

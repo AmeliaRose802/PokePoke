@@ -2501,3 +2501,143 @@ class TestSingleAgentPanelRegistration:
             )
 
 
+class TestOrchestratorBackfillException:
+    """Tests for backfill exception handling in orchestrator."""
+
+    @patch('subprocess.run')
+    @patch('pokepoke.agent_runner.run_worktree_cleanup')
+    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.process_work_item')
+    @patch('pokepoke.orchestrator.select_work_item')
+    @patch('pokepoke.orchestrator.get_ready_work_items')
+    def test_backfill_exception_does_not_crash(
+        self,
+        mock_get_items: Mock,
+        mock_select: Mock,
+        mock_process: Mock,
+        mock_beta: Mock,
+        mock_worktree_cleanup: Mock,
+        mock_subprocess_run: Mock,
+    ) -> None:
+        """Covers lines 137-139: backfill_from_beads_db exception is caught."""
+        mock_beta.return_value = None
+        mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
+        mock_get_items.return_value = []
+        mock_select.return_value = None
+
+        with patch('pokepoke.beads_item_stats_backfill.backfill_from_beads_db',
+                   side_effect=RuntimeError("backfill failed")):
+            result = run_orchestrator(interactive=False, continuous=False)
+
+        assert result == 0  # Should complete gracefully
+
+
+class TestOrchestratorParallelModeForced:
+    """Tests for parallel mode in interactive forcing sequential."""
+
+    @patch('subprocess.run')
+    @patch('pokepoke.agent_runner.run_worktree_cleanup')
+    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.process_work_item')
+    @patch('pokepoke.orchestrator.select_work_item')
+    @patch('pokepoke.orchestrator.get_ready_work_items')
+    def test_interactive_parallel_forces_sequential(
+        self,
+        mock_get_items: Mock,
+        mock_select: Mock,
+        mock_process: Mock,
+        mock_beta: Mock,
+        mock_worktree_cleanup: Mock,
+        mock_subprocess_run: Mock,
+    ) -> None:
+        """Covers lines 174-175: parallel mode forced to 1 in interactive mode."""
+        mock_beta.return_value = None
+        mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
+        mock_get_items.return_value = []
+        mock_select.return_value = None
+
+        # Request parallel=4 in interactive mode - should be forced to 1
+        result = run_orchestrator(
+            interactive=True, continuous=False, max_parallel_agents=4
+        )
+        assert result == 0
+
+
+class TestOrchestratorStopAfterCurrent:
+    """Tests for stop-after-current in orchestrator loop."""
+
+    @patch('subprocess.run')
+    @patch('pokepoke.agent_runner.run_worktree_cleanup')
+    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_periodic_maintenance')
+    @patch('pokepoke.orchestrator.process_work_item')
+    @patch('pokepoke.orchestrator.select_work_item')
+    @patch('pokepoke.orchestrator.get_ready_work_items')
+    def test_stop_after_current_exits_loop(
+        self,
+        mock_get_items: Mock,
+        mock_select: Mock,
+        mock_process: Mock,
+        mock_maintenance: Mock,
+        mock_beta: Mock,
+        mock_worktree_cleanup: Mock,
+        mock_subprocess_run: Mock,
+    ) -> None:
+        """Covers lines 271-276: orchestrator exits when stop_after_current is set."""
+        mock_beta.return_value = None
+        mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
+        mock_maintenance.return_value = None
+
+        item = BeadsWorkItem(
+            id="task-stop", title="Stop Task", description="",
+            status="open", priority=1, issue_type="task",
+        )
+        mock_get_items.return_value = [item]
+        mock_select.return_value = item
+        mock_process.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
+
+        from pokepoke.shutdown import request_stop_after_current, cancel_stop_after_current, reset
+        reset()
+        request_stop_after_current()
+
+        result = run_orchestrator(interactive=False, continuous=True)
+
+        assert result == 0
+        cancel_stop_after_current()
+        reset()
+
+
+class TestOrchestratorMergeQueueCleanup:
+    """Tests for merge queue cleanup in finally block."""
+
+    @patch('subprocess.run')
+    @patch('pokepoke.agent_runner.run_worktree_cleanup')
+    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.process_work_item')
+    @patch('pokepoke.orchestrator.select_work_item')
+    @patch('pokepoke.orchestrator.get_ready_work_items')
+    def test_merge_queue_shutdown_exception_handled(
+        self,
+        mock_get_items: Mock,
+        mock_select: Mock,
+        mock_process: Mock,
+        mock_beta: Mock,
+        mock_worktree_cleanup: Mock,
+        mock_subprocess_run: Mock,
+    ) -> None:
+        """Covers lines 330-332: merge queue shutdown exception in finally."""
+        mock_beta.return_value = None
+        mock_subprocess_run.return_value = Mock(stdout="", returncode=0)
+        mock_get_items.return_value = []
+        mock_select.return_value = None
+
+        mock_mq = Mock()
+        mock_mq.is_running = True
+        mock_mq.shutdown.side_effect = RuntimeError("shutdown failed")
+
+        with patch('pokepoke.merge_queue.get_merge_queue', return_value=mock_mq):
+            result = run_orchestrator(interactive=False, continuous=False)
+
+        assert result == 0  # Should still complete
+
+

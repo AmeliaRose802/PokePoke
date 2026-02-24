@@ -345,3 +345,15 @@ class TestHasActiveAgents:
         register_agent()
         unregister_agent()
         assert has_active_agents() is False
+
+
+class TestShutdownReset:
+    """Additional shutdown coordination tests."""
+
+    def test_reset_clears_shutdown_and_stop(self):
+        """Verify reset clears shutdown event and stop flag."""
+        request_shutdown()
+        request_stop_after_current()
+        reset()
+        assert not is_shutting_down()
+        assert not should_stop_after_current()

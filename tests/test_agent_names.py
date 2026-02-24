@@ -178,3 +178,11 @@ class TestIntegrationWithBeads:
         assert ' ' not in name, "Agent name should not contain spaces"
         assert '"' not in name, "Agent name should not contain quotes"
         assert "'" not in name, "Agent name should not contain quotes"
+
+    def test_generated_name_uses_known_adjective_and_creature(self):
+        """Verify generated names draw from the defined word lists."""
+        name = generate_agent_name()
+        parts = name.split("_")
+        # parts: [prefix, adjective, creature, hex]
+        assert parts[1] in ADJECTIVES
+        assert parts[2] in CREATURES

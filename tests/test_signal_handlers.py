@@ -133,6 +133,37 @@ class TestSignalHandlers:
 
         # sys.exit() must NOT be called; shutdown watchdog handles force-exit
 
+    @patch('pokepoke.signal_handlers.print')
+    def test_signal_handler_catches_request_shutdown_exception(self, mock_print):
+        """Covers lines 96-98: exception when request_shutdown itself fails."""
+        mock_logger = Mock()
+        mock_logger.log_orchestrator.side_effect = Exception("Logging failed")
+
+        register_shutdown_handlers(mock_logger)
+
+        from pokepoke.signal_handlers import _signal_handler
+
+        with patch('pokepoke.shutdown.request_shutdown', side_effect=RuntimeError("shutdown broke")):
+            # Should not raise even though request_shutdown throws
+            _signal_handler(signal.SIGTERM, None)
+
+        # Should have printed error about failed shutdown
+        error_msgs = [str(c) for c in mock_print.call_args_list]
+        assert any("Failed to request graceful shutdown" in msg for msg in error_msgs)
+
+    def test_unregister_restores_sig_dfl_when_no_original(self):
+        """Covers line 120: SIG_DFL restore when original handler was None."""
+        import pokepoke.signal_handlers as sh
+
+        # Register handlers first
+        register_shutdown_handlers(Mock())
+        # Simulate that one handler had no original
+        sh._original_handlers[signal.SIGTERM] = None
+        unregister_shutdown_handlers()
+        # Should have set to SIG_DFL without error
+        current = signal.getsignal(signal.SIGTERM)
+        assert current == signal.SIG_DFL
+
     def test_integration_with_real_logger(self):
         """Test integration with actual RunLogger."""
         with tempfile.TemporaryDirectory() as temp_dir:

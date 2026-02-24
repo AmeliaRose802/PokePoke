@@ -272,3 +272,20 @@ class TestWorkItemSelectionOutput:
 
         list_header_printed = any("Found 1 ready work items" in str(msg) for msg in printed_messages)
         assert list_header_printed, "Should print item list in interactive mode"
+
+
+class TestInteractiveSelectionShutdown:
+    """Test interactive_selection exits when shutdown is requested."""
+
+    @patch('pokepoke.work_item_selection.is_shutting_down', return_value=True)
+    def test_returns_none_on_shutdown(self, mock_shutdown):
+        """Covers line 124: return None when is_shutting_down() is True."""
+        from pokepoke.work_item_selection import interactive_selection
+        items = [
+            BeadsWorkItem(
+                id="task-1", title="Task", description="",
+                status="open", priority=1, issue_type="task"
+            )
+        ]
+        result = interactive_selection(items)
+        assert result is None

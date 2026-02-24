@@ -271,3 +271,14 @@ class TestLoadModelHistoryEntries:
         # Should only get the valid entry
         assert len(result) == 1
         assert result[0]["work_item_id"] == "PP-1"
+
+    def test_returns_empty_on_os_error(self, tmp_path: Path) -> None:
+        """Covers lines 155-157: OSError when file disappears mid-read."""
+        history_path = tmp_path / "model_history.jsonl"
+        # Create file, then make open() raise OSError
+        history_path.write_text('{"work_item_id": "PP-1"}\n', encoding="utf-8")
+
+        from unittest.mock import patch
+        with patch.object(Path, 'open', side_effect=OSError("Permission denied")):
+            result = load_model_history_entries(path=history_path)
+        assert result == []

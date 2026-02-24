@@ -204,3 +204,84 @@ class TestBeadsSeeding:
         assert cmd[0:2] == ["bd", "create"]
         assert cmd[2] == str(_SEED_BEADS_ITEMS[1]["title"])
         assert "--labels" in cmd
+
+    def test_load_existing_returns_empty_set_when_no_issues_file(self, tmp_path: Path) -> None:
+        """Covers line 130: issues.jsonl doesn't exist."""
+        titles = _load_existing_beads_titles(tmp_path)
+        assert titles == set()
+
+    def test_load_existing_skips_blank_lines(self, tmp_path: Path) -> None:
+        """Covers line 137: blank lines in issues.jsonl."""
+        beads_dir = tmp_path / ".beads"
+        beads_dir.mkdir()
+        issues_path = beads_dir / "issues.jsonl"
+        issues_path.write_text(
+            '{"title": "First"}\n\n\n{"title": "Second"}\n',
+            encoding="utf-8",
+        )
+        titles = _load_existing_beads_titles(tmp_path)
+        assert titles == {"first", "second"}
+
+    def test_seed_handles_timeout(self, tmp_path: Path) -> None:
+        """Covers lines 191-193: subprocess.TimeoutExpired."""
+        beads_dir = tmp_path / ".beads"
+        beads_dir.mkdir()
+        (beads_dir / "issues.jsonl").write_text("", encoding="utf-8")
+
+        with (
+            patch("pokepoke.init.shutil.which", return_value="bd"),
+            patch("pokepoke.init.subprocess.run",
+                  side_effect=subprocess.TimeoutExpired(cmd="bd", timeout=30)),
+        ):
+            _seed_setup_beads_items(tmp_path)  # Should not raise
+
+    def test_seed_handles_called_process_error(self, tmp_path: Path) -> None:
+        """Covers lines 194-197: subprocess.CalledProcessError."""
+        beads_dir = tmp_path / ".beads"
+        beads_dir.mkdir()
+        (beads_dir / "issues.jsonl").write_text("", encoding="utf-8")
+
+        with (
+            patch("pokepoke.init.shutil.which", return_value="bd"),
+            patch("pokepoke.init.subprocess.run",
+                  side_effect=subprocess.CalledProcessError(1, "bd", stderr="error msg")),
+        ):
+            _seed_setup_beads_items(tmp_path)  # Should not raise
+
+    def test_seed_handles_non_json_stdout(self, tmp_path: Path) -> None:
+        """Covers lines 204-205: non-JSON stdout from bd create."""
+        beads_dir = tmp_path / ".beads"
+        beads_dir.mkdir()
+        (beads_dir / "issues.jsonl").write_text("", encoding="utf-8")
+
+        result = subprocess.CompletedProcess(
+            args=["bd", "create"],
+            returncode=0,
+            stdout="Created item successfully",  # Not JSON
+            stderr="",
+        )
+
+        with (
+            patch("pokepoke.init.shutil.which", return_value="bd"),
+            patch("pokepoke.init.subprocess.run", return_value=result),
+        ):
+            _seed_setup_beads_items(tmp_path)  # Should not raise
+
+    def test_seed_prints_title_when_no_id(self, tmp_path: Path) -> None:
+        """Covers line 210: JSON output without 'id' field."""
+        beads_dir = tmp_path / ".beads"
+        beads_dir.mkdir()
+        (beads_dir / "issues.jsonl").write_text("", encoding="utf-8")
+
+        result = subprocess.CompletedProcess(
+            args=["bd", "create"],
+            returncode=0,
+            stdout=json.dumps({"title": "Created"}),  # No 'id'
+            stderr="",
+        )
+
+        with (
+            patch("pokepoke.init.shutil.which", return_value="bd"),
+            patch("pokepoke.init.subprocess.run", return_value=result),
+        ):
+            _seed_setup_beads_items(tmp_path)  # Should not raise
