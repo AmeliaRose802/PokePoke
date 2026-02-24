@@ -665,4 +665,49 @@ describe('AgentsPanel', () => {
       expect(childCard).toBeNull();
     });
   });
+
+  describe('cross-session gate isolation', () => {
+    it('does not show gate chip from a different session with same card_id', () => {
+      // Old session has a parent + gate child with same card_id as new session
+      const oldParent = mkAgent({
+        agent_id: 'worker-1',
+        card_id: 'worker-1::v1',
+        name: 'Worker',
+        status: 'failed',
+        session_id: '1000.0',
+        is_history_entry: true,
+      });
+      const oldGate = mkAgent({
+        agent_id: 'worker-1-gate',
+        card_id: 'worker-1-gate::v1',
+        name: 'Gate',
+        status: 'failed',
+        session_id: '1000.0',
+        parent_card_id: 'worker-1::v1',
+        is_history_entry: true,
+      });
+      // New session reuses the same card_id (card IDs collide across sessions)
+      const newParent = mkAgent({
+        agent_id: 'worker-1',
+        card_id: 'worker-1::v1',
+        name: 'Worker',
+        status: 'running',
+        session_id: '2000.0',
+      });
+      const { container } = render(
+        <AgentsPanel
+          agents={[oldParent, oldGate, newParent]}
+          currentSessionId="2000.0"
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+      // Current session's parent card should NOT show "Gate failed" from old session
+      const currentCards = container.querySelectorAll('.agent-card-running');
+      const gateChips = Array.from(currentCards).flatMap((card) =>
+        Array.from(card.querySelectorAll('.agent-gate-chip'))
+      );
+      expect(gateChips).toHaveLength(0);
+    });
+  });
 });

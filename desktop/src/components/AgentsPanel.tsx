@@ -87,27 +87,11 @@ export function AgentsPanel({
     });
   };
 
-  const agentKeySet = new Set<string>();
-  agents.forEach((agent) => {
-    agentKeySet.add(cardIdForAgent(agent));
-    agentKeySet.add(agent.agent_id);
-  });
-  const childrenByParent = new Map<string, AgentInfo[]>();
-
-  for (const agent of agents) {
-    const parentKey =
-      parentKeysForAgent(agent).find((key) => agentKeySet.has(key)) ?? null;
-    if (parentKey) {
-      const siblings = childrenByParent.get(parentKey) ?? [];
-      siblings.push(agent);
-      childrenByParent.set(parentKey, siblings);
-    }
-  }
-
   const renderAgentCard = (
     agent: AgentInfo,
     depth: number,
-    parent?: AgentInfo
+    parent: AgentInfo | undefined,
+    sessionChildrenMap: Map<string, AgentInfo[]>
   ) => {
     const statusInfo =
       STATUS_INDICATOR[agent.status] ?? STATUS_INDICATOR.running;
@@ -127,8 +111,8 @@ export function AgentsPanel({
     const gateChildForParent =
       !isGate
         ? (
-            childrenByParent.get(cardId) ??
-            childrenByParent.get(agent.agent_id) ??
+            sessionChildrenMap.get(cardId) ??
+            sessionChildrenMap.get(agent.agent_id) ??
             []
           ).find(isGateAgent) ?? null
         : null;
@@ -309,7 +293,7 @@ export function AgentsPanel({
       depth: number,
       parent?: AgentInfo
     ): ReactElement[] => {
-      const nodes = [renderAgentCard(agent, depth, parent)];
+      const nodes = [renderAgentCard(agent, depth, parent, sessionChildrenByParent)];
       // Sort children newest-first, then render recursively
       [...(sessionChildrenByParent.get(cardIdForAgent(agent)) ?? sessionChildrenByParent.get(agent.agent_id) ?? [])]
         .sort((a, b) => (b.started_at ?? 0) - (a.started_at ?? 0))
