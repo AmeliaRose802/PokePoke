@@ -128,8 +128,10 @@ def _find_test_files_for_staged(
     return sorted(test_files), False
 
 
-# Matches pytest progress lines like "....s.F.. [ 37%]" (xdist or sequential)
-_PROGRESS_RE = re.compile(r'^[.sFExX]+ \[\s*\d+%\]')
+# Matches pytest progress lines:
+#   xdist format:  "....s.F.. [ 37%]"
+#   plain format:  "....s.F.."   (no percentage indicator)
+_PROGRESS_RE = re.compile(r'^[.sFExXpP]+(\s+\[\s*\d+%\])?\s*$')
 
 
 def _filter_pytest_output(output: str) -> str:
@@ -139,10 +141,20 @@ def _filter_pytest_output(output: str) -> str:
         if _PROGRESS_RE.match(line.lstrip()):
             continue
         filtered.append(line)
-    # Strip leading blank lines
-    while filtered and not filtered[0].strip():
-        filtered.pop(0)
-    return "\n".join(filtered)
+    # Collapse consecutive blank lines and strip leading/trailing blanks
+    result: list[str] = []
+    prev_blank = False
+    for line in filtered:
+        is_blank = not line.strip()
+        if is_blank and prev_blank:
+            continue
+        result.append(line)
+        prev_blank = is_blank
+    while result and not result[0].strip():
+        result.pop(0)
+    while result and not result[-1].strip():
+        result.pop()
+    return "\n".join(result)
 
 
 def run_tests_with_coverage(
