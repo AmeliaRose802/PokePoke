@@ -2,11 +2,13 @@
 
 import logging
 import subprocess
+import time
 from pathlib import Path
 
 from pokepoke.copilot import invoke_copilot
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
 from pokepoke.git_operations import verify_main_repo_clean, commit_all_changes
+from pokepoke.coordination import merge_lock_active
 from pokepoke import terminal_ui
 
 logger = logging.getLogger(__name__)
@@ -223,14 +225,44 @@ def _run_agent_with_ui(
         raise
 
 
+def _wait_for_merge_completion(agent_label: str, item_id: str) -> None:
+    """Wait for an active merge operation to complete before proceeding.
+
+    Polls merge_lock_active() every 30 seconds for up to 10 minutes.
+    """
+    print(f"   ⏳ Merge operation in progress, waiting for completion before {agent_label}...")
+    logger.info(f"{agent_label} agent for {item_id} waiting for merge completion")
+
+    max_wait_time = 600  # 10 minutes
+    wait_interval = 30
+    waited_time = 0
+
+    while merge_lock_active() and waited_time < max_wait_time:
+        time.sleep(wait_interval)
+        waited_time += wait_interval
+        print(f"   ⏳ Still waiting for merge completion ({waited_time}s/{max_wait_time}s)...")
+
+    if merge_lock_active():
+        print("   ⚠️  Merge operation still active after 10 minutes, proceeding with caution")
+        logger.warning(f"{agent_label} agent for {item_id} proceeding despite active merge lock")
+    else:
+        print(f"   ✅ Merge operation completed, proceeding with {agent_label}")
+        logger.info(f"{agent_label} agent for {item_id} proceeding after merge completion")
+
+
 def invoke_cleanup_agent(
     item: BeadsWorkItem,
     repo_root: Path,
     cwd: str | None = None,
     modified_files: list[str] | None = None,
-    parent_agent_id: str | None = None
+    parent_agent_id: str | None = None,
+    wait_for_merge: bool = True
 ) -> tuple[bool, AgentStats | None]:
     """Invoke cleanup agent to commit uncommitted changes."""
+    # Check if merge is active and wait if requested
+    if wait_for_merge and merge_lock_active():
+        _wait_for_merge_completion("cleanup", item.id)
+
     terminal_ui.ui.set_current_agent("Cleanup Agent")
 
     agent_id = f"{item.id}-cleanup"
@@ -281,18 +313,14 @@ def invoke_merge_conflict_cleanup_agent(
     error_msg: str,
     unmerged_files: list[str] | None = None,
     cwd: str | None = None,
-    parent_agent_id: str | None = None
+    parent_agent_id: str | None = None,
+    wait_for_merge: bool = True
 ) -> tuple[bool, AgentStats | None]:
-    """Invoke cleanup agent to resolve merge conflicts.
+    """Invoke cleanup agent to resolve merge conflicts."""
+    # Check if merge is active and wait if requested
+    if wait_for_merge and merge_lock_active():
+        _wait_for_merge_completion("conflict cleanup", item.id)
 
-    Args:
-        item: The work item being processed
-        repo_root: Path to the repository root
-        error_msg: Description of the merge error
-        unmerged_files: Optional list of files with merge conflicts
-        cwd: Optional working directory for the Copilot process.
-        parent_agent_id: Optional parent agent id for UI nesting.
-    """
     terminal_ui.ui.set_current_agent("Merge Conflict Cleanup")
 
     agent_id = f"{item.id}-merge-fix"

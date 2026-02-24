@@ -430,6 +430,258 @@ class TestRunCleanupLoop:
         assert "Cleanup agent failed" in result.error
 
 
+class TestRunCleanupLoopErrorHandling:
+    """Test error handling paths in run_cleanup_loop."""
+
+    @patch('pokepoke.cleanup_agents.verify_main_repo_clean')
+    def test_verify_clean_exception_returns_failure(self, mock_verify: Mock) -> None:
+        """Test cleanup loop when verify_main_repo_clean raises an exception."""
+        mock_verify.side_effect = Exception("git error")
+
+        item = BeadsWorkItem(
+            id="task-1", title="Test", description="",
+            status="in_progress", priority=1, issue_type="task"
+        )
+        result = CopilotResult(
+            work_item_id="task-1", success=True, output="", attempt_count=1
+        )
+
+        success, cleanup_runs = run_cleanup_loop(item, result, Path("/repo"))
+
+        assert success is False
+        assert cleanup_runs == 0
+
+    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent')
+    @patch('pokepoke.cleanup_agents.commit_all_changes')
+    @patch('pokepoke.cleanup_agents.verify_main_repo_clean')
+    def test_recheck_exception_after_cleanup(
+        self, mock_verify: Mock, mock_commit: Mock, mock_invoke: Mock
+    ) -> None:
+        """Test cleanup loop when re-check after cleanup raises an exception."""
+        mock_verify.side_effect = [
+            (False, " M file.py\n", [" M file.py"]),
+            Exception("git status failed after cleanup"),
+        ]
+        mock_commit.return_value = (False, "Tests failed")
+        mock_invoke.return_value = (True, None)
+
+        item = BeadsWorkItem(
+            id="task-1", title="Test", description="",
+            status="in_progress", priority=1, issue_type="task"
+        )
+        result = CopilotResult(
+            work_item_id="task-1", success=True, output="", attempt_count=1
+        )
+
+        success, cleanup_runs = run_cleanup_loop(item, result, Path("/repo"))
+
+        assert success is False
+        assert cleanup_runs == 1
+        assert "Git status check failed" in result.error
+
+
+class TestRunAgentWithUiException:
+    """Test exception handling in _run_agent_with_ui."""
+
+    @patch('pokepoke.cleanup_agents.terminal_ui')
+    @patch('pokepoke.cleanup_agents.invoke_copilot')
+    def test_run_agent_with_ui_exception_reraises(self, mock_invoke, mock_ui):
+        """Test that _run_agent_with_ui re-raises exceptions after logging."""
+        from pokepoke.cleanup_agents import _run_agent_with_ui
+
+        mock_invoke.side_effect = RuntimeError("Copilot crashed")
+
+        item = BeadsWorkItem(
+            id="test-1", title="T", description="D",
+            status="in_progress", priority=1, issue_type="task"
+        )
+
+        with patch('pokepoke.cleanup_agents.agent_type_context', create=True), \
+             pytest.raises(RuntimeError, match="Copilot crashed"):
+            _run_agent_with_ui(
+                "test-1", "Test Agent", "cleanup",
+                item, "prompt", None, None,
+            )
+
+
+class TestMergeWaitLogic:
+    """Test merge wait logic in invoke_cleanup_agent and invoke_merge_conflict_cleanup_agent."""
+
+    @patch('pokepoke.cleanup_agents.merge_lock_active')
+    @patch('pokepoke.cleanup_agents.load_prompt_file')
+    @patch('pokepoke.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.cleanup_agents.terminal_ui')
+    def test_cleanup_agent_waits_for_merge_then_proceeds(
+        self, mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
+    ):
+        """Test cleanup agent waits when merge is active, then proceeds when it clears."""
+        # Call 1 (if guard): True, Call 2 (while check): False, Call 3 (post-while check): False
+        mock_merge_active.side_effect = [True, False, False]
+        mock_load_prompt.return_value = "Instructions {cwd} {branch} {is_worktree}"
+        mock_context.return_value = ("/dir", "main", False)
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="t-1", success=True, output="Done", attempt_count=1
+        )
+
+        item = BeadsWorkItem(
+            id="t-1", title="T", description="D",
+            status="in_progress", priority=1, issue_type="task"
+        )
+
+        with patch('pokepoke.cleanup_agents.time.sleep'):
+            success, stats = invoke_cleanup_agent(item, Path("/repo"), wait_for_merge=True)
+
+        assert success is True
+
+    @patch('pokepoke.cleanup_agents.merge_lock_active')
+    @patch('pokepoke.cleanup_agents.load_prompt_file')
+    @patch('pokepoke.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.cleanup_agents.terminal_ui')
+    def test_cleanup_agent_merge_timeout_proceeds_anyway(
+        self, mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
+    ):
+        """Test cleanup agent proceeds after merge wait timeout."""
+        # Always active (times out)
+        mock_merge_active.return_value = True
+        mock_load_prompt.return_value = "Instructions {cwd} {branch} {is_worktree}"
+        mock_context.return_value = ("/dir", "main", False)
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="t-1", success=True, output="Done", attempt_count=1
+        )
+
+        item = BeadsWorkItem(
+            id="t-1", title="T", description="D",
+            status="in_progress", priority=1, issue_type="task"
+        )
+
+        with patch('pokepoke.cleanup_agents.time.sleep'):
+            success, stats = invoke_cleanup_agent(item, Path("/repo"), wait_for_merge=True)
+
+        assert success is True
+
+    @patch('pokepoke.cleanup_agents.merge_lock_active')
+    @patch('pokepoke.cleanup_agents.load_prompt_file')
+    @patch('pokepoke.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.cleanup_agents.terminal_ui')
+    def test_cleanup_agent_skips_wait_when_false(
+        self, mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
+    ):
+        """Test cleanup agent skips merge wait when wait_for_merge=False."""
+        mock_load_prompt.return_value = "Instructions {cwd} {branch} {is_worktree}"
+        mock_context.return_value = ("/dir", "main", False)
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="t-1", success=True, output="Done", attempt_count=1
+        )
+
+        item = BeadsWorkItem(
+            id="t-1", title="T", description="D",
+            status="in_progress", priority=1, issue_type="task"
+        )
+
+        success, stats = invoke_cleanup_agent(item, Path("/repo"), wait_for_merge=False)
+
+        assert success is True
+        mock_merge_active.assert_not_called()
+
+    @patch('pokepoke.cleanup_agents.merge_lock_active')
+    @patch('pokepoke.cleanup_agents.load_prompt_file')
+    @patch('pokepoke.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.cleanup_agents.terminal_ui')
+    @patch('pokepoke.git_operations.is_merge_in_progress', return_value=False)
+    @patch('pokepoke.git_operations.get_unmerged_files', return_value=[])
+    def test_merge_conflict_agent_waits_for_merge(
+        self, mock_get_unmerged, mock_is_merging,
+        mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
+    ):
+        """Test merge conflict cleanup agent waits when merge is active."""
+        # Call 1 (if guard): True, Call 2 (while check): False, Call 3 (post-while check): False
+        mock_merge_active.side_effect = [True, False, False]
+        mock_load_prompt.return_value = "Fix {merge_error} {cwd} {branch} {is_worktree} {worktree_path} {is_merge_in_progress} {conflict_files} {conflict_count}"
+        mock_context.return_value = ("/dir", "main", False)
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="t-1", success=True, output="Fixed", attempt_count=1
+        )
+
+        item = BeadsWorkItem(
+            id="t-1", title="T", description="D",
+            status="in_progress", priority=1, issue_type="task"
+        )
+
+        with patch('pokepoke.cleanup_agents.time.sleep'):
+            success, stats = invoke_merge_conflict_cleanup_agent(
+                item, Path("/repo"), "Merge error", wait_for_merge=True
+            )
+
+        assert success is True
+
+    @patch('pokepoke.cleanup_agents.merge_lock_active')
+    @patch('pokepoke.cleanup_agents.load_prompt_file')
+    @patch('pokepoke.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.cleanup_agents.terminal_ui')
+    @patch('pokepoke.git_operations.is_merge_in_progress', return_value=False)
+    @patch('pokepoke.git_operations.get_unmerged_files', return_value=[])
+    def test_merge_conflict_agent_timeout_proceeds(
+        self, mock_get_unmerged, mock_is_merging,
+        mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
+    ):
+        """Test merge conflict cleanup agent proceeds after timeout."""
+        mock_merge_active.return_value = True
+        mock_load_prompt.return_value = "Fix {merge_error} {cwd} {branch} {is_worktree} {worktree_path} {is_merge_in_progress} {conflict_files} {conflict_count}"
+        mock_context.return_value = ("/dir", "main", False)
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="t-1", success=True, output="Fixed", attempt_count=1
+        )
+
+        item = BeadsWorkItem(
+            id="t-1", title="T", description="D",
+            status="in_progress", priority=1, issue_type="task"
+        )
+
+        with patch('pokepoke.cleanup_agents.time.sleep'):
+            success, stats = invoke_merge_conflict_cleanup_agent(
+                item, Path("/repo"), "Merge error", wait_for_merge=True
+            )
+
+        assert success is True
+
+    @patch('pokepoke.cleanup_agents.merge_lock_active')
+    @patch('pokepoke.cleanup_agents.load_prompt_file')
+    @patch('pokepoke.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.cleanup_agents.terminal_ui')
+    @patch('pokepoke.git_operations.is_merge_in_progress', return_value=True)
+    @patch('pokepoke.git_operations.get_unmerged_files', return_value=["file1.py", "file2.py", "file3.py", "file4.py", "file5.py", "file6.py"])
+    def test_merge_conflict_agent_with_many_conflict_files(
+        self, mock_get_unmerged, mock_is_merging,
+        mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
+    ):
+        """Test merge conflict cleanup agent displays conflict files (including truncation)."""
+        mock_merge_active.return_value = False
+        mock_load_prompt.return_value = "Fix {merge_error} {cwd} {branch} {is_worktree} {worktree_path} {is_merge_in_progress} {conflict_files} {conflict_count}"
+        mock_context.return_value = ("/dir", "main", False)
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="t-1", success=True, output="Fixed", attempt_count=1
+        )
+
+        item = BeadsWorkItem(
+            id="t-1", title="T", description="D",
+            status="in_progress", priority=1, issue_type="task"
+        )
+
+        success, stats = invoke_merge_conflict_cleanup_agent(
+            item, Path("/repo"), "Merge error",
+            unmerged_files=["f1.py", "f2.py", "f3.py", "f4.py", "f5.py", "f6.py"],
+            wait_for_merge=False,
+        )
+
+        assert success is True
+
+
 class TestWorktreeCleanupPromptSafety:
     """Tests to verify the worktree cleanup prompt prohibits process killing."""
 

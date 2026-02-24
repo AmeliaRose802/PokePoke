@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from pokepoke.git_operations import categorize_git_changes
 from pokepoke.repo_state_guard import cleanup_lock
+from pokepoke.coordination import merge_lock_active
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import RunLogger
@@ -54,17 +55,7 @@ def check_beads_available() -> bool:
 
 
 def initialize_beads_repo(repo_path: Path) -> bool:
-    """Initialize beads in the given repository directory.
-
-    This is intended for first-run setup flows where PokePoke can
-    proactively run ``bd init`` for the user.
-
-    Args:
-        repo_path: Target repository directory to initialize.
-
-    Returns:
-        True if the repository is (now) initialized for beads.
-    """
+    """Initialize beads in the given repository directory."""
     if not shutil.which('bd'):
         print("\nError: 'bd' (beads) command not found.", file=sys.stderr)
         print("   Install beads: pip install beads", file=sys.stderr)
@@ -324,7 +315,14 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
             print("\n🤖 Auto-commit failed, launching cleanup agent...")
             run_logger.log_orchestrator("Auto-commit failed, launching cleanup agent")
 
-            from pokepoke.agent_runner import invoke_cleanup_agent
+            # Check if merge operation is active - defer cleanup if so
+            if merge_lock_active():
+                print("   ⏳ Merge operation in progress - deferring maintenance cleanup")
+                print("   Workers use isolated worktrees, continuing with orchestration for now")
+                run_logger.log_orchestrator("Deferring cleanup due to active merge operation")
+                return True  # Continue processing - merge has priority
+
+            from pokepoke.cleanup_agents import invoke_cleanup_agent
             from pokepoke.types import BeadsWorkItem
 
             cleanup_success = False
@@ -341,7 +339,10 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
                 )
 
                 with cleanup_lock():
-                    cleanup_success, cleanup_stats = invoke_cleanup_agent(cleanup_item, repo_path)
+                    # Use wait_for_merge=False since we already checked above
+                    cleanup_success, cleanup_stats = invoke_cleanup_agent(
+                        cleanup_item, repo_path, wait_for_merge=False
+                    )
 
                 if cleanup_success:
                     print("✅ Cleanup agent successfully resolved uncommitted changes")

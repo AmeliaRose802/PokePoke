@@ -6,7 +6,6 @@ of critical merge sequence logic.
 
 from pathlib import Path
 from unittest.mock import patch, Mock, MagicMock
-import pytest
 
 from pokepoke.types import BeadsWorkItem
 from pokepoke.worktree_merge_handler import (
@@ -307,7 +306,7 @@ class TestHandleWorktreeMergeIntegration:
         mock_perform,
         mock_merge_lock
     ):
-        """Test that merge lock is released even if exception occurs."""
+        """Test that merge lock is released even if exception occurs and proper error handling."""
         mock_lock_context = MagicMock()
         mock_merge_lock.return_value = mock_lock_context
         mock_perform.side_effect = RuntimeError('Test error')
@@ -315,16 +314,19 @@ class TestHandleWorktreeMergeIntegration:
         agent_item = _make_test_item('test-exception')
         worktree_path = Path('C:/repos/worktrees/task-test-exception')
 
-        with pytest.raises(RuntimeError, match='Test error'):
-            handle_worktree_merge(
-                agent_id=agent_item.id,
-                agent_item=agent_item,
-                agent_name='TestAgent',
-                worktree_path=worktree_path,
-                repo_root=Path('C:/repos'),
-                agent_stats=None,
-                parent_agent_id=None
-            )
+        # With new error handling, should return (False, False) instead of raising
+        result = handle_worktree_merge(
+            agent_id=agent_item.id,
+            agent_item=agent_item,
+            agent_name='TestAgent',
+            worktree_path=worktree_path,
+            repo_root=Path('C:/repos'),
+            agent_stats=None,
+            parent_agent_id=None
+        )
+
+        # Should return failure result instead of raising
+        assert result == (False, False)
 
         # Lock should still be released
         mock_lock_context.__exit__.assert_called_once()
