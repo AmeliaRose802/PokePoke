@@ -434,8 +434,12 @@ class TestRunCleanupLoopErrorHandling:
     """Test error handling paths in run_cleanup_loop."""
 
     @patch('pokepoke.cleanup_agents.verify_main_repo_clean')
-    def test_verify_clean_exception_returns_failure(self, mock_verify: Mock) -> None:
-        """Test cleanup loop when verify_main_repo_clean raises an exception."""
+    def test_verify_clean_exception_treats_as_clean(self, mock_verify: Mock) -> None:
+        """Test cleanup loop when verify_main_repo_clean raises an exception on first call.
+
+        Transient git contention (e.g. concurrent git operations across worktrees) should
+        not abort successful work. Treat as clean and return success=True.
+        """
         mock_verify.side_effect = Exception("git error")
 
         item = BeadsWorkItem(
@@ -448,7 +452,7 @@ class TestRunCleanupLoopErrorHandling:
 
         success, cleanup_runs = run_cleanup_loop(item, result, Path("/repo"))
 
-        assert success is False
+        assert success is True
         assert cleanup_runs == 0
 
     @patch('pokepoke.cleanup_agents.invoke_cleanup_agent')
