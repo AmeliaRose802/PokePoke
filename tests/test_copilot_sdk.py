@@ -1171,6 +1171,117 @@ class TestInvokeCopilotSDKAsync:
 
         assert result.success
 
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_invoke_copilot_sdk_disconnected_client_forces_completion(self, mock_client_class, sample_work_item):
+        """Test SDK detects disconnected client and forces completion instead of hanging."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+
+        mock_client = AsyncMock()
+        mock_session = AsyncMock()
+        mock_session.session_id = "test-session-disconnect"
+        mock_session.abort = AsyncMock()
+
+        mock_client.start = AsyncMock()
+        mock_client.create_session = AsyncMock(return_value=mock_session)
+        mock_client.stop = AsyncMock()
+
+        # Simulate the client process dying - get_state returns 'disconnected'
+        mock_client.get_state = MagicMock(return_value="disconnected")
+
+        mock_client_class.return_value = mock_client
+
+        mock_session.on = MagicMock()
+        mock_session.send = AsyncMock()  # Don't trigger idle
+        mock_session.destroy = AsyncMock()
+
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item,
+            prompt="Test prompt",
+            timeout=5.0,  # Give enough time for get_state check
+            idle_timeout=0.01,
+        )
+
+        # Should detect disconnection and force-complete (success with no errors)
+        assert result.success
+
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_invoke_copilot_sdk_error_state_forces_completion(self, mock_client_class, sample_work_item):
+        """Test SDK detects error state client and forces completion."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+
+        mock_client = AsyncMock()
+        mock_session = AsyncMock()
+        mock_session.session_id = "test-session-error-state"
+        mock_session.abort = AsyncMock()
+
+        mock_client.start = AsyncMock()
+        mock_client.create_session = AsyncMock(return_value=mock_session)
+        mock_client.stop = AsyncMock()
+
+        # Simulate the client entering error state
+        mock_client.get_state = MagicMock(return_value="error")
+
+        mock_client_class.return_value = mock_client
+
+        mock_session.on = MagicMock()
+        mock_session.send = AsyncMock()
+        mock_session.destroy = AsyncMock()
+
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item,
+            prompt="Test prompt",
+            timeout=5.0,
+            idle_timeout=0.01,
+        )
+
+        assert result.success
+
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_invoke_copilot_sdk_get_state_exception_does_not_crash(self, mock_client_class, sample_work_item):
+        """Test that get_state() raising an exception doesn't crash the poll loop."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+
+        mock_client = AsyncMock()
+        mock_session = AsyncMock()
+        mock_session.session_id = "test-session-get-state-err"
+
+        mock_client.start = AsyncMock()
+        mock_client.create_session = AsyncMock(return_value=mock_session)
+        mock_client.stop = AsyncMock()
+
+        # get_state raises — should be silently caught
+        mock_client.get_state = MagicMock(side_effect=RuntimeError("transport gone"))
+
+        mock_client_class.return_value = mock_client
+
+        stored_handler = None
+        def capture_handler(handler):
+            nonlocal stored_handler
+            stored_handler = handler
+        mock_session.on = capture_handler
+
+        async def mock_send(message):
+            async def trigger_idle():
+                await asyncio.sleep(0.05)
+                if stored_handler:
+                    event = MagicMock()
+                    event.type.value = "session.idle"
+                    stored_handler(event)
+            asyncio.create_task(trigger_idle())
+        mock_session.send = mock_send
+        mock_session.destroy = AsyncMock()
+
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item,
+            prompt="Test prompt",
+            timeout=5.0,
+            idle_timeout=0.01,
+        )
+
+        # Should still complete normally despite get_state errors
+        assert result.success
+
+
 @pytest.mark.asyncio
 class TestAPIStatsIntegration:
     """Tests for API duration stats integration."""

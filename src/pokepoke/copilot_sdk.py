@@ -210,6 +210,16 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                         await session.abort()
                         activity_timeout = True
                         return False
+                    # Defense-in-depth: detect dead Copilot process even if
+                    # session.idle events are never emitted.
+                    try:
+                        client_state = client.get_state()
+                        if client_state in ("disconnected", "error"):
+                            print(f"\n[SDK] Client state is '{client_state}' - process has exited, forcing completion")
+                            done.set()
+                            break
+                    except Exception:
+                        pass  # get_state() should never fail, but don't let it crash the loop
                     remaining = deadline - asyncio.get_event_loop().time()
                     if remaining <= 0:
                         print(f"\n[SDK] TIMEOUT after {max_timeout}s")

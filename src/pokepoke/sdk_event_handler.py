@@ -152,6 +152,13 @@ def create_event_handler(
     # assistant turn so that the final assistant.message event does not
     # duplicate the same text into output_lines / item_logger.
     received_deltas = False
+    # Track consecutive idle events with unchanged pending_tool_calls.
+    # When the Copilot process exits mid-tool-call, pending_tool_calls
+    # stays > 0 permanently.  After consecutive idles with the same
+    # stale counter we force-set ``done`` to avoid hanging for 2 hours.
+    _stale_idle_count = 0
+    _last_idle_pending: int | None = None
+    _MAX_STALE_IDLES = 2  # force-complete after this many consecutive stale idles
 
     def _iter_streaming_chunks(event_obj: Any) -> list[tuple[str, str]]:
         """Extract text chunks from tool streaming/progress events."""
@@ -167,7 +174,7 @@ def create_event_handler(
 
     def handle_event(event: Any) -> None:
         """Handle SDK session events."""
-        nonlocal received_deltas
+        nonlocal received_deltas, _stale_idle_count, _last_idle_pending
         event_type= event.type.value if hasattr(event.type, 'value') else str(event.type)
 
         if event_type == "assistant.message_delta":
@@ -205,6 +212,9 @@ def create_event_handler(
             terminal_ui.ui.set_style(None)
             stats['total_tool_calls'] += 1
             stats['pending_tool_calls'] += 1
+            # Reset stale idle tracking whenever real tool activity occurs.
+            _stale_idle_count = 0
+            _last_idle_pending = None
             if stats['idle_task'] and not stats['idle_task'].done():
                 stats['idle_task'].cancel()
                 stats['idle_task'] = None
@@ -230,6 +240,9 @@ def create_event_handler(
         elif event_type == "tool.execution_complete":
             terminal_ui.ui.set_style(None)
             stats['pending_tool_calls'] = max(0, stats['pending_tool_calls'] - 1)
+            # Reset stale idle tracking whenever real tool activity occurs.
+            _stale_idle_count = 0
+            _last_idle_pending = None
             if hasattr(event, 'data'):
                 tool_name = getattr(event.data, 'tool_name', 'unknown')
                 arguments = getattr(event.data, 'arguments', {})
@@ -304,8 +317,26 @@ def create_event_handler(
             if stats['idle_task'] and not stats['idle_task'].done():
                 stats['idle_task'].cancel()
             if stats['pending_tool_calls'] > 0:
-                print(f"\n[SDK] Session idle but {stats['pending_tool_calls']} tool(s) still executing - continuing...")
+                # Track consecutive idles with unchanged pending count.
+                # If Copilot exited without emitting tool.execution_complete,
+                # the counter will never decrement and we'd hang for hours.
+                if _last_idle_pending == stats['pending_tool_calls']:
+                    _stale_idle_count += 1
+                else:
+                    _stale_idle_count = 1
+                    _last_idle_pending = stats['pending_tool_calls']
+
+                if _stale_idle_count >= _MAX_STALE_IDLES:
+                    print(f"\n[SDK] Session idle with {stats['pending_tool_calls']} stale pending tool(s) "
+                          f"(idle x{_stale_idle_count}) - forcing completion (process likely exited)")
+                    stats['pending_tool_calls'] = 0
+                    done.set()
+                else:
+                    print(f"\n[SDK] Session idle but {stats['pending_tool_calls']} tool(s) still executing "
+                          f"(stale idle {_stale_idle_count}/{_MAX_STALE_IDLES}) - continuing...")
             else:
+                _stale_idle_count = 0
+                _last_idle_pending = None
                 print("\n[SDK] Session idle - waiting to confirm completion...")
                 async def check_still_idle() -> None:
                     try:

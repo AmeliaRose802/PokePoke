@@ -339,3 +339,108 @@ def test_on_token_usage_callback_invoked_on_usage_event() -> None:
     assert usage_calls == [(100, 50), (300, 150)]
     assert stats['total_input_tokens'] == 300
     assert stats['total_output_tokens'] == 150
+
+
+def test_stale_idle_forces_completion_after_threshold(capsys) -> None:
+    """When session.idle fires repeatedly with unchanged pending_tool_calls,
+    the handler should force-set done after _MAX_STALE_IDLES (2) consecutive
+    stale idles — preventing a 2-hour hang when Copilot exits mid-tool."""
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        done = asyncio.Event()
+        output_lines: list[str] = []
+        errors: list[str] = []
+
+        handler, stats = create_event_handler(
+            done, output_lines, errors, idle_timeout=0.1,
+        )
+
+        # Simulate a tool that started but never completed (Copilot exited)
+        handler(_make_event("tool.execution_start", tool_name="powershell",
+                            arguments={"command": "bd close"}, tool_call_id="t1"))
+        assert stats['pending_tool_calls'] == 1
+        assert not done.is_set()
+
+        # First stale idle: should NOT force completion yet
+        handler(_make_event("session.idle"))
+        assert not done.is_set()
+
+        # Second stale idle: should force completion
+        handler(_make_event("session.idle"))
+        assert done.is_set()
+        assert stats['pending_tool_calls'] == 0
+
+        captured = capsys.readouterr()
+        assert "stale pending tool" in captured.out
+        assert "forcing completion" in captured.out
+    finally:
+        asyncio.set_event_loop(None)
+        loop.close()
+
+
+def test_tool_activity_resets_stale_idle_counter(capsys) -> None:
+    """A tool.execution_start or tool.execution_complete between idle events
+    should reset the stale idle counter, preventing false-positive force
+    completion."""
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        done = asyncio.Event()
+        output_lines: list[str] = []
+        errors: list[str] = []
+
+        handler, stats = create_event_handler(
+            done, output_lines, errors, idle_timeout=0.1,
+        )
+
+        # Start two tools
+        handler(_make_event("tool.execution_start", tool_name="powershell",
+                            arguments={}, tool_call_id="t1"))
+        handler(_make_event("tool.execution_start", tool_name="view",
+                            arguments={}, tool_call_id="t2"))
+        assert stats['pending_tool_calls'] == 2
+
+        # First stale idle (pending=2)
+        handler(_make_event("session.idle"))
+        assert not done.is_set()
+
+        # One tool completes — resets stale counter
+        handler(_make_event("tool.execution_complete", tool_name="powershell",
+                            arguments={}, result=SimpleNamespace(content="ok"),
+                            success=True, tool_call_id="t1"))
+        assert stats['pending_tool_calls'] == 1
+
+        # This idle is NOT stale (pending changed from 2→1), counter resets
+        handler(_make_event("session.idle"))
+        assert not done.is_set()
+
+        # Second idle with pending=1 unchanged → stale counter=2, force complete
+        handler(_make_event("session.idle"))
+        assert done.is_set()
+    finally:
+        asyncio.set_event_loop(None)
+        loop.close()
+
+
+def test_idle_with_zero_pending_still_uses_confirm_timeout() -> None:
+    """When pending_tool_calls is 0, session.idle should schedule the normal
+    confirmation timeout rather than force-completing immediately."""
+    async def _run() -> None:
+        done = asyncio.Event()
+        output_lines: list[str] = []
+        errors: list[str] = []
+
+        handler, stats = create_event_handler(
+            done, output_lines, errors, idle_timeout=0.05,
+        )
+
+        # Idle with no pending tools — done should NOT be set immediately
+        handler(_make_event("session.idle"))
+        assert not done.is_set()
+
+        # After idle_timeout elapses, done should be set
+        await asyncio.sleep(0.15)
+        assert done.is_set()
+
+    asyncio.run(_run())
