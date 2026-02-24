@@ -120,10 +120,11 @@ def merge_lock(timeout: float = 600.0) -> Generator[FileLock, None, None]:
     cleanup agents should wait for this lock before attempting to
     fix uncommitted changes on the main repo.
 
-    A stale lock recovery mechanism removes lock files older than
-    ``_MERGE_LOCK_STALE_AGE`` seconds.  This handles the case where a
-    process crashed or got stuck and the OS has since released the file
-    lock but the lock file remains on disk from a non-filelock tool.
+    Do NOT use stale lock recovery for merge_lock, as legitimate merges with
+    conflict resolution and cleanup agents can run longer than the stale
+    threshold (15 minutes). Without a way to verify the owning process is
+    actually dead, stale deletion would cause concurrent merges to run
+    against the same repository, corrupting the merge queue and repo state.
 
     Args:
         timeout: Seconds to wait. Default 600s (10 minutes) to allow
@@ -132,7 +133,7 @@ def merge_lock(timeout: float = 600.0) -> Generator[FileLock, None, None]:
     Yields:
         The acquired FileLock instance.
     """
-    with acquire_lock(_MERGE_LOCK, timeout=timeout, stale_timeout=_MERGE_LOCK_STALE_AGE) as lock:
+    with acquire_lock(_MERGE_LOCK, timeout=timeout) as lock:
         yield lock
 
 
