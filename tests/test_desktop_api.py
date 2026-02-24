@@ -1463,3 +1463,32 @@ def test_open_project_needs_beads_init_when_bd_unavailable(tmp_path, monkeypatch
     result = DesktopAPI().open_project(str(tmp_path))
     assert result["success"] is True
     assert result["needs_beads_init"] is True
+
+
+def test_open_project_fails_when_agents_active(tmp_path, monkeypatch) -> None:
+    """open_project should fail when agents are actively running."""
+    (tmp_path / ".pokepoke").mkdir()
+    (tmp_path / ".pokepoke" / "config.yaml").write_text(
+        "project_name: test\n", encoding="utf-8"
+    )
+
+    monkeypatch.setattr(
+        "pokepoke.desktop_api_ext._is_git_repo", lambda p: True
+    )
+    monkeypatch.setattr(
+        "pokepoke.desktop_api_ext._resolve_git_toplevel", lambda p: p
+    )
+    monkeypatch.setattr(
+        "pokepoke.desktop_api_ext._has_pokepoke_config", lambda p: True
+    )
+    monkeypatch.setattr(
+        "pokepoke.desktop_api_ext._check_beads_available", lambda p: True
+    )
+    # Mock has_active_agents in the shutdown module where it's defined
+    monkeypatch.setattr(
+        "pokepoke.shutdown.has_active_agents", lambda: True
+    )
+
+    result = DesktopAPI().open_project(str(tmp_path))
+    assert result["success"] is False
+    assert "Cannot switch projects while agents are running" in result["error"]

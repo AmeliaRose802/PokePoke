@@ -151,6 +151,30 @@ def get_active_agent_count() -> int:
         return _active_agent_count
 
 
+def has_active_agents() -> bool:
+    """Check if there are currently active agent threads or pending futures.
+
+    Returns True if:
+    - Any agent threads are running (get_active_agent_count > 0), OR
+    - The ThreadPoolExecutor has pending/running futures
+
+    This is used to prevent project switching while agents are active,
+    which would break relative-path-based coordination locks.
+    """
+    # Check registered agent count
+    if get_active_agent_count() > 0:
+        return True
+
+    # Check if executor has pending futures
+    if _executor is not None:
+        # An executor exists; check if it has any pending work
+        # We can't directly query pending futures, but the presence of
+        # an executor during orchestration means agents might be starting/running
+        return True
+
+    return False
+
+
 def set_executor(executor: concurrent.futures.ThreadPoolExecutor | None) -> None:
     """Set the global ThreadPoolExecutor for shutdown coordination.
 
