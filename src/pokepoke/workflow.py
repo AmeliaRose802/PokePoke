@@ -153,14 +153,14 @@ def process_work_item(
 
             remaining_timeout = timeout_seconds - elapsed
 
-            # Append feedback if retrying
+            # Append feedback if retrying, keeping only last 3 entries
             if last_feedback:
                 print("\n🔄 Restarting Work Agent with feedback...")
-                current_desc = item.description or ""
-                if "**PREVIOUS GATE AGENT FEEDBACK:**" not in current_desc:
-                    current_desc += "\n\n**PREVIOUS GATE AGENT FEEDBACK:**\n"
-                current_desc += f"\n- {last_feedback}"
-                item.description = current_desc
+                hdr = "**PREVIOUS GATE AGENT FEEDBACK:**"
+                desc = item.description or ""
+                base, sec = desc.split(hdr, 1) if hdr in desc else (desc, "")
+                prev = [e for e in sec.strip().splitlines() if e.strip().startswith("- ")]
+                item.description = base.rstrip() + f"\n\n{hdr}\n" + "\n".join(prev[-2:] + [f"- {last_feedback}"])
                 work_agent_iteration += 1
 
             terminal_ui.ui.set_current_agent("Work Agent")
