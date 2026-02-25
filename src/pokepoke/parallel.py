@@ -194,6 +194,36 @@ def _collect_done_futures(
 
     return total_requests, any_success
 
+def _finalize_workers(futures: dict[_Future, BeadsWorkItem], session_stats: SessionStats, start_time: float, total_requests: int, run_logger: RunLogger, record_fn: Any) -> tuple[int, bool]:
+    """Wait for remaining workers."""
+    timeout_occurred = False
+    if not futures:
+        return total_requests, timeout_occurred
+    run_logger.log_orchestrator(f"Waiting for {len(futures)} active workers")
+    try:
+        for fut in concurrent.futures.as_completed(list(futures.keys()), timeout=300):
+            item = futures.pop(fut, BeadsWorkItem(id="?", title="?", status="?", priority=0, issue_type="?"))
+            try:
+                result = fut.result()
+                run_logger.log_orchestrator(f"Worker completed {item.id}")
+            except Exception as e:
+                run_logger.log_orchestrator(f"Worker failed {item.id}: {e}", level="ERROR")
+                result = WorkItemResult(success=False, request_count=0)
+            total_requests += result.request_count
+            try:
+                record_fn(item, result, session_stats, run_logger)
+            except Exception as exc:
+                logger.warning(f"record_fn failed {item.id}: {exc}", exc_info=True)
+                run_logger.log_orchestrator(f"record_fn error {item.id}: {exc}", level="ERROR")
+            terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
+    except concurrent.futures.TimeoutError:
+        cancelled = sum(1 for fut in list(futures.keys()) if fut.cancel())
+        run_logger.log_orchestrator(f"Cancelled {cancelled} workers; timeout waiting", level="WARNING")
+        timeout_occurred = True
+    run_logger.log_orchestrator("Workers completed")
+    terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
+    return total_requests, timeout_occurred
+
 
 def run_parallel_loop(
     effective_parallel: int,
@@ -352,42 +382,10 @@ def run_parallel_loop(
             _spawn_wakeup.clear()
 
     finally:
-        # Wait for all workers to complete before shutting down
-        if futures:
-            print(f"\n⏳ Waiting for {len(futures)} active workers to complete...")
-            run_logger.log_orchestrator(f"Waiting for {len(futures)} active workers to complete")
-            remaining = list(futures.keys())
-            try:
-                for fut in concurrent.futures.as_completed(remaining, timeout=300):  # 5 minute timeout
-                    item = futures.pop(fut, BeadsWorkItem(
-                        id="?", title="?", status="?", priority=0, issue_type="?",
-                    ))
-                    try:
-                        result = fut.result()
-                        run_logger.log_orchestrator(f"Worker completed item {item.id}")
-                    except Exception as e:
-                        run_logger.log_orchestrator(f"Worker failed for item {item.id}: {e}", level="ERROR")
-                        result = WorkItemResult(success=False, request_count=0)
-
-                    total_requests += result.request_count
-                    try:
-                        record_fn(item, result, session_stats, run_logger)
-                    except Exception as exc:
-                        logger.warning(f"record_fn raised for {item.id}: {exc}", exc_info=True)
-                        run_logger.log_orchestrator(f"Error recording result for {item.id}: {exc}", level="ERROR")
-                    items_completed = session_stats.items_completed
-                    terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
-            except concurrent.futures.TimeoutError:
-                print(f"⚠️  Timeout waiting for {len(futures)} workers after 5 minutes")
-                run_logger.log_orchestrator("Timeout waiting for workers", level="WARNING")
-
-            run_logger.log_orchestrator("All workers completed")
-            terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
-
-        executor.shutdown(wait=False, cancel_futures=False)
+        total_requests, timeout_occurred = _finalize_workers(futures, session_stats, start_time, total_requests, run_logger, record_fn)
+        executor.shutdown(wait=True, cancel_futures=timeout_occurred)
         set_executor(None)
         clear_runtime_parallel_limits()
-
         if not finalized:
             print("\n🏁 Finalizing session...")
             run_logger.log_orchestrator("Finalizing session on exit")
