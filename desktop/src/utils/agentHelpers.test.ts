@@ -44,24 +44,30 @@ describe("agentHelpers", () => {
   });
 
   describe("formatModelName", () => {
-    it("formats Claude models correctly", () => {
-      expect(formatModelName("claude-3-5-sonnet-20241022")).toBe("Claude Sonnet");
-      expect(formatModelName("claude-3-haiku-20240307")).toBe("Claude Haiku");
-      expect(formatModelName("claude-3-opus-20240229")).toBe("Claude Opus");
+    it("formats Claude models with version numbers", () => {
+      expect(formatModelName("claude-3-5-sonnet-20241022")).toBe("Claude Sonnet 3.5");
+      expect(formatModelName("claude-3-haiku-20240307")).toBe("Claude Haiku 3");
+      expect(formatModelName("claude-3-opus-20240229")).toBe("Claude Opus 3");
+      expect(formatModelName("claude-opus-4.6")).toBe("Claude Opus 4.6");
+      expect(formatModelName("claude-sonnet-4.5")).toBe("Claude Sonnet 4.5");
       expect(formatModelName("claude-unknown")).toBe("Claude");
     });
 
-    it("formats GPT models correctly", () => {
+    it("formats GPT models with version numbers", () => {
       expect(formatModelName("gpt-4o")).toBe("GPT-4o");
       expect(formatModelName("gpt-4-turbo")).toBe("GPT-4 Turbo");
       expect(formatModelName("gpt-4")).toBe("GPT-4");
-      expect(formatModelName("gpt-3.5-turbo")).toBe("GPT-3.5");
+      expect(formatModelName("gpt-3.5-turbo")).toBe("GPT-3.5 Turbo");
+      expect(formatModelName("gpt-5.3-codex")).toBe("GPT-5.3 Codex");
+      expect(formatModelName("gpt-5.2")).toBe("GPT-5.2");
       expect(formatModelName("gpt-unknown")).toBe("GPT");
     });
 
-    it("formats Gemini models correctly", () => {
-      expect(formatModelName("gemini-1.5-pro")).toBe("Gemini Pro");
-      expect(formatModelName("gemini-flash")).toBe("Gemini");
+    it("formats Gemini models with version numbers", () => {
+      expect(formatModelName("gemini-1.5-pro")).toBe("Gemini 1.5 Pro");
+      expect(formatModelName("gemini-2.0-flash")).toBe("Gemini 2.0 Flash");
+      expect(formatModelName("gemini-flash")).toBe("Gemini Flash");
+      expect(formatModelName("gemini-pro")).toBe("Gemini Pro");
     });
 
     it("handles null and undefined models", () => {

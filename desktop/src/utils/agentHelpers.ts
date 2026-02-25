@@ -156,7 +156,7 @@ export function getAgentAvatar(agent: AgentInfo): string | null {
 
 /**
  * Format a model name into a user-friendly display name.
- * Converts technical model names into readable labels.
+ * Converts technical model names into readable labels while preserving version information.
  */
 export function formatModelName(model: string | null | undefined): string {
   if (!model) {
@@ -165,38 +165,94 @@ export function formatModelName(model: string | null | undefined): string {
 
   const modelStr = model.toLowerCase();
 
-  // Claude models
+  // Claude models - preserve version numbers
   if (modelStr.includes("claude")) {
+    let result = "Claude";
+    
+    // Extract variant (Sonnet, Opus, Haiku)
     if (modelStr.includes("sonnet")) {
-      return "Claude Sonnet";
-    } else if (modelStr.includes("haiku")) {
-      return "Claude Haiku";
+      result += " Sonnet";
     } else if (modelStr.includes("opus")) {
-      return "Claude Opus";
+      result += " Opus";
+    } else if (modelStr.includes("haiku")) {
+      result += " Haiku";
     }
-    return "Claude";
+    
+    // Extract version number - handle multiple patterns:
+    // - "claude-3-5-sonnet" -> "3.5"
+    // - "claude-3-haiku" -> "3"
+    // - "claude-opus-4.6" -> "4.6"
+    // - "claude-4-5" -> "4.5"
+    const versionMatch = modelStr.match(/(\d+)[-.](\d+)(?:[-.](\d+))?/);
+    if (versionMatch) {
+      // Build version from captured groups
+      const major = versionMatch[1];
+      const minor = versionMatch[2];
+      const patch = versionMatch[3];
+      
+      // For patterns like "3-5-sonnet" or "3-haiku", use major.minor format
+      let version = `${major}.${minor}`;
+      
+      // If the second number looks like a date (e.g., "20241022"), just use major
+      if (parseInt(minor) > 100) {
+        version = major;
+      } else if (patch && parseInt(patch) <= 100) {
+        // If there's a third number that's not a date, include it
+        version += `.${patch}`;
+      }
+      
+      result += ` ${version}`;
+    } else {
+      // Fallback: try to match single digit version (e.g., "claude-3")
+      const singleVersionMatch = modelStr.match(/claude-(\d+)[^\d]/);
+      if (singleVersionMatch) {
+        result += ` ${singleVersionMatch[1]}`;
+      }
+    }
+    
+    return result;
   }
 
-  // GPT models
+  // GPT models - preserve version numbers
   if (modelStr.includes("gpt")) {
-    if (modelStr.includes("4o")) {
-      return "GPT-4o";
-    } else if (modelStr.includes("4") && modelStr.includes("turbo")) {
-      return "GPT-4 Turbo";
-    } else if (modelStr.includes("4")) {
-      return "GPT-4";
-    } else if (modelStr.includes("3.5")) {
-      return "GPT-3.5";
+    let result = "GPT";
+    
+    // Extract base version (e.g., "4", "5.3", "3.5")
+    const versionMatch = modelStr.match(/gpt-?(\d+(?:\.\d+)?(?:\.\d+)?)/);
+    if (versionMatch) {
+      result += `-${versionMatch[1]}`;
     }
-    return "GPT";
+    
+    // Add variant suffix (Turbo, Codex, etc.)
+    if (modelStr.includes("turbo")) {
+      result += " Turbo";
+    } else if (modelStr.includes("codex")) {
+      result += " Codex";
+    } else if (modelStr.includes("4o")) {
+      result = "GPT-4o";
+    }
+    
+    return result;
   }
 
-  // Gemini models
+  // Gemini models - preserve version numbers
   if (modelStr.includes("gemini")) {
-    if (modelStr.includes("pro")) {
-      return "Gemini Pro";
+    let result = "Gemini";
+    
+    // Extract version (e.g., "1.5", "2.0")
+    const versionMatch = modelStr.match(/(\d+\.\d+)/);
+    if (versionMatch) {
+      result += ` ${versionMatch[1]}`;
     }
-    return "Gemini";
+    
+    // Add variant (Pro, Flash, etc.)
+    if (modelStr.includes("pro")) {
+      result += " Pro";
+    } else if (modelStr.includes("flash")) {
+      result += " Flash";
+    }
+    
+    return result;
   }
 
   // For any other model, capitalize the first letter and return as-is
