@@ -173,7 +173,12 @@ def process_work_item(
                 desc = item.description or ""
                 base, sec = desc.split(hdr, 1) if hdr in desc else (desc, "")
                 prev = [e for e in sec.strip().splitlines() if e.strip().startswith("- ")]
-                item.description = base.rstrip() + f"\n\n{hdr}\n" + "\n".join(prev[-2:] + [f"- {last_feedback}"])
+
+                base_stripped = base.rstrip()
+                separator = "\n\n" if base_stripped else ""
+                item.description = base_stripped + f"{separator}{hdr}\n" + "\n".join(
+                    prev[-2:] + [f"- {last_feedback}"]
+                )
                 work_agent_iteration += 1
 
             terminal_ui.ui.set_current_agent("Work Agent")

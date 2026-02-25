@@ -1226,7 +1226,7 @@ class TestProcessWorkItem:
         item = BeadsWorkItem(
             id="task-1",
             title="Task 1",
-            description="Original description",
+            description="",
             status="open",
             priority=1,
             issue_type="task"
@@ -1262,6 +1262,9 @@ class TestProcessWorkItem:
         assert result.request_count == 2  # Two invocations
         mock_add_comment.assert_called_once()  # Comment added for gate rejection
         assert mock_gate_agent.call_count == 2
+
+        assert item.description.startswith("**PREVIOUS GATE AGENT FEEDBACK:**\n")
+        assert not item.description.startswith("\n\n")
 
     @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.add_comment')
