@@ -40,14 +40,19 @@ export function PromptEditor({
     listPrompts().then((list) => {
       if (!active) return;
       setPrompts(list);
-      if (initialPrompt && list.some((p) => p.name === initialPrompt)) {
-        getPrompt(initialPrompt).then((detail) => {
-          if (!active || !detail) return;
-          setSelected(detail);
-          setEditorContent(detail.content);
-          setDirty(false);
-          setMessage("");
-        });
+      if (initialPrompt) {
+        // Normalize: strip .md extension so "janitor.md" matches prompt name "janitor"
+        const normalized = initialPrompt.replace(/\.md$/i, "");
+        const match = list.find((p) => p.name === initialPrompt || p.name === normalized);
+        if (match) {
+          getPrompt(match.name).then((detail) => {
+            if (!active || !detail) return;
+            setSelected(detail);
+            setEditorContent(detail.content);
+            setDirty(false);
+            setMessage("");
+          });
+        }
       }
     });
     return () => { active = false; };

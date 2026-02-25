@@ -247,4 +247,25 @@ describe('PromptEditor', () => {
       expect(screen.getByDisplayValue('You are a helpful assistant.')).toBeInTheDocument();
     });
   });
+
+  it('should auto-select prompt when initialPrompt has .md extension', async () => {
+    render(
+      <PromptEditor
+        listPrompts={mockListPrompts}
+        getPrompt={mockGetPrompt}
+        savePrompt={mockSavePrompt}
+        resetPrompt={mockResetPrompt}
+        onClose={mockOnClose}
+        initialPrompt="system-prompt.md"
+      />
+    );
+
+    await waitFor(() => {
+      expect(mockGetPrompt).toHaveBeenCalledWith('system-prompt');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('You are a helpful assistant.')).toBeInTheDocument();
+    });
+  });
 });
