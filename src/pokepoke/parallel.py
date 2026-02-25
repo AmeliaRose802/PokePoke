@@ -154,6 +154,17 @@ def _collect_done_futures(
             futures, timeout=2.0, return_when=concurrent.futures.FIRST_COMPLETED,
         )
         done_futs.update(done_batch)
+        # Second sweep: catch futures that completed while wait() was running.
+        # Without this, concurrent completions are missed and slots = 1 not N.
+        for fut in list(futures):
+            if fut.done():
+                done_futs.add(fut)
+
+    if done_futs:
+        run_logger.log_orchestrator(
+            f"Agent lifecycle: collected {len(done_futs)} agent(s); "
+            f"{len(futures) - len(done_futs)} remain active"
+        )
 
     any_success = False
     for fut in done_futs:
@@ -248,16 +259,22 @@ def run_parallel_loop(
             current_active = {i.id for i in futures.values()}
             current_max = get_effective_max_agents()
             slots = current_max - len(futures)
+            run_logger.log_orchestrator(
+                f"Agent lifecycle: active={len(futures)}, max={current_max}, slots={slots}"
+            )
 
             if (
                 slots > 0
                 and not should_stop_after_current()
-                and not (not continuous and any_success)
             ):
                 selected_items = select_multiple_items(
                     ready_items, count=slots,
                     skip_ids=failed_claim_ids, claimed_ids=current_active,
                 )
+                if selected_items:
+                    run_logger.log_orchestrator(
+                        f"Agent lifecycle: replenishing {len(selected_items)} of {slots} open slot(s)"
+                    )
                 for item in selected_items:
                     if not is_item_claimable(item.id):
                         run_logger.log_orchestrator(f"Skipping {item.id} - already claimed by another agent")
@@ -287,27 +304,10 @@ def run_parallel_loop(
                 exit_code = 0
                 break
 
-            if not continuous and (any_success or not futures):
-                # Drain remaining futures
-                remaining = list(futures.keys())
-                for fut in concurrent.futures.as_completed(remaining):
-                    item = futures.pop(fut, BeadsWorkItem(
-                        id="?", title="?", status="?", priority=0, issue_type="?",
-                    ))
-                    try:
-                        result = fut.result()
-                    except Exception as e:
-                        logger.warning(f"Future raised exception: {e}")
-                        result = WorkItemResult(success=False, request_count=0)
-                    total_requests += result.request_count
-                    try:
-                        record_fn(item, result, session_stats, run_logger)
-                    except Exception as exc:
-                        logger.warning(f"record_fn raised for {item.id}: {exc}", exc_info=True)
-                        run_logger.log_orchestrator(f"Error recording result for {item.id}: {exc}", level="ERROR")
-                    items_completed = session_stats.items_completed
-                    terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
-                # Ensure UI sees the final snapshot even if no futures remained to drain.
+            # In non-continuous mode, exit once all active agents have finished.
+            # A single success must not prevent replenishment up to the limit.
+            if not continuous and not futures:
+                # Drain is a no-op here (futures is empty) but ensures final stats.
                 terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
                 terminal_ui.ui.stop_and_capture()
                 finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
