@@ -984,7 +984,8 @@ class TestDynamicParallelCeiling:
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
-        """ThreadPoolExecutor should have max_workers >= effective_parallel."""
+        """ThreadPoolExecutor should clamp max_workers to ceiling."""
+        from pokepoke.parallel import _DEFAULT_PARALLEL_CEILING
         stats = SessionStats(agent_stats=AgentStats())
 
         with patch("pokepoke.parallel.concurrent.futures.ThreadPoolExecutor") as MockTPE:
@@ -1001,7 +1002,7 @@ class TestDynamicParallelCeiling:
 
             MockTPE.assert_called_once()
             call_kwargs = MockTPE.call_args
-            assert call_kwargs[1]["max_workers"] == 12
+            assert call_kwargs[1]["max_workers"] == _DEFAULT_PARALLEL_CEILING
 
     @patch("pokepoke.parallel.time.sleep")
     @patch("pokepoke.parallel.terminal_ui")
@@ -1010,12 +1011,11 @@ class TestDynamicParallelCeiling:
     @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.parallel.select_multiple_items", return_value=[])
-    def test_pool_uses_default_ceiling_when_effective_parallel_is_small(
+    def test_pool_uses_effective_parallel_when_smaller_than_ceiling(
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
-        """When effective_parallel < default ceiling, pool uses ceiling."""
-        from pokepoke.parallel import _DEFAULT_PARALLEL_CEILING
+        """When effective_parallel < default ceiling, pool uses effective_parallel."""
         stats = SessionStats(agent_stats=AgentStats())
 
         with patch("pokepoke.parallel.concurrent.futures.ThreadPoolExecutor") as MockTPE:
@@ -1031,7 +1031,7 @@ class TestDynamicParallelCeiling:
             )
 
             call_kwargs = MockTPE.call_args
-            assert call_kwargs[1]["max_workers"] == _DEFAULT_PARALLEL_CEILING
+            assert call_kwargs[1]["max_workers"] == 3
 
     @patch("pokepoke.parallel.time.sleep")
     @patch("pokepoke.parallel.terminal_ui")

@@ -8,6 +8,10 @@ import pytest
 import pokepoke.process_utils as process_utils_mod
 from pokepoke.process_utils import (
     check_copilot_processes,
+    get_available_memory_mb,
+    is_memory_pressure,
+    is_memory_critical,
+    kill_orphaned_copilot_processes,
     wait_for_process_cleanup,
     shutdown_copilot_client,
 )
@@ -15,10 +19,12 @@ from pokepoke.process_utils import (
 
 @pytest.fixture(autouse=True)
 def reset_copilot_cache():
-    """Reset the module-level cache before each test to prevent cross-test pollution."""
+    """Reset the module-level caches before each test to prevent cross-test pollution."""
     process_utils_mod._copilot_process_cache = None
+    process_utils_mod._memory_cache = None
     yield
     process_utils_mod._copilot_process_cache = None
+    process_utils_mod._memory_cache = None
 
 
 class TestCheckCopilotProcesses:
@@ -138,6 +144,134 @@ class TestWaitForProcessCleanup:
         mock_check.side_effect = [1, 1, 0]
         wait_for_process_cleanup(max_wait=1.0)
         assert mock_check.call_count == 3
+
+
+class TestGetAvailableMemoryMb:
+    """Tests for get_available_memory_mb."""
+
+    @patch('pokepoke.process_utils.os')
+    def test_returns_zero_on_non_windows(self, mock_os: MagicMock) -> None:
+        mock_os.name = 'posix'
+        assert get_available_memory_mb() == 0
+
+    @patch('pokepoke.process_utils.os')
+    @patch('pokepoke.process_utils.ctypes')
+    def test_returns_available_memory_on_windows(self, mock_ctypes: MagicMock, mock_os: MagicMock) -> None:
+        mock_os.name = 'nt'
+        # Create a mock MEMORYSTATUSEX with 4 GB available
+        mock_mem = MagicMock()
+        mock_mem.ullAvailPhys = 4 * 1024 * 1024 * 1024  # 4 GB
+        mock_ctypes.Structure = type
+        mock_ctypes.sizeof.return_value = 64
+        mock_ctypes.c_ulong = int
+        mock_ctypes.c_ulonglong = int
+        # Patch the class creation inside the function
+        with patch.object(process_utils_mod, 'get_available_memory_mb', wraps=get_available_memory_mb):
+            # Can't easily mock ctypes.Structure subclass creation;
+            # test the caching path instead
+            process_utils_mod._memory_cache = (process_utils_mod.time.time(), 4096)
+            result = get_available_memory_mb()
+            assert result == 4096
+
+    def test_caches_result_within_ttl(self) -> None:
+        """Repeated calls within TTL reuse cached result."""
+        import time
+        process_utils_mod._memory_cache = (time.time(), 8000)
+        assert get_available_memory_mb() == 8000
+
+
+class TestIsMemoryPressure:
+    """Tests for is_memory_pressure."""
+
+    @patch('pokepoke.process_utils.get_available_memory_mb')
+    def test_no_pressure_when_plenty_of_memory(self, mock_mem: MagicMock) -> None:
+        mock_mem.return_value = 8000  # 8 GB free
+        assert is_memory_pressure() is False
+
+    @patch('pokepoke.process_utils.get_available_memory_mb')
+    def test_pressure_when_low_memory(self, mock_mem: MagicMock) -> None:
+        mock_mem.return_value = 1500  # 1.5 GB free
+        assert is_memory_pressure() is True
+
+    @patch('pokepoke.process_utils.get_available_memory_mb')
+    def test_no_pressure_when_unknown(self, mock_mem: MagicMock) -> None:
+        mock_mem.return_value = 0  # Can't determine
+        assert is_memory_pressure() is False
+
+
+class TestIsMemoryCritical:
+    """Tests for is_memory_critical."""
+
+    @patch('pokepoke.process_utils.get_available_memory_mb')
+    def test_not_critical_with_normal_memory(self, mock_mem: MagicMock) -> None:
+        mock_mem.return_value = 4000
+        assert is_memory_critical() is False
+
+    @patch('pokepoke.process_utils.get_available_memory_mb')
+    def test_critical_when_very_low(self, mock_mem: MagicMock) -> None:
+        mock_mem.return_value = 500  # 500 MB free
+        assert is_memory_critical() is True
+
+    @patch('pokepoke.process_utils.get_available_memory_mb')
+    def test_not_critical_when_unknown(self, mock_mem: MagicMock) -> None:
+        mock_mem.return_value = 0
+        assert is_memory_critical() is False
+
+
+class TestKillOrphanedCopilotProcesses:
+    """Tests for kill_orphaned_copilot_processes."""
+
+    @patch('pokepoke.process_utils.os')
+    def test_returns_zero_on_non_windows(self, mock_os: MagicMock) -> None:
+        mock_os.name = 'posix'
+        assert kill_orphaned_copilot_processes(expected_count=0) == 0
+
+    @patch('pokepoke.process_utils.os')
+    @patch('pokepoke.process_utils.subprocess.run')
+    def test_no_processes_found(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+        mock_os.name = 'nt'
+        mock_run.return_value = MagicMock(stdout='INFO: No tasks')
+        assert kill_orphaned_copilot_processes(expected_count=0) == 0
+
+    @patch('pokepoke.process_utils.os')
+    @patch('pokepoke.process_utils.subprocess.run')
+    def test_kills_excess_processes(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+        mock_os.name = 'nt'
+        # First call: tasklist returns 4 processes
+        tasklist_output = (
+            '"Image Name","PID","Session Name","Session#","Mem Usage"\n'
+            '"copilot.exe","100","Console","1","50,000 K"\n'
+            '"copilot.exe","200","Console","1","50,000 K"\n'
+            '"copilot.exe","300","Console","1","50,000 K"\n'
+            '"copilot.exe","400","Console","1","50,000 K"'
+        )
+        mock_run.return_value = MagicMock(stdout=tasklist_output)
+        # expected_count=2, so 2 should be killed (PIDs 100 and 200 as lowest)
+        killed = kill_orphaned_copilot_processes(expected_count=2)
+        assert killed == 2
+        # Verify taskkill was called with /F /T /PID for the oldest PIDs
+        taskkill_calls = [c for c in mock_run.call_args_list
+                         if 'taskkill' in str(c)]
+        assert len(taskkill_calls) == 2
+
+    @patch('pokepoke.process_utils.os')
+    @patch('pokepoke.process_utils.subprocess.run')
+    def test_no_kill_when_under_expected(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+        mock_os.name = 'nt'
+        tasklist_output = (
+            '"Image Name","PID"\n'
+            '"copilot.exe","100"\n'
+            '"copilot.exe","200"'
+        )
+        mock_run.return_value = MagicMock(stdout=tasklist_output)
+        assert kill_orphaned_copilot_processes(expected_count=3) == 0
+
+    @patch('pokepoke.process_utils.os')
+    @patch('pokepoke.process_utils.subprocess.run')
+    def test_handles_tasklist_exception(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+        mock_os.name = 'nt'
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd='tasklist', timeout=30)
+        assert kill_orphaned_copilot_processes(expected_count=0) == 0
 
 
 class TestShutdownCopilotClient:

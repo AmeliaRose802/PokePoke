@@ -7,6 +7,7 @@ import time
 from typing import Any
 
 from pokepoke.parallel_runtime import clear_runtime_parallel_limits, compute_effective_max_agents, set_runtime_parallel_limits
+from pokepoke.process_utils import apply_memory_backpressure, kill_orphaned_copilot_processes
 
 from pokepoke.agent_context import get_agent_name, set_agent_name, clear_agent_name
 from pokepoke.beads import get_ready_work_items, is_item_claimable
@@ -72,10 +73,8 @@ def _build_worker_name(base_agent_name: str, item_id: str, counter: int) -> str:
 
 
 def _parallel_process_item(
-    item: BeadsWorkItem,
-    run_logger: RunLogger,
-    semaphore: threading.Semaphore,
-    worker_agent_name: str | None = None,
+    item: BeadsWorkItem, run_logger: RunLogger,
+    semaphore: threading.Semaphore, worker_agent_name: str | None = None,
 ) -> WorkItemResult:
     """Thread-pool wrapper for process_work_item."""
     agent_id = f"{item.id}:{worker_agent_name}" if worker_agent_name else item.id
@@ -84,51 +83,24 @@ def _parallel_process_item(
     if worker_agent_name:
         set_agent_name(worker_agent_name)
 
-    terminal_ui.ui.push_agent_status(
-        agent_id,
-        display_name,
-        iteration=1,
-        status="running",
-        work_item_id=item.id,
-        work_item_title=item.title,
-        agent_type="work",
-    )
+    def _push(status: str) -> None:
+        terminal_ui.ui.push_agent_status(agent_id, display_name, iteration=1, status=status,
+            work_item_id=item.id, work_item_title=item.title, agent_type="work")
+
+    _push("running")
     terminal_ui.ui.log_orchestrator(f"\U0001f680 Agent {display_name} started item {item.id}: {item.title}")
 
     try:
         with terminal_ui.ui.agent_output_for(agent_id):
-            result = process_work_item(
-                item,
-                interactive=False,
-                run_logger=run_logger,
-                agent_id=agent_id,
-            )
+            result = process_work_item(item, interactive=False, run_logger=run_logger, agent_id=agent_id)
         success = result.success
-        terminal_ui.ui.push_agent_status(
-            agent_id,
-            display_name,
-            iteration=1,
-            status="success" if success else "failed",
-            work_item_id=item.id,
-            work_item_title=item.title,
-            agent_type="work",
-        )
-        status_emoji = "\u2705" if success else "\u274c"
-        terminal_ui.ui.log_orchestrator(
-            f"{status_emoji} Agent {display_name} {'completed' if success else 'failed'} item {item.id}"
-        )
+        _push("success" if success else "failed")
+        emoji = "\u2705" if success else "\u274c"
+        terminal_ui.ui.log_orchestrator(f"{emoji} Agent {display_name} {'completed' if success else 'failed'} item {item.id}")
         return result
     except Exception as e:
         logger.warning(f"Failed to process work item {item.id} in parallel: {e}", exc_info=True)
-        terminal_ui.ui.push_agent_status(
-            agent_id,
-            display_name,
-            iteration=1,
-            status="failed",
-            work_item_id=item.id,
-            work_item_title=item.title,
-            agent_type="work",
-        )
+        _push("failed")
         terminal_ui.ui.log_orchestrator(f"\u274c Agent {display_name} raised exception on item {item.id}")
         raise
     finally:
@@ -222,6 +194,8 @@ def _finalize_workers(futures: dict[_Future, BeadsWorkItem], session_stats: Sess
         run_logger.log_orchestrator(f"Cancelled {cancelled} workers; timeout waiting", level="WARNING")
         timeout_occurred = True
     run_logger.log_orchestrator("Workers completed")
+    # Final sweep: kill any orphaned Copilot CLI processes left behind
+    kill_orphaned_copilot_processes(expected_count=0)
     terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
     return total_requests, timeout_occurred
 
@@ -242,9 +216,9 @@ def run_parallel_loop(
     """Run the parallel orchestrator loop with a ThreadPoolExecutor."""
     total_requests = 0
     items_completed = 0
-    pool_size = max(effective_parallel, _DEFAULT_PARALLEL_CEILING)
+    pool_size = min(effective_parallel, _DEFAULT_PARALLEL_CEILING)
     if effective_parallel > _DEFAULT_PARALLEL_CEILING:
-        logger.warning("max_parallel_agents (%d) exceeds ceiling (%d)", effective_parallel, _DEFAULT_PARALLEL_CEILING)
+        logger.warning("max_parallel_agents (%d) exceeds ceiling (%d); clamping pool", effective_parallel, _DEFAULT_PARALLEL_CEILING)
     semaphore = threading.Semaphore(pool_size)
     futures: dict[_Future, BeadsWorkItem] = {}
     executor = concurrent.futures.ThreadPoolExecutor(
@@ -291,9 +265,23 @@ def run_parallel_loop(
             current_active = {i.id for i in futures.values()}
             current_max = get_effective_max_agents()
             slots = current_max - len(futures)
+
+            # Memory-pressure backpressure: reduce slots when system RAM is low
+            slots, avail_mb = apply_memory_backpressure(slots)
+            if avail_mb > 0 and slots == 0 and current_max - len(futures) > 0:
+                run_logger.log_orchestrator(
+                    f"Memory low ({avail_mb} MB free) — blocking new agents", level="WARNING")
+            elif avail_mb > 0 and slots < current_max - len(futures):
+                run_logger.log_orchestrator(
+                    f"Memory pressure ({avail_mb} MB free) — throttling to {slots} slot(s)", level="WARNING")
+
             run_logger.log_orchestrator(
-                f"Agent lifecycle: active={len(futures)}, max={current_max}, slots={slots}"
+                f"Agent lifecycle: active={len(futures)}, max={current_max}, "
+                f"slots={slots}, mem={avail_mb}MB"
             )
+
+            # Periodically kill orphaned Copilot CLI processes that outlived their agent
+            kill_orphaned_copilot_processes(expected_count=len(futures))
 
             if futures or ready_items:
                 idle_sleep = _IDLE_BASE_DELAY
