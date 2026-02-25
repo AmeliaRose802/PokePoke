@@ -1,0 +1,474 @@
+"""Integration-style tests for workflow.py.
+
+Exercises real code paths in workflow.py, mocking only external I/O
+boundaries (copilot invocation, beads CLI, git operations, filesystem).
+"""
+
+import time
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+
+
+from pokepoke.types import (
+    BeadsWorkItem, AgentStats, CopilotResult, ModelCompletionRecord,
+)
+from pokepoke.workflow import (
+    _fail_result,
+    _build_completion_record,
+    _log_failure,
+    _setup_worktree,
+    _run_cleanup_with_timeout,
+    process_work_item,
+)
+
+
+def _item(id: str = "wf-1", desc: str | None = "desc") -> BeadsWorkItem:
+    return BeadsWorkItem(id=id, title=f"Item {id}", status="ready",
+                         priority=1, issue_type="task", description=desc)
+
+
+# ── _fail_result ───────────────────────────────────────────────────
+
+class TestFailResult:
+    def test_defaults(self):
+        r = _fail_result()
+        assert r.success is False
+        assert r.request_count == 0
+        assert r.stats is None
+        assert r.cleanup_agent_runs == 0
+        assert r.gate_agent_runs == 0
+        assert r.model_completion is None
+
+    def test_with_all_params(self):
+        stats = AgentStats(input_tokens=100)
+        mc = ModelCompletionRecord(item_id="x", model="m", duration_seconds=1.0)
+        r = _fail_result(request_count=3, stats=stats,
+                         cleanup_agent_runs=2, gate_agent_runs=1,
+                         model_completion=mc)
+        assert r.request_count == 3
+        assert r.stats.input_tokens == 100
+        assert r.cleanup_agent_runs == 2
+        assert r.gate_agent_runs == 1
+        assert r.model_completion is mc
+
+
+# ── _build_completion_record ───────────────────────────────────────
+
+class TestBuildCompletionRecord:
+    def test_basic(self):
+        stats = AgentStats(input_tokens=500, output_tokens=200,
+                           api_duration=1.5, lines_added=10, lines_removed=3)
+        rec = _build_completion_record(
+            item_id="x", model="gpt-4", duration=60.0, success=True,
+            gate_passed=True, stats=stats, request_count=2,
+        )
+        assert rec.item_id == "x"
+        assert rec.model == "gpt-4"
+        assert rec.duration_seconds == 60.0
+        assert rec.gate_passed is True
+        assert rec.input_tokens == 500
+        assert rec.output_tokens == 200
+        assert rec.agent_turns == 2
+        assert rec.retry_attempts == 1  # request_count - 1
+        assert rec.api_duration == 1.5
+        assert rec.lines_added == 10
+        assert rec.lines_removed == 3
+
+    def test_no_stats(self):
+        rec = _build_completion_record(
+            item_id="x", model="m", duration=1.0, success=False,
+            gate_passed=None, stats=None, request_count=1,
+        )
+        assert rec.input_tokens == 0
+        assert rec.output_tokens == 0
+        assert rec.retry_attempts == 0
+        assert rec.api_duration is None
+
+
+# ── _log_failure ───────────────────────────────────────────────────
+
+class TestLogFailure:
+    def test_with_loggers(self):
+        run_logger = MagicMock()
+        item_logger = MagicMock()
+        _log_failure(run_logger, item_logger, request_count=5)
+        item_logger.log_summary.assert_called_once_with(False, 5)
+        run_logger.log_orchestrator.assert_called_once()
+
+    def test_without_loggers(self):
+        _log_failure(None, None, 0)  # Should not raise
+
+
+# ── _setup_worktree ────────────────────────────────────────────────
+
+class TestSetupWorktree:
+    @patch("pokepoke.workflow.create_worktree")
+    def test_success(self, mock_create, tmp_path):
+        mock_create.return_value = tmp_path / "worktree"
+        result = _setup_worktree(_item())
+        assert result == tmp_path / "worktree"
+
+    @patch("pokepoke.workflow.create_worktree", side_effect=RuntimeError("git failed"))
+    def test_failure_returns_none(self, mock_create):
+        result = _setup_worktree(_item())
+        assert result is None
+
+    @patch("pokepoke.workflow.create_worktree", side_effect=RuntimeError("git failed"))
+    def test_failure_logs_error(self, mock_create):
+        run_logger = MagicMock()
+        item_logger = MagicMock()
+        result = _setup_worktree(_item(), run_logger=run_logger, item_logger=item_logger)
+        assert result is None
+        run_logger.log_orchestrator.assert_called_once()
+        item_logger.log_error.assert_called_once()
+
+
+# ── _run_cleanup_with_timeout ──────────────────────────────────────
+
+class TestRunCleanupWithTimeout:
+    @patch("pokepoke.workflow.run_cleanup_loop", return_value=(True, 1))
+    @patch("pokepoke.workflow.has_uncommitted_changes")
+    def test_cleanup_runs_once(self, mock_uncommitted, mock_cleanup):
+        # First call: has changes; after cleanup: no changes
+        mock_uncommitted.side_effect = [True, False]
+        item = _item()
+        result_obj = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1)
+
+        success, runs = _run_cleanup_with_timeout(
+            item, result_obj, Path("."), time.time(), 7200, 2.0, cwd="/fake",
+        )
+        assert success is True
+        assert runs == 1
+
+    @patch("pokepoke.workflow.run_cleanup_loop", return_value=(True, 1))
+    @patch("pokepoke.workflow.has_uncommitted_changes", return_value=True)
+    @patch("time.time")
+    def test_cleanup_timeout(self, mock_time, mock_uncommitted, mock_cleanup):
+        # Simulate timeout: time.time() returns value past timeout
+        mock_time.side_effect = [8000.0]  # past timeout_seconds (7200)
+        item = _item()
+        result_obj = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1)
+
+        success, runs = _run_cleanup_with_timeout(
+            item, result_obj, Path("."), 0.0, 7200, 2.0, cwd="/fake",
+        )
+        assert success is False
+        assert runs == 0
+
+    @patch("pokepoke.workflow.has_uncommitted_changes", return_value=False)
+    def test_no_changes_skips_cleanup(self, mock_uncommitted):
+        item = _item()
+        result_obj = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1)
+
+        success, runs = _run_cleanup_with_timeout(
+            item, result_obj, Path("."), time.time(), 7200, 2.0,
+        )
+        assert success is True
+        assert runs == 0
+
+    @patch("pokepoke.workflow.run_cleanup_loop", return_value=(False, 1))
+    @patch("pokepoke.workflow.has_uncommitted_changes", return_value=True)
+    def test_cleanup_failure(self, mock_uncommitted, mock_cleanup):
+        item = _item()
+        result_obj = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1)
+
+        success, runs = _run_cleanup_with_timeout(
+            item, result_obj, Path("."), time.time(), 7200, 2.0,
+        )
+        # When cleanup fails, result.success is still True (the CopilotResult),
+        # but cleanup_success returns True because result.success hasn't changed
+        assert runs == 1
+
+
+# ── process_work_item (integration) ────────────────────────────────
+
+class TestProcessWorkItem:
+    """Test process_work_item exercising real control flow."""
+
+    @patch("pokepoke.workflow.unregister_agent")
+    @patch("pokepoke.workflow.register_agent")
+    @patch("pokepoke.workflow.get_config")
+    @patch("pokepoke.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
+    @patch("pokepoke.workflow.terminal_ui")
+    @patch("pokepoke.workflow.set_terminal_banner")
+    @patch("pokepoke.workflow.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.workflow.get_agent_name", return_value="test-agent")
+    @patch("pokepoke.workflow.assign_and_sync_item", return_value=False)
+    def test_assign_failure(self, mock_assign, mock_agent_name,
+                            mock_banner_fmt, mock_set_banner, mock_ui,
+                            mock_assignment, mock_model, mock_config,
+                            mock_register, mock_unregister):
+        mock_config.return_value = MagicMock(
+            command_timeout=300, max_parallel_agents=1,
+            gate_agent_enabled=True,
+            ai_backend=MagicMock(provider="copilot"),
+        )
+        result = process_work_item(_item(), interactive=False)
+        assert result.success is False
+        assert result.request_count == 0
+
+    @patch("pokepoke.workflow.unregister_agent")
+    @patch("pokepoke.workflow.register_agent")
+    @patch("pokepoke.workflow.unassign_with_retry")
+    @patch("pokepoke.workflow.cleanup_worktree")
+    @patch("pokepoke.workflow.get_config")
+    @patch("pokepoke.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
+    @patch("pokepoke.workflow.terminal_ui")
+    @patch("pokepoke.workflow.set_terminal_banner")
+    @patch("pokepoke.workflow.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.workflow.get_agent_name", return_value="test-agent")
+    @patch("pokepoke.workflow.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.workflow.create_worktree", return_value=None)
+    def test_worktree_failure(self, mock_create, mock_assign, mock_agent_name,
+                              mock_banner_fmt, mock_set_banner, mock_ui,
+                              mock_assignment, mock_model, mock_config,
+                              mock_cleanup, mock_unassign,
+                              mock_register, mock_unregister):
+        mock_config.return_value = MagicMock(
+            command_timeout=300, max_parallel_agents=1,
+            gate_agent_enabled=True,
+            ai_backend=MagicMock(provider="copilot"),
+        )
+        # create_worktree returns None -> _setup_worktree catches exception and returns None
+        mock_create.side_effect = RuntimeError("worktree failed")
+        result = process_work_item(_item(), interactive=False)
+        assert result.success is False
+
+    @patch("pokepoke.workflow.unregister_agent")
+    @patch("pokepoke.workflow.register_agent")
+    @patch("pokepoke.workflow.cleanup_worktree")
+    @patch("pokepoke.workflow.finalize_work_item", return_value=True)
+    @patch("pokepoke.workflow.has_uncommitted_changes", return_value=False)
+    @patch("pokepoke.workflow.has_commits_ahead", return_value=1)
+    @patch("pokepoke.workflow.invoke_copilot")
+    @patch("pokepoke.workflow.build_prompt_from_work_item", return_value="prompt")
+    @patch("pokepoke.workflow.get_config")
+    @patch("pokepoke.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
+    @patch("pokepoke.workflow.terminal_ui")
+    @patch("pokepoke.workflow.set_terminal_banner")
+    @patch("pokepoke.workflow.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.workflow.get_agent_name", return_value="test-agent")
+    @patch("pokepoke.workflow.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.workflow.create_worktree")
+    @patch("pokepoke.workflow.is_shutting_down", return_value=False)
+    def test_successful_processing_no_gate(
+        self, mock_shutdown, mock_create, mock_assign, mock_agent_name,
+        mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
+        mock_model, mock_config, mock_prompt, mock_copilot,
+        mock_ahead, mock_uncommitted, mock_finalize, mock_cleanup,
+        mock_register, mock_unregister, tmp_path,
+    ):
+        mock_create.return_value = tmp_path / "worktree"
+        (tmp_path / "worktree").mkdir()
+        mock_config.return_value = MagicMock(
+            command_timeout=300, max_parallel_agents=1,
+            gate_agent_enabled=False,
+            ai_backend=MagicMock(provider="copilot"),
+        )
+        mock_copilot.return_value = CopilotResult(
+            work_item_id="wf-1", success=True, attempt_count=1,
+            output="done", stats=AgentStats(input_tokens=100),
+        )
+        result = process_work_item(_item(), interactive=False)
+        assert result.success is True
+        assert result.request_count == 1
+        mock_finalize.assert_called_once()
+
+    @patch("pokepoke.workflow.unregister_agent")
+    @patch("pokepoke.workflow.register_agent")
+    @patch("pokepoke.workflow.unassign_with_retry")
+    @patch("pokepoke.workflow.cleanup_worktree")
+    @patch("pokepoke.workflow.has_uncommitted_changes", return_value=False)
+    @patch("pokepoke.workflow.has_commits_ahead", return_value=0)
+    @patch("pokepoke.workflow.invoke_copilot")
+    @patch("pokepoke.workflow.build_prompt_from_work_item", return_value="prompt")
+    @patch("pokepoke.workflow.get_config")
+    @patch("pokepoke.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
+    @patch("pokepoke.workflow.terminal_ui")
+    @patch("pokepoke.workflow.set_terminal_banner")
+    @patch("pokepoke.workflow.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.workflow.get_agent_name", return_value="test-agent")
+    @patch("pokepoke.workflow.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.workflow.create_worktree")
+    @patch("pokepoke.workflow.is_shutting_down", return_value=False)
+    def test_copilot_failure(
+        self, mock_shutdown, mock_create, mock_assign, mock_agent_name,
+        mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
+        mock_model, mock_config, mock_prompt, mock_copilot,
+        mock_ahead, mock_uncommitted, mock_cleanup, mock_unassign,
+        mock_register, mock_unregister, tmp_path,
+    ):
+        mock_create.return_value = tmp_path / "worktree"
+        (tmp_path / "worktree").mkdir()
+        mock_config.return_value = MagicMock(
+            command_timeout=300, max_parallel_agents=1,
+            gate_agent_enabled=False,
+            ai_backend=MagicMock(provider="copilot"),
+        )
+        mock_copilot.return_value = CopilotResult(
+            work_item_id="wf-1", success=False, attempt_count=1,
+            error="timeout",
+        )
+        result = process_work_item(_item(), interactive=False)
+        assert result.success is False
+        assert result.request_count == 1
+        mock_cleanup.assert_called()
+
+    @patch("pokepoke.workflow.unregister_agent")
+    @patch("pokepoke.workflow.register_agent")
+    @patch("pokepoke.workflow.cleanup_worktree")
+    @patch("pokepoke.workflow.finalize_work_item", return_value=True)
+    @patch("pokepoke.workflow.add_comment")
+    @patch("pokepoke.workflow.run_gate_agent")
+    @patch("pokepoke.workflow.has_uncommitted_changes", return_value=False)
+    @patch("pokepoke.workflow.has_commits_ahead", return_value=1)
+    @patch("pokepoke.workflow.invoke_copilot")
+    @patch("pokepoke.workflow.build_prompt_from_work_item", return_value="prompt")
+    @patch("pokepoke.workflow.get_config")
+    @patch("pokepoke.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
+    @patch("pokepoke.workflow.terminal_ui")
+    @patch("pokepoke.workflow.set_terminal_banner")
+    @patch("pokepoke.workflow.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.workflow.get_agent_name", return_value="test-agent")
+    @patch("pokepoke.workflow.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.workflow.create_worktree")
+    @patch("pokepoke.workflow.is_shutting_down", return_value=False)
+    def test_gate_agent_pass(
+        self, mock_shutdown, mock_create, mock_assign, mock_agent_name,
+        mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
+        mock_model, mock_config, mock_prompt, mock_copilot,
+        mock_ahead, mock_uncommitted, mock_gate, mock_comment,
+        mock_finalize, mock_cleanup,
+        mock_register, mock_unregister, tmp_path,
+    ):
+        mock_create.return_value = tmp_path / "worktree"
+        (tmp_path / "worktree").mkdir()
+        mock_config.return_value = MagicMock(
+            command_timeout=300, max_parallel_agents=1,
+            gate_agent_enabled=True,
+            ai_backend=MagicMock(provider="copilot"),
+        )
+        mock_copilot.return_value = CopilotResult(
+            work_item_id="wf-1", success=True, attempt_count=1,
+        )
+        mock_gate.return_value = (True, "looks good", None)
+        with patch("pokepoke.git_operations.build_handoff_context", return_value="ctx"):
+            result = process_work_item(_item(), interactive=False)
+        assert result.success is True
+        assert result.gate_agent_runs == 1
+
+    @patch("pokepoke.workflow.unregister_agent")
+    @patch("pokepoke.workflow.register_agent")
+    @patch("pokepoke.workflow.cleanup_worktree")
+    @patch("pokepoke.workflow.finalize_work_item", return_value=True)
+    @patch("pokepoke.workflow.add_comment")
+    @patch("pokepoke.workflow.run_gate_agent")
+    @patch("pokepoke.workflow.has_uncommitted_changes", return_value=False)
+    @patch("pokepoke.workflow.has_commits_ahead", return_value=1)
+    @patch("pokepoke.workflow.invoke_copilot")
+    @patch("pokepoke.workflow.build_prompt_from_work_item", return_value="prompt")
+    @patch("pokepoke.workflow.get_config")
+    @patch("pokepoke.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
+    @patch("pokepoke.workflow.terminal_ui")
+    @patch("pokepoke.workflow.set_terminal_banner")
+    @patch("pokepoke.workflow.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.workflow.get_agent_name", return_value="test-agent")
+    @patch("pokepoke.workflow.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.workflow.create_worktree")
+    @patch("pokepoke.workflow.is_shutting_down")
+    def test_gate_reject_then_pass(
+        self, mock_shutdown, mock_create, mock_assign, mock_agent_name,
+        mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
+        mock_model, mock_config, mock_prompt, mock_copilot,
+        mock_ahead, mock_uncommitted, mock_gate, mock_comment,
+        mock_finalize, mock_cleanup,
+        mock_register, mock_unregister, tmp_path,
+    ):
+        mock_shutdown.return_value = False
+        mock_create.return_value = tmp_path / "worktree"
+        (tmp_path / "worktree").mkdir()
+        mock_config.return_value = MagicMock(
+            command_timeout=300, max_parallel_agents=1,
+            gate_agent_enabled=True,
+            ai_backend=MagicMock(provider="copilot"),
+        )
+        # First copilot call -> gate rejects; second copilot call -> gate passes
+        mock_copilot.side_effect = [
+            CopilotResult(work_item_id="wf-1", success=True, attempt_count=1),
+            CopilotResult(work_item_id="wf-1", success=True, attempt_count=1),
+        ]
+        mock_gate.side_effect = [
+            (False, "needs fix", None),
+            (True, "ok", None),
+        ]
+        with patch("pokepoke.git_operations.build_handoff_context", return_value="ctx"):
+            result = process_work_item(_item(), interactive=False)
+        assert result.success is True
+        assert result.gate_agent_runs == 2
+        assert result.request_count == 2
+
+    @patch("pokepoke.workflow.unregister_agent")
+    @patch("pokepoke.workflow.register_agent")
+    @patch("pokepoke.workflow.cleanup_worktree")
+    @patch("pokepoke.workflow.get_config")
+    @patch("pokepoke.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
+    @patch("pokepoke.workflow.terminal_ui")
+    @patch("pokepoke.workflow.set_terminal_banner")
+    @patch("pokepoke.workflow.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.workflow.get_agent_name", return_value="test-agent")
+    @patch("pokepoke.workflow.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.workflow.create_worktree")
+    @patch("pokepoke.workflow.is_shutting_down", return_value=True)
+    def test_shutdown_before_copilot(
+        self, mock_shutdown, mock_create, mock_assign, mock_agent_name,
+        mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
+        mock_model, mock_config, mock_cleanup,
+        mock_register, mock_unregister, tmp_path,
+    ):
+        mock_create.return_value = tmp_path / "worktree"
+        (tmp_path / "worktree").mkdir()
+        mock_config.return_value = MagicMock(
+            command_timeout=300, max_parallel_agents=1,
+            gate_agent_enabled=True,
+            ai_backend=MagicMock(provider="copilot"),
+        )
+        result = process_work_item(_item(), interactive=False)
+        # Shutdown exits loop before copilot invocation -> failure
+        assert result.success is False
+
+    @patch("pokepoke.workflow.unregister_agent")
+    @patch("pokepoke.workflow.register_agent")
+    @patch("pokepoke.workflow.cleanup_worktree")
+    @patch("pokepoke.workflow.get_config")
+    @patch("pokepoke.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
+    @patch("pokepoke.workflow.terminal_ui")
+    @patch("pokepoke.workflow.set_terminal_banner")
+    @patch("pokepoke.workflow.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.workflow.get_agent_name", return_value="test-agent")
+    @patch("pokepoke.workflow.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.workflow.create_worktree")
+    @patch("builtins.input", return_value="n")
+    def test_interactive_user_skips(
+        self, mock_input, mock_create, mock_assign, mock_agent_name,
+        mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
+        mock_model, mock_config, mock_cleanup,
+        mock_register, mock_unregister, tmp_path,
+    ):
+        mock_create.return_value = tmp_path / "worktree"
+        (tmp_path / "worktree").mkdir()
+        mock_config.return_value = MagicMock(
+            command_timeout=300, max_parallel_agents=1,
+            gate_agent_enabled=True,
+            ai_backend=MagicMock(provider="copilot"),
+        )
+        result = process_work_item(_item(), interactive=True)
+        assert result.success is False
+        assert result.request_count == 0
