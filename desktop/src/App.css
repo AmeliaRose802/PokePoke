@@ -516,6 +516,15 @@
   --left-panel-fraction: 0.667;
 }
 
+/* Allow nested log panels to scroll inside flex containers */
+.main-content,
+.log-container,
+.log-panel,
+.agent-log-panel,
+.orchestrator-collapsible-content {
+  min-height: 0;
+}
+
 .log-container {
   display: flex;
   flex: 0 0 calc(var(--left-panel-fraction) * 100%);
@@ -1501,7 +1510,7 @@
 
 .log-entries {
   flex: 1;
-  overflow: auto;
+  overflow-y: auto;
   padding: 4px 8px;
   font-size: 12px;
   line-height: 1.5;
