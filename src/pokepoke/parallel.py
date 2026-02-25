@@ -213,9 +213,7 @@ def run_parallel_loop(
     items_completed = 0
     pool_size = max(effective_parallel, _DEFAULT_PARALLEL_CEILING)
     if effective_parallel > _DEFAULT_PARALLEL_CEILING:
-        logger.warning(
-            "max_parallel_agents (%d) exceeds default ceiling (%d); pool sized to %d",
-            effective_parallel, _DEFAULT_PARALLEL_CEILING, pool_size)
+        logger.warning("max_parallel_agents (%d) exceeds ceiling (%d)", effective_parallel, _DEFAULT_PARALLEL_CEILING)
     semaphore = threading.Semaphore(pool_size)
     futures: dict[_Future, BeadsWorkItem] = {}
     executor = concurrent.futures.ThreadPoolExecutor(
@@ -228,6 +226,7 @@ def run_parallel_loop(
     _worker_counter = 0
     finalized = False
     exit_code = 0
+    has_success = False
 
     try:
         while not is_shutting_down():
@@ -248,14 +247,14 @@ def run_parallel_loop(
                 print(f"⚠️  Warning: failed to fetch ready items: {e}")
                 ready_items = []
 
-            # Collect completed futures BEFORE calculating slots so the
-            # refill logic sees the true number of active agents and can
-            # launch enough replacements to fill back to max_agents.
+            # Collect completed futures before calculating slots for accurate refill.
             total_requests, any_success = _collect_done_futures(
                 futures, failed_claim_ids, total_requests,
                 session_stats, run_logger, record_fn,
             )
             items_completed = session_stats.items_completed
+
+            has_success = has_success or any_success
 
             terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
 
@@ -269,6 +268,7 @@ def run_parallel_loop(
             if (
                 slots > 0
                 and not should_stop_after_current()
+                and (continuous or not has_success)
             ):
                 selected_items = select_multiple_items(
                     ready_items, count=slots,
@@ -307,15 +307,13 @@ def run_parallel_loop(
                 exit_code = 0
                 break
 
-            # In non-continuous mode, exit once all active agents have finished.
-            # A single success must not prevent replenishment up to the limit.
-            # Only fires if we processed work; otherwise fall through to "no ready items".
+            # Non-continuous mode: exit once all active agents finish (only if work was done).
             if not continuous and not futures and total_requests > 0:
                 terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
                 terminal_ui.ui.stop_and_capture()
                 finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
                 finalized = True
-                exit_code = 0 if any_success else 1
+                exit_code = 0 if has_success else 1
                 break
 
             # Only exit if no workers are active AND we have no ready items
