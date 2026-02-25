@@ -31,7 +31,8 @@ if (-not (Test-Path $stagedUtils)) {
 
 # Main execution
 $stagedFiles = Get-StagedFiles -Pattern '\.py$' `
-    -DenyPatterns @('(venv|.venv|__pycache__|dist|build)')
+    -DenyPatterns @('(venv|.venv|__pycache__|dist|build)') `
+    -SourceOnly
 
 if ($stagedFiles.Count -eq 0) {
     Write-Host "No Python files staged for commit" -ForegroundColor Gray
@@ -40,8 +41,9 @@ if ($stagedFiles.Count -eq 0) {
 
 Write-Host "🔍 Running mypy type checking on $($stagedFiles.Count) file(s)..." -ForegroundColor Cyan
 
-# Run mypy on src/pokepoke package (not individual files) to handle imports properly
-python -m mypy src/pokepoke --strict --show-error-codes --pretty
+# Run mypy on staged files only (follows imports as needed for context)
+# Use incremental cache for faster repeated runs
+python -m mypy $stagedFiles --strict --show-error-codes --no-error-summary
 
 $mypyFailed = $LASTEXITCODE -ne 0
 

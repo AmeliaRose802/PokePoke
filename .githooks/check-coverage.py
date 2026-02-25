@@ -175,12 +175,17 @@ def run_tests_with_coverage(
     else:
         print("[test] Running full test suite...")
 
+    # Limit parallel workers to prevent memory exhaustion on pre-commit
+    # Use min(4, CPU_count // 2) to balance speed vs resource usage
+    import multiprocessing
+    max_workers = min(4, max(1, multiprocessing.cpu_count() // 2))
+
     cmd = [
         sys.executable,
         "-m",
         "pytest",
         "-n",
-        "auto",
+        str(max_workers),
         "--cov=src/pokepoke",
         "--cov-report=json",
         "-q",
@@ -196,7 +201,7 @@ def run_tests_with_coverage(
             cmd,
             capture_output=True,
             text=True,
-            timeout=300,
+            timeout=120,
             cwd=str(repo_root),
             encoding="utf-8",
         )

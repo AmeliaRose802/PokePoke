@@ -33,7 +33,7 @@ if ($stagedFiles.Count -eq 0) {
 
 Write-Host "🔍 Running ruff on $($stagedFiles.Count) file(s)..." -ForegroundColor Cyan
 
-python -m ruff check $stagedFiles --output-format=concise
+python -m ruff check $stagedFiles --output-format=concise --cache-dir /dev/null
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host ""

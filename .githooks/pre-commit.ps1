@@ -190,21 +190,34 @@ if ($buildFailed) {
 foreach ($jobInfo in $staticJobs) {
     Write-Host "  • $($jobInfo.Name)... " -NoNewline -ForegroundColor Gray
     
-    $result = Wait-Job $jobInfo.Job | Receive-Job
-    Remove-Job $jobInfo.Job
+    # Wait with timeout - 60s per job max
+    $result = $jobInfo.Job | Wait-Job -Timeout 60 | Receive-Job
     
-    if ($result.ExitCode -eq 0) {
-        Write-Host "✓" -ForegroundColor Green
-        $passed += $jobInfo.Name
+    if ($null -eq $result) {
+        # Timeout occurred
+        Stop-Job $jobInfo.Job -ErrorAction SilentlyContinue
+        Remove-Job $jobInfo.Job -Force -ErrorAction SilentlyContinue
+        Write-Host "⏱ TIMEOUT" -ForegroundColor Yellow
+        $failed += "$($jobInfo.Name) (timeout)"
+        $allPassed = $false
+        Write-Host "  ⚠️  This check took too long and was terminated to free resources" -ForegroundColor Yellow
     }
     else {
-        Write-Host "✗" -ForegroundColor Red
-        $failed += $jobInfo.Name
-        $allPassed = $false
-        if ($result.Output.Trim()) {
-            Write-Host ""
-            Write-Host $result.Output.Trim()
-            Write-Host ""
+        Remove-Job $jobInfo.Job -ErrorAction SilentlyContinue
+        
+        if ($result.ExitCode -eq 0) {
+            Write-Host "✓" -ForegroundColor Green
+            $passed += $jobInfo.Name
+        }
+        else {
+            Write-Host "✗" -ForegroundColor Red
+            $failed += $jobInfo.Name
+            $allPassed = $false
+            if ($result.Output.Trim()) {
+                Write-Host ""
+                Write-Host $result.Output.Trim()
+                Write-Host ""
+            }
         }
     }
 }

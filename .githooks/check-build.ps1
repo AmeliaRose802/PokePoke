@@ -48,32 +48,16 @@ if ($pythonFiles.Count -eq 0) {
 else {
     Write-Host "🔨 Checking Python syntax for $($pythonFiles.Count) files..." -ForegroundColor Cyan
     
-    $errors = @()
+    # Pass all files to py_compile in a single Python process to avoid spawn overhead
+    # py_compile.__main__ natively accepts multiple filenames as arguments
+    $result = python -W error -m py_compile $pythonFiles 2>&1
     
-    foreach ($file in $pythonFiles) {
-        # Check syntax using Python's compile (warnings treated as errors)
-        $result = python -W error -m py_compile "$file" 2>&1
-        
-        if ($LASTEXITCODE -ne 0) {
-            $errors += @{
-                File = $file
-                Error = $result | Out-String
-            }
-        }
-    }
-    
-    if ($errors.Count -gt 0) {
+    if ($LASTEXITCODE -ne 0) {
         Write-Host ""
         Write-Host "❌ SYNTAX ERRORS FOUND" -ForegroundColor Red
         Write-Host ""
-        
-        foreach ($error in $errors) {
-            $relativePath = $error.File.Replace($repoRoot, "").TrimStart([char]'\', [char]'/')
-            Write-Host "  $relativePath" -ForegroundColor Red
-            Write-Host "    $($error.Error.Trim())" -ForegroundColor Yellow
-            Write-Host ""
-        }
-        
+        Write-Host ($result | Out-String).Trim() -ForegroundColor Yellow
+        Write-Host ""
         Write-Host "Fix the Python syntax errors before committing." -ForegroundColor Yellow
         $overallPassed = $false
     }
