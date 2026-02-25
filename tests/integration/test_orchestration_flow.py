@@ -415,7 +415,7 @@ def test_run_orchestrator_parallel_mode_invokes_parallel_loop(monkeypatch: pytes
         parallel_calls.append(kwargs["effective_parallel"])
         return 0
 
-    monkeypatch.setattr(orchestrator, "run_parallel_loop", fake_parallel_loop)
+    monkeypatch.setattr("pokepoke.parallel.run_parallel_loop", fake_parallel_loop)
 
     exit_code = orchestrator.run_orchestrator(interactive=False, continuous=True, max_parallel_agents=3)
 
@@ -457,8 +457,8 @@ def test_run_orchestrator_honors_stop_after_current(monkeypatch: pytest.MonkeyPa
         stop_checks.append(True)
         return True
 
-    monkeypatch.setattr("pokepoke.shutdown.should_stop_after_current", fake_should_stop)
-    monkeypatch.setattr("pokepoke.shutdown.cancel_stop_after_current", lambda: stop_checks.append(False))
+    monkeypatch.setattr(orchestrator, "should_stop_after_current", fake_should_stop)
+    monkeypatch.setattr(orchestrator, "cancel_stop_after_current", lambda: stop_checks.append(False))
 
     exit_code = orchestrator.run_orchestrator(interactive=False, continuous=True, max_parallel_agents=1)
 
