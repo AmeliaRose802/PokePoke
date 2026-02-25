@@ -1,7 +1,7 @@
 {
-  "total_attempts": 1,
-  "total_successes": 1,
-  "total_failures": 0,
-  "total_wait_time": 0.0030984878540039062,
-  "max_wait_time": 0.0030984878540039062
+  "total_attempts": 64,
+  "total_successes": 62,
+  "total_failures": 2,
+  "total_wait_time": 1772051957.74546,
+  "max_wait_time": 1772051924.705127
 }
