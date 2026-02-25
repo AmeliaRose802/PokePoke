@@ -84,7 +84,8 @@ def process_work_item(
         _, selected_prompt_template = get_assignment_for_item(item)
         base_agent_id = agent_id or item.id
         backend_provider = config.ai_backend.provider
-        worktree_lock_timeout = float(config.command_timeout)
+        # Scale lock wait by agent count so the last agent in a large pool can wait through all preceding setups.
+        worktree_lock_timeout = max(float(config.command_timeout), 120.0 * max(1, int(config.max_parallel_agents)))
 
         terminal_ui.ui.push_agent_status(base_agent_id, get_agent_name(default="pokepoke"),
             iteration=1, status="running", model=selected_model,

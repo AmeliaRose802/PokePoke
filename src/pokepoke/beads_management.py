@@ -23,9 +23,17 @@ def _is_transient_jsonl_sync_error(output: str) -> bool:
 def run_bd_sync_with_retry(
     max_attempts: int = 3,
     base_delay: float = 0.5,
-    timeout: int | None = None
+    timeout: int | None = 60,
 ) -> subprocess.CompletedProcess[str]:
-    """Run bd sync with retries for transient JSONL lock errors."""
+    """Run bd sync with retries for transient JSONL lock errors.
+
+    Args:
+        max_attempts: Maximum number of retry attempts.
+        base_delay: Initial delay between retries (doubles each attempt).
+        timeout: Maximum seconds to wait for ``bd sync`` to complete.
+            Defaults to 60s to prevent indefinite hangs inside file locks.
+            Pass ``None`` only if an unlimited wait is intentional.
+    """
     last_result: subprocess.CompletedProcess[str] | None = None
     for attempt in range(1, max_attempts + 1):
         result = _run_bd(['sync'], check=False, timeout=timeout)

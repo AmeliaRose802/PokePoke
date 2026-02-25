@@ -2004,3 +2004,64 @@ class TestWorkflowCleanupException:
         result = process_work_item(item, interactive=False)
         assert result.success is False
 
+
+class TestWorktreeLockTimeout:
+    """Tests that worktree_lock_timeout scales with max_parallel_agents."""
+
+    def test_single_agent_uses_command_timeout(self) -> None:
+        """With 1 agent, the lock timeout equals command_timeout (300s default)."""
+        from pokepoke.config import ProjectConfig
+        cfg = ProjectConfig()
+        cfg.command_timeout = 300
+        cfg.max_parallel_agents = 1
+
+        # 120.0 * 1 = 120.0 < 300.0, so max returns 300.0
+        expected = max(float(cfg.command_timeout), 120.0 * max(1, int(cfg.max_parallel_agents)))
+        assert expected == 300.0
+
+    def test_many_agents_scales_timeout(self) -> None:
+        """With 10 agents, the lock timeout exceeds command_timeout to accommodate queuing."""
+        from pokepoke.config import ProjectConfig
+        cfg = ProjectConfig()
+        cfg.command_timeout = 300
+        cfg.max_parallel_agents = 10
+
+        # 120.0 * 10 = 1200.0 > 300.0, so max returns 1200.0
+        expected = max(float(cfg.command_timeout), 120.0 * max(1, int(cfg.max_parallel_agents)))
+        assert expected == 1200.0
+
+    @patch('pokepoke.workflow.worktree_setup_lock')
+    @patch('pokepoke.workflow.assign_and_sync_item', return_value=True)
+    @patch('pokepoke.workflow._setup_worktree', return_value=None)
+    @patch('time.time', return_value=0.0)
+    def test_lock_called_with_scaled_timeout(
+        self,
+        mock_time: Mock,
+        mock_setup: Mock,
+        mock_assign: Mock,
+        mock_lock: Mock,
+    ) -> None:
+        """process_work_item passes a scaled timeout to worktree_setup_lock."""
+        from pokepoke.config import ProjectConfig
+
+        item = BeadsWorkItem(
+            id="task-scale",
+            title="Scale Test",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task",
+        )
+
+        cfg = ProjectConfig()
+        cfg.command_timeout = 300
+        cfg.max_parallel_agents = 10
+
+        with patch('pokepoke.workflow.get_config', return_value=cfg):
+            process_work_item(item, interactive=False)
+
+        # Should have been called with 1200.0 (max(300, 120*10))
+        call_kwargs = mock_lock.call_args
+        timeout_used = call_kwargs[1]['timeout'] if call_kwargs[1] else call_kwargs[0][0]
+        assert timeout_used == 1200.0
+
