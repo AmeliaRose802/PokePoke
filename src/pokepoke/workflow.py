@@ -386,7 +386,6 @@ def _run_cleanup_with_timeout(
         cleanup_success, cleanup_runs = run_cleanup_loop(
             item,
             result,
-            repo_root,
             cwd=cwd,
             parent_agent_id=parent_agent_id,
         )

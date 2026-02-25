@@ -340,7 +340,7 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
                 with cleanup_lock():
                     # Use wait_for_merge=False since we already checked above
                     cleanup_success, cleanup_stats = invoke_cleanup_agent(
-                        cleanup_item, repo_path, wait_for_merge=False
+                        cleanup_item, wait_for_merge=False
                     )
 
                 if cleanup_success:

@@ -335,7 +335,6 @@ def _run_worktree_agent(
         cleanup_success, _ = run_cleanup_loop(
             agent_item,
             result,
-            repo_root,
             cwd=worktree_cwd,
             parent_agent_id=cleanup_parent_id,
         )

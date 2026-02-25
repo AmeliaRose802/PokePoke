@@ -359,7 +359,7 @@ def test_perform_conflict_details_in_cleanup_prompt(
     )
 
     call_args = mock_conflict_cleanup.call_args
-    error_msg = call_args[0][2]
+    error_msg = call_args[0][1]
     assert "Conflicted Files" in error_msg
     assert "src/a.py" in error_msg
     assert call_args.kwargs["unmerged_files"] == files

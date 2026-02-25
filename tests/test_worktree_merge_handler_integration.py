@@ -442,7 +442,7 @@ class TestCleanupAgentInvocation:
         # Verify cleanup agent was called with correct parameters
         mock_invoke_cleanup.assert_called_once()
         call_args = mock_invoke_cleanup.call_args
-        assert call_args[0][1] == repo_root  # repo_root is 2nd positional arg
+        assert call_args[0][0] == agent_item  # item is 1st positional arg
         assert call_args[1]['parent_agent_id'] == parent_id
 
     @patch('pokepoke.worktree_merge_handler.cleanup_lock')
