@@ -26,9 +26,18 @@ from pokepoke.worktree_coordination import with_worktree_lock
 logger = logging.getLogger(__name__)
 
 
+def _run_git(cmd: list[str], *, timeout: int = 30, check: bool = True,
+             capture_output: bool = True) -> subprocess.CompletedProcess[str]:
+    """Run a git command with standard encoding settings."""
+    return subprocess.run(
+        cmd, check=check, capture_output=capture_output,
+        text=True, encoding='utf-8', errors='replace', timeout=timeout
+    )
+
+
 def create_worktree(item_id: str, base_branch: str | None = None) -> Path:
     """Create a git worktree for a work item. Returns existing path if already exists.
-    
+
     Uses file-based locking to prevent race conditions when multiple agents
     attempt to create worktrees simultaneously.
     """
@@ -67,7 +76,7 @@ def create_worktree(item_id: str, base_branch: str | None = None) -> Path:
             lock_wait = time.time() - lock_start
             if lock_wait > 0.1:
                 logger.info(f"Waited {lock_wait:.2f}s for worktree lock (item: {item_id})")
-            
+
             # Double-check worktree doesn't exist (another agent may have created it while we waited)
             existing_worktrees = list_worktrees()
             for wt in existing_worktrees:
@@ -76,27 +85,19 @@ def create_worktree(item_id: str, base_branch: str | None = None) -> Path:
                     logger.debug(f"Worktree created by another agent while waiting for lock: {wt_path}")
                     print(f"   ♻️  Reusing worktree created by another agent at {wt_path}")
                     return wt_path
-            
+
             # Create the worktree
             logger.info(f"Creating worktree for {item_id}: {worktree_path}")
             creation_start = time.time()
             try:
-                result = subprocess.run(
-                    ["git", "worktree", "add", str(worktree_path), "-b", branch_name, base_branch],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    encoding='utf-8',
-                    errors='replace',
-                    timeout=30
-                )
+                _run_git(["git", "worktree", "add", str(worktree_path), "-b", branch_name, base_branch])
                 creation_time = time.time() - creation_start
                 logger.info(f"Created worktree for {item_id} in {creation_time:.2f}s")
-                
+
             except subprocess.CalledProcessError as e:
                 creation_time = time.time() - creation_start
                 stderr = e.stderr if e.stderr else 'No stderr available'
-                
+
                 # Log detailed error information
                 logger.error(
                     f"Git worktree creation failed for {item_id} after {creation_time:.2f}s:\n"
@@ -127,13 +128,13 @@ def create_worktree(item_id: str, base_branch: str | None = None) -> Path:
 
                 # If we couldn't recover, re-raise the error with more context
                 raise RuntimeError(f"Failed to create worktree: {stderr}") from e
-                
+
             except subprocess.TimeoutExpired as e:
                 creation_time = time.time() - creation_start
                 logger.error(f"Git worktree creation timed out for {item_id} after {creation_time:.2f}s")
                 raise RuntimeError(f"Timed out creating worktree after {e.timeout}s") from e
 
-    except RuntimeError as e:
+    except RuntimeError:
         # Lock timeout or git error - already logged above
         raise
     except Exception as e:
@@ -150,12 +151,7 @@ def is_worktree_merged(item_id: str, target_branch: str | None = None) -> bool:
     if target_branch is None:
         target_branch = get_default_branch()
     try:
-        result = subprocess.run(
-            ["git", "branch", "--merged", target_branch],
-            check=True, capture_output=True, text=True, encoding='utf-8',
-            errors='replace',
-            timeout=30
-        )
+        result = _run_git(["git", "branch", "--merged", target_branch])
         return any(branch_name in branch for branch in result.stdout.splitlines())
     except subprocess.CalledProcessError:
         return False
@@ -210,7 +206,7 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
     print(f"✅ Post-merge validation passed: {target_branch} is clean")
 
     try:
-        subprocess.run(["git", "push"], check=True, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120)
+        _run_git(["git", "push"], timeout=120)
         print(f"✅ Pushed {target_branch} to remote")
     except subprocess.CalledProcessError as e:
         print(f"❌ Push failed: {e.stderr if e.stderr else str(e)}")
@@ -269,15 +265,7 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
             if force:
                 cmd.append("--force")
 
-            subprocess.run(
-                cmd,
-                check=True,
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                errors='replace',
-                timeout=30
-            )
+            _run_git(cmd)
             remove_from_manifest(item_id)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
             stderr = getattr(e, 'stderr', None) or str(e)
@@ -311,28 +299,12 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
 
     # Try sanitized branch name first
     try:
-        subprocess.run(
-            ["git", "branch", delete_flag, branch_name],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            timeout=30
-        )
+        _run_git(["git", "branch", delete_flag, branch_name])
     except subprocess.CalledProcessError:
         # Try unsanitized branch name as fallback
         try:
             unsanitized_branch = f"task/{item_id}"
-            subprocess.run(
-                ["git", "branch", delete_flag, unsanitized_branch],
-                check=True,
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                errors='replace',
-                timeout=30
-            )
+            _run_git(["git", "branch", delete_flag, unsanitized_branch])
         except subprocess.CalledProcessError as e2:
             # Check if branch doesn't exist
             if e2.stderr and ("not found" in e2.stderr.lower() or "does not exist" in e2.stderr.lower()):
@@ -350,15 +322,7 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
 def list_worktrees() -> list[dict[str, str]]:
     """List all active worktrees."""
     try:
-        result = subprocess.run(
-            ["git", "worktree", "list", "--porcelain"],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            timeout=30
-        )
+        result = _run_git(["git", "worktree", "list", "--porcelain"])
 
         worktrees = []
         current: dict[str, str] = {}
@@ -396,15 +360,7 @@ def _sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
 
     # Verify main repo is clean before checkout
     try:
-        main_status = subprocess.run(
-            ["git", "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            check=True,
-            timeout=30
-        ).stdout.strip()
+        main_status = _run_git(["git", "status", "--porcelain"]).stdout.strip()
 
         if main_status:
             lines = main_status.split('\n')
@@ -422,16 +378,14 @@ def _sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
 
             if changes['beads']:
                 print("🔧 Committing beads database changes...")
-                subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8', errors='replace', timeout=30)
-                subprocess.run(["git", "commit", "-m", f"chore: sync beads before merge of {branch_name}"],
-                             check=True, capture_output=True, encoding='utf-8', errors='replace', timeout=60)
+                _run_git(["git", "add", ".beads/"], capture_output=False)
+                _run_git(["git", "commit", "-m", f"chore: sync beads before merge of {branch_name}"], timeout=60)
                 print("✅ Beads changes committed")
 
             if changes['worktree']:
                 print("🧹 Committing worktree cleanup changes...")
-                subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8', errors='replace', timeout=30)
-                subprocess.run(["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
-                             check=True, capture_output=True, encoding='utf-8', errors='replace', timeout=60)
+                _run_git(["git", "add", "worktrees/"], capture_output=False)
+                _run_git(["git", "commit", "-m", "chore: cleanup deleted worktree directories"], timeout=60)
                 print("✅ Worktree cleanup committed")
 
         return True

@@ -9,7 +9,7 @@ import logging
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from collections.abc import Iterator
 
 from filelock import FileLock, Timeout
 
@@ -44,7 +44,7 @@ def _load_metrics() -> dict[str, float]:
             "max_wait_time": 0.0,
         }
     try:
-        with open(_METRICS_PATH, 'r') as f:
+        with open(_METRICS_PATH) as f:
             data = json.load(f)
             # Ensure we return the correct type
             if isinstance(data, dict):
@@ -69,6 +69,7 @@ def _load_metrics() -> dict[str, float]:
 def _save_metrics(metrics: dict[str, float]) -> None:
     """Save worktree creation metrics to disk."""
     try:
+        _STATS_DIR.mkdir(parents=True, exist_ok=True)
         with open(_METRICS_PATH, 'w') as f:
             json.dump(metrics, f, indent=2)
     except OSError as e:
@@ -92,30 +93,30 @@ def _record_attempt(success: bool, wait_time: float) -> None:
 @contextmanager
 def with_worktree_lock(timeout: float = _DEFAULT_TIMEOUT) -> Iterator[None]:
     """Context manager for exclusive worktree creation lock.
-    
+
     Ensures only one agent can create a worktree at a time, preventing
     race conditions when multiple git worktree operations access
     .git/worktrees simultaneously.
-    
+
     Args:
         timeout: Maximum time to wait for lock acquisition (seconds)
-        
+
     Yields:
         None - Lock is held for duration of context
-        
+
     Raises:
         Timeout: If lock cannot be acquired within timeout period
-        
+
     Example:
         >>> with with_worktree_lock():
         ...     create_worktree("my-item-123")
     """
     _ensure_dirs()
-    
+
     lock = FileLock(str(_WORKTREE_LOCK_PATH), timeout=timeout)
     wait_start = time.time()
     success = False
-    
+
     try:
         logger.debug(f"Acquiring worktree lock (timeout={timeout}s)...")
         with lock:

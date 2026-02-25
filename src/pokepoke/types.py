@@ -332,25 +332,21 @@ class SessionStats:
         with self._lock:
             self.janitor_lines_removed += lines_removed
 
+    def _safe_copy_stats(self, stats: BeadsStats | None) -> BeadsStats | None:
+        """Return a defensive copy of beads stats."""
+        if stats is None:
+            return None
+        return replace(stats) if is_dataclass(stats) else stats
+
     def set_starting_beads_stats(self, stats: BeadsStats | None) -> None:
         """Set starting beads statistics safely."""
         with self._lock:
-            if stats is None:
-                self.starting_beads_stats = None
-            elif is_dataclass(stats):
-                self.starting_beads_stats = replace(stats)
-            else:
-                self.starting_beads_stats = stats
+            self.starting_beads_stats = self._safe_copy_stats(stats)
 
     def set_ending_beads_stats(self, stats: BeadsStats | None) -> None:
         """Set ending beads statistics safely."""
         with self._lock:
-            if stats is None:
-                self.ending_beads_stats = None
-            elif is_dataclass(stats):
-                self.ending_beads_stats = replace(stats)
-            else:
-                self.ending_beads_stats = stats
+            self.ending_beads_stats = self._safe_copy_stats(stats)
 
     def snapshot(self) -> SessionStatsSnapshot:
         """Return a frozen snapshot for UI display without holding the lock."""
@@ -376,16 +372,8 @@ class SessionStats:
                 code_review_agent_runs=self.code_review_agent_runs,
                 worktree_cleanup_agent_runs=self.worktree_cleanup_agent_runs,
                 agent_type_elapsed_seconds=dict(self.agent_type_elapsed_seconds),
-                starting_beads_stats=(
-                    replace(self.starting_beads_stats)
-                    if self.starting_beads_stats and is_dataclass(self.starting_beads_stats)
-                    else self.starting_beads_stats
-                ),
-                ending_beads_stats=(
-                    replace(self.ending_beads_stats)
-                    if self.ending_beads_stats and is_dataclass(self.ending_beads_stats)
-                    else self.ending_beads_stats
-                ),
+                starting_beads_stats=self._safe_copy_stats(self.starting_beads_stats),
+                ending_beads_stats=self._safe_copy_stats(self.ending_beads_stats),
                 model_completions=tuple(replace(mc) for mc in self.model_completions),
             )
 
