@@ -117,11 +117,7 @@ describe('LogPanel', () => {
     expect(screen.queryByText(/view ×1/)).not.toBeInTheDocument();
     expect(screen.queryByText(/edit ×1/)).not.toBeInTheDocument();
 
-<<<<<<< HEAD
     // Individual tools should be directly visible within the batch
-=======
-    // Individual tools should be directly visible within the batch with descriptions
->>>>>>> 7a9d0e0 (fix: Display tool descriptions in accordion titles)
     expect(screen.getByText('🔧 view - a.txt')).toBeInTheDocument();
     expect(screen.getByText('🔧 edit - b.txt')).toBeInTheDocument();
   });
@@ -146,18 +142,9 @@ describe('LogPanel', () => {
       />
     );
 
-<<<<<<< HEAD
     // Verify descriptions appear inline in accordion titles
     expect(screen.getByText('🔧 powershell - npm run build')).toBeInTheDocument();
     expect(screen.getByText('🔧 grep - TODO')).toBeInTheDocument();
-=======
-    // Verify descriptions are now in the accordion title (inline), not just collapsible sections
-    // powershell description in accordion title
-    expect(screen.getByText('🔧 powershell - npm run build')).toBeInTheDocument();
-    // grep description in accordion title
-    expect(screen.getByText('🔧 grep - TODO')).toBeInTheDocument();
-    // view description in accordion title
->>>>>>> 7a9d0e0 (fix: Display tool descriptions in accordion titles)
     expect(screen.getByText('🔧 view - src/components/Button.tsx')).toBeInTheDocument();
     // Descriptions should also appear in collapsible Description sections
     const descLabels = screen.getAllByText('Description');

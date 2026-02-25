@@ -96,15 +96,7 @@ export function ToolAccordion({ tool, keyPrefix, nested = false }: ToolAccordion
       <summary className="log-accordion-summary">
         <span className="log-accordion-chevron">▸</span>
         <span className="log-timestamp">{formatTime(tool.entry.timestamp)}</span>
-<<<<<<< HEAD
-        <span className="log-message">
-          {tool.summary.description
-            ? `${tool.summary.toolLabel} - ${truncateText(tool.summary.description, 50)}`
-            : tool.summary.toolLabel}
-        </span>
-=======
         <span className="log-message">{displayLabel}</span>
->>>>>>> 7a9d0e0 (fix: Display tool descriptions in accordion titles)
         {tool.summary.resultSummary && (
           <span className="log-accordion-result">{tool.summary.resultSummary}</span>
         )}
