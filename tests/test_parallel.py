@@ -624,12 +624,20 @@ class TestRunParallelLoop:
         self, mock_dyn_max, mock_pwi, mock_sel, mock_ready, mock_repo,
         mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
-        """UI stats should update after draining remaining futures in single-shot mode."""
+        """UI stats should update after both items complete in single-shot mode.
+
+        Previously the loop had an explicit drain path triggered by any_success.
+        Now both items complete through natural loop iterations; the exit fires
+        when futures is empty (not continuous and not futures).  The stats must
+        show items_completed == 2 in both cases.
+        """
         mock_sleep.return_value = None
         fast_item = _make_item("fast")
         slow_item = _make_item("slow")
         mock_ready.return_value = [fast_item, slow_item]
-        mock_sel.side_effect = [[fast_item, slow_item], []]
+        # Extra [] entries accommodate loop iterations that fire select after
+        # fast completes (futures={slow}) and after slow completes (futures={}).
+        mock_sel.side_effect = [[fast_item, slow_item], [], []]
 
         slow_release = threading.Event()
         threading.Timer(0.05, slow_release.set).start()
@@ -658,7 +666,7 @@ class TestRunParallelLoop:
 
         assert code == 0
         assert slow_release.is_set()
-        # First call happens inside the main loop, second after drain.
+        # Stats must be updated at least twice during the loop.
         assert mock_ui.ui.update_stats.call_count >= 2
         last_stats = mock_ui.ui.update_stats.call_args_list[-1][0][0]
         assert last_stats.items_completed == 2
@@ -1067,3 +1075,162 @@ class TestParallelDrainFutureEdgeCases:
 
         assert result == 1  # No items processed = failure exit
         finalize_fn.assert_called_once()
+
+
+class TestParallelReplenishmentBug:
+    """Regression tests for PokePoke-8o4o: batch replenishment fills all slots.
+
+    When multiple agents exit together (or over a short window), the loop must
+    replenish UP TO the configured maximum, not just one agent per iteration.
+    """
+
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.parallel.time.sleep")
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.set_executor")
+    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.parallel.is_shutting_down")
+    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.parallel.get_ready_work_items")
+    @patch("pokepoke.parallel.select_multiple_items")
+    @patch("pokepoke.parallel._collect_done_futures")
+    @patch("pokepoke.parallel.process_work_item")
+    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=10)
+    def test_all_agents_exit_replenishes_to_limit(
+        self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
+        mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
+    ) -> None:
+        """When all N agents exit, the next iteration must request N replacements.
+
+        Regression for PokePoke-8o4o: the replacement count was 1 instead of
+        (max_parallel - currently_active).
+        """
+        items = [_make_item(f"item-{i}") for i in range(20)]
+        mock_ready.return_value = items
+
+        call_idx = [0]
+
+        def collect_side(futures, failed, total, stats, logger, record_fn):
+            call_idx[0] += 1
+            if call_idx[0] == 2:
+                # Simulate all 10 agents completing simultaneously.
+                futures.clear()
+                return (total, False)  # failures, no success
+            return (total, False)
+
+        mock_collect.side_effect = collect_side
+        mock_sel.side_effect = [items[:10], items[10:20]]
+        # 2 full iterations (each: 1 while check + up to 10 inner sleep checks)
+        mock_shut.side_effect = [False] * 22 + [True] * 5
+        mock_pwi.return_value = WorkItemResult(success=False, request_count=0, stats=AgentStats())
+
+        stats = SessionStats(agent_stats=AgentStats())
+        run_parallel_loop(
+            effective_parallel=10, mode_name="Autonomous",
+            main_repo_path="/repo", failed_claim_ids=set(),
+            session_stats=stats, start_time=time.time(),
+            run_logger=Mock(), continuous=True,
+            record_fn=Mock(), finalize_fn=Mock(),
+        )
+
+        # Both select calls must request count=10 (fill all slots, not just 1).
+        assert mock_sel.call_count >= 2
+        first_count = mock_sel.call_args_list[0].kwargs["count"]
+        second_count = mock_sel.call_args_list[1].kwargs["count"]
+        assert first_count == 10, f"First select should request 10 slots, got {first_count}"
+        assert second_count == 10, f"Second select should request 10 slots after all exit, got {second_count}"
+
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.parallel.time.sleep")
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.set_executor")
+    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.parallel.is_shutting_down")
+    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.parallel.get_ready_work_items")
+    @patch("pokepoke.parallel.select_multiple_items")
+    @patch("pokepoke.parallel._collect_done_futures")
+    @patch("pokepoke.parallel.process_work_item")
+    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=10)
+    def test_success_does_not_block_replenishment_non_continuous(
+        self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
+        mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
+    ) -> None:
+        """A successful agent must not prevent other slots from being filled.
+
+        Regression for PokePoke-8o4o: when any_success=True the loop used to
+        break before replenishing the remaining (max - active) empty slots.
+        """
+        items = [_make_item(f"item-{i}") for i in range(20)]
+        mock_ready.return_value = items
+
+        call_idx = [0]
+
+        def collect_side(futures, failed, total, stats, logger, record_fn):
+            call_idx[0] += 1
+            if call_idx[0] == 2:
+                # 9 failures + 1 success; all slots freed.
+                futures.clear()
+                return (total, True)  # any_success=True
+            return (total, False)
+
+        mock_collect.side_effect = collect_side
+        mock_sel.side_effect = [items[:10], items[10:20]]
+        mock_shut.side_effect = [False] * 22 + [True] * 5
+        mock_pwi.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
+
+        stats = SessionStats(agent_stats=AgentStats())
+        run_parallel_loop(
+            effective_parallel=10, mode_name="Autonomous",
+            main_repo_path="/repo", failed_claim_ids=set(),
+            session_stats=stats, start_time=time.time(),
+            run_logger=Mock(), continuous=True,
+            record_fn=Mock(), finalize_fn=Mock(),
+        )
+
+        # Even with any_success=True, replenishment must still request 10 slots.
+        assert mock_sel.call_count >= 2
+        second_count = mock_sel.call_args_list[1].kwargs["count"]
+        assert second_count == 10, (
+            f"Replenishment count should be 10 even after success, got {second_count}"
+        )
+
+    def test_collect_done_futures_second_sweep_catches_concurrent_completions(
+        self,
+    ) -> None:
+        """Second sweep after FIRST_COMPLETED collects all concurrently finished futures.
+
+        Regression for PokePoke-8o4o: without the second sweep, only the first
+        completed future was detected, leaving (N-1) slots unclaimed and forcing
+        the loop to add only 1 replacement instead of N.
+        """
+        import concurrent.futures as cf
+
+        # Three futures all complete at approximately the same time.
+        with cf.ThreadPoolExecutor(max_workers=3) as pool:
+            futs = [
+                pool.submit(lambda: WorkItemResult(success=True, request_count=1))
+                for _ in range(3)
+            ]
+            items = [_make_item(f"concurrent-{i}") for i in range(3)]
+            futures_dict: dict[cf.Future, BeadsWorkItem] = dict(zip(futs, items, strict=False))  # type: ignore[type-arg]
+
+            # Wait for all to finish so they are all "done" at call time.
+            cf.wait(futs, timeout=5)
+
+            failed: set[str] = set()
+            stats = SessionStats(agent_stats=AgentStats())
+            record_fn = Mock()
+
+            from pokepoke.parallel import _collect_done_futures
+            total, any_ok = _collect_done_futures(
+                futures_dict, failed, 0, stats, Mock(), record_fn,
+            )
+
+        # All three must be collected in a single call — none left in futures_dict.
+        assert len(futures_dict) == 0, (
+            f"{len(futures_dict)} future(s) were NOT collected; "
+            "replenishment would under-count available slots"
+        )
+        assert record_fn.call_count == 3
+        assert any_ok is True
