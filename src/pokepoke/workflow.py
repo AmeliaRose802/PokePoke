@@ -37,21 +37,31 @@ def _log_failure(run_logger: 'RunLogger | None', item_logger: 'ItemLogger | None
 
 
 def _fail_result(
-    request_count: int = 0,
-    stats: AgentStats | None = None,
-    cleanup_agent_runs: int = 0,
-    gate_agent_runs: int = 0,
+    request_count: int = 0, stats: AgentStats | None = None,
+    cleanup_agent_runs: int = 0, gate_agent_runs: int = 0,
     model_completion: ModelCompletionRecord | None = None,
 ) -> WorkItemResult:
     """Create a failed WorkItemResult."""
-    return WorkItemResult(
-        success=False,
-        request_count=request_count,
-        stats=stats,
-        cleanup_agent_runs=cleanup_agent_runs,
-        gate_agent_runs=gate_agent_runs,
-        model_completion=model_completion,
-    )
+    return WorkItemResult(success=False, request_count=request_count, stats=stats,
+        cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
+        model_completion=model_completion)
+
+
+def _build_completion_record(
+    item_id: str, model: str, duration: float, success: bool,
+    gate_passed: bool | None, stats: AgentStats | None, request_count: int,
+) -> ModelCompletionRecord:
+    """Build a ModelCompletionRecord from item processing results."""
+    input_tokens = stats.input_tokens if stats else 0
+    output_tokens = stats.output_tokens if stats else 0
+    return ModelCompletionRecord(
+        item_id=item_id, model=model, duration_seconds=duration,
+        gate_passed=gate_passed, input_tokens=input_tokens, output_tokens=output_tokens,
+        agent_turns=request_count, cost=calculate_cost(model, input_tokens, output_tokens),
+        retry_attempts=max(0, request_count - 1),
+        api_duration=stats.api_duration if stats else None,
+        lines_added=stats.lines_added if stats else None,
+        lines_removed=stats.lines_removed if stats else None)
 
 
 def process_work_item(
@@ -112,7 +122,10 @@ def process_work_item(
         was_assigned = True
 
         # create_worktree has its own lock (worktree-setup.lock) via with_worktree_lock
-        worktree_path = _setup_worktree(item, lock_timeout=worktree_lock_timeout)
+        worktree_path = _setup_worktree(
+            item, lock_timeout=worktree_lock_timeout,
+            run_logger=run_logger, item_logger=item_logger,
+        )
 
         if worktree_path is None:
             print(f"↩️  Returning {item.id} to queue (unassigning due to worktree failure)...")
@@ -277,29 +290,11 @@ def process_work_item(
                 run_logger.log_orchestrator(f"Completed work item with {request_count} agent requests - Status: {'SUCCESS' if success else 'FAILURE'}")
 
             terminal_ui.ui.set_current_agent(None)
-
             item_duration = time.time() - start_time
             gate_passed = gate_success if gate_agent_runs > 0 else None
-
-            # Calculate cost and populate per-item stats
-            input_tokens = item_stats.input_tokens if item_stats else 0
-            output_tokens = item_stats.output_tokens if item_stats else 0
-            cost = calculate_cost(selected_model, input_tokens, output_tokens)
-
-            model_completion = ModelCompletionRecord(
-                item_id=item.id,
-                model=selected_model,
-                duration_seconds=item_duration,
-                gate_passed=gate_passed,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                agent_turns=request_count,
-                cost=cost,
-                retry_attempts=max(0, request_count - 1),
-                api_duration=item_stats.api_duration if item_stats else None,
-                lines_added=item_stats.lines_added if item_stats else None,
-                lines_removed=item_stats.lines_removed if item_stats else None,
-            ) if success else None
+            model_completion = _build_completion_record(
+                item.id, selected_model, item_duration, success,
+                gate_passed, item_stats, request_count) if success else None
 
             return WorkItemResult(success=success, request_count=request_count, stats=item_stats,
                                   cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
@@ -311,28 +306,9 @@ def process_work_item(
             cleanup_worktree(item.id, force=True)
             _log_failure(run_logger, item_logger, request_count)
             terminal_ui.ui.set_current_agent(None)
-
-            item_duration = time.time() - start_time
-
-            # Calculate cost for failed items (if stats available)
-            input_tokens = accumulated_stats.input_tokens if accumulated_stats else 0
-            output_tokens = accumulated_stats.output_tokens if accumulated_stats else 0
-            cost = calculate_cost(selected_model, input_tokens, output_tokens)
-
-            model_completion = ModelCompletionRecord(
-                item_id=item.id,
-                model=selected_model,
-                duration_seconds=item_duration,
-                gate_passed=False,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                agent_turns=request_count,
-                cost=cost,
-                retry_attempts=max(0, request_count - 1),
-                api_duration=accumulated_stats.api_duration if accumulated_stats else None,
-                lines_added=accumulated_stats.lines_added if accumulated_stats else None,
-                lines_removed=accumulated_stats.lines_removed if accumulated_stats else None,
-            )
+            model_completion = _build_completion_record(
+                item.id, selected_model, time.time() - start_time, False,
+                False, accumulated_stats, request_count)
             return _fail_result(request_count=request_count, cleanup_agent_runs=cleanup_agent_runs,
                                 gate_agent_runs=gate_agent_runs, model_completion=model_completion, stats=accumulated_stats)
 
@@ -352,20 +328,24 @@ def process_work_item(
         unregister_agent()
 
 
-def _setup_worktree(item: BeadsWorkItem, lock_timeout: float = 300.0) -> Path | None:
-    """Create worktree for work item processing.
-
-    Args:
-        item: The work item to create a worktree for.
-        lock_timeout: Maximum seconds to wait for the worktree lock.
-    """
+def _setup_worktree(
+    item: BeadsWorkItem, lock_timeout: float = 300.0,
+    run_logger: 'RunLogger | None' = None, item_logger: 'ItemLogger | None' = None,
+) -> Path | None:
+    """Create worktree, logging errors to both file logs and UI."""
     print(f"\n🌳 Creating worktree for {item.id}...")
     try:
         worktree_path = create_worktree(item.id, lock_timeout=lock_timeout)
         print(f"   Created at: {worktree_path}")
         return worktree_path
     except Exception as e:
-        print(f"\n❌ Failed to create worktree: {e}")
+        error_msg = f"Failed to create worktree for {item.id}: {e}"
+        print(f"\n❌ {error_msg}")
+        logger.error(error_msg)
+        if run_logger:
+            run_logger.log_orchestrator(error_msg, level="ERROR")
+        if item_logger:
+            item_logger.log_error(error_msg)
         return None
 
 
