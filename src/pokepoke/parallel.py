@@ -309,8 +309,8 @@ def run_parallel_loop(
 
             # In non-continuous mode, exit once all active agents have finished.
             # A single success must not prevent replenishment up to the limit.
-            if not continuous and not futures:
-                # Drain is a no-op here (futures is empty) but ensures final stats.
+            # Only fires if we processed work; otherwise fall through to "no ready items".
+            if not continuous and not futures and total_requests > 0:
                 terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
                 terminal_ui.ui.stop_and_capture()
                 finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)

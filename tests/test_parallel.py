@@ -861,8 +861,8 @@ class TestContinuousModeLoopBack:
             record_fn=Mock(), finalize_fn=finalize_fn,
         )
 
-        # Non-continuous mode exits without looping; no items = no success → code 1
-        assert code == 1
+        # Non-continuous mode exits without looping; no work to do is not a failure
+        assert code == 0
         finalize_fn.assert_called_once()
         # Should NOT have done a retry sleep; exited immediately.
         retry_logged = any(
@@ -1092,7 +1092,7 @@ class TestParallelDrainFutureEdgeCases:
             record_fn=Mock(), finalize_fn=finalize_fn,
         )
 
-        assert result == 1  # No items processed = failure exit
+        assert result == 0  # No work to do is not a failure
         finalize_fn.assert_called_once()
 
 
