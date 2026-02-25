@@ -283,6 +283,56 @@ class TestMergeQueue:
         assert future.done()
         assert future.result().status == MergeStatus.SHUTDOWN
 
+    @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
+    @patch("pokepoke.merge_queue.get_default_branch", side_effect=RuntimeError("Git timeout"))
+    def test_exception_before_try_block_resolves_future(self, mock_branch, mock_shutdown):
+        """Verify exceptions before the main try block still resolve the Future.
+
+        This tests the bug fix for PokePoke-8cn2: exceptions in get_default_branch(),
+        is_high_conflict_risk(), is_worktree_clean(), or add_uncleaned_worktree()
+        should not orphan the Future or kill the worker thread.
+        """
+        with patch("pokepoke.merge_queue.is_high_conflict_risk", return_value=False):
+            self.queue.start()
+            item = _make_item("TEST-EXCEPTION")
+            future = self.queue.submit(Path("worktrees/task-TEST-EXCEPTION"), item)
+
+            # The Future should be resolved with FAILED status, not hang forever
+            result = future.result(timeout=5)
+
+            assert result.status == MergeStatus.FAILED
+            assert "Git timeout" in result.message or "Unhandled exception" in result.message
+            assert result.item_id == "TEST-EXCEPTION"
+
+            # Worker thread should still be alive and can process next request
+            assert self.queue.is_running
+
+            # Verify worker can handle another request
+            with (
+                patch("pokepoke.merge_queue.get_default_branch", return_value="main"),
+                patch("pokepoke.merge_queue._rebase_worktree", return_value=True),
+                patch("pokepoke.worktree_finalization.merge_worktree_to_dev", return_value=True),
+            ):
+                item2 = _make_item("TEST-RECOVERY")
+                future2 = self.queue.submit(Path("worktrees/task-TEST-RECOVERY"), item2)
+                result2 = future2.result(timeout=5)
+                assert result2.status == MergeStatus.SUCCESS
+
+    @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
+    @patch("pokepoke.merge_queue.is_high_conflict_risk", side_effect=Exception("Beads read failure"))
+    def test_exception_in_high_conflict_check_resolves_future(self, mock_conflict, mock_shutdown):
+        """Verify exception in is_high_conflict_risk() resolves the Future."""
+        self.queue.start()
+        item = _make_item("TEST-CONFLICT-FAIL")
+        future = self.queue.submit(Path("worktrees/task-TEST-CONFLICT-FAIL"), item)
+
+        # Should not hang, should get FAILED result
+        result = future.result(timeout=5)
+
+        assert result.status == MergeStatus.FAILED
+        assert "Beads read failure" in result.message or "Unhandled exception" in result.message
+        assert self.queue.is_running  # Worker still alive
+
 
 class TestRebaseWorktree:
     """Tests for _rebase_worktree helper."""

@@ -164,80 +164,97 @@ class MergeQueue:
                 self._drain_on_shutdown()
                 break
 
-            self._process_request(request)
+            try:
+                self._process_request(request)
+            except Exception:
+                logger.exception("Unhandled error in merge worker - worker stays alive for next request")
 
         # Drain anything left after loop exits
         self._drain_on_shutdown()
         logger.info("Merge queue worker stopped")
 
     def _process_request(self, request: _MergeRequest) -> None:
-        """Process a single merge request."""
-        item = request.item
-        worktree_path = request.worktree_path
-        high_conflict = is_high_conflict_risk(item)
+        """Process a single merge request. All exceptions caught to guarantee Future resolution."""
+        try:
+            item = request.item
+            worktree_path = request.worktree_path
+            high_conflict = is_high_conflict_risk(item)
 
-        logger.info("Processing merge for %s from %s", item.id, worktree_path)
-        if high_conflict:
-            logger.info("Applying cautious merge strategy for high-conflict item %s", item.id)
+            logger.info("Processing merge for %s from %s", item.id, worktree_path)
+            if high_conflict:
+                logger.info("Applying cautious merge strategy for high-conflict item %s", item.id)
 
-        # Rebase worktree against target branch to incorporate any previous merges
-        target_branch = get_default_branch()
-        rebase_ok = _rebase_worktree(worktree_path, target_branch=target_branch)
-        if high_conflict and rebase_ok:
-            logger.info("Second safety rebase for high-conflict item %s", item.id)
-            rebase_ok = _rebase_worktree(worktree_path, target_branch=target_branch) and rebase_ok
-            time.sleep(1.0)
-        if not rebase_ok:
-            if not is_worktree_clean(worktree_path):
-                logger.error(
-                    "Worktree %s is dirty after failed rebase for %s - skipping merge",
-                    worktree_path,
-                    item.id,
+            # Rebase worktree against target branch to incorporate any previous merges
+            target_branch = get_default_branch()
+            rebase_ok = _rebase_worktree(worktree_path, target_branch=target_branch)
+            if high_conflict and rebase_ok:
+                logger.info("Second safety rebase for high-conflict item %s", item.id)
+                rebase_ok = _rebase_worktree(worktree_path, target_branch=target_branch) and rebase_ok
+                time.sleep(1.0)
+            if not rebase_ok:
+                if not is_worktree_clean(worktree_path):
+                    logger.error(
+                        "Worktree %s is dirty after failed rebase for %s - skipping merge",
+                        worktree_path,
+                        item.id,
+                    )
+                    from .worktree_cleanup import add_uncleaned_worktree
+
+                    add_uncleaned_worktree(
+                        worktree_id=item.id,
+                        worktree_path=str(worktree_path),
+                        reason="Rebase failed and abort left worktree in dirty state",
+                    )
+                    request.future.set_result(
+                        MergeResult(
+                            status=MergeStatus.FAILED,
+                            item_id=item.id,
+                            message="Rebase failed and worktree is in dirty state after abort",
+                        )
+                    )
+                    return
+                logger.warning(
+                    "Rebase failed for %s but worktree is clean - attempting merge", item.id
                 )
-                from .worktree_cleanup import add_uncleaned_worktree
 
-                add_uncleaned_worktree(
-                    worktree_id=item.id,
-                    worktree_path=str(worktree_path),
-                    reason="Rebase failed and abort left worktree in dirty state",
-                )
-                request.future.set_result(
-                    MergeResult(
+            try:
+                from .worktree_finalization import merge_worktree_to_dev
+
+                success = merge_worktree_to_dev(item, worktree_path=worktree_path)
+                if success:
+                    result = MergeResult(
+                        status=MergeStatus.SUCCESS,
+                        item_id=item.id,
+                        message="Merge completed successfully",
+                    )
+                else:
+                    result = MergeResult(
                         status=MergeStatus.FAILED,
                         item_id=item.id,
-                        message="Rebase failed and worktree is in dirty state after abort",
+                        message="merge_worktree_to_dev returned False",
                     )
-                )
-                return
-            logger.warning(
-                "Rebase failed for %s but worktree is clean - attempting merge", item.id
-            )
-
-        try:
-            from .worktree_finalization import merge_worktree_to_dev
-
-            success = merge_worktree_to_dev(item, worktree_path=worktree_path)
-            if success:
-                result = MergeResult(
-                    status=MergeStatus.SUCCESS,
-                    item_id=item.id,
-                    message="Merge completed successfully",
-                )
-            else:
+            except Exception as exc:
+                logger.exception("Merge failed for %s", item.id)
                 result = MergeResult(
                     status=MergeStatus.FAILED,
                     item_id=item.id,
-                    message="merge_worktree_to_dev returned False",
+                    message=str(exc),
                 )
-        except Exception as exc:
-            logger.exception("Merge failed for %s", item.id)
-            result = MergeResult(
-                status=MergeStatus.FAILED,
-                item_id=item.id,
-                message=str(exc),
-            )
 
-        request.future.set_result(result)
+            request.future.set_result(result)
+        except BaseException as exc:
+            # Catch ALL exceptions to guarantee the Future is always resolved
+            logger.exception("Unhandled exception in merge request processing for %s", request.item.id)
+            if not request.future.done():
+                request.future.set_result(
+                    MergeResult(
+                        status=MergeStatus.FAILED,
+                        item_id=request.item.id,
+                        message=f"Unhandled exception: {exc}",
+                    )
+                )
+            # Re-raise to allow worker loop exception handler to log
+            raise
 
     def _drain_on_shutdown(self) -> None:
         """Drain remaining queue items, setting shutdown results."""
