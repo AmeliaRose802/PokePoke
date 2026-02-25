@@ -16,6 +16,7 @@ worktrees/
 .pokepoke/beads_item_stats.gw*.json
 .maintenance_state.json
 .pokepoke/locks/
+.pokepoke/stats/
 
 # PokePoke logs
 .pokepoke/logs/

@@ -6,6 +6,7 @@ agents attempt to create worktrees simultaneously.
 
 import json
 import logging
+import os
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -29,8 +30,9 @@ _DEFAULT_TIMEOUT = 300
 
 def _ensure_dirs() -> None:
     """Ensure lock and stats directories exist."""
-    _LOCK_DIR.mkdir(parents=True, exist_ok=True)
-    _STATS_DIR.mkdir(parents=True, exist_ok=True)
+    # Use os.makedirs so tests that mock Path.mkdir don't break lock acquisition.
+    os.makedirs(_LOCK_DIR, exist_ok=True)
+    os.makedirs(_STATS_DIR, exist_ok=True)
 
 
 def _load_metrics() -> dict[str, float]:
@@ -69,7 +71,7 @@ def _load_metrics() -> dict[str, float]:
 def _save_metrics(metrics: dict[str, float]) -> None:
     """Save worktree creation metrics to disk."""
     try:
-        _STATS_DIR.mkdir(parents=True, exist_ok=True)
+        os.makedirs(_STATS_DIR, exist_ok=True)
         with open(_METRICS_PATH, 'w') as f:
             json.dump(metrics, f, indent=2)
     except OSError as e:

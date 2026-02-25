@@ -343,7 +343,7 @@ def process_work_item(
     finally:
         # Best-effort worktree cleanup to prevent resource leaks on unhandled exceptions
         try:
-            if worktree_path is not None:
+            if worktree_path is not None and not finalized_successfully:
                 cleanup_worktree(item.id, force=True)
         except Exception as e:
             logger.debug(f"Failed to cleanup worktree: {e}")
