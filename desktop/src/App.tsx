@@ -82,7 +82,10 @@ function App() {
     setSelectedCardId((prev) => (prev === cardId ? null : cardId));
   }, []);
 
-  const handleOpenPromptEditor = useCallback(() => {
+  const [initialPrompt, setInitialPrompt] = useState<string | null>(null);
+
+  const handleOpenPromptEditor = useCallback((promptName?: string) => {
+    setInitialPrompt(promptName ?? null);
     setShowPrompts(true);
     setShowSettings(false);
   }, []);
@@ -295,7 +298,8 @@ function App() {
           getPrompt={bridge.getPrompt}
           savePrompt={bridge.savePrompt}
           resetPrompt={bridge.resetPrompt}
-          onClose={() => setShowPrompts(false)}
+          onClose={() => { setShowPrompts(false); setInitialPrompt(null); }}
+          initialPrompt={initialPrompt}
         />
       )}
 

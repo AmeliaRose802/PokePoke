@@ -15,6 +15,7 @@ interface Props {
   savePrompt: (name: string, content: string) => Promise<boolean>;
   resetPrompt: (name: string) => Promise<boolean>;
   onClose: () => void;
+  initialPrompt?: string | null;
 }
 
 export function PromptEditor({
@@ -23,6 +24,7 @@ export function PromptEditor({
   savePrompt,
   resetPrompt,
   onClose,
+  initialPrompt,
 }: Props) {
   const [prompts, setPrompts] = useState<PromptInfo[]>([]);
   const [selected, setSelected] = useState<PromptDetail | null>(null);
@@ -32,14 +34,24 @@ export function PromptEditor({
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load prompt list on mount
+  // Load prompt list on mount, auto-selecting initialPrompt if provided
   useEffect(() => {
     let active = true;
     listPrompts().then((list) => {
-      if (active) setPrompts(list);
+      if (!active) return;
+      setPrompts(list);
+      if (initialPrompt && list.some((p) => p.name === initialPrompt)) {
+        getPrompt(initialPrompt).then((detail) => {
+          if (!active || !detail) return;
+          setSelected(detail);
+          setEditorContent(detail.content);
+          setDirty(false);
+          setMessage("");
+        });
+      }
     });
     return () => { active = false; };
-  }, [listPrompts]);
+  }, [listPrompts, initialPrompt, getPrompt]);
 
   const reloadList = useCallback(async () => {
     const list = await listPrompts();
