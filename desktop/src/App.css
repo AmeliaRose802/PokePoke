@@ -996,44 +996,6 @@
   white-space: nowrap;
 }
 
-.agent-card-context {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 0;
-  font-size: 10px;
-  color: var(--text-muted);
-}
-
-.agent-card-context-icon {
-  font-size: 10px;
-  flex-shrink: 0;
-}
-
-.agent-card-context-bar {
-  flex: 1;
-  height: 4px;
-  background: var(--bg-primary);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.agent-card-context-fill {
-  height: 100%;
-  background: var(--accent-primary);
-  border-radius: 2px;
-  transition: width 0.3s ease;
-}
-
-.agent-card-context-fill.agent-card-context-warn {
-  background: #e8a838;
-}
-
-.agent-card-context-label {
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
 .agent-detail {
   display: flex;
   flex-direction: column;

@@ -30,7 +30,6 @@ import {
   parentKeysForAgent,
   STATUS_INDICATOR,
 } from "../utils/agentsPanelHelpers";
-import { ContextBar } from "./ContextBar";
 import { GateVerdictPreview } from "./GateVerdictPreview";
 
 interface Props {
@@ -225,18 +224,6 @@ export function AgentsPanel({
             </span>
           </div>
         ) : null}
-        {(() => {
-          const totalTokens = (agent.input_tokens ?? 0) + (agent.output_tokens ?? 0);
-          const limit = agent.context_limit ?? 0;
-          if (totalTokens === 0 && limit === 0) return null;
-          return (
-            <ContextBar
-              inputTokens={agent.input_tokens ?? 0}
-              outputTokens={agent.output_tokens ?? 0}
-              contextLimit={limit}
-            />
-          );
-        })()}
         <div className="agent-card-logs">
           {isGate ? (() => {
             const verdict = parseGateVerdict(agent.log_lines ?? agent.recent_logs);
