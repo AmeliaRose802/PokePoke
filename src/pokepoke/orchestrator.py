@@ -39,7 +39,7 @@ def _finalize_session(
     end_time = time.time()
     terminal_ui.ui.set_session_end_time(end_time)  # Stop desktop UI clock
     try:
-        session_stats.set_ending_beads_stats(get_beads_stats())
+        session_stats.set_ending_beads_stats(None if is_shutting_down() else get_beads_stats())
     except KeyboardInterrupt:
         print("⚠️  Stats collection interrupted, skipping...")
         session_stats.set_ending_beads_stats(None)

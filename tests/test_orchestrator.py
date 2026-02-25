@@ -1309,6 +1309,35 @@ class TestFinalizeSession:
         mock_print.assert_called_once()
         mock_clear.assert_called_once()
 
+    @patch('src.pokepoke.orchestrator.is_shutting_down', return_value=True)
+    @patch('src.pokepoke.orchestrator.clear_terminal_banner')
+    @patch('src.pokepoke.orchestrator.print_stats')
+    @patch('src.pokepoke.orchestrator.get_beads_stats')
+    @patch('src.pokepoke.orchestrator.time')
+    def test_finalize_session_skips_stats_collection_during_shutdown(
+        self, mock_time: Mock, mock_stats: Mock,
+        mock_print: Mock, mock_clear: Mock,
+        _mock_is_shutting_down: Mock,
+    ) -> None:
+        """During shutdown, finalize should avoid stats collection to exit promptly."""
+        from src.pokepoke.orchestrator import _finalize_session
+        from pokepoke.types import SessionStats, AgentStats
+        from pokepoke.logging_utils import RunLogger
+        import tempfile
+
+        mock_time.time.return_value = 100.0
+        mock_stats.return_value = {"items": 5}
+
+        session = SessionStats(agent_stats=AgentStats())
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = RunLogger(base_dir=tmpdir)
+            _finalize_session(session, 90.0, 0, 0, logger)
+
+        assert session.ending_beads_stats is None
+        mock_stats.assert_not_called()
+        mock_print.assert_called_once()
+        mock_clear.assert_called_once()
+
 
 class TestRunOrchestratorBetaFirst:
     """Test run_orchestrator with beta_first flag."""
@@ -2105,6 +2134,11 @@ class TestMainWorktreeCoverage:
 
 class TestOrchestratorCleanupDetection:
     """Test orchestrator's main repo cleanup detection."""
+
+    def setup_method(self) -> None:
+        """Reset shutdown state before each test."""
+        from pokepoke.shutdown import reset
+        reset()
 
     @patch('pokepoke.orchestrator.check_and_commit_main_repo')
     @patch('pokepoke.orchestrator.get_beads_stats')
