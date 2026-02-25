@@ -23,12 +23,13 @@ logger = logging.getLogger(__name__)
 # Default pool size; raised when effective_parallel exceeds this.
 _DEFAULT_PARALLEL_CEILING = 8
 
+_IDLE_BASE_DELAY = 8.0   # Idle backoff start for continuous mode (exponential to max)
+_IDLE_MAX_DELAY = 120.0
+
 # Type alias to satisfy mypy strict generics
 _Future = concurrent.futures.Future[WorkItemResult]
 
-# Threading event used to wake up the parallel loop immediately when a
-# spawn agent request arrives from the desktop UI.
-_spawn_wakeup = threading.Event()
+_spawn_wakeup = threading.Event()  # Wake up loop for spawn agent requests from desktop UI
 _SNAKE_TYPES: tuple[str, ...] = ("cobra", "corn", "rainbow_boa", "rattlesnake", "sea_snake")
 
 
@@ -257,6 +258,7 @@ def run_parallel_loop(
     finalized = False
     exit_code = 0
     has_success = False
+    idle_sleep = _IDLE_BASE_DELAY
 
     try:
         while not is_shutting_down():
@@ -272,12 +274,10 @@ def run_parallel_loop(
             try:
                 ready_items = get_ready_work_items()
             except Exception as e:
-                # Safety: get_ready_work_items handles errors internally
                 run_logger.log_orchestrator(f"Failed to fetch ready items: {e}", level="ERROR")
                 print(f"⚠️  Warning: failed to fetch ready items: {e}")
                 ready_items = []
 
-            # Collect completed futures before calculating slots for accurate refill.
             total_requests, any_success = _collect_done_futures(
                 futures, failed_claim_ids, total_requests,
                 session_stats, run_logger, record_fn,
@@ -294,6 +294,9 @@ def run_parallel_loop(
             run_logger.log_orchestrator(
                 f"Agent lifecycle: active={len(futures)}, max={current_max}, slots={slots}"
             )
+
+            if futures or ready_items:
+                idle_sleep = _IDLE_BASE_DELAY
 
             if (
                 slots > 0
@@ -326,7 +329,6 @@ def run_parallel_loop(
                         raise
                     futures[fut] = item
 
-            # Check if user requested stop after current item
             if should_stop_after_current() and not futures:
                 cancel_stop_after_current()
                 terminal_ui.ui.stop_and_capture()
@@ -337,7 +339,6 @@ def run_parallel_loop(
                 exit_code = 0
                 break
 
-            # Non-continuous mode: exit once all active agents finish (only if work was done).
             if not continuous and not futures and total_requests > 0:
                 terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
                 terminal_ui.ui.stop_and_capture()
@@ -346,22 +347,24 @@ def run_parallel_loop(
                 exit_code = 0 if has_success else 1
                 break
 
-            # Only exit if no workers are active AND we have no ready items
             if not futures and not ready_items:
                 run_logger.log_orchestrator("No ready items - double-checking beads")
                 try:
                     final_check = get_ready_work_items()
                     if final_check:
                         run_logger.log_orchestrator(f"Found {len(final_check)} items on re-check")
+                        idle_sleep = _IDLE_BASE_DELAY
                         continue  # Go back to main loop to process these items
                 except Exception as e:
                     run_logger.log_orchestrator(f"Final beads check failed: {e}", level="WARNING")
 
                 if continuous:
-                    # In continuous mode, wait for new work instead of exiting.
-                    run_logger.log_orchestrator("Continuous mode: sleeping before retry (no ready items)")
+                    run_logger.log_orchestrator(
+                        f"Continuous mode: sleeping {idle_sleep:.1f}s before retry (no ready items)"
+                    )
                     terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", "Waiting for work...")
-                    time.sleep(5)
+                    time.sleep(idle_sleep)
+                    idle_sleep = min(_IDLE_MAX_DELAY, idle_sleep * 2)
                     continue
 
                 terminal_ui.ui.stop_and_capture()

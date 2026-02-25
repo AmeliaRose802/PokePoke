@@ -802,6 +802,37 @@ class TestContinuousModeLoopBack:
     @patch("pokepoke.parallel.time.sleep")
     @patch("pokepoke.parallel.terminal_ui")
     @patch("pokepoke.parallel.set_executor")
+    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, False, True])
+    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
+    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    def test_continuous_mode_idle_uses_exponential_backoff(
+        self, mock_sel, mock_ready, mock_repo, mock_shut,
+        mock_set_exec, mock_ui, mock_sleep,
+    ) -> None:
+        """Continuous mode should increase idle sleep duration between empty polls."""
+        stats = SessionStats(agent_stats=AgentStats())
+        finalize_fn = Mock()
+        logger = Mock()
+
+        code = run_parallel_loop(
+            effective_parallel=2, mode_name="Autonomous",
+            main_repo_path="/repo", failed_claim_ids=set(),
+            session_stats=stats, start_time=time.time(),
+            run_logger=logger, continuous=True,
+            record_fn=Mock(), finalize_fn=finalize_fn,
+        )
+
+        assert code == 0
+        # First idle iteration should sleep with the base delay.
+        assert mock_sleep.call_args_list[0].args[0] == 8.0
+        # Subsequent idle iterations (if any) should not use a smaller delay.
+        for call in mock_sleep.call_args_list[1:]:
+            assert call.args[0] >= 8.0
+
+    @patch("pokepoke.parallel.time.sleep")
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.set_executor")
     @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
     @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
