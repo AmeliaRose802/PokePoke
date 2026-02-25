@@ -169,14 +169,17 @@ def _collect_done_futures(
     any_success = False
     for fut in done_futs:
         item = futures.pop(fut)
+        was_exception = False
         try:
             result = fut.result()
         except Exception as exc:
             print(f"\n❌ Agent for {item.id} raised: {exc}")
             run_logger.log_orchestrator(f"Agent error for {item.id}: {exc}", level="ERROR")
             result = WorkItemResult(success=False, request_count=0)
+            was_exception = True
 
-        if not result.success and result.request_count == 0:
+        # Only blacklist explicit claim failures, not exception-crashed workers.
+        if not result.success and result.request_count == 0 and not was_exception:
             failed_claim_ids.add(item.id)
         elif result.success:
             failed_claim_ids.discard(item.id)
@@ -363,10 +366,8 @@ def run_parallel_loop(
                     ))
                     try:
                         result = fut.result()
-                        print(f"✅ Worker completed item {item.id}")
                         run_logger.log_orchestrator(f"Worker completed item {item.id}")
                     except Exception as e:
-                        print(f"❌ Worker failed for item {item.id}: {e}")
                         run_logger.log_orchestrator(f"Worker failed for item {item.id}: {e}", level="ERROR")
                         result = WorkItemResult(success=False, request_count=0)
 
@@ -382,7 +383,6 @@ def run_parallel_loop(
                 print(f"⚠️  Timeout waiting for {len(futures)} workers after 5 minutes")
                 run_logger.log_orchestrator("Timeout waiting for workers", level="WARNING")
 
-            print("✅ All workers completed")
             run_logger.log_orchestrator("All workers completed")
             terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
 

@@ -192,7 +192,11 @@ class TestCollectDoneFutures:
         assert "fail1" in failed
 
     def test_exception_in_future(self) -> None:
-        """An exception in a future is handled gracefully."""
+        """An exception in a future is handled gracefully.
+
+        Crashed workers must NOT be added to failed_claim_ids so they
+        remain eligible for retry (fixes PokePoke-8o4o).
+        """
         fut: concurrent.futures.Future = concurrent.futures.Future()
         fut.set_exception(RuntimeError("kaboom"))
         item = _make_item("err1")
@@ -208,9 +212,24 @@ class TestCollectDoneFutures:
 
         assert total == 5  # no requests added
         assert any_ok is False
-        assert "err1" in failed
+        # Exception-crashed items must NOT be blacklisted (PokePoke-8o4o fix)
+        assert "err1" not in failed
         logger.log_orchestrator.assert_called()
         record_fn.assert_called_once()
+
+    def test_claim_failure_is_blacklisted(self) -> None:
+        """A returned claim failure (request_count=0, no exception) IS blacklisted."""
+        fut: concurrent.futures.Future = concurrent.futures.Future()
+        fut.set_result(WorkItemResult(success=False, request_count=0))
+        item = _make_item("claim-fail")
+        futures = {fut: item}
+        failed: set[str] = set()
+        stats = SessionStats(agent_stats=AgentStats())
+        record_fn = Mock()
+
+        _collect_done_futures(futures, failed, 0, stats, Mock(), record_fn)
+
+        assert "claim-fail" in failed
 
     def test_no_done_futures_returns_zero(self) -> None:
         """When no futures are done, returns unchanged totals."""
@@ -1234,3 +1253,36 @@ class TestParallelReplenishmentBug:
         )
         assert record_fn.call_count == 3
         assert any_ok is True
+
+    def test_exception_crashed_items_not_blacklisted(self) -> None:
+        """Workers that crash with exceptions must NOT be added to failed_claim_ids.
+
+        Regression for PokePoke-8o4o: the exception handler in _collect_done_futures
+        created WorkItemResult(request_count=0) which incorrectly added crashed items
+        to failed_claim_ids, permanently preventing replacement agents from being
+        launched for those items.
+        """
+        import concurrent.futures as cf
+
+        # Simulate 3 workers that all crash with exceptions.
+        futs = [cf.Future() for _ in range(3)]
+        for fut in futs:
+            fut.set_exception(RuntimeError("worker crashed"))
+        items = [_make_item(f"crash-{i}") for i in range(3)]
+        futures_dict: dict[cf.Future, BeadsWorkItem] = dict(zip(futs, items, strict=False))  # type: ignore[type-arg]
+
+        failed: set[str] = set()
+        stats = SessionStats(agent_stats=AgentStats())
+        record_fn = Mock()
+
+        from pokepoke.parallel import _collect_done_futures
+        _collect_done_futures(futures_dict, failed, 0, stats, Mock(), record_fn)
+
+        # No crashed items should be in failed_claim_ids — they must remain
+        # eligible for retry so replacement agents can pick them up.
+        assert len(failed) == 0, (
+            f"Exception-crashed items were blacklisted: {failed}; "
+            "this prevents replacement agents from being launched"
+        )
+        assert len(futures_dict) == 0  # all collected
+        assert record_fn.call_count == 3
