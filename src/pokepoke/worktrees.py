@@ -1,6 +1,8 @@
 """Git worktree management for PokePoke."""
 
+import logging
 import subprocess
+import time
 from pathlib import Path
 
 from pokepoke.git_operations import (
@@ -19,10 +21,17 @@ from pokepoke.worktree_cleanup import (
     remove_from_manifest,
     _is_windows_lock_error,
 )
+from pokepoke.worktree_coordination import with_worktree_lock
+
+logger = logging.getLogger(__name__)
 
 
 def create_worktree(item_id: str, base_branch: str | None = None) -> Path:
-    """Create a git worktree for a work item. Returns existing path if already exists."""
+    """Create a git worktree for a work item. Returns existing path if already exists.
+    
+    Uses file-based locking to prevent race conditions when multiple agents
+    attempt to create worktrees simultaneously.
+    """
     # Sanitize the item_id for use in branch names
     sanitized_id = sanitize_branch_name(item_id)
 
@@ -32,12 +41,13 @@ def create_worktree(item_id: str, base_branch: str | None = None) -> Path:
     # Branch name for the worktree
     branch_name = f"task/{sanitized_id}"
 
-    # Check if worktree already exists
+    # Check if worktree already exists (outside lock - no git operation needed)
     existing_worktrees = list_worktrees()
     for wt in existing_worktrees:
         wt_path = Path(wt.get("path", ""))
         # Check if this is our worktree (by path or branch)
         if wt_path == worktree_path.resolve() or wt.get("branch", "").endswith(branch_name):
+            logger.debug(f"Reusing existing worktree for {item_id} at {wt_path}")
             print(f"   ♻️  Reusing existing worktree at {wt_path}")
             return wt_path
 
@@ -48,38 +58,87 @@ def create_worktree(item_id: str, base_branch: str | None = None) -> Path:
     if base_branch is None:
         base_branch = get_default_branch()
 
-    # Create the worktree
+    # CRITICAL: Use lock to serialize worktree creation across parallel agents
+    # This prevents race conditions when multiple git worktree operations
+    # access .git/worktrees simultaneously
+    lock_start = time.time()
     try:
-        subprocess.run(
-            ["git", "worktree", "add", str(worktree_path), "-b", branch_name, base_branch],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            timeout=30
-        )
-    except subprocess.CalledProcessError as e:
-        # Log the actual error for debugging
-        print(f"   ⚠️  Git error: {e.stderr if e.stderr else 'No stderr'}")
-
-        # Check if error is because branch already exists
-        if e.stderr and ("already exists" in e.stderr.lower() or "already checked out" in e.stderr.lower()):
-            # Try to find the existing worktree
+        with with_worktree_lock(timeout=300):
+            lock_wait = time.time() - lock_start
+            if lock_wait > 0.1:
+                logger.info(f"Waited {lock_wait:.2f}s for worktree lock (item: {item_id})")
+            
+            # Double-check worktree doesn't exist (another agent may have created it while we waited)
             existing_worktrees = list_worktrees()
             for wt in existing_worktrees:
-                if wt.get("branch", "").endswith(branch_name):
-                    print(f"   ♻️  Reusing existing worktree at {wt['path']}")
-                    return Path(wt["path"])
+                wt_path = Path(wt.get("path", ""))
+                if wt_path == worktree_path.resolve() or wt.get("branch", "").endswith(branch_name):
+                    logger.debug(f"Worktree created by another agent while waiting for lock: {wt_path}")
+                    print(f"   ♻️  Reusing worktree created by another agent at {wt_path}")
+                    return wt_path
+            
+            # Create the worktree
+            logger.info(f"Creating worktree for {item_id}: {worktree_path}")
+            creation_start = time.time()
+            try:
+                result = subprocess.run(
+                    ["git", "worktree", "add", str(worktree_path), "-b", branch_name, base_branch],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace',
+                    timeout=30
+                )
+                creation_time = time.time() - creation_start
+                logger.info(f"Created worktree for {item_id} in {creation_time:.2f}s")
+                
+            except subprocess.CalledProcessError as e:
+                creation_time = time.time() - creation_start
+                stderr = e.stderr if e.stderr else 'No stderr available'
+                
+                # Log detailed error information
+                logger.error(
+                    f"Git worktree creation failed for {item_id} after {creation_time:.2f}s:\n"
+                    f"  Command: git worktree add {worktree_path} -b {branch_name} {base_branch}\n"
+                    f"  Exit code: {e.returncode}\n"
+                    f"  Stderr: {stderr}"
+                )
+                print(f"   ⚠️  Git error (exit {e.returncode}): {stderr}")
 
-        # Check if the base branch doesn't exist
-        if e.stderr and ("invalid reference" in e.stderr.lower() or "not a valid" in e.stderr.lower()):
-            raise RuntimeError(f"Base branch '{base_branch}' does not exist. Please create it first or specify a different base branch.") from e
+                # Check if error is because branch already exists
+                if "already exists" in stderr.lower() or "already checked out" in stderr.lower():
+                    logger.warning(f"Branch {branch_name} already exists, attempting to find existing worktree")
+                    # Try to find the existing worktree
+                    existing_worktrees = list_worktrees()
+                    for wt in existing_worktrees:
+                        if wt.get("branch", "").endswith(branch_name):
+                            logger.info(f"Found existing worktree for {branch_name} at {wt['path']}")
+                            print(f"   ♻️  Reusing existing worktree at {wt['path']}")
+                            return Path(wt["path"])
 
-        # If we couldn't recover, re-raise the error with more context
-        raise RuntimeError(f"Failed to create worktree: {e.stderr if e.stderr else str(e)}") from e
-    except subprocess.TimeoutExpired as e:
-        raise RuntimeError(f"Timed out creating worktree after {e.timeout}s") from e
+                # Check if the base branch doesn't exist
+                if "invalid reference" in stderr.lower() or "not a valid" in stderr.lower():
+                    logger.error(f"Base branch '{base_branch}' does not exist")
+                    raise RuntimeError(
+                        f"Base branch '{base_branch}' does not exist. "
+                        "Please create it first or specify a different base branch."
+                    ) from e
+
+                # If we couldn't recover, re-raise the error with more context
+                raise RuntimeError(f"Failed to create worktree: {stderr}") from e
+                
+            except subprocess.TimeoutExpired as e:
+                creation_time = time.time() - creation_start
+                logger.error(f"Git worktree creation timed out for {item_id} after {creation_time:.2f}s")
+                raise RuntimeError(f"Timed out creating worktree after {e.timeout}s") from e
+
+    except RuntimeError as e:
+        # Lock timeout or git error - already logged above
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error creating worktree for {item_id}: {e}", exc_info=True)
+        raise RuntimeError(f"Unexpected error creating worktree: {e}") from e
 
     return worktree_path
 
