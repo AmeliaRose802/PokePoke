@@ -304,6 +304,108 @@ def test_item_logger_log_error():
         assert "Something went wrong" in content
 
 
+def test_get_item_dir_creates_subdirectory():
+    """Test that _get_item_dir creates a per-item subdirectory."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir)
+
+        item_dir = logger._get_item_dir("my-item-42")
+        assert item_dir.exists()
+        assert item_dir.parent == logger.item_logs_dir
+        assert item_dir.name == "my-item-42"
+
+
+def test_get_item_dir_sanitizes_slashes():
+    """Test that _get_item_dir replaces slashes in item IDs."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir)
+
+        item_dir = logger._get_item_dir("task/with/slashes")
+        assert item_dir.name == "task_with_slashes"
+        assert item_dir.exists()
+
+
+def test_start_item_phase_log_creates_log_in_item_dir():
+    """Test that start_item_phase_log creates a log file inside a per-item directory."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir)
+
+        item_logger = logger.start_item_phase_log(
+            item_id="item-99",
+            item_title="Phase Test",
+            phase="work",
+            attempt=1,
+            agent_name="test_agent",
+        )
+
+        # Log file should be inside items/item-99/
+        assert item_logger.log_path.parent == logger.item_logs_dir / "item-99"
+        assert item_logger.log_path.exists()
+        assert "work" in item_logger.log_path.name
+        assert "attempt_1" in item_logger.log_path.name
+        assert "test_agent" in item_logger.log_path.name
+
+
+def test_start_item_phase_log_multiple_phases():
+    """Test that different phases get separate log files."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir)
+
+        work_logger = logger.start_item_phase_log(
+            "item-1", "Test", phase="work", attempt=1, agent_name="agent"
+        )
+        gate_logger = logger.start_item_phase_log(
+            "item-1", "Test", phase="gate", attempt=1, agent_name="agent"
+        )
+
+        assert work_logger.log_path != gate_logger.log_path
+        assert work_logger.log_path.parent == gate_logger.log_path.parent
+
+
+def test_start_item_phase_log_retry_attempt():
+    """Test that retries get separate log files with attempt number."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir)
+
+        attempt1 = logger.start_item_phase_log(
+            "item-1", "Test", phase="work", attempt=1, agent_name="agent"
+        )
+        attempt2 = logger.start_item_phase_log(
+            "item-1", "Test", phase="work", attempt=2, agent_name="agent"
+        )
+
+        assert attempt1.log_path != attempt2.log_path
+        assert "attempt_1" in attempt1.log_path.name
+        assert "attempt_2" in attempt2.log_path.name
+
+
+def test_start_item_phase_log_clamps_attempt():
+    """Test that attempt < 1 is clamped to 1."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir)
+
+        item_logger = logger.start_item_phase_log(
+            "item-1", "Test", phase="work", attempt=0, agent_name="agent"
+        )
+        assert "attempt_1" in item_logger.log_path.name
+
+
+def test_start_item_phase_log_writes_header():
+    """Test that phase log files contain proper header content."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir)
+
+        item_logger = logger.start_item_phase_log(
+            "item-7", "My Feature", phase="cleanup", attempt=1, agent_name="bot"
+        )
+
+        with open(item_logger.log_path, encoding='utf-8') as f:
+            content = f.read()
+
+        assert "My Feature" in content
+        assert "Agent: bot" in content
+
+
 def test_item_logger_full_agent_session():
     """Test a realistic sequence: output, tool calls, errors, summary."""
     with tempfile.TemporaryDirectory() as tmpdir:
