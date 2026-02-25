@@ -15,10 +15,12 @@ The desktop installer is the easiest way to get PokePoke running on Windows.
 
 **Steps:**
 
-1. Download the latest `PokePokeInstaller-<version>.exe` from the [Releases](https://github.com/AmeliaRose802/PokePoke/releases) page.
+1. Build the installer locally by following [packaging/installer/README.md](packaging/installer/README.md).
 2. Run the installer. If prompted by SmartScreen, click **More info** → **Run anyway**.
 3. Choose an install location (defaults to `C:\Program Files\PokePoke`).
 4. The installer creates Start Menu and Desktop shortcuts automatically.
+
+Pre-built installers may be published on the [Releases](https://github.com/AmeliaRose802/PokePoke/releases) page in the future. If available, download the latest `PokePokeInstaller-<version>.exe` instead of building locally.
 
 **What the installer sets up:**
 
