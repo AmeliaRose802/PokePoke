@@ -203,6 +203,37 @@ def check_copilot_processes() -> int:
         return 0
 
 
+def is_process_running(pid: int) -> bool:
+    """Check if a process with the given PID is currently running.
+    
+    Args:
+        pid: Process ID to check
+        
+    Returns:
+        True if the process is running, False otherwise
+    """
+    if os.name == 'nt':
+        # Windows implementation
+        try:
+            result = subprocess.run(
+                ['tasklist', '/FI', f'PID eq {pid}', '/FO', 'CSV'],
+                capture_output=True, text=True, timeout=10,
+                encoding='utf-8', errors='replace'
+            )
+            # If process exists, tasklist returns header + process line
+            lines = result.stdout.strip().split('\n')
+            return len(lines) > 1
+        except Exception:
+            return False
+    else:
+        # Unix/Linux implementation
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+
+
 def wait_for_process_cleanup(max_wait: float = 3.0) -> None:
     """Wait for Copilot processes to terminate on Windows.
 

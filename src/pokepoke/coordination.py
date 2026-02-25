@@ -351,3 +351,80 @@ def with_worktree_lock(
         if success:
             wait_time = time.time() - wait_start
             _record_worktree_attempt(success=True, wait_time=wait_time)
+
+
+def check_lock_status(lock_name: str) -> tuple[bool, dict[str, object] | None]:
+    """Check if a lock exists and get its metadata.
+    
+    Args:
+        lock_name: Name of the lock to check
+        
+    Returns:
+        Tuple of (lock_exists, metadata_dict)
+        metadata_dict contains 'pid', 'timestamp' if available, None otherwise
+    """
+    lock_path = _lock_path(lock_name)
+    exists = lock_path.exists()
+    
+    if not exists:
+        return False, None
+    
+    metadata = _read_lock_metadata(lock_path)
+    return True, metadata
+
+
+def clear_lock_if_stale(lock_name: str, max_age_seconds: float = 3600) -> bool:
+    """Clear a lock if it's stale (holder PID dead or lock too old).
+    
+    Args:
+        lock_name: Name of the lock to check
+        max_age_seconds: Maximum age in seconds before considering lock stale
+        
+    Returns:
+        True if lock was cleared (was stale), False if lock is active or doesn't exist
+    """
+    lock_path = _lock_path(lock_name)
+    
+    if not lock_path.exists():
+        return False  # No lock to clear
+    
+    metadata = _read_lock_metadata(lock_path)
+    if not metadata:
+        # Lock exists but no metadata - assume stale
+        try:
+            lock_path.unlink()
+            _meta_path(lock_path).unlink(missing_ok=True)
+            logger.info(f"Cleared stale lock {lock_name} (no metadata)")
+            return True
+        except OSError as e:
+            logger.warning(f"Failed to clear stale lock {lock_name}: {e}")
+            return False
+    
+    # Check if holder PID is still alive
+    pid = metadata.get("pid")
+    if isinstance(pid, int) and not _is_pid_alive(pid):
+        try:
+            lock_path.unlink()
+            _meta_path(lock_path).unlink(missing_ok=True)
+            logger.info(f"Cleared stale lock {lock_name} (PID {pid} dead)")
+            return True
+        except OSError as e:
+            logger.warning(f"Failed to clear stale lock {lock_name}: {e}")
+            return False
+    
+    # Check if lock is too old
+    timestamp = metadata.get("timestamp")
+    if isinstance(timestamp, (int, float)):
+        age = time.time() - timestamp
+        if age > max_age_seconds:
+            try:
+                lock_path.unlink()
+                _meta_path(lock_path).unlink(missing_ok=True)
+                logger.info(f"Cleared stale lock {lock_name} (age {age:.1f}s > {max_age_seconds}s)")
+                return True
+            except OSError as e:
+                logger.warning(f"Failed to clear stale lock {lock_name}: {e}")
+                return False
+    
+    # Lock is active
+    return False

@@ -236,6 +236,73 @@ def run_parallel_loop(
 
     try:
         while not is_shutting_down():
+            print("\n🔍 Running pre-flight health checks...")
+            run_logger.log_orchestrator("Running pre-flight health checks")
+            
+            # Import and run preflight health checks
+            from pokepoke.config import get_config
+            from pokepoke.preflight_health import run_preflight_checks
+            
+            cfg = get_config()
+            health_config = {
+                'min_disk_space_gb': cfg.preflight_health.min_disk_space_gb,
+                'lock_timeout_seconds': cfg.preflight_health.lock_timeout_seconds,
+                'worktree_test_timeout': cfg.preflight_health.worktree_test_timeout,
+                'max_orphan_worktrees': cfg.preflight_health.max_orphan_worktrees,
+                'git_operation_timeout': cfg.preflight_health.git_operation_timeout,
+                'enable_self_repair': cfg.preflight_health.enable_self_repair,
+                'max_repair_attempts': cfg.preflight_health.max_repair_attempts,
+            }
+            
+            if cfg.preflight_health.enabled:
+                health_result = run_preflight_checks(repo_path=main_repo_path, config=health_config)
+                
+                if not health_result.passed:
+                    print(f"\n❌ Pre-flight health checks failed ({len(health_result.errors)} error(s))")
+                    for error in health_result.errors:
+                        print(f"   • {error.check_name}: {error.message}")
+                    
+                    if health_result.self_repair_attempted:
+                        if health_result.self_repair_successful:
+                            print("✅ Self-repair completed successfully")
+                            run_logger.log_orchestrator("Pre-flight health checks passed after self-repair")
+                        else:
+                            print("❌ Self-repair failed")
+                            run_logger.log_orchestrator("Pre-flight health check self-repair failed", level="ERROR")
+                    
+                    # Check for critical or environmental errors that should stop all work
+                    if health_result.has_critical_errors() and cfg.preflight_health.fail_on_critical_errors:
+                        print(f"\n🚨 Critical health check failures detected - shutting down gracefully")
+                        run_logger.log_orchestrator("Critical health check failures - shutting down", level="ERROR")
+                        exit_code = 1
+                        break
+                    
+                    if health_result.has_environmental_errors() and cfg.preflight_health.fail_on_environmental_errors:
+                        print(f"\n⚠️  Environmental health check failures detected - shutting down gracefully")
+                        run_logger.log_orchestrator("Environmental health check failures - shutting down", level="ERROR")
+                        if cfg.preflight_health.graceful_shutdown_on_failure:
+                            exit_code = 1
+                            break
+                    
+                    # Log warnings for any remaining issues
+                    for warning in health_result.warnings:
+                        print(f"   ⚠️  Warning: {warning}")
+                    
+                    # If we get here and health checks still failed, but no critical/environmental errors, 
+                    # continue but log the issues
+                    if not health_result.passed:
+                        run_logger.log_orchestrator(f"Pre-flight health checks failed but continuing (errors: {len(health_result.errors)})", level="WARNING")
+                else:
+                    print("✅ Pre-flight health checks passed")
+                    run_logger.log_orchestrator("Pre-flight health checks passed")
+                    
+                    # Log any warnings
+                    for warning in health_result.warnings:
+                        print(f"   ℹ️  {warning}")
+            else:
+                print("⏭️  Pre-flight health checks disabled via config")
+                run_logger.log_orchestrator("Pre-flight health checks disabled via config")
+
             print("\n\ud83d\udd0d Checking main repository status...")
             run_logger.log_orchestrator("Checking main repository status")
             if not check_and_commit_main_repo(main_repo_path, run_logger):

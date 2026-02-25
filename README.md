@@ -66,3 +66,77 @@ ai_backend:
 ```
 
 The Copilot adapter remains the default; setting `provider: claude-code` switches to the Claude Code CLI adapter. Worktrees and orchestrator workflows automatically honor the selected provider.
+
+## Pre-flight Health Checks
+
+PokePoke includes a comprehensive pre-flight health check system that runs before each work batch to prevent submission to broken environments. This system addresses issues where broken environments (stale locks, dirty git state) caused silent failures with 0 agent requests.
+
+### Health Checks Performed
+
+1. **Git Status Verification**: Ensures the repository is in a clean state with no uncommitted changes
+2. **Worktree Creation Test**: Verifies that worktrees can be created successfully  
+3. **Lock Availability Check**: Checks that required locks are available and identifies stale locks
+4. **Disk Space Check**: Ensures sufficient disk space is available for worktree operations
+5. **Repository Integrity Check**: Detects orphaned worktrees and other integrity issues
+
+### Automatic Self-Repair
+
+When health check failures are detected, PokePoke can automatically attempt repairs:
+
+- **Clear Stale Locks**: Removes locks where the holder process is no longer running
+- **Reset Dirty Git State**: Auto-commits or stashes uncommitted changes
+- **Prune Orphan Worktrees**: Cleans up worktree directories that are no longer registered
+- **General Cleanup**: Removes temporary files and corrupted lock files
+
+### Error Classification
+
+Health check errors are classified to determine the appropriate response:
+
+- **Environmental Errors**: Stop all work (e.g., insufficient disk space, critical git issues)
+- **Item-Specific Errors**: Skip the current item, continue with others
+- **Recoverable Errors**: Attempt automatic self-repair
+- **Critical Errors**: Immediate graceful shutdown with diagnostics
+
+### Configuration
+
+Configure pre-flight health checks in `.pokepoke/config.yaml`:
+
+```yaml
+preflight_health:
+  enabled: true                     # Enable/disable health checks
+  min_disk_space_gb: 1.0           # Minimum free disk space required
+  lock_timeout_seconds: 30.0       # Timeout for lock operations
+  worktree_test_timeout: 60.0      # Timeout for worktree creation test
+  max_orphan_worktrees: 10         # Maximum orphaned worktrees before error
+  git_operation_timeout: 30.0      # Timeout for git operations
+  enable_self_repair: true         # Enable automatic self-repair
+  max_repair_attempts: 3           # Maximum self-repair attempts per issue
+  fail_on_environmental_errors: true    # Stop on environmental issues
+  fail_on_critical_errors: true         # Stop on critical issues
+  graceful_shutdown_on_failure: true    # Shutdown gracefully vs exit immediately
+```
+
+### Diagnostic Output
+
+When health checks fail, detailed diagnostics are provided:
+
+```
+❌ Pre-flight health checks failed (3 error(s))
+   • git_status_check: Repository has uncommitted changes: 2 files
+   • disk_space_check: Insufficient disk space: 0.5GB free, 1.0GB required
+   • repository_integrity_check: Too many orphaned worktrees: 12 (max: 10)
+
+✅ Self-repair completed successfully
+✅ Pre-flight health checks passed after self-repair
+```
+
+### Integration with Orchestrator
+
+Health checks run automatically in both sequential and parallel orchestrator modes:
+
+1. **Before Work Batch**: Checks run before fetching work from beads
+2. **Self-Repair**: Automatic repair attempts for recoverable issues
+3. **Error Handling**: Appropriate response based on error severity classification
+4. **Graceful Shutdown**: Clean shutdown with diagnostics on unrecoverable failures
+
+The system prevents the scenario where broken environments accept work items but fail silently, ensuring reliable operation and early problem detection.

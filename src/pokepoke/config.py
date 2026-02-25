@@ -119,6 +119,22 @@ class GitConfig:
             return self.default_branch
         return self.fallback_branch
 @dataclass
+class PreflightHealthConfig:
+    """Pre-flight health check configuration."""
+    enabled: bool = True
+    min_disk_space_gb: float = 1.0
+    lock_timeout_seconds: float = 30.0
+    worktree_test_timeout: float = 60.0
+    max_orphan_worktrees: int = 10
+    git_operation_timeout: float = 30.0
+    enable_self_repair: bool = True
+    max_repair_attempts: int = 3
+    fail_on_environmental_errors: bool = True
+    fail_on_critical_errors: bool = True
+    graceful_shutdown_on_failure: bool = True
+
+
+@dataclass
 class AssignmentRuleMatch:
     """Criteria for matching a work item to an assignment rule."""
     issue_type: str | None = None
@@ -157,6 +173,7 @@ class ProjectConfig:
     model_sync: ModelSyncConfig = field(default_factory=ModelSyncConfig)
     mcp_server: MpcServerConfig = field(default_factory=MpcServerConfig)
     git: GitConfig = field(default_factory=GitConfig)
+    preflight_health: PreflightHealthConfig = field(default_factory=PreflightHealthConfig)
     test_data: dict[str, str] = field(default_factory=dict)
     work_artifacts_dir: str | None = None
     max_parallel_agents: int = 1
@@ -226,6 +243,22 @@ class ProjectConfig:
             enabled=watchdog_data.get("enabled", True),
             timeout_seconds=max(60, int(watchdog_data.get("timeout_seconds", 600))),
             check_interval_seconds=max(10, int(watchdog_data.get("check_interval_seconds", 30))),
+        )
+
+        # Preflight health checks
+        health_data = data.get("preflight_health", {})
+        config.preflight_health = PreflightHealthConfig(
+            enabled=health_data.get("enabled", True),
+            min_disk_space_gb=max(0.1, float(health_data.get("min_disk_space_gb", 1.0))),
+            lock_timeout_seconds=max(5.0, float(health_data.get("lock_timeout_seconds", 30.0))),
+            worktree_test_timeout=max(10.0, float(health_data.get("worktree_test_timeout", 60.0))),
+            max_orphan_worktrees=max(0, int(health_data.get("max_orphan_worktrees", 10))),
+            git_operation_timeout=max(5.0, float(health_data.get("git_operation_timeout", 30.0))),
+            enable_self_repair=health_data.get("enable_self_repair", True),
+            max_repair_attempts=max(1, int(health_data.get("max_repair_attempts", 3))),
+            fail_on_environmental_errors=health_data.get("fail_on_environmental_errors", True),
+            fail_on_critical_errors=health_data.get("fail_on_critical_errors", True),
+            graceful_shutdown_on_failure=health_data.get("graceful_shutdown_on_failure", True),
         )
 
         # Maintenance agents
