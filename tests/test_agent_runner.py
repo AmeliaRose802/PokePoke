@@ -1940,3 +1940,113 @@ class TestWorktreeAgentFinallyCleanupException:
         )
         assert stats is None
         mock_add_uncleaned.assert_called_once()
+
+
+class TestGateAgentWithAgentId:
+    """Test gate agent pushes agent status when agent_id is provided (line 88)."""
+
+    @patch('pokepoke.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.PromptService')
+    @patch('pokepoke.agent_runner.terminal_ui')
+    def test_gate_agent_pushes_status_with_agent_id(
+        self, mock_terminal_ui: Mock, mock_service_cls: Mock,
+        mock_invoke: Mock, mock_parse: Mock,
+    ) -> None:
+        """Gate agent should push agent status when agent_id is provided."""
+        work_item = BeadsWorkItem(
+            id="test-123", title="Test Fix", description="Fix",
+            status="in_progress", priority=1, issue_type="bug",
+        )
+
+        mock_service = Mock()
+        mock_service.load_and_render.return_value = "Gate prompt"
+        mock_service_cls.return_value = mock_service
+
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="test-123", success=True,
+            output='```json\n{"status": "success", "message": "OK"}\n```',
+            attempt_count=1,
+        )
+        mock_parse.return_value = None
+
+        success, reason, stats = run_gate_agent(
+            work_item, agent_id="gate-123", parent_agent_id="parent-1",
+        )
+
+        assert success is True
+        mock_terminal_ui.ui.push_agent_status.assert_called()
+        call_kwargs = mock_terminal_ui.ui.push_agent_status.call_args
+        assert call_kwargs[0][0] == "gate-123"
+        assert call_kwargs[1]["parent_agent_id"] == "parent-1"
+        assert call_kwargs[1]["agent_type"] == "gate"
+
+
+class TestWorktreeCleanupPreCleanupRetry:
+    """Test run_worktree_cleanup pre-cleanup retry logic (lines 234-236)."""
+
+    @patch('pokepoke.worktree_cleanup.retry_failed_cleanups', return_value=2)
+    @patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=3)
+    @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
+    @patch('pokepoke.agent_runner._run_main_repo_agent')
+    @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
+    def test_pre_cleanup_retries_failed_worktrees(
+        self, mock_get_prompts: Mock, mock_main_repo: Mock,
+        mock_has_worktrees: Mock, mock_uncleaned: Mock,
+        mock_retry: Mock,
+    ) -> None:
+        """Pre-cleanup should retry failed worktree removals before running agent."""
+        mock_dir = MagicMock()
+        mock_get_prompts.return_value = mock_dir
+        mock_file = Mock()
+        mock_file.exists.return_value = True
+        mock_file.read_text.return_value = "Cleanup prompt"
+        mock_dir.__truediv__.return_value = mock_file
+        mock_main_repo.return_value = None
+
+        from pokepoke.agent_runner import run_worktree_cleanup
+        run_worktree_cleanup()
+
+        mock_retry.assert_called_once()
+        mock_uncleaned.assert_called_once()
+
+
+class TestWorktreeAgentCleanupFailureSetsResultFalse:
+    """Test that cleanup failure sets result.success=False (line 344)."""
+
+    @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
+    @patch('pokepoke.agent_runner.cleanup_worktree')
+    @patch('pokepoke.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agent_runner.run_cleanup_loop')
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.create_worktree')
+    def test_cleanup_loop_failure_forces_result_false(
+        self, mock_create: Mock, mock_invoke: Mock, mock_cleanup_loop: Mock,
+        mock_parse: Mock, mock_cleanup: Mock, mock_handle_merge: Mock,
+    ) -> None:
+        """If cleanup loop returns success=False, overall result should be False."""
+        agent_item = BeadsWorkItem(
+            id="test-item", title="Test", description="Test",
+            status="in_progress", priority=0, issue_type="task",
+            labels=["maintenance"],
+        )
+
+        mock_create.return_value = Path("/fake/worktree")
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="test-item", success=True,
+            output="Completed", attempt_count=1,
+        )
+        # Cleanup loop fails — line 343-344 should set result.success = False
+        mock_cleanup_loop.return_value = (False, 0)
+        mock_parse.return_value = None
+        mock_handle_merge.return_value = (False, False)
+        mock_cleanup.return_value = True
+
+        _run_worktree_agent(
+            "Test", "test-item", agent_item, "Prompt",
+            Path("/fake/repo"),
+        )
+
+        # Despite invoke_copilot returning success=True, the cleanup failure
+        # should have set result.success=False, so no merge is attempted
+        mock_handle_merge.assert_not_called()

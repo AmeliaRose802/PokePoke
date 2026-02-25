@@ -432,3 +432,78 @@ def _mock_merge_lock(monkeypatch):
         "pokepoke.worktree_merge_handler.merge_lock",
         lambda: nullcontext(),
     )
+
+
+# ---------------------------------------------------------------------------
+# Tests for handle_worktree_merge lock timeout and exception paths
+# ---------------------------------------------------------------------------
+
+
+def test_handle_worktree_merge_lock_timeout(monkeypatch) -> None:
+    """Merge lock timeout adds to manifest and returns (False, False) (lines 61-71)."""
+    from filelock import Timeout
+
+    # Override merge_lock to raise Timeout
+    def raise_timeout():
+        raise Timeout("lock_file")
+
+    class TimeoutCtx:
+        def __enter__(self):
+            raise Timeout("lock_file")
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr(
+        "pokepoke.worktree_merge_handler.merge_lock",
+        lambda: TimeoutCtx(),
+    )
+
+    with patch("pokepoke.worktree_merge_handler.add_uncleaned_worktree") as mock_add, \
+         patch("builtins.print"):
+
+        agent_item = _make_agent_item()
+        success, cleaned = handle_worktree_merge(
+            agent_id=agent_item.id,
+            agent_item=agent_item,
+            agent_name="Janitor",
+            worktree_path=Path("C:/worktrees/task-test"),
+            repo_root=Path("C:/repo"),
+            agent_stats=None,
+        )
+
+        assert success is False
+        assert cleaned is False
+        mock_add.assert_called_once()
+        assert "timeout" in mock_add.call_args[0][2].lower()
+
+
+def test_handle_worktree_merge_unexpected_exception(monkeypatch) -> None:
+    """Unexpected exception during merge adds to manifest and returns (False, False) (lines 72-81)."""
+    class ErrorCtx:
+        def __enter__(self):
+            raise RuntimeError("unexpected disk error")
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr(
+        "pokepoke.worktree_merge_handler.merge_lock",
+        lambda: ErrorCtx(),
+    )
+
+    with patch("pokepoke.worktree_merge_handler.add_uncleaned_worktree") as mock_add, \
+         patch("builtins.print"):
+
+        agent_item = _make_agent_item()
+        success, cleaned = handle_worktree_merge(
+            agent_id=agent_item.id,
+            agent_item=agent_item,
+            agent_name="Janitor",
+            worktree_path=Path("C:/worktrees/task-test"),
+            repo_root=Path("C:/repo"),
+            agent_stats=None,
+        )
+
+        assert success is False
+        assert cleaned is False
+        mock_add.assert_called_once()
+        assert "unexpected disk error" in mock_add.call_args[0][2].lower()
