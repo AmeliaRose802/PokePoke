@@ -9,6 +9,10 @@ from pokepoke.copilot_sdk import (
     invoke_copilot_sdk_sync,
     _fail_result,
     _activity_watchdog,
+    _build_token_usage_callback,
+    _maybe_start_activity_watchdog,
+    _cancel_watchdog,
+    _build_copilot_result,
 )
 from pokepoke.types import BeadsWorkItem
 
@@ -189,7 +193,7 @@ class TestInvokeCopilotSDKAsync:
 
     @pytest.fixture(autouse=True)
     def _mock_process_cleanup(self):
-        with patch('pokepoke.copilot_sdk.wait_for_process_cleanup'):
+        with patch('pokepoke.process_utils.wait_for_process_cleanup'):
             yield
 
     @patch('pokepoke.copilot_sdk.CopilotClient')
@@ -1389,3 +1393,166 @@ class TestActivityWatchdog:
         task.cancel()
         result = await task
         assert result is False
+
+
+class TestBuildTokenUsageCallback:
+    """Tests for _build_token_usage_callback."""
+
+    @patch('pokepoke.copilot_sdk.get_context_window', return_value=200000)
+    def test_returns_callable(self, _mock_ctx):
+        callback = _build_token_usage_callback("claude-sonnet-4")
+        assert callable(callback)
+
+    @patch('pokepoke.copilot_sdk.terminal_ui')
+    @patch('pokepoke.copilot_sdk.get_context_window', return_value=200000)
+    def test_callback_pushes_tokens_when_agent_id_set(self, _mock_ctx, mock_ui):
+        callback = _build_token_usage_callback("claude-sonnet-4")
+        mock_thread = MagicMock()
+        mock_thread.agent_id = "agent-1"
+        with patch('pokepoke.desktop_ui._thread_output', mock_thread):
+            callback(100, 50)
+        mock_ui.ui.push_agent_tokens.assert_called_once_with("agent-1", 100, 50, 200000)
+
+    @patch('pokepoke.copilot_sdk.terminal_ui')
+    @patch('pokepoke.copilot_sdk.get_context_window', return_value=200000)
+    def test_callback_noop_when_no_agent_id(self, _mock_ctx, mock_ui):
+        callback = _build_token_usage_callback("claude-sonnet-4")
+        mock_thread = MagicMock(spec=[])  # no agent_id attribute
+        with patch('pokepoke.desktop_ui._thread_output', mock_thread):
+            callback(100, 50)
+        mock_ui.ui.push_agent_tokens.assert_not_called()
+
+
+class TestMaybeStartActivityWatchdog:
+    """Tests for _maybe_start_activity_watchdog."""
+
+    def test_returns_none_task_when_no_logger(self):
+        proj_config = MagicMock()
+        task, abort = _maybe_start_activity_watchdog(None, proj_config)
+        assert task is None
+        assert isinstance(abort, asyncio.Event)
+        assert not abort.is_set()
+
+    def test_returns_none_task_when_watchdog_disabled(self):
+        proj_config = MagicMock()
+        proj_config.activity_watchdog.enabled = False
+        item_logger = MagicMock()
+        task, abort = _maybe_start_activity_watchdog(item_logger, proj_config)
+        assert task is None
+
+    @pytest.mark.asyncio
+    async def test_starts_watchdog_when_enabled(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        log_file.write_text("data")
+        proj_config = MagicMock()
+        proj_config.activity_watchdog.enabled = True
+        proj_config.activity_watchdog.timeout_seconds = 60
+        proj_config.activity_watchdog.check_interval_seconds = 0.05
+        item_logger = MagicMock()
+        item_logger.log_path = str(log_file)
+        task, abort = _maybe_start_activity_watchdog(item_logger, proj_config)
+        assert task is not None
+        assert not task.done()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+
+class TestCancelWatchdog:
+    """Tests for _cancel_watchdog."""
+
+    @pytest.mark.asyncio
+    async def test_cancel_none_is_noop(self):
+        await _cancel_watchdog(None)
+
+    @pytest.mark.asyncio
+    async def test_cancel_done_task_is_noop(self):
+        async def quick():
+            return True
+        task = asyncio.create_task(quick())
+        await task
+        await _cancel_watchdog(task)
+
+    @pytest.mark.asyncio
+    async def test_cancel_running_task(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        log_file.write_text("data")
+        abort = asyncio.Event()
+        task = asyncio.create_task(
+            _activity_watchdog(log_file, timeout_seconds=999, check_interval_seconds=0.05, abort_event=abort)
+        )
+        await asyncio.sleep(0.02)
+        await _cancel_watchdog(task)
+        assert task.done()
+
+
+class TestBuildCopilotResult:
+    """Tests for _build_copilot_result."""
+
+    def _make_stats(self, **overrides):
+        defaults = {
+            "pending_tool_calls": 0,
+            "idle_task": None,
+            "total_input_tokens": 1000,
+            "total_output_tokens": 500,
+            "total_cache_read_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "turn_count": 3,
+            "total_tool_calls": 5,
+            "tried_fallback": False,
+            "current_model": "claude-sonnet-4",
+        }
+        defaults.update(overrides)
+        return defaults
+
+    def _make_work_item(self):
+        return BeadsWorkItem(
+            id="wi-1", title="Test", description="", status="open",
+            priority=2, issue_type="bug", labels=None,
+        )
+
+    def test_success_result(self):
+        result = _build_copilot_result(
+            work_item=self._make_work_item(),
+            output_lines=["line1\n", "line2\n"],
+            errors=[],
+            stats=self._make_stats(),
+            current_model="claude-sonnet-4",
+            total_api_duration=10.0,
+            total_wall_duration=12.0,
+        )
+        assert result.success is True
+        assert result.output == "line1\nline2\n"
+        assert result.error is None
+        assert result.work_item_id == "wi-1"
+        assert result.stats is not None
+        assert result.stats.input_tokens == 1000
+        assert result.stats.output_tokens == 500
+        assert result.stats.tool_calls == 5
+        assert result.model == "claude-sonnet-4"
+
+    def test_failure_result_with_errors(self):
+        result = _build_copilot_result(
+            work_item=self._make_work_item(),
+            output_lines=[],
+            errors=["err1", "err2"],
+            stats=self._make_stats(turn_count=0, total_input_tokens=0),
+            current_model="claude-sonnet-4",
+            total_api_duration=1.0,
+            total_wall_duration=2.0,
+        )
+        assert result.success is False
+        assert result.error == "err1; err2"
+
+    def test_empty_output(self):
+        result = _build_copilot_result(
+            work_item=self._make_work_item(),
+            output_lines=[],
+            errors=[],
+            stats=self._make_stats(turn_count=0, total_input_tokens=0),
+            current_model="m",
+            total_api_duration=0.0,
+            total_wall_duration=0.0,
+        )
+        assert result.success is True
+        assert result.output == ""

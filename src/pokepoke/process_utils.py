@@ -1,8 +1,10 @@
 """Process utilities for SDK client management."""
+import asyncio
 import logging
 import os
 import subprocess
 import time
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -72,3 +74,35 @@ def wait_for_process_cleanup(max_wait: float = 3.0) -> None:
         if check_copilot_processes() == 0:
             return  # All processes cleaned up
         time.sleep(0.1)
+
+
+async def shutdown_copilot_client(client: Any) -> None:
+    """Shut down the Copilot client gracefully with fallbacks."""
+    try:
+        print("\n[SDK] Initiating graceful client shutdown...")
+        await asyncio.sleep(0.5)
+        try:
+            await asyncio.wait_for(client.stop(), timeout=10.0)
+            print("[SDK] Client stopped gracefully")
+            if os.name == "nt":
+                wait_for_process_cleanup(max_wait=2.0)
+        except TimeoutError:
+            print("[SDK] Client stop timed out after 10s - forcing shutdown")
+            try:
+                await asyncio.wait_for(client.stop(), timeout=5.0)
+                if os.name == "nt":
+                    wait_for_process_cleanup(max_wait=1.0)
+            except TimeoutError:
+                logger.warning("Force-killing copilot process after double timeout")
+                try:
+                    await client.force_stop()
+                    if os.name == "nt":
+                        wait_for_process_cleanup(max_wait=1.0)
+                except Exception as force_error:
+                    logger.error(f"Failed to force stop client: {force_error}")
+            except Exception as e:
+                logger.debug(f"Failed to force stop client: {e}")
+    except UnicodeDecodeError:
+        print("[SDK] Client stopped (encoding error suppressed)")
+    except Exception as e:
+        print(f"[SDK] Error stopping client: {e}")

@@ -1,11 +1,16 @@
 """Tests for process_utils module."""
-from unittest.mock import patch, MagicMock
+import asyncio
+from unittest.mock import patch, MagicMock, AsyncMock
 import subprocess
 
 import pytest
 
 import pokepoke.process_utils as process_utils_mod
-from pokepoke.process_utils import check_copilot_processes, wait_for_process_cleanup
+from pokepoke.process_utils import (
+    check_copilot_processes,
+    wait_for_process_cleanup,
+    shutdown_copilot_client,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -133,3 +138,53 @@ class TestWaitForProcessCleanup:
         mock_check.side_effect = [1, 1, 0]
         wait_for_process_cleanup(max_wait=1.0)
         assert mock_check.call_count == 3
+
+
+class TestShutdownCopilotClient:
+    """Tests for shutdown_copilot_client."""
+
+    @pytest.mark.asyncio
+    async def test_graceful_stop(self):
+        client = AsyncMock()
+        client.stop = AsyncMock()
+        with patch('pokepoke.process_utils.os') as mock_os:
+            mock_os.name = 'posix'
+            await shutdown_copilot_client(client)
+        client.stop.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_graceful_stop_with_windows_cleanup(self):
+        client = AsyncMock()
+        client.stop = AsyncMock()
+        with (
+            patch('pokepoke.process_utils.os') as mock_os,
+            patch('pokepoke.process_utils.wait_for_process_cleanup') as mock_cleanup,
+        ):
+            mock_os.name = 'nt'
+            await shutdown_copilot_client(client)
+        mock_cleanup.assert_called_with(max_wait=2.0)
+
+    @pytest.mark.asyncio
+    async def test_timeout_then_force_stop(self):
+        client = AsyncMock()
+        client.stop = AsyncMock(side_effect=asyncio.TimeoutError)
+        client.force_stop = AsyncMock()
+        with patch('pokepoke.process_utils.os') as mock_os:
+            mock_os.name = 'posix'
+            # asyncio.wait_for wraps, so we need to mock at that level
+            with patch('pokepoke.process_utils.asyncio.wait_for', side_effect=TimeoutError):
+                await shutdown_copilot_client(client)
+
+    @pytest.mark.asyncio
+    async def test_unicode_decode_error_suppressed(self):
+        client = AsyncMock()
+        client.stop = AsyncMock(side_effect=UnicodeDecodeError('utf-8', b'', 0, 1, 'err'))
+        with patch('pokepoke.process_utils.asyncio.sleep', new_callable=AsyncMock):
+            await shutdown_copilot_client(client)
+
+    @pytest.mark.asyncio
+    async def test_generic_exception_handled(self):
+        client = AsyncMock()
+        client.stop = AsyncMock(side_effect=RuntimeError("boom"))
+        with patch('pokepoke.process_utils.asyncio.sleep', new_callable=AsyncMock):
+            await shutdown_copilot_client(client)

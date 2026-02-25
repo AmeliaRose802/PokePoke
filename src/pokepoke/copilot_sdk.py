@@ -4,6 +4,7 @@ import contextlib
 import logging
 import os
 from pathlib import Path
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 try:
@@ -16,8 +17,8 @@ from .types import BeadsWorkItem, CopilotResult, RetryConfig, AgentStats
 from .prompts import PromptService
 from . import terminal_ui
 from .shutdown import is_shutting_down
-from .process_utils import wait_for_process_cleanup
-from .sdk_event_handler import create_event_handler
+from .process_utils import shutdown_copilot_client
+from .sdk_event_handler import create_event_handler, SessionStats
 from .model_pricing import get_context_window
 
 logger = logging.getLogger(__name__)
@@ -114,6 +115,87 @@ def _fail_result(work_item_id: str, error: str) -> CopilotResult:
     return CopilotResult(work_item_id=work_item_id, success=False, error=error, attempt_count=1)
 
 
+def _build_token_usage_callback(current_model: str) -> Callable[[int, int], None]:
+    """Create a token-usage callback that pushes live stats to the agent card."""
+    context_limit = get_context_window(current_model)
+
+    def _on_token_usage(input_tokens: int, output_tokens: int) -> None:
+        from .desktop_ui import _thread_output
+        agent_id: str | None = getattr(_thread_output, "agent_id", None)
+        if agent_id:
+            terminal_ui.ui.push_agent_tokens(agent_id, input_tokens, output_tokens, context_limit)
+
+    return _on_token_usage
+
+
+def _maybe_start_activity_watchdog(
+    item_logger: "ItemLogger | None",
+    proj_config: Any,
+) -> tuple[asyncio.Task[bool] | None, asyncio.Event]:
+    """Start the activity watchdog if enabled, returning (task, abort_event)."""
+    watchdog_abort: asyncio.Event = asyncio.Event()
+    watchdog_task: asyncio.Task[bool] | None = None
+
+    if item_logger and proj_config.activity_watchdog.enabled:
+        log_path = Path(item_logger.log_path)
+        watchdog_task = asyncio.create_task(
+            _activity_watchdog(
+                log_path,
+                float(proj_config.activity_watchdog.timeout_seconds),
+                float(proj_config.activity_watchdog.check_interval_seconds),
+                watchdog_abort,
+            )
+        )
+        print(f"[SDK] Activity watchdog enabled (timeout: {proj_config.activity_watchdog.timeout_seconds}s)\n")
+
+    return watchdog_task, watchdog_abort
+
+
+async def _cancel_watchdog(watchdog_task: asyncio.Task[bool] | None) -> None:
+    """Cancel watchdog task if it is still running."""
+    if watchdog_task and not watchdog_task.done():
+        watchdog_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await watchdog_task
+
+
+def _build_copilot_result(
+    work_item: BeadsWorkItem,
+    output_lines: list[str],
+    errors: list[str],
+    stats: SessionStats,
+    current_model: str,
+    total_api_duration: float,
+    total_wall_duration: float,
+) -> CopilotResult:
+    """Assemble the final CopilotResult and print summary statistics."""
+    output_text = "".join(output_lines)
+    success = len(errors) == 0
+    print(f"\n{'='*60}\n[SDK] Result: {'SUCCESS' if success else 'FAILURE'}\n{'='*60}")
+    if stats["turn_count"] > 0 or stats["total_input_tokens"] > 0:
+        print(
+            f"\n📊 Stats: {stats['turn_count']} turns, "
+            f"{stats['total_input_tokens']:,}+{stats['total_output_tokens']:,} tokens"
+        )
+    agent_stats = AgentStats(
+        input_tokens=stats["total_input_tokens"],
+        output_tokens=stats["total_output_tokens"],
+        premium_requests=stats["turn_count"],
+        tool_calls=stats["total_tool_calls"],
+        api_duration=total_api_duration,
+        wall_duration=total_wall_duration,
+    )
+    return CopilotResult(
+        work_item_id=work_item.id,
+        success=success,
+        output=output_text,
+        error="; ".join(errors) if errors else None,
+        attempt_count=1,
+        stats=agent_stats,
+        model=current_model,
+    )
+
+
 async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     work_item: BeadsWorkItem,
     prompt: str | None = None,
@@ -167,16 +249,11 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         errors: list[str] = []
 
         # Build a token-usage callback that pushes live stats to the agent card.
-        context_limit = get_context_window(current_model)
-        def _on_token_usage(input_tokens: int, output_tokens: int) -> None:
-            from .desktop_ui import _thread_output
-            agent_id: str | None = getattr(_thread_output, "agent_id", None)
-            if agent_id:
-                terminal_ui.ui.push_agent_tokens(agent_id, input_tokens, output_tokens, context_limit)
+        on_token_usage = _build_token_usage_callback(current_model)
 
         handle_event, stats = create_event_handler(
             done, output_lines, errors, item_logger, idle_timeout,
-            on_token_usage=_on_token_usage,
+            on_token_usage=on_token_usage,
         )
         stats['current_model'] = current_model
 
@@ -188,18 +265,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         total_api_duration = 0.0
 
         # Setup activity watchdog
-        watchdog_abort = asyncio.Event()
-        if item_logger and proj_config.activity_watchdog.enabled:
-            log_path = Path(item_logger.log_path)
-            watchdog_task = asyncio.create_task(
-                _activity_watchdog(
-                    log_path,
-                    float(proj_config.activity_watchdog.timeout_seconds),
-                    float(proj_config.activity_watchdog.check_interval_seconds),
-                    watchdog_abort
-                )
-            )
-            print(f"[SDK] Activity watchdog enabled (timeout: {proj_config.activity_watchdog.timeout_seconds}s)\n")
+        watchdog_task, watchdog_abort = _maybe_start_activity_watchdog(item_logger, proj_config)
 
         async def send_with_retry() -> bool:
             """Send message, returns True if should retry with fallback model."""
@@ -275,12 +341,6 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             if needs_retry:
                 await send_with_retry()
 
-        # Cancel watchdog if it's still running
-        if watchdog_task and not watchdog_task.done():
-            watchdog_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await watchdog_task
-
         # Handle timeout/interrupt cases
         if activity_timeout:
             return _fail_result(work_item.id, f"Activity timeout: no output for {proj_config.activity_watchdog.timeout_seconds}s")
@@ -291,20 +351,14 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             return _fail_result(work_item.id, error)
 
         await session.destroy()
-        output_text = "".join(output_lines)
-        success = len(errors) == 0
-        print(f"\n{'='*60}\n[SDK] Result: {'SUCCESS' if success else 'FAILURE'}\n{'='*60}")
-        if stats['turn_count'] > 0 or stats['total_input_tokens'] > 0:
-            print(f"\n📊 Stats: {stats['turn_count']} turns, {stats['total_input_tokens']:,}+{stats['total_output_tokens']:,} tokens")
-        agent_stats = AgentStats(
-            input_tokens=stats['total_input_tokens'], output_tokens=stats['total_output_tokens'],
-            premium_requests=stats['turn_count'], tool_calls=stats['total_tool_calls'],
-            api_duration=total_api_duration, wall_duration=total_wall_duration,
-        )
-        return CopilotResult(
-            work_item_id=work_item.id, success=success, output=output_text,
-            error="; ".join(errors) if errors else None,
-            attempt_count=1, stats=agent_stats, model=current_model,
+        return _build_copilot_result(
+            work_item=work_item,
+            output_lines=output_lines,
+            errors=errors,
+            stats=stats,
+            current_model=current_model,
+            total_api_duration=total_api_duration,
+            total_wall_duration=total_wall_duration,
         )
 
     except KeyboardInterrupt:
@@ -315,40 +369,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         print(f"\n[SDK] Exception: {e}")
         return _fail_result(work_item.id, f"SDK exception: {e}")
     finally:
-        # Ensure watchdog is cancelled
-        if watchdog_task and not watchdog_task.done():
-            watchdog_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await watchdog_task
-
-        try:
-            print("\n[SDK] Initiating graceful client shutdown...")
-            await asyncio.sleep(0.5)
-            try:
-                await asyncio.wait_for(client.stop(), timeout=10.0)
-                print("[SDK] Client stopped gracefully")
-                if os.name == 'nt':
-                    wait_for_process_cleanup(max_wait=2.0)
-            except TimeoutError:
-                print("[SDK] Client stop timed out after 10s - forcing shutdown")
-                try:
-                    await asyncio.wait_for(client.stop(), timeout=5.0)
-                    if os.name == 'nt':
-                        wait_for_process_cleanup(max_wait=1.0)
-                except TimeoutError:
-                    logger.warning("Force-killing copilot process after double timeout")
-                    try:
-                        await client.force_stop()
-                        if os.name == 'nt':
-                            wait_for_process_cleanup(max_wait=1.0)
-                    except Exception as force_error:
-                        logger.error(f"Failed to force stop client: {force_error}")
-                except Exception as e:
-                    logger.debug(f"Failed to force stop client: {e}")
-        except UnicodeDecodeError:
-            print("[SDK] Client stopped (encoding error suppressed)")
-        except Exception as e:
-            print(f"[SDK] Error stopping client: {e}")
+        await _cancel_watchdog(watchdog_task)
+        await shutdown_copilot_client(client)
 
 
 def invoke_copilot_sdk_sync(  # type: ignore[no-any-unimported]
