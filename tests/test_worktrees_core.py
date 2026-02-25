@@ -522,5 +522,6 @@ class TestCleanupWorktree:
         )
         mock_list.return_value = []
 
-        # Should handle gracefully
+        # Should handle gracefully and return True (worktree already gone)
         result = cleanup_worktree('nonexistent')
+        assert result is True
