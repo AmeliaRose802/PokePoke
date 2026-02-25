@@ -170,6 +170,35 @@ class TestPickRepoDirectory:
         result = repo_picker.pick_repo_directory()
         assert result is None
 
+    def test_tkinter_tclerror_fallback(self, tmp_path: Path, monkeypatch) -> None:
+        """Fallback to console when tkinter fails to initialize (headless)."""
+        from pokepoke import repo_picker
+
+        class FakeTclError(Exception):
+            pass
+
+        class FakeTkModule:
+            TclError = FakeTclError
+
+            class Tk:
+                def __init__(self, *args, **kwargs):
+                    raise FakeTclError("no display")
+
+        mock_tk = FakeTkModule()
+
+        monkeypatch.setitem(sys.modules, "tkinter", mock_tk)
+        monkeypatch.setitem(sys.modules, "tkinter.filedialog", MagicMock())
+        monkeypatch.setitem(sys.modules, "tkinter.ttk", MagicMock())
+
+        inputs = iter([str(tmp_path)])
+        monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+        result = repo_picker.pick_repo_directory()
+
+        assert result is not None
+        assert result.repo_path == tmp_path.resolve()
+        assert result.max_agents == 1
+
     def test_console_fallback_quit(self, monkeypatch) -> None:
         """Test console fallback when tkinter is unavailable and user quits."""
         from pokepoke import repo_picker
