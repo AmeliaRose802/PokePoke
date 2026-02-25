@@ -70,6 +70,54 @@ class RunLogger:
         with open(self.orchestrator_log_path, 'a', encoding='utf-8') as f:
             f.write(f"[{timestamp}] [{level}] {message}\n")
 
+    def _get_item_dir(self, item_id: str) -> Path:
+        """Return the per-item log directory, creating it if needed."""
+        safe_id = item_id.replace('/', '_').replace('\\', '_')
+        item_dir = self.item_logs_dir / safe_id
+        item_dir.mkdir(exist_ok=True)
+        return item_dir
+
+    def start_item_phase_log(
+        self,
+        item_id: str,
+        item_title: str,
+        phase: str,
+        attempt: int = 1,
+        agent_name: str | None = None,
+    ) -> 'ItemLogger':
+        """Start logging for a specific work item phase/attempt.
+
+        Args:
+            item_id: Work item ID
+            item_title: Work item title
+            phase: Logical phase name (e.g. "work", "cleanup", "gate")
+            attempt: 1-based attempt counter for this phase
+            agent_name: Name of the agent handling this item (defaults to current agent)
+
+        Returns:
+            ItemLogger instance for the work item phase
+        """
+        if agent_name is None:
+            # Defer import to avoid circular dependency at module load
+            from pokepoke.agent_context import get_agent_name
+
+            agent_name = get_agent_name(default="agent")
+
+        item_dir = self._get_item_dir(item_id)
+        safe_phase = phase.lower()
+        attempt_index = attempt if attempt >= 1 else 1
+        phase_item_id = f"{item_id}__{safe_phase}_attempt_{attempt_index}"
+        if agent_name:
+            safe_agent = ItemLogger._sanitize_agent_component(agent_name)
+            phase_item_id = f"{phase_item_id}_{safe_agent}"
+
+        return ItemLogger(
+            item_dir,
+            phase_item_id,
+            item_title,
+            agent_name=agent_name,
+        )
+
     def start_item_log(
         self,
         item_id: str,
