@@ -351,6 +351,10 @@ class TestIsWorktreeMerged:
 class TestMergeWorktree:
     """Tests for merge_worktree function."""
 
+    @patch('pokepoke.worktrees.cleanup_after_merge')
+    @patch('pokepoke.worktrees.is_worktree_merged')
+    @patch('pokepoke.worktrees._run_git')
+    @patch('pokepoke.worktrees.validate_post_merge')
     @patch('pokepoke.worktrees.get_default_branch')
     @patch('pokepoke.worktrees.is_worktree_clean')
     @patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo')
@@ -361,12 +365,20 @@ class TestMergeWorktree:
         mock_sync,
         mock_is_clean,
         mock_default_branch,
+        mock_validate,
+        mock_run_git,
+        mock_is_merged,
+        mock_cleanup,
     ) -> None:
         """Successfully merge worktree."""
         mock_default_branch.return_value = 'main'
         mock_is_clean.return_value = True
         mock_sync.return_value = True
         mock_execute.return_value = (True, '', [])
+        mock_validate.return_value = True
+        mock_run_git.return_value = Mock(returncode=0, stdout='')
+        mock_is_merged.return_value = True
+        mock_cleanup.return_value = None
 
         success, conflicts = merge_worktree('item-1')
 
@@ -427,31 +439,39 @@ class TestMergeWorktree:
         assert success is False
         assert conflicts == conflict_files
 
+    @patch('pokepoke.worktrees.cleanup_after_merge')
+    @patch('pokepoke.worktrees.is_worktree_merged')
+    @patch('pokepoke.worktrees._run_git')
+    @patch('pokepoke.worktrees.validate_post_merge')
     @patch('pokepoke.worktrees.get_default_branch')
     @patch('pokepoke.worktrees.is_worktree_clean')
     @patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo')
     @patch('pokepoke.worktrees.execute_merge_sequence')
-    @patch('pokepoke.worktrees.run_bd_sync_with_retry')
-    @patch('pokepoke.worktrees.validate_post_merge')
     def test_merge_worktree_cleanup(
         self,
-        mock_validate,
-        mock_bd_sync,
         mock_execute,
         mock_sync,
         mock_is_clean,
         mock_default_branch,
+        mock_validate,
+        mock_run_git,
+        mock_is_merged,
+        mock_cleanup,
     ) -> None:
         """Call cleanup_after_merge when cleanup=True."""
         mock_default_branch.return_value = 'main'
         mock_is_clean.return_value = True
         mock_sync.return_value = True
         mock_execute.return_value = (True, '', [])
-        mock_validate.return_value = (True, [])
+        mock_validate.return_value = True
+        mock_run_git.return_value = Mock(returncode=0, stdout='')
+        mock_is_merged.return_value = True
+        mock_cleanup.return_value = None
 
         success, _ = merge_worktree('item-1', cleanup=True)
 
         assert success is True
+        mock_cleanup.assert_called_once()
 
 
 class TestListWorktrees:
@@ -469,9 +489,15 @@ class TestListWorktrees:
     @patch('pokepoke.worktrees._run_git')
     def test_list_worktrees_parsing(self, mock_run_git) -> None:
         """Parse git worktree list output correctly."""
+        # git worktree list --porcelain format
         mock_run_git.return_value = Mock(
-            stdout='{"path":"/repo/main","branch":"refs/heads/main","detached":false}\n'
-                   '{"path":"/repo/worktrees/task-1","branch":"refs/heads/task/task-1","detached":false}\n',
+            stdout='worktree /repo/main\n'
+                   'branch refs/heads/main\n'
+                   'HEAD abcd1234\n'
+                   '\n'
+                   'worktree /repo/worktrees/task-1\n'
+                   'branch refs/heads/task/task-1\n'
+                   'HEAD efgh5678\n',
             returncode=0
         )
 
@@ -494,24 +520,25 @@ class TestListWorktrees:
 class TestCleanupWorktree:
     """Tests for cleanup_worktree function."""
 
-    @patch('pokepoke.worktrees._run_git')
-    @patch('pokepoke.worktrees.list_worktrees')
     @patch('pokepoke.worktrees.remove_from_manifest')
+    @patch('pokepoke.worktrees.list_worktrees')
+    @patch('pokepoke.worktrees._run_git')
     def test_cleanup_worktree_success(
-        self, mock_remove_manifest, mock_list, mock_run_git
+        self, mock_run_git, mock_list, mock_remove_manifest
     ) -> None:
         """Successfully cleanup a worktree."""
-        mock_run_git.return_value = Mock(returncode=0, stdout='')
         mock_list.return_value = []
+        mock_run_git.return_value = Mock(returncode=0, stdout='')
 
         result = cleanup_worktree('item-1')
 
-        # Should remove the worktree
-        call_args = mock_run_git.call_args[0][0] if mock_run_git.called else []
-        if call_args:
-            assert 'git' in call_args
-            assert 'worktree' in call_args
-            assert 'remove' in call_args
+        assert result is True
+        # Should attempt to delete branch
+        # Last call should be git branch -d
+        assert mock_run_git.call_count >= 1
+        last_call = mock_run_git.call_args_list[-1]
+        assert 'branch' in last_call[0][0]
+        assert '-d' in last_call[0][0]
 
     @patch('pokepoke.worktrees._run_git')
     @patch('pokepoke.worktrees.list_worktrees')
