@@ -1027,7 +1027,7 @@ class TestDynamicParallelCeiling:
 
             mock_logger.warning.assert_called_once()
             warning_msg = mock_logger.warning.call_args[0][0]
-            assert "exceeds default ceiling" in warning_msg
+            assert "exceeds ceiling" in warning_msg
 
 
 class TestRequestSpawnAgent:
@@ -1171,11 +1171,11 @@ class TestParallelReplenishmentBug:
     @patch("pokepoke.parallel._collect_done_futures")
     @patch("pokepoke.parallel.process_work_item")
     @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=10)
-    def test_success_does_not_block_replenishment_non_continuous(
+    def test_success_does_not_block_replenishment_continuous(
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
-        """A successful agent must not prevent other slots from being filled.
+        """A successful agent must not prevent other slots from being filled in continuous mode.
 
         Regression for PokePoke-8o4o: when any_success=True the loop used to
         break before replenishing the remaining (max - active) empty slots.
@@ -1213,6 +1213,66 @@ class TestParallelReplenishmentBug:
         assert second_count == 10, (
             f"Replenishment count should be 10 even after success, got {second_count}"
         )
+
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.parallel.time.sleep")
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.set_executor")
+    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.parallel.is_shutting_down")
+    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.parallel.get_ready_work_items")
+    @patch("pokepoke.parallel.select_multiple_items")
+    @patch("pokepoke.parallel._collect_done_futures")
+    @patch("pokepoke.parallel.process_work_item")
+    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=2)
+    def test_single_shot_stops_replenishing_after_success(
+        self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
+        mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
+    ) -> None:
+        """Non-continuous runs stop launching new work after the first success.
+
+        Once any worker succeeds, the parallel loop should refrain from
+        replenishing additional items and instead drain the remaining
+        in-flight workers before exiting.
+        """
+        items = [_make_item(f"item-{i}") for i in range(3)]
+        mock_ready.return_value = items
+
+        call_idx = [0]
+
+        def collect_side(futures, failed, total, stats, logger, record_fn):
+            call_idx[0] += 1
+            if call_idx[0] == 1:
+                # First iteration: no completions yet.
+                return (total, False)
+            if call_idx[0] == 2:
+                # Second iteration: both active workers complete and at least
+                # one succeeds; all slots are now free.
+                futures.clear()
+                return (total + 2, True)
+            return (total, False)
+
+        mock_collect.side_effect = collect_side
+        mock_sel.side_effect = [items[:2], items[2:3]]
+        # Provide enough values: the wait loop (lines 358-362) calls
+        # is_shutting_down() up to 10 times per iteration.
+        mock_shut.side_effect = [False] * 22 + [True] * 5
+        mock_pwi.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
+
+        stats = SessionStats(agent_stats=AgentStats())
+        code = run_parallel_loop(
+            effective_parallel=2, mode_name="Autonomous",
+            main_repo_path="/repo", failed_claim_ids=set(),
+            session_stats=stats, start_time=time.time(),
+            run_logger=Mock(), continuous=False,
+            record_fn=Mock(), finalize_fn=Mock(),
+        )
+
+        assert code == 0
+        # Only the initial replenishment should occur; after success, no new
+        # items should be selected even though slots are available.
+        assert mock_sel.call_count == 1
 
     def test_collect_done_futures_second_sweep_catches_concurrent_completions(
         self,
