@@ -146,14 +146,12 @@ class TestProcessWorkItem:
     @patch('os.getcwd')
     @patch('pokepoke.workflow.create_worktree')
     @patch('pokepoke.workflow.assign_and_sync_item', return_value=True)
-    @patch('pokepoke.workflow.worktree_setup_lock')
     @patch('pokepoke.workflow.invoke_copilot')
     @patch('builtins.input')
     def test_process_work_item_success_no_parent(
         self,
         mock_input: Mock,
         mock_invoke: Mock,
-        mock_wt_lock: Mock,
         mock_assign: Mock,
         mock_create_wt: Mock,
         mock_getcwd: Mock,
@@ -228,12 +226,10 @@ class TestProcessWorkItem:
     @patch('os.getcwd')
     @patch('pokepoke.workflow.create_worktree')
     @patch('pokepoke.workflow.assign_and_sync_item', return_value=True)
-    @patch('pokepoke.workflow.worktree_setup_lock')
     @patch('pokepoke.workflow.invoke_copilot')
     def test_process_work_item_success_with_parent(
         self,
         mock_invoke: Mock,
-        mock_wt_lock: Mock,
         mock_assign: Mock,
         mock_create_wt: Mock,
         mock_getcwd: Mock,
@@ -305,12 +301,10 @@ class TestProcessWorkItem:
     @patch('os.getcwd')
     @patch('pokepoke.workflow.create_worktree')
     @patch('pokepoke.workflow.assign_and_sync_item', return_value=True)
-    @patch('pokepoke.workflow.worktree_setup_lock')
     @patch('pokepoke.workflow.invoke_copilot')
     def test_process_work_item_failure(
         self,
         mock_invoke: Mock,
-        mock_wt_lock: Mock,
         mock_assign: Mock,
         mock_create_wt: Mock,
         mock_getcwd: Mock,
@@ -378,12 +372,10 @@ class TestProcessWorkItem:
     @patch('pokepoke.workflow.cleanup_worktree')
     @patch('pokepoke.workflow.invoke_copilot')
     @patch('pokepoke.workflow.assign_and_sync_item', return_value=True)
-    @patch('pokepoke.workflow.worktree_setup_lock')
     @patch('pokepoke.workflow.create_worktree')
     def test_process_work_item_cleans_worktree_on_unhandled_exception(
         self,
         mock_create_wt: Mock,
-        mock_wt_lock: Mock,
         mock_assign: Mock,
         mock_invoke: Mock,
         mock_cleanup: Mock,
