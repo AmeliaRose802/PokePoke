@@ -22,12 +22,80 @@ export function formatTotalTokens(stats: SessionStats | null): string {
   return formatTokens(totalTokens);
 }
 
+/**
+ * Format duration in seconds to a readable string with proper decimal handling.
+ * 
+ * Rules:
+ * - Under 1 minute: 2 decimal places (e.g., '12.45s'), removing trailing zeros
+ * - 1-10 minutes: Show with decimal (e.g., '2.0m', '5.2m')
+ * - 10-60 minutes: Show as whole minutes when whole number (e.g., '12m'), with decimal otherwise
+ * - Over 1 hour: h:m format (e.g., '1h 0m', '1h 23m') for better readability
+ */
 export function formatDurationShort(seconds: number | undefined): string {
   if (!Number.isFinite(seconds ?? 0)) return "0s";
   const value = Math.max(0, seconds ?? 0);
-  if (value < 60) return `${value.toFixed(0)}s`;
-  if (value < 3600) return `${(value / 60).toFixed(1)}m`;
-  return `${(value / 3600).toFixed(1)}h`;
+  
+  if (value < 60) {
+    // Under 1 minute: 2 decimal places, remove trailing zeros
+    const formatted = value.toFixed(2);
+    return `${removeTrailingZeros(formatted)}s`;
+  }
+  
+  if (value < 3600) {
+    // 1-60 minutes: format with precision
+    const minutes = value / 60;
+    
+    if (minutes < 10) {
+      // For minutes < 10, always show with at least one decimal
+      const formatted = minutes.toFixed(1);
+      return `${removeTrailingZeros(formatted, true)}m`;
+    } else {
+      // For minutes >= 10, show as whole number if exact, otherwise with decimals
+      if (Number.isInteger(minutes)) {
+        return `${minutes}m`;
+      }
+      const formatted = minutes.toFixed(1);
+      return `${removeTrailingZeros(formatted, true)}m`;
+    }
+  }
+  
+  // Over 1 hour: use h:m format for readability
+  const hours = Math.floor(value / 3600);
+  const remainingSeconds = value % 3600;
+  const minutes = Math.round(remainingSeconds / 60);
+  
+  if (minutes === 60) {
+    return `${hours + 1}h 0m`;
+  }
+  
+  return `${hours}h ${minutes}m`;
+}
+
+/**
+ * Remove trailing zeros and unnecessary decimal points from a number string.
+ * When keepOneDecimal=true: keeps at least ".0" if the original had a decimal (e.g., "2.0" stays "2.0", "2.50" becomes "2.5")
+ * When keepOneDecimal=false: removes all trailing zeros (e.g., "51.00" becomes "51", "51.70" becomes "51.7")
+ */
+function removeTrailingZeros(numStr: string, keepOneDecimal: boolean = false): string {
+  if (!numStr.includes('.')) {
+    return numStr;
+  }
+  
+  // Split into whole and decimal parts
+  const [whole, decimal] = numStr.split('.');
+  
+  // Remove trailing zeros
+  const trimmed = decimal.replace(/0+$/, '');
+  
+  if (trimmed.length === 0) {
+    // No decimal part left after removing zeros
+    if (keepOneDecimal) {
+      return `${whole}.0`;
+    }
+    return whole;
+  }
+  
+  return `${whole}.${trimmed}`;
 }
 
 export function formatDurationWithSpread(

@@ -1,13 +1,55 @@
 import { describe, expect,it } from 'vitest';
 
 import type { ModelHistoryEntry, ModelPerformanceSummary, SessionStats } from '../types';
-import { aggregateHistory, buildCompletionSeries, buildSuccessRateSeries, formatDurationWithSpread, getCompletedItems, getDoneCount, inferCurrentModel } from './stats';
+import { aggregateHistory, buildCompletionSeries, buildSuccessRateSeries, formatDurationShort, formatDurationWithSpread, getCompletedItems, getDoneCount, inferCurrentModel } from './stats';
 
 describe('stats helpers', () => {
+  describe('formatDurationShort', () => {
+    it('formats seconds with 2 decimal places, removing trailing zeros', () => {
+      // The bug example: 51.768338680267334s should become ~51.77s
+      expect(formatDurationShort(51.768338680267334)).toBe('51.77s');
+      expect(formatDurationShort(12.45)).toBe('12.45s');
+      expect(formatDurationShort(5.001)).toBe('5s');  // 5.00 -> remove zeros -> 5
+      expect(formatDurationShort(5.5)).toBe('5.5s');
+    });
+
+    it('removes trailing zeros from seconds', () => {
+      expect(formatDurationShort(51.7)).toBe('51.7s');
+      expect(formatDurationShort(10)).toBe('10s');
+      expect(formatDurationShort(5.1)).toBe('5.1s');
+    });
+
+    it('formats minutes with 1 decimal place minimum', () => {
+      expect(formatDurationShort(120)).toBe('2.0m');
+      expect(formatDurationShort(150)).toBe('2.5m');
+      expect(formatDurationShort(130)).toBe('2.2m');
+      expect(formatDurationShort(125)).toBe('2.1m');
+    });
+
+    it('removes trailing zeros from minutes (except one decimal when < 10m)', () => {
+      expect(formatDurationShort(600)).toBe('10m');  // 10m exactly shows without decimal
+      expect(formatDurationShort(630)).toBe('10.5m');
+      expect(formatDurationShort(120)).toBe('2.0m');  // < 10m shows with decimal
+    });
+
+    it('formats hours with h m format', () => {
+      expect(formatDurationShort(3600)).toBe('1h 0m');
+      expect(formatDurationShort(3660)).toBe('1h 1m');
+      expect(formatDurationShort(5400)).toBe('1h 30m');
+      expect(formatDurationShort(7200)).toBe('2h 0m');
+    });
+
+    it('handles edge cases', () => {
+      expect(formatDurationShort(0)).toBe('0s');
+      expect(formatDurationShort(undefined)).toBe('0s');
+      expect(formatDurationShort(NaN)).toBe('0s');
+    });
+  });
+
   describe('formatDurationWithSpread', () => {
     it('shows median ±stddev when stddev is non-zero', () => {
       // 2610s = 43.5m, 720s = 12.0m
-      expect(formatDurationWithSpread(2610, 720)).toBe('43.5m ±12.0m');
+      expect(formatDurationWithSpread(2610, 720)).toBe('43.5m ±12m');
     });
 
     it('shows only median when stddev is zero', () => {
@@ -23,13 +65,14 @@ describe('stats helpers', () => {
     });
 
     it('handles hours-range values', () => {
-      expect(formatDurationWithSpread(7200, 3600)).toBe('2.0h ±1.0h');
+      expect(formatDurationWithSpread(7200, 3600)).toBe('2h 0m ±1h 0m');
     });
 
     it('handles undefined median', () => {
       expect(formatDurationWithSpread(undefined, 10)).toBe('0s ±10s');
     });
   });
+
 
   describe('getCompletedItems', () => {
     it('dedupes by id and ignores missing ids', () => {
