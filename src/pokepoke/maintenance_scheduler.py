@@ -8,6 +8,7 @@ or could produce duplicate work (like Beta Tester filing the same issues twice).
 import contextlib
 import logging
 import threading
+import typing
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -74,7 +75,7 @@ class MaintenanceScheduler:
         return self._locks[agent_name]
 
     @contextlib.contextmanager
-    def _track_running_agent(self, agent_name: str):
+    def _track_running_agent(self, agent_name: str) -> typing.Generator[None, None, None]:
         """Context manager to track a running agent and auto-unregister on exit."""
         with self._running_agents_lock:
             self._running_agents.add(agent_name)
