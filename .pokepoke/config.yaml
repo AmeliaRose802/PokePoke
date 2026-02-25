@@ -23,6 +23,18 @@ models:
     - gpt-5.2
     - gpt-5.2-codex
 
+# Copilot model discovery sync (creates beads items for new beta models)
+model_sync:
+  enabled: true
+  interval_minutes: 60
+  beta_only: true
+  include_preview: true
+  prune_unavailable: false
+  create_beads_items: true
+  issue_type: task
+  priority: 2
+  labels: [model, beta, copilot]
+
 # Git branch configuration
 git:
   default_branch: master
@@ -77,6 +89,13 @@ maintenance:
       prompt_file: worktree-cleanup.md
       frequency: 2  # Run every 2 items instead of 4 to handle locked worktrees faster
       needs_worktree: false
+      enabled: true
+
+    - name: Model Sync
+      prompt_file: ""
+      frequency: 1
+      needs_worktree: false
+      merge_changes: false
       enabled: true
 
 # Project-specific test data for prompt templates

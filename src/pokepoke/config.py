@@ -3,11 +3,11 @@
 Loads project-specific settings from .pokepoke/config.yaml, allowing PokePoke
 to be used generically on any project without hardcoded values.
 """
-
-
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from pokepoke.model_sync_config import ModelSyncConfig, parse_model_sync_config
 
 try:
     import yaml  # type: ignore[import-untyped]
@@ -16,8 +16,6 @@ except ImportError:
     HAS_YAML = False
 
 import json
-
-
 # Default model identifiers (single source of truth)
 DEFAULT_MODEL = "claude-opus-4.6"
 FALLBACK_MODEL = "claude-sonnet-4.5"
@@ -29,16 +27,12 @@ class ModelConfig:
     default: str = DEFAULT_MODEL
     fallback: str = FALLBACK_MODEL
     candidate_models: list[str] = field(default_factory=list)
-
-
 @dataclass
 class AIBackendConfig:
     """AI backend configuration."""
     provider: str = "copilot"
     copilot_cli_path: str = "copilot.cmd"
     claude_code_cli_path: str = "claude"
-
-
 @dataclass
 class MaintenanceAgentConfig:
     """Configuration for a single maintenance agent."""
@@ -49,8 +43,6 @@ class MaintenanceAgentConfig:
     merge_changes: bool = True
     model: str | None = None
     enabled: bool = True
-
-
 @dataclass
 class MaintenanceConfig:
     """Maintenance agent scheduling configuration."""
@@ -100,17 +92,20 @@ class MaintenanceConfig:
                 frequency=4,
                 needs_worktree=False,
             ),
+            MaintenanceAgentConfig(
+                name="Model Sync",
+                prompt_file="",
+                frequency=1,
+                needs_worktree=False,
+                merge_changes=False,
+            ),
         ])
-
-
 @dataclass
 class MpcServerConfig:
     """MCP server configuration."""
     enabled: bool = False
     restart_script: str | None = None
     name: str | None = None
-
-
 @dataclass
 class GitConfig:
     """Git-related configuration."""
@@ -122,25 +117,18 @@ class GitConfig:
         if self.default_branch:
             return self.default_branch
         return self.fallback_branch
-
-
-
 @dataclass
 class AssignmentRuleMatch:
     """Criteria for matching a work item to an assignment rule."""
     issue_type: str | None = None
     labels: list[str] | None = None
     priority_max: int | None = None  # Match items with priority <= this value
-
-
 @dataclass
 class AssignmentRule:
     """A single assignment rule mapping matched work items to models/prompts."""
     match: AssignmentRuleMatch = field(default_factory=AssignmentRuleMatch)
     model: str | None = None
     prompt_template: str | None = None
-
-
 @dataclass
 class AssignmentConfig:
     """Per-work-item assignment settings.
@@ -152,16 +140,12 @@ class AssignmentConfig:
     """
     rules: list[AssignmentRule] = field(default_factory=list)
     fallback: str = "weighted"
-
-
 @dataclass
 class ActivityWatchdogConfig:
     """Configuration for the activity watchdog that detects hung Copilot sessions."""
     enabled: bool = True
     timeout_seconds: int = 600  # 10 minutes
     check_interval_seconds: int = 30
-
-
 @dataclass
 class ProjectConfig:
     """Top-level project configuration."""
@@ -169,6 +153,7 @@ class ProjectConfig:
     models: ModelConfig = field(default_factory=ModelConfig)
     ai_backend: AIBackendConfig = field(default_factory=AIBackendConfig)
     maintenance: MaintenanceConfig = field(default_factory=MaintenanceConfig.defaults)
+    model_sync: ModelSyncConfig = field(default_factory=ModelSyncConfig)
     mcp_server: MpcServerConfig = field(default_factory=MpcServerConfig)
     git: GitConfig = field(default_factory=GitConfig)
     test_data: dict[str, str] = field(default_factory=dict)
@@ -259,6 +244,9 @@ class ProjectConfig:
                 for a in agents_data
             ])
         # else: keep defaults from field(default_factory=...)
+
+        # Model sync
+        config.model_sync = parse_model_sync_config(data.get("model_sync", {}))
 
         # Assignment rules
         assign_data = data.get("assignment", {})

@@ -24,6 +24,18 @@ models:
   default: claude-opus-4.6
   fallback: claude-sonnet-4.5
 
+# Copilot model discovery sync (creates beads items for new beta models)
+model_sync:
+  enabled: true
+  interval_minutes: 60
+  beta_only: true
+  include_preview: true
+  prune_unavailable: false
+  create_beads_items: true
+  issue_type: task
+  priority: 2
+  labels: [model, beta, copilot]
+
 # Git branch configuration
 # If not set, auto-detects from git user.email
 git:
@@ -65,6 +77,13 @@ maintenance:
       prompt_file: worktree-cleanup.md
       frequency: 4
       needs_worktree: false
+      enabled: true
+
+    - name: Model Sync
+      prompt_file: ""
+      frequency: 1
+      needs_worktree: false
+      merge_changes: false
       enabled: true
 
 # Project-specific test data for prompt templates (optional)
