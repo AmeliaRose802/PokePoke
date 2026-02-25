@@ -37,6 +37,7 @@ class DesktopAPI:
     def __init__(self) -> None:
         self._window: Any | None = None
         self._lock = threading.RLock()
+        self._window_disposed = False
 
         # Buffered state — frontend can poll or get pushed updates
         self._log_buffer: list[dict[str, Any]] = []
@@ -90,6 +91,12 @@ class DesktopAPI:
         """Called once after pywebview creates the window."""
         self._window = window
 
+    def dispose(self) -> None:
+        """Mark window as disposed to prevent ObjectDisposedException spam during teardown."""
+        with self._lock:
+            self._window_disposed = True
+            self._window = None
+
     # Stats serialization — delegated to desktop_api_stats
     _snapshot_to_dict = staticmethod(_stats.snapshot_to_dict)
     _serialize_live_stats = _stats.serialize_live_stats
@@ -132,13 +139,11 @@ class DesktopAPI:
             new_logs = self._log_buffer[self._log_read_index:]
             self._log_read_index = len(self._log_buffer)
             return new_logs
-
     def get_all_logs(self) -> list[dict[str, Any]]:
         """Get all buffered logs (for reconnect / initial load)."""
         with self._lock:
             self._log_read_index = len(self._log_buffer)
             return list(self._log_buffer)
-
     def get_work_item(self) -> dict[str, Any] | None:
         """Get the current work item."""
         with self._lock:
@@ -157,21 +162,22 @@ class DesktopAPI:
     save_config = _ext.save_config
 
     # ─── Python → State: Called by the orchestrator ───────────────────
-
     def push_log(
         self, message: str, target: str = "orchestrator", style: str | None = None
     ) -> None:
         """Add a log entry to the buffer."""
-        entry = {
-            "message": message,
-            "target": target,
-            "style": style,
-            "timestamp": time.time(),
-        }
         with self._lock:
+            if self._window_disposed:  # Silently ignore after window disposal
+                return
+
+            entry = {
+                "message": message,
+                "target": target,
+                "style": style,
+                "timestamp": time.time(),
+            }
             self._log_buffer.append(entry)
             if len(self._log_buffer) > self._max_log_buffer:
-                # Trim oldest entries and adjust read index
                 trim = len(self._log_buffer) - self._max_log_buffer
                 self._log_buffer = self._log_buffer[trim:]
                 self._log_read_index = max(0, self._log_read_index - trim)
@@ -212,36 +218,29 @@ class DesktopAPI:
         """Update the current agent name."""
         with self._lock:
             self._current_agent_name = name
-
     def push_progress(self, active: bool, status: str = "") -> None:
         """Update the progress indicator."""
         with self._lock:
             self._current_progress = {"active": active, "status": status}
-
     def set_logs_dir(self, logs_dir: str) -> None:
         """Set the current logs directory path."""
         with self._lock:
             self._current_logs_dir = logs_dir
-
     def clear_logs(self) -> None:
         """Clear the log buffer."""
         with self._lock:
             self._log_buffer.clear()
             self._log_read_index = 0
-
     @property
     def _agent_max_log_lines(self) -> int:
         return self._agent_max_log_lines_internal
-
     @_agent_max_log_lines.setter
     def _agent_max_log_lines(self, value: int) -> None:
         self._agent_max_log_lines_internal = value
         self._agent_registry.set_limits(value, self._agent_detail_max_log_lines_internal)
-
     @property
     def _agent_detail_max_log_lines(self) -> int | None:
         return self._agent_detail_max_log_lines_internal
-
     @_agent_detail_max_log_lines.setter
     def _agent_detail_max_log_lines(self, value: int | None) -> None:
         self._agent_detail_max_log_lines_internal = value

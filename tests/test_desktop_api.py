@@ -1492,3 +1492,80 @@ def test_open_project_fails_when_agents_active(tmp_path, monkeypatch) -> None:
     result = DesktopAPI().open_project(str(tmp_path))
     assert result["success"] is False
     assert "Cannot switch projects while agents are running" in result["error"]
+
+
+# ─── Window disposal tests ───────────────────────────────────────────
+
+
+def test_dispose_marks_window_as_disposed() -> None:
+    """dispose() should set the _window_disposed flag and clear window reference."""
+    api = DesktopAPI()
+    mock_window = Mock()
+    api.set_window(mock_window)
+
+    assert api._window == mock_window
+    assert api._window_disposed is False
+
+    api.dispose()
+
+    assert api._window is None
+    assert api._window_disposed is True
+
+
+def test_push_log_silently_ignores_after_disposal() -> None:
+    """push_log() should silently return when window is disposed to prevent ObjectDisposedException spam."""
+    api = DesktopAPI()
+
+    # Log before disposal - should work
+    api.push_log("before disposal")
+    assert len(api._log_buffer) == 1
+    assert api._log_buffer[0]["message"] == "before disposal"
+
+    # Dispose the window
+    api.dispose()
+
+    # Log after disposal - should be silently ignored
+    api.push_log("after disposal")
+    assert len(api._log_buffer) == 1  # Should still be 1, not 2
+    assert api._log_buffer[0]["message"] == "before disposal"  # Original log preserved
+
+    # Verify no exceptions are raised
+    api.push_log("another log", "agent", "red")
+    assert len(api._log_buffer) == 1
+
+
+def test_disposal_is_thread_safe() -> None:
+    """dispose() should be thread-safe using the existing lock."""
+    import threading
+    api = DesktopAPI()
+
+    # Add some logs before disposal
+    for i in range(10):
+        api.push_log(f"pre-dispose log {i}")
+
+    assert len(api._log_buffer) == 10
+
+    # Dispose the window
+    api.dispose()
+    assert api._window_disposed is True
+
+    # Try logging from multiple threads after disposal
+    def log_in_thread(thread_id: int):
+        for i in range(20):
+            api.push_log(f"thread-{thread_id} log {i}")
+
+    threads = [threading.Thread(target=log_in_thread, args=(i,)) for i in range(3)]
+
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    # After disposal, no more logs should be added
+    assert api._window_disposed is True
+    # Log buffer should still have only the pre-disposal logs
+    assert len(api._log_buffer) == 10
+    # Verify the logs are the original ones
+    for i in range(10):
+        assert api._log_buffer[i]["message"] == f"pre-dispose log {i}"
+

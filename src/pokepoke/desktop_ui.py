@@ -178,7 +178,8 @@ class DesktopUI:
                     self._api.push_log(f"❌ Desktop UI error: {e}", "orchestrator", "red")
                     exit_code_box[0] = 1
 
-            # Window closed (or UI failed) — tell orchestrator to shut down
+            # Window closed (or UI failed) — dispose window then shut down
+            self._api.dispose()
             request_shutdown()
             self._is_running = False
             builtins.print = self._original_print
