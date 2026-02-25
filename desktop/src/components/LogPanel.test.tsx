@@ -62,9 +62,9 @@ describe('LogPanel', () => {
       />
     );
 
-    expect(screen.getByText('🔧 view')).toBeInTheDocument();
+    expect(screen.getByText('🔧 view - README.md')).toBeInTheDocument();
     expect(screen.queryByText(/Tool batch/)).not.toBeInTheDocument();
-    // Description should be in a collapsible section
+    // Description should also be in a collapsible section
     expect(screen.getByText('Description')).toBeInTheDocument();
   });
 
@@ -118,8 +118,8 @@ describe('LogPanel', () => {
     expect(screen.queryByText(/edit ×1/)).not.toBeInTheDocument();
 
     // Individual tools should be directly visible within the batch
-    expect(screen.getByText('🔧 view')).toBeInTheDocument();
-    expect(screen.getByText('🔧 edit')).toBeInTheDocument();
+    expect(screen.getByText('🔧 view - a.txt')).toBeInTheDocument();
+    expect(screen.getByText('🔧 edit - b.txt')).toBeInTheDocument();
   });
 
   it('displays tool call descriptions in accordion titles for various tool types', () => {
@@ -142,14 +142,11 @@ describe('LogPanel', () => {
       />
     );
 
-    // Verify descriptions are in collapsible sections, not inline in labels
-    // powershell description is in a collapsible section
-    expect(screen.getByText('🔧 powershell')).toBeInTheDocument();
-    // grep description is in a collapsible section
-    expect(screen.getByText('🔧 grep')).toBeInTheDocument();
-    // view description is in a collapsible section
-    expect(screen.getByText('🔧 view')).toBeInTheDocument();
-    // Descriptions should appear in collapsible Description sections
+    // Verify descriptions appear inline in accordion titles
+    expect(screen.getByText('🔧 powershell - npm run build')).toBeInTheDocument();
+    expect(screen.getByText('🔧 grep - TODO')).toBeInTheDocument();
+    expect(screen.getByText('🔧 view - src/components/Button.tsx')).toBeInTheDocument();
+    // Descriptions should also appear in collapsible Description sections
     const descLabels = screen.getAllByText('Description');
     expect(descLabels.length).toBe(3);
   });
