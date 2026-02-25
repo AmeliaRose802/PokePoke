@@ -178,7 +178,7 @@ def record_event(
     }
 
     lock_name = _resolve_lock_name()
-    with _thread_lock, acquire_lock(lock_name):
+    with _thread_lock, acquire_lock(lock_name, timeout=60):
         data = load_beads_item_stats(path)
         data["log"].append(entry)
         data["summary"] = _rebuild_summary(data["log"])

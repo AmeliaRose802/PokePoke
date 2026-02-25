@@ -164,7 +164,7 @@ def record_completion(record: ModelCompletionRecord, path: Path | None = None) -
     a cross-process file lock to serialize read-modify-write across multiple
     worker processes in multi-agent mode.
     """
-    with _thread_lock, acquire_lock(_STATS_FILE_LOCK):
+    with _thread_lock, acquire_lock(_STATS_FILE_LOCK, timeout=60):
         data = load_model_stats(path)
         data["log"].append(_record_to_dict(record))
         data["summary"] = _rebuild_summary(data["log"])

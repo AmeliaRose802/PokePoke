@@ -1,5 +1,7 @@
 """Tests for pokepoke.coordination module."""
 
+import json
+import os
 import threading
 import time
 from pathlib import Path
@@ -10,7 +12,8 @@ from filelock import Timeout
 
 from pokepoke.coordination import (
     acquire_lock, try_lock, worktree_setup_lock, merge_lock, merge_lock_active,
-    manifest_lock, git_main_repo_lock, _lock_dir, _lock_path, _MERGE_LOCK_STALE_AGE,
+    manifest_lock, _lock_dir, _lock_path, _MERGE_LOCK_STALE_AGE,
+    _is_pid_alive, _read_lock_metadata, _write_lock_metadata,
 )
 
 
@@ -401,51 +404,104 @@ class TestStaleLockRecovery:
         assert _MERGE_LOCK_STALE_AGE >= 600, "Stale age must be >= merge lock timeout"
 
 
-class TestGitMainRepoLock:
-    """Tests for git_main_repo_lock – serializes main-repo git operations."""
+class TestPidTracking:
+    """Tests for PID tracking and stale-lock detection."""
 
-    def test_acquires_and_releases(self, tmp_path: Path) -> None:
+    def test_is_pid_alive_returns_true_for_current_process(self) -> None:
+        assert _is_pid_alive(os.getpid()) is True
+
+    def test_is_pid_alive_returns_false_for_invalid_pid(self) -> None:
+        assert _is_pid_alive(0) is False
+        assert _is_pid_alive(-1) is False
+
+    def test_is_pid_alive_returns_false_for_dead_pid(self) -> None:
+        # Use a very high PID that is almost certainly not running
+        assert _is_pid_alive(2**30) is False
+
+    def test_write_and_read_lock_metadata(self, tmp_path: Path) -> None:
+        lock_file = tmp_path / "test.lock"
+        lock_file.write_text("")
+        _write_lock_metadata(lock_file)
+        meta = _read_lock_metadata(lock_file)
+        assert meta is not None
+        assert meta["pid"] == os.getpid()
+        assert isinstance(meta["timestamp"], float)
+        # Metadata lives in sidecar file
+        assert (tmp_path / "test.lock.meta").exists()
+
+    def test_read_lock_metadata_returns_none_for_empty(self, tmp_path: Path) -> None:
+        lock_file = tmp_path / "test.lock"
+        lock_file.write_text("")
+        # No sidecar written yet
+        assert _read_lock_metadata(lock_file) is None
+
+    def test_read_lock_metadata_returns_none_for_invalid_json(self, tmp_path: Path) -> None:
+        lock_file = tmp_path / "test.lock"
+        meta_file = tmp_path / "test.lock.meta"
+        meta_file.write_text("not json")
+        assert _read_lock_metadata(lock_file) is None
+
+    def test_read_lock_metadata_returns_none_for_missing_pid(self, tmp_path: Path) -> None:
+        lock_file = tmp_path / "test.lock"
+        meta_file = tmp_path / "test.lock.meta"
+        meta_file.write_text(json.dumps({"timestamp": 123.0}))
+        assert _read_lock_metadata(lock_file) is None
+
+    def test_acquire_lock_writes_pid_metadata(self, tmp_path: Path) -> None:
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), acquire_lock("pidtest", timeout=5):
+            meta = _read_lock_metadata(tmp_path / "pidtest.lock")
+            assert meta is not None
+            assert meta["pid"] == os.getpid()
+
+    def test_stale_lock_with_dead_pid_is_removed(self, tmp_path: Path) -> None:
+        """A lock whose holder PID is dead should be force-removed."""
         with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
-            with git_main_repo_lock(timeout=5) as lock:
+            lock_file = tmp_path / "stale-pid.lock"
+            # Create lock file and sidecar with dead PID
+            lock_file.write_text("")
+            (tmp_path / "stale-pid.lock.meta").write_text(json.dumps({
+                "pid": 2**30,
+                "timestamp": time.time() - 3600,
+            }))
+            # Backdate mtime past stale threshold
+            old_mtime = time.time() - 3600
+            os.utime(lock_file, (old_mtime, old_mtime))
+
+            with acquire_lock("stale-pid", timeout=0, stale_timeout=300) as lock:
                 assert lock.is_locked
-            assert not lock.is_locked
 
-    def test_second_holder_times_out(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), git_main_repo_lock(timeout=5):  # noqa: SIM117
-            with pytest.raises(Timeout), git_main_repo_lock(timeout=0):
-                pass  # pragma: no cover
-
-    def test_serializes_two_threads(self, tmp_path: Path) -> None:
-        """Two threads must not hold git_main_repo_lock simultaneously."""
-        overlap_detected = threading.Event()
-        inside_count = [0]
-        lock_obj = threading.Lock()
-        errors: list[str] = []
-
-        def worker():
-            with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), git_main_repo_lock(timeout=10):
-                with lock_obj:
-                    inside_count[0] += 1
-                    if inside_count[0] > 1:
-                        errors.append("overlap!")
-                        overlap_detected.set()
-                time.sleep(0.05)
-                with lock_obj:
-                    inside_count[0] -= 1
-
-        threads = [threading.Thread(target=worker) for _ in range(2)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join(timeout=15)
-
-        assert not errors, "Two threads were inside git_main_repo_lock simultaneously"
-
-    def test_releases_on_exception(self, tmp_path: Path) -> None:
+    def test_stale_lock_with_alive_pid_not_removed(self, tmp_path: Path) -> None:
+        """A lock whose holder PID is alive should NOT be force-removed."""
         with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
-            lock_ref = None
-            with pytest.raises(ValueError), git_main_repo_lock(timeout=5) as lock:
-                lock_ref = lock
-                raise ValueError("simulated failure")
-            assert lock_ref is not None
-            assert not lock_ref.is_locked
+            lock_file = tmp_path / "alive-pid.lock"
+            meta_file = tmp_path / "alive-pid.lock.meta"
+            # Write sidecar with our own (alive) PID
+            meta_file.write_text(json.dumps({
+                "pid": os.getpid(),
+                "timestamp": time.time() - 3600,
+            }))
+            # Create and hold a real lock
+            lock_file.write_text("")
+            old_mtime = time.time() - 3600
+            os.utime(lock_file, (old_mtime, old_mtime))
+
+            from filelock import FileLock
+            real_lock = FileLock(lock_file)
+            real_lock.acquire(timeout=0)
+            try:
+                # Should NOT remove the lock since PID is alive
+                with pytest.raises(Timeout), acquire_lock("alive-pid", timeout=0, stale_timeout=300):
+                    pass  # pragma: no cover
+            finally:
+                real_lock.release()
+
+    def test_try_lock_writes_metadata(self, tmp_path: Path) -> None:
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+            lock = try_lock("trytest")
+            assert lock is not None
+            try:
+                meta = _read_lock_metadata(tmp_path / "trytest.lock")
+                assert meta is not None
+                assert meta["pid"] == os.getpid()
+            finally:
+                lock.release()

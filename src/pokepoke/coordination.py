@@ -6,7 +6,10 @@ Locks auto-release on process crash since they are backed by filelock.FileLock.
 
 from __future__ import annotations
 
+import contextlib
+import json
 import logging
+import os
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -30,6 +33,63 @@ def _lock_path(name: str) -> Path:
     return _lock_dir() / f"{name}.lock"
 
 
+def _is_pid_alive(pid: int) -> bool:
+    """Check if a process with the given PID is still running (cross-platform)."""
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        # On Windows, os.kill(pid, 0) can hang or send CTRL_C_EVENT.
+        # Use ctypes OpenProcess to check existence instead.
+        import ctypes
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = ctypes.windll.kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, pid,
+        )
+        if handle:
+            ctypes.windll.kernel32.CloseHandle(handle)
+            return True
+        return False
+    # POSIX: signal 0 checks existence without sending a real signal
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # Process exists but we can't signal it
+    except OSError:
+        return False
+
+
+def _meta_path(lock_path: Path) -> Path:
+    """Return the sidecar metadata path for a lock file."""
+    return lock_path.with_suffix(".lock.meta")
+
+
+def _write_lock_metadata(lock_path: Path) -> None:
+    """Write PID and timestamp into a sidecar file after lock acquisition."""
+    with contextlib.suppress(OSError):
+        _meta_path(lock_path).write_text(json.dumps({
+            "pid": os.getpid(),
+            "timestamp": time.time(),
+        }))
+
+
+def _read_lock_metadata(lock_path: Path) -> dict[str, object] | None:
+    """Read PID/timestamp metadata from a lock's sidecar file."""
+    mp = _meta_path(lock_path)
+    try:
+        text = mp.read_text().strip()
+        if not text:
+            return None
+        data = json.loads(text)
+        if isinstance(data, dict) and "pid" in data:
+            return data
+    except (OSError, json.JSONDecodeError, ValueError):
+        pass
+    return None
+
+
 @contextmanager
 def acquire_lock(
     name: str,
@@ -42,11 +102,9 @@ def acquire_lock(
         name: Logical lock name (e.g. ``"worktree-setup"``).
         timeout: Seconds to wait. ``-1`` (default) means wait forever.
         stale_timeout: If set, and the lock file's modification time is older
-            than this many seconds, forcibly remove the lock file before
-            retrying.  This recovers from crashes where the OS file lock was
-            released but the lock file was left behind by a non-filelock tool.
-            Use with caution: only safe when you are certain the original
-            owner process is no longer running.
+            than this many seconds, check whether the holding process is still
+            alive (via PID recorded in the lock file).  If the holder is dead,
+            forcibly remove the stale lock and re-acquire.
 
     Yields:
         The acquired :class:`filelock.FileLock` instance.
@@ -57,18 +115,32 @@ def acquire_lock(
     lock_path = _lock_path(name)
     lock = FileLock(lock_path)
     if stale_timeout is not None and lock_path.exists():
-        age = time.time() - lock_path.stat().st_mtime
+        try:
+            age = time.time() - lock_path.stat().st_mtime
+        except FileNotFoundError:
+            age = 0.0  # File disappeared between exists() and stat()
         if age > stale_timeout:
-            logger.warning(
-                'Lock file %s is %.0f seconds old (stale_timeout=%.0f). '
-                'Removing stale lock file before acquiring.',
-                lock_path, age, stale_timeout,
-            )
-            try:
-                lock_path.unlink(missing_ok=True)
-            except OSError as exc:
-                logger.warning('Could not remove stale lock file %s: %s', lock_path, exc)
+            meta = _read_lock_metadata(lock_path)
+            raw_pid = meta.get("pid") if meta else None
+            holder_pid = int(raw_pid) if isinstance(raw_pid, (int, float)) else None
+            # Only force-remove if holder PID is dead (or unknown)
+            if holder_pid is None or not _is_pid_alive(holder_pid):
+                logger.warning(
+                    'Lock file %s is %.0f s old (stale_timeout=%.0f), '
+                    'holder PID %s is dead. Removing stale lock.',
+                    lock_path, age, stale_timeout, holder_pid,
+                )
+                try:
+                    lock_path.unlink(missing_ok=True)
+                except OSError as exc:
+                    logger.warning('Could not remove stale lock file %s: %s', lock_path, exc)
+            else:
+                logger.info(
+                    'Lock file %s is %.0f s old but holder PID %s is still alive.',
+                    lock_path, age, holder_pid,
+                )
     lock.acquire(timeout=timeout)
+    _write_lock_metadata(lock_path)
     try:
         yield lock
     finally:
@@ -83,9 +155,11 @@ def try_lock(name: str) -> FileLock | None:
         if the lock is already held by another process.  The caller is
         responsible for calling ``lock.release()`` when done.
     """
-    lock = FileLock(_lock_path(name))
+    lp = _lock_path(name)
+    lock = FileLock(lp)
     try:
         lock.acquire(timeout=0)
+        _write_lock_metadata(lp)
         return lock
     except Timeout:
         return None
@@ -94,17 +168,25 @@ def try_lock(name: str) -> FileLock | None:
 _WORKTREE_SETUP_LOCK = "worktree-setup"
 _MERGE_LOCK = "merge-queue"
 _MANIFEST_LOCK = "worktree-manifest"
-_GIT_MAIN_REPO_LOCK = "git-main-repo"
 
 # Age threshold (seconds) after which a merge lock file is considered stale.
 # 15 minutes should be well beyond any legitimate merge operation.
 _MERGE_LOCK_STALE_AGE = 900.0
 
+# Stale-timeout defaults (seconds).  When a lock file is older than this AND
+# the recorded holder PID is dead, the lock is forcibly removed.
+_WORKTREE_SETUP_STALE = 300.0   # 5 min
+_MERGE_STALE = 600.0            # 10 min
+_MANIFEST_STALE = 120.0         # 2 min
+_CLEANUP_STALE = 300.0          # 5 min (main-repo-cleanup)
+
 
 @contextmanager
 def worktree_setup_lock(timeout: float = 180.0) -> Generator[FileLock, None, None]:
     """Serialize beads assignment + worktree creation across agents."""
-    with acquire_lock(_WORKTREE_SETUP_LOCK, timeout=timeout) as lock:
+    with acquire_lock(
+        _WORKTREE_SETUP_LOCK, timeout=timeout, stale_timeout=_WORKTREE_SETUP_STALE,
+    ) as lock:
         yield lock
 
 
@@ -120,11 +202,9 @@ def merge_lock(timeout: float = 600.0) -> Generator[FileLock, None, None]:
     cleanup agents should wait for this lock before attempting to
     fix uncommitted changes on the main repo.
 
-    Do NOT use stale lock recovery for merge_lock, as legitimate merges with
-    conflict resolution and cleanup agents can run longer than the stale
-    threshold (15 minutes). Without a way to verify the owning process is
-    actually dead, stale deletion would cause concurrent merges to run
-    against the same repository, corrupting the merge queue and repo state.
+    Stale-lock recovery is PID-gated: the lock is only force-removed when
+    the recorded holder PID is confirmed dead, so legitimate long-running
+    merges are never interrupted.
 
     Args:
         timeout: Seconds to wait. Default 600s (10 minutes) to allow
@@ -133,7 +213,9 @@ def merge_lock(timeout: float = 600.0) -> Generator[FileLock, None, None]:
     Yields:
         The acquired FileLock instance.
     """
-    with acquire_lock(_MERGE_LOCK, timeout=timeout) as lock:
+    with acquire_lock(
+        _MERGE_LOCK, timeout=timeout, stale_timeout=_MERGE_STALE,
+    ) as lock:
         yield lock
 
 
@@ -162,27 +244,110 @@ def manifest_lock(timeout: float = 30.0) -> Generator[FileLock, None, None]:
     Yields:
         The acquired FileLock instance.
     """
-    with acquire_lock(_MANIFEST_LOCK, timeout=timeout) as lock:
+    with acquire_lock(
+        _MANIFEST_LOCK, timeout=timeout, stale_timeout=_MANIFEST_STALE,
+    ) as lock:
         yield lock
+
+
+# ── Worktree lock (consolidated from worktree_coordination.py) ───────
+
+_WORKTREE_METRICS_DIR = Path(".pokepoke") / "stats"
+_WORKTREE_METRICS_PATH = _WORKTREE_METRICS_DIR / "worktree_metrics.json"
+
+# Default timeout for worktree lock (5 minutes)
+_WORKTREE_LOCK_DEFAULT_TIMEOUT = 300.0
+
+
+def _load_worktree_metrics() -> dict[str, float]:
+    """Load worktree creation metrics from disk."""
+    if not _WORKTREE_METRICS_PATH.exists():
+        return {
+            "total_attempts": 0,
+            "total_successes": 0,
+            "total_failures": 0,
+            "total_wait_time": 0.0,
+            "max_wait_time": 0.0,
+        }
+    try:
+        with open(_WORKTREE_METRICS_PATH) as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    except (json.JSONDecodeError, OSError):
+        pass
+    return {
+        "total_attempts": 0,
+        "total_successes": 0,
+        "total_failures": 0,
+        "total_wait_time": 0.0,
+        "max_wait_time": 0.0,
+    }
+
+
+def _save_worktree_metrics(metrics: dict[str, float]) -> None:
+    """Save worktree creation metrics to disk."""
+    try:
+        os.makedirs(_WORKTREE_METRICS_DIR, exist_ok=True)
+        with open(_WORKTREE_METRICS_PATH, 'w') as f:
+            json.dump(metrics, f, indent=2)
+    except OSError as e:
+        logger.warning("Failed to save worktree metrics: %s", e)
+
+
+def _record_worktree_attempt(success: bool, wait_time: float) -> None:
+    """Record a worktree creation attempt in metrics."""
+    metrics = _load_worktree_metrics()
+    metrics["total_attempts"] += 1
+    if success:
+        metrics["total_successes"] += 1
+    else:
+        metrics["total_failures"] += 1
+    metrics["total_wait_time"] += wait_time
+    if wait_time > metrics["max_wait_time"]:
+        metrics["max_wait_time"] = wait_time
+    _save_worktree_metrics(metrics)
 
 
 @contextmanager
-def git_main_repo_lock(timeout: float = 60.0) -> Generator[FileLock, None, None]:
-    """Serialize git operations on the main repository.
+def with_worktree_lock(
+    timeout: float = _WORKTREE_LOCK_DEFAULT_TIMEOUT,
+) -> Generator[None, None, None]:
+    """Context manager for exclusive worktree creation lock.
 
-    Under high parallelism (e.g. --max-agents 15) multiple agents can run
-    ``git status`` or other index-touching git commands against the main
-    repository simultaneously, creating ``.git/index.lock`` contention that
-    causes timeouts (exit code 0xFFFFFFFF on Windows).
-
-    Callers that perform git operations on the main repository (not a
-    worktree) should hold this lock for the duration of those operations.
+    Ensures only one agent can create a worktree at a time, preventing
+    race conditions when multiple git worktree operations access
+    .git/worktrees simultaneously.  Records metrics about wait times.
 
     Args:
-        timeout: Seconds to wait. Default 60s.
+        timeout: Maximum time to wait for lock acquisition (seconds).
 
     Yields:
-        The acquired FileLock instance.
+        None – Lock is held for duration of context.
+
+    Raises:
+        RuntimeError: If lock cannot be acquired within *timeout*.
     """
-    with acquire_lock(_GIT_MAIN_REPO_LOCK, timeout=timeout) as lock:
-        yield lock
+    wait_start = time.time()
+    success = False
+
+    try:
+        logger.debug("Acquiring worktree lock (timeout=%ss)...", timeout)
+        with worktree_setup_lock(timeout=timeout):
+            wait_time = time.time() - wait_start
+            if wait_time > 0.1:
+                logger.info("Acquired worktree lock after %.2fs", wait_time)
+            success = True
+            yield
+    except Timeout as e:
+        wait_time = time.time() - wait_start
+        logger.error("Failed to acquire worktree lock after %.2fs", wait_time)
+        _record_worktree_attempt(success=False, wait_time=wait_time)
+        raise RuntimeError(
+            f"Timed out waiting for worktree lock after {timeout}s. "
+            "Another agent may be stuck creating a worktree."
+        ) from e
+    finally:
+        if success:
+            wait_time = time.time() - wait_start
+            _record_worktree_attempt(success=True, wait_time=wait_time)

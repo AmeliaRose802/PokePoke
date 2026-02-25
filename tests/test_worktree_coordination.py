@@ -17,24 +17,24 @@ import contextlib
 @pytest.fixture
 def isolated_metrics(tmp_path, monkeypatch):
     """Provide an isolated metrics file for each test."""
-    import pokepoke.worktree_coordination as coord_module
+    import pokepoke.coordination as coord_module
 
     # Create isolated paths for this test
     test_stats_dir = tmp_path / "stats"
     test_metrics_path = test_stats_dir / "worktree_metrics.json"
 
-    # Patch module constants
-    original_stats_dir = coord_module._STATS_DIR
-    original_metrics_path = coord_module._METRICS_PATH
+    # Patch the canonical module constants
+    original_stats_dir = coord_module._WORKTREE_METRICS_DIR
+    original_metrics_path = coord_module._WORKTREE_METRICS_PATH
 
-    coord_module._STATS_DIR = test_stats_dir
-    coord_module._METRICS_PATH = test_metrics_path
+    coord_module._WORKTREE_METRICS_DIR = test_stats_dir
+    coord_module._WORKTREE_METRICS_PATH = test_metrics_path
 
     yield test_metrics_path
 
     # Restore original constants
-    coord_module._STATS_DIR = original_stats_dir
-    coord_module._METRICS_PATH = original_metrics_path
+    coord_module._WORKTREE_METRICS_DIR = original_stats_dir
+    coord_module._WORKTREE_METRICS_PATH = original_metrics_path
 
 
 @pytest.fixture
@@ -163,31 +163,12 @@ def test_metrics_persistence(isolated_metrics):
 
 def test_lock_creates_directories(cleanup_lock_files, tmp_path, monkeypatch):
     """Test that lock creation ensures required directories exist."""
-    # Use temporary directory for test
-    test_lock_dir = tmp_path / "locks"
-    test_lock_path = test_lock_dir / "test.lock"
+    from unittest.mock import patch
 
-    # Patch module constants
-    import pokepoke.worktree_coordination as coord_module
-    original_lock_dir = coord_module._LOCK_DIR
-    original_lock_path = coord_module._WORKTREE_LOCK_PATH
-
-    try:
-        coord_module._LOCK_DIR = test_lock_dir
-        coord_module._WORKTREE_LOCK_PATH = test_lock_path
-
-        # Directory shouldn't exist yet
-        assert not test_lock_dir.exists()
-
-        # Acquire lock - should create directory
-        with with_worktree_lock(timeout=5):
-            assert test_lock_dir.exists()
-            assert test_lock_path.exists()
-
-    finally:
-        # Restore original constants
-        coord_module._LOCK_DIR = original_lock_dir
-        coord_module._WORKTREE_LOCK_PATH = original_lock_path
+    # Use a temporary lock directory so the test is isolated
+    with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), with_worktree_lock(timeout=5):
+            # Lock file should exist in the patched directory
+            assert (tmp_path / "worktree-setup.lock").exists()
 
 
 def test_concurrent_lock_acquisition_stress(cleanup_lock_files):

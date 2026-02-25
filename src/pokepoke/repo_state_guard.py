@@ -51,7 +51,7 @@ def cleanup_lock_active() -> bool:
 @contextmanager
 def cleanup_lock(timeout: float = 600.0) -> Generator[None, None, None]:
     """Block until the cleanup lock is available, then yield to the caller."""
-    with acquire_lock(_CLEANUP_LOCK_NAME, timeout=timeout):
+    with acquire_lock(_CLEANUP_LOCK_NAME, timeout=timeout, stale_timeout=300.0):
         yield
 
 

@@ -21,7 +21,7 @@ from pokepoke.worktree_cleanup import (
     remove_from_manifest,
     _is_windows_lock_error,
 )
-from pokepoke.worktree_coordination import with_worktree_lock
+from pokepoke.coordination import with_worktree_lock
 
 logger = logging.getLogger(__name__)
 
