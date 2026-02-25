@@ -35,7 +35,7 @@ def _run_git(cmd: list[str], *, timeout: int = 30, check: bool = True,
     )
 
 
-def create_worktree(item_id: str, base_branch: str | None = None) -> Path:
+def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: float = 300.0) -> Path:
     """Create a git worktree for a work item. Returns existing path if already exists.
 
     Uses file-based locking to prevent race conditions when multiple agents
@@ -72,7 +72,7 @@ def create_worktree(item_id: str, base_branch: str | None = None) -> Path:
     # access .git/worktrees simultaneously
     lock_start = time.time()
     try:
-        with with_worktree_lock(timeout=300):
+        with with_worktree_lock(timeout=lock_timeout):
             lock_wait = time.time() - lock_start
             if lock_wait > 0.1:
                 logger.info(f"Waited {lock_wait:.2f}s for worktree lock (item: {item_id})")

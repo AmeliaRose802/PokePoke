@@ -322,7 +322,26 @@ class TestSetupWorktree:
 
         assert result is not None
         assert result == Path("/fake/worktree")
-        mock_create.assert_called_once_with("task-1")
+        mock_create.assert_called_once_with("task-1", lock_timeout=300.0)
+
+    @patch('pokepoke.workflow.create_worktree')
+    def test_successful_setup_with_custom_timeout(self, mock_create: Mock) -> None:
+        """Test successful worktree creation with custom lock timeout."""
+        item = BeadsWorkItem(
+            id="task-1",
+            title="Task 1",
+            description="",
+            status="open",
+            priority=1,
+            issue_type="task"
+        )
+        mock_create.return_value = Path("/fake/worktree")
+
+        result = _setup_worktree(item, lock_timeout=600.0)
+
+        assert result is not None
+        assert result == Path("/fake/worktree")
+        mock_create.assert_called_once_with("task-1", lock_timeout=600.0)
 
     @patch('pokepoke.workflow.create_worktree')
     def test_creation_failure(self, mock_create: Mock) -> None:
@@ -1581,17 +1600,25 @@ class TestProcessWorkItemCoordination:
         assert result.stats is None
         mock_setup.assert_not_called()
 
-    @patch('pokepoke.workflow.worktree_setup_lock')
+    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.workflow.assign_and_sync_item')
     @patch('time.time')
     def test_worktree_lock_timeout(
         self,
         mock_time: Mock,
-        mock_lock: Mock,
+        mock_assign: Mock,
+        mock_setup: Mock,
     ) -> None:
-        """When worktree_setup_lock times out (another agent holds the lock),
-        process_work_item must return (False, 0, ...) without crashing."""
-        from filelock import Timeout
+        """When create_worktree times out (another agent holds the lock),
+        process_work_item must return (False, 0, ...) without crashing.
 
+        The lock is now acquired inside create_worktree via with_worktree_lock,
+        not as a wrapper around the entire setup block.
+
+        _setup_worktree catches exceptions and returns None, so we simulate
+        that behavior here by returning None (as if the lock timeout happened
+        and _setup_worktree caught the exception).
+        """
         item = BeadsWorkItem(
             id="task-lock",
             title="Lock Task",
@@ -1601,7 +1628,9 @@ class TestProcessWorkItemCoordination:
             issue_type="task",
         )
         mock_time.return_value = 0.0
-        mock_lock.side_effect = Timeout("worktree-setup")
+        mock_assign.return_value = True
+        # Simulate lock timeout: _setup_worktree catches the RuntimeError and returns None
+        mock_setup.return_value = None
 
         result = process_work_item(
             item, interactive=False
@@ -2030,18 +2059,20 @@ class TestWorktreeLockTimeout:
         expected = max(float(cfg.command_timeout), 120.0 * max(1, int(cfg.max_parallel_agents)))
         assert expected == 1200.0
 
-    @patch('pokepoke.workflow.worktree_setup_lock')
     @patch('pokepoke.workflow.assign_and_sync_item', return_value=True)
     @patch('pokepoke.workflow._setup_worktree', return_value=None)
     @patch('time.time', return_value=0.0)
-    def test_lock_called_with_scaled_timeout(
+    def test_setup_worktree_called_with_scaled_timeout(
         self,
         mock_time: Mock,
         mock_setup: Mock,
         mock_assign: Mock,
-        mock_lock: Mock,
     ) -> None:
-        """process_work_item passes a scaled timeout to worktree_setup_lock."""
+        """process_work_item passes scaled lock_timeout to _setup_worktree.
+
+        The worktree lock is now acquired inside create_worktree, and the
+        timeout is passed via _setup_worktree's lock_timeout parameter.
+        """
         from pokepoke.config import ProjectConfig
 
         item = BeadsWorkItem(
@@ -2060,8 +2091,9 @@ class TestWorktreeLockTimeout:
         with patch('pokepoke.workflow.get_config', return_value=cfg):
             process_work_item(item, interactive=False)
 
-        # Should have been called with 1200.0 (max(300, 120*10))
-        call_kwargs = mock_lock.call_args
-        timeout_used = call_kwargs[1]['timeout'] if call_kwargs[1] else call_kwargs[0][0]
+        # _setup_worktree should have been called with lock_timeout=1200.0 (max(300, 120*10))
+        mock_setup.assert_called_once()
+        call_kwargs = mock_setup.call_args
+        timeout_used = call_kwargs[1]['lock_timeout'] if call_kwargs[1] else call_kwargs[0][1]
         assert timeout_used == 1200.0
 

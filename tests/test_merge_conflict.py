@@ -197,3 +197,51 @@ class TestGetMergeConflictDetails:
         assert result["is_merging"] is False
         assert result["conflict_count"] == 0
         assert result["merge_head"] == ""
+
+    @patch('pokepoke.merge_conflict.get_unmerged_files')
+    @patch('pokepoke.merge_conflict.is_merge_in_progress')
+    @patch('subprocess.run')
+    def test_get_details_with_repo_path(
+        self, mock_run: Mock, mock_is_merge: Mock, mock_get_unmerged: Mock
+    ) -> None:
+        """Test get_merge_conflict_details with explicit repo_path (line 124)."""
+        mock_is_merge.return_value = True
+        mock_get_unmerged.return_value = []
+        mock_run.return_value = Mock(stdout="def456\n", returncode=0)
+
+        result = get_merge_conflict_details(repo_path=Path("/my/repo"))
+
+        assert result["merge_head"] == "def456"
+        call_args = mock_run.call_args[0][0]
+        assert "-C" in call_args
+
+    @patch('pokepoke.merge_conflict.get_unmerged_files')
+    @patch('pokepoke.merge_conflict.is_merge_in_progress')
+    @patch('subprocess.run')
+    def test_get_details_merge_head_exception(
+        self, mock_run: Mock, mock_is_merge: Mock, mock_get_unmerged: Mock
+    ) -> None:
+        """Test get_merge_conflict_details when MERGE_HEAD retrieval fails (lines 135-136)."""
+        mock_is_merge.return_value = True
+        mock_get_unmerged.return_value = ["file.py"]
+        mock_run.side_effect = Exception("git process error")
+
+        result = get_merge_conflict_details()
+
+        assert result["is_merging"] is True
+        assert result["merge_head"] == ""
+        assert result["conflict_count"] == 1
+
+
+class TestAbortMergeGenericException:
+    """Test abort_merge with a generic exception (lines 103-104)."""
+
+    @patch('subprocess.run')
+    def test_abort_merge_generic_exception(self, mock_run: Mock) -> None:
+        """Test abort_merge handles generic exceptions gracefully."""
+        mock_run.side_effect = OSError("system error")
+
+        success, error = abort_merge()
+
+        assert success is False
+        assert "system error" in error

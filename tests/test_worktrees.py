@@ -1650,3 +1650,318 @@ class TestForceRemoveTimeoutBranch:
 
             result = force_remove_directory(Path("/fake/path"))
             assert result is False
+
+
+class TestCreateWorktreeLockAndEdgeCases:
+    """Tests for create_worktree lock contention and edge cases."""
+
+    def test_create_worktree_lock_wait_logging(self):
+        """Test that long lock wait times are logged (line 78)."""
+        import time as _time
+
+        call_count = [0]
+        original_time = _time.time
+
+        def fake_time():
+            call_count[0] += 1
+            # Make lock_start = 0, then lock_wait = 1.0 (> 0.1)
+            if call_count[0] == 1:
+                return 0.0  # lock_start
+            elif call_count[0] == 2:
+                return 1.0  # after lock acquired
+            return original_time()
+
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.list_worktrees') as mock_list, \
+             patch('pokepoke.worktrees.get_default_branch', return_value='main'), \
+             patch('pathlib.Path.mkdir'), \
+             patch('pokepoke.worktrees.time.time', side_effect=fake_time):
+
+            mock_list.side_effect = [
+                [],  # First check (before lock)
+                [],  # Double-check (inside lock)
+            ]
+            mock_run.return_value = Mock(returncode=0, stderr='', stdout='')
+
+            result = create_worktree('test-item')
+            assert result == Path('worktrees/task-test-item')
+
+    def test_create_worktree_race_condition_double_check(self):
+        """Test that worktree found during double-check inside lock is reused (lines 83-87)."""
+        resolved_path = Path('worktrees/task-test-item').resolve()
+
+        with patch('pokepoke.worktrees.list_worktrees') as mock_list, \
+             patch('pokepoke.worktrees.get_default_branch', return_value='main'), \
+             patch('pathlib.Path.mkdir'), \
+             patch('builtins.print') as mock_print:
+
+            mock_list.side_effect = [
+                [],  # First check outside lock
+                [{'path': str(resolved_path), 'branch': 'refs/heads/task/test-item'}],  # Inside lock
+            ]
+
+            result = create_worktree('test-item')
+
+            assert result == resolved_path
+            assert any('another agent' in str(c) for c in mock_print.call_args_list)
+
+    def test_create_worktree_invalid_base_branch(self):
+        """Test error when base branch doesn't exist (lines 123-124)."""
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.list_worktrees', return_value=[]), \
+             patch('pathlib.Path.mkdir'):
+
+            error = subprocess.CalledProcessError(
+                128, ['git'], stderr="fatal: not a valid object name: 'nonexistent'"
+            )
+            mock_run.side_effect = error
+
+            with pytest.raises(RuntimeError, match="does not exist"):
+                create_worktree('test-item', base_branch='nonexistent')
+
+    def test_create_worktree_timeout(self):
+        """Test timeout during worktree creation (lines 132-135)."""
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.list_worktrees', return_value=[]), \
+             patch('pokepoke.worktrees.get_default_branch', return_value='main'), \
+             patch('pathlib.Path.mkdir'):
+
+            mock_run.side_effect = subprocess.TimeoutExpired('git', 30)
+
+            with pytest.raises(RuntimeError, match="Timed out creating worktree"):
+                create_worktree('test-item')
+
+    def test_create_worktree_unexpected_exception(self):
+        """Test unexpected exception during worktree creation (lines 140-142)."""
+        with patch('pokepoke.worktrees.list_worktrees', return_value=[]), \
+             patch('pokepoke.worktrees.get_default_branch', return_value='main'), \
+             patch('pathlib.Path.mkdir'), \
+             patch('pokepoke.worktrees.with_worktree_lock', side_effect=OSError("disk full")):
+
+            with pytest.raises(RuntimeError, match="Unexpected error creating worktree"):
+                create_worktree('test-item')
+
+
+class TestMergeWorktreeConflicts:
+    """Tests for merge_worktree conflict reporting."""
+
+    def test_merge_worktree_many_unmerged_files(self):
+        """Test conflict reporting with >10 unmerged files (lines 192-196)."""
+        from pokepoke.git_operations import execute_merge_sequence
+
+        unmerged = [f"file{i}.py" for i in range(15)]
+
+        with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
+             patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
+             patch('pokepoke.worktrees.execute_merge_sequence', return_value=(False, "conflicts", unmerged)), \
+             patch('pokepoke.worktrees.get_default_branch', return_value='main'), \
+             patch('builtins.print') as mock_print:
+
+            success, files = merge_worktree('test-item')
+
+            assert success is False
+            assert len(files) == 15
+            print_calls = [str(c) for c in mock_print.call_args_list]
+            assert any('15 file(s)' in c for c in print_calls)
+            assert any('and 5 more' in c for c in print_calls)
+
+
+class TestCleanupWorktreeEdgeCases:
+    """Tests for cleanup_worktree edge cases."""
+
+    def test_cleanup_worktree_found_by_expected_path(self):
+        """Test worktree found by expected path not by branch (line 256)."""
+        def exists_side_effect(self: Path) -> bool:
+            normalized = str(self).replace('\\', '/')
+            if 'task-test-item' in normalized:
+                return True
+            return False
+
+        with patch('pokepoke.worktrees.list_worktrees', return_value=[]), \
+             patch('subprocess.run') as mock_run, \
+             patch('pathlib.Path.exists', new=exists_side_effect), \
+             patch('pokepoke.worktrees.remove_from_manifest'):
+
+            exists_state = {'present': True}
+
+            def run_and_remove(*args, **kwargs):
+                cmd = args[0]
+                if 'worktree' in cmd and 'remove' in cmd:
+                    exists_state['present'] = False
+                    # Now make exists return False for the worktree path
+                    return Mock(returncode=0, stderr='', stdout='')
+                return Mock(returncode=0, stderr='', stdout='')
+
+            # Override the exists side effect to use state
+            def stateful_exists(self: Path) -> bool:
+                normalized = str(self).replace('\\', '/')
+                if 'task-test-item' in normalized:
+                    return exists_state['present']
+                return False
+
+            with patch('pathlib.Path.exists', new=stateful_exists):
+                mock_run.side_effect = run_and_remove
+                result = cleanup_worktree('test-item')
+
+            assert result is True
+
+    def test_cleanup_worktree_found_by_unsanitized_path(self):
+        """Test backwards-compatible unsanitized path lookup (line 262)."""
+        exists_state = {'present': True}
+
+        def exists_side_effect(self: Path) -> bool:
+            normalized = str(self).replace('\\', '/')
+            # The unsanitized path for item "c#-item" is task-c#-item
+            if 'task-c-item' in normalized:
+                return False  # sanitized path doesn't exist
+            if 'task-c#-item' in normalized:
+                return exists_state['present']
+            return False
+
+        with patch('pokepoke.worktrees.list_worktrees', return_value=[]), \
+             patch('subprocess.run') as mock_run, \
+             patch('pathlib.Path.exists', new=exists_side_effect), \
+             patch('pokepoke.worktrees.remove_from_manifest'):
+
+            def run_and_remove(*args, **kwargs):
+                cmd = args[0]
+                if 'worktree' in cmd and 'remove' in cmd:
+                    exists_state['present'] = False
+                    return Mock(returncode=0, stderr='', stdout='')
+                return Mock(returncode=0, stderr='', stdout='')
+
+            mock_run.side_effect = run_and_remove
+
+            result = cleanup_worktree('c#-item')
+            assert result is True
+
+    def test_cleanup_worktree_not_a_working_tree_error(self):
+        """Test 'not a working tree' error is silently handled (line 280)."""
+        exists_state = {'present': True}
+
+        def exists_side_effect(self: Path) -> bool:
+            normalized = str(self).replace('\\', '/')
+            if 'task-test-item' in normalized:
+                return exists_state['present']
+            return True
+
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.list_worktrees') as mock_list, \
+             patch('pathlib.Path.exists', new=exists_side_effect), \
+             patch('pokepoke.worktrees.remove_from_manifest'):
+
+            mock_list.return_value = [
+                {'path': 'worktrees/task-test-item', 'branch': 'refs/heads/task/test-item'}
+            ]
+
+            def run_side_effect(*args, **kwargs):
+                cmd = args[0]
+                if 'worktree' in cmd and 'remove' in cmd:
+                    exists_state['present'] = False
+                    raise subprocess.CalledProcessError(
+                        1, cmd, stderr="fatal: 'worktrees/task-test-item' is not a working tree"
+                    )
+                return Mock(returncode=0, stderr='', stdout='')
+
+            mock_run.side_effect = run_side_effect
+
+            result = cleanup_worktree('test-item')
+            assert result is True
+
+    def test_cleanup_worktree_other_removal_error_with_existing_dir(self):
+        """Test other removal error adds to manifest when dir still exists (lines 289-291)."""
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.list_worktrees') as mock_list, \
+             patch('pathlib.Path.exists', return_value=True), \
+             patch('pokepoke.worktrees.add_uncleaned_worktree') as mock_add, \
+             patch('builtins.print'):
+
+            mock_list.return_value = [
+                {'path': 'worktrees/task-test-item', 'branch': 'refs/heads/task/test-item'}
+            ]
+
+            mock_run.side_effect = subprocess.CalledProcessError(
+                1, ['git'], stderr="fatal: unexpected internal error"
+            )
+
+            result = cleanup_worktree('test-item')
+
+            # Should return False because dir still exists after error
+            assert result is False
+            mock_add.assert_called_once()
+            assert 'test-item' in mock_add.call_args[0][0]
+
+
+class TestSyncAndEnsureCleanMainRepo:
+    """Tests for _sync_and_ensure_clean_main_repo edge cases."""
+
+    def test_bd_sync_timeout(self):
+        """Test bd sync timeout is handled gracefully (lines 361-362)."""
+        from pokepoke.worktrees import _sync_and_ensure_clean_main_repo
+
+        with patch('pokepoke.worktrees.run_bd_sync_with_retry', side_effect=subprocess.TimeoutExpired('bd', 30)), \
+             patch('pokepoke.worktrees._run_git') as mock_git, \
+             patch('builtins.print') as mock_print:
+
+            mock_git.return_value = Mock(stdout='', returncode=0)
+
+            result = _sync_and_ensure_clean_main_repo('task/test-branch')
+
+            assert result is True
+            assert any('bd sync timed out' in str(c) for c in mock_print.call_args_list)
+
+    def test_many_other_changes(self):
+        """Test reporting when >10 non-beads changes exist (line 378)."""
+        from pokepoke.worktrees import _sync_and_ensure_clean_main_repo
+
+        lines = '\n'.join(f' M src/file{i}.py' for i in range(15))
+
+        with patch('pokepoke.worktrees.run_bd_sync_with_retry') as mock_sync, \
+             patch('pokepoke.worktrees._run_git') as mock_git, \
+             patch('builtins.print') as mock_print:
+
+            mock_sync.return_value = Mock(returncode=0)
+            mock_git.return_value = Mock(stdout=lines, returncode=0)
+
+            result = _sync_and_ensure_clean_main_repo('task/test-branch')
+
+            assert result is False
+            print_calls = [str(c) for c in mock_print.call_args_list]
+            assert any('and 5 more' in c for c in print_calls)
+
+    def test_worktree_changes_committed(self):
+        """Test worktree cleanup changes are auto-committed (lines 389-392)."""
+        from pokepoke.worktrees import _sync_and_ensure_clean_main_repo
+
+        with patch('pokepoke.worktrees.run_bd_sync_with_retry') as mock_sync, \
+             patch('pokepoke.worktrees._run_git') as mock_git, \
+             patch('builtins.print') as mock_print:
+
+            mock_sync.return_value = Mock(returncode=0)
+            mock_git.side_effect = [
+                Mock(stdout=' D worktrees/task-old/.git\n', returncode=0),  # status
+                Mock(stdout='', returncode=0),  # git add worktrees/
+                Mock(stdout='', returncode=0),  # git commit
+            ]
+
+            result = _sync_and_ensure_clean_main_repo('task/test-branch')
+
+            assert result is True
+            print_calls = [str(c) for c in mock_print.call_args_list]
+            assert any('Committing worktree cleanup' in c for c in print_calls)
+
+    def test_main_repo_check_fails(self):
+        """Test CalledProcessError during main repo check (lines 395-397)."""
+        from pokepoke.worktrees import _sync_and_ensure_clean_main_repo
+
+        with patch('pokepoke.worktrees.run_bd_sync_with_retry') as mock_sync, \
+             patch('pokepoke.worktrees._run_git', side_effect=subprocess.CalledProcessError(1, ['git'])), \
+             patch('builtins.print') as mock_print:
+
+            mock_sync.return_value = Mock(returncode=0)
+
+            result = _sync_and_ensure_clean_main_repo('task/test-branch')
+
+            assert result is False
+            print_calls = [str(c) for c in mock_print.call_args_list]
+            assert any('Failed to check/clean main repo' in c for c in print_calls)

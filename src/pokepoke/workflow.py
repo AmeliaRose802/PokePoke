@@ -5,8 +5,6 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from filelock import Timeout
-
 from pokepoke.copilot import invoke_copilot
 from pokepoke.copilot_sdk import build_prompt_from_work_item
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, ModelCompletionRecord, WorkItemResult
@@ -24,7 +22,6 @@ from pokepoke.shutdown import is_shutting_down, register_agent, unregister_agent
 from pokepoke.model_selection import select_model_for_item, get_assignment_for_item
 from pokepoke.agent_context import get_agent_name
 from pokepoke.config import get_config
-from pokepoke.coordination import worktree_setup_lock
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import ItemLogger, RunLogger
@@ -107,22 +104,18 @@ def process_work_item(
 
         # Assign and sync BEFORE creating worktree to prevent parallel conflicts
         print("\n🔒 Claiming work item...")
-        try:
-            with worktree_setup_lock(timeout=worktree_lock_timeout):
-                if not assign_and_sync_item(item.id):
-                    print(f"❌ Failed to assign work item {item.id}")
-                    _log_failure(run_logger, item_logger)
-                    return _fail_result()
-                was_assigned = True
-                worktree_path = _setup_worktree(item)
+        # assign_and_sync_item has its own per-item lock (beads-claim-{item_id})
+        if not assign_and_sync_item(item.id):
+            print(f"❌ Failed to assign work item {item.id}")
+            _log_failure(run_logger, item_logger)
+            return _fail_result()
+        was_assigned = True
 
-                if worktree_path is None:
-                    print(f"↩️  Returning {item.id} to queue (unassigning due to worktree failure)...")
-                    _log_failure(run_logger, item_logger)
-                    return _fail_result()
-        except Timeout:
-            wait_seconds = int(worktree_lock_timeout)
-            print(f"❌ Timed out waiting {wait_seconds}s for worktree setup lock (another agent is claiming an item).")
+        # create_worktree has its own lock (worktree-setup.lock) via with_worktree_lock
+        worktree_path = _setup_worktree(item, lock_timeout=worktree_lock_timeout)
+
+        if worktree_path is None:
+            print(f"↩️  Returning {item.id} to queue (unassigning due to worktree failure)...")
             _log_failure(run_logger, item_logger)
             return _fail_result()
 
@@ -356,11 +349,16 @@ def process_work_item(
         unregister_agent()
 
 
-def _setup_worktree(item: BeadsWorkItem) -> Path | None:
-    """Create worktree for work item processing."""
+def _setup_worktree(item: BeadsWorkItem, lock_timeout: float = 300.0) -> Path | None:
+    """Create worktree for work item processing.
+
+    Args:
+        item: The work item to create a worktree for.
+        lock_timeout: Maximum seconds to wait for the worktree lock.
+    """
     print(f"\n🌳 Creating worktree for {item.id}...")
     try:
-        worktree_path = create_worktree(item.id)
+        worktree_path = create_worktree(item.id, lock_timeout=lock_timeout)
         print(f"   Created at: {worktree_path}")
         return worktree_path
     except Exception as e:
