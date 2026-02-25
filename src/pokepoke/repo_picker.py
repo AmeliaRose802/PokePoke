@@ -140,7 +140,7 @@ def pick_repo_directory() -> LaunchConfig | None:
             root.mainloop()
 
             return result
-        except (tk.TclError, RuntimeError) as exc:
+        except Exception as exc:
             print(f"⚠️  GUI not available ({exc}); falling back to console prompt.")
             return _prompt_for_repo()
 
