@@ -768,8 +768,8 @@ class TestMergeWorktree:
             print_calls = [str(call) for call in mock_print.call_args_list]
             assert any('Post-merge validation failed' in call for call in print_calls)
 
-    def test_merge_worktree_not_merged_after_merge(self):
-        """Test merge confirmation fails if branch not showing as merged."""
+    def test_merge_worktree_verification_fails_after_push_succeeds(self):
+        """Test that merge succeeds with warning when verification fails after successful push."""
         with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
              patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.get_default_branch', return_value='ameliapayne/dev'), \
@@ -786,13 +786,54 @@ class TestMergeWorktree:
                     return Mock(stdout='', stderr='', returncode=0)
 
             mock_run.side_effect = run_side_effect
+            # This is the bug scenario: push succeeds but verification fails
             mock_merged.return_value = False
 
             success, unmerged_files = merge_worktree('incredible_icm-42')
 
-            assert success is False
+            # After fix: should succeed with warning, not fail
+            assert success is True, "Merge should succeed even when verification fails after push"
             assert unmerged_files == []
-            assert any('Merge confirmation failed' in str(call) for call in mock_print.call_args_list)
+            
+            # Verify warning message was printed instead of error
+            print_calls = [str(call) for call in mock_print.call_args_list]
+            assert any('Post-push merge verification failed' in call and 'but push succeeded' in call
+                      for call in print_calls), "Should print warning about verification failure"
+            
+            # Verify push command was called (confirming push succeeded)
+            run_calls = [str(call) for call in mock_run.call_args_list]
+            assert any('push' in call for call in run_calls), "Should have attempted git push"
+
+    def test_merge_worktree_push_failure_still_fails(self):
+        """Test that merge correctly fails when git push fails."""
+        with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
+             patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.get_default_branch', return_value='ameliapayne/dev'), \
+             patch('builtins.print') as mock_print:
+
+            def run_side_effect(*args, **kwargs):
+                cmd = args[0]
+                if 'push' in cmd:
+                    # Push fails
+                    raise subprocess.CalledProcessError(1, cmd, stderr='push failed: network error')
+                elif 'branch' in cmd and '--show-current' in cmd:
+                    return Mock(stdout='ameliapayne/dev\n', returncode=0)
+                elif 'status' in cmd and '--porcelain' in cmd:
+                    return Mock(stdout='', returncode=0)
+                else:
+                    return Mock(stdout='', stderr='', returncode=0)
+
+            mock_run.side_effect = run_side_effect
+
+            success, unmerged_files = merge_worktree('incredible_icm-42')
+
+            # Push failure should still cause overall failure
+            assert success is False, "Merge should fail when push fails"
+            assert unmerged_files == []
+            
+            # Verify push failure message was printed
+            print_calls = [str(call) for call in mock_print.call_args_list]
+            assert any('Push failed' in call for call in print_calls), "Should print push failure message"
 
     def test_merge_worktree_subprocess_error(self):
         """Test merge fails on subprocess error."""
