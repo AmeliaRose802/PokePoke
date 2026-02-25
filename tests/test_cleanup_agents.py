@@ -107,7 +107,7 @@ class TestCleanupAgents:
             labels=["test"]
         )
 
-        success, stats = invoke_cleanup_agent(item, Path("/repo"))
+        success, stats = invoke_cleanup_agent(item)
 
         assert success is True
         mock_invoke.assert_called_once()
@@ -124,7 +124,7 @@ class TestCleanupAgents:
         mock_get_dir.side_effect = FileNotFoundError("Not found")
 
         item = BeadsWorkItem(id="1", title="T", description="D", status="open", priority=1, issue_type="task")
-        success, stats = invoke_cleanup_agent(item, Path("/repo"))
+        success, stats = invoke_cleanup_agent(item)
 
         assert success is False
         assert stats is None
@@ -160,7 +160,7 @@ class TestCleanupAgents:
             status="in_progress"
         )
 
-        success, stats = invoke_merge_conflict_cleanup_agent(item, Path("/repo"), "Merge error")
+        success, stats = invoke_merge_conflict_cleanup_agent(item, "Merge error")
 
         assert success is True
         mock_invoke.assert_called_once()
@@ -182,7 +182,7 @@ class TestCleanupAgents:
         mock_invoke_cleanup.return_value = (True, None)
 
         item = BeadsWorkItem(id="1", title="T", description="D", status="open", priority=1, issue_type="task")
-        success, stats = invoke_merge_conflict_cleanup_agent(item, Path("/repo"), "Error")
+        success, stats = invoke_merge_conflict_cleanup_agent(item, "Error")
 
         assert success is True
         mock_invoke_cleanup.assert_called_once()
@@ -283,12 +283,11 @@ class TestRunCleanupLoop:
             output="",
             attempt_count=1
         )
-        repo_root = Path("/fake/repo")
 
         # is_clean=True, no uncommitted output, no non-beads changes
         mock_verify.return_value = (True, "", [])
 
-        success, cleanup_runs = run_cleanup_loop(item, result, repo_root)
+        success, cleanup_runs = run_cleanup_loop(item, result)
 
         assert success is True
         assert cleanup_runs == 0
@@ -319,13 +318,12 @@ class TestRunCleanupLoop:
             output="",
             attempt_count=1
         )
-        repo_root = Path("/fake/repo")
 
         # is_clean=False (has non-beads changes), then True after commit
         mock_verify.return_value = (False, " M file.py\n", [" M file.py"])
         mock_commit.return_value = (True, "")
 
-        success, cleanup_runs = run_cleanup_loop(item, result, repo_root)
+        success, cleanup_runs = run_cleanup_loop(item, result)
 
         assert success is True
         assert cleanup_runs == 0
@@ -365,7 +363,6 @@ class TestRunCleanupLoop:
                 premium_requests=1
             )
         )
-        repo_root = Path("/fake/repo")
 
         # First call: has non-beads changes, second call: clean after cleanup
         mock_verify.side_effect = [
@@ -386,7 +383,7 @@ class TestRunCleanupLoop:
             )
         )
 
-        success, cleanup_runs = run_cleanup_loop(item, result, repo_root)
+        success, cleanup_runs = run_cleanup_loop(item, result)
 
         assert success is True
         assert cleanup_runs == 1
@@ -419,14 +416,13 @@ class TestRunCleanupLoop:
             output="",
             attempt_count=1
         )
-        repo_root = Path("/fake/repo")
 
         # is_clean=False (has non-beads changes)
         mock_verify.return_value = (False, " M file.py\n", [" M file.py"])
         mock_commit.return_value = (False, "Tests failed")
         mock_invoke.return_value = (False, None)
 
-        success, cleanup_runs = run_cleanup_loop(item, result, repo_root)
+        success, cleanup_runs = run_cleanup_loop(item, result)
 
         assert success is False
         assert cleanup_runs == 1
@@ -454,7 +450,7 @@ class TestRunCleanupLoopErrorHandling:
             work_item_id="task-1", success=True, output="", attempt_count=1
         )
 
-        success, cleanup_runs = run_cleanup_loop(item, result, Path("/repo"))
+        success, cleanup_runs = run_cleanup_loop(item, result)
 
         assert success is True
         assert cleanup_runs == 0
@@ -481,7 +477,7 @@ class TestRunCleanupLoopErrorHandling:
             work_item_id="task-1", success=True, output="", attempt_count=1
         )
 
-        success, cleanup_runs = run_cleanup_loop(item, result, Path("/repo"))
+        success, cleanup_runs = run_cleanup_loop(item, result)
 
         assert success is False
         assert cleanup_runs == 1
@@ -538,7 +534,7 @@ class TestMergeWaitLogic:
         )
 
         with patch('pokepoke.cleanup_agents.time.sleep'):
-            success, stats = invoke_cleanup_agent(item, Path("/repo"), wait_for_merge=True)
+            success, stats = invoke_cleanup_agent(item, wait_for_merge=True)
 
         assert success is True
 
@@ -565,7 +561,7 @@ class TestMergeWaitLogic:
         )
 
         with patch('pokepoke.cleanup_agents.time.sleep'):
-            success, stats = invoke_cleanup_agent(item, Path("/repo"), wait_for_merge=True)
+            success, stats = invoke_cleanup_agent(item, wait_for_merge=True)
 
         assert success is True
 
@@ -589,7 +585,7 @@ class TestMergeWaitLogic:
             status="in_progress", priority=1, issue_type="task"
         )
 
-        success, stats = invoke_cleanup_agent(item, Path("/repo"), wait_for_merge=False)
+        success, stats = invoke_cleanup_agent(item, wait_for_merge=False)
 
         assert success is True
         mock_merge_active.assert_not_called()
@@ -621,7 +617,7 @@ class TestMergeWaitLogic:
 
         with patch('pokepoke.cleanup_agents.time.sleep'):
             success, stats = invoke_merge_conflict_cleanup_agent(
-                item, Path("/repo"), "Merge error", wait_for_merge=True
+                item, "Merge error", wait_for_merge=True
             )
 
         assert success is True
@@ -652,7 +648,7 @@ class TestMergeWaitLogic:
 
         with patch('pokepoke.cleanup_agents.time.sleep'):
             success, stats = invoke_merge_conflict_cleanup_agent(
-                item, Path("/repo"), "Merge error", wait_for_merge=True
+                item, "Merge error", wait_for_merge=True
             )
 
         assert success is True
@@ -682,7 +678,7 @@ class TestMergeWaitLogic:
         )
 
         success, stats = invoke_merge_conflict_cleanup_agent(
-            item, Path("/repo"), "Merge error",
+            item, "Merge error",
             unmerged_files=["f1.py", "f2.py", "f3.py", "f4.py", "f5.py", "f6.py"],
             wait_for_merge=False,
         )

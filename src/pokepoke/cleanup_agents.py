@@ -22,7 +22,6 @@ def aggregate_cleanup_stats(result_stats: AgentStats | None, cleanup_stats: Agen
 def run_cleanup_loop(
     item: BeadsWorkItem,
     result: CopilotResult,
-    repo_root: Path,
     cwd: str | None = None,
     parent_agent_id: str | None = None
 ) -> tuple[bool, int]:
@@ -62,7 +61,6 @@ def run_cleanup_loop(
         file_paths = [f.split()[-1] if f.split() else f for f in non_beads_changes]
         cleanup_success, cleanup_stats = invoke_cleanup_agent(
             item,
-            repo_root,
             cwd=cwd,
             modified_files=file_paths,
             parent_agent_id=parent_agent_id,
@@ -255,7 +253,6 @@ def _wait_for_merge_completion(agent_label: str, item_id: str) -> None:
 
 def invoke_cleanup_agent(
     item: BeadsWorkItem,
-    repo_root: Path,
     cwd: str | None = None,
     modified_files: list[str] | None = None,
     parent_agent_id: str | None = None,
@@ -309,7 +306,6 @@ def invoke_cleanup_agent(
 
 def invoke_merge_conflict_cleanup_agent(
     item: BeadsWorkItem,
-    repo_root: Path,
     error_msg: str,
     unmerged_files: list[str] | None = None,
     cwd: str | None = None,
@@ -335,7 +331,7 @@ def invoke_merge_conflict_cleanup_agent(
             parent_agent_id=parent_agent_id,
             agent_type="merge_conflict_cleanup",
         )
-        return invoke_cleanup_agent(item, repo_root, parent_agent_id=parent_agent_id, wait_for_merge=wait_for_merge)
+        return invoke_cleanup_agent(item, parent_agent_id=parent_agent_id, wait_for_merge=wait_for_merge)
 
     current_dir, current_branch, is_worktree = _get_current_git_context(cwd=cwd)
 

@@ -129,7 +129,6 @@ def perform_worktree_merge(
             # Don't wait for merge lock since we already hold it
             cleanup_success, _ = invoke_cleanup_agent(
                 item,
-                repo_root,
                 parent_agent_id=parent_agent_id,
                 wait_for_merge=False
             )
@@ -185,7 +184,6 @@ def perform_worktree_merge(
             # Don't wait for merge lock since we already hold it
             success, _ = invoke_merge_conflict_cleanup_agent(
                 item,
-                repo_root,
                 f"Merge conflict detected in {len(unmerged_files)} file(s){conflict_details}",
                 unmerged_files=unmerged_files,
                 parent_agent_id=parent_agent_id,

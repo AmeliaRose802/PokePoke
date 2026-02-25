@@ -794,12 +794,12 @@ class TestMergeWorktree:
             # After fix: should succeed with warning, not fail
             assert success is True, "Merge should succeed even when verification fails after push"
             assert unmerged_files == []
-            
+
             # Verify warning message was printed instead of error
             print_calls = [str(call) for call in mock_print.call_args_list]
             assert any('Post-push merge verification failed' in call and 'but push succeeded' in call
                       for call in print_calls), "Should print warning about verification failure"
-            
+
             # Verify push command was called (confirming push succeeded)
             run_calls = [str(call) for call in mock_run.call_args_list]
             assert any('push' in call for call in run_calls), "Should have attempted git push"
@@ -830,7 +830,7 @@ class TestMergeWorktree:
             # Push failure should still cause overall failure
             assert success is False, "Merge should fail when push fails"
             assert unmerged_files == []
-            
+
             # Verify push failure message was printed
             print_calls = [str(call) for call in mock_print.call_args_list]
             assert any('Push failed' in call for call in print_calls), "Should print push failure message"
@@ -1736,10 +1736,9 @@ class TestCreateWorktreeLockAndEdgeCases:
         with patch('pokepoke.worktrees.list_worktrees', return_value=[]), \
              patch('pokepoke.worktrees.get_default_branch', return_value='main'), \
              patch('pathlib.Path.mkdir'), \
-             patch('pokepoke.worktrees.with_worktree_lock', side_effect=OSError("disk full")):
-
-            with pytest.raises(RuntimeError, match="Unexpected error creating worktree"):
-                create_worktree('test-item')
+             patch('pokepoke.worktrees.with_worktree_lock', side_effect=OSError("disk full")), \
+             pytest.raises(RuntimeError, match="Unexpected error creating worktree"):
+            create_worktree('test-item')
 
 
 class TestMergeWorktreeConflicts:
@@ -1747,7 +1746,6 @@ class TestMergeWorktreeConflicts:
 
     def test_merge_worktree_many_unmerged_files(self):
         """Test conflict reporting with >10 unmerged files (lines 192-196)."""
-        from pokepoke.git_operations import execute_merge_sequence
 
         unmerged = [f"file{i}.py" for i in range(15)]
 

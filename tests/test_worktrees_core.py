@@ -5,7 +5,7 @@ Tests for create_worktree, merge_worktree, list_worktrees, and error handling.
 
 import subprocess
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 import pytest
 
 from pokepoke.worktrees import (
@@ -39,7 +39,7 @@ class TestRunGit:
         with patch('subprocess.run') as mock_run:
             mock_run.return_value = Mock(returncode=0)
             _run_git(['git', 'status'])
-            
+
             call_kwargs = mock_run.call_args[1]
             assert call_kwargs['text'] is True
             assert call_kwargs['encoding'] == 'utf-8'
@@ -51,7 +51,7 @@ class TestRunGit:
         with patch('subprocess.run') as mock_run:
             mock_run.return_value = Mock(returncode=0)
             _run_git(['git', 'status'], timeout=60)
-            
+
             assert mock_run.call_args[1]['timeout'] == 60
 
     def test_run_git_check_false(self) -> None:
@@ -59,14 +59,14 @@ class TestRunGit:
         with patch('subprocess.run') as mock_run:
             mock_run.return_value = Mock(returncode=1)
             _run_git(['git', 'invalid'], check=False)
-            
+
             assert mock_run.call_args[1]['check'] is False
 
     def test_run_git_timeout_expired(self) -> None:
         """_run_git propagates TimeoutExpired."""
         with patch('subprocess.run') as mock_run:
             mock_run.side_effect = subprocess.TimeoutExpired(cmd='git', timeout=30)
-            
+
             with pytest.raises(subprocess.TimeoutExpired):
                 _run_git(['git', 'slow-command'])
 
@@ -136,7 +136,7 @@ class TestCreateWorktree:
         ]
         mock_lock.return_value.__enter__ = Mock(return_value=None)
         mock_lock.return_value.__exit__ = Mock(return_value=None)
-        
+
         error = subprocess.CalledProcessError(1, 'git', stderr='fatal: already exists')
         mock_run_git.side_effect = error
 
@@ -162,7 +162,7 @@ class TestCreateWorktree:
         mock_list.return_value = []
         mock_lock.return_value.__enter__ = Mock(return_value=None)
         mock_lock.return_value.__exit__ = Mock(return_value=None)
-        
+
         error = subprocess.CalledProcessError(
             128, 'git', stderr='fatal: invalid reference: nonexistent'
         )
@@ -189,7 +189,7 @@ class TestCreateWorktree:
         mock_list.return_value = []
         mock_lock.return_value.__enter__ = Mock(return_value=None)
         mock_lock.return_value.__exit__ = Mock(return_value=None)
-        
+
         mock_run_git.side_effect = subprocess.TimeoutExpired(cmd='git', timeout=30)
 
         with pytest.raises(RuntimeError, match="Timed out creating worktree"):
@@ -243,7 +243,7 @@ class TestCreateWorktree:
         mock_list.return_value = []
         mock_lock.return_value.__enter__ = Mock(return_value=None)
         mock_lock.return_value.__exit__ = Mock(return_value=None)
-        
+
         mock_run_git.side_effect = ValueError("unexpected error")
 
         with pytest.raises(RuntimeError, match="Unexpected error creating worktree"):
@@ -283,7 +283,7 @@ class TestCreateWorktree:
              patch('pokepoke.worktrees.with_worktree_lock') as mock_lock, \
              patch('pokepoke.worktrees._run_git') as mock_run_git, \
              patch('pathlib.Path.mkdir'):
-            
+
             mock_list.return_value = []
             mock_lock.return_value.__enter__ = Mock(return_value=None)
             mock_lock.return_value.__exit__ = Mock(return_value=None)
