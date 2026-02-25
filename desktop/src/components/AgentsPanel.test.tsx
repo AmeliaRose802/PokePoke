@@ -656,4 +656,101 @@ describe('AgentsPanel', () => {
       expect(gateChips).toHaveLength(0);
     });
   });
+
+  describe('retry agent nesting', () => {
+    it('should nest retry agents under the main agent card', () => {
+      // Main agent (first iteration)
+      const mainAgent = mkAgent({
+        agent_id: 'work-item-123',
+        card_id: 'work-item-123::v1',
+        name: 'pokepoke',
+        iteration: 1,
+        status: 'failed',
+        agent_type: 'work',
+        work_item_id: 'PokePoke-123',
+        work_item_title: 'Test Work Item',
+      });
+
+      // Retry agent (second iteration) - should be nested under main agent
+      const retryAgent = mkAgent({
+        agent_id: 'work-item-123-retry-2',
+        card_id: 'work-item-123-retry-2::v2',
+        name: 'pokepoke',
+        iteration: 2,
+        status: 'running',
+        parent_card_id: 'work-item-123::v1', // This should make it nested
+        agent_type: 'work',
+        work_item_id: 'PokePoke-123',
+        work_item_title: 'Test Work Item',
+      });
+
+      const { container } = render(
+        <AgentsPanel
+          agents={[mainAgent, retryAgent]}
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+
+      // Should have two agent cards total
+      const allCards = container.querySelectorAll('.agent-card');
+      expect(allCards).toHaveLength(2);
+
+      // Main agent should not have child class (it's the parent)
+      expect(allCards[0].classList.contains('agent-card-child')).toBe(false);
+
+      // Retry agent should have child class (nested under main agent)
+      expect(allCards[1].classList.contains('agent-card-child')).toBe(true);
+    });
+
+    it('should handle multiple retry attempts nested under main agent', () => {
+      // Main agent
+      const mainAgent = mkAgent({
+        agent_id: 'work-item-456',
+        card_id: 'work-item-456::v1',
+        name: 'pokepoke',
+        iteration: 1,
+        status: 'failed',
+      });
+
+      // First retry
+      const retryAgent1 = mkAgent({
+        agent_id: 'work-item-456-retry-2',
+        card_id: 'work-item-456-retry-2::v2',
+        name: 'pokepoke',
+        iteration: 2,
+        status: 'failed',
+        parent_card_id: 'work-item-456::v1',
+      });
+
+      // Second retry
+      const retryAgent2 = mkAgent({
+        agent_id: 'work-item-456-retry-3',
+        card_id: 'work-item-456-retry-3::v3',
+        name: 'pokepoke',
+        iteration: 3,
+        status: 'running',
+        parent_card_id: 'work-item-456::v1',
+      });
+
+      const { container } = render(
+        <AgentsPanel
+          agents={[mainAgent, retryAgent1, retryAgent2]}
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+
+      // Should have three agent cards total
+      const allCards = container.querySelectorAll('.agent-card');
+      expect(allCards).toHaveLength(3);
+
+      // Only the main agent should be at root level (no child class)
+      expect(allCards[0].classList.contains('agent-card-child')).toBe(false);
+
+      // Both retry agents should be nested (have child class)
+      expect(allCards[1].classList.contains('agent-card-child')).toBe(true);
+      expect(allCards[2].classList.contains('agent-card-child')).toBe(true);
+    });
+  });
 });

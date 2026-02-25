@@ -168,8 +168,11 @@ def process_work_item(
             prompt_template = selected_prompt_template or "beads-item"
             work_prompt = build_prompt_from_work_item(item, template_name=prompt_template)
             with agent_type_context("work"):
-                terminal_ui.ui.push_agent_status(base_agent_id, get_agent_name(default="pokepoke"),
+                is_retry = work_agent_iteration > 1
+                agent_id = f"{base_agent_id}-retry-{work_agent_iteration}" if is_retry else base_agent_id
+                terminal_ui.ui.push_agent_status(agent_id, get_agent_name(default="pokepoke"),
                     iteration=work_agent_iteration, status="running", model=selected_model,
+                    parent_agent_id=base_agent_id if is_retry else None,
                     work_item_id=item.id, work_item_title=item.title, agent_type="work",
                     agent_prompt=work_prompt)
                 result = invoke_copilot(
