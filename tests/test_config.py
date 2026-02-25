@@ -8,6 +8,7 @@ import pytest
 from pokepoke.config import (
     ProjectConfig,
     ModelConfig,
+    ModelSyncConfig,
     MaintenanceConfig,
     MaintenanceAgentConfig,
     GitConfig,
@@ -70,12 +71,50 @@ class TestMaintenanceAgentConfig:
         assert config.enabled is False
 
 
+class TestModelSyncConfig:
+    """Tests for ModelSyncConfig dataclass."""
+
+    def test_defaults(self):
+        config = ModelSyncConfig()
+        assert config.enabled is True
+        assert config.interval_minutes == 60
+        assert config.beta_only is True
+        assert config.include_preview is True
+        assert config.prune_unavailable is False
+        assert config.create_beads_items is True
+        assert config.issue_type == "task"
+        assert config.priority == 2
+        assert config.labels == ["model", "beta", "copilot"]
+
+    def test_custom_values(self):
+        config = ModelSyncConfig(
+            enabled=False,
+            interval_minutes=10,
+            beta_only=False,
+            include_preview=False,
+            prune_unavailable=True,
+            create_beads_items=False,
+            issue_type="feature",
+            priority=1,
+            labels=["model", "experimental"],
+        )
+        assert config.enabled is False
+        assert config.interval_minutes == 10
+        assert config.beta_only is False
+        assert config.include_preview is False
+        assert config.prune_unavailable is True
+        assert config.create_beads_items is False
+        assert config.issue_type == "feature"
+        assert config.priority == 1
+        assert config.labels == ["model", "experimental"]
+
+
 class TestMaintenanceConfig:
     """Tests for MaintenanceConfig dataclass."""
 
     def test_defaults_factory(self):
         config = MaintenanceConfig.defaults()
-        assert len(config.agents) == 6
+        assert len(config.agents) == 7
         names = [a.name for a in config.agents]
         assert "Tech Debt" in names
         assert "Janitor" in names
@@ -83,6 +122,7 @@ class TestMaintenanceConfig:
         assert "Code Review" in names
         assert "Worktree Cleanup" in names
         assert "Backlog Cleanup" in names
+        assert "Model Sync" in names
 
     def test_default_frequencies(self):
         config = MaintenanceConfig.defaults()
@@ -93,6 +133,7 @@ class TestMaintenanceConfig:
         assert by_name["Beta Tester"].frequency == 3
         assert by_name["Code Review"].frequency == 5
         assert by_name["Worktree Cleanup"].frequency == 4
+        assert by_name["Model Sync"].frequency == 1
 
     def test_code_review_has_model(self):
         config = MaintenanceConfig.defaults()
@@ -130,6 +171,7 @@ class TestProjectConfig:
         assert config.models.default == "claude-opus-4.6"
         assert config.ai_backend.provider == "copilot"
         assert config.ai_backend.copilot_cli_path == "copilot.cmd"
+        assert config.model_sync.interval_minutes == 60
         assert config.mcp_server.enabled is False
         assert config.test_data == {}
         assert config.work_artifacts_dir is None
@@ -178,6 +220,17 @@ class TestProjectConfig:
                     }
                 ]
             },
+            "model_sync": {
+                "enabled": True,
+                "interval_minutes": 30,
+                "beta_only": False,
+                "include_preview": False,
+                "prune_unavailable": True,
+                "create_beads_items": False,
+                "issue_type": "feature",
+                "priority": 1,
+                "labels": ["model", "beta", "copilot", "preview"],
+            },
         }
 
         config = ProjectConfig.from_dict(data)
@@ -194,6 +247,9 @@ class TestProjectConfig:
         assert config.mcp_server.name == "Test MCP"
         assert config.test_data["api_url"] == "https://example.com/api"
         assert config.work_artifacts_dir == "artifacts"
+        assert config.model_sync.interval_minutes == 30
+        assert config.model_sync.prune_unavailable is True
+        assert config.model_sync.issue_type == "feature"
         assert len(config.maintenance.agents) == 1
         assert config.maintenance.agents[0].name == "Custom Agent"
         assert config.maintenance.agents[0].frequency == 10
@@ -214,7 +270,7 @@ class TestProjectConfig:
     def test_from_dict_no_maintenance_keeps_defaults(self):
         """When maintenance section is absent, defaults are used."""
         config = ProjectConfig.from_dict({"project_name": "test"})
-        assert len(config.maintenance.agents) == 6
+        assert len(config.maintenance.agents) == 7
 
 
 
@@ -301,7 +357,7 @@ class TestLoadConfig:
         config = load_config()
         assert config.project_name == ""
         assert config.models.default == "claude-opus-4.6"
-        assert len(config.maintenance.agents) == 6
+        assert len(config.maintenance.agents) == 7
 
     @patch("pokepoke.config._find_repo_root")
     def test_pokepoke_yaml_takes_priority(self, mock_root, tmp_path):

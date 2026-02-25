@@ -426,7 +426,7 @@ class TestAgentClassification:
 
     def test_singleton_agents_defined(self):
         """Test that singleton agents are properly defined."""
-        expected_singleton = {"Beta Tester", "Janitor", "Backlog Cleanup", "Worktree Cleanup"}
+        expected_singleton = {"Beta Tester", "Janitor", "Backlog Cleanup", "Worktree Cleanup", "Model Sync"}
         assert expected_singleton == _SINGLETON_AGENTS
 
     def test_parallel_safe_agents_defined(self):

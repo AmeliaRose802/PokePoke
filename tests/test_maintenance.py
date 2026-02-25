@@ -306,6 +306,7 @@ class TestRunPeriodicMaintenance:
         mock_lock.return_value = Mock()
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
+        mock_special_agent.return_value = None
 
         # Return stats from maintenance agent (Janitor runs at 2)
         mock_maintenance.return_value = AgentStats(
@@ -570,6 +571,14 @@ class TestRunSpecialAgent:
         with patch('pokepoke.agent_runner.run_worktree_cleanup', return_value=AgentStats()) as mock_wc:
             result = _run_special_agent("Worktree Cleanup", Path("/repo"))
             mock_wc.assert_called_once_with(repo_root=Path("/repo"), item_logger=None, parent_agent_id=None)
+            assert isinstance(result, AgentStats)
+
+    def test_model_sync(self) -> None:
+        """Test that Model Sync delegates to sync_copilot_models."""
+        from pathlib import Path
+        with patch('pokepoke.model_sync.sync_copilot_models', return_value=AgentStats()) as mock_sync:
+            result = _run_special_agent("Model Sync", Path("/repo"))
+            mock_sync.assert_called_once_with(item_logger=None)
             assert isinstance(result, AgentStats)
 
     def test_unknown_agent_returns_none(self) -> None:

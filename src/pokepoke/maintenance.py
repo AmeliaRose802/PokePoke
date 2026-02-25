@@ -23,6 +23,9 @@ def _run_special_agent(name: str, repo_root: Path, item_logger: 'ItemLogger | No
     if name == "Worktree Cleanup":
         from pokepoke.agent_runner import run_worktree_cleanup
         return run_worktree_cleanup(repo_root=repo_root, item_logger=item_logger, parent_agent_id=parent_agent_id)
+    if name == "Model Sync":
+        from pokepoke.model_sync import sync_copilot_models
+        return sync_copilot_models(item_logger=item_logger)
     return None
 
 
