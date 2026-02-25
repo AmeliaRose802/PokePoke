@@ -43,6 +43,7 @@ class MaintenanceAgentConfig:
     merge_changes: bool = True
     model: str | None = None
     enabled: bool = True
+    conflicts_with: list[str] = field(default_factory=list)
 @dataclass
 class MaintenanceConfig:
     """Maintenance agent scheduling configuration."""
@@ -240,6 +241,7 @@ class ProjectConfig:
                     merge_changes=a.get("merge_changes", True),
                     model=a.get("model"),
                     enabled=a.get("enabled", True),
+                    conflicts_with=a.get("conflicts_with", []),
                 )
                 for a in agents_data
             ])

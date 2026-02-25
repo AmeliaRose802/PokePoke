@@ -49,6 +49,7 @@ mcp_server:
 # Maintenance agent scheduling
 # Each agent runs every N work items completed.
 # Set enabled: false to disable an agent.
+# Use conflicts_with to prevent incompatible agents from running concurrently.
 maintenance:
   agents:
     - name: Tech Debt
@@ -56,6 +57,7 @@ maintenance:
       frequency: 5
       needs_worktree: false
       enabled: true
+      # Tech Debt is safe - only creates beads items, no conflicts
 
     - name: Janitor
       prompt_file: janitor.md
@@ -63,6 +65,10 @@ maintenance:
       needs_worktree: true
       merge_changes: true
       enabled: true
+      conflicts_with:
+        - Backlog Cleanup
+        - Worktree Cleanup
+      # Janitor modifies worktrees and merges changes - conflicts with other worktree agents
 
     - name: Backlog Cleanup
       prompt_file: backlog-cleanup.md
@@ -70,6 +76,10 @@ maintenance:
       needs_worktree: true
       merge_changes: false
       enabled: true
+      conflicts_with:
+        - Janitor
+        - Worktree Cleanup
+      # Backlog Cleanup operates on beads items and worktrees - conflicts with other worktree agents
 
     - name: Beta Tester
       prompt_file: beta-tester.md
@@ -77,6 +87,10 @@ maintenance:
       needs_worktree: true
       merge_changes: false
       enabled: false  # No MCP server to test in self-improvement mode
+      conflicts_with:
+        - Janitor
+        - Worktree Cleanup
+      # Beta Tester uses worktrees - conflicts with worktree maintenance
 
     - name: Code Review
       prompt_file: code-reviewer.md
@@ -84,12 +98,18 @@ maintenance:
       needs_worktree: false
       model: gpt-5.1-codex
       enabled: true
+      # Code Review is safe - only creates beads items, no conflicts
 
     - name: Worktree Cleanup
       prompt_file: worktree-cleanup.md
       frequency: 2  # Run every 2 items instead of 4 to handle locked worktrees faster
       needs_worktree: false
       enabled: true
+      conflicts_with:
+        - Janitor
+        - Backlog Cleanup
+        - Beta Tester
+      # Worktree Cleanup removes worktrees - must not run while other agents use them
 
     - name: Model Sync
       prompt_file: ""
@@ -97,6 +117,7 @@ maintenance:
       needs_worktree: false
       merge_changes: false
       enabled: true
+      # Model Sync is safe - only syncs model list, no conflicts
 
 # Project-specific test data for prompt templates
 # These values are injected into prompt templates that reference test data.

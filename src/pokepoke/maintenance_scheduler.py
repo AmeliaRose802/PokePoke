@@ -60,6 +60,9 @@ class MaintenanceScheduler:
         # In-process locks for thread coordination
         self._locks: dict[str, threading.Lock] = {}
         self._lock_creation_lock = threading.Lock()
+        # Track currently running agents (for conflict detection)
+        self._running_agents: set[str] = set()
+        self._running_agents_lock = threading.Lock()
 
     def _get_agent_lock(self, agent_name: str) -> threading.Lock:
         """Get or create a threading lock for the given agent."""
@@ -69,6 +72,22 @@ class MaintenanceScheduler:
                 if agent_name not in self._locks:
                     self._locks[agent_name] = threading.Lock()
         return self._locks[agent_name]
+
+    @contextlib.contextmanager
+    def _track_running_agent(self, agent_name: str):
+        """Context manager to track a running agent and auto-unregister on exit."""
+        with self._running_agents_lock:
+            self._running_agents.add(agent_name)
+        try:
+            yield
+        finally:
+            with self._running_agents_lock:
+                self._running_agents.discard(agent_name)
+
+    def _get_running_agents(self) -> set[str]:
+        """Get a snapshot of currently running agents (thread-safe)."""
+        with self._running_agents_lock:
+            return self._running_agents.copy()
 
     def maybe_run_maintenance(self, items_completed: int, session_stats: SessionStats, run_logger: RunLogger) -> None:
         """Run maintenance agents that are due, with singleton coordination.
@@ -154,6 +173,18 @@ class MaintenanceScheduler:
                 )
                 return
 
+        # Check for conflicts with currently running agents
+        if agent_cfg.conflicts_with:
+            running = self._get_running_agents()
+            conflicts = set(agent_cfg.conflicts_with) & running
+            if conflicts:
+                conflict_list = ", ".join(sorted(conflicts))
+                run_logger.log_maintenance(
+                    log_key,
+                    f"Deferring {agent_name} Agent - conflicts with running agent(s): {conflict_list}",
+                )
+                return
+
         if agent_name in _PARALLEL_SAFE_AGENTS:
             # Parallel-safe agents don't need singleton coordination
             self._run_agent_with_coordination(agent_name, agent_cfg, pokepoke_repo, session_stats, run_logger)
@@ -222,9 +253,9 @@ class MaintenanceScheduler:
         # Create a dedicated log file for the maintenance agent output
         maint_logger = run_logger.start_maintenance_log(agent_name)
 
-        # Run the agent with proper output routing
+        # Run the agent with proper output routing and track as running
         try:
-            with terminal_ui.ui.agent_output_for(agent_id):
+            with self._track_running_agent(agent_name), terminal_ui.ui.agent_output_for(agent_id):
                 if agent_name in _SPECIAL_AGENTS:
                     result = _run_special_agent(agent_name, pokepoke_repo, item_logger=maint_logger, parent_agent_id=agent_id)
                 else:

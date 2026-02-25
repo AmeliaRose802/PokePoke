@@ -640,3 +640,176 @@ class TestConcurrentExecution:
         with patch.object(scheduler, '_run_agent_with_coordination') as mock_run:
             scheduler._maybe_run_agent("Tech Debt", agent_cfg, Path.cwd(), session_stats, run_logger)
             mock_run.assert_called_once()
+
+
+class TestConflictResolution:
+    """Test conflict detection and deferral logic."""
+
+    def test_agent_with_no_conflicts_runs_normally(self):
+        """Test that agents without conflicts_with run without issues."""
+        scheduler = MaintenanceScheduler()
+        agent_cfg = MaintenanceAgentConfig(
+            name="Tech Debt",
+            prompt_file="tech-debt.md",
+            frequency=5,
+            conflicts_with=[],  # No conflicts
+        )
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        with patch.object(scheduler, '_run_agent_with_coordination') as mock_run:
+            scheduler._maybe_run_agent("Tech Debt", agent_cfg, Path.cwd(), session_stats, run_logger)
+            mock_run.assert_called_once()
+
+    def test_agent_deferred_when_conflicting_agent_running(self):
+        """Test that agent is deferred when a conflicting agent is running."""
+        scheduler = MaintenanceScheduler()
+
+        # Start Janitor running (add to running set)
+        with scheduler._running_agents_lock:
+            scheduler._running_agents.add("Janitor")
+
+        try:
+            # Try to run Worktree Cleanup which conflicts with Janitor
+            agent_cfg = MaintenanceAgentConfig(
+                name="Worktree Cleanup",
+                prompt_file="worktree-cleanup.md",
+                frequency=2,
+                conflicts_with=["Janitor", "Backlog Cleanup"],
+            )
+            session_stats = SessionStats(agent_stats=AgentStats())
+            run_logger = Mock()
+
+            with patch.object(scheduler, '_run_agent_with_coordination') as mock_run:
+                scheduler._maybe_run_agent("Worktree Cleanup", agent_cfg, Path.cwd(), session_stats, run_logger)
+                mock_run.assert_not_called()
+
+            # Should log deferral message
+            run_logger.log_maintenance.assert_called_with(
+                "worktree_cleanup",
+                "Deferring Worktree Cleanup Agent - conflicts with running agent(s): Janitor",
+            )
+        finally:
+            scheduler._running_agents.discard("Janitor")
+
+    def test_agent_runs_when_no_conflicting_agents_running(self):
+        """Test that agent runs when none of its conflicting agents are running."""
+        scheduler = MaintenanceScheduler()
+
+        # Add a non-conflicting agent to running set
+        with scheduler._running_agents_lock:
+            scheduler._running_agents.add("Tech Debt")
+
+        try:
+            agent_cfg = MaintenanceAgentConfig(
+                name="Worktree Cleanup",
+                prompt_file="worktree-cleanup.md",
+                frequency=2,
+                conflicts_with=["Janitor", "Backlog Cleanup"],  # Tech Debt not in list
+            )
+            session_stats = SessionStats(agent_stats=AgentStats())
+            run_logger = Mock()
+
+            with patch.object(scheduler, '_run_with_singleton_guard') as mock_run:
+                scheduler._maybe_run_agent("Worktree Cleanup", agent_cfg, Path.cwd(), session_stats, run_logger)
+                mock_run.assert_called_once()
+        finally:
+            scheduler._running_agents.discard("Tech Debt")
+
+    def test_multiple_conflicting_agents_listed_in_defer_message(self):
+        """Test that all conflicting agents are listed when multiple conflict."""
+        scheduler = MaintenanceScheduler()
+
+        # Start multiple conflicting agents
+        with scheduler._running_agents_lock:
+            scheduler._running_agents.add("Janitor")
+            scheduler._running_agents.add("Backlog Cleanup")
+
+        try:
+            agent_cfg = MaintenanceAgentConfig(
+                name="Worktree Cleanup",
+                prompt_file="worktree-cleanup.md",
+                frequency=2,
+                conflicts_with=["Janitor", "Backlog Cleanup", "Beta Tester"],
+            )
+            session_stats = SessionStats(agent_stats=AgentStats())
+            run_logger = Mock()
+
+            with patch.object(scheduler, '_run_agent_with_coordination') as mock_run:
+                scheduler._maybe_run_agent("Worktree Cleanup", agent_cfg, Path.cwd(), session_stats, run_logger)
+                mock_run.assert_not_called()
+
+            # Check message contains both conflicting agents
+            call_args = run_logger.log_maintenance.call_args
+            assert call_args is not None
+            log_msg = call_args[0][1]
+            assert "Backlog Cleanup" in log_msg
+            assert "Janitor" in log_msg
+            assert "conflicts with running agent(s):" in log_msg
+        finally:
+            scheduler._running_agents.discard("Janitor")
+            scheduler._running_agents.discard("Backlog Cleanup")
+
+    def test_tracking_context_manager_adds_and_removes_agent(self):
+        """Test that _track_running_agent correctly registers and unregisters."""
+        scheduler = MaintenanceScheduler()
+
+        # Initially empty
+        assert len(scheduler._get_running_agents()) == 0
+
+        # Add agent via context manager
+        with scheduler._track_running_agent("Janitor"):
+            running = scheduler._get_running_agents()
+            assert "Janitor" in running
+            assert len(running) == 1
+
+        # Should be removed after context exit
+        assert len(scheduler._get_running_agents()) == 0
+
+    def test_tracking_context_manager_removes_agent_on_exception(self):
+        """Test that agent is unregistered even if exception occurs."""
+        scheduler = MaintenanceScheduler()
+
+        try:
+            with scheduler._track_running_agent("Janitor"):
+                assert "Janitor" in scheduler._get_running_agents()
+                raise RuntimeError("Test exception")
+        except RuntimeError:
+            pass
+
+        # Should still be removed despite exception
+        assert len(scheduler._get_running_agents()) == 0
+
+    @patch('pokepoke.maintenance_scheduler.run_maintenance_agent')
+    @patch('pokepoke.maintenance_scheduler.set_terminal_banner')
+    @patch('pokepoke.maintenance_scheduler.terminal_ui')
+    def test_agent_tracked_during_execution(self, mock_ui, mock_banner, mock_maintenance):
+        """Test that agent is tracked as running during execution."""
+        mock_maintenance.return_value = AgentStats()
+
+        scheduler = MaintenanceScheduler()
+        agent_cfg = MaintenanceAgentConfig(
+            name="Janitor",
+            prompt_file="janitor.md",
+            frequency=2,
+        )
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        # Track whether agent was in running set during execution
+        was_running = []
+
+        def check_running(*args, **kwargs):
+            was_running.append("Janitor" in scheduler._get_running_agents())
+            return AgentStats()
+
+        mock_maintenance.side_effect = check_running
+
+        scheduler._run_agent_with_coordination("Janitor", agent_cfg, Path.cwd(), session_stats, run_logger)
+
+        # Agent should have been in running set during execution
+        assert len(was_running) > 0
+        assert was_running[0] is True
+
+        # Agent should be removed after execution
+        assert "Janitor" not in scheduler._get_running_agents()
