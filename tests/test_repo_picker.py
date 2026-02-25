@@ -195,3 +195,24 @@ class TestPickRepoDirectory:
         assert result is not None
         assert result.repo_path == tmp_path.resolve()
         assert result.max_agents == 1
+
+    def test_tkinter_runtime_failure_falls_back_to_console(self, tmp_path: Path, monkeypatch) -> None:
+        """Test that a tkinter runtime error (e.g. no display) falls back to console."""
+        from pokepoke import repo_picker
+
+        # Make tkinter importable but crash at Tk() instantiation (no display)
+        mock_tk = MagicMock()
+        mock_tk.Tk.side_effect = RuntimeError("no display")
+        mock_ttk = MagicMock()
+
+        monkeypatch.setitem(sys.modules, "tkinter", mock_tk)
+        monkeypatch.setitem(sys.modules, "tkinter.filedialog", MagicMock())
+        monkeypatch.setitem(sys.modules, "tkinter.ttk", mock_ttk)
+
+        inputs = iter([str(tmp_path)])
+        monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+        result = repo_picker.pick_repo_directory()
+        assert result is not None
+        assert result.repo_path == tmp_path.resolve()
+        assert result.max_agents == 1

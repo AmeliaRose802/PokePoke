@@ -125,8 +125,9 @@ def pick_repo_directory() -> LaunchConfig | None:
 
         return result
 
-    except ImportError:
-        # tkinter not available — fall back to a console prompt
+    except (ImportError, Exception):
+        # tkinter not available or failed at runtime (e.g. no display) —
+        # fall back to a console prompt
         cwd = Path.cwd()
         print("📁 Current directory is not a git repository.")
         print(f"   cwd: {cwd}")
@@ -137,5 +138,4 @@ def pick_repo_directory() -> LaunchConfig | None:
             p = Path(answer).resolve()
             if p.is_dir():
                 return LaunchConfig(repo_path=p, max_agents=1)
-            print(f"   ❌ Not a valid directory: {p}")
             print(f"   ❌ Not a valid directory: {p}")
