@@ -155,6 +155,31 @@ class TestMaintenanceScheduler:
                 "janitor", "Skipping Janitor Agent - paused by user"
             )
 
+    @patch("pokepoke.maintenance_scheduler.wait_for_main_repo_clean")
+    @patch("pokepoke.maintenance_scheduler.terminal_ui")
+    @patch("pokepoke.maintenance_scheduler.get_config")
+    def test_repo_clean_checked_once_for_entire_batch(self, mock_config, mock_terminal_ui, mock_wait):
+        """wait_for_main_repo_clean must be called exactly once regardless of agent count."""
+        mock_wait.return_value = True
+        mock_terminal_ui.ui.is_agent_paused.return_value = False
+        config = ProjectConfig()
+        config.maintenance = MaintenanceConfig(agents=[
+            MaintenanceAgentConfig(name="Janitor", prompt_file="janitor.md", frequency=2, enabled=True),
+            MaintenanceAgentConfig(name="Backlog Cleanup", prompt_file="backlog.md", frequency=2, enabled=True),
+            MaintenanceAgentConfig(name="Code Review", prompt_file="code-review.md", frequency=2, enabled=True),
+            MaintenanceAgentConfig(name="Worktree Cleanup", prompt_file="worktree-cleanup.md", frequency=2, enabled=True),
+        ])
+        mock_config.return_value = config
+        scheduler = MaintenanceScheduler()
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        with patch.object(scheduler, '_maybe_run_agent'):
+            scheduler.maybe_run_maintenance(2, session_stats, run_logger)
+
+        # Must be called exactly once — not once per agent
+        mock_wait.assert_called_once()
+
 
 class TestSingletonCoordination:
     """Test singleton coordination logic."""
@@ -536,20 +561,38 @@ class TestConcurrentExecution:
         assert len(results) == 0  # None should complete
         assert len(skipped_messages) == 3  # All should be skipped
 
-    @patch("pokepoke.maintenance_scheduler.wait_for_main_repo_clean")
-    def test_maybe_run_agent_defers_when_repo_stays_dirty(self, mock_wait):
-        """Agents should skip when repo never becomes clean."""
-        mock_wait.return_value = False
+    @patch("pokepoke.maintenance_scheduler.get_active_agent_count")
+    def test_maybe_run_agent_defers_when_repo_stays_dirty(self, mock_active_count):
+        """Entire maintenance batch skips when repo never becomes clean (checked once)."""
+        # active_count=0 so singleton deferral is bypassed
+        mock_active_count.return_value = 0
         scheduler = MaintenanceScheduler()
-        agent_cfg = MaintenanceAgentConfig(name="Janitor", prompt_file="janitor.md", frequency=2)
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
 
-        scheduler._maybe_run_agent("Janitor", agent_cfg, Path.cwd(), session_stats, run_logger)
+        # Simulate 'wait_for_main_repo_clean' returning False for the batch check.
+        # We call _maybe_run_agent directly, but since the per-agent repo check was
+        # removed, this exercises the path via maybe_run_maintenance instead.
+        with patch("pokepoke.maintenance_scheduler.get_config") as mock_config, \
+                patch("pokepoke.maintenance_scheduler.wait_for_main_repo_clean", return_value=False) as mock_wait, \
+                patch("pokepoke.maintenance_scheduler.terminal_ui") as mock_ui:
+            mock_ui.ui.is_agent_paused.return_value = False
+            config = ProjectConfig()
+            config.maintenance = MaintenanceConfig(agents=[
+                MaintenanceAgentConfig(name="Janitor", prompt_file="janitor.md", frequency=2, enabled=True),
+                MaintenanceAgentConfig(name="Backlog Cleanup", prompt_file="backlog.md", frequency=2, enabled=True),
+            ])
+            mock_config.return_value = config
 
+            with patch.object(scheduler, '_maybe_run_agent') as mock_run:
+                scheduler.maybe_run_maintenance(2, session_stats, run_logger)
+                mock_run.assert_not_called()
+
+        # wait_for_main_repo_clean must be called exactly once for the whole batch
+        mock_wait.assert_called_once()
         run_logger.log_maintenance.assert_called_with(
-            "janitor",
-            "Skipping Janitor Agent - main repo still dirty after wait",
+            "maintenance",
+            "Skipping 2 maintenance agent(s) - main repo still dirty after wait",
         )
 
     @patch("pokepoke.maintenance_scheduler.get_active_agent_count")

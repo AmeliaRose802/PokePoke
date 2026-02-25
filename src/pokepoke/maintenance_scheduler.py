@@ -86,6 +86,8 @@ class MaintenanceScheduler:
         config = get_config()
         agents = config.maintenance.agents
 
+        # Collect agents that are due to run this cycle.
+        due_agents: list[MaintenanceAgentConfig] = []
         for agent_cfg in agents:
             if not agent_cfg.enabled:
                 continue
@@ -101,7 +103,31 @@ class MaintenanceScheduler:
                 run_logger.log_maintenance(log_key, f"Skipping {agent_cfg.name} Agent - paused by user")
                 continue
 
-            # Agent is due to run - try to schedule it
+            due_agents.append(agent_cfg)
+
+        if not due_agents:
+            return
+
+        # Check repo cleanliness ONCE for the entire batch.  Previously each
+        # agent called wait_for_main_repo_clean independently, so a dirty repo
+        # caused 4+ agents to each time-out after 3 minutes — wasting 12+ min
+        # per cycle with no useful work.
+        def _batch_log(msg: str) -> None:
+            run_logger.log_maintenance("maintenance", msg)
+
+        if not wait_for_main_repo_clean(
+            pokepoke_repo,
+            timeout=180.0,
+            poll_interval=2.0,
+            log_fn=_batch_log,
+        ):
+            run_logger.log_maintenance(
+                "maintenance",
+                f"Skipping {len(due_agents)} maintenance agent(s) - main repo still dirty after wait",
+            )
+            return
+
+        for agent_cfg in due_agents:
             self._maybe_run_agent(agent_cfg.name, agent_cfg, pokepoke_repo, session_stats, run_logger)
 
     def _maybe_run_agent(self, agent_name: str, agent_cfg: MaintenanceAgentConfig, pokepoke_repo: Path, session_stats: SessionStats, run_logger: RunLogger) -> None:
@@ -127,21 +153,6 @@ class MaintenanceScheduler:
                     f"Deferring {agent_name} Agent - {active_count} agent(s) still active",
                 )
                 return
-
-        def log_fn(msg: str) -> None:
-            run_logger.log_maintenance(log_key, msg)
-
-        if not wait_for_main_repo_clean(
-            pokepoke_repo,
-            timeout=180.0,
-            poll_interval=2.0,
-            log_fn=log_fn,
-        ):
-            run_logger.log_maintenance(
-                log_key,
-                f"Skipping {agent_name} Agent - main repo still dirty after wait",
-            )
-            return
 
         if agent_name in _PARALLEL_SAFE_AGENTS:
             # Parallel-safe agents don't need singleton coordination
