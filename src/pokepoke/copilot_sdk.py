@@ -134,7 +134,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     timeout: float | None = None,
     deny_write: bool = False,
     item_logger: 'ItemLogger | None' = None,
-    idle_timeout: float = 10.0,
+    idle_timeout: float = 30.0,
     model: str | None = None,
     cwd: str | None = None,
     template_name: str | None = None

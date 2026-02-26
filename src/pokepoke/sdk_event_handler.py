@@ -1,7 +1,6 @@
 """Event handler utilities for SDK client sessions."""
 
 import asyncio
-import contextlib
 import json
 import logging
 import re
@@ -101,6 +100,7 @@ class SessionStats(TypedDict):
     current_model: str
     last_event_time: float
     event_count: int
+    last_tool_activity_time: float
 
 
 def create_event_handler(
@@ -108,7 +108,7 @@ def create_event_handler(
     output_lines: list[str],
     errors: list[str],
     item_logger: Any | None = None,
-    idle_timeout: float = 10.0,
+    idle_timeout: float = 30.0,
     hung_command_detector: HungCommandDetector | None = None,
     on_token_usage: Callable[[int, int], None] | None = None,
 ) -> tuple[Callable[[Any], None], SessionStats]:
@@ -137,7 +137,6 @@ def create_event_handler(
         )
 
     # Shared state for event handler
-    turn_end_completion_timeout = max(0.5, min(idle_timeout * 0.5, 5.0))
     stats: SessionStats = {
         'pending_tool_calls': 0,
         'idle_task': None,
@@ -151,6 +150,7 @@ def create_event_handler(
         'current_model': DEFAULT_MODEL,
         'last_event_time': time.monotonic(),
         'event_count': 0,
+        'last_tool_activity_time': 0.0,
     }
 
     # Track pending tool calls by name for hung detection
@@ -186,35 +186,6 @@ def create_event_handler(
         stats['event_count'] += 1
         stats['last_event_time'] = time.monotonic()
 
-        def _schedule_completion(delay: float, reason: str) -> None:
-            baseline_event_count = stats['event_count']
-            if stats['idle_task'] and not stats['idle_task'].done():
-                stats['idle_task'].cancel()
-
-            async def _confirm_still_done() -> None:
-                try:
-                    await asyncio.sleep(delay)
-                    if done.is_set():
-                        return
-                    if stats['pending_tool_calls'] != 0:
-                        return
-                    if stats['event_count'] != baseline_event_count:
-                        return
-                    print(f"[SDK] Session confirmed complete via {reason}")
-                    done.set()
-                except asyncio.CancelledError:
-                    pass
-
-            try:
-                loop_for_task = asyncio.get_running_loop()
-            except RuntimeError:
-                with contextlib.suppress(RuntimeError):
-                    loop_for_task = asyncio.get_event_loop_policy().get_event_loop()
-                    stats['idle_task'] = loop_for_task.create_task(_confirm_still_done())
-                return
-
-            stats['idle_task'] = loop_for_task.create_task(_confirm_still_done())
-
         if event_type == "assistant.message_delta":
             received_deltas = True
             terminal_ui.ui.set_style("green")
@@ -248,14 +219,15 @@ def create_event_handler(
 
         elif event_type == "tool.execution_start":
             terminal_ui.ui.set_style(None)
+            # Cancel any pending idle confirmation — agent is still working.
+            if stats['idle_task'] and not stats['idle_task'].done():
+                stats['idle_task'].cancel()
             stats['total_tool_calls'] += 1
             stats['pending_tool_calls'] += 1
+            stats['last_tool_activity_time'] = time.monotonic()
             # Reset stale idle tracking whenever real tool activity occurs.
             _stale_idle_count = 0
             _last_idle_pending = None
-            if stats['idle_task'] and not stats['idle_task'].done():
-                stats['idle_task'].cancel()
-                stats['idle_task'] = None
             if hasattr(event, 'data'):
                 tool_name = getattr(event.data, 'tool_name', 'unknown')
                 tool_args = getattr(event.data, 'arguments', {}) or {}
@@ -278,6 +250,7 @@ def create_event_handler(
         elif event_type == "tool.execution_complete":
             terminal_ui.ui.set_style(None)
             stats['pending_tool_calls'] = max(0, stats['pending_tool_calls'] - 1)
+            stats['last_tool_activity_time'] = time.monotonic()
             # Reset stale idle tracking whenever real tool activity occurs.
             _stale_idle_count = 0
             _last_idle_pending = None
@@ -350,11 +323,12 @@ def create_event_handler(
 
         elif event_type == "assistant.turn_end":
             stats['turn_count'] += 1
-            if stats['pending_tool_calls'] == 0 and stats['turn_count'] > 0:
-                logger.debug("Assistant turn ended with no pending tools - scheduling completion check")
-                _schedule_completion(turn_end_completion_timeout, "assistant.turn_end")
+            logger.debug("Assistant turn ended (turn %d, pending=%d)",
+                         stats['turn_count'], stats['pending_tool_calls'])
 
         elif event_type == "session.idle":
+            if stats['idle_task'] and not stats['idle_task'].done():
+                stats['idle_task'].cancel()
             if stats['pending_tool_calls'] > 0:
                 # Track consecutive idles with unchanged pending count.
                 # If Copilot exited without emitting tool.execution_complete,
@@ -376,8 +350,22 @@ def create_event_handler(
             else:
                 _stale_idle_count = 0
                 _last_idle_pending = None
-                logger.debug("Session idle - scheduling completion check")
-                _schedule_completion(idle_timeout, "session.idle")
+                print("\n[SDK] Session idle - waiting to confirm completion...")
+
+                async def check_still_idle() -> None:
+                    try:
+                        await asyncio.sleep(idle_timeout)
+                        if not done.is_set() and stats['pending_tool_calls'] == 0:
+                            print("[SDK] Session confirmed idle - processing complete")
+                            done.set()
+                    except asyncio.CancelledError:
+                        pass
+
+                stats['idle_task'] = asyncio.create_task(check_still_idle())
+
+        elif event_type == "session.end":
+            print("[SDK] Agent signaled session complete")
+            done.set()
 
         elif event_type == "session.error":
             error_msg = getattr(event.data, 'message', 'Unknown error') if hasattr(event, 'data') else 'Unknown error'

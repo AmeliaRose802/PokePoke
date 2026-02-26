@@ -232,7 +232,9 @@ def test_assistant_turn_end_increments_count() -> None:
     assert stats['turn_count'] == 2
 
 
-def test_turn_end_with_no_pending_tools_sets_done_after_grace() -> None:
+def test_turn_end_with_no_pending_tools_does_not_set_done() -> None:
+    """assistant.turn_end should NOT set done — only session.idle (after
+    confirmation timeout) or session.end do."""
     loop = asyncio.new_event_loop()
     try:
         asyncio.set_event_loop(loop)
@@ -244,8 +246,8 @@ def test_turn_end_with_no_pending_tools_sets_done_after_grace() -> None:
         handler(_make_event("assistant.turn_end"))
 
         assert stats['turn_count'] == 1
-        loop.run_until_complete(asyncio.sleep(0.7))
-        assert done.is_set()
+        loop.run_until_complete(asyncio.sleep(0.3))
+        assert not done.is_set(), "turn_end should not set done — wait for session.end"
     finally:
         asyncio.set_event_loop(None)
         loop.close()
@@ -442,9 +444,9 @@ def test_tool_activity_resets_stale_idle_counter(capsys) -> None:
         loop.close()
 
 
-def test_idle_with_zero_pending_still_uses_confirm_timeout() -> None:
-    """When pending_tool_calls is 0, session.idle should schedule the normal
-    confirmation timeout rather than force-completing immediately."""
+def test_idle_with_zero_pending_sets_done_after_confirm() -> None:
+    """When pending_tool_calls is 0, session.idle should spawn a confirmation
+    task that sets done after idle_timeout elapses (Feb 24 pattern)."""
     async def _run() -> None:
         done = asyncio.Event()
         output_lines: list[str] = []
@@ -454,12 +456,104 @@ def test_idle_with_zero_pending_still_uses_confirm_timeout() -> None:
             done, output_lines, errors, idle_timeout=0.05,
         )
 
-        # Idle with no pending tools — done should NOT be set immediately
+        # Idle with no pending tools — spawns confirmation task, not done yet
         handler(_make_event("session.idle"))
         assert not done.is_set()
 
-        # After idle_timeout elapses, done should be set
+        # After idle_timeout elapses, confirmation task should set done
         await asyncio.sleep(0.15)
-        assert done.is_set()
+        assert done.is_set(), "session.idle should set done after idle_timeout confirmation"
 
     asyncio.run(_run())
+
+
+def test_tool_start_cancels_idle_confirmation() -> None:
+    """New tool activity should cancel the pending idle confirmation task,
+    preventing premature completion when the agent resumes work."""
+    async def _run() -> None:
+        done = asyncio.Event()
+        output_lines: list[str] = []
+        errors: list[str] = []
+
+        handler, stats = create_event_handler(
+            done, output_lines, errors, idle_timeout=0.1,
+        )
+
+        # Trigger idle — spawns confirmation task
+        handler(_make_event("session.idle"))
+        assert not done.is_set()
+        assert stats['idle_task'] is not None
+
+        # New tool activity should cancel that task
+        handler(_make_event("tool.execution_start", tool_name="powershell",
+                            arguments={"command": "echo hi"}, tool_call_id="t1"))
+
+        # Let the event loop process the cancellation
+        await asyncio.sleep(0)
+        assert stats['idle_task'].cancelled()
+
+        # Wait past idle_timeout — done should NOT be set (task was cancelled)
+        await asyncio.sleep(0.2)
+        assert not done.is_set(), "tool activity should have cancelled idle confirmation"
+
+    asyncio.run(_run())
+
+
+def test_session_end_sets_done_immediately() -> None:
+    """A session.end event should set done immediately — this is the
+    primary signal that the agent has finished its work."""
+    done = asyncio.Event()
+    output_lines: list[str] = []
+    errors: list[str] = []
+
+    handler, stats = create_event_handler(done, output_lines, errors)
+    assert not done.is_set()
+
+    handler(_make_event("session.end"))
+    assert done.is_set()
+
+
+def test_session_end_after_tool_activity_sets_done(capsys) -> None:
+    """session.end should set done even after recent tool activity."""
+    done = asyncio.Event()
+    output_lines: list[str] = []
+    errors: list[str] = []
+
+    handler, stats = create_event_handler(done, output_lines, errors)
+
+    # Simulate tool activity
+    handler(_make_event("tool.execution_start", tool_name="powershell",
+                        arguments={"command": "echo hi"}, tool_call_id="t1"))
+    handler(_make_event("tool.execution_complete", tool_name="powershell",
+                        arguments={"command": "echo hi"},
+                        result=SimpleNamespace(content="hi"), success=True,
+                        tool_call_id="t1"))
+
+    assert not done.is_set()
+    handler(_make_event("session.end"))
+    assert done.is_set()
+
+    captured = capsys.readouterr()
+    assert "session complete" in captured.out.lower()
+
+
+def test_tool_activity_time_tracked_on_start_and_complete() -> None:
+    """last_tool_activity_time in stats should update on both
+    tool.execution_start and tool.execution_complete events."""
+    done = asyncio.Event()
+    output_lines: list[str] = []
+    errors: list[str] = []
+
+    handler, stats = create_event_handler(done, output_lines, errors)
+
+    assert stats['last_tool_activity_time'] == 0.0
+
+    handler(_make_event("tool.execution_start", tool_name="run_cmd",
+                        arguments={}, tool_call_id="t1"))
+    start_time = stats['last_tool_activity_time']
+    assert start_time > 0
+
+    handler(_make_event("tool.execution_complete", tool_name="run_cmd",
+                        arguments={}, result=SimpleNamespace(content="ok"),
+                        success=True, tool_call_id="t1"))
+    assert stats['last_tool_activity_time'] >= start_time

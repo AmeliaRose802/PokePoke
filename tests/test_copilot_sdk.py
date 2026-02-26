@@ -227,7 +227,7 @@ class TestInvokeCopilotSDKAsync:
                 await asyncio.sleep(0.01)  # Small delay to allow event loop
                 if stored_handler:
                     event = MagicMock()
-                    event.type.value = "session.idle"
+                    event.type.value = "session.end"
                     event.data = MagicMock()
                     stored_handler(event)
             asyncio.create_task(trigger_completion())
@@ -285,7 +285,7 @@ class TestInvokeCopilotSDKAsync:
 
                     # Send completion event
                     event = MagicMock()
-                    event.type.value = "session.idle"
+                    event.type.value = "session.end"
                     event.data = MagicMock()
                     stored_handler(event)
             asyncio.create_task(send_events())
@@ -303,8 +303,8 @@ class TestInvokeCopilotSDKAsync:
         assert result.output == "Hello world!"
 
     @patch('pokepoke.copilot_sdk.CopilotClient')
-    async def test_invoke_copilot_sdk_turn_end_without_idle_completes(self, mock_client_class, sample_work_item):
-        """Session should complete from assistant.turn_end even if session.idle never arrives."""
+    async def test_invoke_copilot_sdk_session_end_completes(self, mock_client_class, sample_work_item):
+        """Session should complete from session.end event — the explicit agent completion signal."""
         from pokepoke.copilot_sdk import invoke_copilot_sdk
         import asyncio
 
@@ -331,8 +331,14 @@ class TestInvokeCopilotSDKAsync:
             async def send_events():
                 await asyncio.sleep(0.01)
                 if stored_handler:
+                    # Turn ends but session continues...
                     event = MagicMock()
                     event.type.value = "assistant.turn_end"
+                    event.data = MagicMock()
+                    stored_handler(event)
+                    # Agent explicitly signals done
+                    event = MagicMock()
+                    event.type.value = "session.end"
                     event.data = MagicMock()
                     stored_handler(event)
             asyncio.create_task(send_events())
@@ -382,7 +388,7 @@ class TestInvokeCopilotSDKAsync:
 
                     # Send completion
                     event = MagicMock()
-                    event.type.value = "session.idle"
+                    event.type.value = "session.end"
                     event.data = MagicMock()
                     stored_handler(event)
             asyncio.create_task(send_events())
@@ -438,7 +444,7 @@ class TestInvokeCopilotSDKAsync:
 
                     # Completion
                     event = MagicMock()
-                    event.type.value = "session.idle"
+                    event.type.value = "session.end"
                     event.data = MagicMock()
                     stored_handler(event)
             asyncio.create_task(send_events())
@@ -598,7 +604,7 @@ class TestInvokeCopilotSDKAsync:
         async def mock_send(message):
             if stored_handler:
                 event = MagicMock()
-                event.type.value = "session.idle"
+                event.type.value = "session.end"
                 stored_handler(event)
 
         mock_session.send = mock_send
@@ -645,7 +651,7 @@ class TestInvokeCopilotSDKAsync:
         async def mock_send(message):
             if stored_handler:
                 event = MagicMock()
-                event.type.value = "session.idle"
+                event.type.value = "session.end"
                 stored_handler(event)
 
         mock_session.send = mock_send
@@ -688,7 +694,7 @@ class TestInvokeCopilotSDKAsync:
         async def mock_send(message):
             if stored_handler:
                 event = MagicMock()
-                event.type.value = "session.idle"
+                event.type.value = "session.end"
                 stored_handler(event)
 
         mock_session.send = mock_send
@@ -753,7 +759,7 @@ class TestInvokeCopilotSDKAsync:
 
                     # Completion
                     event = MagicMock()
-                    event.type.value = "session.idle"
+                    event.type.value = "session.end"
                     stored_handler(event)
             asyncio.create_task(send_events())
 
@@ -814,7 +820,7 @@ class TestInvokeCopilotSDKAsync:
 
                     # Completion
                     event = MagicMock()
-                    event.type.value = "session.idle"
+                    event.type.value = "session.end"
                     stored_handler(event)
             asyncio.create_task(send_events())
 
@@ -899,7 +905,7 @@ class TestInvokeCopilotSDKAsync:
                 await asyncio.sleep(0.01)
                 if stored_handler:
                     event = MagicMock()
-                    event.type.value = "session.idle"
+                    event.type.value = "session.end"
                     stored_handler(event)
             asyncio.create_task(send_events())
 
@@ -959,7 +965,7 @@ class TestInvokeCopilotSDKAsync:
 
                     # Completion
                     event = MagicMock()
-                    event.type.value = "session.idle"
+                    event.type.value = "session.end"
                     stored_handler(event)
             asyncio.create_task(send_events())
 
@@ -1018,7 +1024,7 @@ class TestInvokeCopilotSDKAsync:
                 await asyncio.sleep(0.01)
                 if stored_handler:
                     event = MagicMock()
-                    event.type.value = "session.idle"
+                    event.type.value = "session.end"
                     stored_handler(event)
             asyncio.create_task(send_events())
         mock_session.send = mock_send
@@ -1059,7 +1065,7 @@ class TestInvokeCopilotSDKAsync:
                 await asyncio.sleep(0.01)
                 if stored_handler:
                     event = MagicMock()
-                    event.type.value = "session.idle"
+                    event.type.value = "session.end"
                     stored_handler(event)
             asyncio.create_task(send_events())
         mock_session.send = mock_send
@@ -1141,7 +1147,7 @@ class TestInvokeCopilotSDKAsync:
                 await asyncio.sleep(0.01)
                 if stored_handler:
                     event = MagicMock()
-                    event.type.value = "session.idle"
+                    event.type.value = "session.end"
                     stored_handler(event)
             asyncio.create_task(send_events())
         mock_session.send = mock_send
@@ -1221,7 +1227,7 @@ class TestInvokeCopilotSDKAsync:
                 await asyncio.sleep(0.01)
                 if stored_handler:
                     event = MagicMock()
-                    event.type.value = "session.idle"
+                    event.type.value = "session.end"
                     stored_handler(event)
             asyncio.create_task(send_events())
         mock_session.send = mock_send
@@ -1328,7 +1334,7 @@ class TestInvokeCopilotSDKAsync:
                 await asyncio.sleep(0.05)
                 if stored_handler:
                     event = MagicMock()
-                    event.type.value = "session.idle"
+                    event.type.value = "session.end"
                     stored_handler(event)
             asyncio.create_task(trigger_idle())
         mock_session.send = mock_send
