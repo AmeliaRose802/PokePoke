@@ -106,10 +106,14 @@ class DesktopAPI:
     push_stats = _stats.push_stats
 
     def get_state(self) -> dict[str, Any]:
-        """Get the full current state snapshot. Called on frontend init."""
+        """State snapshot + new log entries since last poll (single IPC call)."""
         from pokepoke.config import get_config
-
         with self._lock:
+            if self._log_read_index < len(self._log_buffer):
+                new_logs = self._log_buffer[self._log_read_index:]
+                self._log_read_index = len(self._log_buffer)
+            else:
+                new_logs = []
             config = get_config()
             return {
                 "work_item": self._current_work_item,
@@ -124,15 +128,11 @@ class DesktopAPI:
                 "project_name": config.project_name,
                 "current_session_id": self._current_session_id,
                 "logs_dir": self._current_logs_dir,
+                "new_logs": new_logs,
             }
 
     def get_new_logs(self) -> list[dict[str, Any]]:
-        """Get log entries added since the last call (incremental).
-
-        The frontend polls this on a timer instead of receiving pushes,
-        which avoids the complexity of evaluate_js and thread-safety
-        issues with pywebview.
-        """
+        """Return new log entries since last call; used by reconnect / test helpers."""
         with self._lock:
             if self._log_read_index >= len(self._log_buffer):
                 return []

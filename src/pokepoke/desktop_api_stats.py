@@ -71,6 +71,12 @@ def serialize_live_stats(self: Any) -> dict[str, Any] | None:
         else:
             elapsed = time.time() - self._session_start_time
 
+        # Truncate to integer seconds so that shallowEqual on the stats dict
+        # succeeds between polls when nothing else has changed.  Without this,
+        # the ever-changing float causes React to re-render the StatsBar (and
+        # anything else consuming stats) on every single 250 ms poll cycle.
+        elapsed = int(elapsed)
+
         if stats is None:
             stats = {"elapsed_time": elapsed}
         else:

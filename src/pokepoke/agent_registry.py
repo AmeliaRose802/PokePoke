@@ -235,17 +235,24 @@ class AgentRegistry:
                         return self._copy_agent(
                             live_agent,
                             live_agent.get("agent_id") in self._paused_agents,
+                            include_log_lines=True,
                         )
                 for attempts in self._agent_history.values():
                     for attempt in attempts:
                         if attempt.get("card_id") == agent_id or attempt.get("agent_id") == agent_id:
                             return dict(attempt)
                 return None
-            return self._copy_agent(agent, agent_id in self._paused_agents)
+            return self._copy_agent(agent, agent_id in self._paused_agents, include_log_lines=True)
 
     @staticmethod
-    def _copy_agent(agent: dict[str, Any], paused: bool = False, *, is_history: bool = False) -> dict[str, Any]:
-        return {
+    def _copy_agent(
+        agent: dict[str, Any],
+        paused: bool = False,
+        *,
+        is_history: bool = False,
+        include_log_lines: bool = False,
+    ) -> dict[str, Any]:
+        result = {
             "agent_id": agent.get("agent_id"),
              "base_agent_id": agent.get("base_agent_id", agent.get("agent_id")),
             "card_id": agent.get("card_id"),
@@ -262,7 +269,6 @@ class AgentRegistry:
             "agent_type": agent.get("agent_type"),
             "modified_files": list(agent.get("modified_files") or []),
             "recent_logs": list(agent.get("recent_logs", [])),
-            "log_lines": list(agent.get("log_lines", [])),
             "started_at": agent.get("started_at"),
             "last_updated": agent.get("last_updated"),
             "last_log_at": agent.get("last_log_at"),
@@ -272,6 +278,14 @@ class AgentRegistry:
             "context_limit": agent.get("context_limit", 0),
             "is_history_entry": is_history,
         }
+        # log_lines carries up to 500 lines of detail data.  It is only needed
+        # by get_detail() (AgentLogPanel's 5-second refresh).  Including it in
+        # serialize_all() (polled every 250 ms) forces serialisation of ~500
+        # strings per agent per poll and guarantees shallowEqual fails for
+        # agents on every cycle, triggering unnecessary AgentsPanel re-renders.
+        if include_log_lines:
+            result["log_lines"] = list(agent.get("log_lines", []))
+        return result
 
     @staticmethod
     def _build_card_id(agent_id: str, iteration: int) -> str:
@@ -284,6 +298,7 @@ class AgentRegistry:
             attempt,
             paused=agent_id in self._paused_agents,
             is_history=True,
+            include_log_lines=True,  # archived entries need full logs for detail view
         )
         if snapshot.get("status") == "running":
             snapshot["status"] = "failed"

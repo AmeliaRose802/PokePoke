@@ -24,8 +24,11 @@ import type {
 import type { SetupBridgeMethods } from "./useSetupBridge";
 import { useSetupBridge } from "./useSetupBridge";
 
-/** Poll interval in ms — 100ms = responsive without hammering */
-const POLL_INTERVAL_MS = 100;
+/** Poll interval in ms — 250ms balances responsiveness with low CPU overhead */
+const POLL_INTERVAL_MS = 250;
+
+/** Maximum log entries kept in React state — prevents DOM explosion over long runs */
+const MAX_FRONTEND_LOG_ENTRIES = 2000;
 
 /**
  * Shallow-compare two values to avoid unnecessary setState calls.
@@ -78,6 +81,7 @@ interface PyWebViewAPI {
     project_name: string;
     current_session_id: string | null;
     logs_dir: string | null;
+    new_logs: LogEntry[];
   }>;
   get_new_logs(): Promise<LogEntry[]>;
   get_all_logs(): Promise<LogEntry[]>;
@@ -333,24 +337,18 @@ export function useBridge(): BridgeState {
 
   const appendLogs = useCallback((entries: LogEntry[]) => {
     if (entries.length === 0) return;
-
-    // Split into orchestrator and agent logs
     const orchLogs: LogEntry[] = [];
     const agLogs: LogEntry[] = [];
     for (const e of entries) {
-      if (e.target === "agent") {
-        agLogs.push(e);
-      } else {
-        orchLogs.push(e);
-      }
+      if (e.target === "agent") agLogs.push(e);
+      else orchLogs.push(e);
     }
-
-    if (orchLogs.length > 0) {
-      setOrchestratorLogs((prev) => [...prev, ...orchLogs]);
-    }
-    if (agLogs.length > 0) {
-      setAgentLogs((prev) => [...prev, ...agLogs]);
-    }
+    const cap = (prev: LogEntry[], added: LogEntry[]): LogEntry[] => {
+      const next = [...prev, ...added];
+      return next.length > MAX_FRONTEND_LOG_ENTRIES ? next.slice(-MAX_FRONTEND_LOG_ENTRIES) : next;
+    };
+    if (orchLogs.length > 0) setOrchestratorLogs(p => cap(p, orchLogs));
+    if (agLogs.length > 0) setAgentLogs(p => cap(p, agLogs));
   }, []);
 
   useEffect(() => {
@@ -410,13 +408,9 @@ export function useBridge(): BridgeState {
       timer = setInterval(async () => {
         if (stopped) return;
         try {
-          // Get new logs (incremental — only entries since last poll)
-          const newLogs = await api.get_new_logs();
-          appendLogs(newLogs);
-
-          // Get current state — use shallow-equal guards to avoid
-          // unnecessary re-renders that clear native text selection.
+          // Single IPC call returns state + new logs (halves round-trips)
           const state = await api.get_state();
+          appendLogs(state.new_logs ?? []);
           setIfChanged(setWorkItem)(state.work_item);
           setIfChanged(setAgentName)(state.agent_name);
           setIfChanged(setRepositoryName)(state.repository_name);

@@ -267,24 +267,25 @@ def test_session_end_time_freezes_clock() -> None:
     stats1 = api.get_stats()
     assert stats1 is not None
     elapsed1 = stats1["elapsed_time"]
-    assert elapsed1 >= 9.0  # Should be ~10 seconds
+    assert elapsed1 >= 9  # Should be ~10 seconds (integer precision)
 
     # Set end time to freeze the clock
     end_time = start_time + 5.5  # 5.5 seconds after start
     api.set_session_end_time(end_time)
 
-    # Clock should be frozen at 5.5 seconds
+    # Clock should be frozen — elapsed truncated to int seconds (5)
     stats2 = api.get_stats()
     assert stats2 is not None
     elapsed2 = stats2["elapsed_time"]
-    assert abs(elapsed2 - 5.5) < 0.1  # Should be exactly 5.5 seconds
+    # int(5.5) == 5; allow ±1 for integer truncation
+    assert abs(elapsed2 - 5.5) <= 1
 
     # Clock should remain frozen even after waiting
     time.sleep(0.1)
     stats3 = api.get_stats()
     assert stats3 is not None
     elapsed3 = stats3["elapsed_time"]
-    assert abs(elapsed3 - 5.5) < 0.1  # Should still be 5.5 seconds
+    assert elapsed3 == elapsed2  # Should not advance
 
 
 def test_session_end_time_without_start_time() -> None:
@@ -845,7 +846,11 @@ def test_push_agent_log_trims_excess() -> None:
 
     agents = api.get_agents()
     assert agents[0]["recent_logs"] == ["line-2", "line-3", "line-4"]
-    assert agents[0]["log_lines"] == ["line-1", "line-2", "line-3", "line-4"]
+    # log_lines is only available via get_agent_detail, not in the summary
+    assert "log_lines" not in agents[0]
+    detail = api.get_agent_detail("agent-1")
+    assert detail is not None
+    assert detail["log_lines"] == ["line-1", "line-2", "line-3", "line-4"]
 
 
 def test_push_agent_log_ignores_unknown_agent(monkeypatch) -> None:
@@ -888,8 +893,12 @@ def test_get_state_includes_agents(monkeypatch) -> None:
     assert len(state["agents"]) == 1
     assert state["agents"][0]["name"] == "Worker"
     assert state["agents"][0]["recent_logs"] == ["doing work"]
-    assert state["agents"][0]["log_lines"] == ["doing work"]
+    # log_lines is omitted from serialize_all to keep poll payloads small;
+    # it is only available from get_agent_detail.
+    assert "log_lines" not in state["agents"][0]
     assert state["agents"][0]["work_item_id"] is None
+    # get_state now folds in new_logs so the frontend only needs one IPC call
+    assert "new_logs" in state
 
 
 def test_push_agent_status_with_modified_files() -> None:
