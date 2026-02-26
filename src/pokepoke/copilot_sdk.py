@@ -195,9 +195,6 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         total_wall_duration = 0.0
         total_api_duration = 0.0
 
-        no_event_timeout_seconds = max(5.0, idle_timeout * 3.0)
-        max_no_event_polls = max(1, int(no_event_timeout_seconds))
-
         # Setup activity watchdog
         watchdog_task, watchdog_abort = _maybe_start_activity_watchdog(
             item_logger,
@@ -210,8 +207,6 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             nonlocal session, session_config, current_model, timed_out, interrupted, activity_timeout, total_wall_duration, total_api_duration
             print("[SDK] Sending message...\n")
             attempt_start = asyncio.get_event_loop().time()
-            no_event_polls = 0
-            last_seen_event_count = int(stats.get("event_count", 0))
             try:
                 await session.send({"prompt": final_prompt})
                 deadline = asyncio.get_event_loop().time() + max_timeout
@@ -245,24 +240,6 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     try:
                         await asyncio.wait_for(done.wait(), timeout=min(1.0, remaining))
                     except TimeoutError:
-                        current_event_count = int(stats.get("event_count", 0))
-                        if current_event_count == last_seen_event_count:
-                            no_event_polls += 1
-                        else:
-                            no_event_polls = 0
-                            last_seen_event_count = current_event_count
-
-                        if (
-                            no_event_polls >= max_no_event_polls
-                            and int(stats.get("turn_count", 0)) > 0
-                            and int(stats.get("pending_tool_calls", 0)) == 0
-                        ):
-                            print(
-                                f"\n[SDK] No new events for {no_event_timeout_seconds:.0f}s after completion signals "
-                                "- forcing completion"
-                            )
-                            done.set()
-                            break
                         continue
             except KeyboardInterrupt:
                 print("\n\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")
