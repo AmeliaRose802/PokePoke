@@ -351,7 +351,7 @@ def create_event_handler(
         elif event_type == "assistant.turn_end":
             stats['turn_count'] += 1
             if stats['pending_tool_calls'] == 0 and stats['turn_count'] > 0:
-                print("\n[SDK] Assistant turn ended with no pending tools - waiting to confirm completion...")
+                logger.debug("Assistant turn ended with no pending tools - scheduling completion check")
                 _schedule_completion(turn_end_completion_timeout, "assistant.turn_end")
 
         elif event_type == "session.idle":
@@ -376,7 +376,7 @@ def create_event_handler(
             else:
                 _stale_idle_count = 0
                 _last_idle_pending = None
-                print("\n[SDK] Session idle - waiting to confirm completion...")
+                logger.debug("Session idle - scheduling completion check")
                 _schedule_completion(idle_timeout, "session.idle")
 
         elif event_type == "session.error":
