@@ -1,6 +1,7 @@
 """Parallel orchestrator loop for running multiple work items concurrently."""
 
 import concurrent.futures
+import contextlib
 import logging
 import threading
 import time
@@ -10,7 +11,7 @@ from pokepoke.parallel_runtime import clear_runtime_parallel_limits, compute_eff
 from pokepoke.process_utils import apply_memory_backpressure, kill_orphaned_copilot_processes
 
 from pokepoke.agent_context import get_agent_name, set_agent_name, clear_agent_name
-from pokepoke.beads import get_ready_work_items, is_item_claimable
+from pokepoke.beads import get_ready_work_items, is_item_claimable, assign_and_sync_item, unassign_with_retry
 from pokepoke.types import BeadsWorkItem, SessionStats, WorkItemResult
 from pokepoke.workflow import process_work_item
 from pokepoke.work_item_selection import select_multiple_items
@@ -374,6 +375,17 @@ def run_parallel_loop(
                     _worker_counter += 1
                     base_name = get_agent_name(default="pokepoke")
                     worker_name = _build_worker_name(base_name, item.id, _worker_counter)
+
+                    # IMPORTANT: Claim (bd update + sync) in the orchestrator thread
+                    # to avoid concurrent SQLite writes from multiple workers.
+                    if not assign_and_sync_item(item.id, agent_name=worker_name):
+                        run_logger.log_orchestrator(
+                            f"Claim failed for {item.id}; skipping dispatch (worker: {worker_name})",
+                            level="WARNING",
+                        )
+                        failed_claim_ids.add(item.id)
+                        continue
+
                     run_logger.log_orchestrator(f"Submitting item: {item.id} - {item.title} (worker: {worker_name})")
                     semaphore.acquire()
                     try:
@@ -381,6 +393,9 @@ def run_parallel_loop(
                     except Exception as e:
                         logger.warning(f"Failed to submit work item {item.id} to executor: {e}")
                         semaphore.release()
+                        # Best-effort: return item to queue since no worker will run it.
+                        with contextlib.suppress(Exception):
+                            unassign_with_retry(item.id)
                         raise
                     futures[fut] = item
 

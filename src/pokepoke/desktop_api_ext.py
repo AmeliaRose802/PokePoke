@@ -231,14 +231,16 @@ def _mutate_work_item_label(
     flag = "--add-label" if action == "add" else "--remove-label"
     command = ["bd", "update", item_id, flag, label, "--json"]
     try:
-        subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            check=True,
-            timeout=30,
-        )
+        from pokepoke.coordination import beads_db_lock
+        with beads_db_lock(timeout=60.0):
+            subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                check=True,
+                timeout=30,
+            )
     except subprocess.TimeoutExpired as exc:
         logger.warning(
             "Label %s for %s timed out after %ss",

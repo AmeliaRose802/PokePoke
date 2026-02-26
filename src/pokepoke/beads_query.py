@@ -6,7 +6,16 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from .coordination import beads_db_lock
 from .types import BeadsWorkItem, IssueWithDependencies, Dependency, BeadsStats
+
+
+_MUTATING_BD_COMMANDS: frozenset[str] = frozenset({
+    "update",
+    "close",
+    "sync",
+    "comments",
+})
 
 
 def _run_bd(
@@ -16,17 +25,33 @@ def _run_bd(
     timeout: int | None = 30,
     cwd: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run a ``bd`` CLI command with standard options."""
-    return subprocess.run(
-        ['bd'] + args,
-        capture_output=True,
-        text=True,
-        encoding='utf-8',
-        errors='replace',
-        check=check,
-        timeout=timeout,
-        cwd=cwd,
-    )
+    """Run a ``bd`` CLI command with standard options.
+
+    IMPORTANT: All mutating beads operations are serialized through a single
+    global lock to prevent SQLite lock contention in parallel mode.
+    """
+    cmd = args[0] if args else ""
+
+    def _run() -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ['bd'] + args,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            check=check,
+            timeout=timeout,
+            cwd=cwd,
+        )
+
+    if cmd in _MUTATING_BD_COMMANDS:
+        # Default timeout of 180s is intentionally larger than the bd subprocess
+        # timeout so contention queues rather than timing out inside SQLite.
+        lock_timeout = 180.0
+        with beads_db_lock(timeout=lock_timeout):
+            return _run()
+
+    return _run()
 
 
 def _filter_to_dataclass(cls: type, data: dict[str, Any]) -> Any:

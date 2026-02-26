@@ -168,6 +168,7 @@ def try_lock(name: str) -> FileLock | None:
 _WORKTREE_SETUP_LOCK = "worktree-setup"
 _MERGE_LOCK = "merge-queue"
 _MANIFEST_LOCK = "worktree-manifest"
+_BEADS_DB_LOCK = "beads-db"
 
 # Age threshold (seconds) after which a merge lock file is considered stale.
 # 15 minutes should be well beyond any legitimate merge operation.
@@ -179,6 +180,7 @@ _WORKTREE_SETUP_STALE = 300.0   # 5 min
 _MERGE_STALE = 600.0            # 10 min
 _MANIFEST_STALE = 120.0         # 2 min
 _CLEANUP_STALE = 300.0          # 5 min (main-repo-cleanup)
+_BEADS_DB_STALE = 300.0         # 5 min (beads DB mutations)
 
 
 @contextmanager
@@ -186,6 +188,20 @@ def worktree_setup_lock(timeout: float = 180.0) -> Generator[FileLock, None, Non
     """Serialize beads assignment + worktree creation across agents."""
     with acquire_lock(
         _WORKTREE_SETUP_LOCK, timeout=timeout, stale_timeout=_WORKTREE_SETUP_STALE,
+    ) as lock:
+        yield lock
+
+
+@contextmanager
+def beads_db_lock(timeout: float = 180.0) -> Generator[FileLock, None, None]:
+    """Serialize beads database mutations across agents.
+
+    This lock must be global (not per-item) because beads uses a single SQLite
+    database with file-level locking; concurrent writes across different items
+    can otherwise cause timeouts and deadlocks in parallel mode.
+    """
+    with acquire_lock(
+        _BEADS_DB_LOCK, timeout=timeout, stale_timeout=_BEADS_DB_STALE,
     ) as lock:
         yield lock
 

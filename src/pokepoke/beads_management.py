@@ -129,6 +129,7 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
                     # - assignee: The specific agent currently working on it (pokepoke_agent_123)
                     # - owner: The human user who owns it (e.g., user@example.com)
                     current_assignee = current_item.get('assignee', '')
+                    current_status = str(current_item.get('status', '') or '')
 
                     # Check if already assigned to another agent
                     if current_assignee:
@@ -137,6 +138,13 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
                         if not is_ours:
                             print(f"⚠️  RACE CONDITION DETECTED: {item_id} already assigned to {current_assignee}")
                             return False
+
+                        # If the item is already ours and in progress, this is a
+                        # no-op claim (common when the orchestrator claims in the
+                        # main thread before dispatching a worker).
+                        if current_status.lower() == 'in_progress':
+                            print(f"ℹ️  {item_id} already assigned to {agent_name} and in_progress — skipping bd update")
+                            return True
 
             except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
                 print(f"⚠️  Failed to verify {item_id} ownership: {e}")
