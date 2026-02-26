@@ -323,13 +323,19 @@ def process_work_item(
             if worktree_path is not None and not finalized_successfully:
                 cleanup_worktree(item.id, force=True)
         except Exception as e:
-            logger.debug(f"Failed to cleanup worktree: {e}")
+            logger.error("Failed to cleanup worktree for %s: %s", item.id, e)
+            # Track orphaned worktree for later cleanup
+            try:
+                from pokepoke.worktree_cleanup import add_uncleaned_worktree
+                add_uncleaned_worktree(item.id, str(worktree_path), f"Finally-block cleanup failed: {e}")
+            except Exception:
+                logger.error("Failed to track orphaned worktree %s in manifest", item.id)
         # Unassign item so other agents can pick it up again
         if was_assigned and not finalized_successfully:
             try:
                 unassign_with_retry(item.id)
             except Exception as e:
-                logger.warning(f"Failed to unassign item {item.id}: {e}")
+                logger.error("Failed to unassign item %s — item may be stuck in assigned state: %s", item.id, e)
         unregister_agent()
 
 

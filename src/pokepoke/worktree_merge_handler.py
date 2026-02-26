@@ -203,19 +203,36 @@ def perform_worktree_merge(
             merge_success, _ = merge_worktree(item_id, cleanup=True)
             if merge_success:
                 remove_from_manifest(item_id)
-                print("   Merged and cleaned up worktree")
-                return True, True
+                worktree_cleaned = not worktree_path.exists()
+                if not worktree_cleaned:
+                    logger.error("Worktree directory persists after retry merge: %s", worktree_path)
+                    add_uncleaned_worktree(item_id, str(worktree_path), "Worktree persists after successful retry merge")
+                print("   Merged worktree" + (" and cleaned up" if worktree_cleaned else " (cleanup incomplete)"))
+                return True, worktree_cleaned
             else:
                 print("   Merge failed again after cleanup.")
                 if is_merge_in_progress():
-                    abort_merge()
+                    abort_success, abort_error = abort_merge()
+                    if not abort_success:
+                        logger.error("Failed to abort merge after retry failure for %s: %s", item_id, abort_error)
+                        print(f"   ❌ Failed to abort merge: {abort_error}")
+                        print("   ⚠️  Repository may be stuck in merge-in-progress state")
                 return False, False
         else:
             print("   Cleanup failed.")
             if is_merge_in_progress():
                 print("   Aborting merge to reset state...")
-                abort_merge()
+                abort_success, abort_error = abort_merge()
+                if not abort_success:
+                    logger.error("Failed to abort merge after cleanup failure for %s: %s", item_id, abort_error)
+                    print(f"   ❌ Failed to abort merge: {abort_error}")
+                    print("   ⚠️  Repository may be stuck in merge-in-progress state")
             return False, False
 
-    print("   Merged and cleaned up worktree")
-    return True, True
+    # Verify worktree was actually cleaned up
+    worktree_cleaned = not worktree_path.exists()
+    if not worktree_cleaned:
+        logger.error("Worktree directory persists after merge: %s", worktree_path)
+        add_uncleaned_worktree(item_id, str(worktree_path), "Worktree persists after successful merge")
+    print("   Merged worktree" + (" and cleaned up" if worktree_cleaned else " (cleanup incomplete)"))
+    return True, worktree_cleaned
