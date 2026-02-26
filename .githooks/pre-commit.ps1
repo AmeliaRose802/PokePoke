@@ -121,28 +121,40 @@ $buildDependentChecks = @(
     @{ Name = "Test Coverage"; Script = "check-coverage.ps1" }
 )
 
-# Start static checks in parallel
+# Start static checks in parallel.
+# Wrapped in try/catch so that if Start-Job fails mid-loop, already-started
+# jobs are cleaned up instead of orphaned.
 $staticJobs = @()
-foreach ($check in $staticChecks) {
-    $checkScript = Join-Path $hooksDir $check.Script
-    $job = Start-Job -ScriptBlock {
-        param($script, $workingDir)
-        $ErrorActionPreference = "Stop"
-        try {
-            # Set working directory to repo root for relative paths to work
-            Set-Location $workingDir
-            $output = & $script *>&1 | Out-String
-            @{ ExitCode = $LASTEXITCODE; Output = $output }
+try {
+    foreach ($check in $staticChecks) {
+        $checkScript = Join-Path $hooksDir $check.Script
+        $job = Start-Job -ScriptBlock {
+            param($script, $workingDir)
+            $ErrorActionPreference = "Stop"
+            try {
+                # Set working directory to repo root for relative paths to work
+                Set-Location $workingDir
+                $output = & $script *>&1 | Out-String
+                @{ ExitCode = $LASTEXITCODE; Output = $output }
+            }
+            catch {
+                @{ ExitCode = 1; Output = $_.Exception.Message }
+            }
+        } -ArgumentList $checkScript, $repoRoot
+        
+        $staticJobs += @{
+            Name = $check.Name
+            Job = $job
         }
-        catch {
-            @{ ExitCode = 1; Output = $_.Exception.Message }
-        }
-    } -ArgumentList $checkScript, $repoRoot
-    
-    $staticJobs += @{
-        Name = $check.Name
-        Job = $job
     }
+}
+catch {
+    Write-Host "Error starting parallel checks: $_" -ForegroundColor Red
+    foreach ($jobInfo in $staticJobs) {
+        Stop-Job $jobInfo.Job -ErrorAction SilentlyContinue
+        Remove-Job $jobInfo.Job -Force -ErrorAction SilentlyContinue
+    }
+    exit 1
 }
 
 # Run build-dependent checks sequentially (abort on first failure)
@@ -175,51 +187,66 @@ foreach ($check in $buildDependentChecks) {
     }
 }
 
-# If build failed, stop parallel static jobs and exit early
-if ($buildFailed) {
+# Helper: clean up all remaining Start-Job processes to prevent resource leaks.
+# On Windows, child processes are NOT auto-killed when the parent exits, so
+# every Start-Job that isn't explicitly stopped leaks a full pwsh process.
+function Stop-AllStaticJobs {
     foreach ($jobInfo in $staticJobs) {
         Stop-Job $jobInfo.Job -ErrorAction SilentlyContinue
         Remove-Job $jobInfo.Job -Force -ErrorAction SilentlyContinue
     }
+}
+
+# If build failed, stop parallel static jobs and exit early
+if ($buildFailed) {
+    Stop-AllStaticJobs
     Write-Host ""
     Write-Host "❌ Build failed: $($failed -join ', ') — downstream checks skipped" -ForegroundColor Red
     exit 1
 }
 
-# Wait for and process static checks results
-foreach ($jobInfo in $staticJobs) {
-    Write-Host "  • $($jobInfo.Name)... " -NoNewline -ForegroundColor Gray
-    
-    # Wait with timeout - 60s per job max
-    $result = $jobInfo.Job | Wait-Job -Timeout 60 | Receive-Job
-    
-    if ($null -eq $result) {
-        # Timeout occurred
-        Stop-Job $jobInfo.Job -ErrorAction SilentlyContinue
-        Remove-Job $jobInfo.Job -Force -ErrorAction SilentlyContinue
-        Write-Host "⏱ TIMEOUT" -ForegroundColor Yellow
-        $failed += "$($jobInfo.Name) (timeout)"
-        $allPassed = $false
-        Write-Host "  ⚠️  This check took too long and was terminated to free resources" -ForegroundColor Yellow
-    }
-    else {
-        Remove-Job $jobInfo.Job -ErrorAction SilentlyContinue
+# Wait for and process static checks results.
+# Wrapped in try/finally so that ANY error (or Ctrl+C) during Wait-Job /
+# Receive-Job still cleans up remaining background jobs instead of orphaning them.
+try {
+    foreach ($jobInfo in $staticJobs) {
+        Write-Host "  • $($jobInfo.Name)... " -NoNewline -ForegroundColor Gray
         
-        if ($result.ExitCode -eq 0) {
-            Write-Host "✓" -ForegroundColor Green
-            $passed += $jobInfo.Name
+        # Wait with timeout - 60s per job max
+        $result = $jobInfo.Job | Wait-Job -Timeout 60 | Receive-Job
+        
+        if ($null -eq $result) {
+            # Timeout occurred
+            Stop-Job $jobInfo.Job -ErrorAction SilentlyContinue
+            Remove-Job $jobInfo.Job -Force -ErrorAction SilentlyContinue
+            Write-Host "⏱ TIMEOUT" -ForegroundColor Yellow
+            $failed += "$($jobInfo.Name) (timeout)"
+            $allPassed = $false
+            Write-Host "  ⚠️  This check took too long and was terminated to free resources" -ForegroundColor Yellow
         }
         else {
-            Write-Host "✗" -ForegroundColor Red
-            $failed += $jobInfo.Name
-            $allPassed = $false
-            if ($result.Output.Trim()) {
-                Write-Host ""
-                Write-Host $result.Output.Trim()
-                Write-Host ""
+            Remove-Job $jobInfo.Job -ErrorAction SilentlyContinue
+            
+            if ($result.ExitCode -eq 0) {
+                Write-Host "✓" -ForegroundColor Green
+                $passed += $jobInfo.Name
+            }
+            else {
+                Write-Host "✗" -ForegroundColor Red
+                $failed += $jobInfo.Name
+                $allPassed = $false
+                if ($result.Output.Trim()) {
+                    Write-Host ""
+                    Write-Host $result.Output.Trim()
+                    Write-Host ""
+                }
             }
         }
     }
+}
+finally {
+    # Ensure no orphaned pwsh processes remain regardless of how we exit
+    Stop-AllStaticJobs
 }
 
 Write-Host ""
