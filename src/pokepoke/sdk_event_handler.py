@@ -1,9 +1,11 @@
 """Event handler utilities for SDK client sessions."""
 
 import asyncio
+import contextlib
 import json
 import logging
 import re
+import time
 from typing import Any, TypedDict
 
 from collections.abc import Callable
@@ -97,6 +99,8 @@ class SessionStats(TypedDict):
     total_tool_calls: int
     tried_fallback: bool
     current_model: str
+    last_event_time: float
+    event_count: int
 
 
 def create_event_handler(
@@ -133,6 +137,7 @@ def create_event_handler(
         )
 
     # Shared state for event handler
+    turn_end_completion_timeout = max(0.5, min(idle_timeout * 0.5, 5.0))
     stats: SessionStats = {
         'pending_tool_calls': 0,
         'idle_task': None,
@@ -143,7 +148,9 @@ def create_event_handler(
         'turn_count': 0,
         'total_tool_calls': 0,
         'tried_fallback': False,
-        'current_model': DEFAULT_MODEL
+        'current_model': DEFAULT_MODEL,
+        'last_event_time': time.monotonic(),
+        'event_count': 0,
     }
 
     # Track pending tool calls by name for hung detection
@@ -176,6 +183,37 @@ def create_event_handler(
         """Handle SDK session events."""
         nonlocal received_deltas, _stale_idle_count, _last_idle_pending
         event_type= event.type.value if hasattr(event.type, 'value') else str(event.type)
+        stats['event_count'] += 1
+        stats['last_event_time'] = time.monotonic()
+
+        def _schedule_completion(delay: float, reason: str) -> None:
+            baseline_event_count = stats['event_count']
+            if stats['idle_task'] and not stats['idle_task'].done():
+                stats['idle_task'].cancel()
+
+            async def _confirm_still_done() -> None:
+                try:
+                    await asyncio.sleep(delay)
+                    if done.is_set():
+                        return
+                    if stats['pending_tool_calls'] != 0:
+                        return
+                    if stats['event_count'] != baseline_event_count:
+                        return
+                    print(f"[SDK] Session confirmed complete via {reason}")
+                    done.set()
+                except asyncio.CancelledError:
+                    pass
+
+            try:
+                loop_for_task = asyncio.get_running_loop()
+            except RuntimeError:
+                with contextlib.suppress(RuntimeError):
+                    loop_for_task = asyncio.get_event_loop_policy().get_event_loop()
+                    stats['idle_task'] = loop_for_task.create_task(_confirm_still_done())
+                return
+
+            stats['idle_task'] = loop_for_task.create_task(_confirm_still_done())
 
         if event_type == "assistant.message_delta":
             received_deltas = True
@@ -312,10 +350,11 @@ def create_event_handler(
 
         elif event_type == "assistant.turn_end":
             stats['turn_count'] += 1
+            if stats['pending_tool_calls'] == 0 and stats['turn_count'] > 0:
+                print("\n[SDK] Assistant turn ended with no pending tools - waiting to confirm completion...")
+                _schedule_completion(turn_end_completion_timeout, "assistant.turn_end")
 
         elif event_type == "session.idle":
-            if stats['idle_task'] and not stats['idle_task'].done():
-                stats['idle_task'].cancel()
             if stats['pending_tool_calls'] > 0:
                 # Track consecutive idles with unchanged pending count.
                 # If Copilot exited without emitting tool.execution_complete,
@@ -338,15 +377,7 @@ def create_event_handler(
                 _stale_idle_count = 0
                 _last_idle_pending = None
                 print("\n[SDK] Session idle - waiting to confirm completion...")
-                async def check_still_idle() -> None:
-                    try:
-                        await asyncio.sleep(idle_timeout)
-                        if not done.is_set() and stats['pending_tool_calls'] == 0:
-                            print("[SDK] Session confirmed idle - processing complete")
-                            done.set()
-                    except asyncio.CancelledError:
-                        pass
-                stats['idle_task'] = asyncio.create_task(check_still_idle())
+                _schedule_completion(idle_timeout, "session.idle")
 
         elif event_type == "session.error":
             error_msg = getattr(event.data, 'message', 'Unknown error') if hasattr(event, 'data') else 'Unknown error'

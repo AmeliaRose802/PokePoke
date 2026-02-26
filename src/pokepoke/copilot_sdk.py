@@ -1,9 +1,7 @@
 """GitHub Copilot SDK integration."""
 import asyncio
-import contextlib
 import logging
 import os
-from pathlib import Path
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -20,6 +18,7 @@ from .shutdown import is_shutting_down
 from .process_utils import shutdown_copilot_client
 from .sdk_event_handler import create_event_handler, SessionStats
 from .model_pricing import get_context_window
+from . import session_watchdog
 
 logger = logging.getLogger(__name__)
 
@@ -27,53 +26,16 @@ if TYPE_CHECKING:
     from .logging_utils import ItemLogger
 
 
-async def _activity_watchdog(
-    log_path: Path,
-    timeout_seconds: float,
-    check_interval_seconds: float,
-    abort_event: asyncio.Event
-) -> bool:
-    """Monitor log file activity and detect hung sessions.
+async def _activity_watchdog(*args: Any, **kwargs: Any) -> bool:
+    return await session_watchdog.activity_watchdog(*args, **kwargs)
 
-    Args:
-        log_path: Path to the item log file to monitor
-        timeout_seconds: How long to wait with no activity before aborting
-        check_interval_seconds: How often to check for activity
-        abort_event: Event to signal when session should abort
 
-    Returns:
-        True if watchdog triggered abort, False if cancelled normally
-    """
-    try:
-        last_mtime = log_path.stat().st_mtime if log_path.exists() else 0.0
-        last_activity_time = asyncio.get_event_loop().time()
+def _maybe_start_activity_watchdog(*args: Any, **kwargs: Any) -> tuple[asyncio.Task[bool] | None, asyncio.Event]:
+    return session_watchdog.maybe_start_activity_watchdog(*args, **kwargs)
 
-        while True:
-            await asyncio.sleep(check_interval_seconds)
 
-            # Check if log file was modified
-            current_mtime = log_path.stat().st_mtime if log_path.exists() else 0.0
-            current_time = asyncio.get_event_loop().time()
-
-            if current_mtime > last_mtime:
-                # Activity detected - reset timer
-                last_mtime = current_mtime
-                last_activity_time = current_time
-            else:
-                # No activity - check if we've exceeded threshold
-                idle_duration = current_time - last_activity_time
-                if idle_duration >= timeout_seconds:
-                    print(f"\n⚠️  ACTIVITY WATCHDOG: No output for {int(idle_duration)}s (threshold: {int(timeout_seconds)}s)")
-                    print("   Aborting hung session...")
-                    abort_event.set()
-                    return True
-
-    except asyncio.CancelledError:
-        # Normal cancellation - session completed
-        return False
-    except Exception as e:
-        print(f"\n⚠️  Activity watchdog error: {e}")
-        return False
+async def _cancel_watchdog(*args: Any, **kwargs: Any) -> None:
+    await session_watchdog.cancel_watchdog(*args, **kwargs)
 
 
 def build_prompt_from_work_item(
@@ -126,37 +88,6 @@ def _build_token_usage_callback(current_model: str) -> Callable[[int, int], None
             terminal_ui.ui.push_agent_tokens(agent_id, input_tokens, output_tokens, context_limit)
 
     return _on_token_usage
-
-
-def _maybe_start_activity_watchdog(
-    item_logger: "ItemLogger | None",
-    proj_config: Any,
-) -> tuple[asyncio.Task[bool] | None, asyncio.Event]:
-    """Start the activity watchdog if enabled, returning (task, abort_event)."""
-    watchdog_abort: asyncio.Event = asyncio.Event()
-    watchdog_task: asyncio.Task[bool] | None = None
-
-    if item_logger and proj_config.activity_watchdog.enabled:
-        log_path = Path(item_logger.log_path)
-        watchdog_task = asyncio.create_task(
-            _activity_watchdog(
-                log_path,
-                float(proj_config.activity_watchdog.timeout_seconds),
-                float(proj_config.activity_watchdog.check_interval_seconds),
-                watchdog_abort,
-            )
-        )
-        print(f"[SDK] Activity watchdog enabled (timeout: {proj_config.activity_watchdog.timeout_seconds}s)\n")
-
-    return watchdog_task, watchdog_abort
-
-
-async def _cancel_watchdog(watchdog_task: asyncio.Task[bool] | None) -> None:
-    """Cancel watchdog task if it is still running."""
-    if watchdog_task and not watchdog_task.done():
-        watchdog_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await watchdog_task
 
 
 def _build_copilot_result(
@@ -264,14 +195,23 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         total_wall_duration = 0.0
         total_api_duration = 0.0
 
+        no_event_timeout_seconds = max(5.0, idle_timeout * 3.0)
+        max_no_event_polls = max(1, int(no_event_timeout_seconds))
+
         # Setup activity watchdog
-        watchdog_task, watchdog_abort = _maybe_start_activity_watchdog(item_logger, proj_config)
+        watchdog_task, watchdog_abort = _maybe_start_activity_watchdog(
+            item_logger,
+            proj_config,
+            get_last_activity_time=lambda: float(stats.get("last_event_time", 0.0)),
+        )
 
         async def send_with_retry() -> bool:
             """Send message, returns True if should retry with fallback model."""
             nonlocal session, session_config, current_model, timed_out, interrupted, activity_timeout, total_wall_duration, total_api_duration
             print("[SDK] Sending message...\n")
             attempt_start = asyncio.get_event_loop().time()
+            no_event_polls = 0
+            last_seen_event_count = int(stats.get("event_count", 0))
             try:
                 await session.send({"prompt": final_prompt})
                 deadline = asyncio.get_event_loop().time() + max_timeout
@@ -305,6 +245,24 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                     try:
                         await asyncio.wait_for(done.wait(), timeout=min(1.0, remaining))
                     except TimeoutError:
+                        current_event_count = int(stats.get("event_count", 0))
+                        if current_event_count == last_seen_event_count:
+                            no_event_polls += 1
+                        else:
+                            no_event_polls = 0
+                            last_seen_event_count = current_event_count
+
+                        if (
+                            no_event_polls >= max_no_event_polls
+                            and int(stats.get("turn_count", 0)) > 0
+                            and int(stats.get("pending_tool_calls", 0)) == 0
+                        ):
+                            print(
+                                f"\n[SDK] No new events for {no_event_timeout_seconds:.0f}s after completion signals "
+                                "- forcing completion"
+                            )
+                            done.set()
+                            break
                         continue
             except KeyboardInterrupt:
                 print("\n\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")

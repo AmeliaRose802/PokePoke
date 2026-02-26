@@ -232,6 +232,25 @@ def test_assistant_turn_end_increments_count() -> None:
     assert stats['turn_count'] == 2
 
 
+def test_turn_end_with_no_pending_tools_sets_done_after_grace() -> None:
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        done = asyncio.Event()
+        output_lines: list[str] = []
+        errors: list[str] = []
+
+        handler, stats = create_event_handler(done, output_lines, errors, idle_timeout=0.1)
+        handler(_make_event("assistant.turn_end"))
+
+        assert stats['turn_count'] == 1
+        loop.run_until_complete(asyncio.sleep(0.7))
+        assert done.is_set()
+    finally:
+        asyncio.set_event_loop(None)
+        loop.close()
+
+
 def test_session_error_sets_done_and_records_error() -> None:
     done = asyncio.Event()
     output_lines: list[str] = []

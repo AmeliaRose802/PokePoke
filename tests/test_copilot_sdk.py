@@ -303,6 +303,52 @@ class TestInvokeCopilotSDKAsync:
         assert result.output == "Hello world!"
 
     @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_invoke_copilot_sdk_turn_end_without_idle_completes(self, mock_client_class, sample_work_item):
+        """Session should complete from assistant.turn_end even if session.idle never arrives."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        import asyncio
+
+        mock_client = AsyncMock()
+        mock_session = AsyncMock()
+        mock_session.session_id = "test-session-turn-end"
+
+        mock_client.start = AsyncMock()
+        mock_client.create_session = AsyncMock(return_value=mock_session)
+        mock_client.stop = AsyncMock()
+        mock_client.get_state = MagicMock(return_value="connected")
+
+        mock_client_class.return_value = mock_client
+
+        stored_handler = None
+
+        def mock_on(handler):
+            nonlocal stored_handler
+            stored_handler = handler
+
+        mock_session.on = mock_on
+
+        async def mock_send(message):
+            async def send_events():
+                await asyncio.sleep(0.01)
+                if stored_handler:
+                    event = MagicMock()
+                    event.type.value = "assistant.turn_end"
+                    event.data = MagicMock()
+                    stored_handler(event)
+            asyncio.create_task(send_events())
+
+        mock_session.send = mock_send
+        mock_session.destroy = AsyncMock()
+
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item,
+            prompt="Test prompt",
+            idle_timeout=0.1,
+        )
+
+        assert result.success
+
+    @patch('pokepoke.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_complete_message(self, mock_client_class, sample_work_item):
         """Test SDK invocation with complete message (no deltas)."""
         from pokepoke.copilot_sdk import invoke_copilot_sdk
@@ -1390,6 +1436,37 @@ class TestActivityWatchdog:
         )
         # Wait long enough for the update to happen but cancel before idle timeout
         await asyncio.sleep(0.25)
+        task.cancel()
+        result = await task
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_watchdog_uses_event_activity_callback(self, tmp_path):
+        """Watchdog should respect SDK event timestamps when callback is provided."""
+        log_file = tmp_path / "test.log"
+        log_file.write_text("initial")
+        abort = asyncio.Event()
+
+        loop = asyncio.get_event_loop()
+        last_activity = {"value": loop.time()}
+
+        async def bump_activity():
+            await asyncio.sleep(0.05)
+            last_activity["value"] = loop.time()
+
+        asyncio.create_task(bump_activity())
+        task = asyncio.create_task(
+            _activity_watchdog(
+                log_file,
+                timeout_seconds=0.2,
+                check_interval_seconds=0.02,
+                abort_event=abort,
+                get_last_activity_time=lambda: last_activity["value"],
+            )
+        )
+
+        await asyncio.sleep(0.12)
+        assert not abort.is_set()
         task.cancel()
         result = await task
         assert result is False
