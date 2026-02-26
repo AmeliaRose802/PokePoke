@@ -1759,7 +1759,7 @@ class TestRunWorktreeCleanup:
         assert stats is None
 
     @patch('pokepoke.worktree_cleanup.load_worktree_manifest', return_value={})
-    @patch('pokepoke.worktrees.list_worktrees')
+    @patch('pokepoke.git_operations.list_worktrees')
     def test_has_unmerged_worktrees_with_task_worktree(
         self,
         mock_list: Mock,
@@ -1774,7 +1774,7 @@ class TestRunWorktreeCleanup:
         assert has_unmerged_worktrees() is True
 
     @patch('pokepoke.worktree_cleanup.load_worktree_manifest')
-    @patch('pokepoke.worktrees.list_worktrees', return_value=[
+    @patch('pokepoke.git_operations.list_worktrees', return_value=[
         {"path": "/repo", "branch": "refs/heads/main"}
     ])
     def test_has_unmerged_worktrees_manifest_only(
@@ -1788,7 +1788,7 @@ class TestRunWorktreeCleanup:
         assert has_unmerged_worktrees() is True
 
     @patch('pokepoke.worktree_cleanup.load_worktree_manifest', return_value={})
-    @patch('pokepoke.worktrees.list_worktrees', return_value=[
+    @patch('pokepoke.git_operations.list_worktrees', return_value=[
         {"path": "/repo", "branch": "refs/heads/main"}
     ])
     def test_has_unmerged_worktrees_none_found(
