@@ -195,7 +195,7 @@ def _run_simple_agent(
         result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=deny_write, model=model, cwd=cwd, item_logger=item_logger)
     if result.success:
         print(f"✅ {agent_name} completed")
-        return parse_agent_stats(result.output) if result.output else None
+        return (parse_agent_stats(result.output) if result.output else None) or AgentStats()
     print(f"❌ {agent_name} failed: {result.error}")
     return None
 

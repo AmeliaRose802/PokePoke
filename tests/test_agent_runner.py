@@ -708,6 +708,38 @@ class TestRunBeadsOnlyAgent:
 
         assert stats is None
 
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    def test_successful_agent_no_parseable_stats_returns_default_stats(self, mock_invoke: Mock) -> None:
+        """Test that a successful agent with no parseable stats returns default AgentStats, not None.
+
+        Regression test for PokePoke-tl06: maintenance scheduler marked agents as
+        FAILURE when they succeeded but produced no parseable stats output.
+        """
+        agent_item = BeadsWorkItem(
+            id="maintenance-test",
+            title="Test Maintenance",
+            description="Test",
+            status="in_progress",
+            priority=0,
+            issue_type="task",
+            labels=["maintenance"]
+        )
+
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="maintenance-test",
+            success=True,
+            output="Agent completed all tasks successfully. No stats block.",
+            attempt_count=1
+        )
+
+        stats = _run_beads_only_agent("Test", agent_item, "Test prompt")
+
+        # Should return a default AgentStats (not None) so the scheduler
+        # correctly identifies this as a success.
+        assert stats is not None
+        assert isinstance(stats, AgentStats)
+        assert stats.wall_duration == 0.0
+
 
 class TestRunWorktreeAgent:
     """Test _run_worktree_agent function."""
