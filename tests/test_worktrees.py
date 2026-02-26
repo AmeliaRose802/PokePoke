@@ -684,31 +684,51 @@ class TestMergeWorktree:
             assert unmerged_files == []
             assert any('Committing beads database changes' in str(call) for call in mock_print.call_args_list)
 
-    def test_merge_worktree_with_non_beads_changes(self):
-        """Test merge fails with non-beads uncommitted changes in main repo."""
+    def test_merge_worktree_with_non_beads_changes_commit_fails(self):
+        """Test merge fails when non-beads uncommitted changes cannot be committed."""
         with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
-             patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.run_bd_sync_with_retry') as mock_sync, \
+             patch('pokepoke.worktrees._run_git') as mock_git, \
+             patch('pokepoke.worktrees.commit_all_changes', return_value=(False, 'pre-commit hooks failed')) as mock_commit, \
              patch('pokepoke.worktrees.get_default_branch', return_value='ameliapayne/dev'), \
              patch('builtins.print') as mock_print:
 
-            call_count = [0]
-
-            def run_side_effect(*args, **kwargs):
-                cmd = args[0]
-                if 'status' in cmd and '--porcelain' in cmd:
-                    call_count[0] += 1
-                    return Mock(stdout=' M src/file.py\n', returncode=0)
-                else:
-                    return Mock(stdout='', stderr='', returncode=0)
-
-            mock_run.side_effect = run_side_effect
+            mock_sync.return_value = Mock(returncode=0)
+            mock_git.return_value = Mock(stdout=' M src/file.py\n', returncode=0)
 
             success, unmerged_files = merge_worktree('incredible_icm-42')
 
             assert success is False
             assert unmerged_files == []
-            assert any('Cannot merge: main repo has uncommitted non-beads changes' in str(call)
+            mock_commit.assert_called_once()
+            assert any('Cannot merge: failed to commit pending changes' in str(call)
                       for call in mock_print.call_args_list)
+
+    def test_merge_worktree_with_non_beads_changes_commit_succeeds(self):
+        """Test merge proceeds when non-beads changes are successfully committed before merge."""
+        with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
+             patch('pokepoke.worktrees.run_bd_sync_with_retry') as mock_sync, \
+             patch('pokepoke.worktrees._run_git') as mock_git, \
+             patch('pokepoke.worktrees.commit_all_changes', return_value=(True, '')) as mock_commit, \
+             patch('pokepoke.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
+             patch('pokepoke.worktrees.validate_post_merge', return_value=True), \
+             patch('pokepoke.worktrees.cleanup_after_merge'), \
+             patch('pokepoke.worktrees.get_default_branch', return_value='ameliapayne/dev'), \
+             patch('pokepoke.worktrees.is_worktree_merged', return_value=True), \
+             patch('builtins.print'):
+
+            mock_sync.return_value = Mock(returncode=0)
+            # First call: status shows non-beads changes; push call returns success
+            mock_git.side_effect = [
+                Mock(stdout=' M src/file.py\n', returncode=0),  # git status (non-beads change)
+                Mock(stdout='', stderr='', returncode=0),  # git push
+            ]
+
+            success, unmerged_files = merge_worktree('incredible_icm-42')
+
+            assert success is True
+            assert unmerged_files == []
+            mock_commit.assert_called_once()
 
     def test_merge_worktree_wrong_branch_after_merge(self):
         """Test post-merge validation fails if not on target branch."""
@@ -1909,13 +1929,14 @@ class TestSyncAndEnsureCleanMainRepo:
             assert any('bd sync timed out' in str(c) for c in mock_print.call_args_list)
 
     def test_many_other_changes(self):
-        """Test reporting when >10 non-beads changes exist (line 378)."""
+        """Test reporting when >10 non-beads changes exist - tries commit, blocks if it fails."""
         from pokepoke.worktrees import _sync_and_ensure_clean_main_repo
 
         lines = '\n'.join(f' M src/file{i}.py' for i in range(15))
 
         with patch('pokepoke.worktrees.run_bd_sync_with_retry') as mock_sync, \
              patch('pokepoke.worktrees._run_git') as mock_git, \
+             patch('pokepoke.worktrees.commit_all_changes', return_value=(False, 'hooks failed')) as mock_commit, \
              patch('builtins.print') as mock_print:
 
             mock_sync.return_value = Mock(returncode=0)
@@ -1924,6 +1945,7 @@ class TestSyncAndEnsureCleanMainRepo:
             result = _sync_and_ensure_clean_main_repo('task/test-branch')
 
             assert result is False
+            mock_commit.assert_called_once()
             print_calls = [str(c) for c in mock_print.call_args_list]
             assert any('and 5 more' in c for c in print_calls)
 

@@ -12,6 +12,7 @@ from pokepoke.git_operations import (
     execute_merge_sequence,
     validate_post_merge,
     categorize_git_changes,
+    commit_all_changes,
 )
 from pokepoke.beads_management import run_bd_sync_with_retry
 from pokepoke.worktree_cleanup import (
@@ -369,15 +370,16 @@ def _sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
             lines = main_status.split('\n')
             changes = categorize_git_changes(lines)
 
-            # Block merge if there are problematic changes
             if changes['other']:
-                print("⚠️  Main repo has uncommitted changes:")
                 for line in changes['other'][:10]:
-                    print(f"   {line}")
+                    print(f"   ⚠️  pending: {line}")
                 if len(changes['other']) > 10:
                     print(f"   ... and {len(changes['other']) - 10} more")
-                print("❌ Cannot merge: main repo has uncommitted non-beads changes")
-                return False
+                ok, err = commit_all_changes(f"chore: commit pending changes before merge of {branch_name}")
+                if not ok:
+                    print(f"❌ Cannot merge: failed to commit pending changes: {err}")
+                    return False
+                print("✅ Pending main-branch changes committed")
 
             if changes['beads']:
                 print("🔧 Committing beads database changes...")

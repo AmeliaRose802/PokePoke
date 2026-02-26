@@ -580,16 +580,18 @@ class TestSyncAndEnsureCleanMainRepoIntegration:
 
     @patch('pokepoke.worktrees.run_bd_sync_with_retry')
     @patch('pokepoke.worktrees.categorize_git_changes')
+    @patch('pokepoke.worktrees.commit_all_changes')
     @patch('subprocess.run')
     def test_sync_fails_on_non_beads_changes(
-        self, mock_run, mock_categorize, mock_bd_sync
+        self, mock_run, mock_commit, mock_categorize, mock_bd_sync
     ):
-        """Test that sync fails if main repo has non-beads uncommitted changes."""
+        """Test that sync fails if main repo has non-beads uncommitted changes that cannot be committed."""
         mock_bd_sync.return_value = Mock(returncode=0, stdout='', stderr='')
         mock_run.return_value = Mock(
             returncode=0,
             stdout=' M src/somefile.py\n'
         )
+        mock_commit.return_value = (False, 'pre-commit hooks rejected changes')
 
         mock_categorize.return_value = {
             'beads': [],
@@ -600,6 +602,7 @@ class TestSyncAndEnsureCleanMainRepoIntegration:
         result = _sync_and_ensure_clean_main_repo('task/test-123')
 
         assert result is False
+        mock_commit.assert_called_once()
 
     @patch('pokepoke.worktrees.run_bd_sync_with_retry')
     @patch('subprocess.run')
