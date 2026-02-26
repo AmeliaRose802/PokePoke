@@ -416,6 +416,122 @@ def test_perform_fetches_fresh_unmerged_when_not_merging(
     )
     assert success is True
     mock_get_unmerged.assert_called_once()
+
+
+@patch("pokepoke.git_operations.is_merge_in_progress")
+@patch("pokepoke.git_operations.get_unmerged_files")
+@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+def test_perform_first_merge_worktree_persists(
+    mock_check, mock_merge, mock_add,
+    mock_get_unmerged, mock_is_merging, tmp_path,
+) -> None:
+    """Worktree directory persisting after merge reports cleaned=False."""
+    mock_check.return_value = (True, "")
+    mock_merge.return_value = (True, [])
+
+    # Create a real directory that simulates a worktree not cleaned up
+    worktree_dir = tmp_path / "task-item-1"
+    worktree_dir.mkdir()
+
+    success, cleaned = perform_worktree_merge(
+        "item-1", _make_agent_item("item-1"),
+        worktree_dir, tmp_path,
+    )
+    assert success is True
+    assert cleaned is False
+    mock_add.assert_called_once()
+    assert "persists" in mock_add.call_args[0][2].lower()
+
+
+@patch("pokepoke.git_operations.abort_merge")
+@patch("pokepoke.git_operations.is_merge_in_progress")
+@patch("pokepoke.git_operations.get_unmerged_files")
+@patch("pokepoke.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+def test_perform_retry_abort_failure_logs_error(
+    mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
+    mock_get_unmerged, mock_is_merging, mock_abort,
+) -> None:
+    """When abort_merge fails after retry merge failure, return (False, False) with error logged."""
+    mock_check.return_value = (True, "")
+    mock_merge.side_effect = [(False, ["f.py"]), (False, ["f.py"])]
+    mock_is_merging.side_effect = [True, False, True]
+    mock_get_unmerged.return_value = ["f.py"]
+    mock_conflict_cleanup.return_value = (True, None)
+    mock_abort.return_value = (False, "Cannot abort: lock held")
+
+    success, cleaned = perform_worktree_merge(
+        "item-1", _make_agent_item("item-1"),
+        Path("C:/wt"), Path("C:/repo"),
+    )
+    assert success is False
+    assert cleaned is False
+    mock_abort.assert_called_once()
+
+
+@patch("pokepoke.git_operations.abort_merge")
+@patch("pokepoke.git_operations.is_merge_in_progress")
+@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+def test_perform_cleanup_failure_abort_failure_logged(
+    mock_check, mock_merge, mock_conflict_cleanup, mock_add,
+    mock_is_merging, mock_abort,
+) -> None:
+    """When abort_merge fails after cleanup failure, error is logged but function returns."""
+    mock_check.return_value = (True, "")
+    mock_merge.return_value = (False, ["file.py"])
+    mock_is_merging.side_effect = [True, True]
+    mock_conflict_cleanup.return_value = (False, None)
+    mock_abort.return_value = (False, "Cannot abort")
+
+    success, cleaned = perform_worktree_merge(
+        "item-1", _make_agent_item("item-1"),
+        Path("C:/wt"), Path("C:/repo"),
+    )
+    assert success is False
+    assert cleaned is False
+    mock_abort.assert_called_once()
+
+
+@patch("pokepoke.git_operations.abort_merge")
+@patch("pokepoke.git_operations.is_merge_in_progress")
+@patch("pokepoke.git_operations.get_unmerged_files")
+@patch("pokepoke.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+def test_perform_retry_merge_worktree_persists(
+    mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
+    mock_get_unmerged, mock_is_merging, mock_abort, tmp_path,
+) -> None:
+    """Retry merge succeeds but worktree directory persists — cleaned=False."""
+    mock_check.return_value = (True, "")
+    mock_merge.side_effect = [(False, ["file.py"]), (True, [])]
+    mock_is_merging.side_effect = [True, False]
+    mock_get_unmerged.return_value = ["file.py"]
+    mock_conflict_cleanup.return_value = (True, None)
+
+    worktree_dir = tmp_path / "task-item-1"
+    worktree_dir.mkdir()
+
+    success, cleaned = perform_worktree_merge(
+        "item-1", _make_agent_item("item-1"),
+        worktree_dir, tmp_path,
+    )
+    assert success is True
+    assert cleaned is False
+    # Should track in manifest since worktree persists
+    mock_add.assert_called()
+    # remove_from_manifest still called (from conflict tracking), then re-added for persistence
+    mock_remove.assert_called_once_with("item-1")
 @pytest.fixture(autouse=True)
 def _mock_cleanup_lock(monkeypatch):
     """Ensure cleanup lock is a no-op for tests."""

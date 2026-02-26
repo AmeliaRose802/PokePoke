@@ -137,11 +137,38 @@ class TestCheckAndMergeWorktree:
     @patch("pokepoke.worktree_finalization.merge_worktree_to_dev")
     @patch("pokepoke.worktree_finalization.get_default_branch")
     @patch("pokepoke.worktree_finalization.subprocess")
-    def test_exception_merges_anyway(self, mock_sub: Mock, mock_branch: Mock, mock_merge: Mock) -> None:
-        mock_sub.run.side_effect = Exception("git error")
+    def test_called_process_error_merges_anyway(self, mock_sub: Mock, mock_branch: Mock, mock_merge: Mock) -> None:
+        """CalledProcessError (e.g., branch not found) is recoverable — proceed with merge."""
+        import subprocess as real_subprocess
+        mock_sub.run.side_effect = real_subprocess.CalledProcessError(1, "git")
+        mock_sub.CalledProcessError = real_subprocess.CalledProcessError
+        mock_sub.TimeoutExpired = real_subprocess.TimeoutExpired
         mock_merge.return_value = True
         assert check_and_merge_worktree(_make_test_item(), Path("/wt")) is True
         mock_merge.assert_called_once()
+
+    @patch("pokepoke.worktree_finalization.merge_worktree_to_dev")
+    @patch("pokepoke.worktree_finalization.get_default_branch")
+    @patch("pokepoke.worktree_finalization.subprocess")
+    def test_timeout_aborts_merge(self, mock_sub: Mock, mock_branch: Mock, mock_merge: Mock) -> None:
+        """TimeoutExpired means git is unresponsive — abort merge."""
+        import subprocess as real_subprocess
+        mock_sub.run.side_effect = real_subprocess.TimeoutExpired("git", 30)
+        mock_sub.TimeoutExpired = real_subprocess.TimeoutExpired
+        assert check_and_merge_worktree(_make_test_item(), Path("/wt")) is False
+        mock_merge.assert_not_called()
+
+    @patch("pokepoke.worktree_finalization.merge_worktree_to_dev")
+    @patch("pokepoke.worktree_finalization.get_default_branch")
+    @patch("pokepoke.worktree_finalization.subprocess")
+    def test_unexpected_exception_aborts_merge(self, mock_sub: Mock, mock_branch: Mock, mock_merge: Mock) -> None:
+        """Unexpected exceptions (OS/resource) abort merge to prevent corruption."""
+        mock_sub.run.side_effect = OSError("disk full")
+        import subprocess as real_subprocess
+        mock_sub.TimeoutExpired = real_subprocess.TimeoutExpired
+        mock_sub.CalledProcessError = real_subprocess.CalledProcessError
+        assert check_and_merge_worktree(_make_test_item(), Path("/wt")) is False
+        mock_merge.assert_not_called()
 
 
 class TestCloseWorkItemAndParents:
