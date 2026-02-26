@@ -1,8 +1,101 @@
 """Tests for logging utilities."""
 
+import logging
 from pathlib import Path
+import sys
 import tempfile
-from pokepoke.logging_utils import RunLogger, ItemLogger
+from pokepoke.logging_utils import RunLogger, ItemLogger, configure_logging
+
+
+def test_configure_logging_creates_debug_log(tmp_path):
+    """configure_logging should create the debug log file and set up handlers."""
+    log_file = tmp_path / "debug.log"
+
+    # Use a fresh root logger state by removing existing handlers
+    root = logging.getLogger()
+    original_handlers = root.handlers[:]
+    root.handlers.clear()
+
+    pokepoke_logger = logging.getLogger("pokepoke")
+    original_pp_handlers = pokepoke_logger.handlers[:]
+    pokepoke_logger.handlers.clear()
+
+    try:
+        configure_logging(log_file)
+
+        # Root logger should have a file handler at DEBUG
+        assert root.level == logging.DEBUG
+        assert any(
+            isinstance(h, logging.FileHandler) for h in root.handlers
+        ), "Root logger should have a FileHandler"
+
+        # 'pokepoke' logger should have a console StreamHandler
+        console_handlers = [
+            h for h in pokepoke_logger.handlers
+            if isinstance(h, logging.StreamHandler)
+            and not isinstance(h, logging.FileHandler)
+        ]
+        assert len(console_handlers) == 1, "pokepoke logger should have one console handler"
+        assert console_handlers[0].level == logging.WARNING
+
+        # Writing a debug message should appear in the file
+        test_logger = logging.getLogger("pokepoke.test_module")
+        test_logger.debug("test debug message")
+
+        with open(log_file, encoding="utf-8") as f:
+            content = f.read()
+        assert "test debug message" in content
+    finally:
+        # Restore original handler state
+        root.handlers = original_handlers
+        pokepoke_logger.handlers = original_pp_handlers
+
+
+def test_configure_logging_no_duplicate_console_handlers(tmp_path):
+    """Calling configure_logging twice should not add duplicate console handlers."""
+    log_file = tmp_path / "debug.log"
+
+    root = logging.getLogger()
+    original_handlers = root.handlers[:]
+    root.handlers.clear()
+
+    pokepoke_logger = logging.getLogger("pokepoke")
+    original_pp_handlers = pokepoke_logger.handlers[:]
+    pokepoke_logger.handlers.clear()
+
+    try:
+        configure_logging(log_file)
+        configure_logging(log_file)
+
+        console_handlers = [
+            h for h in pokepoke_logger.handlers
+            if isinstance(h, logging.StreamHandler)
+            and not isinstance(h, logging.FileHandler)
+        ]
+        assert len(console_handlers) == 1, "Should not add duplicate console handlers"
+    finally:
+        root.handlers = original_handlers
+        pokepoke_logger.handlers = original_pp_handlers
+
+
+def test_configure_logging_creates_parent_dirs(tmp_path):
+    """configure_logging should create parent directories for the log file."""
+    log_file = tmp_path / "nested" / "dirs" / "debug.log"
+
+    root = logging.getLogger()
+    original_handlers = root.handlers[:]
+    root.handlers.clear()
+
+    pokepoke_logger = logging.getLogger("pokepoke")
+    original_pp_handlers = pokepoke_logger.handlers[:]
+    pokepoke_logger.handlers.clear()
+
+    try:
+        configure_logging(log_file)
+        assert log_file.parent.exists()
+    finally:
+        root.handlers = original_handlers
+        pokepoke_logger.handlers = original_pp_handlers
 
 
 def test_run_logger_initialization():

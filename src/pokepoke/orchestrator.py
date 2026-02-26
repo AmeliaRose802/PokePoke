@@ -14,7 +14,7 @@ from pokepoke.types import AgentStats, SessionStats, BeadsWorkItem, WorkItemResu
 from pokepoke.stats import print_stats
 from pokepoke.workflow import process_work_item
 from pokepoke.work_item_selection import select_work_item
-from pokepoke.logging_utils import RunLogger
+from pokepoke.logging_utils import RunLogger, configure_logging
 from pokepoke.agent_names import initialize_agent_name
 from pokepoke.agent_context import get_agent_name
 from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner, clear_terminal_banner
@@ -106,6 +106,7 @@ def run_orchestrator(
         run_logger = RunLogger()
         run_id = run_logger.get_run_id()
         run_dir = run_logger.get_run_dir()
+        configure_logging(run_dir / 'debug.log')
         print(f"📝 Run ID: {run_id} | 📁 Logs: {run_dir}")
         terminal_ui.ui.set_logs_dir(str(run_dir))
         run_logger.log_orchestrator(f"PokePoke started in {mode_name} mode with agent name: {agent_name}")

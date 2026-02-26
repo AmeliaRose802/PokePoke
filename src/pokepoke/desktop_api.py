@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import threading
 import time
+from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
 from pokepoke.agent_registry import AgentRegistry
+from pokepoke.logging_utils import configure_logging
 from pokepoke.metrics_context import get_current_agent_type
 from pokepoke.repo_utils import get_repository_name
 
@@ -38,6 +40,8 @@ class DesktopAPI:
         self._window: Any | None = None
         self._lock = threading.RLock()
         self._window_disposed = False
+
+        configure_logging(Path(".pokepoke/logs/desktop_api.log"))
 
         # Buffered state — frontend can poll or get pushed updates
         self._log_buffer: list[dict[str, Any]] = []

@@ -1,5 +1,7 @@
 """Logging utilities for PokePoke - File-based logging for runs and work items."""
 
+import logging
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -7,6 +9,45 @@ import uuid
 
 if TYPE_CHECKING:
     from pokepoke.types import SessionStats
+
+
+def configure_logging(
+    log_file: Path | str,
+    console_level: int = logging.WARNING,
+) -> None:
+    """Configure Python logging handlers for a PokePoke entry point.
+
+    Sets up two channels:
+    1. FileHandler on the root logger at DEBUG level → *log_file*
+    2. StreamHandler(sys.stderr) at *console_level* on the ``pokepoke`` logger
+
+    Safe to call once per process.  ``basicConfig`` only acts when the root
+    logger has no handlers, so repeated calls are benign.
+    """
+    log_file = Path(log_file)
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        filename=str(log_file),
+        filemode="w",
+    )
+
+    pokepoke_logger = logging.getLogger("pokepoke")
+    # Avoid duplicate console handlers on repeated calls
+    has_console = any(
+        isinstance(h, logging.StreamHandler)
+        and not isinstance(h, logging.FileHandler)
+        for h in pokepoke_logger.handlers
+    )
+    if not has_console:
+        console = logging.StreamHandler(sys.stderr)
+        console.setLevel(console_level)
+        console.setFormatter(
+            logging.Formatter("%(levelname)s: %(name)s: %(message)s")
+        )
+        pokepoke_logger.addHandler(console)
 
 
 class RunLogger:
