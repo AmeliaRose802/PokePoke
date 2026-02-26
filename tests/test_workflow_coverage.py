@@ -145,7 +145,9 @@ class TestRunCleanupWithTimeout:
     @patch("time.time")
     def test_cleanup_timeout(self, mock_time, mock_uncommitted, mock_cleanup):
         # Simulate timeout: time.time() returns value past timeout
-        mock_time.side_effect = [8000.0]  # past timeout_seconds (7200)
+        # Extra values needed because print() may trigger desktop_ui push_log
+        # which also calls time.time() internally.
+        mock_time.side_effect = [8000.0] + [8000.0] * 20  # past timeout_seconds (7200)
         item = _item()
         result_obj = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1)
 

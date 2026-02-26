@@ -73,15 +73,16 @@ def check_git_status(
                 lines = result.stdout.strip().split('\n') if result.stdout.strip() else []
                 changes = categorize_git_changes(lines)
 
-                # Classify different types of changes
-                if changes['other']:  # Non-beads, non-worktree changes
+                # Classify different types of changes (including untracked files)
+                untracked_and_other = changes['other'] + changes['untracked']
+                if untracked_and_other:  # Non-beads, non-worktree changes (including untracked)
                     errors.append(HealthCheckError(
                         check_name='git_status_check',
-                        message=f"Repository has uncommitted changes: {len(changes['other'])} files",
+                        message=f"Repository has uncommitted changes: {len(untracked_and_other)} files",
                         severity=ErrorSeverity.RECOVERABLE,
                         details={
-                            'uncommitted_files': changes['other'][:10],  # Limit for logging
-                            'total_count': len(changes['other'])
+                            'uncommitted_files': untracked_and_other[:10],  # Limit for logging
+                            'total_count': len(untracked_and_other)
                         }
                     ))
 
