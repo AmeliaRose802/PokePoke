@@ -155,6 +155,9 @@ def get_model_history(self: Any, limit: int = 200) -> list[dict[str, Any]]:
 
 def push_stats(self: Any, session_stats: Any, elapsed_time: float = 0.0) -> None:
     """Update session statistics (snapshot fallback)."""
+    if getattr(self, "_window_disposed", False):  # Silently ignore after window disposal
+        return
+
     if session_stats:
         self._live_session_stats = session_stats
     stats_data: dict[str, Any] = {"elapsed_time": elapsed_time}
