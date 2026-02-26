@@ -24,7 +24,7 @@ def sample_work_item():
 class TestActivityWatchdog:
     """Tests for activity watchdog functionality."""
 
-    @patch('pokepoke.copilot_sdk._activity_watchdog')
+    @patch('pokepoke.session_watchdog.activity_watchdog')
     @patch('pokepoke.copilot_sdk.CopilotClient')
     async def test_watchdog_enabled_with_item_logger(self, mock_client_class, mock_watchdog, sample_work_item):
         """Test that watchdog is started when item_logger is provided."""
