@@ -13,6 +13,7 @@ from pokepoke.git_operations import (
     validate_post_merge,
     categorize_git_changes,
     commit_all_changes,
+    list_worktrees,
 )
 from pokepoke.beads_management import run_bd_sync_with_retry
 from pokepoke.worktree_cleanup import (
@@ -86,6 +87,41 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
                     logger.debug(f"Worktree created by another agent while waiting for lock: {wt_path}")
                     print(f"   ♻️  Reusing worktree created by another agent at {wt_path}")
                     return wt_path
+
+            # Check if the directory already exists but wasn't in list_worktrees
+            if worktree_path.exists():
+                logger.warning(f"Worktree directory {worktree_path} already exists but wasn't in list_worktrees")
+                
+                # Check if it's a valid git worktree
+                is_valid_worktree = False
+                try:
+                    result = subprocess.run(
+                        ["git", "rev-parse", "--is-inside-work-tree"],
+                        cwd=worktree_path,
+                        capture_output=True,
+                        text=True,
+                        check=True
+                    )
+                    if result.stdout.strip() == "true":
+                        is_valid_worktree = True
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    pass
+                
+                if is_valid_worktree:
+                    logger.info(f"Directory {worktree_path} is a valid worktree, reusing it")
+                    print(f"   ♻️  Reusing existing worktree directory at {worktree_path}")
+                    return worktree_path
+                else:
+                    logger.warning(f"Directory {worktree_path} is not a valid worktree, removing it")
+                    print(f"   🧹  Removing stale worktree directory at {worktree_path}")
+                    if not force_remove_directory(worktree_path):
+                        raise RuntimeError(f"Failed to remove stale directory {worktree_path}")
+                    
+                    # Also run git worktree prune just in case
+                    try:
+                        _run_git(["git", "worktree", "prune"])
+                    except Exception:
+                        pass
 
             # Create the worktree
             logger.info(f"Creating worktree for {item_id}: {worktree_path}")
@@ -161,16 +197,11 @@ def is_worktree_merged(item_id: str, target_branch: str | None = None) -> bool:
 def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool = True) -> tuple[bool, list[str]]:
     """Merge a worktree's branch into the target branch and optionally clean up.
 
-    Returns:
-        Tuple of (success: bool, unmerged_files: list[str])
-        - If successful: (True, [])
-        - If failed due to conflicts: (False, list_of_conflicted_files)
-        - If failed for other reasons: (False, [])
+    Returns (success, unmerged_files). On success: (True, []). On failure: (False, conflicted_files).
     """
     sanitized_id = sanitize_branch_name(item_id)
     branch_name = f"task/{sanitized_id}"
     worktree_path = Path("worktrees") / f"task-{sanitized_id}"
-
 
     if target_branch is None:
         target_branch = get_default_branch()
@@ -213,13 +244,10 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
         print(f"❌ Push failed: {e.stderr if e.stderr else str(e)}")
         return False, []
 
-    # MERGE CONFIRMATION: Verify branch is actually merged
-    # Note: After successful push, verification failures are warnings, not hard failures
+    # Verify branch is actually merged (warnings only - push already succeeded)
     if not is_worktree_merged(item_id, target_branch):
-        print(f"⚠️  Post-push merge verification failed for {branch_name}, but push succeeded")
-        print("    The merge is complete, but git branch --merged may have transient issues")
+        print(f"\u26a0\ufe0f  Post-push merge verification failed for {branch_name}, but push succeeded")
         logger.warning(f"Post-push merge verification failed for {branch_name}, but push to {target_branch} succeeded")
-        # Don't return failure - the push already succeeded
     else:
         print(f"✅ Merge confirmed: {branch_name} is merged into {target_branch}")
 
@@ -231,9 +259,6 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
 
 def cleanup_worktree(item_id: str, force: bool = False) -> bool:
     """Remove a worktree and its associated branch.
-
-    Handles both sanitized and unsanitized worktree paths by searching
-    for the actual worktree associated with this item_id.
 
     Returns True if cleanup succeeds or if the worktree/branch don't exist.
     """
@@ -323,35 +348,9 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
     return True
 
 
-def list_worktrees() -> list[dict[str, str]]:
-    """List all active worktrees."""
-    try:
-        result = _run_git(["git", "worktree", "list", "--porcelain"])
-
-        worktrees = []
-        current: dict[str, str] = {}
-
-        for line in result.stdout.splitlines():
-            if line.startswith("worktree "):
-                if current:
-                    worktrees.append(current)
-                current = {"path": line.split(" ", 1)[1]}
-            elif line.startswith("branch "):
-                current["branch"] = line.split(" ", 1)[1]
-            elif line.startswith("HEAD "):
-                current["commit"] = line.split(" ", 1)[1]
-
-        if current:
-            worktrees.append(current)
-
-        return worktrees
-
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        return []
-
 def _sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
     """Sync beads and ensure main repo is clean before merge."""
-    # CRITICAL: Sync beads before merge to avoid uncommitted .beads files blocking checkout
+
     print("🔄 Syncing beads database before merge...")
     try:
         bd_sync_result = run_bd_sync_with_retry(timeout=30)
@@ -361,8 +360,6 @@ def _sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
             print(f"   stderr: {bd_sync_result.stderr}")
     except subprocess.TimeoutExpired:
         print("⚠️  bd sync timed out")
-
-    # Verify main repo is clean before checkout
     try:
         main_status = _run_git(["git", "status", "--porcelain"]).stdout.strip()
 

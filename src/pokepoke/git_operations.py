@@ -165,10 +165,8 @@ def check_main_repo_ready_for_merge() -> tuple[bool, str]:
 
 def sanitize_branch_name(name: str) -> str:
     """Sanitize string to valid git branch name (replace invalid chars with hyphens)."""
-    sanitized = re.sub(r'[~^:?*\[\]\\@{}#<>|&;\s]+', '-', name)
-    sanitized = re.sub(r'\.\.+', '.', sanitized)
-    sanitized = re.sub(r'-+', '-', sanitized)
-    return sanitized.strip('-.')
+    s = re.sub(r'[~^:?*\[\]\\@{}#<>|&;\s]+', '-', name)
+    return re.sub(r'-+', '-', re.sub(r'\.\.+', '.', s)).strip('-.')
 
 
 def branch_exists(branch_name: str) -> bool:
@@ -176,11 +174,8 @@ def branch_exists(branch_name: str) -> bool:
     try:
         result = subprocess.run(
             ["git", "show-ref", "--verify", f"refs/heads/{branch_name}"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8', errors='replace',
-            timeout=30
-        )
+            capture_output=True, text=True, encoding='utf-8', errors='replace',
+            timeout=30)
         return result.returncode == 0
     except subprocess.CalledProcessError:
         return False
@@ -262,12 +257,9 @@ def get_main_repo_root() -> Path:
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--git-common-dir"],
-            capture_output=True, text=True, encoding='utf-8', check=True,
-            errors='replace',
-            timeout=30
-        )
-        git_common_dir = Path(result.stdout.strip())
-        return git_common_dir.parent
+            capture_output=True, text=True, encoding='utf-8', errors='replace',
+            check=True, timeout=30)
+        return Path(result.stdout.strip()).parent
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Not in a git repository: {e}") from e
 
@@ -276,13 +268,8 @@ def is_worktree_clean(worktree_path: Path) -> bool:
     try:
         result = subprocess.run(
             ["git", "-C", str(worktree_path), "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8', errors='replace',
-            check=True,
-            timeout=30
-        )
-        # Empty output means clean status
+            capture_output=True, text=True, encoding='utf-8', errors='replace',
+            check=True, timeout=30)
         return not bool(result.stdout.strip())
     except subprocess.CalledProcessError:
         return False
@@ -356,45 +343,57 @@ def validate_post_merge(target_branch: str) -> bool:
     """Validate repository state after merge."""
     current_branch = subprocess.run(
         ["git", "branch", "--show-current"],
-        capture_output=True, text=True, encoding='utf-8', check=True,
-        errors='replace',
-        timeout=30
-    ).stdout.strip()
-
+        capture_output=True, text=True, encoding='utf-8', errors='replace',
+        check=True, timeout=30).stdout.strip()
     if current_branch != target_branch:
         print(f"❌ Post-merge validation failed: Not on {target_branch} (on {current_branch})")
         return False
-
-    status_result = subprocess.run(
+    status = subprocess.run(
         ["git", "status", "--porcelain"],
-        capture_output=True, text=True, encoding='utf-8', check=True,
-        errors='replace',
-        timeout=30
-    )
-
-    if status_result.stdout.strip():
+        capture_output=True, text=True, encoding='utf-8', errors='replace',
+        check=True, timeout=30).stdout.strip()
+    if status:
         print(f"❌ Post-merge validation failed: {target_branch} has uncommitted changes")
         return False
-
     return True
 
 def has_commits_ahead(target_branch: str | None = None, cwd: str | None = None) -> int:
     """Count commits in current branch ahead of the target branch."""
     if target_branch is None:
         target_branch = get_default_branch()
-
     try:
         result = subprocess.run(
             ["git", "rev-list", "--count", f"{target_branch}..HEAD"],
             capture_output=True, text=True, encoding='utf-8', errors='replace',
-            timeout=10,
-            cwd=cwd
-        )
+            timeout=10, cwd=cwd)
         if result.returncode == 0:
             return int(result.stdout.strip())
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError):
         pass
     return 0
 
-# Re-export handoff context builder for backward compatibility
-from .handoff_context import build_handoff_context  # noqa: E402,F401
+def list_worktrees() -> list[dict[str, str]]:
+    """List all active worktrees."""
+    try:
+        result = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            capture_output=True, text=True, encoding='utf-8', errors='replace',
+            timeout=30, check=True)
+        worktrees: list[dict[str, str]] = []
+        current: dict[str, str] = {}
+        for line in result.stdout.splitlines():
+            if line.startswith("worktree "):
+                if current:
+                    worktrees.append(current)
+                current = {"path": line.split(" ", 1)[1]}
+            elif line.startswith("branch "):
+                current["branch"] = line.split(" ", 1)[1]
+            elif line.startswith("HEAD "):
+                current["commit"] = line.split(" ", 1)[1]
+        if current:
+            worktrees.append(current)
+        return worktrees
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return []
+
+from .handoff_context import build_handoff_context  # noqa: E402,F401  # Re-export for backward compat

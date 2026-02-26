@@ -278,7 +278,7 @@ def get_uncleaned_worktree_count() -> int:
 
 def has_unmerged_worktrees() -> bool:
     """Check if there are any task worktrees or uncleaned manifest entries."""
-    from pokepoke.worktrees import list_worktrees
+    from pokepoke.git_operations import list_worktrees
     worktrees = list_worktrees()
     task_worktrees = [
         wt for wt in worktrees

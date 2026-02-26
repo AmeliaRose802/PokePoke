@@ -477,20 +477,20 @@ class TestMergeWorktree:
 class TestListWorktrees:
     """Tests for list_worktrees function."""
 
-    @patch('pokepoke.worktrees._run_git')
-    def test_list_worktrees_empty(self, mock_run_git) -> None:
+    @patch('subprocess.run')
+    def test_list_worktrees_empty(self, mock_run) -> None:
         """Return empty list when no worktrees exist."""
-        mock_run_git.return_value = Mock(stdout='', returncode=0)
+        mock_run.return_value = Mock(stdout='', returncode=0)
 
         result = list_worktrees()
 
         assert result == []
 
-    @patch('pokepoke.worktrees._run_git')
-    def test_list_worktrees_parsing(self, mock_run_git) -> None:
+    @patch('subprocess.run')
+    def test_list_worktrees_parsing(self, mock_run) -> None:
         """Parse git worktree list output correctly."""
         # git worktree list --porcelain format
-        mock_run_git.return_value = Mock(
+        mock_run.return_value = Mock(
             stdout='worktree /repo/main\n'
                    'branch refs/heads/main\n'
                    'HEAD abcd1234\n'
@@ -507,10 +507,10 @@ class TestListWorktrees:
         assert result[0]['path'] == '/repo/main'
         assert result[1]['branch'] == 'refs/heads/task/task-1'
 
-    @patch('pokepoke.worktrees._run_git')
-    def test_list_worktrees_git_error(self, mock_run_git) -> None:
+    @patch('subprocess.run')
+    def test_list_worktrees_git_error(self, mock_run) -> None:
         """Return empty list on git error."""
-        mock_run_git.side_effect = subprocess.CalledProcessError(1, 'git')
+        mock_run.side_effect = subprocess.CalledProcessError(1, 'git')
 
         result = list_worktrees()
 

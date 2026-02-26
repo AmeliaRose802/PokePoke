@@ -331,6 +331,58 @@ class TestCreateWorktree:
             mock_print.assert_called_once()
             assert 'Reusing existing worktree' in mock_print.call_args[0][0]
 
+    def test_create_worktree_directory_exists_valid(self):
+        """Test when worktree directory exists and is a valid git worktree."""
+        existing_path = Path('worktrees/task-incredible_icm-42')
+        
+        with patch('pokepoke.worktrees.list_worktrees', return_value=[]), \
+             patch('pathlib.Path.mkdir'), \
+             patch('pathlib.Path.exists', return_value=True), \
+             patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.get_default_branch', return_value='master'), \
+             patch('builtins.print') as mock_print:
+            
+            # Mock git rev-parse --is-inside-work-tree to return true
+            mock_run.return_value.stdout = "true\n"
+            
+            result = create_worktree('incredible_icm-42')
+            
+            assert result == existing_path
+            mock_print.assert_called_once()
+            assert 'Reusing existing worktree directory' in mock_print.call_args[0][0]
+            mock_run.assert_called_once_with(
+                ["git", "rev-parse", "--is-inside-work-tree"],
+                cwd=existing_path,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+
+    def test_create_worktree_directory_exists_invalid(self):
+        """Test when worktree directory exists but is not a valid git worktree."""
+        existing_path = Path('worktrees/task-incredible_icm-42')
+        
+        with patch('pokepoke.worktrees.list_worktrees', return_value=[]), \
+             patch('pathlib.Path.mkdir'), \
+             patch('pathlib.Path.exists', return_value=True), \
+             patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.force_remove_directory', return_value=True) as mock_remove, \
+             patch('pokepoke.worktrees._run_git') as mock_run_git, \
+             patch('pokepoke.worktrees.get_default_branch', return_value='master'), \
+             patch('builtins.print') as mock_print:
+            
+            # Mock git rev-parse --is-inside-work-tree to fail
+            mock_run.side_effect = subprocess.CalledProcessError(128, "git")
+            
+            result = create_worktree('incredible_icm-42')
+            
+            assert result == existing_path
+            mock_remove.assert_called_once_with(existing_path)
+            # Should have called git worktree prune and git worktree add
+            assert mock_run_git.call_count == 2
+            assert mock_run_git.call_args_list[0][0][0] == ["git", "worktree", "prune"]
+            assert mock_run_git.call_args_list[1][0][0] == ["git", "worktree", "add", str(existing_path), "-b", "task/incredible_icm-42", "master"]
+
     def test_create_worktree_branch_already_exists_error_recovery(self):
         """Test recovery when branch already exists."""
         with patch('subprocess.run') as mock_run, \
