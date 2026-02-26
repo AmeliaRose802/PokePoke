@@ -306,6 +306,7 @@ def _run_worktree_agent(
         print(f"   Model: {model}")
 
     worktree_cleaned = False
+    preserve_for_debugging = False
 
     # Use the scheduler's parent_agent_id if provided, otherwise fall back to agent_id
     # This ensures sub-agents nest under the UI-visible maintenance agent card
@@ -369,29 +370,27 @@ def _run_worktree_agent(
             return agent_stats
         else:
             print(f"\n❌ {agent_name} agent failed: {result.error}")
-            print("\n🧹 Cleaning up worktree...")
-            cleanup_worktree(agent_id, force=True)
-            worktree_cleaned = True
+            print(f"\n🔍 Worktree preserved for debugging at: {worktree_path}")
+            print(f"   Logs: {repo_root}/.pokepoke/logs/")
+            print(f"   Cleanup: cleanup_worktree('{agent_id}', force=True)")
+            preserve_for_debugging = True
             return None
 
     finally:
-        # Ensure worktree is cleaned up if not already done
-        if not worktree_cleaned:
+        if preserve_for_debugging:
+            logger.info(f"Worktree preserved for debugging: {worktree_path}")
+            print(f"\n📝 Worktree preserved at: {worktree_path}")
+            print("   Manual cleanup required when investigation complete")
+        elif not worktree_cleaned:
             print(f"\n🧹 Final cleanup: removing worktree {agent_id}...")
             try:
                 cleanup_worktree(agent_id, force=True)
-                # Remove from manifest if it was added
                 from pokepoke.worktree_cleanup import remove_from_manifest
                 remove_from_manifest(agent_id)
             except Exception as cleanup_error:
                 print(f"⚠️  Final cleanup failed: {cleanup_error}")
-                # Track failed cleanup in manifest
                 from pokepoke.worktree_cleanup import add_uncleaned_worktree
-                add_uncleaned_worktree(
-                    agent_id,
-                    str(worktree_path),
-                    f"Failed final cleanup: {cleanup_error}"
-                )
+                add_uncleaned_worktree(agent_id, str(worktree_path), f"Failed final cleanup: {cleanup_error}")
 
 
 # Re-export beta tester for backward compatibility
