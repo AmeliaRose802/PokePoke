@@ -22,10 +22,10 @@ from pokepoke.shutdown import (
 from pokepoke import desktop_api_ext as _ext
 from pokepoke import desktop_api_stats as _stats
 from pokepoke import desktop_api_setup as _setup
+from pokepoke import desktop_api_session as _session
 
 if TYPE_CHECKING:
     from pokepoke.types import SessionStats
-
 
 class DesktopAPI:
     """API surface exposed to the pywebview frontend.
@@ -98,12 +98,11 @@ class DesktopAPI:
             self._window = None
 
     # Stats serialization — delegated to desktop_api_stats
-    _snapshot_to_dict = staticmethod(_stats.snapshot_to_dict)
-    _serialize_live_stats = _stats.serialize_live_stats
-    _get_cached_leaderboard = _stats.get_cached_leaderboard
-    get_model_leaderboard = _stats.get_model_leaderboard
-    get_model_history = _stats.get_model_history
-    push_stats = _stats.push_stats
+    (_snapshot_to_dict, _serialize_live_stats, _get_cached_leaderboard,
+     get_model_leaderboard, get_model_history, push_stats) = (
+        staticmethod(_stats.snapshot_to_dict), _stats.serialize_live_stats,
+        _stats.get_cached_leaderboard, _stats.get_model_leaderboard,
+        _stats.get_model_history, _stats.push_stats)
 
     def get_state(self) -> dict[str, Any]:
         """State snapshot + new log entries since last poll (single IPC call)."""
@@ -158,8 +157,7 @@ class DesktopAPI:
         with self._lock:
             return self._serialize_live_stats()
 
-    get_config = _ext.get_config
-    save_config = _ext.save_config
+    get_config, save_config = _ext.get_config, _ext.save_config
 
     # ─── Python → State: Called by the orchestrator ───────────────────
     def push_log(
@@ -191,44 +189,43 @@ class DesktopAPI:
     ) -> None:
         """Update the current work item."""
         with self._lock:
+            if self._window_disposed:  # Silently ignore after window disposal
+                return
+
             self._current_work_item = {
                 "item_id": item_id,
                 "title": title,
                 "status": status,
                 "labels": list(labels) if labels is not None else [],
             }
-
-    def set_session_start_time(self, start_time: float) -> None:
-        """Store session start time (enables live elapsed_time ticking)."""
-        with self._lock:
-            self._session_start_time = start_time
-            self._current_session_id = str(start_time)
-
-    def set_session_end_time(self, end_time: float) -> None:
-        """Store session end time (freezes elapsed_time)."""
-        with self._lock:
-            self._session_end_time = end_time
-
-    def set_live_session_stats(self, session_stats: SessionStats) -> None:
-        """Store a live SessionStats reference for real-time polling."""
-        with self._lock:
-            self._live_session_stats = session_stats
+    # Session timing — delegated to desktop_api_session
+    set_session_start_time = _session.set_session_start_time
+    set_session_end_time = _session.set_session_end_time
+    set_live_session_stats = _session.set_live_session_stats
 
     def push_agent_name(self, name: str) -> None:
         """Update the current agent name."""
         with self._lock:
+            if self._window_disposed:  # Silently ignore after window disposal
+                return
             self._current_agent_name = name
     def push_progress(self, active: bool, status: str = "") -> None:
         """Update the progress indicator."""
         with self._lock:
+            if self._window_disposed:  # Silently ignore after window disposal
+                return
             self._current_progress = {"active": active, "status": status}
     def set_logs_dir(self, logs_dir: str) -> None:
         """Set the current logs directory path."""
         with self._lock:
+            if self._window_disposed:  # Silently ignore after window disposal
+                return
             self._current_logs_dir = logs_dir
     def clear_logs(self) -> None:
         """Clear the log buffer."""
         with self._lock:
+            if self._window_disposed:  # Silently ignore after window disposal
+                return
             self._log_buffer.clear()
             self._log_read_index = 0
     @property
@@ -262,6 +259,8 @@ class DesktopAPI:
     ) -> None:
         """Register or update a running agent."""
         with self._lock:
+            if self._window_disposed:  # Silently ignore after window disposal
+                return
             session_id = self._current_session_id
         resolved_type = agent_type or get_current_agent_type(default="")
         normalized_agent_type: str | None = resolved_type if resolved_type else None
@@ -283,6 +282,9 @@ class DesktopAPI:
 
     def push_agent_log(self, agent_id: str, line: str) -> None:
         """Append a log line to an agent's recent log preview."""
+        with self._lock:
+            if self._window_disposed:  # Silently ignore after window disposal
+                return
         self._agent_registry.append_log(agent_id, line)
 
     def push_agent_tokens(
@@ -293,6 +295,9 @@ class DesktopAPI:
         context_limit: int,
     ) -> None:
         """Update live token usage for an agent."""
+        with self._lock:
+            if self._window_disposed:  # Silently ignore after window disposal
+                return
         self._agent_registry.update_token_usage(
             agent_id, input_tokens, output_tokens, context_limit,
         )
@@ -383,17 +388,13 @@ class DesktopAPI:
     browse_for_project = _ext.browse_for_project
 
     # First-time setup wizard API
-    check_setup_status = _setup.check_setup_status
-    git_init = _setup.git_init
-    bd_init = _setup.bd_init
-    create_default_config = _setup.create_default_config
-    scaffold_prompt_overrides = _setup.scaffold_prompt_overrides
-    complete_setup = _setup.complete_setup
-    wait_for_setup_complete = _setup.wait_for_setup_complete
+    (check_setup_status, git_init, bd_init, create_default_config,
+     scaffold_prompt_overrides, complete_setup, wait_for_setup_complete) = (
+        _setup.check_setup_status, _setup.git_init, _setup.bd_init,
+        _setup.create_default_config, _setup.scaffold_prompt_overrides,
+        _setup.complete_setup, _setup.wait_for_setup_complete)
 
-    list_prompts = _ext.list_prompts
-    get_prompt = _ext.get_prompt
-    save_prompt = _ext.save_prompt
-    reset_prompt = _ext.reset_prompt
-    add_work_item_label = _ext.add_work_item_label
-    remove_work_item_label = _ext.remove_work_item_label
+    (list_prompts, get_prompt, save_prompt, reset_prompt,
+     add_work_item_label, remove_work_item_label) = (
+        _ext.list_prompts, _ext.get_prompt, _ext.save_prompt, _ext.reset_prompt,
+        _ext.add_work_item_label, _ext.remove_work_item_label)

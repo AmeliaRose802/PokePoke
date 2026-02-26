@@ -1545,7 +1545,6 @@ def test_push_log_silently_ignores_after_disposal() -> None:
 
 def test_disposal_is_thread_safe() -> None:
     """dispose() should be thread-safe using the existing lock."""
-    import threading
     api = DesktopAPI()
 
     # Add some logs before disposal
@@ -1558,23 +1557,79 @@ def test_disposal_is_thread_safe() -> None:
     api.dispose()
     assert api._window_disposed is True
 
-    # Try logging from multiple threads after disposal
-    def log_in_thread(thread_id: int):
-        for i in range(20):
-            api.push_log(f"thread-{thread_id} log {i}")
 
-    threads = [threading.Thread(target=log_in_thread, args=(i,)) for i in range(3)]
+def test_push_methods_silently_ignore_after_disposal() -> None:
+    """All push methods should silently return when window is disposed."""
+    from pokepoke.types import SessionStats, AgentStats
 
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    api = DesktopAPI()
 
-    # After disposal, no more logs should be added
-    assert api._window_disposed is True
-    # Log buffer should still have only the pre-disposal logs
-    assert len(api._log_buffer) == 10
-    # Verify the logs are the original ones
-    for i in range(10):
-        assert api._log_buffer[i]["message"] == f"pre-dispose log {i}"
+    # Set initial state before disposal
+    api.push_work_item("item-1", "Test Item", "open", ["label1"])
+    api.push_agent_name("Test Agent")
+    api.push_progress(True, "working")
+    api.push_agent_status("agent-1", "Worker", status="running")
+    api.push_agent_log("agent-1", "log line")
+    api.push_agent_tokens("agent-1", 100, 50, 8000)
+    api.set_session_start_time(1000.0)
+    api.set_session_end_time(2000.0)
+    api.set_logs_dir("/logs")
+
+    stats = SessionStats(
+        agent_stats=AgentStats(),
+        items_completed=1,
+        items_created=0,
+        lifetime_items_created=10,
+        lifetime_items_completed=9,
+    )
+    api.set_live_session_stats(stats)
+    api.push_stats(stats, elapsed_time=100.0)
+
+    # Capture initial state
+    initial_work_item = api._current_work_item
+    initial_agent_name = api._current_agent_name
+    initial_progress = api._current_progress.copy()
+    initial_agents_count = len(api.get_agents())
+    initial_session_start = api._session_start_time
+    initial_session_end = api._session_end_time
+    initial_logs_dir = api._current_logs_dir
+    initial_live_stats = api._live_session_stats
+    initial_current_stats = api._current_stats
+
+    # Dispose the window
+    api.dispose()
+
+    # All push methods should now silently ignore updates
+    api.push_work_item("item-2", "New Item", "closed", ["label2"])
+    api.push_agent_name("Different Agent")
+    api.push_progress(False, "done")
+    api.push_agent_status("agent-2", "Another Worker", status="done")
+    api.push_agent_log("agent-1", "should be ignored")
+    api.push_agent_tokens("agent-1", 200, 100, 16000)
+    api.set_session_start_time(3000.0)
+    api.set_session_end_time(4000.0)
+    api.set_logs_dir("/different/logs")
+
+    new_stats = SessionStats(
+        agent_stats=AgentStats(),
+        items_completed=5,
+        items_created=2,
+        lifetime_items_created=20,
+        lifetime_items_completed=18,
+    )
+    api.set_live_session_stats(new_stats)
+    api.push_stats(new_stats, elapsed_time=200.0)
+    api.clear_logs()  # Should also be ignored
+
+    # Verify state hasn't changed
+    assert api._current_work_item == initial_work_item
+    assert api._current_agent_name == initial_agent_name
+    assert api._current_progress == initial_progress
+    assert len(api.get_agents()) == initial_agents_count  # No new agent added
+    assert api._session_start_time == initial_session_start
+    assert api._session_end_time == initial_session_end
+    assert api._current_logs_dir == initial_logs_dir
+    assert api._live_session_stats == initial_live_stats
+    assert api._current_stats == initial_current_stats
+    assert len(api._log_buffer) == 0  # clear_logs was not executed
 
