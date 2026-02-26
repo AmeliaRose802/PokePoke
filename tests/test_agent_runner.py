@@ -804,17 +804,19 @@ class TestRunWorktreeAgent:
         assert stats is None
 
     @patch('pokepoke.agent_runner.cleanup_worktree')
+    @patch('pokepoke.agent_runner.run_cleanup_loop')
     @patch('pokepoke.agent_runner.invoke_copilot')
     @patch('pokepoke.agent_runner.create_worktree')
     @patch('os.getcwd')
     @patch('os.chdir')
     def test_invoke_copilot_exception(
         self, mock_chdir: Mock, mock_getcwd: Mock,
-        mock_cleanup: Mock, mock_invoke: Mock, mock_create: Mock
+        mock_create: Mock, mock_invoke: Mock, mock_cleanup_loop: Mock, mock_cleanup: Mock
     ) -> None:
         """Test exception handling when invoke_copilot raises."""
         mock_create.return_value = Path("/tmp/wt")
         mock_invoke.side_effect = Exception("Boom")
+        mock_cleanup_loop.return_value = (False, 0)
 
         item = BeadsWorkItem(
             id="1", title="T", description="D",
@@ -824,7 +826,7 @@ class TestRunWorktreeAgent:
         res = _run_worktree_agent("Agent", "1", item, "Prompt", Path("/repo"))
 
         assert res is None
-        mock_cleanup.assert_called()
+        mock_cleanup.assert_not_called()
 
     @patch('pokepoke.agent_runner.cleanup_worktree')
     @patch('os.chdir')
@@ -872,6 +874,7 @@ class TestRunWorktreeAgent:
         )
 
         assert stats is None
+        mock_cleanup.assert_not_called()
 
     @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
     @patch('pokepoke.agent_runner.invoke_merge_conflict_cleanup_agent')
@@ -929,8 +932,7 @@ class TestRunWorktreeAgent:
         )
 
         assert stats is None
-        # With our new try-finally pattern, cleanup should be called in finally block
-        mock_cleanup.assert_called_once_with("maintenance-test", force=True)
+        mock_cleanup.assert_not_called()
 
     @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
     @patch('pokepoke.git_operations.is_merge_in_progress')
@@ -1911,14 +1913,13 @@ class TestWorktreeAgentFinallyCleanupException:
 
     @patch('pokepoke.worktree_cleanup.add_uncleaned_worktree')
     @patch('pokepoke.agent_runner.cleanup_worktree')
-    @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
     @patch('pokepoke.agent_runner.parse_agent_stats')
     @patch('pokepoke.agent_runner.run_cleanup_loop')
     @patch('pokepoke.agent_runner.invoke_copilot')
     @patch('pokepoke.agent_runner.create_worktree')
     def test_cleanup_raises_adds_uncleaned(
         self, mock_create: Mock, mock_invoke: Mock, mock_cleanup_loop: Mock,
-        mock_parse: Mock, mock_handle_merge: Mock, mock_cleanup: Mock,
+        mock_parse: Mock, mock_cleanup: Mock,
         mock_add_uncleaned: Mock
     ) -> None:
         agent_item = BeadsWorkItem(
@@ -1932,11 +1933,10 @@ class TestWorktreeAgentFinallyCleanupException:
         )
         mock_cleanup_loop.return_value = (True, 0)
         mock_parse.return_value = None
-        mock_handle_merge.return_value = (False, False)
         mock_cleanup.side_effect = Exception("Cannot remove worktree")
         stats = _run_worktree_agent(
             "Test", "maint-test", agent_item, "Prompt",
-            Path("/fake/repo")
+            Path("/fake/repo"), merge_changes=False
         )
         assert stats is None
         mock_add_uncleaned.assert_called_once()

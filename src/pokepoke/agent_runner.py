@@ -32,6 +32,13 @@ def _generate_unique_agent_id(agent_type: str) -> str:
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     return f"{agent_type}-{timestamp}"
 
+
+def _print_preserved_worktree_debug(agent_id: str, worktree_path: Path, repo_root: Path) -> None:
+    """Print consistent guidance when a worktree is preserved for debugging."""
+    print(f"\n🔍 Worktree preserved for debugging at: {worktree_path}")
+    print(f"   Logs: {repo_root}/.pokepoke/logs/")
+    print(f"   Cleanup: cleanup_worktree('{agent_id}', force=True)")
+
 def run_gate_agent(
     item: BeadsWorkItem,
     cwd: str | None = None,
@@ -61,7 +68,6 @@ def run_gate_agent(
     terminal_ui.ui.set_current_agent("Gate Agent")
     print(f"\n{'='*60}\n🕵️ Running Gate Agent on {item.id}\n{'='*60}")
 
-    # Select different model for gate agent if work model provided
     gate_model = None
     if work_model:
         from pokepoke.model_selection import select_gate_model
@@ -79,11 +85,8 @@ def run_gate_agent(
     except Exception as e:
         return False, f"Failed to render prompt: {e}", None
 
-    # Gate Agent runs in the specified directory (worktree)
-    # deny_write=True ensures it only reads/runs tests but doesn't modify code
     from pokepoke.metrics_context import agent_type_context
     with agent_type_context("gate"):
-        # Push agent status inside context so get_current_agent_type() returns "gate"
         if agent_id:
             terminal_ui.ui.push_agent_status(
                 agent_id, "Gate Agent", iteration=agent_iteration, status="running",
@@ -98,11 +101,8 @@ def run_gate_agent(
     if not result.success:
         return False, f"Gate Agent execution failed: {result.error}", stats
 
-    # Parse output for decision
     output = result.output or ""
 
-    # Try to find JSON block (use greedy match to capture the full outer object,
-    # including any nested objects, rather than stopping at the first closing brace)
     json_match = re.search(r'```json\s*(\{.*\})\s*```', output, re.DOTALL)
     if json_match:
         try:
@@ -129,8 +129,6 @@ def run_gate_agent(
         except json.JSONDecodeError:
             pass
 
-    # Fallback to text matching if JSON fails. Check for known approval strings
-    # that gate agents may emit (e.g. NEW_WORK_VERIFIED from older prompt versions).
     if "VERIFICATION SUCCESSFUL" in output or "NEW_WORK_VERIFIED" in output:
         return True, "Verification successful (text match)", stats
 
@@ -172,12 +170,9 @@ def run_maintenance_agent(
         labels=["maintenance", agent_name.lower()]
     )
 
-    # Beads-only agents run in main repo without worktree
     if not needs_worktree:
         return _run_beads_only_agent(agent_name, agent_item, agent_prompt, model=model, item_logger=item_logger)
 
-    # Code-modifying agents need worktree isolation
-    # Ensure repo_root has a value
     if repo_root is None:
         repo_root = Path.cwd()
 
@@ -217,7 +212,6 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
     """Run worktree cleanup agent to merge/delete stale worktrees."""
     terminal_ui.ui.set_current_agent("Worktree Cleanup")
 
-    # Import here to avoid circular dependency
     from pokepoke.worktree_cleanup import retry_failed_cleanups, get_uncleaned_worktree_count
 
     if not has_unmerged_worktrees():
@@ -228,7 +222,6 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
     terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="running", parent_agent_id=parent_agent_id, agent_type="worktree_cleanup")
     print(f"\n{'='*60}\n🌳 Running Worktree Cleanup Agent\n{'='*60}")
 
-    # First, try to clean up any worktrees that previously failed
     failed_count = get_uncleaned_worktree_count()
     if failed_count > 0:
         print(f"\n🔧 Pre-cleanup: Retrying {failed_count} previously failed worktree removals...")
@@ -251,9 +244,6 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
 
         cleanup_prompt = prompt_path.read_text(encoding='utf-8')
 
-        # Inject orchestrator PID as defense-in-depth against process killing.
-        # The prompt prohibits process killing entirely, but if the agent ignores
-        # that rule, at minimum it should know the orchestrator PID is sacred.
         orchestrator_pid = os.getpid()
         cleanup_prompt += (
             f"\n\n## ⚠️ Orchestrator Process (DO NOT TOUCH)\n\n"
@@ -306,19 +296,15 @@ def _run_worktree_agent(
         print(f"   Model: {model}")
 
     worktree_cleaned = False
-    preserve_for_debugging = False
+    preserve_for_debugging = True
 
-    # Use the scheduler's parent_agent_id if provided, otherwise fall back to agent_id
-    # This ensures sub-agents nest under the UI-visible maintenance agent card
     cleanup_parent_id = parent_agent_id if parent_agent_id else agent_id
 
     try:
-        # Main agent execution block
         try:
             from pokepoke.metrics_context import agent_type_context
             normalized = agent_name.lower().replace(" ", "_")
             with agent_type_context(normalized):
-                # Push agent status inside context so get_current_agent_type() returns the agent type
                 terminal_ui.ui.push_agent_status(
                     agent_id, f"{agent_name} Agent", iteration=1, status="running",
                     parent_agent_id=parent_agent_id,
@@ -348,15 +334,24 @@ def _run_worktree_agent(
 
             if not merge_changes:
                 print("   Discarding worktree (merge_changes=False)")
-                cleanup_worktree(agent_id, force=True)
-                worktree_cleaned = True
-                return parse_agent_stats(result.output) if result.output else None
-
+                try:
+                    cleanup_worktree(agent_id, force=True)
+                    worktree_cleaned = True
+                    preserve_for_debugging = False
+                    return parse_agent_stats(result.output) if result.output else None
+                except Exception as cleanup_error:
+                    print(f"⚠️  Explicit cleanup failed: {cleanup_error}")
+                    from pokepoke.worktree_cleanup import add_uncleaned_worktree
+                    add_uncleaned_worktree(
+                        agent_id,
+                        str(worktree_path),
+                        f"Failed explicit cleanup: {cleanup_error}",
+                    )
+                    return None
             print("   All changes committed and validated")
 
             agent_stats = parse_agent_stats(result.output) if result.output else None
 
-            # Handle worktree merge
             from pokepoke.worktree_merge_handler import handle_worktree_merge
             merge_success, worktree_cleaned = handle_worktree_merge(
                 agent_id, agent_item, agent_name, worktree_path, repo_root, agent_stats,
@@ -364,17 +359,25 @@ def _run_worktree_agent(
             )
 
             if not merge_success:
+                _print_preserved_worktree_debug(agent_id, worktree_path, repo_root)
                 return None
 
+            preserve_for_debugging = not worktree_cleaned
             print("   Merged and cleaned up worktree")
             return agent_stats
         else:
             print(f"\n❌ {agent_name} agent failed: {result.error}")
-            print(f"\n🔍 Worktree preserved for debugging at: {worktree_path}")
-            print(f"   Logs: {repo_root}/.pokepoke/logs/")
-            print(f"   Cleanup: cleanup_worktree('{agent_id}', force=True)")
-            preserve_for_debugging = True
+            _print_preserved_worktree_debug(agent_id, worktree_path, repo_root)
             return None
+
+    except Exception as e:
+        logger.warning(
+            f"Unhandled error while running {agent_name} in worktree {agent_id}: {e}",
+            exc_info=True,
+        )
+        print(f"\n❌ Unexpected error in {agent_name} agent: {e}")
+        _print_preserved_worktree_debug(agent_id, worktree_path, repo_root)
+        return None
 
     finally:
         if preserve_for_debugging:
