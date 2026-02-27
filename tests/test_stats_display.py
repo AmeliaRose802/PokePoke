@@ -4,6 +4,19 @@ from pokepoke.stats import print_stats
 from pokepoke.types import AgentStats, SessionStats
 
 
+def _find_agent_line(output: str, label: str) -> str | None:
+    for line in output.splitlines():
+        if label in line:
+            return line
+    return None
+
+
+def _assert_agent_line(output: str, label: str, expected: int) -> None:
+    line = _find_agent_line(output, label)
+    assert line is not None, f"{label} missing from output"
+    assert line.rstrip().endswith(str(expected)), f"{label} should end with {expected}, got: {line!r}"
+
+
 def test_print_stats_with_full_stats(capsys):
     """Test print_stats displays all statistics when available."""
     stats = SessionStats(
@@ -221,11 +234,11 @@ def test_print_stats_with_agent_run_counts(capsys):
 
     # Check agent run counts section
     assert "🤖 Agent Run Counts" in output
-    assert "Work agents:         5" in output
-    assert "Cleanup agents:      2" in output
-    assert "Tech Debt agents:    1" in output
-    assert "Janitor agents:      3" in output
-    assert "Backlog agents:      1" in output
+    _assert_agent_line(output, "📋 Work agents:", 5)
+    _assert_agent_line(output, "🧹 Cleanup agents:", 2)
+    _assert_agent_line(output, "📊 Tech Debt agents:", 1)
+    _assert_agent_line(output, "🧽 Janitor agents:", 3)
+    _assert_agent_line(output, "🗑️ Backlog Cleanup agents:", 1)
 
 
 def test_print_stats_with_only_work_agent_runs(capsys):
@@ -245,14 +258,14 @@ def test_print_stats_with_only_work_agent_runs(capsys):
     output = captured.out
 
     # Check work agents shown
-    assert "Work agents:         3" in output
+    _assert_agent_line(output, "📋 Work agents:", 3)
 
     # Check other agents NOT shown (zero counts)
-    assert "Gate agents:" not in output
-    assert "Cleanup agents:" not in output
-    assert "Tech Debt agents:" not in output
-    assert "Janitor agents:" not in output
-    assert "Backlog agents:" not in output
+    assert "🚪 Gate agents:" not in output
+    assert "🧹 Cleanup agents:" not in output
+    assert "📊 Tech Debt agents:" not in output
+    assert "🧽 Janitor agents:" not in output
+    assert "🗑️ Backlog Cleanup agents:" not in output
 
 
 def test_print_stats_gate_agent_runs_shown(capsys):
@@ -268,8 +281,8 @@ def test_print_stats_gate_agent_runs_shown(capsys):
     captured = capsys.readouterr()
     output = captured.out
 
-    assert "Work agents:         2" in output
-    assert "Gate agents:         3" in output
+    _assert_agent_line(output, "📋 Work agents:", 2)
+    _assert_agent_line(output, "🚪 Gate agents:", 3)
 
 
 def test_print_stats_gate_agent_runs_hidden_when_zero(capsys):
@@ -285,5 +298,5 @@ def test_print_stats_gate_agent_runs_hidden_when_zero(capsys):
     captured = capsys.readouterr()
     output = captured.out
 
-    assert "Work agents:         1" in output
-    assert "Gate agents:" not in output
+    _assert_agent_line(output, "📋 Work agents:", 1)
+    assert "🚪 Gate agents:" not in output
