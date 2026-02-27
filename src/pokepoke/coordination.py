@@ -99,16 +99,10 @@ def acquire_lock(
     """Blocking context manager that acquires a named file lock.
 
     Args:
-        name: Logical lock name (e.g. ``"worktree-setup"``).
-        timeout: Seconds to wait. ``-1`` (default) means wait forever.
-        stale_timeout: If set, and the lock file's modification time is older
-            than this many seconds, check whether the holding process is still
-            alive (via PID recorded in the lock file).  If the holder is dead,
-            forcibly remove the stale lock and re-acquire.
-
-    Yields:
-        The acquired :class:`filelock.FileLock` instance.
-
+        name: Logical lock name (e.g. "worktree-setup").
+        timeout: Seconds to wait (-1 means wait forever).
+        stale_timeout: If set and the lock file is old, verify holder PID and
+            remove the lock if the holder is dead.
     Raises:
         filelock.Timeout: If *timeout* expires before the lock is acquired.
     """
@@ -171,11 +165,10 @@ _MANIFEST_LOCK = "worktree-manifest"
 _BEADS_DB_LOCK = "beads-db"
 
 # Age threshold (seconds) after which a merge lock file is considered stale.
-# 15 minutes should be well beyond any legitimate merge operation.
+# 15 minutes should be beyond any legitimate merge operation.
 _MERGE_LOCK_STALE_AGE = 900.0
 
-# Stale-timeout defaults (seconds).  When a lock file is older than this AND
-# the recorded holder PID is dead, the lock is forcibly removed.
+# Stale-timeout defaults (seconds) for dead-PID lock recovery.
 _WORKTREE_SETUP_STALE = 300.0   # 5 min
 _MERGE_STALE = 600.0            # 10 min
 _MANIFEST_STALE = 120.0         # 2 min
@@ -194,12 +187,7 @@ def worktree_setup_lock(timeout: float = 180.0) -> Generator[FileLock, None, Non
 
 @contextmanager
 def beads_db_lock(timeout: float = 180.0) -> Generator[FileLock, None, None]:
-    """Serialize beads database mutations across agents.
-
-    This lock must be global (not per-item) because beads uses a single SQLite
-    database with file-level locking; concurrent writes across different items
-    can otherwise cause timeouts and deadlocks in parallel mode.
-    """
+    """Serialize beads database mutations across agents using a global lock."""
     with acquire_lock(
         _BEADS_DB_LOCK, timeout=timeout, stale_timeout=_BEADS_DB_STALE,
     ) as lock:
@@ -208,27 +196,7 @@ def beads_db_lock(timeout: float = 180.0) -> Generator[FileLock, None, None]:
 
 @contextmanager
 def merge_lock(timeout: float = 600.0) -> Generator[FileLock, None, None]:
-    """Serialize worktree merges across parallel agents.
-
-    This lock is held during the entire merge operation to prevent:
-    1. Multiple agents merging concurrently (causing conflicts)
-    2. Cleanup agents running while a merge is in progress (leaving dirty state)
-
-    The lock coordinates with cleanup_lock in repo_state_guard.py -
-    cleanup agents should wait for this lock before attempting to
-    fix uncommitted changes on the main repo.
-
-    Stale-lock recovery is PID-gated: the lock is only force-removed when
-    the recorded holder PID is confirmed dead, so legitimate long-running
-    merges are never interrupted.
-
-    Args:
-        timeout: Seconds to wait. Default 600s (10 minutes) to allow
-                 for slow merges with conflict resolution.
-
-    Yields:
-        The acquired FileLock instance.
-    """
+    """Serialize worktree merges across parallel agents."""
     with acquire_lock(
         _MERGE_LOCK, timeout=timeout, stale_timeout=_MERGE_STALE,
     ) as lock:
@@ -246,20 +214,7 @@ def merge_lock_active() -> bool:
 
 @contextmanager
 def manifest_lock(timeout: float = 30.0) -> Generator[FileLock, None, None]:
-    """Serialize worktree manifest read-modify-write operations.
-
-    This lock prevents race conditions when multiple agents concurrently
-    update the uncleaned worktrees manifest. Without this lock, parallel
-    agents could read the same manifest, both add their entry, and the
-    last writer would silently overwrite the other's entry.
-
-    Args:
-        timeout: Seconds to wait. Default 30s should be ample since
-                 manifest operations are fast (just JSON read/write).
-
-    Yields:
-        The acquired FileLock instance.
-    """
+    """Serialize worktree manifest read-modify-write operations."""
     with acquire_lock(
         _MANIFEST_LOCK, timeout=timeout, stale_timeout=_MANIFEST_STALE,
     ) as lock:
@@ -329,21 +284,7 @@ def _record_worktree_attempt(success: bool, wait_time: float) -> None:
 def with_worktree_lock(
     timeout: float = _WORKTREE_LOCK_DEFAULT_TIMEOUT,
 ) -> Generator[None, None, None]:
-    """Context manager for exclusive worktree creation lock.
-
-    Ensures only one agent can create a worktree at a time, preventing
-    race conditions when multiple git worktree operations access
-    .git/worktrees simultaneously.  Records metrics about wait times.
-
-    Args:
-        timeout: Maximum time to wait for lock acquisition (seconds).
-
-    Yields:
-        None – Lock is held for duration of context.
-
-    Raises:
-        RuntimeError: If lock cannot be acquired within *timeout*.
-    """
+    """Exclusive worktree creation lock with metrics."""
     wait_start = time.time()
     success = False
 
@@ -370,77 +311,78 @@ def with_worktree_lock(
 
 
 def check_lock_status(lock_name: str) -> tuple[bool, dict[str, object] | None]:
-    """Check if a lock exists and get its metadata.
-    
-    Args:
-        lock_name: Name of the lock to check
-        
-    Returns:
-        Tuple of (lock_exists, metadata_dict)
-        metadata_dict contains 'pid', 'timestamp' if available, None otherwise
-    """
+    """Check if a lock exists and return metadata if available."""
     lock_path = _lock_path(lock_name)
     exists = lock_path.exists()
-    
+
     if not exists:
         return False, None
-    
+
     metadata = _read_lock_metadata(lock_path)
     return True, metadata
 
 
 def clear_lock_if_stale(lock_name: str, max_age_seconds: float = 3600) -> bool:
-    """Clear a lock if it's stale (holder PID dead or lock too old).
-    
-    Args:
-        lock_name: Name of the lock to check
-        max_age_seconds: Maximum age in seconds before considering lock stale
-        
-    Returns:
-        True if lock was cleared (was stale), False if lock is active or doesn't exist
+    """Clear a lock if it's stale.
+
+    To avoid deleting an actively-held lock, this function only clears after
+    acquiring the FileLock in non-blocking mode.
     """
     lock_path = _lock_path(lock_name)
-    
+
     if not lock_path.exists():
         return False  # No lock to clear
-    
-    metadata = _read_lock_metadata(lock_path)
-    if not metadata:
-        # Lock exists but no metadata - assume stale
+
+    lock = FileLock(lock_path)
+    try:
+        lock.acquire(timeout=0)
+    except Timeout:
+        logger.info("Lock %s is currently held; skipping stale clear.", lock_name)
+        return False
+
+    def _clear(reason: str) -> bool:
         try:
             lock_path.unlink()
             _meta_path(lock_path).unlink(missing_ok=True)
-            logger.info(f"Cleared stale lock {lock_name} (no metadata)")
+            logger.info("Cleared stale lock %s (%s)", lock_name, reason)
             return True
-        except OSError as e:
-            logger.warning(f"Failed to clear stale lock {lock_name}: {e}")
-            return False
-    
-    # Check if holder PID is still alive
-    pid = metadata.get("pid")
-    if isinstance(pid, int) and not _is_pid_alive(pid):
-        try:
-            lock_path.unlink()
-            _meta_path(lock_path).unlink(missing_ok=True)
-            logger.info(f"Cleared stale lock {lock_name} (PID {pid} dead)")
-            return True
-        except OSError as e:
-            logger.warning(f"Failed to clear stale lock {lock_name}: {e}")
-            return False
-    
-    # Check if lock is too old
-    timestamp = metadata.get("timestamp")
-    if isinstance(timestamp, (int, float)):
-        age = time.time() - timestamp
-        if age > max_age_seconds:
+        except PermissionError as exc:
+            if os.name != "nt" or not lock.is_locked:
+                logger.warning("Failed to clear stale lock %s: %s", lock_name, exc)
+                return False
+            lock.release()
             try:
                 lock_path.unlink()
                 _meta_path(lock_path).unlink(missing_ok=True)
-                logger.info(f"Cleared stale lock {lock_name} (age {age:.1f}s > {max_age_seconds}s)")
+                logger.info("Cleared stale lock %s (%s)", lock_name, reason)
                 return True
-            except OSError as e:
-                logger.warning(f"Failed to clear stale lock {lock_name}: {e}")
+            except OSError as exc2:
+                logger.warning("Failed to clear stale lock %s: %s", lock_name, exc2)
                 return False
-    
-    # Lock is active
-    return False
+        except OSError as exc:
+            logger.warning("Failed to clear stale lock %s: %s", lock_name, exc)
+            return False
+
+    try:
+        metadata = _read_lock_metadata(lock_path)
+        if not metadata:
+            # Lock exists but no metadata - assume stale
+            return _clear("no metadata")
+
+        # Check if holder PID is still alive
+        pid = metadata.get("pid")
+        if isinstance(pid, int) and not _is_pid_alive(pid):
+            return _clear(f"PID {pid} dead")
+
+        # Check if lock is too old
+        timestamp = metadata.get("timestamp")
+        if isinstance(timestamp, (int, float)):
+            age = time.time() - timestamp
+            if age > max_age_seconds:
+                return _clear(f"age {age:.1f}s > {max_age_seconds}s")
+
+        # Lock is active
+        return False
+    finally:
+        if lock.is_locked:
+            lock.release()

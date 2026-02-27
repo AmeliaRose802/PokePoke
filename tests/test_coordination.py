@@ -12,8 +12,10 @@ from filelock import Timeout
 
 from pokepoke.coordination import (
     acquire_lock, try_lock, worktree_setup_lock, merge_lock, merge_lock_active,
-    manifest_lock, _lock_dir, _lock_path, _MERGE_LOCK_STALE_AGE,
-    _is_pid_alive, _read_lock_metadata, _write_lock_metadata,
+    manifest_lock, clear_lock_if_stale, check_lock_status, with_worktree_lock,
+    _load_worktree_metrics, _record_worktree_attempt, _save_worktree_metrics,
+    _lock_dir, _lock_path, _MERGE_LOCK_STALE_AGE, _is_pid_alive, _read_lock_metadata,
+    _write_lock_metadata,
 )
 
 
@@ -505,3 +507,177 @@ class TestPidTracking:
                 assert meta["pid"] == os.getpid()
             finally:
                 lock.release()
+
+
+class TestWorktreeMetrics:
+    """Tests for worktree metrics persistence helpers."""
+
+    def test_load_metrics_defaults_when_missing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import pokepoke.coordination as coord_module
+
+        metrics_path = tmp_path / "worktree_metrics.json"
+        monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_PATH", metrics_path)
+        monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_DIR", tmp_path)
+
+        metrics = _load_worktree_metrics()
+
+        assert metrics["total_attempts"] == 0
+        assert metrics["total_successes"] == 0
+        assert metrics["total_failures"] == 0
+
+    def test_load_metrics_handles_invalid_json(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import pokepoke.coordination as coord_module
+
+        metrics_path = tmp_path / "worktree_metrics.json"
+        metrics_path.write_text("not json")
+        monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_PATH", metrics_path)
+        monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_DIR", tmp_path)
+
+        metrics = _load_worktree_metrics()
+
+        assert metrics["total_attempts"] == 0
+        assert metrics["total_wait_time"] == 0.0
+
+    def test_save_and_load_metrics_round_trip(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import pokepoke.coordination as coord_module
+
+        metrics_path = tmp_path / "worktree_metrics.json"
+        monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_PATH", metrics_path)
+        monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_DIR", tmp_path)
+
+        metrics_in = {
+            "total_attempts": 3,
+            "total_successes": 2,
+            "total_failures": 1,
+            "total_wait_time": 4.0,
+            "max_wait_time": 2.5,
+        }
+
+        _save_worktree_metrics(metrics_in)
+        metrics_out = _load_worktree_metrics()
+
+        assert metrics_out == metrics_in
+
+    def test_record_worktree_attempt_updates_metrics(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import pokepoke.coordination as coord_module
+
+        metrics_path = tmp_path / "worktree_metrics.json"
+        monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_PATH", metrics_path)
+        monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_DIR", tmp_path)
+
+        _record_worktree_attempt(success=True, wait_time=1.5)
+        _record_worktree_attempt(success=False, wait_time=2.0)
+
+        metrics = _load_worktree_metrics()
+        assert metrics["total_attempts"] == 2
+        assert metrics["total_successes"] == 1
+        assert metrics["total_failures"] == 1
+        assert metrics["total_wait_time"] == pytest.approx(3.5)
+        assert metrics["max_wait_time"] == pytest.approx(2.0)
+
+
+class TestWithWorktreeLock:
+    """Tests for worktree lock metrics integration."""
+
+    def test_records_successful_lock(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import pokepoke.coordination as coord_module
+
+        metrics_path = tmp_path / "worktree_metrics.json"
+        monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_PATH", metrics_path)
+        monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_DIR", tmp_path)
+
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), with_worktree_lock(timeout=5):
+            pass
+
+        metrics = _load_worktree_metrics()
+        assert metrics["total_attempts"] == 1
+        assert metrics["total_successes"] == 1
+
+    def test_records_failed_lock(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import pokepoke.coordination as coord_module
+
+        metrics_path = tmp_path / "worktree_metrics.json"
+        monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_PATH", metrics_path)
+        monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_DIR", tmp_path)
+
+        called = {"value": False}
+
+        def failing_lock(*_args, **_kwargs):
+            called["value"] = True
+            raise Timeout("lock timeout")
+
+        monkeypatch.setattr(coord_module, "worktree_setup_lock", failing_lock)
+
+        with pytest.raises(RuntimeError), with_worktree_lock(timeout=0):
+            pass
+
+        assert called["value"] is True
+
+        metrics = _load_worktree_metrics()
+        assert metrics["total_attempts"] == 1
+        assert metrics["total_failures"] == 1
+
+
+class TestCheckLockStatus:
+    """Tests for check_lock_status helper."""
+
+    def test_returns_false_when_missing(self, tmp_path: Path) -> None:
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+            exists, metadata = check_lock_status("missing-lock")
+            assert exists is False
+            assert metadata is None
+
+    def test_returns_metadata_when_present(self, tmp_path: Path) -> None:
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+            lock_file = tmp_path / "status.lock"
+            lock_file.write_text("")
+            _write_lock_metadata(lock_file)
+
+            exists, metadata = check_lock_status("status")
+
+            assert exists is True
+            assert metadata is not None
+            assert metadata["pid"] == os.getpid()
+
+
+class TestClearLockIfStale:
+    """Tests for clear_lock_if_stale helper."""
+
+    def test_clears_stale_lock_without_metadata(self, tmp_path: Path) -> None:
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+            lock_file = tmp_path / "stale-no-meta.lock"
+            lock_file.write_text("")
+
+            cleared = clear_lock_if_stale("stale-no-meta", max_age_seconds=10)
+
+            assert cleared is True
+            assert not lock_file.exists()
+
+    def test_clears_stale_lock_when_unheld(self, tmp_path: Path) -> None:
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+            lock_file = tmp_path / "stale-clear.lock"
+            lock_file.write_text("")
+            meta_file = tmp_path / "stale-clear.lock.meta"
+            meta_file.write_text(json.dumps({
+                "pid": 2**30,
+                "timestamp": time.time() - 3600,
+            }))
+
+            cleared = clear_lock_if_stale("stale-clear", max_age_seconds=10)
+
+            assert cleared is True
+            assert not lock_file.exists()
+            assert not meta_file.exists()
+
+    def test_does_not_clear_when_lock_held(self, tmp_path: Path) -> None:
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), acquire_lock("held-clear", timeout=5):
+            meta_file = tmp_path / "held-clear.lock.meta"
+            meta_file.write_text(json.dumps({
+                "pid": 2**30,
+                "timestamp": time.time() - 3600,
+            }))
+
+            cleared = clear_lock_if_stale("held-clear", max_age_seconds=10)
+
+            assert cleared is False
+            assert (tmp_path / "held-clear.lock").exists()
