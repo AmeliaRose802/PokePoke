@@ -157,6 +157,42 @@ def _filter_pytest_output(output: str) -> str:
     return "\n".join(result)
 
 
+def _filter_pytest_stderr(stderr: str) -> str:
+    """Strip xdist temp-dir cleanup warnings from captured pytest stderr.
+
+    On Windows, pytest-xdist worker processes sometimes leave open handles
+    on their popen-gwX directories when they exit. Pytest then emits a
+    PytestWarning for every directory it cannot remove, which can produce
+    hundreds of noisy lines per run. The -W flag on the pytest command
+    prevents most of these, but any that slip through are stripped here so
+    that real errors stand out.
+    """
+    result: list[str] = []
+    skip_block = False
+    for line in stderr.splitlines():
+        stripped = line.strip()
+        # Detect the start of a rm_rf warning block:
+        #   "C:\...\pathlib.py:96: PytestWarning: (rm_rf) error removing ..."
+        if "PytestWarning" in stripped and "(rm_rf)" in stripped:
+            skip_block = True
+            # Also drop any immediately preceding "warnings.warn(" line
+            if result and result[-1].strip() == "warnings.warn(":
+                result.pop()
+            continue
+        # Drop continuation lines that belong to the same warning block:
+        # the OSError detail and the closing "  warnings.warn(" call.
+        if skip_block:
+            if stripped.startswith(("<class 'OSError'>", "warnings.warn(")):
+                # The closing "warnings.warn(" ends this block.
+                if stripped == "warnings.warn(":
+                    skip_block = False
+                continue
+            # Any other content ends the block and is kept.
+            skip_block = False
+        result.append(line)
+    return "\n".join(result)
+
+
 def run_tests_with_coverage(
     repo_root: Path, test_files: list[str] | None = None
 ) -> bool:
@@ -175,10 +211,21 @@ def run_tests_with_coverage(
     else:
         print("[test] Running full test suite...")
 
-    # Limit parallel workers to prevent memory exhaustion on pre-commit
-    # Use min(4, CPU_count // 2) to balance speed vs resource usage
+    # Limit parallel workers to prevent memory exhaustion on pre-commit.
+    # On Windows xdist uses 'spawn' instead of 'fork', making each worker
+    # significantly more expensive — cap at 2 to avoid bricking the system.
     import multiprocessing
-    max_workers = min(4, max(1, multiprocessing.cpu_count() // 2))
+    import platform
+    if platform.system() == "Windows":
+        max_workers = min(2, max(1, multiprocessing.cpu_count() // 2))
+    else:
+        max_workers = min(4, max(1, multiprocessing.cpu_count() // 2))
+
+    # Use a repo-local basetemp so pytest temp dirs don't accumulate in the
+    # system temp folder across runs.  On Windows, stale xdist popen-gwX dirs
+    # left by aborted runs trigger a flood of PytestWarning(rm_rf) messages
+    # every subsequent run.  Keeping basetemp here means a fresh wipe each time.
+    basetemp = repo_root / ".pytest_tmp"
 
     cmd = [
         sys.executable,
@@ -186,6 +233,11 @@ def run_tests_with_coverage(
         "pytest",
         "-n",
         str(max_workers),
+        f"--basetemp={basetemp}",
+        # Suppress xdist worker temp-dir cleanup warnings on Windows.
+        # pyproject.toml filterwarnings applies inside each worker subprocess
+        # but rm_rf cleanup can fire after that filter is torn down.
+        "-W", "ignore::pytest.PytestWarning",
         "--cov=src/pokepoke",
         "--cov-report=json",
         "-q",
@@ -213,7 +265,7 @@ def run_tests_with_coverage(
 
         if result.returncode != 0:
             if result.stderr.strip():
-                print(result.stderr.strip(), file=sys.stderr)
+                print(_filter_pytest_stderr(result.stderr).strip(), file=sys.stderr)
             print("[error] Tests failed", file=sys.stderr)
             return False
 
