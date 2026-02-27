@@ -1,9 +1,12 @@
 """Beads hierarchy operations - parent-child relationships."""
 
+import logging
 from subprocess import CalledProcessError
 
 from .types import BeadsWorkItem
 from .beads_query import get_issue_dependencies, _run_bd
+
+logger = logging.getLogger(__name__)
 
 # Label that marks items as requiring human intervention - agents will skip these
 HUMAN_REQUIRED_LABEL = 'human-required'
@@ -290,7 +293,7 @@ def close_parent_if_complete(parent_id: str) -> bool:
         print(f"✅ Auto-closed parent {parent_id} - all children complete")
         return True
     except CalledProcessError as e:
-        print(f"⚠️  Failed to close parent {parent_id}: {e.stderr}")
+        logger.error(f"⚠️  Failed to close parent {parent_id}: {e.stderr}")
         return False
 
 
@@ -335,5 +338,5 @@ def has_feature_parent(issue_id: str) -> bool:
             for dep in issue.dependencies
         )
     except Exception as e:
-        print(f"Warning: Failed to check dependencies for {issue_id}: {e}")
+        logger.warning(f"Warning: Failed to check dependencies for {issue_id}: {e}")
         return False

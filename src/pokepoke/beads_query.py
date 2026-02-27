@@ -2,12 +2,16 @@
 
 import dataclasses
 import json
+import logging
 import subprocess
 from pathlib import Path
 from typing import Any
 
 from .coordination import beads_db_lock
 from .types import BeadsWorkItem, IssueWithDependencies, Dependency, BeadsStats
+
+
+logger = logging.getLogger(__name__)
 
 
 _MUTATING_BD_COMMANDS: frozenset[str] = frozenset({
@@ -110,15 +114,15 @@ def get_ready_work_items() -> list[BeadsWorkItem]:
     except subprocess.CalledProcessError as e:
         # Log error but don't crash the orchestrator
         # This can happen when beads database is temporarily unavailable
-        print(f"⚠️  Warning: beads ready command failed (exit code {e.returncode})")
+        logger.warning(f"⚠️  Warning: beads ready command failed (exit code {e.returncode})")
         if e.stderr:
-            print(f"⚠️  Error output: {e.stderr.strip()}")
+            logger.warning(f"⚠️  Error output: {e.stderr.strip()}")
         return []
     except subprocess.TimeoutExpired:
-        print("⚠️  Warning: beads ready command timed out after 30 seconds")
+        logger.warning("⚠️  Warning: beads ready command timed out after 30 seconds")
         return []
     except Exception as e:
-        print(f"⚠️  Warning: unexpected error querying beads: {e}")
+        logger.warning(f"⚠️  Warning: unexpected error querying beads: {e}")
         return []
 
     if not result.stdout:
@@ -131,7 +135,7 @@ def get_ready_work_items() -> list[BeadsWorkItem]:
 
         return [_filter_to_dataclass(BeadsWorkItem, item) for item in items_data]
     except (json.JSONDecodeError, KeyError, TypeError) as e:
-        print(f"⚠️  Warning: failed to parse beads output: {e}")
+        logger.warning(f"⚠️  Warning: failed to parse beads output: {e}")
         return []
 
 
@@ -226,5 +230,5 @@ def get_beads_stats() -> BeadsStats | None:
             ready_issues=summary.get('ready_issues', 0)
         )
     except Exception as e:
-        print(f"⚠️  Warning: Failed to get beads stats: {e}")
+        logger.warning(f"⚠️  Warning: Failed to get beads stats: {e}")
         return None
