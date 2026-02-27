@@ -9,10 +9,12 @@ import time
 from dataclasses import asdict
 from typing import Any
 
+from pokepoke.agent_types import iter_agent_types
+
 
 def snapshot_to_dict(snapshot: Any) -> dict[str, Any]:
     """Convert a SessionStatsSnapshot to a JSON-serializable dict."""
-    return {
+    stats = {
         "agent_stats": asdict(snapshot.agent_stats),
         "items_completed": snapshot.items_completed,
         "items_created": snapshot.items_created,
@@ -38,18 +40,12 @@ def snapshot_to_dict(snapshot: Any) -> dict[str, Any]:
             }
             for item in snapshot.created_items_list
         ],
-        "work_agent_runs": snapshot.work_agent_runs,
-        "gate_agent_runs": snapshot.gate_agent_runs,
-        "tech_debt_agent_runs": snapshot.tech_debt_agent_runs,
-        "janitor_agent_runs": snapshot.janitor_agent_runs,
-        "backlog_cleanup_agent_runs": snapshot.backlog_cleanup_agent_runs,
-        "cleanup_agent_runs": snapshot.cleanup_agent_runs,
-        "beta_tester_agent_runs": snapshot.beta_tester_agent_runs,
-        "code_review_agent_runs": snapshot.code_review_agent_runs,
-        "worktree_cleanup_agent_runs": snapshot.worktree_cleanup_agent_runs,
         "agent_type_elapsed_seconds": dict(snapshot.agent_type_elapsed_seconds),
         "model_completions": [asdict(mc) for mc in snapshot.model_completions],
     }
+    for agent in iter_agent_types():
+        stats[agent.run_attr] = snapshot.agent_run_counts.get(agent.key, 0)
+    return stats
 
 
 def serialize_live_stats(self: Any) -> dict[str, Any] | None:

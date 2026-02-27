@@ -2,6 +2,11 @@
 
 import threading
 from dataclasses import dataclass, field, replace, is_dataclass
+from typing import Any
+
+from pokepoke.agent_types import (
+    AGENT_TYPES, _empty_agent_run_counts, _normalize_agent_key, resolve_agent_type,
+)
 
 
 @dataclass
@@ -141,19 +146,6 @@ class WorkItemResult:
     model_completion: ModelCompletionRecord | None = None
 
 
-_AGENT_RUN_ATTRS = {
-    "work": "work_agent_runs",
-    "gate": "gate_agent_runs",
-    "cleanup": "cleanup_agent_runs",
-    "tech_debt": "tech_debt_agent_runs",
-    "janitor": "janitor_agent_runs",
-    "backlog_cleanup": "backlog_cleanup_agent_runs",
-    "beta_tester": "beta_tester_agent_runs",
-    "code_review": "code_review_agent_runs",
-    "worktree_cleanup": "worktree_cleanup_agent_runs",
-}
-
-
 @dataclass(frozen=True)
 class SessionStatsSnapshot:
     """Frozen snapshot of session stats for UI display."""
@@ -175,16 +167,8 @@ class SessionStatsSnapshot:
     lifetime_items_completed: int = 0
 
     # Agent runs
-    work_agent_runs: int = 0
-    gate_agent_runs: int = 0
-    tech_debt_agent_runs: int = 0
-    janitor_agent_runs: int = 0
+    agent_run_counts: dict[str, int] = field(default_factory=_empty_agent_run_counts)
     janitor_lines_removed: int = 0
-    backlog_cleanup_agent_runs: int = 0
-    cleanup_agent_runs: int = 0
-    beta_tester_agent_runs: int = 0
-    code_review_agent_runs: int = 0
-    worktree_cleanup_agent_runs: int = 0
 
     # Elapsed wall-clock seconds spent in each agent type
     agent_type_elapsed_seconds: dict[str, float] = field(default_factory=dict)
@@ -194,6 +178,18 @@ class SessionStatsSnapshot:
     ending_beads_stats: BeadsStats | None = None
 
     model_completions: tuple[ModelCompletionRecord, ...] = ()
+
+    def get_agent_run_count(self, agent_type: str) -> int:
+        """Return the recorded run count for the requested agent (slug or display)."""
+        key = agent_type if agent_type in AGENT_TYPES else resolve_agent_type(agent_type).key
+        return self.agent_run_counts.get(key, 0)
+
+    def __getattr__(self, name: str) -> Any:
+        if name.endswith("_agent_runs"):
+            key = name[: -len("_agent_runs")]
+            if key in AGENT_TYPES:
+                return self.agent_run_counts.get(key, 0)
+        raise AttributeError(f"{self.__class__.__name__!s} object has no attribute {name!r}")
 
 
 @dataclass
@@ -217,16 +213,8 @@ class SessionStats:
     lifetime_items_completed: int = 0
 
     # Agent runs
-    work_agent_runs: int = 0
-    gate_agent_runs: int = 0
-    tech_debt_agent_runs: int = 0
-    janitor_agent_runs: int = 0
+    agent_run_counts: dict[str, int] = field(default_factory=_empty_agent_run_counts)
     janitor_lines_removed: int = 0
-    backlog_cleanup_agent_runs: int = 0
-    cleanup_agent_runs: int = 0
-    beta_tester_agent_runs: int = 0
-    code_review_agent_runs: int = 0
-    worktree_cleanup_agent_runs: int = 0
     agent_type_elapsed_seconds: dict[str, float] = field(default_factory=dict)
     starting_beads_stats: BeadsStats | None = None
     ending_beads_stats: BeadsStats | None = None
@@ -291,12 +279,14 @@ class SessionStats:
             raise ValueError("count cannot be negative")
         if count == 0:
             return
-        normalized = agent_type.lower().replace(" ", "_")
-        attr = _AGENT_RUN_ATTRS.get(normalized)
-        if attr is None:
-            raise ValueError(f"Unknown agent type: {agent_type}")
+        agent = resolve_agent_type(agent_type if agent_type else "")
         with self._lock:
-            setattr(self, attr, getattr(self, attr) + count)
+            self.agent_run_counts[agent.key] = self.agent_run_counts.get(agent.key, 0) + count
+
+    def get_agent_run_count(self, agent_type: str) -> int:
+        """Return the recorded run count for the requested agent (slug or display)."""
+        key = agent_type if agent_type in AGENT_TYPES else resolve_agent_type(agent_type).key
+        return self.agent_run_counts.get(key, 0)
 
     def record_agent_elapsed_time(self, agent_type: str, elapsed_seconds: float) -> None:
         """Accumulate elapsed wall-clock seconds for an agent type."""
@@ -355,27 +345,44 @@ class SessionStats:
                 agent_stats=replace(self.agent_stats),
                 items_completed=self.items_completed,
                 items_created=self.items_created,
-                completed_items_list=tuple(replace(item) for item in self.completed_items_list),
-                created_items_list=tuple(replace(item) for item in self.created_items_list),
+                completed_items_list=tuple(replace(i) for i in self.completed_items_list),
+                created_items_list=tuple(replace(i) for i in self.created_items_list),
                 created_counts_by_agent_type=dict(self.created_counts_by_agent_type),
                 completed_counts_by_agent_type=dict(self.completed_counts_by_agent_type),
                 lifetime_items_created=self.lifetime_items_created,
                 lifetime_items_completed=self.lifetime_items_completed,
-                work_agent_runs=self.work_agent_runs,
-                gate_agent_runs=self.gate_agent_runs,
-                tech_debt_agent_runs=self.tech_debt_agent_runs,
-                janitor_agent_runs=self.janitor_agent_runs,
+                agent_run_counts=dict(self.agent_run_counts),
                 janitor_lines_removed=self.janitor_lines_removed,
-                backlog_cleanup_agent_runs=self.backlog_cleanup_agent_runs,
-                cleanup_agent_runs=self.cleanup_agent_runs,
-                beta_tester_agent_runs=self.beta_tester_agent_runs,
-                code_review_agent_runs=self.code_review_agent_runs,
-                worktree_cleanup_agent_runs=self.worktree_cleanup_agent_runs,
                 agent_type_elapsed_seconds=dict(self.agent_type_elapsed_seconds),
                 starting_beads_stats=self._safe_copy_stats(self.starting_beads_stats),
                 ending_beads_stats=self._safe_copy_stats(self.ending_beads_stats),
                 model_completions=tuple(replace(mc) for mc in self.model_completions),
             )
+
+    def __getattr__(self, name: str) -> Any:
+        if name.endswith("_agent_runs"):
+            key = name[: -len("_agent_runs")]
+            if key in AGENT_TYPES:
+                return self.agent_run_counts.get(key, 0)
+        raise AttributeError(f"{self.__class__.__name__!s} object has no attribute {name!r}")
+
+
+_SESSION_STATS_INIT = SessionStats.__init__
+
+
+def _session_stats_init(self: SessionStats, *args: Any, **kwargs: Any) -> None:
+    """Backwards-compatible __init__ supporting legacy *_agent_runs kwargs."""
+    legacy = {_normalize_agent_key(k[:-len("_agent_runs")]): int(v)
+              for k, v in kwargs.items() if k.endswith("_agent_runs")}
+    cleaned = {k: v for k, v in kwargs.items() if not k.endswith("_agent_runs")}
+    _SESSION_STATS_INIT(self, *args, **cleaned)
+    for slug, count in legacy.items():
+        if slug not in AGENT_TYPES:
+            raise ValueError(f"Unknown agent type: {slug}")
+        self.agent_run_counts[slug] = count
+
+
+SessionStats.__init__ = _session_stats_init  # type: ignore[method-assign]
 
 
 @dataclass
