@@ -103,6 +103,15 @@ class MaintenanceScheduler:
         if items_completed == 0:
             return
 
+        # Run session reconciler on every maintenance cycle (lightweight scan)
+        try:
+            from pokepoke import session_reconciler
+            reconciled = session_reconciler.run()
+            if reconciled:
+                run_logger.log_maintenance("session_reconciler", f"Reconciled {reconciled} abandoned session(s)")
+        except Exception as exc:
+            logger.warning("SessionReconciler failed: %s", exc, exc_info=True)
+
         config = get_config()
         agents = config.maintenance.agents
 
