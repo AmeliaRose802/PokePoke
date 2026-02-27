@@ -94,3 +94,112 @@ def test_get_beads_stats_returns_none_on_error(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(beads_query, "_run_bd", boom)
 
     assert beads_query.get_beads_stats() is None
+
+
+def test_get_main_repo_root_returns_none_on_runtime_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    import pokepoke.git_operations
+
+    def boom() -> None:
+        raise RuntimeError("not a repo")
+
+    monkeypatch.setattr(pokepoke.git_operations, "get_main_repo_root", boom)
+
+    assert beads_query._get_main_repo_root() is None
+
+
+def test_run_bd_uses_lock_for_mutating_commands(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict[str, object] = {"lock_timeout": None, "ran": False}
+
+    class _Lock:
+        def __init__(self, *, timeout: float):
+            calls["lock_timeout"] = timeout
+
+        def __enter__(self):
+            return None
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_lock(*, timeout: float):
+        return _Lock(timeout=timeout)
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls["ran"] = True
+        return subprocess.CompletedProcess(args, 0, stdout="{}")
+
+    monkeypatch.setattr(beads_query, "beads_db_lock", fake_lock)
+    monkeypatch.setattr(beads_query.subprocess, "run", fake_run)
+
+    beads_query._run_bd(["update", "x"], check=False)
+
+    assert calls["ran"] is True
+    assert calls["lock_timeout"] == 180.0
+
+
+def test_run_bd_skips_lock_for_non_mutating_commands(monkeypatch: pytest.MonkeyPatch) -> None:
+    lock_called = {"called": False}
+
+    def fake_lock(*, timeout: float):
+        lock_called["called"] = True
+        raise AssertionError("should not lock")
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args, 0, stdout="[]")
+
+    monkeypatch.setattr(beads_query, "beads_db_lock", fake_lock)
+    monkeypatch.setattr(beads_query.subprocess, "run", fake_run)
+
+    beads_query._run_bd(["ready", "--json"], check=False)
+
+    assert lock_called["called"] is False
+
+
+def test_filter_to_dataclass_filters_extraneous_fields() -> None:
+    import dataclasses
+
+    @dataclasses.dataclass
+    class _X:
+        a: int
+        b: str
+
+    inst = beads_query._filter_to_dataclass(_X, {"a": 1, "b": "ok", "extra": 2})
+    assert inst == _X(a=1, b="ok")
+
+
+def test_get_issue_dependencies_returns_none_on_calledprocesserror(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise subprocess.CalledProcessError(1, "bd")
+
+    monkeypatch.setattr(beads_query, "_run_bd", boom)
+
+    assert beads_query.get_issue_dependencies("A") is None
+
+
+def test_get_issue_dependencies_returns_none_on_empty_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
+    mock_process = subprocess.CompletedProcess("bd", 0, stdout="")
+    monkeypatch.setattr(beads_query, "_run_bd", lambda *args, **kwargs: mock_process)
+
+    assert beads_query.get_issue_dependencies("A") is None
+
+
+def test_get_issue_dependencies_converts_dependents(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = [
+        {
+            "id": "A",
+            "title": "Issue A",
+            "status": "open",
+            "priority": 1,
+            "issue_type": "task",
+            "dependents": [
+                {"id": "child1", "title": "Child", "issue_type": "task", "dependency_type": "parent", "status": "open"}
+            ],
+        }
+    ]
+    mock_process = subprocess.CompletedProcess("bd", 0, stdout=json.dumps(payload))
+    monkeypatch.setattr(beads_query, "_run_bd", lambda *args, **kwargs: mock_process)
+
+    issue = beads_query.get_issue_dependencies("A")
+
+    assert issue is not None
+    assert issue.dependents is not None
+    assert issue.dependents[0].dependency_type == "parent"

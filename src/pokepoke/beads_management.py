@@ -1,6 +1,7 @@
 """Beads item management - close, assign, and select work items."""
 
 import json
+import logging
 import subprocess
 import time
 
@@ -11,6 +12,9 @@ from .coordination import acquire_lock
 from .types import BeadsWorkItem
 from .beads_hierarchy import resolve_to_leaf_task, HUMAN_REQUIRED_LABEL
 from .beads_query import _parse_beads_json, _run_bd
+
+
+logger = logging.getLogger(__name__)
 
 
 def _is_transient_jsonl_sync_error(output: str) -> bool:
@@ -46,7 +50,7 @@ def run_bd_sync_with_retry(
         output = f"{result.stdout}\n{result.stderr}"
         if _is_transient_jsonl_sync_error(output) and attempt < max_attempts:
             delay = base_delay * (2 ** (attempt - 1))
-            print(
+            logger.warning(
                 "⚠️  bd sync failed due to locked JSONL file; "
                 f"retrying in {delay:.1f}s (attempt {attempt}/{max_attempts})"
             )
@@ -136,7 +140,7 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
                         is_ours = (current_assignee.lower() == agent_name.lower())
 
                         if not is_ours:
-                            print(f"⚠️  RACE CONDITION DETECTED: {item_id} already assigned to {current_assignee}")
+                            logger.warning(f"⚠️  RACE CONDITION DETECTED: {item_id} already assigned to {current_assignee}")
                             return False
 
                         # If the item is already ours and in progress, this is a
@@ -147,7 +151,7 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
                             return True
 
             except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
-                print(f"⚠️  Failed to verify {item_id} ownership: {e}")
+                logger.warning(f"⚠️  Failed to verify {item_id} ownership: {e}")
                 return False
 
             try:
@@ -159,13 +163,13 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
                 verify_result = _run_bd(['show', item_id, '--json'])
                 verify_data = _parse_beads_json(verify_result.stdout)
                 if verify_data is None:
-                    print(f"⚠️  CLAIM VERIFICATION FAILED: {item_id} could not be re-read after update")
+                    logger.error(f"⚠️  CLAIM VERIFICATION FAILED: {item_id} could not be re-read after update")
                     return False
 
                 verify_item = verify_data[0] if isinstance(verify_data, list) else verify_data
                 verify_assignee = verify_item.get('assignee', '')
                 if verify_assignee.lower() != agent_name.lower():
-                    print(
+                    logger.error(
                         f"⚠️  CLAIM VERIFICATION FAILED: {item_id} assignee is '{verify_assignee}', "
                         f"expected '{agent_name}'"
                     )
@@ -177,18 +181,18 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
                 if sync_result.returncode == 0:
                     print(f"✅ Synced assignment - other agents will see {item_id} is claimed")
                 else:
-                    print(f"⚠️  bd sync returned non-zero: {sync_result.returncode}")
-                    print("   Assignment may not be immediately visible to other agents")
+                    logger.warning(f"⚠️  bd sync returned non-zero: {sync_result.returncode}")
+                    logger.warning("   Assignment may not be immediately visible to other agents")
 
                 return True
 
             except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
                 stderr = e.stderr if isinstance(e, subprocess.CalledProcessError) else str(e)
-                print(f"⚠️  Failed to assign {item_id}: {stderr}")
+                logger.error(f"⚠️  Failed to assign {item_id}: {stderr}")
                 return False
 
     except Timeout:
-        print(f"⚠️  Claim lock busy ('{lock_name}') — another agent is claiming this item")
+        logger.warning(f"⚠️  Claim lock busy ('{lock_name}') — another agent is claiming this item")
         return False
 
 
@@ -215,14 +219,14 @@ def unassign_item(item_id: str) -> bool:
             _run_bd(['update', item_id, '--status', 'new'])
             print(f"↩️  Reset {item_id} to 'new' (assignee field may still reference {agent_name})")
         except subprocess.CalledProcessError as e:
-            print(f"⚠️  Failed to unassign {item_id}: {e.stderr}")
+            logger.error(f"⚠️  Failed to unassign {item_id}: {e.stderr}")
             return False
 
     # Best-effort sync so other agents see the item is available again.
     sync_result = run_bd_sync_with_retry()
     if sync_result.returncode != 0:
-        print(f"⚠️  bd sync returned non-zero after unassign: {sync_result.returncode}")
-        print(f"   Other agents may not immediately see {item_id} as available")
+        logger.warning(f"⚠️  bd sync returned non-zero after unassign: {sync_result.returncode}")
+        logger.warning(f"   Other agents may not immediately see {item_id} as available")
 
     return True
 
@@ -242,7 +246,7 @@ def close_item(item_id: str, message: str = "Completed") -> bool:
         print(f"✅ Closed {item_id}")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"⚠️  Failed to close {item_id}: {e.stderr}")
+        logger.error(f"⚠️  Failed to close {item_id}: {e.stderr}")
         return False
 
 
@@ -261,7 +265,7 @@ def add_comment(item_id: str, comment: str) -> bool:
         print(f"💬 Added comment to {item_id}")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"⚠️  Failed to add comment to {item_id}: {e.stderr}")
+        logger.error(f"⚠️  Failed to add comment to {item_id}: {e.stderr}")
         return False
 
 
