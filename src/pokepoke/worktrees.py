@@ -1,5 +1,6 @@
 """Git worktree management for PokePoke."""
 
+import contextlib
 import logging
 import subprocess
 import time
@@ -11,11 +12,12 @@ from pokepoke.git_operations import (
     is_worktree_clean,
     execute_merge_sequence,
     validate_post_merge,
-    categorize_git_changes,
-    commit_all_changes,
     list_worktrees,
 )
-from pokepoke.beads_management import run_bd_sync_with_retry
+from pokepoke.worktree_helpers import (
+    validate_worktree_integrity as _validate_worktree_integrity,
+    sync_and_ensure_clean_main_repo as _sync_and_ensure_clean_main_repo,
+)
 from pokepoke.worktree_cleanup import (
     add_uncleaned_worktree,
     cleanup_after_merge,
@@ -91,7 +93,7 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
             # Check if the directory already exists but wasn't in list_worktrees
             if worktree_path.exists():
                 logger.warning(f"Worktree directory {worktree_path} already exists but wasn't in list_worktrees")
-                
+
                 # Check if it's a valid git worktree
                 is_valid_worktree = False
                 try:
@@ -106,7 +108,7 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
                         is_valid_worktree = True
                 except (subprocess.CalledProcessError, FileNotFoundError):
                     pass
-                
+
                 if is_valid_worktree:
                     logger.info(f"Directory {worktree_path} is a valid worktree, reusing it")
                     print(f"   ♻️  Reusing existing worktree directory at {worktree_path}")
@@ -116,12 +118,10 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
                     print(f"   🧹  Removing stale worktree directory at {worktree_path}")
                     if not force_remove_directory(worktree_path):
                         raise RuntimeError(f"Failed to remove stale directory {worktree_path}")
-                    
+
                     # Also run git worktree prune just in case
-                    try:
+                    with contextlib.suppress(Exception):
                         _run_git(["git", "worktree", "prune"])
-                    except Exception:
-                        pass
 
             # Create the worktree
             logger.info(f"Creating worktree for {item_id}: {worktree_path}")
@@ -155,6 +155,23 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
                             print(f"   ♻️  Reusing existing worktree at {wt['path']}")
                             return Path(wt["path"])
 
+                    # No active worktree uses this branch — it's a stale leftover.
+                    # Delete the branch and retry worktree creation.
+                    if "already exists" in stderr.lower():
+                        logger.info(f"Branch {branch_name} is stale (no active worktree) — deleting and retrying")
+                        print(f"   🧹 Cleaning up stale branch {branch_name}...")
+                        try:
+                            _run_git(["git", "branch", "-D", branch_name])
+                            _run_git(["git", "worktree", "add", str(worktree_path), "-b", branch_name, base_branch])
+                            creation_time = time.time() - creation_start
+                            logger.info(f"Created worktree for {item_id} after stale branch cleanup in {creation_time:.2f}s")
+                            # Success — validate and return, skipping the fallthrough raise.
+                            _validate_worktree_integrity(worktree_path, item_id)
+                            return worktree_path
+                        except subprocess.CalledProcessError as retry_e:
+                            retry_stderr = retry_e.stderr if retry_e.stderr else 'No stderr'
+                            raise RuntimeError(f"Failed to create worktree after stale branch cleanup: {retry_stderr}") from retry_e
+
                 # Check if the base branch doesn't exist
                 if "invalid reference" in stderr.lower() or "not a valid" in stderr.lower():
                     logger.error(f"Base branch '{base_branch}' does not exist")
@@ -177,6 +194,11 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
     except Exception as e:
         logger.error(f"Unexpected error creating worktree for {item_id}: {e}", exc_info=True)
         raise RuntimeError(f"Unexpected error creating worktree: {e}") from e
+
+    # --- Post-creation integrity check ---
+    # Verify the worktree actually contains files.  A broken git checkout
+    # can leave an empty directory that wastes an entire agent invocation.
+    _validate_worktree_integrity(worktree_path, item_id)
 
     return worktree_path
 
@@ -346,52 +368,4 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
                     return False
 
     return True
-
-
-def _sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
-    """Sync beads and ensure main repo is clean before merge."""
-
-    print("🔄 Syncing beads database before merge...")
-    try:
-        bd_sync_result = run_bd_sync_with_retry(timeout=30)
-        if bd_sync_result.returncode != 0:
-            print(f"⚠️  bd sync returned non-zero: {bd_sync_result.returncode}")
-            print(f"   stdout: {bd_sync_result.stdout}")
-            print(f"   stderr: {bd_sync_result.stderr}")
-    except subprocess.TimeoutExpired:
-        print("⚠️  bd sync timed out")
-    try:
-        main_status = _run_git(["git", "status", "--porcelain"]).stdout.strip()
-
-        if main_status:
-            lines = main_status.split('\n')
-            changes = categorize_git_changes(lines)
-
-            if changes['other']:
-                for line in changes['other'][:10]:
-                    print(f"   ⚠️  pending: {line}")
-                if len(changes['other']) > 10:
-                    print(f"   ... and {len(changes['other']) - 10} more")
-                ok, err = commit_all_changes(f"chore: commit pending changes before merge of {branch_name}")
-                if not ok:
-                    print(f"❌ Cannot merge: failed to commit pending changes: {err}")
-                    return False
-                print("✅ Pending main-branch changes committed")
-
-            if changes['beads']:
-                print("🔧 Committing beads database changes...")
-                _run_git(["git", "add", ".beads/"], capture_output=False)
-                _run_git(["git", "commit", "-m", f"chore: sync beads before merge of {branch_name}"], timeout=60)
-                print("✅ Beads changes committed")
-
-            if changes['worktree']:
-                print("🧹 Committing worktree cleanup changes...")
-                _run_git(["git", "add", "worktrees/"], capture_output=False)
-                _run_git(["git", "commit", "-m", "chore: cleanup deleted worktree directories"], timeout=60)
-                print("✅ Worktree cleanup committed")
-
-        return True
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-        print(f"❌ Failed to check/clean main repo: {e}")
-        return False
 

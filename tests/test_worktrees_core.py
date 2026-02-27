@@ -79,8 +79,10 @@ class TestCreateWorktree:
     @patch('pokepoke.worktrees.with_worktree_lock')
     @patch('pokepoke.worktrees._run_git')
     @patch('pathlib.Path.mkdir')
+    @patch('pokepoke.worktrees._validate_worktree_integrity')
     def test_create_worktree_new_success(
         self,
+        mock_validate,
         mock_mkdir,
         mock_run_git,
         mock_lock,
@@ -282,7 +284,8 @@ class TestCreateWorktree:
         with patch('pokepoke.worktrees.list_worktrees') as mock_list, \
              patch('pokepoke.worktrees.with_worktree_lock') as mock_lock, \
              patch('pokepoke.worktrees._run_git') as mock_run_git, \
-             patch('pathlib.Path.mkdir'):
+             patch('pathlib.Path.mkdir'), \
+             patch('pokepoke.worktrees._validate_worktree_integrity'):
 
             mock_list.return_value = []
             mock_lock.return_value.__enter__ = Mock(return_value=None)

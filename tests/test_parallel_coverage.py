@@ -25,6 +25,17 @@ from pokepoke.parallel import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _disable_preflight_health(monkeypatch):
+    """Disable preflight health checks and mock beads operations."""
+    mock_cfg = MagicMock()
+    mock_cfg.preflight_health.enabled = False
+    mock_cfg.max_parallel_agents = 10
+    monkeypatch.setattr("pokepoke.config.get_config", lambda: mock_cfg)
+    monkeypatch.setattr("pokepoke.parallel.assign_and_sync_item", lambda *a, **kw: True)
+    monkeypatch.setattr("pokepoke.parallel.unassign_with_retry", lambda *a, **kw: None)
+
+
 def _item(id: str = "par-1") -> BeadsWorkItem:
     return BeadsWorkItem(id=id, title=f"Item {id}", status="ready",
                          priority=1, issue_type="task")
@@ -136,7 +147,7 @@ class TestCollectDoneFutures:
         stats = SessionStats(agent_stats=AgentStats())
         logger = MagicMock()
 
-        total, any_success = _collect_done_futures(
+        total, any_success, _s, _f = _collect_done_futures(
             futures, set(), 0, stats, logger, record_fn,
         )
         assert any_success is True
@@ -153,7 +164,7 @@ class TestCollectDoneFutures:
         stats = SessionStats(agent_stats=AgentStats())
         logger = MagicMock()
 
-        total, any_success = _collect_done_futures(
+        total, any_success, _s, _f = _collect_done_futures(
             futures, set(), 0, stats, logger, record_fn,
         )
         assert any_success is False
@@ -186,7 +197,7 @@ class TestCollectDoneFutures:
         assert "c-4" not in failed_ids
 
     def test_empty_futures(self):
-        total, any_success = _collect_done_futures(
+        total, any_success, _s, _f = _collect_done_futures(
             {}, set(), 5, SessionStats(agent_stats=AgentStats()),
             MagicMock(), MagicMock(),
         )
@@ -203,7 +214,7 @@ class TestCollectDoneFutures:
         logger = MagicMock()
 
         # Should not raise despite record_fn failure
-        total, any_success = _collect_done_futures(
+        total, any_success, _s, _f = _collect_done_futures(
             futures, set(), 0, stats, logger, record_fn,
         )
         assert any_success is True

@@ -27,8 +27,9 @@ class TestCreateWorktreeIntegration:
     @patch('subprocess.run')
     @patch('pathlib.Path.mkdir')
     @patch('pokepoke.worktrees.sanitize_branch_name', side_effect=lambda x: x)
+    @patch('pokepoke.worktrees._validate_worktree_integrity')
     def test_create_new_worktree_success(
-        self, mock_sanitize, mock_mkdir, mock_run, mock_get_branch, mock_list
+        self, mock_validate, mock_sanitize, mock_mkdir, mock_run, mock_get_branch, mock_list
     ):
         """Test creating a new worktree executes real code path."""
         # Setup mocks
@@ -535,7 +536,7 @@ branch refs/heads/task/test-456
 class TestSyncAndEnsureCleanMainRepoIntegration:
     """Integration tests for _sync_and_ensure_clean_main_repo."""
 
-    @patch('pokepoke.worktrees.run_bd_sync_with_retry')
+    @patch('pokepoke.worktree_helpers.run_bd_sync_with_retry')
     @patch('subprocess.run')
     def test_sync_succeeds_when_main_repo_clean(
         self, mock_run, mock_bd_sync
@@ -549,8 +550,8 @@ class TestSyncAndEnsureCleanMainRepoIntegration:
         assert result is True
         mock_bd_sync.assert_called_once()
 
-    @patch('pokepoke.worktrees.run_bd_sync_with_retry')
-    @patch('pokepoke.worktrees.categorize_git_changes')
+    @patch('pokepoke.worktree_helpers.run_bd_sync_with_retry')
+    @patch('pokepoke.worktree_helpers.categorize_git_changes')
     @patch('subprocess.run')
     def test_sync_commits_beads_changes(
         self, mock_run, mock_categorize, mock_bd_sync
@@ -578,9 +579,9 @@ class TestSyncAndEnsureCleanMainRepoIntegration:
         # Verify git add and commit were called
         assert mock_run.call_count == 3
 
-    @patch('pokepoke.worktrees.run_bd_sync_with_retry')
-    @patch('pokepoke.worktrees.categorize_git_changes')
-    @patch('pokepoke.worktrees.commit_all_changes')
+    @patch('pokepoke.worktree_helpers.run_bd_sync_with_retry')
+    @patch('pokepoke.worktree_helpers.categorize_git_changes')
+    @patch('pokepoke.worktree_helpers.commit_all_changes')
     @patch('subprocess.run')
     def test_sync_fails_on_non_beads_changes(
         self, mock_run, mock_commit, mock_categorize, mock_bd_sync
@@ -604,7 +605,7 @@ class TestSyncAndEnsureCleanMainRepoIntegration:
         assert result is False
         mock_commit.assert_called_once()
 
-    @patch('pokepoke.worktrees.run_bd_sync_with_retry')
+    @patch('pokepoke.worktree_helpers.run_bd_sync_with_retry')
     @patch('subprocess.run')
     def test_sync_handles_bd_sync_timeout(
         self, mock_run, mock_bd_sync
@@ -619,7 +620,7 @@ class TestSyncAndEnsureCleanMainRepoIntegration:
         # Should still return True if repo is clean
         assert result is True
 
-    @patch('pokepoke.worktrees.run_bd_sync_with_retry')
+    @patch('pokepoke.worktree_helpers.run_bd_sync_with_retry')
     @patch('subprocess.run')
     def test_sync_handles_git_status_error(
         self, mock_run, mock_bd_sync

@@ -290,7 +290,7 @@ class TestCollectDoneFutures:
         run_logger = Mock(spec=RunLogger)
         record_fn = Mock()
 
-        total, any_success = _collect_done_futures(
+        total, any_success, _s, _f = _collect_done_futures(
             futures, failed_claim_ids, 0, session_stats, run_logger, record_fn
         )
 
@@ -332,7 +332,7 @@ class TestCollectDoneFutures:
         run_logger = Mock(spec=RunLogger)
         record_fn = Mock()
 
-        total, any_success = _collect_done_futures(
+        total, any_success, _s, _f = _collect_done_futures(
             futures, failed_claim_ids, 0, session_stats, run_logger, record_fn
         )
 
@@ -354,7 +354,7 @@ class TestCollectDoneFutures:
         run_logger = Mock(spec=RunLogger)
         record_fn = Mock()
 
-        total, any_success = _collect_done_futures(
+        total, any_success, _s, _f = _collect_done_futures(
             futures, failed_claim_ids, 0, session_stats, run_logger, record_fn
         )
 
@@ -375,7 +375,7 @@ class TestCollectDoneFutures:
         run_logger = Mock(spec=RunLogger)
         record_fn = Mock()
 
-        total, any_success = _collect_done_futures(
+        total, any_success, _s, _f = _collect_done_futures(
             futures, failed_claim_ids, 0, session_stats, run_logger, record_fn
         )
 
@@ -396,7 +396,7 @@ class TestCollectDoneFutures:
         record_fn = Mock(side_effect=OSError("Recording failed"))
 
         # Should not raise, log error instead
-        total, any_success = _collect_done_futures(
+        total, any_success, _s, _f = _collect_done_futures(
             futures, failed_claim_ids, 0, session_stats, run_logger, record_fn
         )
 
@@ -421,7 +421,7 @@ class TestCollectDoneFutures:
         run_logger = Mock(spec=RunLogger)
         record_fn = Mock()
 
-        total, any_success = _collect_done_futures(
+        total, any_success, _s, _f = _collect_done_futures(
             futures, failed_claim_ids, 0, session_stats, run_logger, record_fn
         )
 

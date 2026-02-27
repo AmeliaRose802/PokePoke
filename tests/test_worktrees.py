@@ -263,7 +263,8 @@ class TestCreateWorktree:
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees', return_value=[]), \
              patch('pokepoke.worktrees.get_default_branch', return_value='ameliapayne/dev'), \
-             patch('pathlib.Path.mkdir') as mock_mkdir:
+             patch('pathlib.Path.mkdir') as mock_mkdir, \
+             patch('pokepoke.worktrees._validate_worktree_integrity'):
 
             mock_run.return_value = Mock(returncode=0, stderr='', stdout='')
 
@@ -284,7 +285,8 @@ class TestCreateWorktree:
         """Test worktree creation with custom base branch."""
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees', return_value=[]), \
-             patch('pathlib.Path.mkdir'):
+             patch('pathlib.Path.mkdir'), \
+             patch('pokepoke.worktrees._validate_worktree_integrity'):
 
             mock_run.return_value = Mock(returncode=0, stderr='', stdout='')
 
@@ -369,7 +371,8 @@ class TestCreateWorktree:
              patch('pokepoke.worktrees.force_remove_directory', return_value=True) as mock_remove, \
              patch('pokepoke.worktrees._run_git') as mock_run_git, \
              patch('pokepoke.worktrees.get_default_branch', return_value='master'), \
-             patch('builtins.print') as mock_print:
+             patch('builtins.print') as mock_print, \
+             patch('pokepoke.worktrees._validate_worktree_integrity'):
             
             # Mock git rev-parse --is-inside-work-tree to fail
             mock_run.side_effect = subprocess.CalledProcessError(128, "git")
@@ -739,9 +742,9 @@ class TestMergeWorktree:
     def test_merge_worktree_with_non_beads_changes_commit_fails(self):
         """Test merge fails when non-beads uncommitted changes cannot be committed."""
         with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
-             patch('pokepoke.worktrees.run_bd_sync_with_retry') as mock_sync, \
+             patch('pokepoke.worktree_helpers.run_bd_sync_with_retry') as mock_sync, \
              patch('pokepoke.worktrees._run_git') as mock_git, \
-             patch('pokepoke.worktrees.commit_all_changes', return_value=(False, 'pre-commit hooks failed')) as mock_commit, \
+             patch('pokepoke.worktree_helpers.commit_all_changes', return_value=(False, 'pre-commit hooks failed')) as mock_commit, \
              patch('pokepoke.worktrees.get_default_branch', return_value='ameliapayne/dev'), \
              patch('builtins.print') as mock_print:
 
@@ -759,9 +762,9 @@ class TestMergeWorktree:
     def test_merge_worktree_with_non_beads_changes_commit_succeeds(self):
         """Test merge proceeds when non-beads changes are successfully committed before merge."""
         with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
-             patch('pokepoke.worktrees.run_bd_sync_with_retry') as mock_sync, \
+             patch('pokepoke.worktree_helpers.run_bd_sync_with_retry') as mock_sync, \
              patch('pokepoke.worktrees._run_git') as mock_git, \
-             patch('pokepoke.worktrees.commit_all_changes', return_value=(True, '')) as mock_commit, \
+             patch('pokepoke.worktree_helpers.commit_all_changes', return_value=(True, '')) as mock_commit, \
              patch('pokepoke.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
              patch('pokepoke.worktrees.validate_post_merge', return_value=True), \
              patch('pokepoke.worktrees.cleanup_after_merge'), \
@@ -1747,7 +1750,8 @@ class TestCreateWorktreeLockAndEdgeCases:
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
              patch('pokepoke.worktrees.get_default_branch', return_value='main'), \
              patch('pathlib.Path.mkdir'), \
-             patch('pokepoke.worktrees.time.time', side_effect=fake_time):
+             patch('pokepoke.worktrees.time.time', side_effect=fake_time), \
+             patch('pokepoke.worktrees._validate_worktree_integrity'):
 
             mock_list.side_effect = [
                 [],  # First check (before lock)
@@ -1969,8 +1973,8 @@ class TestSyncAndEnsureCleanMainRepo:
         """Test bd sync timeout is handled gracefully (lines 361-362)."""
         from pokepoke.worktrees import _sync_and_ensure_clean_main_repo
 
-        with patch('pokepoke.worktrees.run_bd_sync_with_retry', side_effect=subprocess.TimeoutExpired('bd', 30)), \
-             patch('pokepoke.worktrees._run_git') as mock_git, \
+        with patch('pokepoke.worktree_helpers.run_bd_sync_with_retry', side_effect=subprocess.TimeoutExpired('bd', 30)), \
+             patch('pokepoke.worktree_helpers._run_git') as mock_git, \
              patch('builtins.print') as mock_print:
 
             mock_git.return_value = Mock(stdout='', returncode=0)
@@ -1986,9 +1990,9 @@ class TestSyncAndEnsureCleanMainRepo:
 
         lines = '\n'.join(f' M src/file{i}.py' for i in range(15))
 
-        with patch('pokepoke.worktrees.run_bd_sync_with_retry') as mock_sync, \
-             patch('pokepoke.worktrees._run_git') as mock_git, \
-             patch('pokepoke.worktrees.commit_all_changes', return_value=(False, 'hooks failed')) as mock_commit, \
+        with patch('pokepoke.worktree_helpers.run_bd_sync_with_retry') as mock_sync, \
+             patch('pokepoke.worktree_helpers._run_git') as mock_git, \
+             patch('pokepoke.worktree_helpers.commit_all_changes', return_value=(False, 'hooks failed')) as mock_commit, \
              patch('builtins.print') as mock_print:
 
             mock_sync.return_value = Mock(returncode=0)
@@ -2005,8 +2009,8 @@ class TestSyncAndEnsureCleanMainRepo:
         """Test worktree cleanup changes are auto-committed (lines 389-392)."""
         from pokepoke.worktrees import _sync_and_ensure_clean_main_repo
 
-        with patch('pokepoke.worktrees.run_bd_sync_with_retry') as mock_sync, \
-             patch('pokepoke.worktrees._run_git') as mock_git, \
+        with patch('pokepoke.worktree_helpers.run_bd_sync_with_retry') as mock_sync, \
+             patch('pokepoke.worktree_helpers._run_git') as mock_git, \
              patch('builtins.print') as mock_print:
 
             mock_sync.return_value = Mock(returncode=0)
@@ -2026,8 +2030,8 @@ class TestSyncAndEnsureCleanMainRepo:
         """Test CalledProcessError during main repo check (lines 395-397)."""
         from pokepoke.worktrees import _sync_and_ensure_clean_main_repo
 
-        with patch('pokepoke.worktrees.run_bd_sync_with_retry') as mock_sync, \
-             patch('pokepoke.worktrees._run_git', side_effect=subprocess.CalledProcessError(1, ['git'])), \
+        with patch('pokepoke.worktree_helpers.run_bd_sync_with_retry') as mock_sync, \
+             patch('pokepoke.worktree_helpers._run_git', side_effect=subprocess.CalledProcessError(1, ['git'])), \
              patch('builtins.print') as mock_print:
 
             mock_sync.return_value = Mock(returncode=0)
@@ -2037,3 +2041,115 @@ class TestSyncAndEnsureCleanMainRepo:
             assert result is False
             print_calls = [str(c) for c in mock_print.call_args_list]
             assert any('Failed to check/clean main repo' in c for c in print_calls)
+
+
+# ── Worktree Integrity Validation ────────────────────────────────────────────
+
+
+class TestValidateWorktreeIntegrity:
+    """Tests for _validate_worktree_integrity post-creation check."""
+
+    def test_nonexistent_directory_raises(self, tmp_path: Path) -> None:
+        """Raises RuntimeError if worktree directory doesn't exist."""
+        from pokepoke.worktrees import _validate_worktree_integrity
+
+        fake_path = tmp_path / "nonexistent"
+        with pytest.raises(RuntimeError, match="does not exist"):
+            _validate_worktree_integrity(fake_path, "test-item")
+
+    def test_empty_directory_raises(self, tmp_path: Path) -> None:
+        """Raises RuntimeError if worktree directory is empty (0 files)."""
+        from pokepoke.worktrees import _validate_worktree_integrity
+
+        empty_dir = tmp_path / "empty-worktree"
+        empty_dir.mkdir()
+        with pytest.raises(RuntimeError, match="empty.*0 files"):
+            _validate_worktree_integrity(empty_dir, "test-item")
+
+    def test_valid_directory_passes(self, tmp_path: Path) -> None:
+        """Non-empty directory with valid git checkout passes."""
+        from pokepoke.worktrees import _validate_worktree_integrity
+
+        wt_dir = tmp_path / "good-worktree"
+        wt_dir.mkdir()
+        (wt_dir / "file.txt").touch()
+
+        # Mock subprocess.run to simulate git rev-parse returning "true"
+        with patch("pokepoke.worktrees.subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=0, stdout="true\n", stderr="")
+            _validate_worktree_integrity(wt_dir, "test-item")
+
+        mock_run.assert_called_once()
+
+    def test_git_not_work_tree_raises(self, tmp_path: Path) -> None:
+        """Raises RuntimeError if git doesn't recognize directory as work tree."""
+        from pokepoke.worktrees import _validate_worktree_integrity
+
+        wt_dir = tmp_path / "bad-worktree"
+        wt_dir.mkdir()
+        (wt_dir / "file.txt").touch()
+
+        with patch("pokepoke.worktrees.subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=128, stdout="", stderr="fatal: not a git repo")
+            with pytest.raises(RuntimeError, match="not recognized by git"):
+                _validate_worktree_integrity(wt_dir, "test-item")
+
+    def test_git_timeout_raises(self, tmp_path: Path) -> None:
+        """Raises RuntimeError if git rev-parse times out."""
+        from pokepoke.worktrees import _validate_worktree_integrity
+
+        wt_dir = tmp_path / "slow-worktree"
+        wt_dir.mkdir()
+        (wt_dir / "file.txt").touch()
+
+        with patch("pokepoke.worktrees.subprocess.run", side_effect=subprocess.TimeoutExpired("git", 10)):
+            with pytest.raises(RuntimeError, match="timed out"):
+                _validate_worktree_integrity(wt_dir, "test-item")
+
+
+class TestCreateWorktreeStaleBranchCleanup:
+    """Tests for stale branch cleanup during worktree creation."""
+
+    @patch("pokepoke.worktrees._validate_worktree_integrity")
+    @patch("pokepoke.worktrees.with_worktree_lock")
+    @patch("pokepoke.worktrees.list_worktrees", return_value=[])
+    @patch("pokepoke.worktrees._run_git")
+    @patch("pokepoke.worktrees.get_default_branch", return_value="main")
+    def test_stale_branch_deleted_and_retried(
+        self, mock_default, mock_git, mock_list, mock_lock, mock_validate,
+    ) -> None:
+        """When 'already exists' error occurs with no matching worktree, branch is deleted and retried."""
+        error = subprocess.CalledProcessError(128, "git")
+        error.stderr = "fatal: a branch named 'task/test-123' already exists"
+
+        # First call fails (worktree add), second deletes branch (git branch -D), third succeeds (retry worktree add)
+        mock_git.side_effect = [error, None, None]
+
+        result = create_worktree("test-123")
+
+        # Verify git branch -D was called
+        delete_call = mock_git.call_args_list[1]
+        assert "branch" in delete_call[0][0]
+        assert "-D" in delete_call[0][0]
+
+    @patch("pokepoke.worktrees.with_worktree_lock")
+    @patch("pokepoke.worktrees.list_worktrees")
+    @patch("pokepoke.worktrees._run_git")
+    @patch("pokepoke.worktrees.get_default_branch", return_value="main")
+    def test_existing_worktree_reused_when_branch_exists(
+        self, mock_default, mock_git, mock_list, mock_lock,
+    ) -> None:
+        """When branch already exists and a worktree uses it, the existing worktree path is returned."""
+        error = subprocess.CalledProcessError(128, "git")
+        error.stderr = "fatal: a branch named 'task/test-456' already exists"
+        mock_git.side_effect = [error]
+
+        # First call returns [] (pre-lock check), second call returns the matching worktree (inside lock)
+        mock_list.side_effect = [
+            [],  # pre-lock check
+            [],  # double-check inside lock
+            [{"path": "/repo/worktrees/task-test-456", "branch": "refs/heads/task/test-456"}],  # error recovery
+        ]
+
+        result = create_worktree("test-456")
+        assert result == Path("/repo/worktrees/task-test-456")

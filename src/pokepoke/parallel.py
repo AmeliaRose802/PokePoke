@@ -19,6 +19,10 @@ from pokepoke.logging_utils import RunLogger
 from pokepoke import terminal_ui
 from pokepoke.repo_check import check_and_commit_main_repo
 from pokepoke.shutdown import is_shutting_down, set_executor, should_stop_after_current, cancel_stop_after_current
+from pokepoke.parallel_support import (
+    finalize_workers as _finalize_workers,
+    handle_preflight_checks as _handle_preflight_checks,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +31,8 @@ _DEFAULT_PARALLEL_CEILING = 8
 
 _IDLE_BASE_DELAY = 8.0   # Idle backoff start for continuous mode (exponential to max)
 _IDLE_MAX_DELAY = 120.0
+_MAX_CONSECUTIVE_FAILURES = 10  # Circuit breaker: stop dispatching after N consecutive failures
+_MAX_CONSECUTIVE_PREFLIGHT_FAILURES = 5  # Stop after N preflight failures
 
 # Type alias to satisfy mypy strict generics
 _Future = concurrent.futures.Future[WorkItemResult]
@@ -116,8 +122,11 @@ def _collect_done_futures(
     session_stats: SessionStats,
     run_logger: RunLogger,
     record_fn: Any,
-) -> tuple[int, bool]:
-    """Collect completed futures and record results."""
+) -> tuple[int, bool, int, int]:
+    """Collect completed futures and record results.
+
+    Returns (total_requests, any_success, success_count, failure_count).
+    """
     done_futs: set[_Future] = set()
     for fut in list(futures):
         if fut.done():
@@ -141,6 +150,8 @@ def _collect_done_futures(
         )
 
     any_success = False
+    success_count = 0
+    failure_count = 0
     for fut in done_futs:
         item = futures.pop(fut)
         was_exception = False
@@ -155,9 +166,13 @@ def _collect_done_futures(
         # Only blacklist explicit claim failures, not exception-crashed workers.
         if not result.success and result.request_count == 0 and not was_exception:
             failed_claim_ids.add(item.id)
-        elif result.success:
+
+        if result.success:
             failed_claim_ids.discard(item.id)
             any_success = True
+            success_count += 1
+        else:
+            failure_count += 1
 
         total_requests += result.request_count
         try:
@@ -166,39 +181,7 @@ def _collect_done_futures(
             logger.warning(f"record_fn raised for {item.id}: {exc}", exc_info=True)
             run_logger.log_orchestrator(f"Error recording result for {item.id}: {exc}", level="ERROR")
 
-    return total_requests, any_success
-
-def _finalize_workers(futures: dict[_Future, BeadsWorkItem], session_stats: SessionStats, start_time: float, total_requests: int, run_logger: RunLogger, record_fn: Any) -> tuple[int, bool]:
-    """Wait for remaining workers."""
-    timeout_occurred = False
-    if not futures:
-        return total_requests, timeout_occurred
-    run_logger.log_orchestrator(f"Waiting for {len(futures)} active workers")
-    try:
-        for fut in concurrent.futures.as_completed(list(futures.keys()), timeout=300):
-            item = futures.pop(fut, BeadsWorkItem(id="?", title="?", status="?", priority=0, issue_type="?"))
-            try:
-                result = fut.result()
-                run_logger.log_orchestrator(f"Worker completed {item.id}")
-            except Exception as e:
-                run_logger.log_orchestrator(f"Worker failed {item.id}: {e}", level="ERROR")
-                result = WorkItemResult(success=False, request_count=0)
-            total_requests += result.request_count
-            try:
-                record_fn(item, result, session_stats, run_logger)
-            except Exception as exc:
-                logger.warning(f"record_fn failed {item.id}: {exc}", exc_info=True)
-                run_logger.log_orchestrator(f"record_fn error {item.id}: {exc}", level="ERROR")
-            terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
-    except concurrent.futures.TimeoutError:
-        cancelled = sum(1 for fut in list(futures.keys()) if fut.cancel())
-        run_logger.log_orchestrator(f"Cancelled {cancelled} workers; timeout waiting", level="WARNING")
-        timeout_occurred = True
-    run_logger.log_orchestrator("Workers completed")
-    # Final sweep: kill any orphaned Copilot CLI processes left behind
-    kill_orphaned_copilot_processes(expected_count=0)
-    terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
-    return total_requests, timeout_occurred
+    return total_requests, any_success, success_count, failure_count
 
 
 def run_parallel_loop(
@@ -234,99 +217,56 @@ def run_parallel_loop(
     exit_code = 0
     has_success = False
     idle_sleep = _IDLE_BASE_DELAY
+    consecutive_failures = 0
+    consecutive_preflight_failures = 0
 
     try:
         while not is_shutting_down():
-            print("\n🔍 Running pre-flight health checks...")
             run_logger.log_orchestrator("Running pre-flight health checks")
-            
-            # Import and run preflight health checks
-            from pokepoke.config import get_config
-            from pokepoke.preflight_health import run_preflight_checks
-            
-            cfg = get_config()
-            health_config = {
-                'min_disk_space_gb': cfg.preflight_health.min_disk_space_gb,
-                'lock_timeout_seconds': cfg.preflight_health.lock_timeout_seconds,
-                'worktree_test_timeout': cfg.preflight_health.worktree_test_timeout,
-                'max_orphan_worktrees': cfg.preflight_health.max_orphan_worktrees,
-                'git_operation_timeout': cfg.preflight_health.git_operation_timeout,
-                'enable_self_repair': cfg.preflight_health.enable_self_repair,
-                'max_repair_attempts': cfg.preflight_health.max_repair_attempts,
-            }
-            
-            if cfg.preflight_health.enabled:
-                health_result = run_preflight_checks(repo_path=main_repo_path, config=health_config)
-                
-                if not health_result.passed:
-                    print(f"\n❌ Pre-flight health checks failed ({len(health_result.errors)} error(s))")
-                    for error in health_result.errors:
-                        print(f"   • {error.check_name}: {error.message}")
-                    
-                    if health_result.self_repair_attempted:
-                        if health_result.self_repair_successful:
-                            print("✅ Self-repair completed successfully")
-                            run_logger.log_orchestrator("Pre-flight health checks passed after self-repair")
-                        else:
-                            print("❌ Self-repair failed")
-                            run_logger.log_orchestrator("Pre-flight health check self-repair failed", level="ERROR")
-                    
-                    # Check for critical or environmental errors that should stop all work
-                    if health_result.has_critical_errors() and cfg.preflight_health.fail_on_critical_errors:
-                        print(f"\n🚨 Critical health check failures detected - shutting down gracefully")
-                        run_logger.log_orchestrator("Critical health check failures - shutting down", level="ERROR")
+            should_continue, is_critical = _handle_preflight_checks(main_repo_path, run_logger)
+            if not should_continue:
+                if is_critical:
+                    consecutive_preflight_failures += 1
+                    if consecutive_preflight_failures >= _MAX_CONSECUTIVE_PREFLIGHT_FAILURES:
+                        run_logger.log_orchestrator(f"Shutting down after {consecutive_preflight_failures} preflight failures", level="ERROR")
                         exit_code = 1
                         break
-                    
-                    if health_result.has_environmental_errors() and cfg.preflight_health.fail_on_environmental_errors:
-                        print(f"\n⚠️  Environmental health check failures detected - shutting down gracefully")
-                        run_logger.log_orchestrator("Environmental health check failures - shutting down", level="ERROR")
-                        if cfg.preflight_health.graceful_shutdown_on_failure:
-                            exit_code = 1
-                            break
-                    
-                    # Log warnings for any remaining issues
-                    for warning in health_result.warnings:
-                        print(f"   ⚠️  Warning: {warning}")
-                    
-                    # If we get here and health checks still failed, but no critical/environmental errors, 
-                    # continue but log the issues
-                    if not health_result.passed:
-                        run_logger.log_orchestrator(f"Pre-flight health checks failed but continuing (errors: {len(health_result.errors)})", level="WARNING")
-                else:
-                    print("✅ Pre-flight health checks passed")
-                    run_logger.log_orchestrator("Pre-flight health checks passed")
-                    
-                    # Log any warnings
-                    for warning in health_result.warnings:
-                        print(f"   ℹ️  {warning}")
-            else:
-                print("⏭️  Pre-flight health checks disabled via config")
-                run_logger.log_orchestrator("Pre-flight health checks disabled via config")
+                exit_code = 1
+                break
+            consecutive_preflight_failures = 0
 
-            print("\n\ud83d\udd0d Checking main repository status...")
             run_logger.log_orchestrator("Checking main repository status")
             if not check_and_commit_main_repo(main_repo_path, run_logger):
                 run_logger.log_orchestrator("Main repo check failed", level="ERROR")
                 exit_code = 1
                 break
 
-            print("\nFetching ready work from beads...")
             run_logger.log_orchestrator("Fetching ready work from beads")
             try:
                 ready_items = get_ready_work_items()
             except Exception as e:
                 run_logger.log_orchestrator(f"Failed to fetch ready items: {e}", level="ERROR")
-                print(f"⚠️  Warning: failed to fetch ready items: {e}")
                 ready_items = []
 
-            total_requests, any_success = _collect_done_futures(
+            total_requests, any_success, batch_successes, batch_failures = _collect_done_futures(
                 futures, failed_claim_ids, total_requests,
                 session_stats, run_logger, record_fn,
             )
             items_completed = session_stats.items_completed
 
             has_success = has_success or any_success
+
+            # Circuit breaker: track consecutive failures
+            if batch_failures > 0 and batch_successes == 0:
+                consecutive_failures += batch_failures
+            elif batch_successes > 0:
+                consecutive_failures = 0
+
+            if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
+                run_logger.log_orchestrator(f"Circuit breaker: {consecutive_failures} consecutive failures", level="ERROR")
+                if not futures:
+                    exit_code = 1
+                    break
 
             terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
 
@@ -337,16 +277,10 @@ def run_parallel_loop(
             # Memory-pressure backpressure: reduce slots when system RAM is low
             slots, avail_mb = apply_memory_backpressure(slots)
             if avail_mb > 0 and slots == 0 and current_max - len(futures) > 0:
-                run_logger.log_orchestrator(
-                    f"Memory low ({avail_mb} MB free) — blocking new agents", level="WARNING")
+                run_logger.log_orchestrator(f"Memory low ({avail_mb}MB) — blocking agents", level="WARNING")
             elif avail_mb > 0 and slots < current_max - len(futures):
-                run_logger.log_orchestrator(
-                    f"Memory pressure ({avail_mb} MB free) — throttling to {slots} slot(s)", level="WARNING")
-
-            run_logger.log_orchestrator(
-                f"Agent lifecycle: active={len(futures)}, max={current_max}, "
-                f"slots={slots}, mem={avail_mb}MB"
-            )
+                run_logger.log_orchestrator(f"Memory pressure ({avail_mb}MB) — {slots} slot(s)", level="WARNING")
+            run_logger.log_orchestrator(f"Lifecycle: active={len(futures)} max={current_max} slots={slots} mem={avail_mb}MB")
 
             # Periodically kill orphaned Copilot CLI processes that outlived their agent
             kill_orphaned_copilot_processes(expected_count=len(futures))
@@ -358,15 +292,14 @@ def run_parallel_loop(
                 slots > 0
                 and not should_stop_after_current()
                 and (continuous or not has_success)
+                and consecutive_failures < _MAX_CONSECUTIVE_FAILURES
             ):
                 selected_items = select_multiple_items(
                     ready_items, count=slots,
                     skip_ids=failed_claim_ids, claimed_ids=current_active,
                 )
                 if selected_items:
-                    run_logger.log_orchestrator(
-                        f"Agent lifecycle: replenishing {len(selected_items)} of {slots} open slot(s)"
-                    )
+                    run_logger.log_orchestrator(f"Replenishing {len(selected_items)} of {slots} open slot(s)")
                 for item in selected_items:
                     if not is_item_claimable(item.id):
                         run_logger.log_orchestrator(f"Skipping {item.id} - already claimed by another agent")
@@ -379,10 +312,7 @@ def run_parallel_loop(
                     # IMPORTANT: Claim (bd update + sync) in the orchestrator thread
                     # to avoid concurrent SQLite writes from multiple workers.
                     if not assign_and_sync_item(item.id, agent_name=worker_name):
-                        run_logger.log_orchestrator(
-                            f"Claim failed for {item.id}; skipping dispatch (worker: {worker_name})",
-                            level="WARNING",
-                        )
+                        run_logger.log_orchestrator(f"Claim failed {item.id} (worker: {worker_name})", level="WARNING")
                         failed_claim_ids.add(item.id)
                         continue
 
@@ -402,7 +332,6 @@ def run_parallel_loop(
             if should_stop_after_current() and not futures:
                 cancel_stop_after_current()
                 terminal_ui.ui.stop_and_capture()
-                print("\n⏸️  Stopping after current item (user requested).")
                 run_logger.log_orchestrator("Stop after current item requested - exiting")
                 finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
                 finalized = True
@@ -429,25 +358,20 @@ def run_parallel_loop(
                     run_logger.log_orchestrator(f"Final beads check failed: {e}", level="WARNING")
 
                 if continuous:
-                    run_logger.log_orchestrator(
-                        f"Continuous mode: sleeping {idle_sleep:.1f}s before retry (no ready items)"
-                    )
+                    run_logger.log_orchestrator(f"Continuous: sleeping {idle_sleep:.1f}s (no items)")
                     terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", "Waiting for work...")
                     time.sleep(idle_sleep)
                     idle_sleep = min(_IDLE_MAX_DELAY, idle_sleep * 2)
                     continue
 
                 terminal_ui.ui.stop_and_capture()
-                print("\n👋 Exiting PokePoke - no work items available.")
                 run_logger.log_orchestrator("No work items available - exiting")
                 finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
                 finalized = True
                 exit_code = 0
                 break
 
-            terminal_ui.ui.update_header(
-                "PokePoke", f"{mode_name} Mode", f"{len(futures)} agents active",
-            )
+            terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", f"{len(futures)} agents active")
             for _ in range(10):
                 if is_shutting_down() or _spawn_wakeup.is_set():
                     break

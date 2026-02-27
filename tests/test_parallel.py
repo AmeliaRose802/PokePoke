@@ -22,6 +22,26 @@ def _make_item(item_id: str = "t1") -> BeadsWorkItem:
     )
 
 
+@pytest.fixture(autouse=True)
+def _disable_preflight_health(monkeypatch):
+    """Disable preflight health checks and mock beads claim for all parallel tests.
+
+    The preflight system uses a lazy import inside run_parallel_loop.
+    We mock get_config to return a config with preflight disabled so that
+    tests do not need real git repos / disk space checks.
+    We also mock assign_and_sync_item since tests use fake item IDs.
+    """
+    mock_cfg = MagicMock()
+    mock_cfg.preflight_health.enabled = False
+    mock_cfg.max_parallel_agents = 10
+    monkeypatch.setattr("pokepoke.config.get_config", lambda: mock_cfg)
+    monkeypatch.setattr("pokepoke.parallel.assign_and_sync_item", lambda *a, **kw: True)
+    monkeypatch.setattr("pokepoke.parallel.unassign_with_retry", lambda *a, **kw: None)
+    # Mock parallel_support dependencies so _finalize_workers doesn't call real processes
+    monkeypatch.setattr("pokepoke.parallel_support.kill_orphaned_copilot_processes", lambda **kw: None)
+    monkeypatch.setattr("pokepoke.parallel_support.terminal_ui", MagicMock())
+
+
 # ΓöÇΓöÇ _parallel_process_item ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 class TestParallelProcessItem:
@@ -167,12 +187,14 @@ class TestCollectDoneFutures:
         logger = Mock()
         record_fn = Mock()
 
-        total, any_ok = _collect_done_futures(
+        total, any_ok, successes, failures = _collect_done_futures(
             futures, failed, 0, stats, logger, record_fn,
         )
 
         assert total == 2
         assert any_ok is True
+        assert successes == 1
+        assert failures == 0
         assert len(futures) == 0
         record_fn.assert_called_once()
 
@@ -206,12 +228,14 @@ class TestCollectDoneFutures:
         logger = Mock()
         record_fn = Mock()
 
-        total, any_ok = _collect_done_futures(
+        total, any_ok, successes, failures = _collect_done_futures(
             futures, failed, 5, stats, logger, record_fn,
         )
 
         assert total == 5  # no requests added
         assert any_ok is False
+        assert successes == 0
+        assert failures == 1
         # Exception-crashed items must NOT be blacklisted (PokePoke-8o4o fix)
         assert "err1" not in failed
         logger.log_orchestrator.assert_called()
@@ -236,11 +260,13 @@ class TestCollectDoneFutures:
         stats = SessionStats(agent_stats=AgentStats())
         record_fn = Mock()
         # Empty dict
-        total, any_ok = _collect_done_futures(
+        total, any_ok, successes, failures = _collect_done_futures(
             {}, set(), 3, stats, Mock(), record_fn,
         )
         assert total == 3
         assert any_ok is False
+        assert successes == 0
+        assert failures == 0
         record_fn.assert_not_called()
 
 
@@ -367,8 +393,8 @@ class TestRunParallelLoop:
             call_idx[0] += 1
             if call_idx[0] == 2:
                 futures.clear()
-                return (total, True)
-            return (total, False)
+                return (total, True, 3, 0)
+            return (total, False, 0, 0)
 
         mock_collect.side_effect = collect_side
         mock_sel.side_effect = [items[:3], items[3:6]]
@@ -398,7 +424,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.parallel.get_ready_work_items")
     @patch("pokepoke.parallel.select_multiple_items", return_value=[])
-    @patch("pokepoke.parallel._collect_done_futures", return_value=(0, False))
+    @patch("pokepoke.parallel._collect_done_futures", return_value=(0, False, 0, 0))
     @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=2)
     def test_cli_override_uses_effective_parallel_over_config(
         self, mock_dyn_max, mock_collect, mock_sel, mock_ready,
@@ -445,7 +471,7 @@ class TestRunParallelLoop:
         mock_ready.return_value = [item]
         mock_sel.return_value = [item]
         mock_pwi.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
-        mock_collect.side_effect = lambda futures, failed, total, stats, logger, record_fn: (total, False)
+        mock_collect.side_effect = lambda futures, failed, total, stats, logger, record_fn: (total, False, 0, 0)
 
         # Two full loop iterations + shutdown, accounting for the inner sleep loop checks.
         mock_shut.side_effect = [False] + ([False] * 10) + [False, True, True]
@@ -719,7 +745,7 @@ class TestRunParallelLoop:
         def collect_side_effect(futures, failed, total, stats, logger, record_fn):
             # Simulate shutdown being requested while futures are still pending.
             shutdown_flag["value"] = True
-            return total, False
+            return total, False, 0, 0
 
         mock_collect.side_effect = collect_side_effect
 
@@ -739,8 +765,9 @@ class TestRunParallelLoop:
         )
 
         assert code == 0
-        # The final snapshot from the cleanup path should include the completed item.
-        assert mock_ui.ui.update_stats.call_count >= 2
+        # Stats are updated in the main loop; _finalize_workers also updates
+        # via parallel_support.terminal_ui (separate mock).
+        assert mock_ui.ui.update_stats.call_count >= 1
         last_stats = mock_ui.ui.update_stats.call_args_list[-1][0][0]
         assert last_stats.items_completed == 1
 
@@ -769,8 +796,8 @@ class TestRunParallelLoop:
             call_idx[0] += 1
             if call_idx[0] == 2:
                 futures.clear()
-                return (total, True)
-            return (total, False)
+                return (total, True, 3, 0)
+            return (total, False, 0, 0)
 
         mock_collect.side_effect = collect_side
 
@@ -930,7 +957,7 @@ class TestContinuousModeLoopBack:
         # Manually call _collect_done_futures with the exploding record_fn.
         # It must NOT raise, it must swallow the exception and log it.
         futures: dict[concurrent.futures.Future, BeadsWorkItem] = {fut: item}
-        total, any_ok = _collect_done_futures(
+        total, any_ok, successes, failures = _collect_done_futures(
             futures, set(), 0, stats, logger, exploding_record_fn,
         )
 
@@ -960,7 +987,7 @@ class TestCollectDoneFuturesWait:
             stats = SessionStats(agent_stats=AgentStats())
             record_fn = Mock()
 
-            total, any_ok = _collect_done_futures(
+            total, any_ok, successes, failures = _collect_done_futures(
                 futures, failed, 0, stats, Mock(), record_fn,
             )
 
@@ -1164,9 +1191,11 @@ class TestParallelReplenishmentBug:
             call_idx[0] += 1
             if call_idx[0] == 2:
                 # Simulate all 10 agents completing simultaneously.
+                # Use success_count=1 to avoid tripping the circuit breaker
+                # (which triggers at _MAX_CONSECUTIVE_FAILURES=10).
                 futures.clear()
-                return (total, False)  # failures, no success
-            return (total, False)
+                return (total, False, 1, 9)
+            return (total, False, 0, 0)
 
         mock_collect.side_effect = collect_side
         mock_sel.side_effect = [items[:10], items[10:20]]
@@ -1221,8 +1250,8 @@ class TestParallelReplenishmentBug:
             if call_idx[0] == 2:
                 # 9 failures + 1 success; all slots freed.
                 futures.clear()
-                return (total, True)  # any_success=True
-            return (total, False)
+                return (total, True, 1, 9)  # any_success=True
+            return (total, False, 0, 0)
 
         mock_collect.side_effect = collect_side
         mock_sel.side_effect = [items[:10], items[10:20]]
@@ -1276,13 +1305,13 @@ class TestParallelReplenishmentBug:
             call_idx[0] += 1
             if call_idx[0] == 1:
                 # First iteration: no completions yet.
-                return (total, False)
+                return (total, False, 0, 0)
             if call_idx[0] == 2:
                 # Second iteration: both active workers complete and at least
                 # one succeeds; all slots are now free.
                 futures.clear()
-                return (total + 2, True)
-            return (total, False)
+                return (total + 2, True, 1, 1)
+            return (total, False, 0, 0)
 
         mock_collect.side_effect = collect_side
         mock_sel.side_effect = [items[:2], items[2:3]]
@@ -1333,7 +1362,7 @@ class TestParallelReplenishmentBug:
             record_fn = Mock()
 
             from pokepoke.parallel import _collect_done_futures
-            total, any_ok = _collect_done_futures(
+            total, any_ok, successes, failures = _collect_done_futures(
                 futures_dict, failed, 0, stats, Mock(), record_fn,
             )
 
@@ -1344,6 +1373,8 @@ class TestParallelReplenishmentBug:
         )
         assert record_fn.call_count == 3
         assert any_ok is True
+        assert successes == 3
+        assert failures == 0
 
     def test_exception_crashed_items_not_blacklisted(self) -> None:
         """Workers that crash with exceptions must NOT be added to failed_claim_ids.
@@ -1377,3 +1408,153 @@ class TestParallelReplenishmentBug:
         )
         assert len(futures_dict) == 0  # all collected
         assert record_fn.call_count == 3
+
+
+# ── Circuit Breaker ──────────────────────────────────────────────────────────
+
+
+class TestCircuitBreaker:
+    """Tests for the circuit breaker that stops dispatch after consecutive failures."""
+
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.parallel.time.sleep")
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.set_executor")
+    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.parallel.is_shutting_down")
+    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.parallel.get_ready_work_items")
+    @patch("pokepoke.parallel.select_multiple_items")
+    @patch("pokepoke.parallel._collect_done_futures")
+    @patch("pokepoke.parallel.process_work_item")
+    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=5)
+    def test_circuit_breaker_trips_after_max_consecutive_failures(
+        self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
+        mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
+    ) -> None:
+        """After _MAX_CONSECUTIVE_FAILURES consecutive failures, no new workers dispatched."""
+        from pokepoke.parallel import _MAX_CONSECUTIVE_FAILURES
+
+        items = [_make_item(f"cb-{i}") for i in range(20)]
+        mock_ready.return_value = items
+
+        call_idx = [0]
+
+        def collect_side(futures, failed, total, stats, logger, record_fn):
+            call_idx[0] += 1
+            if call_idx[0] >= 2:
+                # Report enough failures to trip the circuit breaker.
+                futures.clear()
+                return (total, False, 0, _MAX_CONSECUTIVE_FAILURES)
+            return (total, False, 0, 0)
+
+        mock_collect.side_effect = collect_side
+        mock_sel.return_value = items[:5]
+        mock_shut.side_effect = [False] * 30 + [True] * 5
+        mock_pwi.return_value = WorkItemResult(success=False, request_count=0, stats=AgentStats())
+
+        stats = SessionStats(agent_stats=AgentStats())
+        logger = Mock()
+
+        code = run_parallel_loop(
+            effective_parallel=5, mode_name="Autonomous",
+            main_repo_path="/repo", failed_claim_ids=set(),
+            session_stats=stats, start_time=time.time(),
+            run_logger=logger, continuous=True,
+            record_fn=Mock(), finalize_fn=Mock(),
+        )
+
+        assert code == 1
+        # Should log circuit breaker tripping.
+        assert any(
+            "Circuit breaker" in str(call) or "circuit breaker" in str(call)
+            for call in logger.log_orchestrator.call_args_list
+        )
+
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.parallel.time.sleep")
+    @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.parallel.set_executor")
+    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.parallel.is_shutting_down")
+    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.parallel.get_ready_work_items")
+    @patch("pokepoke.parallel.select_multiple_items")
+    @patch("pokepoke.parallel._collect_done_futures")
+    @patch("pokepoke.parallel.process_work_item")
+    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=2)
+    def test_circuit_breaker_resets_on_success(
+        self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
+        mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
+    ) -> None:
+        """A successful batch resets the consecutive failure counter."""
+        items = [_make_item(f"rs-{i}") for i in range(10)]
+        mock_ready.return_value = items
+
+        call_idx = [0]
+
+        def collect_side(futures, failed, total, stats, logger, record_fn):
+            call_idx[0] += 1
+            if call_idx[0] == 2:
+                # 5 failures — below threshold
+                futures.clear()
+                return (total, False, 0, 5)
+            if call_idx[0] == 4:
+                # 1 success — resets counter
+                futures.clear()
+                return (total, True, 1, 0)
+            if call_idx[0] == 6:
+                # 5 more failures — total would be 10 without reset, but
+                # counter was reset to 0 by the success, so this is only 5.
+                futures.clear()
+                return (total, False, 0, 5)
+            return (total, False, 0, 0)
+
+        mock_collect.side_effect = collect_side
+        mock_sel.return_value = items[:2]
+        mock_shut.side_effect = [False] * 50 + [True] * 5
+        mock_pwi.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
+
+        stats = SessionStats(agent_stats=AgentStats())
+
+        code = run_parallel_loop(
+            effective_parallel=2, mode_name="Autonomous",
+            main_repo_path="/repo", failed_claim_ids=set(),
+            session_stats=stats, start_time=time.time(),
+            run_logger=Mock(), continuous=True,
+            record_fn=Mock(), finalize_fn=Mock(),
+        )
+
+        # Should NOT trip circuit breaker (failures reset by success).
+        assert code == 0
+
+
+class TestCollectDoneFuturesSuccessFailureCounts:
+    """Tests that _collect_done_futures returns correct success/failure counts."""
+
+    def test_mixed_results_counts(self) -> None:
+        """Mixed successes and failures return correct counts."""
+        futs = []
+        items = []
+        for i in range(3):
+            fut = concurrent.futures.Future()
+            fut.set_result(WorkItemResult(success=True, request_count=1))
+            futs.append(fut)
+            items.append(_make_item(f"s{i}"))
+        for i in range(2):
+            fut = concurrent.futures.Future()
+            fut.set_result(WorkItemResult(success=False, request_count=1))
+            futs.append(fut)
+            items.append(_make_item(f"f{i}"))
+
+        futures_dict = dict(zip(futs, items, strict=False))
+        stats = SessionStats(agent_stats=AgentStats())
+
+        total, any_ok, successes, failures = _collect_done_futures(
+            futures_dict, set(), 0, stats, Mock(), Mock(),
+        )
+
+        assert successes == 3
+        assert failures == 2
+        assert any_ok is True
+        assert total == 5
