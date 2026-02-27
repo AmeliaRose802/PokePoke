@@ -8,6 +8,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from pokepoke.agent_types import iter_agent_types
 from pokepoke.file_utils import replace_with_retry
 from pokepoke.types import AgentStats, SessionStats, ModelCompletionRecord
 
@@ -105,19 +106,12 @@ def print_stats(items_completed: int, total_requests: int, elapsed_seconds: floa
         print("\n" + "=" * 60)
         print("🤖 Agent Run Counts")
         print("=" * 60)
-        print(f"📋 Work agents:         {session_stats.work_agent_runs}")
-        if session_stats.gate_agent_runs > 0:
-            print(f"🚪 Gate agents:         {session_stats.gate_agent_runs}")
-        if session_stats.cleanup_agent_runs > 0:
-            print(f"🧹 Cleanup agents:      {session_stats.cleanup_agent_runs}")
-        if session_stats.tech_debt_agent_runs > 0:
-            print(f"📊 Tech Debt agents:    {session_stats.tech_debt_agent_runs}")
-        if session_stats.janitor_agent_runs > 0:
-            print(f"🧹 Janitor agents:      {session_stats.janitor_agent_runs}")
-        if session_stats.backlog_cleanup_agent_runs > 0:
-            print(f"🗑️  Backlog agents:      {session_stats.backlog_cleanup_agent_runs}")
-        if session_stats.beta_tester_agent_runs > 0:
-            print(f"🧪 Beta Tester agents:  {session_stats.beta_tester_agent_runs}")
+        for agent in iter_agent_types():
+            count = session_stats.get_agent_run_count(agent.key)
+            if count <= 0 and not agent.always_show:
+                continue
+            emoji = f"{agent.emoji} " if agent.emoji else ""
+            print(f"{emoji}{agent.display_name} agents:".ljust(28) + f"{count}")
 
     # Print agent statistics if available and has non-zero values
     if session_stats and session_stats.agent_stats and (
@@ -131,21 +125,21 @@ def print_stats(items_completed: int, total_requests: int, elapsed_seconds: floa
         print("\n" + "=" * 60)
         print("🤖 Agent Usage Statistics")
         print("=" * 60)
-        agent = session_stats.agent_stats
-        if agent.wall_duration > 0:
-            print(f"⏱️  Wall duration:      {agent.wall_duration:.1f}s")
-        if agent.api_duration > 0:
-            print(f"⚡ API duration:       {agent.api_duration:.1f}s")
-        if agent.input_tokens > 0:
-            print(f"📊 Input tokens:       {agent.input_tokens:,}")
-        if agent.output_tokens > 0:
-            print(f"📤 Output tokens:      {agent.output_tokens:,}")
-        if agent.lines_added > 0:
-            print(f"➕ Lines added:        {agent.lines_added:,}")
-        if agent.lines_removed > 0:
-            print(f"➖ Lines removed:      {agent.lines_removed:,}")
-        if agent.premium_requests > 0:
-            print(f"💎 Premium requests:   {agent.premium_requests}")
+        astats = session_stats.agent_stats
+        if astats.wall_duration > 0:
+            print(f"⏱️  Wall duration:      {astats.wall_duration:.1f}s")
+        if astats.api_duration > 0:
+            print(f"⚡ API duration:       {astats.api_duration:.1f}s")
+        if astats.input_tokens > 0:
+            print(f"📊 Input tokens:       {astats.input_tokens:,}")
+        if astats.output_tokens > 0:
+            print(f"📤 Output tokens:      {astats.output_tokens:,}")
+        if astats.lines_added > 0:
+            print(f"➕ Lines added:        {astats.lines_added:,}")
+        if astats.lines_removed > 0:
+            print(f"➖ Lines removed:      {astats.lines_removed:,}")
+        if astats.premium_requests > 0:
+            print(f"💎 Premium requests:   {astats.premium_requests}")
     else:
         print("\n⚠️  No agent statistics available (stats parsing may have failed)")
 
@@ -251,6 +245,11 @@ def serialize_session_stats(
     Returns:
         A plain dict suitable for ``json.dumps``.
     """
+    run_counts = {
+        f"{agent.key}_agent": session_stats.get_agent_run_count(agent.key)
+        for agent in iter_agent_types()
+    }
+
     data: dict[str, Any] = {
         "items_completed": items_completed,
         "items_created": session_stats.items_created,
@@ -259,16 +258,8 @@ def serialize_session_stats(
         "elapsed_seconds": round(elapsed_seconds, 2),
         "agent_stats": asdict(session_stats.agent_stats),
         "run_counts": {
-            "work_agent": session_stats.work_agent_runs,
-            "gate_agent": session_stats.gate_agent_runs,
-            "tech_debt_agent": session_stats.tech_debt_agent_runs,
-            "janitor_agent": session_stats.janitor_agent_runs,
+            **run_counts,
             "janitor_lines_removed": session_stats.janitor_lines_removed,
-            "backlog_cleanup_agent": session_stats.backlog_cleanup_agent_runs,
-            "cleanup_agent": session_stats.cleanup_agent_runs,
-            "beta_tester_agent": session_stats.beta_tester_agent_runs,
-            "code_review_agent": session_stats.code_review_agent_runs,
-            "worktree_cleanup_agent": session_stats.worktree_cleanup_agent_runs,
         },
         "created_counts_by_agent_type": dict(session_stats.created_counts_by_agent_type),
         "completed_counts_by_agent_type": dict(session_stats.completed_counts_by_agent_type),

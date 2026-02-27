@@ -40,16 +40,6 @@ _PARALLEL_SAFE_AGENTS: set[str] = {
     "Code Review"
 }
 
-# Map of agent stat attribute names by agent name
-_AGENT_STAT_ATTRS = {
-    "Tech Debt": "tech_debt_agent_runs",
-    "Janitor": "janitor_agent_runs",
-    "Backlog Cleanup": "backlog_cleanup_agent_runs",
-    "Beta Tester": "beta_tester_agent_runs",
-    "Code Review": "code_review_agent_runs",
-    "Worktree Cleanup": "worktree_cleanup_agent_runs",
-}
-
 # Agents that have special runner functions instead of the generic one
 _SPECIAL_AGENTS = {"Beta Tester", "Worktree Cleanup", "Model Sync"}
 
@@ -258,10 +248,14 @@ class MaintenanceScheduler:
         run_logger.log_maintenance(log_key, f"Starting {agent_name} Agent")
 
         # Update run count on session stats if attribute exists (thread-safe)
-        stat_attr = _AGENT_STAT_ATTRS.get(agent_name)
-        if stat_attr and hasattr(session_stats, 'record_agent_run'):
-            with contextlib.suppress(AttributeError, ValueError):
+        if hasattr(session_stats, "record_agent_run"):
+            try:
                 session_stats.record_agent_run(agent_name)
+            except ValueError:
+                run_logger.log_maintenance(
+                    log_key,
+                    f"WARNING: Unknown agent type '{agent_name}' - update AGENT_TYPES registry",
+                )
 
         # Create a dedicated log file for the maintenance agent output
         maint_logger = run_logger.start_maintenance_log(agent_name)
