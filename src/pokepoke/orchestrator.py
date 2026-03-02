@@ -193,7 +193,7 @@ def run_orchestrator(
             while not is_shutting_down():
                 print("\n🔍 Running pre-flight health checks...")
                 run_logger.log_orchestrator("Running pre-flight health checks")
-                
+
                 # Import and run preflight health checks
                 from pokepoke.preflight_health import run_preflight_checks
                 health_config = {
@@ -205,15 +205,15 @@ def run_orchestrator(
                     'enable_self_repair': cfg.preflight_health.enable_self_repair,
                     'max_repair_attempts': cfg.preflight_health.max_repair_attempts,
                 }
-                
+
                 if cfg.preflight_health.enabled:
                     health_result = run_preflight_checks(repo_path=main_repo_path, config=health_config)
-                    
+
                     if not health_result.passed:
                         print(f"\n❌ Pre-flight health checks failed ({len(health_result.errors)} error(s))")
                         for error in health_result.errors:
                             print(f"   • {error.check_name}: {error.message}")
-                        
+
                         if health_result.self_repair_attempted:
                             if health_result.self_repair_successful:
                                 print("✅ Self-repair completed successfully")
@@ -221,35 +221,35 @@ def run_orchestrator(
                             else:
                                 print("❌ Self-repair failed")
                                 run_logger.log_orchestrator("Pre-flight health check self-repair failed", level="ERROR")
-                        
+
                         # Check for critical or environmental errors that should stop all work
                         if health_result.has_critical_errors() and cfg.preflight_health.fail_on_critical_errors:
                             terminal_ui.ui.stop_and_capture()
-                            print(f"\n🚨 Critical health check failures detected - shutting down gracefully")
+                            print("\n🚨 Critical health check failures detected - shutting down gracefully")
                             run_logger.log_orchestrator("Critical health check failures - shutting down", level="ERROR")
                             _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
                             return 1
-                        
+
                         if health_result.has_environmental_errors() and cfg.preflight_health.fail_on_environmental_errors:
                             terminal_ui.ui.stop_and_capture()
-                            print(f"\n⚠️  Environmental health check failures detected - shutting down gracefully")
+                            print("\n⚠️  Environmental health check failures detected - shutting down gracefully")
                             run_logger.log_orchestrator("Environmental health check failures - shutting down", level="ERROR")
                             if cfg.preflight_health.graceful_shutdown_on_failure:
                                 _finalize_session(session_stats, start_time, items_completed, total_requests, run_logger)
                                 return 1
-                        
+
                         # Log warnings for any remaining issues
                         for warning in health_result.warnings:
                             print(f"   ⚠️  Warning: {warning}")
-                        
-                        # If we get here and health checks still failed, but no critical/environmental errors, 
+
+                        # If we get here and health checks still failed, but no critical/environmental errors,
                         # continue but log the issues
                         if not health_result.passed:
                             run_logger.log_orchestrator(f"Pre-flight health checks failed but continuing (errors: {len(health_result.errors)})", level="WARNING")
                     else:
                         print("✅ Pre-flight health checks passed")
                         run_logger.log_orchestrator("Pre-flight health checks passed")
-                        
+
                         # Log any warnings
                         for warning in health_result.warnings:
                             print(f"   ℹ️  {warning}")
