@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pokepoke.git_operations import categorize_git_changes
+from pokepoke.git_operations import get_status_porcelain_and_changes
 from pokepoke.repo_state_guard import cleanup_lock
 from pokepoke.coordination import merge_lock_active
 
@@ -266,15 +266,7 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
         True if ready to continue, False if should exit
     """
     try:
-        status_result = subprocess.run(
-            ["git", "status", "--porcelain"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            check=True,
-            cwd=str(repo_path),
-            timeout=30
-        )
+        uncommitted, changes = get_status_porcelain_and_changes(str(repo_path), timeout=30)
     except subprocess.CalledProcessError as e:
         # Handle git errors gracefully
         error_msg = e.stderr.strip() if e.stderr else f"exit code {e.returncode}"
@@ -290,10 +282,7 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
         print("   Continuing despite git error...")
         return True
 
-    uncommitted = status_result.stdout.strip()
     if uncommitted:
-        lines = uncommitted.split('\n')
-        changes = categorize_git_changes(lines)
 
         # Handle problematic changes that need agent intervention
         if changes['other']:

@@ -19,11 +19,9 @@ from pokepoke.worktree_helpers import (
     sync_and_ensure_clean_main_repo as _sync_and_ensure_clean_main_repo,
 )
 from pokepoke.worktree_cleanup import (
-    add_uncleaned_worktree,
     cleanup_after_merge,
+    cleanup_worktree_and_branch,
     force_remove_directory,
-    remove_from_manifest,
-    _is_windows_lock_error,
 )
 from pokepoke.coordination import with_worktree_lock
 
@@ -289,7 +287,7 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
     expected_worktree_path = Path("worktrees") / f"task-{sanitized_id}"
 
     # Find the actual worktree for this item (might have unsanitized path if created before fix)
-    actual_worktree_path = None
+    actual_worktree_path: Path | None = None
     existing_worktrees = list_worktrees()
 
     # Search by branch name first
@@ -309,63 +307,14 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
         if unsanitized_path.exists():
             actual_worktree_path = unsanitized_path
 
-    # Remove worktree if found
-    if actual_worktree_path and actual_worktree_path.exists():
-        try:
-            cmd = ["git", "worktree", "remove", str(actual_worktree_path)]
-            if force:
-                cmd.append("--force")
+    return cleanup_worktree_and_branch(
+        actual_worktree_path,
+        branch_name,
+        worktree_id=item_id,
+        force=force,
+        fallback_branch_name=f"task/{item_id}",
+        skip_branch_delete_if_dir_exists=True,
+        print_success=False,
+    )
 
-            _run_git(cmd)
-            remove_from_manifest(item_id)
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            stderr = getattr(e, 'stderr', None) or str(e)
-            stderr_lower = stderr.lower()
-
-            # Check if error is because worktree doesn't exist
-            if "not a working tree" in stderr_lower or "no such file" in stderr_lower:
-                # Already gone, that's fine
-                pass
-            elif _is_windows_lock_error(stderr):
-                print("⚠️  Worktree removal failed (likely locked). Retrying with enhanced force removal...")
-                if force_remove_directory(actual_worktree_path):
-                    remove_from_manifest(item_id)
-                else:
-                    print(f"⚠️  Could not remove worktree directory after retries: {actual_worktree_path}")
-                    add_uncleaned_worktree(item_id, str(actual_worktree_path), f"Worktree removal failed: {stderr}")
-            else:
-                print(f"⚠️  Worktree removal warning: {stderr}")
-                if actual_worktree_path.exists():
-                    add_uncleaned_worktree(item_id, str(actual_worktree_path), f"Worktree removal warning: {stderr}")
-                # Continue to try branch deletion
-
-    # If the worktree directory still exists, do not delete the branch.
-    # Deleting the branch while the worktree remains creates a dangling worktree.
-    if actual_worktree_path is not None and actual_worktree_path.exists():
-        print(f"⚠️  Skipping branch deletion because worktree directory still exists: {actual_worktree_path}")
-        return False
-
-    # Delete branch (try both sanitized and unsanitized branch names)
-    delete_flag = "-D" if force else "-d"
-
-    # Try sanitized branch name first
-    try:
-        _run_git(["git", "branch", delete_flag, branch_name])
-    except subprocess.CalledProcessError:
-        # Try unsanitized branch name as fallback
-        try:
-            unsanitized_branch = f"task/{item_id}"
-            _run_git(["git", "branch", delete_flag, unsanitized_branch])
-        except subprocess.CalledProcessError as e2:
-            # Check if branch doesn't exist
-            if e2.stderr and ("not found" in e2.stderr.lower() or "does not exist" in e2.stderr.lower()):
-                # Already gone, that's fine
-                pass
-            else:
-                print(f"⚠️  Branch deletion warning: {e2.stderr if e2.stderr else str(e2)}")
-                # If both worktree and branch operations failed, return False
-                if actual_worktree_path is not None:
-                    return False
-
-    return True
 

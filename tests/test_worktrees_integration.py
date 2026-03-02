@@ -392,7 +392,7 @@ class TestCleanupWorktreeIntegration:
     """Integration tests for cleanup_worktree."""
 
     @patch('pokepoke.worktrees.list_worktrees')
-    @patch('pokepoke.worktrees.remove_from_manifest')
+    @patch('pokepoke.worktree_cleanup.remove_from_manifest')
     @patch('subprocess.run')
     def test_cleanup_success_by_branch_name(
         self, mock_run, mock_remove, mock_list
@@ -425,7 +425,7 @@ class TestCleanupWorktreeIntegration:
         mock_run.return_value = Mock(returncode=0)
 
         with patch.object(Path, 'exists', side_effect=[True, False]), \
-             patch('pokepoke.worktrees.remove_from_manifest'):
+             patch('pokepoke.worktree_cleanup.remove_from_manifest'):
             result = cleanup_worktree('test-456', force=True)
 
         assert result is True
@@ -435,8 +435,8 @@ class TestCleanupWorktreeIntegration:
         assert '--force' in worktree_remove_args
 
     @patch('pokepoke.worktrees.list_worktrees')
-    @patch('pokepoke.worktrees.add_uncleaned_worktree')
-    @patch('pokepoke.worktrees.force_remove_directory')
+    @patch('pokepoke.worktree_cleanup.add_uncleaned_worktree')
+    @patch('pokepoke.worktree_cleanup.force_remove_directory')
     @patch('subprocess.run')
     @patch('time.sleep')  # Mock sleep to avoid timeout
     def test_cleanup_handles_windows_lock_error(
@@ -457,7 +457,7 @@ class TestCleanupWorktreeIntegration:
         mock_force_remove.return_value = True  # Force remove succeeds
 
         with patch.object(Path, 'exists', side_effect=[True, False]), \
-             patch('pokepoke.worktrees.remove_from_manifest'):
+             patch('pokepoke.worktree_cleanup.remove_from_manifest'):
             cleanup_worktree('test-789')
 
         # Should call force remove as fallback

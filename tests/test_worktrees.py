@@ -521,11 +521,19 @@ class TestMergeWorktree:
 
     def test_merge_worktree_success(self):
         """Test successful worktree merge with cleanup."""
+        exists_state = {'present': True}
+
+        def exists_side_effect(self: Path) -> bool:
+            normalized = str(self).replace('\\', '/')
+            if normalized.endswith('worktrees/task-incredible_icm-42'):
+                return exists_state['present']
+            return True
+
         with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
              patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.get_default_branch', return_value='ameliapayne/dev'), \
              patch('pokepoke.worktrees.is_worktree_merged', return_value=True), \
-             patch('pathlib.Path.exists', return_value=True), \
+             patch('pathlib.Path.exists', new=exists_side_effect), \
              patch('builtins.print'):
 
             # Configure subprocess.run to return appropriate values for each command
@@ -536,6 +544,9 @@ class TestMergeWorktree:
                     return Mock(stdout='ameliapayne/dev\n', returncode=0)
                 elif 'status' in cmd and '--porcelain' in cmd:
                     return Mock(stdout='', returncode=0)
+                elif 'worktree' in cmd and 'remove' in cmd:
+                    exists_state['present'] = False
+                    return Mock(stdout='', stderr='', returncode=0)
                 else:
                     return Mock(stdout='', stderr='', returncode=0)
 
@@ -603,8 +614,8 @@ class TestMergeWorktree:
             # Verify cleanup warnings were printed
             assert any('Could not remove worktree' in call for call in print_calls), \
                 "Should warn about worktree removal failure"
-            assert any('Could not delete branch' in call for call in print_calls), \
-                "Should warn about branch deletion failure"
+            assert any('Skipping branch deletion' in call for call in print_calls), \
+                "Should skip branch deletion when worktree still exists"
 
             # Verify helpful message about non-critical failure
             assert any('Merge successful' in call for call in print_calls), \
@@ -955,7 +966,7 @@ class TestCleanupWorktree:
 
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
-             patch('pokepoke.worktrees.remove_from_manifest') as mock_rm_manifest, \
+             patch('pokepoke.worktree_cleanup.remove_from_manifest') as mock_rm_manifest, \
              patch('pathlib.Path.exists', new=exists_side_effect):
 
             mock_list.return_value = [
@@ -999,7 +1010,7 @@ class TestCleanupWorktree:
 
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
-             patch('pokepoke.worktrees.remove_from_manifest') as mock_rm_manifest, \
+             patch('pokepoke.worktree_cleanup.remove_from_manifest') as mock_rm_manifest, \
              patch('pathlib.Path.exists', new=exists_side_effect):
 
             mock_list.return_value = [
@@ -1105,8 +1116,8 @@ class TestCleanupWorktree:
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
              patch('pathlib.Path.exists', new=exists_side_effect), \
-             patch('pokepoke.worktrees.force_remove_directory', side_effect=force_side_effect) as mock_force, \
-             patch('pokepoke.worktrees.remove_from_manifest'), \
+             patch('pokepoke.worktree_cleanup.force_remove_directory', side_effect=force_side_effect) as mock_force, \
+             patch('pokepoke.worktree_cleanup.remove_from_manifest'), \
              patch('builtins.print'):
 
             mock_list.return_value = [
@@ -1147,8 +1158,8 @@ class TestCleanupWorktree:
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
              patch('pathlib.Path.exists', new=exists_side_effect), \
-             patch('pokepoke.worktrees.force_remove_directory', side_effect=force_side_effect) as mock_force, \
-             patch('pokepoke.worktrees.remove_from_manifest') as mock_rm_manifest, \
+             patch('pokepoke.worktree_cleanup.force_remove_directory', side_effect=force_side_effect) as mock_force, \
+             patch('pokepoke.worktree_cleanup.remove_from_manifest') as mock_rm_manifest, \
              patch('builtins.print'):
 
             mock_list.return_value = [
@@ -1183,8 +1194,8 @@ class TestCleanupWorktree:
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
              patch('pathlib.Path.exists', new=exists_side_effect), \
-             patch('pokepoke.worktrees.force_remove_directory', return_value=False) as mock_force, \
-             patch('pokepoke.worktrees.add_uncleaned_worktree') as mock_manifest, \
+             patch('pokepoke.worktree_cleanup.force_remove_directory', return_value=False) as mock_force, \
+             patch('pokepoke.worktree_cleanup.add_uncleaned_worktree') as mock_manifest, \
              patch('builtins.print') as mock_print:
 
             mock_list.return_value = [
@@ -1854,7 +1865,7 @@ class TestCleanupWorktreeEdgeCases:
         with patch('pokepoke.worktrees.list_worktrees', return_value=[]), \
              patch('subprocess.run') as mock_run, \
              patch('pathlib.Path.exists', new=exists_side_effect), \
-             patch('pokepoke.worktrees.remove_from_manifest'):
+             patch('pokepoke.worktree_cleanup.remove_from_manifest'):
 
             exists_state = {'present': True}
 
@@ -1895,7 +1906,7 @@ class TestCleanupWorktreeEdgeCases:
         with patch('pokepoke.worktrees.list_worktrees', return_value=[]), \
              patch('subprocess.run') as mock_run, \
              patch('pathlib.Path.exists', new=exists_side_effect), \
-             patch('pokepoke.worktrees.remove_from_manifest'):
+             patch('pokepoke.worktree_cleanup.remove_from_manifest'):
 
             def run_and_remove(*args, **kwargs):
                 cmd = args[0]
@@ -1922,7 +1933,7 @@ class TestCleanupWorktreeEdgeCases:
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
              patch('pathlib.Path.exists', new=exists_side_effect), \
-             patch('pokepoke.worktrees.remove_from_manifest'):
+             patch('pokepoke.worktree_cleanup.remove_from_manifest'):
 
             mock_list.return_value = [
                 {'path': 'worktrees/task-test-item', 'branch': 'refs/heads/task/test-item'}
@@ -1947,7 +1958,7 @@ class TestCleanupWorktreeEdgeCases:
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
              patch('pathlib.Path.exists', return_value=True), \
-             patch('pokepoke.worktrees.add_uncleaned_worktree') as mock_add, \
+             patch('pokepoke.worktree_cleanup.add_uncleaned_worktree') as mock_add, \
              patch('builtins.print'):
 
             mock_list.return_value = [

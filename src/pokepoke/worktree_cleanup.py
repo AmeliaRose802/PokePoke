@@ -182,47 +182,156 @@ def remove_from_manifest(worktree_id: str) -> None:
             save_worktree_manifest(manifest)
 
 
-def cleanup_after_merge(worktree_path: Path, branch_name: str) -> None:
-    """Cleanup worktree and branch after successful merge."""
-    if worktree_path.exists():
+def cleanup_worktree_and_branch(
+    worktree_path: Path | None,
+    branch_name: str,
+    *,
+    worktree_id: str | None = None,
+    force: bool = False,
+    fallback_branch_name: str | None = None,
+    skip_branch_delete_if_dir_exists: bool = True,
+    post_merge: bool = False,
+    print_success: bool = False,
+) -> bool:
+    """Remove a worktree directory and delete its branch.
+
+    This is the shared implementation used by both interactive cleanup and
+    post-merge cleanup.
+
+    Returns True when cleanup succeeds (or the worktree/branch are already gone).
+    Returns False when the worktree directory still exists or branch deletion
+    fails with a non-ignorable error.
+    """
+    if worktree_id is None:
+        if branch_name.startswith("task/"):
+            worktree_id = branch_name.split("/", 1)[1]
+        elif worktree_path is not None:
+            worktree_id = worktree_path.name
+
+    # Remove worktree if found
+    if worktree_path is not None and worktree_path.exists():
         try:
+            cmd = ["git", "worktree", "remove", str(worktree_path)]
+            if force:
+                cmd.append("--force")
+
             subprocess.run(
-                ["git", "worktree", "remove", str(worktree_path)],
-                check=True, capture_output=True, text=True, encoding='utf-8',
-                errors='replace',
-                timeout=30
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=30,
             )
-            print(f"✅ Removed worktree at {worktree_path}")
+            if worktree_id is not None:
+                remove_from_manifest(worktree_id)
+            if print_success:
+                print(f"✅ Removed worktree at {worktree_path}")
+
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-            stderr = getattr(e, 'stderr', None) or str(e)
+            stderr = getattr(e, "stderr", None) or str(e)
+            stderr_lower = stderr.lower()
 
-            if _is_windows_lock_error(stderr):
-                print("⚠️ Worktree removal failed (likely locked). Retrying with enhanced force removal...")
+            # Check if error is because worktree doesn't exist
+            if "not a working tree" in stderr_lower or "no such file" in stderr_lower:
+                pass
+
+            elif _is_windows_lock_error(stderr):
+                print("⚠️  Worktree removal failed (likely locked). Retrying with enhanced force removal...")
                 if force_remove_directory(worktree_path):
-                    print(f"✅ Force-removed worktree at {worktree_path}")
-                    if branch_name.startswith("task/"):
-                        remove_from_manifest(branch_name.split("/", 1)[1])
+                    if worktree_id is not None:
+                        remove_from_manifest(worktree_id)
+                    if print_success:
+                        print(f"✅ Force-removed worktree at {worktree_path}")
                 else:
-                    print(f"⚠️ Could not remove worktree after retries: {worktree_path}")
-                    print("   Merge successful - worktree cleanup can be done later")
-                    worktree_id = branch_name.split("/", 1)[1] if branch_name.startswith("task/") else worktree_path.name
-                    add_uncleaned_worktree(worktree_id, str(worktree_path), f"Post-merge cleanup failed: {stderr}")
-            else:
-                print(f"⚠️ Could not remove worktree: {stderr}")
-                print("   Merge successful - worktree cleanup can be done later")
-                worktree_id = branch_name.split("/", 1)[1] if branch_name.startswith("task/") else worktree_path.name
-                add_uncleaned_worktree(worktree_id, str(worktree_path), f"Post-merge cleanup warning: {stderr}")
+                    if post_merge:
+                        print(f"⚠️ Could not remove worktree after retries: {worktree_path}")
+                        print("✅ Merge successful, but cleanup had issues. You may need to manually remove this worktree later.")
+                    else:
+                        print(f"⚠️  Could not remove worktree directory after retries: {worktree_path}")
 
+                    if worktree_id is not None:
+                        add_uncleaned_worktree(
+                            worktree_id,
+                            str(worktree_path),
+                            f"Post-merge cleanup failed: {stderr}" if post_merge else f"Worktree removal failed: {stderr}",
+                        )
+
+            else:
+                if post_merge:
+                    print(f"⚠️ Could not remove worktree: {stderr}")
+                    print("✅ Merge successful, but cleanup had issues. You may need to manually remove this worktree later.")
+                else:
+                    print(f"⚠️  Worktree removal warning: {stderr}")
+
+                if worktree_id is not None and worktree_path.exists():
+                    add_uncleaned_worktree(
+                        worktree_id,
+                        str(worktree_path),
+                        f"Post-merge cleanup warning: {stderr}" if post_merge else f"Worktree removal warning: {stderr}",
+                    )
+
+    # If the worktree directory still exists, do not delete the branch.
+    # Deleting the branch while the worktree remains creates a dangling worktree.
+    if skip_branch_delete_if_dir_exists and worktree_path is not None and worktree_path.exists():
+        print(f"⚠️  Skipping branch deletion because worktree directory still exists: {worktree_path}")
+        return False
+
+    delete_flag = "-D" if force else "-d"
+
+    # Try primary branch name.
     try:
         subprocess.run(
-            ["git", "branch", "-d", branch_name],
-            check=True, capture_output=True, text=True, encoding='utf-8',
-            errors='replace',
-            timeout=30
+            ["git", "branch", delete_flag, branch_name],
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
         )
-        print(f"✅ Deleted branch {branch_name}")
-    except subprocess.CalledProcessError as e:
-        print(f"⚠️ Could not delete branch: {e.stderr or e}")
+        if print_success:
+            print(f"✅ Deleted branch {branch_name}")
+        return True
+
+    except subprocess.CalledProcessError as e1:
+        # Try fallback branch name if provided.
+        if fallback_branch_name:
+            try:
+                subprocess.run(
+                    ["git", "branch", delete_flag, fallback_branch_name],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=30,
+                )
+                if print_success:
+                    print(f"✅ Deleted branch {fallback_branch_name}")
+                return True
+            except subprocess.CalledProcessError as e2:
+                stderr = e2.stderr or ""
+                if "not found" in stderr.lower() or "does not exist" in stderr.lower():
+                    return True
+                print(f"⚠️  Branch deletion warning: {stderr if stderr else str(e2)}")
+                return False
+
+        # cleanup_after_merge historically logged but did not fail the merge cleanup.
+        print(f"⚠️ Could not delete branch: {e1.stderr or e1}")
+        return True
+
+
+def cleanup_after_merge(worktree_path: Path, branch_name: str) -> None:
+    """Cleanup worktree and branch after successful merge."""
+    cleanup_worktree_and_branch(
+        worktree_path,
+        branch_name,
+        skip_branch_delete_if_dir_exists=True,
+        post_merge=True,
+        print_success=True,
+    )
 
 
 def retry_failed_cleanups() -> int:
