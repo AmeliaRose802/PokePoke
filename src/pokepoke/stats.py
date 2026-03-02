@@ -1,12 +1,15 @@
 """Agent statistics parsing and display utilities."""
 
 import json
+import logging
 import os
 import re
 from contextlib import suppress
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from pokepoke.agent_types import iter_agent_types
 from pokepoke.file_utils import replace_with_retry
@@ -60,9 +63,18 @@ def parse_agent_stats(output: str) -> AgentStats | None:
             found_any = True
 
         # Only return stats if we found at least one value
-        return stats if found_any else None
+        if not found_any:
+            logger.warning(
+                "No agent statistics found in copilot output (output length=%d). "
+                "The CLI output format may not match expected patterns. "
+                "Output preview: %.200s",
+                len(output),
+                output,
+            )
+            return None
+        return stats
     except (ValueError, AttributeError) as e:
-        print(f"⚠️  Warning: Failed to parse agent stats: {e}")
+        logger.warning("Failed to parse agent stats: %s", e, exc_info=True)
         return None
 
 
