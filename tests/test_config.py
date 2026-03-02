@@ -530,6 +530,42 @@ class TestAssignmentConfig:
         assert rule.match.labels is None
         assert rule.match.priority_max is None
         assert rule.model == "some-model"
+
+
+class TestUnknownKeyDetection:
+    """Tests for detecting unknown/typo'd config keys."""
+
+    def test_typo_in_top_level_key_raises(self):
+        """A typo like 'comand_timeout' should raise an error."""
+        data = {"comand_timeout": 600}  # Typo: missing 'm' in command
+        with pytest.raises(ValueError, match="Unknown configuration key"):
+            ProjectConfig.from_dict(data)
+
+    def test_typo_in_nested_key_raises(self):
+        """A typo in nested config should raise an error."""
+        data = {"models": {"defualt": "gpt-4o"}}  # Typo: 'defualt' instead of 'default'
+        with pytest.raises(ValueError, match="Unknown configuration key"):
+            ProjectConfig.from_dict(data)
+
+    def test_unknown_section_raises(self):
+        """A completely unknown top-level section should raise an error."""
+        data = {"unknown_section": {"key": "value"}}
+        with pytest.raises(ValueError, match="Unknown configuration key"):
+            ProjectConfig.from_dict(data)
+
+    def test_valid_config_does_not_raise(self):
+        """Valid config keys should not raise errors."""
+        data = {
+            "project_name": "test",
+            "command_timeout": 600,
+            "models": {"default": "gpt-4o"},
+        }
+        config = ProjectConfig.from_dict(data)
+        assert config.project_name == "test"
+        assert config.command_timeout == 600
+        assert config.models.default == "gpt-4o"
+
+
 class TestGateAgentEnabled:
     """Tests for gate_agent_enabled configuration."""
 
