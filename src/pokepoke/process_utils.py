@@ -205,10 +205,10 @@ def check_copilot_processes() -> int:
 
 def is_process_running(pid: int) -> bool:
     """Check if a process with the given PID is currently running.
-    
+
     Args:
         pid: Process ID to check
-        
+
     Returns:
         True if the process is running, False otherwise
     """
