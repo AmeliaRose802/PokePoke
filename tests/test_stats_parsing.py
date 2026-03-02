@@ -48,13 +48,16 @@ def test_parse_agent_stats_with_partial_fields():
     assert stats.premium_requests == 0
 
 
-def test_parse_agent_stats_with_no_stats():
-    """Test that None is returned when no stats are found in output."""
+def test_parse_agent_stats_with_no_stats(caplog):
+    """Test that None is returned and a warning is logged when no stats are found in output."""
+    import logging
     output = "Just some regular output with no statistics"
 
-    stats = parse_agent_stats(output)
+    with caplog.at_level(logging.WARNING, logger="pokepoke.stats"):
+        stats = parse_agent_stats(output)
 
     assert stats is None
+    assert any("No agent statistics found" in r.message for r in caplog.records)
 
 
 def test_parse_agent_stats_with_empty_output():
@@ -138,8 +141,9 @@ def test_parse_agent_stats_with_invalid_format():
     assert stats.lines_added == 0  # Failed to parse, defaults to 0
 
 
-def test_parse_agent_stats_with_exception_handling(capsys, monkeypatch):
+def test_parse_agent_stats_with_exception_handling(monkeypatch, caplog):
     """Test that exceptions during parsing are caught and logged."""
+    import logging
     # Create output that will trigger an exception during parsing
     output = "Total duration (wall): 10.0s"
 
@@ -155,10 +159,10 @@ def test_parse_agent_stats_with_exception_handling(capsys, monkeypatch):
 
     monkeypatch.setattr('builtins.float', mock_float)
 
-    # Should return None and print warning
-    stats = parse_agent_stats(output)
+    # Should return None and log a warning
+    with caplog.at_level(logging.WARNING, logger="pokepoke.stats"):
+        stats = parse_agent_stats(output)
 
     assert stats is None
-    captured = capsys.readouterr()
-    assert "Warning: Failed to parse agent stats" in captured.out
-    assert "Mock parsing error" in captured.out
+    assert any("Failed to parse agent stats" in r.message for r in caplog.records)
+    assert any("Mock parsing error" in r.message for r in caplog.records)
