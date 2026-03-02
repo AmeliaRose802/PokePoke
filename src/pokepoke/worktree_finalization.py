@@ -70,7 +70,6 @@ def check_and_merge_worktree(
 
     except subprocess.TimeoutExpired:
         logger.error("Git timed out checking commit count for %s — aborting merge", item.id)
-        print("\n❌ Git timed out checking commit count — aborting merge")
         return False
     except (subprocess.CalledProcessError, ValueError) as e:
         # Branch not found or parse error — recoverable, attempt merge
@@ -78,16 +77,13 @@ def check_and_merge_worktree(
         print("   Attempting merge anyway...")
     except Exception as e:
         logger.error("Unexpected error checking commit count for %s: %s", item.id, e)
-        print(f"\n❌ Unexpected error checking commit count: {e}")
         print("   Aborting merge to prevent data corruption")
         return False
 
     # Acquire merge lock to serialize with other parallel agents
-    print("\n🔒 Acquiring merge lock for serialized merge...")
     logger.info("Waiting for merge lock for item %s", item.id)
     with merge_lock():
         logger.info("Acquired merge lock for item %s", item.id)
-        print("   ✅ Lock acquired, proceeding with merge")
         return merge_worktree_to_dev(item, parent_agent_id=parent_agent_id, worktree_path=worktree_path)
 
 
