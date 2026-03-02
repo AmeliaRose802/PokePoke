@@ -50,7 +50,6 @@ def handle_worktree_merge(
     try:
         with merge_lock():
             logger.info("Acquired merge lock for agent %s", agent_id)
-            print("   ✅ Lock acquired, proceeding with merge")
             # Fall back to agent_id for cleanup parent if no parent_agent_id
             cleanup_parent_id = parent_agent_id if parent_agent_id else agent_id
             return perform_worktree_merge(
@@ -59,7 +58,6 @@ def handle_worktree_merge(
             )
     except Timeout as e:
         logger.warning("Merge lock timeout for agent %s: %s", agent_id, e)
-        print("   Adding worktree to uncleaned list for later retry")
 
         add_uncleaned_worktree(
             agent_id,

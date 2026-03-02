@@ -84,7 +84,6 @@ def check_and_merge_worktree(
     logger.info("Waiting for merge lock for item %s", item.id)
     with merge_lock():
         logger.info("Acquired merge lock for item %s", item.id)
-        print("   ✅ Lock acquired, proceeding with merge")
         return merge_worktree_to_dev(item, parent_agent_id=parent_agent_id, worktree_path=worktree_path)
 
 
