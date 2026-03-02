@@ -45,7 +45,6 @@ def handle_worktree_merge(
         Tuple of (merge_success, worktree_cleaned)
     """
     # Acquire merge lock to serialize with other parallel agents
-    print("\n🔒 Acquiring merge lock for serialized merge...")
     logger.info("Waiting for merge lock for agent %s", agent_id)
 
     try:
@@ -59,9 +58,8 @@ def handle_worktree_merge(
                 parent_agent_id=cleanup_parent_id,
             )
     except Timeout as e:
-        print("   ⏰ Timeout waiting for merge lock - another merge is taking too long")
-        print("   Adding worktree to uncleaned list for later retry")
         logger.warning("Merge lock timeout for agent %s: %s", agent_id, e)
+        print("   Adding worktree to uncleaned list for later retry")
 
         add_uncleaned_worktree(
             agent_id,
@@ -70,7 +68,6 @@ def handle_worktree_merge(
         )
         return False, False
     except Exception as e:
-        print(f"   ❌ Merge coordination error: {e}")
         logger.error("Merge coordination error for agent %s: %s", agent_id, e, exc_info=True)
 
         add_uncleaned_worktree(
