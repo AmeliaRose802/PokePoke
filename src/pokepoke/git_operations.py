@@ -21,7 +21,8 @@ __all__ = [
     'is_merge_in_progress', 'get_unmerged_files', 'abort_merge',
     'get_merge_conflict_details', 'has_uncommitted_changes',
     'execute_merge_sequence', 'check_main_repo_ready_for_merge',
-    'categorize_git_changes', 'build_handoff_context',
+    'categorize_git_changes', 'get_status_porcelain_and_changes',
+    'build_handoff_context',
 ]
 
 
@@ -41,19 +42,27 @@ def categorize_git_changes(lines: list[str]) -> dict[str, list[str]]:
     }
 
 
-def has_uncommitted_changes(cwd: str | None = None) -> bool:
-    """Check if there are uncommitted changes in the given directory.
+def get_status_porcelain_and_changes(
+    cwd: str | None = None,
+    *,
+    timeout: int = 10,
+) -> tuple[str, dict[str, list[str]]]:
+    """Return `git status --porcelain` output plus categorized change buckets."""
+    status_result = _run_git_status_with_retry(
+        ["git", "status", "--porcelain"],
+        cwd=cwd,
+        timeout=timeout,
+    )
+    uncommitted = status_result.stdout.strip()
+    lines = uncommitted.splitlines() if uncommitted else []
+    return uncommitted, categorize_git_changes(lines)
 
-    Returns True if changes exist or git status cannot be verified.
-    Assumes dirty state on failure to prevent data loss during merge operations.
-    Retries on timeout to handle transient git index.lock contention.
-    """
+
+def has_uncommitted_changes(cwd: str | None = None) -> bool:
+    """Check for uncommitted changes in cwd (assume dirty on failure)."""
     try:
-        result = _run_git_status_with_retry(
-            ["git", "status", "--porcelain"],
-            cwd=cwd,
-        )
-        return bool(result.stdout.strip())
+        uncommitted, _ = get_status_porcelain_and_changes(cwd)
+        return bool(uncommitted)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         logger.warning('Could not check uncommitted changes: %s', e)
         return True  # Assume dirty to prevent data loss
@@ -92,11 +101,7 @@ def commit_all_changes(message: str = "Auto-commit by PokePoke", cwd: str | None
 
 
 def verify_main_repo_clean(cwd: str | None = None) -> tuple[bool, str, list[str]]:
-    """Verify repository has no uncommitted non-beads changes.
-
-    Returns (is_clean, uncommitted_output, non_beads_changes).
-    Retries on timeout to handle transient git index.lock contention.
-    """
+    """Return (is_clean, porcelain, non_beads_changes) for the repo."""
     try:
         status_result = _run_git_status_with_retry(
             ["git", "status", "--porcelain"],
@@ -120,11 +125,7 @@ def verify_main_repo_clean(cwd: str | None = None) -> tuple[bool, str, list[str]
 
 
 def handle_beads_auto_commit() -> None:
-    """Automatically commit beads database changes.
-
-    Raises:
-        RuntimeError: If commit fails
-    """
+    """Commit beads database changes."""
     try:
         print("🔧 Committing beads database changes in main repo...")
         subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8', errors='replace', timeout=10)
@@ -143,11 +144,7 @@ def handle_beads_auto_commit() -> None:
 
 
 def check_main_repo_ready_for_merge() -> tuple[bool, str]:
-    """Check if main repo is ready for worktree merge.
-
-    Returns:
-        (is_ready, error_message) tuple
-    """
+    """Return (is_ready, error_message) for merging into the main repo."""
     try:
         is_clean, uncommitted, non_beads_changes = verify_main_repo_clean()
 

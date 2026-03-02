@@ -24,7 +24,8 @@ logger = logging.getLogger(__name__)
 def _lock_dir() -> Path:
     """Return (and lazily create) the lock directory."""
     d = Path(".pokepoke") / "locks"
-    d.mkdir(parents=True, exist_ok=True)
+    # Use os.makedirs so tests that patch Path.mkdir don't break file-lock creation.
+    os.makedirs(d, exist_ok=True)
     return d
 
 

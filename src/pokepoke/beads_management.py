@@ -50,10 +50,13 @@ def run_bd_sync_with_retry(
         output = f"{result.stdout}\n{result.stderr}"
         if _is_transient_jsonl_sync_error(output) and attempt < max_attempts:
             delay = base_delay * (2 ** (attempt - 1))
-            logger.warning(
+            message = (
                 "⚠️  bd sync failed due to locked JSONL file; "
                 f"retrying in {delay:.1f}s (attempt {attempt}/{max_attempts})"
             )
+            # Keep this as a print as well so interactive runs and tests can observe retries.
+            print(message)
+            logger.warning(message)
             time.sleep(delay)
             continue
         return result

@@ -523,25 +523,22 @@ class TestListWorktrees:
 class TestCleanupWorktree:
     """Tests for cleanup_worktree function."""
 
-    @patch('pokepoke.worktrees.remove_from_manifest')
+    @patch('pokepoke.worktree_cleanup.remove_from_manifest')
     @patch('pokepoke.worktrees.list_worktrees')
-    @patch('pokepoke.worktrees._run_git')
+    @patch('subprocess.run')
     def test_cleanup_worktree_success(
-        self, mock_run_git, mock_list, mock_remove_manifest
+        self, mock_run, mock_list, mock_remove_manifest
     ) -> None:
         """Successfully cleanup a worktree."""
         mock_list.return_value = []
-        mock_run_git.return_value = Mock(returncode=0, stdout='')
+        mock_run.return_value = Mock(returncode=0, stdout='', stderr='')
 
         result = cleanup_worktree('item-1')
 
         assert result is True
-        # Should attempt to delete branch
-        # Last call should be git branch -d
-        assert mock_run_git.call_count >= 1
-        last_call = mock_run_git.call_args_list[-1]
-        assert 'branch' in last_call[0][0]
-        assert '-d' in last_call[0][0]
+        mock_remove_manifest.assert_not_called()
+        mock_run.assert_called_once()
+        assert mock_run.call_args[0][0] == ['git', 'branch', '-d', 'task/item-1']
 
     @patch('pokepoke.worktrees._run_git')
     @patch('pokepoke.worktrees.list_worktrees')
