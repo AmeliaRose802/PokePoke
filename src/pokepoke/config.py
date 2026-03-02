@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import dacite
+
 from pokepoke.model_sync_config import ModelSyncConfig, parse_model_sync_config
 
 try:
@@ -133,6 +135,15 @@ class PreflightHealthConfig:
     fail_on_critical_errors: bool = True
     graceful_shutdown_on_failure: bool = True
 
+    def __post_init__(self) -> None:
+        """Clamp values to valid ranges."""
+        self.min_disk_space_gb = max(0.1, self.min_disk_space_gb)
+        self.lock_timeout_seconds = max(5.0, self.lock_timeout_seconds)
+        self.worktree_test_timeout = max(10.0, self.worktree_test_timeout)
+        self.max_orphan_worktrees = max(0, self.max_orphan_worktrees)
+        self.git_operation_timeout = max(5.0, self.git_operation_timeout)
+        self.max_repair_attempts = max(1, self.max_repair_attempts)
+
 
 @dataclass
 class AssignmentRuleMatch:
@@ -163,6 +174,13 @@ class ActivityWatchdogConfig:
     enabled: bool = True
     timeout_seconds: int = 600  # 10 minutes
     check_interval_seconds: int = 30
+
+    def __post_init__(self) -> None:
+        """Clamp values to valid ranges."""
+        self.timeout_seconds = max(60, self.timeout_seconds)
+        self.check_interval_seconds = max(10, self.check_interval_seconds)
+
+
 @dataclass
 class ProjectConfig:
     """Top-level project configuration."""
@@ -182,127 +200,50 @@ class ProjectConfig:
     activity_watchdog: ActivityWatchdogConfig = field(default_factory=ActivityWatchdogConfig)
     assignment: AssignmentConfig = field(default_factory=AssignmentConfig)
 
+    def __post_init__(self) -> None:
+        """Clamp values to valid ranges."""
+        self.max_parallel_agents = max(1, self.max_parallel_agents)
+        self.command_timeout = max(30, self.command_timeout)
+
     @staticmethod
     def from_dict(data: dict[str, Any]) -> 'ProjectConfig':
-        """Create a ProjectConfig from a dictionary (parsed YAML/JSON)."""
-        config = ProjectConfig()
+        """Create a ProjectConfig from a dictionary (parsed YAML/JSON).
 
-        config.project_name = data.get("project_name", "")
+        Uses dacite for deserialization with strict mode to catch unknown keys.
+        """
+        # Handle special cases that need preprocessing
+        processed_data = dict(data)
 
-        # Models
-        models_data = data.get("models", {})
-        config.models = ModelConfig(
-            default=models_data.get("default", DEFAULT_MODEL),
-            fallback=models_data.get("fallback", FALLBACK_MODEL),
-            candidate_models=models_data.get("candidate_models", []),
+        # Handle model_sync specially since it has custom parsing logic
+        if "model_sync" in processed_data:
+            processed_data["model_sync"] = parse_model_sync_config(
+                processed_data["model_sync"]
+            )
+
+        # Handle maintenance default behavior: if no agents key, use defaults
+        if "maintenance" in processed_data:
+            maint_data = processed_data["maintenance"]
+            if "agents" not in maint_data:
+                # No agents specified, keep default factory behavior
+                del processed_data["maintenance"]
+
+        dacite_config = dacite.Config(
+            strict=True,  # Raise on unknown keys
+            cast=[bool, int, float],  # Allow type coercion for these types
         )
 
-        # AI backend
-        backend_data = data.get("ai_backend", {})
-        config.ai_backend = AIBackendConfig(
-            provider=backend_data.get("provider", "copilot"),
-            copilot_cli_path=backend_data.get("copilot_cli_path", "copilot.cmd"),
-            claude_code_cli_path=backend_data.get("claude_code_cli_path", "claude"),
-        )
-
-        # Git
-        git_data = data.get("git", {})
-        config.git = GitConfig(
-            default_branch=git_data.get("default_branch"),
-            fallback_branch=git_data.get("fallback_branch", "master"),
-        )
-
-        # MCP Server
-        mcp_data = data.get("mcp_server", {})
-        config.mcp_server = MpcServerConfig(
-            enabled=mcp_data.get("enabled", False),
-            restart_script=mcp_data.get("restart_script"),
-            name=mcp_data.get("name"),
-        )
-
-        # Test data
-        config.test_data = data.get("test_data", {})
-
-        # Work artifacts directory
-        config.work_artifacts_dir = data.get("work_artifacts_dir")
-
-        # Max parallel agents
-        config.max_parallel_agents = max(1, int(data.get("max_parallel_agents", 1)))
-
-        # Command timeout (default 300 seconds)
-        config.command_timeout = max(30, int(data.get("command_timeout", 300)))
-
-        # Gate agent
-        gate_val = data.get("gate_agent_enabled")
-        if gate_val is not None:
-            config.gate_agent_enabled = bool(gate_val)
-
-        # Activity watchdog
-        watchdog_data = data.get("activity_watchdog", {})
-        config.activity_watchdog = ActivityWatchdogConfig(
-            enabled=watchdog_data.get("enabled", True),
-            timeout_seconds=max(60, int(watchdog_data.get("timeout_seconds", 600))),
-            check_interval_seconds=max(10, int(watchdog_data.get("check_interval_seconds", 30))),
-        )
-
-        # Preflight health checks
-        health_data = data.get("preflight_health", {})
-        config.preflight_health = PreflightHealthConfig(
-            enabled=health_data.get("enabled", True),
-            min_disk_space_gb=max(0.1, float(health_data.get("min_disk_space_gb", 1.0))),
-            lock_timeout_seconds=max(5.0, float(health_data.get("lock_timeout_seconds", 30.0))),
-            worktree_test_timeout=max(10.0, float(health_data.get("worktree_test_timeout", 60.0))),
-            max_orphan_worktrees=max(0, int(health_data.get("max_orphan_worktrees", 10))),
-            git_operation_timeout=max(5.0, float(health_data.get("git_operation_timeout", 30.0))),
-            enable_self_repair=health_data.get("enable_self_repair", True),
-            max_repair_attempts=max(1, int(health_data.get("max_repair_attempts", 3))),
-            fail_on_environmental_errors=health_data.get("fail_on_environmental_errors", True),
-            fail_on_critical_errors=health_data.get("fail_on_critical_errors", True),
-            graceful_shutdown_on_failure=health_data.get("graceful_shutdown_on_failure", True),
-        )
-
-        # Maintenance agents
-        maint_data = data.get("maintenance", {})
-        agents_data = maint_data.get("agents")
-        if agents_data is not None:
-            config.maintenance = MaintenanceConfig(agents=[
-                MaintenanceAgentConfig(
-                    name=a.get("name", ""),
-                    prompt_file=a.get("prompt_file", ""),
-                    frequency=a.get("frequency", 5),
-                    needs_worktree=a.get("needs_worktree", False),
-                    merge_changes=a.get("merge_changes", True),
-                    model=a.get("model"),
-                    enabled=a.get("enabled", True),
-                    conflicts_with=a.get("conflicts_with", []),
-                )
-                for a in agents_data
-            ])
-        # else: keep defaults from field(default_factory=...)
-
-        # Model sync
-        config.model_sync = parse_model_sync_config(data.get("model_sync", {}))
-
-        # Assignment rules
-        assign_data = data.get("assignment", {})
-        rules_data = assign_data.get("rules", [])
-        config.assignment = AssignmentConfig(
-            rules=[
-                AssignmentRule(
-                    match=AssignmentRuleMatch(
-                        issue_type=r.get("match", {}).get("issue_type"),
-                        labels=r.get("match", {}).get("labels"),
-                        priority_max=r.get("match", {}).get("priority_max"),
-                    ),
-                    model=r.get("model"),
-                    prompt_template=r.get("prompt_template"),
-                )
-                for r in rules_data
-            ],
-            fallback=assign_data.get("fallback", "weighted"),
-        )
-
-        return config
+        try:
+            return dacite.from_dict(
+                data_class=ProjectConfig,
+                data=processed_data,
+                config=dacite_config,
+            )
+        except dacite.UnexpectedDataError as e:
+            # Provide helpful error message for typos like "comand_timeout"
+            raise ValueError(
+                f"Unknown configuration key(s): {e}. "
+                "Check for typos in your config file."
+            ) from e
 
 
 
