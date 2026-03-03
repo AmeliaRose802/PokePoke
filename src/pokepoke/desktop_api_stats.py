@@ -160,3 +160,9 @@ def push_stats(self: Any, session_stats: Any, elapsed_time: float = 0.0) -> None
     if session_stats:
         stats_data.update(snapshot_to_dict(session_stats.snapshot()))
     self._current_stats = stats_data
+
+
+def get_lock_contention_stats(self: Any) -> dict[str, Any]:
+    """Get lock contention metrics for all named locks."""
+    from pokepoke.lock_contention import get_lock_contention_stats as _get
+    return _get()
