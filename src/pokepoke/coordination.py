@@ -13,10 +13,12 @@ import os
 import time
 from contextlib import contextmanager
 from pathlib import Path
-
 from collections.abc import Generator
 
 from filelock import FileLock, Timeout
+
+from pokepoke.lock_contention import _contention_tracker  # noqa: F401 (used in acquire_lock)
+from pokepoke.lock_contention import get_lock_contention_stats as get_lock_contention_stats
 
 logger = logging.getLogger(__name__)
 
@@ -129,12 +131,21 @@ def acquire_lock(
                     lock_path.unlink(missing_ok=True)
                 except OSError as exc:
                     logger.warning('Could not remove stale lock file %s: %s', lock_path, exc)
+                else:
+                    _contention_tracker.record_stale_clearance(name)
             else:
                 logger.info(
                     'Lock file %s is %.0f s old but holder PID %s is still alive.',
                     lock_path, age, holder_pid,
                 )
-    lock.acquire(timeout=timeout)
+    t0 = time.monotonic()
+    try:
+        lock.acquire(timeout=timeout)
+    except Timeout:
+        _contention_tracker.record_timeout(name, time.monotonic() - t0)
+        raise
+    wait = time.monotonic() - t0
+    _contention_tracker.record_acquisition(name, wait)
     _write_lock_metadata(lock_path)
     try:
         yield lock
