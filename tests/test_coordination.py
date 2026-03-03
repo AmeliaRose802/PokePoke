@@ -17,6 +17,9 @@ from pokepoke.coordination import (
     _lock_dir, _lock_path, _MERGE_LOCK_STALE_AGE, _is_pid_alive, _read_lock_metadata,
     _write_lock_metadata,
 )
+from pokepoke.lock_contention import (
+    get_lock_contention_stats, _contention_tracker,
+)
 
 
 class TestLockDir:
@@ -681,3 +684,50 @@ class TestClearLockIfStale:
 
             assert cleared is False
             assert (tmp_path / "held-clear.lock").exists()
+
+
+class TestAcquireLockContention:
+    """Tests that acquire_lock records contention metrics via the global tracker."""
+
+    def test_successful_acquire_records_metric(self, tmp_path: Path) -> None:
+        _contention_tracker.reset()
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), acquire_lock("track-ok", timeout=5):
+            pass
+        snap = get_lock_contention_stats()
+        assert "track-ok" in snap
+        assert snap["track-ok"]["acquired"] == 1
+        assert snap["track-ok"]["timeouts"] == 0
+        assert snap["track-ok"]["total_wait"] >= 0.0
+
+    def test_timeout_records_metric(self, tmp_path: Path) -> None:
+        _contention_tracker.reset()
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), acquire_lock("track-to", timeout=5):  # noqa: SIM117
+            with pytest.raises(Timeout), acquire_lock("track-to", timeout=0):
+                pass  # pragma: no cover
+        snap = get_lock_contention_stats()
+        assert snap["track-to"]["acquired"] == 1
+        assert snap["track-to"]["timeouts"] == 1
+
+    def test_stale_clearance_records_metric(self, tmp_path: Path) -> None:
+        _contention_tracker.reset()
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+            lock_file = tmp_path / "track-stale.lock"
+            lock_file.write_text("")
+            (tmp_path / "track-stale.lock.meta").write_text(json.dumps({
+                "pid": 2**30,
+                "timestamp": time.time() - 7200,
+            }))
+            old_mtime = time.time() - 7200
+            os.utime(lock_file, (old_mtime, old_mtime))
+
+            with acquire_lock("track-stale", timeout=0, stale_timeout=300):
+                pass
+
+        snap = get_lock_contention_stats()
+        assert snap["track-stale"]["stale_cleared"] == 1
+        assert snap["track-stale"]["acquired"] == 1
+
+    def test_get_lock_contention_stats_returns_dict(self, tmp_path: Path) -> None:
+        _contention_tracker.reset()
+        result = get_lock_contention_stats()
+        assert isinstance(result, dict)
