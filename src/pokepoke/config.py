@@ -197,6 +197,7 @@ class ProjectConfig:
     max_parallel_agents: int = 1
     command_timeout: int = 300  # Default 5 minutes for long-running commands
     gate_agent_enabled: bool = True
+    max_copilot_failure_retries: int = 2  # Max retries when Copilot session fails (0 = no retry)
     activity_watchdog: ActivityWatchdogConfig = field(default_factory=ActivityWatchdogConfig)
     assignment: AssignmentConfig = field(default_factory=AssignmentConfig)
 
@@ -204,6 +205,7 @@ class ProjectConfig:
         """Clamp values to valid ranges."""
         self.max_parallel_agents = max(1, self.max_parallel_agents)
         self.command_timeout = max(30, self.command_timeout)
+        self.max_copilot_failure_retries = max(0, self.max_copilot_failure_retries)
 
     @staticmethod
     def from_dict(data: dict[str, Any]) -> 'ProjectConfig':

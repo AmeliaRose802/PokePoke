@@ -584,3 +584,32 @@ class TestGateAgentEnabled:
     def test_from_dict_enabled_explicit(self):
         config = ProjectConfig.from_dict({"gate_agent_enabled": True})
         assert config.gate_agent_enabled is True
+
+
+class TestMaxCopilotFailureRetries:
+    """Tests for max_copilot_failure_retries configuration."""
+
+    def test_default_value(self):
+        """Default retries is 2."""
+        config = ProjectConfig()
+        assert config.max_copilot_failure_retries == 2
+
+    def test_from_dict_default(self):
+        """Defaults to 2 when not specified."""
+        config = ProjectConfig.from_dict({})
+        assert config.max_copilot_failure_retries == 2
+
+    def test_from_dict_custom_value(self):
+        """Can be set to any non-negative integer."""
+        config = ProjectConfig.from_dict({"max_copilot_failure_retries": 5})
+        assert config.max_copilot_failure_retries == 5
+
+    def test_from_dict_zero_disables_retry(self):
+        """Setting to 0 disables retries."""
+        config = ProjectConfig.from_dict({"max_copilot_failure_retries": 0})
+        assert config.max_copilot_failure_retries == 0
+
+    def test_negative_clamped_to_zero(self):
+        """Negative values are clamped to 0 (no retry) by __post_init__."""
+        config = ProjectConfig.from_dict({"max_copilot_failure_retries": -3})
+        assert config.max_copilot_failure_retries == 0

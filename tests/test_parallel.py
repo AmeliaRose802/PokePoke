@@ -1432,10 +1432,10 @@ class TestCircuitBreaker:
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
-        """After _MAX_CONSECUTIVE_FAILURES consecutive failures, no new workers dispatched."""
+        """After _MAX_CONSECUTIVE_FAILURES *rounds* of all-failures, no new workers dispatched."""
         from pokepoke.parallel import _MAX_CONSECUTIVE_FAILURES
 
-        items = [_make_item(f"cb-{i}") for i in range(20)]
+        items = [_make_item(f"cb-{i}") for i in range(_MAX_CONSECUTIVE_FAILURES * 2)]
         mock_ready.return_value = items
 
         call_idx = [0]
@@ -1443,14 +1443,16 @@ class TestCircuitBreaker:
         def collect_side(futures, failed, total, stats, logger, record_fn):
             call_idx[0] += 1
             if call_idx[0] >= 2:
-                # Report enough failures to trip the circuit breaker.
+                # Report 1 failure per round; circuit breaker trips after
+                # _MAX_CONSECUTIVE_FAILURES rounds (not individual item count).
                 futures.clear()
-                return (total, False, 0, _MAX_CONSECUTIVE_FAILURES)
+                return (total, False, 0, 1)
             return (total, False, 0, 0)
 
         mock_collect.side_effect = collect_side
         mock_sel.return_value = items[:5]
-        mock_shut.side_effect = [False] * 30 + [True] * 5
+        # Need enough False entries: each outer iteration consumes up to 11 calls.
+        mock_shut.side_effect = [False] * (_MAX_CONSECUTIVE_FAILURES * 20) + [True] * 5
         mock_pwi.return_value = WorkItemResult(success=False, request_count=0, stats=AgentStats())
 
         stats = SessionStats(agent_stats=AgentStats())
@@ -1487,7 +1489,7 @@ class TestCircuitBreaker:
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
-        """A successful batch resets the consecutive failure counter."""
+        """A successful round resets the consecutive failure counter."""
         items = [_make_item(f"rs-{i}") for i in range(10)]
         mock_ready.return_value = items
 
@@ -1496,7 +1498,7 @@ class TestCircuitBreaker:
         def collect_side(futures, failed, total, stats, logger, record_fn):
             call_idx[0] += 1
             if call_idx[0] == 2:
-                # 5 failures — below threshold
+                # 5 failures in one round → counts as 1 failure-round
                 futures.clear()
                 return (total, False, 0, 5)
             if call_idx[0] == 4:
@@ -1504,8 +1506,8 @@ class TestCircuitBreaker:
                 futures.clear()
                 return (total, True, 1, 0)
             if call_idx[0] == 6:
-                # 5 more failures — total would be 10 without reset, but
-                # counter was reset to 0 by the success, so this is only 5.
+                # 5 more failures in one round → counts as 1 failure-round.
+                # Total rounds-without-success = 1 (reset by earlier success).
                 futures.clear()
                 return (total, False, 0, 5)
             return (total, False, 0, 0)

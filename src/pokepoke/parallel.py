@@ -256,9 +256,11 @@ def run_parallel_loop(
 
             has_success = has_success or any_success
 
-            # Circuit breaker: track consecutive failures
+            # Circuit breaker: track consecutive failure *rounds* (not items).
+            # Counting per-item would trip the breaker after just two rounds
+            # of all-agents-fail when running 5+ agents in parallel.
             if batch_failures > 0 and batch_successes == 0:
-                consecutive_failures += batch_failures
+                consecutive_failures += 1
             elif batch_successes > 0:
                 consecutive_failures = 0
 
