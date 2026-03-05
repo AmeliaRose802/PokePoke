@@ -399,7 +399,10 @@ class TestIntegrationScenarios:
         # Mock list_worktrees to return empty list so orphan detection works
         # (list_worktrees() runs without cwd so it checks the wrong repo otherwise)
         # Mock worktree creation to avoid flaky git operations under parallel xdist
-        with patch('pokepoke.preflight_checks.list_worktrees', return_value=[]):
+        # Mock repair_git_status to prevent real git add -A / git commit against
+        # the host repo (was causing auto-commits of unrelated staged files)
+        with patch('pokepoke.preflight_checks.list_worktrees', return_value=[]), \
+             patch('pokepoke.preflight_repair.repair_git_status', return_value=True):
             checker = PreflightChecker(temp_repo, health_config)
             with patch.object(checker, '_check_worktree_creation', return_value=([], [])):
                 result = checker.run_all_checks()
