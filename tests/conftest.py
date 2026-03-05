@@ -2,7 +2,24 @@
 import sys
 import os
 import importlib.util
+import warnings
 from pathlib import Path
+
+# Suppress rm_rf PermissionError noise on Windows with xdist.
+# xdist workers (spawned, not forked) may not fully release file handles
+# before the controller tries to clean up temp dirs.  Monkeypatching rm_rf
+# is necessary because pytest restores warning filters during unconfigure,
+# before the cleanup that triggers these warnings.
+if sys.platform == "win32":
+    import _pytest.pathlib
+    _original_rm_rf = _pytest.pathlib.rm_rf
+
+    def _quiet_rm_rf(path):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            _original_rm_rf(path)
+
+    _pytest.pathlib.rm_rf = _quiet_rm_rf
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SRC_PATH = PROJECT_ROOT / "src"
@@ -114,6 +131,15 @@ def _block_real_git_repair(request, monkeypatch):
     monkeypatch.setattr(
         "pokepoke.preflight_health.repair_git_status",
         lambda error, repo_path: False,
+    )
+    # Also stub out run_preflight_checks so tests that call run_orchestrator()
+    # don't run real health checks against the host repo (which would fail
+    # when there are unstaged files and cause the orchestrator to exit early).
+    from pokepoke.preflight_health import HealthCheckResult
+    _passing = HealthCheckResult(passed=True)
+    monkeypatch.setattr(
+        "pokepoke.preflight_health.run_preflight_checks",
+        lambda *args, **kwargs: _passing,
     )
     yield
 

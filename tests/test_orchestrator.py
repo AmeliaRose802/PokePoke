@@ -2139,7 +2139,7 @@ class TestOrchestratorCleanupDetection:
         self,
         mock_get_items: Mock,
         mock_beads_stats: Mock,
-        mock_check_repo: Mock
+        mock_check_repo: Mock,
     ) -> None:
         """Test that orchestrator invokes check_and_commit_main_repo."""
         mock_check_repo.return_value = True  # Repo check passes (cleanup succeeded or continued)
@@ -2166,7 +2166,7 @@ class TestOrchestratorCleanupDetection:
         self,
         mock_get_items: Mock,
         mock_beads_stats: Mock,
-        mock_check_repo: Mock
+        mock_check_repo: Mock,
     ) -> None:
         """Test that beads-only changes are detected but NOT auto-committed."""
         mock_beads_stats.return_value = BeadsStats(
@@ -2190,7 +2190,7 @@ class TestOrchestratorCleanupDetection:
     def test_clean_repo_proceeds_to_work(
         self,
         mock_subprocess: Mock,
-        mock_get_items: Mock
+        mock_get_items: Mock,
     ) -> None:
         """Test that clean repo proceeds to normal work processing."""
         mock_subprocess.return_value = Mock(

@@ -1,10 +1,11 @@
 import contextlib
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
-from pokepoke import orchestrator, parallel, workflow
+from pokepoke import orchestrator, parallel, workflow, workflow_helpers
 from pokepoke.types import (
     AgentStats,
     BeadsStats,
@@ -143,19 +144,19 @@ class WorkflowHarness:
         monkeypatch.setattr(workflow, "cleanup_worktree", self._cleanup_worktree)
         monkeypatch.setattr(workflow, "invoke_copilot", self._invoke_copilot)
         monkeypatch.setattr(workflow, "run_gate_agent", self._run_gate_agent)
-        monkeypatch.setattr(workflow, "run_cleanup_loop", self._run_cleanup_loop)
-        monkeypatch.setattr(workflow, "has_uncommitted_changes", self._has_uncommitted)
-        monkeypatch.setattr(workflow, "has_commits_ahead", lambda **_kwargs: 0)
-        monkeypatch.setattr(workflow, "finalize_work_item", self._finalize_work_item)
+        monkeypatch.setattr(workflow_helpers, "run_cleanup_loop", self._run_cleanup_loop)
+        monkeypatch.setattr(workflow_helpers, "has_uncommitted_changes", self._has_uncommitted)
+        monkeypatch.setattr("pokepoke.git_operations.has_commits_ahead", lambda **_kwargs: 0)
+        monkeypatch.setattr(workflow_helpers, "finalize_work_item", self._finalize_work_item)
         monkeypatch.setattr(workflow, "unassign_with_retry", self._unassign)
         monkeypatch.setattr(workflow, "add_comment", self._add_comment)
         monkeypatch.setattr(workflow, "build_prompt_from_work_item", lambda *_args, **_kwargs: "prompt")
         monkeypatch.setattr(workflow, "select_model_for_item", lambda *_args, **_kwargs: "test-model")
         monkeypatch.setattr(workflow, "get_assignment_for_item", lambda *_args, **_kwargs: ("work", "beads-item"))
-        monkeypatch.setattr(workflow, "calculate_cost", lambda *_args, **_kwargs: 0.0)
-        monkeypatch.setattr(workflow, "run_beta_tester", self._run_beta)
+        monkeypatch.setattr(workflow_helpers, "calculate_cost", lambda *_args, **_kwargs: 0.0)
+        monkeypatch.setattr(workflow_helpers, "run_beta_tester", self._run_beta)
         monkeypatch.setattr("pokepoke.git_operations.build_handoff_context", lambda **_kwargs: {"context": "noop"})
-        monkeypatch.setattr(workflow, "set_terminal_banner", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(workflow_helpers, "set_terminal_banner", lambda *_args, **_kwargs: None)
 
     def _assign_and_sync(self, item_id: str) -> bool:
         self.assigned.append(item_id)
@@ -321,7 +322,7 @@ def test_run_orchestrator_processes_single_item(monkeypatch: pytest.MonkeyPatch,
     monkeypatch.setattr("pokepoke.agent_names.initialize_agent_name", lambda **_kwargs: "AgentZero")
     monkeypatch.setattr("pokepoke.agent_context.set_agent_name", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "get_agent_name", lambda default="pokepoke": "AgentZero")
-    monkeypatch.setattr(orchestrator, "load_config", lambda: SimpleNamespace(max_parallel_agents=1))
+    monkeypatch.setattr(orchestrator, "load_config", lambda: SimpleNamespace(max_parallel_agents=1, preflight_health=MagicMock(enabled=False)))
     monkeypatch.setattr(orchestrator, "get_ready_work_items", lambda: [item])
     monkeypatch.setattr(orchestrator, "select_work_item", lambda *_args, **_kwargs: item)
     monkeypatch.setattr(orchestrator, "process_work_item", lambda *_args, **_kwargs: result)
@@ -356,7 +357,7 @@ def test_run_orchestrator_failure_returns_non_zero(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr("pokepoke.agent_names.initialize_agent_name", lambda **_kwargs: "AgentZero")
     monkeypatch.setattr("pokepoke.agent_context.set_agent_name", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "get_agent_name", lambda default="pokepoke": "AgentZero")
-    monkeypatch.setattr(orchestrator, "load_config", lambda: SimpleNamespace(max_parallel_agents=1))
+    monkeypatch.setattr(orchestrator, "load_config", lambda: SimpleNamespace(max_parallel_agents=1, preflight_health=MagicMock(enabled=False)))
     monkeypatch.setattr(orchestrator, "get_ready_work_items", lambda: [item])
     monkeypatch.setattr(orchestrator, "select_work_item", lambda *_args, **_kwargs: item)
     monkeypatch.setattr(orchestrator, "process_work_item", lambda *_args, **_kwargs: result)
@@ -390,7 +391,7 @@ def test_run_orchestrator_parallel_mode_invokes_parallel_loop(monkeypatch: pytes
     monkeypatch.setattr("pokepoke.agent_names.initialize_agent_name", lambda **_kwargs: "AgentZero")
     monkeypatch.setattr("pokepoke.agent_context.set_agent_name", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "get_agent_name", lambda default="pokepoke": "AgentZero")
-    monkeypatch.setattr(orchestrator, "load_config", lambda: SimpleNamespace(max_parallel_agents=2))
+    monkeypatch.setattr(orchestrator, "load_config", lambda: SimpleNamespace(max_parallel_agents=2, preflight_health=MagicMock(enabled=False)))
     monkeypatch.setattr(orchestrator, "get_ready_work_items", lambda: [])
     monkeypatch.setattr(orchestrator, "select_work_item", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "process_work_item", lambda *_args, **_kwargs: WorkItemResult(success=True, request_count=0))
@@ -432,7 +433,7 @@ def test_run_orchestrator_honors_stop_after_current(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr("pokepoke.agent_names.initialize_agent_name", lambda **_kwargs: "AgentZero")
     monkeypatch.setattr("pokepoke.agent_context.set_agent_name", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "get_agent_name", lambda default="pokepoke": "AgentZero")
-    monkeypatch.setattr(orchestrator, "load_config", lambda: SimpleNamespace(max_parallel_agents=1))
+    monkeypatch.setattr(orchestrator, "load_config", lambda: SimpleNamespace(max_parallel_agents=1, preflight_health=MagicMock(enabled=False)))
     monkeypatch.setattr(orchestrator, "get_ready_work_items", lambda: [item])
     monkeypatch.setattr(orchestrator, "select_work_item", lambda *_args, **_kwargs: item)
     monkeypatch.setattr(orchestrator, "process_work_item", lambda *_args, **_kwargs: result)
@@ -475,7 +476,7 @@ def test_run_orchestrator_runs_beta_first(monkeypatch: pytest.MonkeyPatch, tmp_p
     monkeypatch.setattr("pokepoke.agent_names.initialize_agent_name", lambda **_kwargs: "AgentZero")
     monkeypatch.setattr("pokepoke.agent_context.set_agent_name", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "get_agent_name", lambda default="pokepoke": "AgentZero")
-    monkeypatch.setattr(orchestrator, "load_config", lambda: SimpleNamespace(max_parallel_agents=1))
+    monkeypatch.setattr(orchestrator, "load_config", lambda: SimpleNamespace(max_parallel_agents=1, preflight_health=MagicMock(enabled=False)))
     monkeypatch.setattr(orchestrator, "get_ready_work_items", lambda: [item])
     monkeypatch.setattr(orchestrator, "select_work_item", lambda *_args, **_kwargs: item)
     monkeypatch.setattr(orchestrator, "process_work_item", lambda *_args, **_kwargs: result)
