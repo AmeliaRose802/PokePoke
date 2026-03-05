@@ -105,10 +105,56 @@ def finalize_workers(
         cancelled = sum(1 for fut in list(futures.keys()) if fut.cancel())
         run_logger.log_orchestrator(f"Cancelled {cancelled} workers; timeout waiting", level="WARNING")
         timeout_occurred = True
+        # Drain orphaned futures so record_fn is called and stats are accurate
+        _drain_orphaned_futures(futures, session_stats, start_time, run_logger, record_fn)
     run_logger.log_orchestrator("Workers completed")
     kill_orphaned_copilot_processes(expected_count=0)
     terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
     return total_requests, timeout_occurred
+
+
+def _drain_orphaned_futures(
+    futures: dict[_Future, BeadsWorkItem],
+    session_stats: SessionStats,
+    start_time: float,
+    run_logger: RunLogger,
+    record_fn: Any,
+) -> None:
+    """Drain futures remaining after a timeout, recording each as a failure and unassigning."""
+    from pokepoke.parallel import unassign_with_retry
+
+    orphaned = list(futures.items())
+    futures.clear()
+    if not orphaned:
+        return
+    run_logger.log_orchestrator(
+        f"Draining {len(orphaned)} orphaned future(s) after timeout", level="WARNING",
+    )
+    for fut, item in orphaned:
+        result = WorkItemResult(success=False, request_count=0)
+        # Try to harvest an actual result if the future completed during drain
+        if fut.done():
+            try:
+                result = fut.result(timeout=0)
+                run_logger.log_orchestrator(f"Orphan {item.id} had completed result")
+            except Exception as e:
+                run_logger.log_orchestrator(
+                    f"Orphan {item.id} raised: {e}", level="ERROR",
+                )
+        try:
+            record_fn(item, result, session_stats, run_logger)
+        except Exception as exc:
+            logger.warning(f"record_fn failed for orphan {item.id}: {exc}", exc_info=True)
+            run_logger.log_orchestrator(
+                f"record_fn error for orphan {item.id}: {exc}", level="ERROR",
+            )
+        try:
+            unassign_with_retry(item.id)
+            run_logger.log_orchestrator(f"Unassigned orphan {item.id}")
+        except Exception as exc:
+            logger.warning(f"Failed to unassign orphan {item.id}: {exc}", exc_info=True)
+            run_logger.log_orchestrator(f"Unassign failed for orphan {item.id}: {exc}", level="ERROR")
+        terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
 
 
 def drain_circuit_breaker(
