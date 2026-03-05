@@ -207,7 +207,7 @@ class TestRunOrchestrator:
         mock_banner_fmt, mock_clear_banner, mock_set_banner, mock_ui,
         mock_register, mock_unregister,
     ):
-        mock_config.return_value = MagicMock(max_parallel_agents=1)
+        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
         with patch("pokepoke.beads_item_stats_backfill.backfill_from_beads_db",
                     return_value={"backfilled": 0}), patch("pokepoke.beads_item_stats_store.get_summary",
                     return_value={"total_created": 0, "total_completed": 0}):
@@ -235,7 +235,7 @@ class TestRunOrchestrator:
         mock_banner_fmt, mock_clear_banner, mock_set_banner, mock_ui,
         mock_register, mock_unregister,
     ):
-        mock_config.return_value = MagicMock(max_parallel_agents=1)
+        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
         with patch("pokepoke.beads_item_stats_backfill.backfill_from_beads_db",
                     return_value={"backfilled": 0}), patch("pokepoke.beads_item_stats_store.get_summary",
                     return_value={"total_created": 0, "total_completed": 0}):
@@ -271,7 +271,7 @@ class TestRunOrchestrator:
         mock_register, mock_unregister,
     ):
         item = _item()
-        mock_config.return_value = MagicMock(max_parallel_agents=1)
+        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
         mock_ready.return_value = [item]
         mock_select.return_value = item
         mock_process.return_value = _success_result()
@@ -314,7 +314,7 @@ class TestRunOrchestrator:
         mock_register, mock_unregister,
     ):
         item = _item()
-        mock_config.return_value = MagicMock(max_parallel_agents=1)
+        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
         mock_ready.return_value = [item]
         mock_select.return_value = item
         mock_process.return_value = _fail_result()
@@ -352,7 +352,7 @@ class TestRunOrchestrator:
         mock_register, mock_unregister,
     ):
         item = _item()
-        mock_config.return_value = MagicMock(max_parallel_agents=1)
+        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
         mock_ready.return_value = [item]
         mock_select.return_value = item
         # request_count=0 means claim failure
@@ -389,7 +389,7 @@ class TestRunOrchestrator:
         mock_banner_fmt, mock_clear_banner, mock_set_banner, mock_ui,
         mock_register, mock_unregister,
     ):
-        mock_config.return_value = MagicMock(max_parallel_agents=1)
+        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
         with patch("pokepoke.beads_item_stats_backfill.backfill_from_beads_db",
                     return_value={"backfilled": 0}), patch("pokepoke.beads_item_stats_store.get_summary",
                     return_value={"total_created": 0, "total_completed": 0}):
