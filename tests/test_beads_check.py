@@ -22,60 +22,76 @@ class TestCheckBeadsAvailable:
         captured = capsys.readouterr()
         assert "'bd' (beads) command not found" in captured.err
 
-    @patch('subprocess.run')
     @patch('pokepoke.repo_check.shutil.which')
-    def test_bd_not_initialized(self, mock_which: Mock, mock_run: Mock, capsys) -> None:
+    def test_bd_not_initialized(self, mock_which: Mock, capsys) -> None:
         """Test error when beads is not initialized in the directory."""
         mock_which.return_value = '/usr/bin/bd'
-        mock_run.return_value = Mock(returncode=1, stdout='', stderr='Not a beads repo')
 
-        result = check_beads_available()
+        with patch('pokepoke.repo_check.Path') as mock_path_cls:
+            mock_cwd = Mock()
+            mock_path_cls.cwd.return_value = mock_cwd
+            beads_dir = Mock()
+            beads_dir.is_dir.return_value = False
+            mock_cwd.__truediv__ = Mock(return_value=beads_dir)
+
+            result = check_beads_available()
 
         assert result is False
         captured = capsys.readouterr()
         assert "not a beads repository" in captured.err
 
-    @patch('subprocess.run')
     @patch('pokepoke.repo_check.shutil.which')
-    def test_bd_info_timeout(self, mock_which: Mock, mock_run: Mock, capsys) -> None:
-        """Test error when bd info command times out."""
+    def test_bd_info_timeout(self, mock_which: Mock, capsys) -> None:
+        """Test error when .beads/ directory has no marker files."""
         mock_which.return_value = '/usr/bin/bd'
-        mock_run.side_effect = subprocess.TimeoutExpired(cmd='bd', timeout=30)
 
-        result = check_beads_available()
+        with patch('pokepoke.repo_check.Path') as mock_path_cls:
+            mock_cwd = Mock()
+            mock_path_cls.cwd.return_value = mock_cwd
+            beads_dir = Mock()
+            beads_dir.is_dir.return_value = True
+            # No marker files exist
+            beads_dir.__truediv__ = Mock(return_value=Mock(exists=Mock(return_value=False)))
+            mock_cwd.__truediv__ = Mock(return_value=beads_dir)
+
+            result = check_beads_available()
 
         assert result is False
         captured = capsys.readouterr()
-        assert "timed out" in captured.err
+        assert "incomplete" in captured.err
 
-    @patch('subprocess.run')
     @patch('pokepoke.repo_check.shutil.which')
-    def test_bd_info_exception(self, mock_which: Mock, mock_run: Mock, capsys) -> None:
-        """Test error when bd info raises unexpected exception."""
+    def test_bd_info_exception(self, mock_which: Mock, tmp_path: Path) -> None:
+        """Test that .beads/ directory with empty content is rejected."""
         mock_which.return_value = '/usr/bin/bd'
-        mock_run.side_effect = OSError("Something went wrong")
 
-        result = check_beads_available()
+        # Create .beads dir but leave it empty (no marker files)
+        beads_dir = tmp_path / ".beads"
+        beads_dir.mkdir()
+
+        with patch('pokepoke.repo_check.Path') as mock_path_cls:
+            mock_path_cls.cwd.return_value = tmp_path
+
+            result = check_beads_available()
 
         assert result is False
-        captured = capsys.readouterr()
-        assert "Failed to check beads status" in captured.err
 
-    @patch('subprocess.run')
     @patch('pokepoke.repo_check.shutil.which')
-    def test_bd_available_and_initialized(self, mock_which: Mock, mock_run: Mock) -> None:
-        """Test success when bd is installed and initialized."""
+    def test_bd_available_and_initialized(self, mock_which: Mock, tmp_path: Path) -> None:
+        """Test success when bd is installed and .beads/ directory is valid."""
         mock_which.return_value = '/usr/bin/bd'
-        mock_run.return_value = Mock(returncode=0, stdout='{"version": "1.0"}')
 
-        result = check_beads_available()
+        # Create a real .beads directory with a marker file
+        beads_dir = tmp_path / ".beads"
+        beads_dir.mkdir()
+        (beads_dir / "config.yaml").write_text("version: 1")
+
+        with patch('pokepoke.repo_check.Path') as mock_path_cls:
+            mock_path_cls.cwd.return_value = tmp_path
+
+            result = check_beads_available()
 
         assert result is True
-        mock_run.assert_called_once_with(
-            ['bd', 'info', '--json'],
-            capture_output=True, text=True,
-            encoding='utf-8', errors='replace', timeout=30,
-        )
 
 
 class TestInitializeBeadsRepo:

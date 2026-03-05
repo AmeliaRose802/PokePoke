@@ -530,9 +530,9 @@ class TestAssignAndSyncItem:
 
         result = assign_and_sync_item(item_id, "my-agent")
 
-        # Should allow updating own item
+        # Item already assigned to my-agent and in_progress — early return after show
         assert result is True
-        assert mock_run.call_count == 4
+        assert mock_run.call_count == 1
 
     @patch('src.pokepoke.beads_management.subprocess.run')
     def test_assign_allows_claiming_by_username(self, mock_run: Mock) -> None:

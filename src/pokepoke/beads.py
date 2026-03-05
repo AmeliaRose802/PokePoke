@@ -42,6 +42,13 @@ from .beads_recovery import (
     get_failed_unassign_count,
 )
 
+from .multi_repo_aggregator import (
+    aggregate_ready_work_items,
+    query_repo_ready_items,
+    get_aggregated_stats,
+    RepoQueryResult,
+)
+
 __all__ = [
     # Query operations
     'get_ready_work_items',
@@ -70,4 +77,10 @@ __all__ = [
     'retry_failed_unassigns',
     'get_failed_unassign_count',
     'add_comment',
+
+    # Multi-repo aggregation
+    'aggregate_ready_work_items',
+    'query_repo_ready_items',
+    'get_aggregated_stats',
+    'RepoQueryResult',
 ]

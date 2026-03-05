@@ -182,6 +182,18 @@ class ActivityWatchdogConfig:
 
 
 @dataclass
+class RepoConfig:
+    """Configuration for an individual repository in multi-repo mode."""
+    path: str = ""
+    priority_weight: int = 1
+    enabled: bool = True
+
+    def __post_init__(self) -> None:
+        """Clamp values to valid ranges."""
+        self.priority_weight = max(1, self.priority_weight)
+
+
+@dataclass
 class ProjectConfig:
     """Top-level project configuration."""
     project_name: str = ""
@@ -200,6 +212,7 @@ class ProjectConfig:
     max_copilot_failure_retries: int = 2  # Max retries when Copilot session fails (0 = no retry)
     activity_watchdog: ActivityWatchdogConfig = field(default_factory=ActivityWatchdogConfig)
     assignment: AssignmentConfig = field(default_factory=AssignmentConfig)
+    repos: list[RepoConfig] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """Clamp values to valid ranges."""
