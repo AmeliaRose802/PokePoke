@@ -1,6 +1,9 @@
 """Tests for copilot_sdk.py module (direct SDK integration)."""
 
 import asyncio
+import contextlib
+import sys
+import time
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 
@@ -1388,6 +1391,10 @@ class TestFailResult:
 class TestActivityWatchdog:
     """Tests for _activity_watchdog."""
 
+    def teardown_method(self):
+        if sys.platform == "win32":
+            time.sleep(0.05)
+
     @pytest.mark.asyncio
     async def test_watchdog_cancellation_returns_false(self, tmp_path):
         log_file = tmp_path / "test.log"
@@ -1436,7 +1443,7 @@ class TestActivityWatchdog:
             await asyncio.sleep(0.1)
             log_file.write_text("updated")
 
-        asyncio.create_task(update_file())
+        update_task = asyncio.create_task(update_file())
         task = asyncio.create_task(
             _activity_watchdog(log_file, timeout_seconds=0.3, check_interval_seconds=0.05, abort_event=abort)
         )
@@ -1445,6 +1452,10 @@ class TestActivityWatchdog:
         task.cancel()
         result = await task
         assert result is False
+        if not update_task.done():
+            update_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await update_task
 
     @pytest.mark.asyncio
     async def test_watchdog_uses_event_activity_callback(self, tmp_path):
@@ -1460,7 +1471,7 @@ class TestActivityWatchdog:
             await asyncio.sleep(0.05)
             last_activity["value"] = loop.time()
 
-        asyncio.create_task(bump_activity())
+        bump_task = asyncio.create_task(bump_activity())
         task = asyncio.create_task(
             _activity_watchdog(
                 log_file,
@@ -1476,6 +1487,10 @@ class TestActivityWatchdog:
         task.cancel()
         result = await task
         assert result is False
+        if not bump_task.done():
+            bump_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await bump_task
 
 
 class TestBuildTokenUsageCallback:
@@ -1508,6 +1523,10 @@ class TestBuildTokenUsageCallback:
 
 class TestMaybeStartActivityWatchdog:
     """Tests for _maybe_start_activity_watchdog."""
+
+    def teardown_method(self):
+        if sys.platform == "win32":
+            time.sleep(0.05)
 
     def test_returns_none_task_when_no_logger(self):
         proj_config = MagicMock()
@@ -1543,6 +1562,10 @@ class TestMaybeStartActivityWatchdog:
 
 class TestCancelWatchdog:
     """Tests for _cancel_watchdog."""
+
+    def teardown_method(self):
+        if sys.platform == "win32":
+            time.sleep(0.05)
 
     @pytest.mark.asyncio
     async def test_cancel_none_is_noop(self):

@@ -1,6 +1,8 @@
 """Integration tests for copilot_sdk module to improve coverage."""
 
 import asyncio
+import sys
+import time
 from unittest.mock import patch, Mock
 import pytest
 
@@ -138,6 +140,10 @@ class TestFailResultIntegration:
 
 class TestActivityWatchdogIntegration:
     """Integration tests for _activity_watchdog."""
+
+    def teardown_method(self):
+        if sys.platform == "win32":
+            time.sleep(0.05)
 
     @pytest.mark.asyncio
     async def test_watchdog_detects_activity(self, tmp_path):
@@ -302,6 +308,10 @@ class TestInvokeCopilotSDKSyncIntegration:
 
 class TestCopilotSDKErrorHandling:
     """Tests for error handling in copilot_sdk module."""
+
+    def teardown_method(self):
+        if sys.platform == "win32":
+            time.sleep(0.05)
 
     @patch('pokepoke.copilot_sdk.get_config')
     @patch('pokepoke.copilot_sdk.PromptService')

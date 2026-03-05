@@ -47,20 +47,9 @@ def run_gate_agent(
     agent_id: str | None = None,
     agent_iteration: int = 1,
     parent_agent_id: str | None = None,
+    item_logger: 'ItemLogger | None' = None,
 ) -> tuple[bool, str, AgentStats | None]:
     """Run the Gate Agent to verify a fixed work item.
-
-    Args:
-        item: The work item to verify.
-        cwd: Optional working directory for the gate agent.
-        work_model: Optional model that completed the work. If provided, ensures
-                   gate agent uses a different model for objective verification.
-        handoff_context: Optional structured context from the work agent
-                        (changed files, diff stats, commit history) to inject
-                        into the gate prompt so it skips re-discovering the codebase.
-        agent_id: Optional agent ID for UI status tracking.
-        agent_iteration: Iteration number for UI status tracking.
-        parent_agent_id: Optional parent agent ID for UI status tracking.
 
     Returns:
         Tuple of (success, reason, stats).
@@ -94,7 +83,7 @@ def run_gate_agent(
                 agent_type="gate",
                 agent_prompt=final_prompt,
             )
-        result = invoke_copilot(item, prompt=final_prompt, deny_write=True, cwd=cwd, model=gate_model)
+        result = invoke_copilot(item, prompt=final_prompt, deny_write=True, cwd=cwd, model=gate_model, item_logger=item_logger)
 
     stats = parse_agent_stats(result.output) if result.output else None
 

@@ -209,7 +209,7 @@ def _apply_gate_feedback(
 
 def _log_commit_status(worktree_cwd: str) -> None:
     """Print a summary of committed/uncommitted state for the worktree."""
-    from pokepoke.git_operations import has_commits_ahead, has_uncommitted_changes
+    from pokepoke.git_operations import has_commits_ahead
     if has_uncommitted_changes(cwd=worktree_cwd):
         return
     ahead = has_commits_ahead(cwd=worktree_cwd)
@@ -294,6 +294,7 @@ def _finalize_item_result(  # noqa: C901 – inherently complex; see workflow.py
     """Handle post-loop outcome. Returns (WorkItemResult, finalized_successfully)."""
     if result.success:
         set_terminal_banner(format_work_item_banner(item.id, item.title, "Finalizing"))
+        assert worktree_path is not None, "worktree_path must be set when result is successful"
         success = finalize_work_item(item, worktree_path, parent_agent_id=base_agent_id)
         item_stats = accumulated_stats
         set_terminal_banner(format_work_item_banner(item.id, item.title, "Completed" if success else "Failed"))

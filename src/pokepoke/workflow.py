@@ -21,7 +21,7 @@ from pokepoke.config import get_config
 from pokepoke.workflow_helpers import (
     _apply_gate_feedback, _extract_agent_stats, _fail_result,
     _finalize_item_result, _log_commit_status, _log_failure,
-    _maybe_retry_copilot, _pre_loop_validate, _run_gate_check,
+    _maybe_retry_copilot,
     run_cleanup_with_timeout,
 )
 
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def process_work_item(
+def process_work_item(  # noqa: C901
     item: BeadsWorkItem,
     interactive: bool,
     timeout_hours: float = 2.0,
@@ -202,6 +202,7 @@ def process_work_item(
                         handoff_context=handoff_ctx,
                         agent_id=gate_agent_id, agent_iteration=gate_iteration,
                         parent_agent_id=base_agent_id,
+                        item_logger=item_logger,
                     )
             except Exception as e:
                 logger.warning(f"Gate agent raised exception: {e}", exc_info=True)

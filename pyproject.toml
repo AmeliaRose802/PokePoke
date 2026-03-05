@@ -41,7 +41,10 @@ norecursedirs = [
     "worktrees"
 ]
 timeout = 10
-filterwarnings = ['ignore::pytest.PytestWarning']
+filterwarnings = [
+    'ignore::pytest.PytestWarning',
+    'ignore:coroutine .* was never awaited:RuntimeWarning',
+]
 
 # Coverage settings
 [tool.coverage.run]

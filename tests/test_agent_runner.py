@@ -143,7 +143,7 @@ class TestRunGateAgent:
         assert success is True
         assert "All tests pass" in reason
         assert stats is not None
-        mock_invoke.assert_called_once_with(work_item, prompt="Gate prompt", deny_write=True, cwd=None, model=None)
+        mock_invoke.assert_called_once_with(work_item, prompt="Gate prompt", deny_write=True, cwd=None, model=None, item_logger=None)
 
     @patch('pokepoke.agent_runner.parse_agent_stats')
     @patch('pokepoke.agent_runner.invoke_copilot')
@@ -414,7 +414,8 @@ class TestRunGateAgent:
             prompt="Gate prompt",
             deny_write=True,
             cwd=None,
-            model="gpt-5.1-codex"
+            model="gpt-5.1-codex",
+            item_logger=None
         )
 
     @patch('pokepoke.agent_runner.parse_agent_stats')
