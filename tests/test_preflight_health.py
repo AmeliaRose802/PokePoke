@@ -15,8 +15,15 @@ from pokepoke.preflight_health import (
 
 
 @pytest.fixture
-def temp_repo():
+def temp_repo(monkeypatch):
     """Create a temporary git repository for testing."""
+    # Strip GIT_* env vars so git commands target the temp repo, not the
+    # host repo (pre-commit hooks set GIT_DIR / GIT_INDEX_FILE which
+    # cause 'git init' to fail with exit 128 inside xdist workers and
+    # make git status report the host repo's changes instead of the temp repo's).
+    for key in [k for k in os.environ if k.startswith('GIT_')]:
+        monkeypatch.delenv(key, raising=False)
+
     with tempfile.TemporaryDirectory() as temp_dir:
         repo_path = Path(temp_dir)
 
@@ -266,9 +273,9 @@ class TestSelfRepair:
     @pytest.mark.allow_git_repair
     @patch('subprocess.run')
     def test_repair_git_status_auto_commit_success(self, mock_run, temp_repo, health_config):
-        # Mock successful git add and commit
+        # Mock successful git add -u and commit
         mock_run.side_effect = [
-            MagicMock(returncode=0),  # git add
+            MagicMock(returncode=0),  # git add -u
             MagicMock(returncode=0),  # git commit
         ]
 
@@ -279,15 +286,20 @@ class TestSelfRepair:
 
         assert success
         assert mock_run.call_count == 2
+        # Verify targeted staging (git add -u, not git add -A)
+        add_call = mock_run.call_args_list[0]
+        assert add_call[0][0] == ['git', 'add', '-u']
 
     @pytest.mark.allow_git_repair
+    @patch('pokepoke.preflight_repair._invoke_preflight_cleanup', return_value=True)
     @patch('subprocess.run')
-    def test_repair_git_status_stash_fallback(self, mock_run, temp_repo, health_config):
-        # Mock failed commit but successful stash
+    def test_repair_git_status_cleanup_agent_on_commit_failure(
+        self, mock_run, mock_cleanup, temp_repo, health_config
+    ):
+        """When commit fails, cleanup agent is invoked instead of stashing."""
         mock_run.side_effect = [
-            MagicMock(returncode=0),  # git add
-            MagicMock(returncode=1),  # git commit fails
-            MagicMock(returncode=0),  # git stash succeeds
+            MagicMock(returncode=0),  # git add -u
+            MagicMock(returncode=1, stderr='hook failed'),  # git commit fails
         ]
 
         checker = PreflightChecker(temp_repo, health_config)
@@ -296,7 +308,28 @@ class TestSelfRepair:
         success = checker._repair_git_status(error)
 
         assert success
-        assert mock_run.call_count == 3
+        assert mock_run.call_count == 2
+        mock_cleanup.assert_called_once_with(temp_repo, 'hook failed')
+
+    @pytest.mark.allow_git_repair
+    @patch('pokepoke.preflight_repair._invoke_preflight_cleanup', return_value=False)
+    @patch('subprocess.run')
+    def test_repair_git_status_cleanup_agent_failure(
+        self, mock_run, mock_cleanup, temp_repo, health_config
+    ):
+        """When cleanup agent fails, repair returns False (never stashes)."""
+        mock_run.side_effect = [
+            MagicMock(returncode=0),  # git add -u
+            MagicMock(returncode=1, stderr='hook failed'),  # git commit fails
+        ]
+
+        checker = PreflightChecker(temp_repo, health_config)
+        error = HealthCheckError('git_status_check', 'test', ErrorSeverity.RECOVERABLE)
+
+        success = checker._repair_git_status(error)
+
+        assert not success
+        mock_cleanup.assert_called_once()
 
     def test_repair_repository_integrity_orphaned_worktrees(self, temp_repo, health_config):
         # Create orphaned worktree directories
@@ -733,6 +766,29 @@ class TestRepairEdgeCases:
         checker = PreflightChecker(temp_repo, health_config)
         error = HealthCheckError('git_status_check', 'test', ErrorSeverity.RECOVERABLE)
         success = checker._repair_git_status(error)
+        assert not success
+
+    @pytest.mark.allow_git_repair
+    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent', return_value=(True, None))
+    def test_invoke_preflight_cleanup_success(self, mock_agent, temp_repo, health_config):
+        """Test _invoke_preflight_cleanup delegates to cleanup agent."""
+        from pokepoke.preflight_repair import _invoke_preflight_cleanup
+        success = _invoke_preflight_cleanup(temp_repo, 'hook failed')
+        assert success
+        mock_agent.assert_called_once()
+        call_kwargs = mock_agent.call_args
+        # Verify synthetic work item was created with commit error context
+        item = call_kwargs[0][0]
+        assert item.id == 'preflight-repair'
+        assert 'hook failed' in item.description
+
+    @pytest.mark.allow_git_repair
+    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent',
+           side_effect=RuntimeError('agent crash'))
+    def test_invoke_preflight_cleanup_agent_exception(self, mock_agent, temp_repo, health_config):
+        """Test _invoke_preflight_cleanup when cleanup agent raises exception."""
+        from pokepoke.preflight_repair import _invoke_preflight_cleanup
+        success = _invoke_preflight_cleanup(temp_repo, 'hook failed')
         assert not success
 
     def test_repair_repository_integrity_rmtree_fails(self, temp_repo, health_config):

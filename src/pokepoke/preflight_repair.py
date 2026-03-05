@@ -20,43 +20,105 @@ logger = logging.getLogger(__name__)
 
 
 def repair_git_status(error: HealthCheckError, repo_path: Path) -> bool:
-    """Repair git status issues (dirty working directory)."""
+    """Repair git status issues (dirty working directory).
+
+    Uses targeted staging (tracked files only via ``git add -u``) and
+    attempts to commit.  If the commit fails (e.g. pre-commit hooks
+    reject it), a cleanup agent is invoked to fix the issues instead of
+    stashing — uncommitted work is **never** discarded or hidden.
+    """
     try:
-        # Try auto-commit first
-        logger.info("Attempting auto-commit of uncommitted changes")
+        logger.warning(
+            "Uncommitted changes detected in %s – attempting targeted commit",
+            repo_path,
+        )
+
+        # Stage only tracked-file changes (not untracked files / temp files)
         subprocess.run(
-            ['git', 'add', '-A'],
+            ['git', 'add', '-u'],
             capture_output=True, text=True, check=True,
-            cwd=str(repo_path), timeout=30
+            cwd=str(repo_path), timeout=30,
         )
 
         result = subprocess.run(
             ['git', 'commit', '-m', 'chore: auto-commit for pre-flight health check'],
             capture_output=True, text=True,
-            cwd=str(repo_path), timeout=60
+            cwd=str(repo_path), timeout=60,
         )
 
         if result.returncode == 0:
-            logger.info("Auto-commit successful")
+            logger.info("Auto-commit of tracked changes successful")
             return True
 
-        # Auto-commit failed, try stashing
-        logger.info("Auto-commit failed, attempting stash")
-        subprocess.run(
-            ['git', 'stash', 'push', '-m', 'pokepoke-preflight-stash'],
-            capture_output=True, text=True, check=True,
-            cwd=str(repo_path), timeout=60
+        # Commit failed – invoke cleanup agent instead of stashing
+        commit_error = result.stderr.strip() if result.stderr else "Unknown commit failure"
+        logger.warning(
+            "Auto-commit failed: %s. Invoking cleanup agent to fix issues.",
+            commit_error,
         )
-
-        logger.info("Stash successful")
-        return True
+        return _invoke_preflight_cleanup(repo_path, commit_error)
 
     except subprocess.CalledProcessError as e:
-        logger.warning(f"Git repair failed: {e.stderr or str(e)}")
+        logger.warning("Git repair failed: %s", e.stderr or str(e))
         return False
     except Exception as e:
-        logger.exception(f"Git repair failed with exception: {e}")
+        logger.exception("Git repair failed with exception: %s", e)
         return False
+
+
+def _invoke_preflight_cleanup(repo_path: Path, commit_error: str) -> bool:
+    """Invoke cleanup agent to fix commit failures during preflight repair.
+
+    Creates a synthetic work item and delegates to the existing cleanup
+    agent infrastructure so that test failures, lint errors, etc. are
+    fixed and committed properly.  Returns *False* (never raises) when
+    the cleanup agent is unavailable or fails.
+    """
+    try:
+        from pokepoke.cleanup_agents import invoke_cleanup_agent  # noqa: F811
+        from pokepoke.types import BeadsWorkItem
+    except ImportError:
+        logger.warning(
+            "Cleanup agent infrastructure not available. "
+            "Cannot auto-fix commit failures – please fix issues manually."
+        )
+        return False
+
+    cleanup_item = BeadsWorkItem(
+        id="preflight-repair",
+        title="Preflight repair: fix commit failures",
+        description=(
+            "The pre-flight health check found uncommitted changes and attempted "
+            f"to commit them, but the commit failed with:\n\n{commit_error}\n\n"
+            "Fix the issues (test failures, lint errors, etc.) and commit the changes."
+        ),
+        status="in_progress",
+        priority=0,
+        issue_type="task",
+        labels=["preflight", "automated"],
+    )
+
+    try:
+        logger.info("Invoking cleanup agent for preflight repair")
+        success, _stats = invoke_cleanup_agent(
+            cleanup_item,
+            cwd=str(repo_path),
+            wait_for_merge=False,
+        )
+    except Exception as e:
+        logger.warning("Cleanup agent raised an exception: %s", e, exc_info=True)
+        return False
+
+    if success:
+        logger.info("Cleanup agent fixed issues – preflight repair successful")
+    else:
+        logger.warning(
+            "Cleanup agent could not fix commit failures. "
+            "Uncommitted changes remain in the working directory – "
+            "please review and fix issues manually."
+        )
+
+    return success
 
 
 def repair_repository_integrity(error: HealthCheckError) -> bool:
