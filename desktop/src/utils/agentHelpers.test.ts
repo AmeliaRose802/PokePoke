@@ -51,6 +51,8 @@ describe("agentHelpers", () => {
       expect(formatModelName("claude-opus-4.6")).toBe("Claude Opus 4.6");
       expect(formatModelName("claude-sonnet-4.5")).toBe("Claude Sonnet 4.5");
       expect(formatModelName("claude-unknown")).toBe("Claude");
+      expect(formatModelName("claude-4")).toBe("Claude 4");
+      expect(formatModelName("claude-2")).toBe("Claude 2");
     });
 
     it("formats GPT models with version numbers", () => {

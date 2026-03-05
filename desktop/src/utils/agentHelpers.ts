@@ -204,7 +204,7 @@ export function formatModelName(model: string | null | undefined): string {
       result += ` ${version}`;
     } else {
       // Fallback: try to match single digit version (e.g., "claude-3")
-      const singleVersionMatch = modelStr.match(/claude-(\d+)[^\d]/);
+      const singleVersionMatch = modelStr.match(/claude-(\d+)(?:[^\d]|$)/);
       if (singleVersionMatch) {
         result += ` ${singleVersionMatch[1]}`;
       }
