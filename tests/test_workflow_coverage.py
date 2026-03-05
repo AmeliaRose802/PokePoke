@@ -672,3 +672,120 @@ class TestFinalizeItemResult:
         assert success is True
         item_logger.log_summary.assert_called_once_with(True, 2)
         run_logger.log_orchestrator.assert_called_once()
+
+    # ── Failure path: reconciliation upgrades to SUCCESS ──────────
+
+    @patch("pokepoke.workflow_helpers.terminal_ui")
+    @patch("pokepoke.workflow_helpers.reconcile_completed_item")
+    @patch("pokepoke.workflow_helpers.set_terminal_banner")
+    @patch("pokepoke.workflow_helpers.format_work_item_banner", return_value="banner")
+    def test_failure_reconciled_to_success(self, mock_banner, mock_set,
+                                           mock_reconcile, mock_tui, tmp_path):
+        """When session fails but reconciliation shows all evidence passed,
+        _finalize_item_result should upgrade the outcome to SUCCESS."""
+        mock_reconcile.return_value = (True, {
+            "beads_closed": True,
+            "commits_on_default": True,
+            "worktree_cleaned": True,
+        })
+        result = CopilotResult(work_item_id="wf-1", success=False, attempt_count=1,
+                               error="session failed")
+        run_logger = MagicMock()
+        item_logger = MagicMock()
+        wir, success = _finalize_item_result(
+            result=result,
+            item=_item(),
+            worktree_path=tmp_path,
+            selected_model="gpt-4",
+            start_time=time.time() - 10,
+            request_count=1,
+            accumulated_stats=AgentStats(input_tokens=100),
+            cleanup_agent_runs=0,
+            gate_agent_runs=0,
+            gate_success=False,
+            run_logger=run_logger,
+            item_logger=item_logger,
+            base_agent_id="agent-1",
+            run_beta_test=False,
+        )
+        assert success is True
+        assert wir.success is True
+        item_logger.log_summary.assert_called_once_with(True, 1)
+        run_logger.log_orchestrator.assert_called_once()
+
+    # ── Failure path: reconciliation says NOT reconciled ──────────
+
+    @patch("pokepoke.workflow_helpers.terminal_ui")
+    @patch("pokepoke.workflow_helpers.reconcile_completed_item")
+    @patch("pokepoke.workflow_helpers.cleanup_worktree")
+    @patch("pokepoke.workflow_helpers.set_terminal_banner")
+    @patch("pokepoke.workflow_helpers.format_work_item_banner", return_value="banner")
+    def test_failure_not_reconciled(self, mock_banner, mock_set,
+                                    mock_cleanup, mock_reconcile,
+                                    mock_tui, tmp_path):
+        """When session fails and reconciliation also says not reconciled,
+        _finalize_item_result should return failure and clean up."""
+        mock_reconcile.return_value = (False, {
+            "beads_closed": False,
+            "commits_on_default": False,
+            "worktree_cleaned": False,
+        })
+        result = CopilotResult(work_item_id="wf-1", success=False, attempt_count=1,
+                               error="session failed")
+        wir, success = _finalize_item_result(
+            result=result,
+            item=_item(),
+            worktree_path=tmp_path,
+            selected_model="gpt-4",
+            start_time=time.time() - 10,
+            request_count=1,
+            accumulated_stats=AgentStats(),
+            cleanup_agent_runs=0,
+            gate_agent_runs=0,
+            gate_success=False,
+            run_logger=None,
+            item_logger=None,
+            base_agent_id="agent-1",
+            run_beta_test=False,
+        )
+        assert success is False
+        assert wir.success is False
+        mock_cleanup.assert_called_once_with("wf-1", force=True)
+
+    # ── False-positive guard: partial evidence ≠ reconciled ──────
+
+    @patch("pokepoke.workflow_helpers.terminal_ui")
+    @patch("pokepoke.workflow_helpers.reconcile_completed_item")
+    @patch("pokepoke.workflow_helpers.cleanup_worktree")
+    @patch("pokepoke.workflow_helpers.set_terminal_banner")
+    @patch("pokepoke.workflow_helpers.format_work_item_banner", return_value="banner")
+    def test_failure_partial_evidence_not_reconciled(self, mock_banner, mock_set,
+                                                     mock_cleanup, mock_reconcile,
+                                                     mock_tui, tmp_path):
+        """Worktree cleaned + beads closed but NO merge commit should NOT reconcile.
+        This guards against false positives."""
+        mock_reconcile.return_value = (False, {
+            "beads_closed": True,
+            "commits_on_default": False,
+            "worktree_cleaned": True,
+        })
+        result = CopilotResult(work_item_id="wf-1", success=False, attempt_count=1,
+                               error="session failed")
+        wir, success = _finalize_item_result(
+            result=result,
+            item=_item(),
+            worktree_path=tmp_path,
+            selected_model="gpt-4",
+            start_time=time.time() - 10,
+            request_count=1,
+            accumulated_stats=AgentStats(),
+            cleanup_agent_runs=0,
+            gate_agent_runs=0,
+            gate_success=False,
+            run_logger=None,
+            item_logger=None,
+            base_agent_id="agent-1",
+            run_beta_test=False,
+        )
+        assert success is False
+        assert wir.success is False
