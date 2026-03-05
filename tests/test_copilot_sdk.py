@@ -1164,8 +1164,9 @@ class TestInvokeCopilotSDKAsync:
         assert result.success
 
     @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.sdk_helpers.is_shutting_down', return_value=True)
     @patch('pokepoke.copilot_sdk.is_shutting_down', return_value=True)
-    async def test_invoke_copilot_sdk_shutdown_during_wait(self, mock_shutting_down, mock_client_class, sample_work_item):
+    async def test_invoke_copilot_sdk_shutdown_during_wait(self, mock_shutting_down, mock_shutting_down_helpers, mock_client_class, sample_work_item):
         """Test SDK handles shutdown signal during wait loop."""
         from pokepoke.copilot_sdk import invoke_copilot_sdk
 
@@ -1496,13 +1497,13 @@ class TestActivityWatchdog:
 class TestBuildTokenUsageCallback:
     """Tests for _build_token_usage_callback."""
 
-    @patch('pokepoke.copilot_sdk.get_context_window', return_value=200000)
+    @patch('pokepoke.sdk_helpers.get_context_window', return_value=200000)
     def test_returns_callable(self, _mock_ctx):
         callback = _build_token_usage_callback("claude-sonnet-4")
         assert callable(callback)
 
-    @patch('pokepoke.copilot_sdk.terminal_ui')
-    @patch('pokepoke.copilot_sdk.get_context_window', return_value=200000)
+    @patch('pokepoke.sdk_helpers.terminal_ui')
+    @patch('pokepoke.sdk_helpers.get_context_window', return_value=200000)
     def test_callback_pushes_tokens_when_agent_id_set(self, _mock_ctx, mock_ui):
         callback = _build_token_usage_callback("claude-sonnet-4")
         mock_thread = MagicMock()
@@ -1511,8 +1512,8 @@ class TestBuildTokenUsageCallback:
             callback(100, 50)
         mock_ui.ui.push_agent_tokens.assert_called_once_with("agent-1", 100, 50, 200000)
 
-    @patch('pokepoke.copilot_sdk.terminal_ui')
-    @patch('pokepoke.copilot_sdk.get_context_window', return_value=200000)
+    @patch('pokepoke.sdk_helpers.terminal_ui')
+    @patch('pokepoke.sdk_helpers.get_context_window', return_value=200000)
     def test_callback_noop_when_no_agent_id(self, _mock_ctx, mock_ui):
         callback = _build_token_usage_callback("claude-sonnet-4")
         mock_thread = MagicMock(spec=[])  # no agent_id attribute
