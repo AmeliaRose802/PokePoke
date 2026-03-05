@@ -43,7 +43,7 @@ If modifying the MCP server or using tools:
 3. Update documentation if needed
 4. Ensure all quality gates pass (linting, type checking, etc.)
 5. Commit changes with descriptive conventional commit messages
-6. **Merge your worktree** - Push commits with `git push`, return to main repo, and merge
+6. **Push your commits** - Run `git push`; the orchestrator handles merging afterward
 7. **Close the beads item** - Run `bd close {{id}} --reason "<completion reason>"`, then `bd sync` to sync beads changes
 8. DO NOT bypass pre-commit hooks with --no-verify
 9. DO NOT modify quality gate scripts in .githooks/
@@ -56,7 +56,7 @@ If modifying the MCP server or using tools:
 - The orchestrator will verify closure and handle it if you miss this step
 
 Work independently and complete the task. When finished:
-1. Merge your worktree back to main branch
+1. Push your commits so the orchestrator can merge
 2. Close the beads item with an appropriate reason
 3. Report:
    [OK] What was implemented
