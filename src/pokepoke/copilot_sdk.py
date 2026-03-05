@@ -127,6 +127,96 @@ def _build_copilot_result(
     )
 
 
+def _create_sdk_client(cwd: str | None) -> Any:
+    """Create and configure a CopilotClient instance."""
+    proj_config = get_config()
+    client_opts: dict[str, Any] = {
+        "cli_path": proj_config.ai_backend.copilot_cli_path,
+        "log_level": "info",
+        "env": {**os.environ, "PYTHONIOENCODING": "utf-8:replace"},
+    }
+    if cwd:
+        client_opts["cwd"] = cwd
+    if CopilotClient is None:
+        raise ImportError(
+            "The 'copilot' SDK package is required but not installed. "
+            "Install it or use a different AI backend."
+        )
+    return CopilotClient(client_opts)  # type: ignore[arg-type]
+
+
+def _build_session_config(
+    model: str, deny_write: bool,
+) -> dict[str, Any]:
+    """Build the SDK session configuration dict."""
+    config: dict[str, Any] = {"model": model, "streaming": True}
+    # Auto-approve all tool permission requests.  In autonomous/server mode
+    # there is no human to click "Allow", so without this callback the CLI
+    # silently returns empty results for file-access tools.
+    config["on_permission_request"] = lambda _req, _ctx: {"kind": "approved"}
+    if deny_write:
+        config["excluded_tools"] = ["write", "edit"]
+    return config
+
+
+def _check_early_exit(
+    work_item_id: str,
+    timed_out: bool,
+    interrupted: bool,
+    activity_timeout: bool,
+    max_timeout: float,
+    proj_config: Any,
+) -> CopilotResult | None:
+    """Return a failure result if the session ended abnormally, else None."""
+    if activity_timeout:
+        return _fail_result(work_item_id, f"Activity timeout: no output for {proj_config.activity_watchdog.timeout_seconds}s")
+    if timed_out:
+        return _fail_result(work_item_id, f"SDK timeout after {max_timeout}s")
+    if interrupted:
+        error = "Session aborted due to application shutdown" if is_shutting_down() else "Interrupted by user"
+        return _fail_result(work_item_id, error)
+    return None
+
+
+async def _await_completion(
+    session: Any, client: Any, done: asyncio.Event,
+    watchdog_abort: asyncio.Event, max_timeout: float,
+) -> str | None:
+    """Poll until the session finishes or an abort condition is met.
+
+    Returns ``None`` on normal completion, or a reason string
+    (``"shutdown"``, ``"watchdog"``, ``"timeout"``) on abort.
+    """
+    deadline = asyncio.get_event_loop().time() + max_timeout
+    while not done.is_set():
+        if is_shutting_down():
+            print("\n[SDK] Shutdown requested - aborting session...")
+            await session.abort()
+            return "shutdown"
+        if watchdog_abort.is_set():
+            print("\n[SDK] Activity watchdog triggered - aborting session...")
+            await session.abort()
+            return "watchdog"
+        try:
+            client_state = client.get_state()
+            if client_state in ("disconnected", "error"):
+                print(f"\n[SDK] Client state is '{client_state}' - process has exited, forcing completion")
+                done.set()
+                break
+        except Exception:
+            pass
+        remaining = deadline - asyncio.get_event_loop().time()
+        if remaining <= 0:
+            print(f"\n[SDK] TIMEOUT after {max_timeout}s")
+            await session.abort()
+            return "timeout"
+        try:
+            await asyncio.wait_for(done.wait(), timeout=min(1.0, remaining))
+        except TimeoutError:
+            continue
+    return None
+
+
 async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     work_item: BeadsWorkItem,
     prompt: str | None = None,
@@ -145,32 +235,14 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     current_model = model or DEFAULT_MODEL
     watchdog_task: asyncio.Task[bool] | None = None  # Initialize early for finally block
 
-    # Pass PYTHONIOENCODING via subprocess env (thread-safe, no global os.environ mutation)
-    proj_config = get_config()
-    client_opts: dict[str, Any] = {
-        "cli_path": proj_config.ai_backend.copilot_cli_path,
-        "log_level": "info",
-        "env": {**os.environ, "PYTHONIOENCODING": "utf-8:replace"},
-    }
-    if cwd:
-        client_opts["cwd"] = cwd
-    if CopilotClient is None:
-        raise ImportError(
-            "The 'copilot' SDK package is required but not installed. "
-            "Install it or use a different AI backend."
-        )
-    client = CopilotClient(client_opts)  # type: ignore[arg-type]
+    client = _create_sdk_client(cwd)
 
     try:
         print("[SDK] Starting Copilot client...")
         await client.start()
 
-        session_config = {"model": current_model, "streaming": True}
+        session_config = _build_session_config(current_model, deny_write)
         print(f"[SDK] Using model: {current_model}")
-
-        # Add tool restrictions if needed
-        if deny_write:
-            session_config["excluded_tools"] = ["write", "edit"]
 
         session = await client.create_session(session_config)  # type: ignore[arg-type]
         print(f"[SDK] Session created: {session.session_id}\n")
@@ -196,6 +268,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         total_api_duration = 0.0
 
         # Setup activity watchdog
+        proj_config = get_config()
         watchdog_task, watchdog_abort = _maybe_start_activity_watchdog(
             item_logger,
             proj_config,
@@ -209,38 +282,18 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             attempt_start = asyncio.get_event_loop().time()
             try:
                 await session.send({"prompt": final_prompt})
-                deadline = asyncio.get_event_loop().time() + max_timeout
-                while not done.is_set():
-                    if is_shutting_down():
-                        print("\n[SDK] Shutdown requested - aborting session...")
-                        await session.abort()
-                        interrupted = True
-                        return False
-                    if watchdog_abort.is_set():
-                        print("\n[SDK] Activity watchdog triggered - aborting session...")
-                        await session.abort()
-                        activity_timeout = True
-                        return False
-                    # Defense-in-depth: detect dead Copilot process even if
-                    # session.idle events are never emitted.
-                    try:
-                        client_state = client.get_state()
-                        if client_state in ("disconnected", "error"):
-                            print(f"\n[SDK] Client state is '{client_state}' - process has exited, forcing completion")
-                            done.set()
-                            break
-                    except Exception:
-                        pass  # get_state() should never fail, but don't let it crash the loop
-                    remaining = deadline - asyncio.get_event_loop().time()
-                    if remaining <= 0:
-                        print(f"\n[SDK] TIMEOUT after {max_timeout}s")
-                        await session.abort()
-                        timed_out = True
-                        return False
-                    try:
-                        await asyncio.wait_for(done.wait(), timeout=min(1.0, remaining))
-                    except TimeoutError:
-                        continue
+                abort_reason = await _await_completion(
+                    session, client, done, watchdog_abort, max_timeout,
+                )
+                if abort_reason == "shutdown":
+                    interrupted = True
+                    return False
+                if abort_reason == "watchdog":
+                    activity_timeout = True
+                    return False
+                if abort_reason == "timeout":
+                    timed_out = True
+                    return False
             except KeyboardInterrupt:
                 print("\n\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")
                 try:
@@ -277,13 +330,12 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                 await send_with_retry()
 
         # Handle timeout/interrupt cases
-        if activity_timeout:
-            return _fail_result(work_item.id, f"Activity timeout: no output for {proj_config.activity_watchdog.timeout_seconds}s")
-        if timed_out:
-            return _fail_result(work_item.id, f"SDK timeout after {max_timeout}s")
-        if interrupted:
-            error = "Session aborted due to application shutdown" if is_shutting_down() else "Interrupted by user"
-            return _fail_result(work_item.id, error)
+        early = _check_early_exit(
+            work_item.id, timed_out, interrupted, activity_timeout,
+            max_timeout, proj_config,
+        )
+        if early is not None:
+            return early
 
         await session.destroy()
         return _build_copilot_result(

@@ -1,27 +1,39 @@
 """Parallel orchestrator loop for running multiple work items concurrently."""
 
 import concurrent.futures
-import contextlib
 import logging
 import threading
 import time
 from typing import Any
 
 from pokepoke.parallel_runtime import clear_runtime_parallel_limits, compute_effective_max_agents, set_runtime_parallel_limits
-from pokepoke.process_utils import apply_memory_backpressure, kill_orphaned_copilot_processes
+from pokepoke.process_utils import kill_orphaned_copilot_processes  # noqa: F401
 
-from pokepoke.agent_context import get_agent_name, set_agent_name, clear_agent_name
-from pokepoke.beads import get_ready_work_items, is_item_claimable, assign_and_sync_item, unassign_with_retry
+from pokepoke.agent_context import set_agent_name, clear_agent_name
+from pokepoke.beads import get_ready_work_items, is_item_claimable, assign_and_sync_item, unassign_with_retry  # noqa: F401
 from pokepoke.types import BeadsWorkItem, SessionStats, WorkItemResult
 from pokepoke.workflow import process_work_item
-from pokepoke.work_item_selection import select_multiple_items
+from pokepoke.work_item_selection import select_multiple_items  # noqa: F401
 from pokepoke.logging_utils import RunLogger
 from pokepoke import terminal_ui
-from pokepoke.repo_check import check_and_commit_main_repo
-from pokepoke.shutdown import is_shutting_down, set_executor, should_stop_after_current, cancel_stop_after_current
+from pokepoke.repo_check import check_and_commit_main_repo  # noqa: F401
+from pokepoke.shutdown import is_shutting_down, set_executor, should_stop_after_current, cancel_stop_after_current  # noqa: F401
+
+# Re-exported for test monkey-patching via parallel_support late imports
+__all__ = [
+    "get_ready_work_items", "is_item_claimable", "assign_and_sync_item",
+    "unassign_with_retry", "select_multiple_items", "check_and_commit_main_repo",
+    "should_stop_after_current", "cancel_stop_after_current",
+]
+
 from pokepoke.parallel_support import (
     finalize_workers as _finalize_workers,
-    handle_preflight_checks as _handle_preflight_checks,
+    drain_circuit_breaker as _drain_circuit_breaker,
+    dispatch_items as _dispatch_items,
+    run_preflight_and_repo_checks as _run_preflight_and_repo_checks,
+    check_loop_exit as _check_loop_exit,
+    update_circuit_breaker as _update_circuit_breaker,
+    compute_slots as _compute_slots,
 )
 
 logger = logging.getLogger(__name__)
@@ -220,33 +232,29 @@ def run_parallel_loop(
     consecutive_failures = 0
     consecutive_preflight_failures = 0
 
+    circuit_breaker_tripped = False
+
     try:
         while not is_shutting_down():
-            run_logger.log_orchestrator("Running pre-flight health checks")
-            should_continue, is_critical = _handle_preflight_checks(main_repo_path, run_logger)
-            if not should_continue:
-                if is_critical:
-                    consecutive_preflight_failures += 1
-                    if consecutive_preflight_failures >= _MAX_CONSECUTIVE_PREFLIGHT_FAILURES:
-                        run_logger.log_orchestrator(f"Shutting down after {consecutive_preflight_failures} preflight failures", level="ERROR")
-                        exit_code = 1
-                        break
+            if circuit_breaker_tripped:
+                if not futures:
+                    run_logger.log_orchestrator("Circuit breaker: all remaining agents finished \u2014 exiting")
+                    exit_code = 1
+                    break
+                total_requests = _drain_circuit_breaker(
+                    futures, failed_claim_ids, total_requests,
+                    session_stats, run_logger, record_fn, _collect_done_futures, mode_name,
+                )
+                continue
+
+            ok, consecutive_preflight_failures, ready_items = _run_preflight_and_repo_checks(
+                main_repo_path, run_logger, consecutive_preflight_failures,
+                _MAX_CONSECUTIVE_PREFLIGHT_FAILURES,
+                check_and_commit_main_repo, get_ready_work_items,
+            )
+            if not ok:
                 exit_code = 1
                 break
-            consecutive_preflight_failures = 0
-
-            run_logger.log_orchestrator("Checking main repository status")
-            if not check_and_commit_main_repo(main_repo_path, run_logger):
-                run_logger.log_orchestrator("Main repo check failed", level="ERROR")
-                exit_code = 1
-                break
-
-            run_logger.log_orchestrator("Fetching ready work from beads")
-            try:
-                ready_items = get_ready_work_items()
-            except Exception as e:
-                run_logger.log_orchestrator(f"Failed to fetch ready items: {e}", level="ERROR")
-                ready_items = []
 
             total_requests, any_success, batch_successes, batch_failures = _collect_done_futures(
                 futures, failed_claim_ids, total_requests,
@@ -256,33 +264,17 @@ def run_parallel_loop(
 
             has_success = has_success or any_success
 
-            # Circuit breaker: track consecutive failure *rounds* (not items).
-            # Counting per-item would trip the breaker after just two rounds
-            # of all-agents-fail when running 5+ agents in parallel.
-            if batch_failures > 0 and batch_successes == 0:
-                consecutive_failures += 1
-            elif batch_successes > 0:
-                consecutive_failures = 0
-
-            if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
-                run_logger.log_orchestrator(f"Circuit breaker: {consecutive_failures} consecutive failures", level="ERROR")
-                if not futures:
-                    exit_code = 1
-                    break
+            consecutive_failures, circuit_breaker_tripped = _update_circuit_breaker(
+                batch_successes, batch_failures, consecutive_failures,
+                _MAX_CONSECUTIVE_FAILURES, futures, run_logger,
+            )
+            if circuit_breaker_tripped and not futures:
+                exit_code = 1
+                break
 
             terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
 
-            current_active = {i.id for i in futures.values()}
-            current_max = get_effective_max_agents()
-            slots = current_max - len(futures)
-
-            # Memory-pressure backpressure: reduce slots when system RAM is low
-            slots, avail_mb = apply_memory_backpressure(slots)
-            if avail_mb > 0 and slots == 0 and current_max - len(futures) > 0:
-                run_logger.log_orchestrator(f"Memory low ({avail_mb}MB) — blocking agents", level="WARNING")
-            elif avail_mb > 0 and slots < current_max - len(futures):
-                run_logger.log_orchestrator(f"Memory pressure ({avail_mb}MB) — {slots} slot(s)", level="WARNING")
-            run_logger.log_orchestrator(f"Lifecycle: active={len(futures)} max={current_max} slots={slots} mem={avail_mb}MB")
+            current_active, slots, _avail_mb = _compute_slots(futures, run_logger)
 
             # Periodically kill orphaned Copilot CLI processes that outlived their agent
             kill_orphaned_copilot_processes(expected_count=len(futures))
@@ -290,88 +282,27 @@ def run_parallel_loop(
             if futures or ready_items:
                 idle_sleep = _IDLE_BASE_DELAY
 
-            if (
-                slots > 0
-                and not should_stop_after_current()
-                and (continuous or not has_success)
-                and consecutive_failures < _MAX_CONSECUTIVE_FAILURES
-            ):
-                selected_items = select_multiple_items(
-                    ready_items, count=slots,
-                    skip_ids=failed_claim_ids, claimed_ids=current_active,
-                )
-                if selected_items:
-                    run_logger.log_orchestrator(f"Replenishing {len(selected_items)} of {slots} open slot(s)")
-                for item in selected_items:
-                    if not is_item_claimable(item.id):
-                        run_logger.log_orchestrator(f"Skipping {item.id} - already claimed by another agent")
-                        continue
+            _worker_counter = _dispatch_items(
+                ready_items, slots, continuous, has_success,
+                consecutive_failures, _MAX_CONSECUTIVE_FAILURES,
+                failed_claim_ids, current_active,
+                futures, semaphore, executor, run_logger, _worker_counter,
+                _build_worker_name, _parallel_process_item,
+            )
 
-                    _worker_counter += 1
-                    base_name = get_agent_name(default="pokepoke")
-                    worker_name = _build_worker_name(base_name, item.id, _worker_counter)
-
-                    # IMPORTANT: Claim (bd update + sync) in the orchestrator thread
-                    # to avoid concurrent SQLite writes from multiple workers.
-                    if not assign_and_sync_item(item.id, agent_name=worker_name):
-                        run_logger.log_orchestrator(f"Claim failed {item.id} (worker: {worker_name})", level="WARNING")
-                        failed_claim_ids.add(item.id)
-                        continue
-
-                    run_logger.log_orchestrator(f"Submitting item: {item.id} - {item.title} (worker: {worker_name})")
-                    semaphore.acquire()
-                    try:
-                        fut = executor.submit(_parallel_process_item, item, run_logger, semaphore, worker_name)
-                    except Exception as e:
-                        logger.warning(f"Failed to submit work item {item.id} to executor: {e}")
-                        semaphore.release()
-                        # Best-effort: return item to queue since no worker will run it.
-                        with contextlib.suppress(Exception):
-                            unassign_with_retry(item.id)
-                        raise
-                    futures[fut] = item
-
-            if should_stop_after_current() and not futures:
-                cancel_stop_after_current()
-                terminal_ui.ui.stop_and_capture()
-                run_logger.log_orchestrator("Stop after current item requested - exiting")
-                finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
-                finalized = True
-                exit_code = 0
-                break
-
-            if not continuous and not futures and total_requests > 0:
-                terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
-                terminal_ui.ui.stop_and_capture()
-                finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
-                finalized = True
-                exit_code = 0 if has_success else 1
-                break
-
-            if not futures and not ready_items:
-                run_logger.log_orchestrator("No ready items - double-checking beads")
-                try:
-                    final_check = get_ready_work_items()
-                    if final_check:
-                        run_logger.log_orchestrator(f"Found {len(final_check)} items on re-check")
-                        idle_sleep = _IDLE_BASE_DELAY
-                        continue  # Go back to main loop to process these items
-                except Exception as e:
-                    run_logger.log_orchestrator(f"Final beads check failed: {e}", level="WARNING")
-
-                if continuous:
-                    run_logger.log_orchestrator(f"Continuous: sleeping {idle_sleep:.1f}s (no items)")
-                    terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", "Waiting for work...")
-                    time.sleep(idle_sleep)
-                    idle_sleep = min(_IDLE_MAX_DELAY, idle_sleep * 2)
-                    continue
-
-                terminal_ui.ui.stop_and_capture()
-                run_logger.log_orchestrator("No work items available - exiting")
-                finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
-                finalized = True
-                exit_code = 0
-                break
+            action = _check_loop_exit(
+                futures, ready_items, continuous, has_success,
+                total_requests, items_completed, session_stats,
+                start_time, idle_sleep, mode_name,
+                run_logger, finalize_fn, get_ready_work_items,
+            )
+            if action is not None:
+                if action.startswith("break"):
+                    finalized = True
+                    exit_code = 0 if action != "break-done" or has_success else 1
+                    break
+                idle_sleep = _IDLE_BASE_DELAY if action == "recheck" else min(_IDLE_MAX_DELAY, idle_sleep * 2)
+                continue
 
             terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", f"{len(futures)} agents active")
             for _ in range(10):
