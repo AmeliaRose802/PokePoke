@@ -93,6 +93,31 @@ def _mock_cleanup_lock_global(monkeypatch):
     monkeypatch.setattr("pokepoke.worktree_finalization.merge_lock", lambda: nullcontext())
 
 
+@pytest.fixture(autouse=True)
+def _block_real_git_repair(request, monkeypatch):
+    """CRITICAL: Prevent preflight/repo_check from running real git add/commit/stash.
+
+    Without this guard, any test that triggers preflight self-repair will
+    run real 'git add -A' + 'git commit' against the host repo, silently
+    auto-committing (and thus destroying) unrelated staged/unstaged work.
+
+    Tests that explicitly test repair functions can opt out with:
+        @pytest.mark.allow_git_repair
+    """
+    if request.node.get_closest_marker("allow_git_repair"):
+        yield
+        return
+    monkeypatch.setattr(
+        "pokepoke.preflight_repair.repair_git_status",
+        lambda error, repo_path: False,
+    )
+    monkeypatch.setattr(
+        "pokepoke.preflight_health.repair_git_status",
+        lambda error, repo_path: False,
+    )
+    yield
+
+
 @pytest.fixture
 def sample_work_item() -> BeadsWorkItem:
     """Create a sample work item for testing."""

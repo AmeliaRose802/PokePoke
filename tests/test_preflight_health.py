@@ -263,6 +263,7 @@ class TestPreflightChecker:
 class TestSelfRepair:
     """Test self-repair functionality."""
 
+    @pytest.mark.allow_git_repair
     @patch('subprocess.run')
     def test_repair_git_status_auto_commit_success(self, mock_run, temp_repo, health_config):
         # Mock successful git add and commit
@@ -279,6 +280,7 @@ class TestSelfRepair:
         assert success
         assert mock_run.call_count == 2
 
+    @pytest.mark.allow_git_repair
     @patch('subprocess.run')
     def test_repair_git_status_stash_fallback(self, mock_run, temp_repo, health_config):
         # Mock failed commit but successful stash
@@ -632,6 +634,7 @@ class TestRepairEdgeCases:
         success = checker._repair_lock_availability(error)
         assert success  # Already gone = success
 
+    @pytest.mark.allow_git_repair
     @patch('subprocess.run')
     def test_repair_git_status_called_process_error(self, mock_run, temp_repo, health_config):
         """Test git status repair when subprocess raises CalledProcessError."""
@@ -722,6 +725,7 @@ class TestRepairEdgeCases:
             success = checker._repair_lock_availability(error)
         assert not success
 
+    @pytest.mark.allow_git_repair
     @patch('subprocess.run')
     def test_repair_git_status_generic_exception(self, mock_run, temp_repo, health_config):
         """Test git status repair when a generic exception occurs."""
