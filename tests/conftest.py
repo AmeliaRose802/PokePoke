@@ -1,4 +1,5 @@
 """Test configuration for PokePoke tests."""
+import contextlib
 import sys
 import os
 import importlib.util
@@ -12,14 +13,38 @@ from pathlib import Path
 # before the cleanup that triggers these warnings.
 if sys.platform == "win32":
     import _pytest.pathlib
+    import _pytest.tmpdir
     _original_rm_rf = _pytest.pathlib.rm_rf
 
     def _quiet_rm_rf(path):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            _original_rm_rf(path)
+            with contextlib.suppress(PermissionError, OSError):
+                _original_rm_rf(path)
 
     _pytest.pathlib.rm_rf = _quiet_rm_rf
+    _pytest.tmpdir.rm_rf = _quiet_rm_rf
+
+    # Also patch getbasetemp to tolerate pre-existing dirs that rm_rf
+    # couldn't remove (stale xdist worker handles on Windows).
+    _orig_getbasetemp = _pytest.tmpdir.TempPathFactory.getbasetemp
+
+    def _resilient_getbasetemp(self):
+        try:
+            return _orig_getbasetemp(self)
+        except (FileExistsError, OSError):
+            # basetemp dir survived rm_rf due to locked handles.
+            # Fall back: reuse the existing dir.
+            if self._basetemp is not None:
+                return self._basetemp
+            basetemp = self._given_basetemp or Path(os.path.join(
+                __import__("tempfile").gettempdir(), "pytest-fallback"))
+            basetemp = Path(basetemp).resolve()
+            basetemp.mkdir(mode=0o700, exist_ok=True)
+            self._basetemp = basetemp
+            return basetemp
+
+    _pytest.tmpdir.TempPathFactory.getbasetemp = _resilient_getbasetemp
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SRC_PATH = PROJECT_ROOT / "src"

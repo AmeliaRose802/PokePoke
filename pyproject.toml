@@ -10,7 +10,7 @@ authors = [{name = "Amelia Payne"}]
 requires-python = ">=3.12"
 
 [project.scripts]
-pokepoke = "pokepoke.orchestrator:main"
+pokepoke = "pokepoke.__main__:main"
 pokepoke-init = "pokepoke.init:main"
 
 [tool.setuptools.packages.find]

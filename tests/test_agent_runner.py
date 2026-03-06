@@ -968,7 +968,7 @@ class TestRunWorktreeAgent:
         mock_cleanup.assert_not_called()
 
     @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
-    @patch('pokepoke.git_operations.is_merge_in_progress')
+    @patch('pokepoke.merge_conflict.is_merge_in_progress')
     @patch('pokepoke.agent_runner.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.agent_runner.cleanup_worktree')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
@@ -1029,8 +1029,8 @@ class TestRunWorktreeAgent:
         assert stats is not None
 
     @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
-    @patch('pokepoke.git_operations.abort_merge')
-    @patch('pokepoke.git_operations.is_merge_in_progress')
+    @patch('pokepoke.merge_conflict.abort_merge')
+    @patch('pokepoke.merge_conflict.is_merge_in_progress')
     @patch('pokepoke.agent_runner.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.agent_runner.cleanup_worktree')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')

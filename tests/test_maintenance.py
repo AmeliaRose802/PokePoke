@@ -4,7 +4,8 @@ import pytest
 from unittest.mock import Mock, patch
 from pokepoke.types import AgentStats, SessionStats
 from pokepoke.config import MaintenanceConfig, MaintenanceAgentConfig, ProjectConfig
-from pokepoke.maintenance import aggregate_stats, run_periodic_maintenance, _run_special_agent
+from pokepoke.maintenance import aggregate_stats, _run_special_agent
+from pokepoke.maintenance_scheduler import run_periodic_maintenance
 
 
 @pytest.fixture(autouse=True)

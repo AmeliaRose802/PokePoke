@@ -13,12 +13,6 @@ STATE_FILE = Path(".pokepoke") / "maintenance_state.json"
 class MaintenanceState:
     """Persistent state for maintenance tracking."""
     total_items_completed: int = 0
-    # Track when agents last ran (by item count)
-    last_janitor_run: int = 0
-    last_tech_debt_run: int = 0
-    last_backlog_run: int = 0
-    last_beta_run: int = 0
-    last_code_review_run: int = 0
 
 def load_state() -> MaintenanceState:
     """Load maintenance state from disk."""

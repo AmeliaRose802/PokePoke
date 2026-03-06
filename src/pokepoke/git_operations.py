@@ -7,19 +7,10 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Re-export merge conflict utilities for backward compatibility
-from .merge_conflict import (  # noqa: E402
-    is_merge_in_progress,
-    get_unmerged_files,
-    abort_merge,
-    get_merge_conflict_details,
-)
-
 from .git_helpers import restore_beads_stash, _run_git_status_with_retry  # noqa: E402
 
 __all__ = [
-    'is_merge_in_progress', 'get_unmerged_files', 'abort_merge',
-    'get_merge_conflict_details', 'has_uncommitted_changes',
+    'has_uncommitted_changes',
     'execute_merge_sequence', 'check_main_repo_ready_for_merge',
     'categorize_git_changes', 'get_status_porcelain_and_changes',
     'build_handoff_context',
@@ -328,6 +319,7 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, 
         return True, "", []
     except subprocess.CalledProcessError as e:
         # Check if this is a merge conflict
+        from .merge_conflict import get_unmerged_files, is_merge_in_progress
         unmerged = get_unmerged_files()
         is_merging = is_merge_in_progress()
 

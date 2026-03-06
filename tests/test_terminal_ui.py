@@ -69,8 +69,8 @@ class TestSetTerminalBanner:
 
     @pytest.mark.real_terminal_banner
     def test_clear_banner_windows(self):
-        """Test clearing banner on Windows platform."""
-        with patch('sys.platform', 'win32'), patch('ctypes.windll.kernel32.SetConsoleTitleW') as mock_title:
+        """Test clearing banner delegates to set_terminal_banner with 'PokePoke'."""
+        with patch('pokepoke.terminal_ui.set_terminal_banner') as mock_set:
             clear_terminal_banner()
-            mock_title.assert_called_with("PokePoke")
+            mock_set.assert_called_with("PokePoke")
 

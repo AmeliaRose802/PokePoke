@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
-from pokepoke.copilot import invoke_copilot
+from pokepoke.ai_backends import invoke_copilot
 from pokepoke.git_operations import get_default_branch
 from pokepoke.types import BeadsWorkItem, AgentStats
 from pokepoke.stats import parse_agent_stats

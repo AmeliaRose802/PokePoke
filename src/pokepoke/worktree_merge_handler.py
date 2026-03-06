@@ -76,7 +76,7 @@ def handle_worktree_merge(
         return False, False
 
 
-def perform_worktree_merge(
+def perform_worktree_merge(  # noqa: C901
     item_id: str,
     item: BeadsWorkItem,
     worktree_path: Path,
@@ -99,6 +99,8 @@ def perform_worktree_merge(
     """
     from pokepoke.git_operations import (
         check_main_repo_ready_for_merge,
+    )
+    from pokepoke.merge_conflict import (
         is_merge_in_progress,
         get_unmerged_files,
         abort_merge,

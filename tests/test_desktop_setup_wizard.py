@@ -30,42 +30,44 @@ def test_setup_complete_event_roundtrip() -> None:
     assert api.wait_for_setup_complete(0.0) is True
 
 
-def test_create_default_config_writes_yaml(tmp_path: Path) -> None:
+def test_create_default_config_writes_yaml(tmp_path: Path, monkeypatch) -> None:
     from pokepoke.desktop_api import DesktopAPI
 
     api = DesktopAPI()
 
-    with _chdir(tmp_path):
-        result = api.create_default_config(
-            {
-                "project_name": "ExampleProject",
-                "default_model": "claude-opus-4.6",
-                "fallback_model": "claude-sonnet-4.5",
-                "max_parallel_agents": 2,
-                "default_branch": "main",
-            }
-        )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("pokepoke.project_utils.resolve_git_toplevel", lambda _: tmp_path)
+    result = api.create_default_config(
+        {
+            "project_name": "ExampleProject",
+            "default_model": "claude-opus-4.6",
+            "fallback_model": "claude-sonnet-4.5",
+            "max_parallel_agents": 2,
+            "default_branch": "main",
+        }
+    )
 
-        assert result["saved"] is True
-        config_path = tmp_path / ".pokepoke" / "config.yaml"
-        assert config_path.exists()
-        text = config_path.read_text(encoding="utf-8")
-        assert "project_name: ExampleProject" in text
-        assert "max_parallel_agents: 2" in text
-        assert "default: claude-opus-4.6" in text
+    assert result["saved"] is True
+    config_path = tmp_path / ".pokepoke" / "config.yaml"
+    assert config_path.exists()
+    text = config_path.read_text(encoding="utf-8")
+    assert "project_name: ExampleProject" in text
+    assert "max_parallel_agents: 2" in text
+    assert "default: claude-opus-4.6" in text
 
 
-def test_scaffold_prompt_overrides_copies_beads_item(tmp_path: Path) -> None:
+def test_scaffold_prompt_overrides_copies_beads_item(tmp_path: Path, monkeypatch) -> None:
     from pokepoke.desktop_api import DesktopAPI
 
     api = DesktopAPI()
 
-    with _chdir(tmp_path):
-        result = api.scaffold_prompt_overrides(["beads-item"], False)
-        assert result["success"] is True
-        written = result.get("written") or []
-        assert any(p.endswith("beads-item.md") for p in written)
-        assert (tmp_path / ".pokepoke" / "prompts" / "beads-item.md").exists()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("pokepoke.project_utils.resolve_git_toplevel", lambda _: tmp_path)
+    result = api.scaffold_prompt_overrides(["beads-item"], False)
+    assert result["success"] is True
+    written = result.get("written") or []
+    assert any(p.endswith("beads-item.md") for p in written)
+    assert (tmp_path / ".pokepoke" / "prompts" / "beads-item.md").exists()
 
 
 def test_orchestrator_main_waits_for_setup_then_runs(tmp_path: Path) -> None:
@@ -94,7 +96,7 @@ def test_orchestrator_main_waits_for_setup_then_runs(tmp_path: Path) -> None:
         patch("pokepoke.project_utils.check_beads_available", return_value=True),
         patch("sys.argv", ["pokepoke", "--autonomous"]),
     ):
-        from pokepoke.orchestrator import main
+        from pokepoke.__main__ import main
 
         assert main() == 0
 

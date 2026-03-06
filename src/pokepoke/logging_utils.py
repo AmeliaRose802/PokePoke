@@ -108,6 +108,7 @@ class RunLogger:
             level: Log level (INFO, WARNING, ERROR, etc.)
         """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.orchestrator_log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.orchestrator_log_path, 'a', encoding='utf-8') as f:
             f.write(f"[{timestamp}] [{level}] {message}\n")
 
@@ -313,9 +314,6 @@ class ItemLogger:
                 f.write("=" * 80 + "\n")
             f.write(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write("=" * 80 + "\n\n")
-
-        # Track whether file is open
-        self._file_handle: object | None = None
 
     def log(self, message: str) -> None:
         """Log a message to the item log.

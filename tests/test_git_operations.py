@@ -834,8 +834,8 @@ class TestExecuteMergeSequenceAdditional:
         assert "Failed to checkout main" in message
         assert unmerged == []
 
-    @patch('src.pokepoke.git_operations.is_merge_in_progress', return_value=True)
-    @patch('src.pokepoke.git_operations.get_unmerged_files', return_value=["file.py"])
+    @patch('src.pokepoke.merge_conflict.is_merge_in_progress', return_value=True)
+    @patch('src.pokepoke.merge_conflict.get_unmerged_files', return_value=["file.py"])
     @patch('src.pokepoke.git_operations.restore_beads_stash')
     @patch('src.pokepoke.git_operations.subprocess.run')
     def test_merge_conflict_returns_unmerged_files(
@@ -861,8 +861,8 @@ class TestExecuteMergeSequenceAdditional:
         assert "conflicts" in message.lower()
         assert "file.py" in unmerged
 
-    @patch('src.pokepoke.git_operations.is_merge_in_progress', return_value=False)
-    @patch('src.pokepoke.git_operations.get_unmerged_files', return_value=[])
+    @patch('src.pokepoke.merge_conflict.is_merge_in_progress', return_value=False)
+    @patch('src.pokepoke.merge_conflict.get_unmerged_files', return_value=[])
     @patch('src.pokepoke.git_operations.restore_beads_stash')
     @patch('src.pokepoke.git_operations.subprocess.run')
     def test_merge_failure_without_conflict(

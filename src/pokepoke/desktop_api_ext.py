@@ -19,18 +19,6 @@ except ImportError:
     _HAS_YAML = False
 
 
-def seed_historical_agents(self: Any) -> None:
-    """Load persisted agent logs from disk so the UI shows history on startup.
-
-    NOTE: Disabled to fix critical memory bloat (35+ GB).  Loading all historical
-    log files at startup and deep-copying them every 100ms poll caused unbounded
-    memory growth.  See PokePoke-6pgw / memory-fix tracking issue.
-    """
-    # Intentionally a no-op until a lazy/paginated history API replaces the
-    # eager bulk-load approach.
-    return
-
-
 def _discover_log_roots() -> list[Path]:
     """Return candidate directories that may contain run log folders."""
     roots: list[Path] = []

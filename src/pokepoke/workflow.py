@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pokepoke.copilot import invoke_copilot
+from pokepoke.ai_backends import invoke_copilot
 from pokepoke.copilot_sdk import build_prompt_from_work_item
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, WorkItemResult
 from pokepoke.worktrees import create_worktree, cleanup_worktree

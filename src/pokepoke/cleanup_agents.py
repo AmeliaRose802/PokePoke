@@ -5,7 +5,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from pokepoke.copilot import invoke_copilot
+from pokepoke.ai_backends import invoke_copilot
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
 from pokepoke.git_operations import verify_main_repo_clean, commit_all_changes
 from pokepoke.coordination import merge_lock_active
@@ -321,7 +321,7 @@ def invoke_merge_conflict_cleanup_agent(
 
     agent_id = f"{item.id}-merge-fix"
 
-    from pokepoke.git_operations import is_merge_in_progress, get_unmerged_files as git_get_unmerged
+    from pokepoke.merge_conflict import is_merge_in_progress, get_unmerged_files as git_get_unmerged
 
     cleanup_prompt_template = load_prompt_file("merge-conflict-cleanup.md")
     if cleanup_prompt_template is None:

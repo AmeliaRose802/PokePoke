@@ -2,16 +2,22 @@
 
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
-from pokepoke.worktree_coordination import (
+from pokepoke.coordination import (
     with_worktree_lock,
-    _load_metrics,
-    _record_attempt,
-    _WORKTREE_LOCK_PATH,
+    _load_worktree_metrics as _load_metrics,
+    _record_worktree_attempt as _record_attempt,
+    _lock_dir,
 )
 import contextlib
+
+
+def _worktree_lock_path() -> Path:
+    """Return the lock file path dynamically (CWD-relative)."""
+    return _lock_dir() / "worktree-setup.lock"
 
 
 @pytest.fixture
@@ -42,21 +48,23 @@ def cleanup_lock_files():
     """Clean up lock and metrics files after each test."""
     yield
     # Clean up lock file
-    if _WORKTREE_LOCK_PATH.exists():
+    if _worktree_lock_path().exists():
         with contextlib.suppress(Exception):
-            _WORKTREE_LOCK_PATH.unlink()
+            _worktree_lock_path().unlink()
 
 
-def test_with_worktree_lock_basic(cleanup_lock_files):
+def test_with_worktree_lock_basic(cleanup_lock_files, tmp_path, monkeypatch):
     """Test basic lock acquisition and release."""
+    monkeypatch.chdir(tmp_path)
+    lock_path = tmp_path / ".pokepoke" / "locks" / "worktree-setup.lock"
     # Lock should be acquired and released without error
     with with_worktree_lock(timeout=5):
         # Verify lock file exists while locked
-        assert _WORKTREE_LOCK_PATH.exists()
+        assert lock_path.exists()
 
     # Lock file should still exist but be unlocked
     # (filelock doesn't delete the lock file)
-    assert _WORKTREE_LOCK_PATH.exists()
+    assert lock_path.exists()
 
 
 def test_with_worktree_lock_serializes_operations(cleanup_lock_files):

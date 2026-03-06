@@ -82,7 +82,6 @@ class DesktopAPI:
             preview_limit=self._agent_max_log_lines_internal,
             detail_limit=self._agent_detail_max_log_lines_internal,
         )
-        _ext.seed_historical_agents(self)
 
         self._repository_name = get_repository_name()
         # Setup wizard gating — orchestrator waits for UI to complete init

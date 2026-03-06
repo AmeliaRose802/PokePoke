@@ -595,8 +595,8 @@ class TestMergeWaitLogic:
     @patch('pokepoke.cleanup_agents._get_current_git_context')
     @patch('pokepoke.cleanup_agents.invoke_copilot')
     @patch('pokepoke.cleanup_agents.terminal_ui')
-    @patch('pokepoke.git_operations.is_merge_in_progress', return_value=False)
-    @patch('pokepoke.git_operations.get_unmerged_files', return_value=[])
+    @patch('pokepoke.merge_conflict.is_merge_in_progress', return_value=False)
+    @patch('pokepoke.merge_conflict.get_unmerged_files', return_value=[])
     def test_merge_conflict_agent_waits_for_merge(
         self, mock_get_unmerged, mock_is_merging,
         mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
@@ -627,8 +627,8 @@ class TestMergeWaitLogic:
     @patch('pokepoke.cleanup_agents._get_current_git_context')
     @patch('pokepoke.cleanup_agents.invoke_copilot')
     @patch('pokepoke.cleanup_agents.terminal_ui')
-    @patch('pokepoke.git_operations.is_merge_in_progress', return_value=False)
-    @patch('pokepoke.git_operations.get_unmerged_files', return_value=[])
+    @patch('pokepoke.merge_conflict.is_merge_in_progress', return_value=False)
+    @patch('pokepoke.merge_conflict.get_unmerged_files', return_value=[])
     def test_merge_conflict_agent_timeout_proceeds(
         self, mock_get_unmerged, mock_is_merging,
         mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
@@ -658,8 +658,8 @@ class TestMergeWaitLogic:
     @patch('pokepoke.cleanup_agents._get_current_git_context')
     @patch('pokepoke.cleanup_agents.invoke_copilot')
     @patch('pokepoke.cleanup_agents.terminal_ui')
-    @patch('pokepoke.git_operations.is_merge_in_progress', return_value=True)
-    @patch('pokepoke.git_operations.get_unmerged_files', return_value=["file1.py", "file2.py", "file3.py", "file4.py", "file5.py", "file6.py"])
+    @patch('pokepoke.merge_conflict.is_merge_in_progress', return_value=True)
+    @patch('pokepoke.merge_conflict.get_unmerged_files', return_value=["file1.py", "file2.py", "file3.py", "file4.py", "file5.py", "file6.py"])
     def test_merge_conflict_agent_with_many_conflict_files(
         self, mock_get_unmerged, mock_is_merging,
         mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active

@@ -1,8 +1,8 @@
-"""Tests for copilot.py module (SDK-based implementation)."""
+"""Tests for invoke_copilot function (moved to ai_backends)."""
 
 from unittest.mock import patch, MagicMock
 
-from pokepoke.copilot import (
+from pokepoke.ai_backends import (
     invoke_copilot
 )
 from pokepoke.types import CopilotResult
@@ -11,7 +11,7 @@ from pokepoke.types import CopilotResult
 class TestInvokeCopilot:
     """Tests for invoke_copilot function (SDK-based)."""
 
-    @patch('pokepoke.copilot.get_backend')
+    @patch('pokepoke.ai_backends.get_backend')
     def test_invoke_copilot_success(self, mock_backend_factory, sample_work_item):
         """Test successful invocation."""
         expected_result = CopilotResult(
@@ -40,7 +40,7 @@ class TestInvokeCopilot:
             template_name=None
         )
 
-    @patch('pokepoke.copilot.get_backend')
+    @patch('pokepoke.ai_backends.get_backend')
     def test_invoke_copilot_with_params(self, mock_backend_factory, sample_work_item):
         """Test invocation with custom parameters."""
         expected_result = CopilotResult(

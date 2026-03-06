@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pokepoke.types import AgentStats, SessionStats
-from pokepoke.logging_utils import RunLogger
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import ItemLogger
@@ -27,14 +26,3 @@ def _run_special_agent(name: str, repo_root: Path, item_logger: 'ItemLogger | No
         from pokepoke.model_sync import sync_copilot_models
         return sync_copilot_models(item_logger=item_logger)
     return None
-
-
-def run_periodic_maintenance(items_completed: int, session_stats: SessionStats, run_logger: RunLogger) -> None:
-    """Run periodic maintenance agents based on config and completion count.
-
-    This function now delegates to MaintenanceScheduler for singleton coordination.
-    Kept for backward compatibility.
-    """
-    # Import here to avoid circular imports
-    from pokepoke.maintenance_scheduler import run_periodic_maintenance as _run_with_scheduler
-    return _run_with_scheduler(items_completed, session_stats, run_logger)
