@@ -4,7 +4,6 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from .model_pricing import get_context_window
 from .shutdown import is_shutting_down
 from .types import AgentStats, BeadsWorkItem, CopilotResult
 from .sdk_event_handler import SessionStats
@@ -18,15 +17,13 @@ def _fail_result(work_item_id: str, error: str) -> CopilotResult:
     return CopilotResult(work_item_id=work_item_id, success=False, error=error, attempt_count=1)
 
 
-def _build_token_usage_callback(current_model: str) -> Callable[[int, int], None]:
+def _build_token_usage_callback() -> Callable[[int, int], None]:
     """Create a token-usage callback that pushes live stats to the agent card."""
-    context_limit = get_context_window(current_model)
-
     def _on_token_usage(input_tokens: int, output_tokens: int) -> None:
         from .desktop_ui import _thread_output
         agent_id: str | None = getattr(_thread_output, "agent_id", None)
         if agent_id:
-            terminal_ui.ui.push_agent_tokens(agent_id, input_tokens, output_tokens, context_limit)
+            terminal_ui.ui.push_agent_tokens(agent_id, input_tokens, output_tokens)
 
     return _on_token_usage
 

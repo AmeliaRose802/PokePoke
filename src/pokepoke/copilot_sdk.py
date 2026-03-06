@@ -148,7 +148,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         errors: list[str] = []
 
         # Build a token-usage callback that pushes live stats to the agent card.
-        on_token_usage = _build_token_usage_callback(current_model)
+        on_token_usage = _build_token_usage_callback()
 
         handle_event, stats = create_event_handler(
             done, output_lines, errors, item_logger, idle_timeout,

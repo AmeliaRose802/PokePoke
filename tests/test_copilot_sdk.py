@@ -1497,25 +1497,22 @@ class TestActivityWatchdog:
 class TestBuildTokenUsageCallback:
     """Tests for _build_token_usage_callback."""
 
-    @patch('pokepoke.sdk_helpers.get_context_window', return_value=200000)
-    def test_returns_callable(self, _mock_ctx):
-        callback = _build_token_usage_callback("claude-sonnet-4")
+    def test_returns_callable(self):
+        callback = _build_token_usage_callback()
         assert callable(callback)
 
     @patch('pokepoke.sdk_helpers.terminal_ui')
-    @patch('pokepoke.sdk_helpers.get_context_window', return_value=200000)
-    def test_callback_pushes_tokens_when_agent_id_set(self, _mock_ctx, mock_ui):
-        callback = _build_token_usage_callback("claude-sonnet-4")
+    def test_callback_pushes_tokens_when_agent_id_set(self, mock_ui):
+        callback = _build_token_usage_callback()
         mock_thread = MagicMock()
         mock_thread.agent_id = "agent-1"
         with patch('pokepoke.desktop_ui._thread_output', mock_thread):
             callback(100, 50)
-        mock_ui.ui.push_agent_tokens.assert_called_once_with("agent-1", 100, 50, 200000)
+        mock_ui.ui.push_agent_tokens.assert_called_once_with("agent-1", 100, 50)
 
     @patch('pokepoke.sdk_helpers.terminal_ui')
-    @patch('pokepoke.sdk_helpers.get_context_window', return_value=200000)
-    def test_callback_noop_when_no_agent_id(self, _mock_ctx, mock_ui):
-        callback = _build_token_usage_callback("claude-sonnet-4")
+    def test_callback_noop_when_no_agent_id(self, mock_ui):
+        callback = _build_token_usage_callback()
         mock_thread = MagicMock(spec=[])  # no agent_id attribute
         with patch('pokepoke.desktop_ui._thread_output', mock_thread):
             callback(100, 50)

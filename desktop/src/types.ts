@@ -249,7 +249,6 @@ export interface AgentInfo {
   session_id?: string | null;
   input_tokens?: number;
   output_tokens?: number;
-  context_limit?: number;
   is_history_entry?: boolean;
 }
 

@@ -381,9 +381,9 @@ class DesktopUI:
         self._api.push_agent_log(agent_id, line)
 
     def push_agent_tokens(self, agent_id: str, input_tokens: int,
-                          output_tokens: int, context_limit: int) -> None:
+                          output_tokens: int) -> None:
         """Update live token usage for an agent card."""
-        self._api.push_agent_tokens(agent_id, input_tokens, output_tokens, context_limit)
+        self._api.push_agent_tokens(agent_id, input_tokens, output_tokens)
 
     def remove_agent(self, agent_id: str) -> None:
         self._api.remove_agent(agent_id)

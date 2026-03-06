@@ -10,7 +10,6 @@ from pokepoke.agent_runner import run_beta_tester, run_gate_agent
 from pokepoke.beads import assign_and_sync_item
 from pokepoke.cleanup_agents import run_cleanup_loop
 from pokepoke.git_operations import has_uncommitted_changes
-from pokepoke.model_pricing import calculate_cost
 from pokepoke.reconciliation import reconcile_completed_item
 from pokepoke.terminal_ui import format_work_item_banner, set_terminal_banner
 from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult, ModelCompletionRecord, WorkItemResult
@@ -64,7 +63,7 @@ def _build_completion_record(
     return ModelCompletionRecord(
         item_id=item_id, model=model, duration_seconds=duration,
         gate_passed=gate_passed, input_tokens=input_tokens, output_tokens=output_tokens,
-        agent_turns=request_count, cost=calculate_cost(model, input_tokens, output_tokens),
+        agent_turns=request_count,
         retry_attempts=max(0, request_count - 1),
         api_duration=stats.api_duration if stats else None,
         lines_added=stats.lines_added if stats else None,

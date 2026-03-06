@@ -143,7 +143,6 @@ class AgentRegistry:
         agent_id: str,
         input_tokens: int,
         output_tokens: int,
-        context_limit: int,
     ) -> None:
         """Update cumulative token usage for an agent."""
         with self._lock:
@@ -152,7 +151,6 @@ class AgentRegistry:
                 return
             agent["input_tokens"] = input_tokens
             agent["output_tokens"] = output_tokens
-            agent["context_limit"] = context_limit
 
     def append_log(self, agent_id: str, line: str) -> None:
         with self._lock:
@@ -275,7 +273,6 @@ class AgentRegistry:
             "paused": paused,
             "input_tokens": agent.get("input_tokens", 0),
             "output_tokens": agent.get("output_tokens", 0),
-            "context_limit": agent.get("context_limit", 0),
             "is_history_entry": is_history,
         }
         # log_lines carries up to 500 lines of detail data.  It is only needed

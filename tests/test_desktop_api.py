@@ -333,8 +333,8 @@ def test_live_stats_update_in_realtime() -> None:
     assert state["stats"]["items_created"] == 0
 
     # Mutate the live object (as the orchestrator does)
-    stats_obj.work_agent_runs += 1
-    stats_obj.gate_agent_runs += 2
+    stats_obj.record_agent_run("work", 1)
+    stats_obj.record_agent_run("gate", 2)
     stats_obj.items_completed = 1
     stats_obj.agent_stats.input_tokens = 500
 
@@ -1181,12 +1181,11 @@ def test_push_agent_tokens_updates_agent() -> None:
     """push_agent_tokens should store token counts on the agent."""
     api = DesktopAPI()
     api.push_agent_status("agent-1", "Worker", status="running")
-    api.push_agent_tokens("agent-1", 5000, 2000, 128_000)
+    api.push_agent_tokens("agent-1", 5000, 2000)
 
     agents = api.get_agents()
     assert agents[0]["input_tokens"] == 5000
     assert agents[0]["output_tokens"] == 2000
-    assert agents[0]["context_limit"] == 128_000
 
 
 def test_push_agent_tokens_defaults_to_zero() -> None:
@@ -1197,13 +1196,12 @@ def test_push_agent_tokens_defaults_to_zero() -> None:
     agents = api.get_agents()
     assert agents[0]["input_tokens"] == 0
     assert agents[0]["output_tokens"] == 0
-    assert agents[0]["context_limit"] == 0
 
 
 def test_push_agent_tokens_ignores_unknown_agent() -> None:
     """push_agent_tokens should silently ignore unknown agent IDs."""
     api = DesktopAPI()
-    api.push_agent_tokens("nonexistent", 100, 200, 128_000)
+    api.push_agent_tokens("nonexistent", 100, 200)
     assert api.get_agents() == []
 
 
@@ -1211,13 +1209,12 @@ def test_agent_detail_includes_tokens() -> None:
     """get_agent_detail should include token fields."""
     api = DesktopAPI()
     api.push_agent_status("agent-1", "Worker", status="running")
-    api.push_agent_tokens("agent-1", 10_000, 3_000, 200_000)
+    api.push_agent_tokens("agent-1", 10_000, 3_000)
 
     detail = api.get_agent_detail("agent-1")
     assert detail is not None
     assert detail["input_tokens"] == 10_000
     assert detail["output_tokens"] == 3_000
-    assert detail["context_limit"] == 200_000
 
 
 # ─── open_project / browse_for_project tests ─────────────────────────
@@ -1245,6 +1242,7 @@ def test_open_project_success_with_pokepoke_config(tmp_path, monkeypatch) -> Non
     (tmp_path / ".pokepoke" / "config.yaml").write_text(
         "project_name: test-proj\n", encoding="utf-8"
     )
+    (tmp_path / ".git").mkdir()  # So _find_repo_root resolves to tmp_path
 
     monkeypatch.setattr(
         "pokepoke.desktop_api_ext._is_git_repo", lambda p: True
@@ -1317,6 +1315,7 @@ def test_browse_for_project_delegates_to_open_project(tmp_path, monkeypatch) -> 
     (tmp_path / ".pokepoke" / "config.yaml").write_text(
         "project_name: picked\n", encoding="utf-8"
     )
+    (tmp_path / ".git").mkdir()  # So _find_repo_root resolves to tmp_path
 
     monkeypatch.setattr(
         "pokepoke.desktop_api_ext._is_git_repo", lambda p: True
@@ -1351,6 +1350,7 @@ def test_open_project_resolves_subdirectory_to_git_toplevel(tmp_path, monkeypatc
     (repo_root / ".pokepoke" / "config.yaml").write_text(
         "project_name: resolved-proj\n", encoding="utf-8"
     )
+    (repo_root / ".git").mkdir()  # So _find_repo_root resolves to repo_root
 
     monkeypatch.setattr(
         "pokepoke.desktop_api_ext._is_git_repo", lambda p: True
@@ -1570,7 +1570,7 @@ def test_push_methods_silently_ignore_after_disposal() -> None:
     api.push_progress(True, "working")
     api.push_agent_status("agent-1", "Worker", status="running")
     api.push_agent_log("agent-1", "log line")
-    api.push_agent_tokens("agent-1", 100, 50, 8000)
+    api.push_agent_tokens("agent-1", 100, 50)
     api.set_session_start_time(1000.0)
     api.set_session_end_time(2000.0)
     api.set_logs_dir("/logs")
@@ -1605,7 +1605,7 @@ def test_push_methods_silently_ignore_after_disposal() -> None:
     api.push_progress(False, "done")
     api.push_agent_status("agent-2", "Another Worker", status="done")
     api.push_agent_log("agent-1", "should be ignored")
-    api.push_agent_tokens("agent-1", 200, 100, 16000)
+    api.push_agent_tokens("agent-1", 200, 100)
     api.set_session_start_time(3000.0)
     api.set_session_end_time(4000.0)
     api.set_logs_dir("/different/logs")

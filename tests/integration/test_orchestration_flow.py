@@ -154,7 +154,6 @@ class WorkflowHarness:
         monkeypatch.setattr(workflow, "build_prompt_from_work_item", self._build_prompt)
         monkeypatch.setattr(workflow, "select_model_for_item", lambda *_args, **_kwargs: "test-model")
         monkeypatch.setattr(workflow, "get_assignment_for_item", lambda *_args, **_kwargs: ("work", "beads-item"))
-        monkeypatch.setattr(workflow_helpers, "calculate_cost", lambda *_args, **_kwargs: 0.0)
         monkeypatch.setattr(workflow_helpers, "run_beta_tester", self._run_beta)
         monkeypatch.setattr("pokepoke.git_operations.build_handoff_context", lambda **_kwargs: {"context": "noop"})
         monkeypatch.setattr(workflow_helpers, "set_terminal_banner", lambda *_args, **_kwargs: None)

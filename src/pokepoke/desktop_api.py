@@ -84,11 +84,8 @@ class DesktopAPI:
         )
         _ext.seed_historical_agents(self)
 
-        # Extract repository name at initialization
         self._repository_name = get_repository_name()
-
-        # Setup wizard gating — orchestrator can wait for the UI to complete
-        # first-time project initialization steps.
+        # Setup wizard gating — orchestrator waits for UI to complete init
         self._setup_complete_event = threading.Event()
 
     def set_window(self, window: Any) -> None:
@@ -296,14 +293,13 @@ class DesktopAPI:
         agent_id: str,
         input_tokens: int,
         output_tokens: int,
-        context_limit: int,
     ) -> None:
         """Update live token usage for an agent."""
         with self._lock:
             if self._window_disposed:  # Silently ignore after window disposal
                 return
         self._agent_registry.update_token_usage(
-            agent_id, input_tokens, output_tokens, context_limit,
+            agent_id, input_tokens, output_tokens,
         )
 
     def remove_agent(self, agent_id: str) -> None:
