@@ -389,3 +389,9 @@ def run_orchestrator(  # noqa: C901
         # Clean up signal handlers
         with contextlib.suppress(Exception):
             unregister_shutdown_handlers()
+
+
+if __name__ == "__main__":
+    import sys
+    from pokepoke.__main__ import main
+    sys.exit(main())

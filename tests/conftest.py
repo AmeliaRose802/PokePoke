@@ -112,6 +112,30 @@ def _suppress_atexit():
 
 
 @pytest.fixture(autouse=True)
+def _force_sequential_mode(monkeypatch):
+    """Force max_parallel_agents=1 so orchestrator tests use the sequential loop.
+
+    The on-disk config (.pokepoke/config.yaml) may set max_parallel_agents>1.
+    Without this fixture, orchestrator tests route through the parallel loop
+    in parallel.py, where test mocks (applied to pokepoke.orchestrator) don't
+    take effect.  The unmocked parallel loop then runs REAL git add/commit
+    via check_and_commit_main_repo, silently auto-committing (and destroying)
+    any staged work in the host repository.
+    """
+    from pokepoke.config import load_config as _real_load_config
+
+    def _patched_load_config(*args, **kwargs):
+        cfg = _real_load_config(*args, **kwargs)
+        cfg.max_parallel_agents = 1
+        return cfg
+
+    monkeypatch.setattr("pokepoke.orchestrator.load_config", _patched_load_config)
+    # Also patch the src.pokepoke path used by worktree-coverage tests
+    monkeypatch.setattr("pokepoke.config.load_config", _patched_load_config,
+                        raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _fast_repo_guard(monkeypatch):
     """Ensure maintenance tests never block on repo cleanliness."""
     monkeypatch.setattr(

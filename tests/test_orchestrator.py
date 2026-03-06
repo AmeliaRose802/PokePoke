@@ -601,7 +601,7 @@ class TestRunOrchestrator:
         )
         mock_get_items.return_value = [item]
         mock_select.return_value = item
-        mock_process.return_value = False
+        mock_process.return_value = WorkItemResult(success=False, request_count=1, stats=AgentStats())
 
         result = run_orchestrator(interactive=False, continuous=False)
 
