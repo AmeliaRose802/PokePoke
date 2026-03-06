@@ -95,9 +95,16 @@ def _build_worker_env(cwd: str | None) -> dict[str, str]:
 
 def _create_sdk_client(cwd: str | None) -> Any:
     """Create and configure a CopilotClient instance."""
+    import shutil
     proj_config = get_config()
+    cli_path = proj_config.ai_backend.copilot_cli_path
+    # Resolve relative CLI names (e.g. "copilot.cmd") to absolute paths via PATH
+    # so the SDK's os.path.exists() check succeeds.
+    resolved = shutil.which(cli_path)
+    if resolved:
+        cli_path = resolved
     client_opts: dict[str, Any] = {
-        "cli_path": proj_config.ai_backend.copilot_cli_path,
+        "cli_path": cli_path,
         "log_level": "info",
         "env": _build_worker_env(cwd),
     }
