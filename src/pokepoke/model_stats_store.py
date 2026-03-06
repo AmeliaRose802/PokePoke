@@ -112,9 +112,68 @@ def _rebuild_summary(log: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         s["stddev_duration"] = round(statistics.pstdev(durations), 2) if len(durations) >= 2 else 0.0
         decided = s["total_items_succeeded"] + s["total_items_failed"]
         s["success_rate"] = round(s["total_items_succeeded"] / decided, 4) if decided else 0.0
-        del s["_durations"]
+        # Keep _durations for incremental updates
         summary[model] = s
     return summary
+
+
+def _update_summary_incremental(
+    summary: dict[str, dict[str, Any]],
+    entry: dict[str, Any],
+) -> None:
+    """Fold a single log entry into the existing summary.
+
+    Unlike ``_rebuild_summary`` which scans the entire log, this only touches
+    the single model bucket affected by *entry*.  Per-model ``_durations``
+    lists are kept in the summary so that median/stddev can be recomputed
+    from the per-model data (much smaller than the full cross-model log).
+    """
+    model = entry.get("model", "unknown")
+
+    if model not in summary:
+        summary[model] = {
+            "total_items_attempted": 0,
+            "total_items_succeeded": 0,
+            "total_items_failed": 0,
+            "total_duration_seconds": 0.0,
+            "total_retries": 0,
+            "average_duration": 0.0,
+            "median_duration": 0.0,
+            "stddev_duration": 0.0,
+            "success_rate": 0.0,
+            "last_used": "",
+            "_durations": [],
+        }
+
+    s = summary[model]
+
+    # Ensure _durations exists (migration from old format)
+    if "_durations" not in s:
+        s["_durations"] = []
+
+    s["total_items_attempted"] += 1
+    gp = entry.get("gate_passed")
+    if gp is True:
+        s["total_items_succeeded"] += 1
+    elif gp is False:
+        s["total_items_failed"] += 1
+
+    dur = entry.get("duration_seconds", 0.0)
+    s["total_duration_seconds"] += dur
+    s["_durations"].append(dur)
+
+    ts = entry.get("timestamp", "")
+    if ts and ts > s["last_used"]:
+        s["last_used"] = ts
+
+    # Recompute derived fields for this model only
+    attempted = s["total_items_attempted"]
+    durations = s["_durations"]
+    s["average_duration"] = round(s["total_duration_seconds"] / attempted, 2) if attempted else 0.0
+    s["median_duration"] = round(statistics.median(durations), 2) if durations else 0.0
+    s["stddev_duration"] = round(statistics.pstdev(durations), 2) if len(durations) >= 2 else 0.0
+    decided = s["total_items_succeeded"] + s["total_items_failed"]
+    s["success_rate"] = round(s["total_items_succeeded"] / decided, 4) if decided else 0.0
 
 
 # ── Public API ───────────────────────────────────────────────────────
@@ -163,19 +222,39 @@ def record_completion(record: ModelCompletionRecord, path: Path | None = None) -
     Thread-safe and process-safe: uses both a thread lock (fast path) and
     a cross-process file lock to serialize read-modify-write across multiple
     worker processes in multi-agent mode.
+
+    Uses incremental summary update — only the affected model's bucket is
+    touched, avoiding O(N) full-log rescans on every call.
     """
     with _thread_lock, acquire_lock(_STATS_FILE_LOCK, timeout=60):
         data = load_model_stats(path)
-        data["log"].append(_record_to_dict(record))
-        data["summary"] = _rebuild_summary(data["log"])
+        entry = _record_to_dict(record)
+        data["log"].append(entry)
+
+        summary = data.get("summary", {})
+
+        # Migration: if any model summary lacks _durations (old format),
+        # do a one-time full rebuild to populate _durations per model.
+        if summary and any("_durations" not in s for s in summary.values()):
+            data["summary"] = _rebuild_summary(data["log"])
+        else:
+            _update_summary_incremental(summary, entry)
+            data["summary"] = summary
+
         save_model_stats(data, path)
 
 
 def get_model_summary(path: Path | None = None) -> dict[str, dict[str, Any]]:
-    """Return the per-model summary dict (read-only)."""
+    """Return the per-model summary dict (read-only).
+
+    Internal fields (prefixed with ``_``) are stripped from the output.
+    """
     data = load_model_stats(path)
-    summary: dict[str, dict[str, Any]] = data.get("summary", {})
-    return summary
+    raw: dict[str, dict[str, Any]] = data.get("summary", {})
+    return {
+        model: {k: v for k, v in stats.items() if not k.startswith("_")}
+        for model, stats in raw.items()
+    }
 
 
 def get_model_history(path: Path | None = None, limit: int = 200) -> list[dict[str, Any]]:

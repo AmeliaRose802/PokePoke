@@ -28,6 +28,7 @@ from pokepoke.model_stats_store import (
     get_model_history,
     print_model_leaderboard,
     _rebuild_summary,
+    _update_summary_incremental,
     _empty_store,
     _record_to_dict,
 )
@@ -443,3 +444,182 @@ class TestGetModelHistoryEdgeCases:
                               encoding="utf-8")
         result = get_model_history(limit=10, path=stats_path)
         assert result == []
+
+
+# ── _update_summary_incremental ──────────────────────────────────────
+
+
+class TestUpdateSummaryIncremental:
+    def test_new_model(self):
+        """Incremental update with a brand new model creates correct summary."""
+        summary: dict = {}
+        entry = {"model": "gpt-4o", "duration_seconds": 60.0, "gate_passed": True, "timestamp": "2026-01-01T00:00:00"}
+        _update_summary_incremental(summary, entry)
+        assert "gpt-4o" in summary
+        s = summary["gpt-4o"]
+        assert s["total_items_attempted"] == 1
+        assert s["total_items_succeeded"] == 1
+        assert s["total_items_failed"] == 0
+        assert s["success_rate"] == 1.0
+        assert s["average_duration"] == 60.0
+        assert s["median_duration"] == 60.0
+        assert s["_durations"] == [60.0]
+
+    def test_existing_model(self):
+        """Incrementally adding to existing model updates correctly."""
+        summary: dict = {}
+        entries = [
+            {"model": "m1", "duration_seconds": 50.0, "gate_passed": True, "timestamp": "2026-01-01T00:00:00"},
+            {"model": "m1", "duration_seconds": 70.0, "gate_passed": False, "timestamp": "2026-01-01T00:01:00"},
+            {"model": "m1", "duration_seconds": 80.0, "gate_passed": True, "timestamp": "2026-01-01T00:02:00"},
+        ]
+        for entry in entries:
+            _update_summary_incremental(summary, entry)
+
+        s = summary["m1"]
+        assert s["total_items_attempted"] == 3
+        assert s["total_items_succeeded"] == 2
+        assert s["total_items_failed"] == 1
+        assert s["success_rate"] == pytest.approx(0.6667, abs=0.01)
+        assert s["average_duration"] == pytest.approx(66.67, abs=0.01)
+        assert s["median_duration"] == 70.0
+
+    def test_matches_full_rebuild(self):
+        """Incremental updates produce the same result as a full rebuild."""
+        log = [
+            {"model": "m1", "duration_seconds": 50.0, "gate_passed": True, "timestamp": "2026-01-01T00:00:00"},
+            {"model": "m1", "duration_seconds": 70.0, "gate_passed": False, "timestamp": "2026-01-01T00:01:00"},
+            {"model": "m2", "duration_seconds": 90.0, "gate_passed": True, "timestamp": "2026-01-01T00:02:00"},
+            {"model": "m1", "duration_seconds": 80.0, "gate_passed": True, "timestamp": "2026-01-01T00:03:00"},
+        ]
+
+        full_summary = _rebuild_summary(log)
+
+        incr_summary: dict = {}
+        for entry in log:
+            _update_summary_incremental(incr_summary, entry)
+
+        assert full_summary == incr_summary
+
+    def test_none_gate_not_counted(self):
+        """gate_passed=None should count as attempted but not succeeded/failed."""
+        summary: dict = {}
+        entry = {"model": "m1", "duration_seconds": 30.0, "gate_passed": None, "timestamp": "2026-01-01T00:00:00"}
+        _update_summary_incremental(summary, entry)
+        s = summary["m1"]
+        assert s["total_items_attempted"] == 1
+        assert s["total_items_succeeded"] == 0
+        assert s["total_items_failed"] == 0
+        assert s["success_rate"] == 0.0
+
+    def test_missing_durations_key_migrated(self):
+        """If summary has a model entry without _durations, it gets created."""
+        summary = {
+            "m1": {
+                "total_items_attempted": 1,
+                "total_items_succeeded": 1,
+                "total_items_failed": 0,
+                "total_duration_seconds": 50.0,
+                "total_retries": 0,
+                "average_duration": 50.0,
+                "median_duration": 50.0,
+                "stddev_duration": 0.0,
+                "success_rate": 1.0,
+                "last_used": "2026-01-01T00:00:00",
+                # Note: no _durations key (old format)
+            }
+        }
+        entry = {"model": "m1", "duration_seconds": 60.0, "gate_passed": True, "timestamp": "2026-01-02T00:00:00"}
+        _update_summary_incremental(summary, entry)
+        # _durations is created, but only contains the new entry (not historical)
+        assert "_durations" in summary["m1"]
+        assert 60.0 in summary["m1"]["_durations"]
+
+
+# ── Migration path (old format) ─────────────────────────────────────
+
+
+class TestMigrationFromOldFormat:
+    def test_old_format_triggers_full_rebuild(self, tmp_path: Path):
+        """record_completion on old-format file (no _durations) triggers full rebuild."""
+        path = _tmp_stats_path(tmp_path)
+        # Write old-format data (summary without _durations)
+        old_data = {
+            "log": [
+                {"model": "m1", "duration_seconds": 50.0, "gate_passed": True, "timestamp": "2026-01-01T00:00:00"},
+            ],
+            "summary": {
+                "m1": {
+                    "total_items_attempted": 1,
+                    "total_items_succeeded": 1,
+                    "total_items_failed": 0,
+                    "total_duration_seconds": 50.0,
+                    "total_retries": 0,
+                    "average_duration": 50.0,
+                    "median_duration": 50.0,
+                    "stddev_duration": 0.0,
+                    "success_rate": 1.0,
+                    "last_used": "2026-01-01T00:00:00",
+                }
+            },
+        }
+        path.write_text(json.dumps(old_data), encoding="utf-8")
+
+        # Record a new completion — should trigger migration
+        record_completion(_make_record(item_id="B", model="m1", duration=70.0, gate_passed=True), path)
+
+        data = load_model_stats(path)
+        assert len(data["log"]) == 2
+        # After migration, _durations should be present
+        assert "_durations" in data["summary"]["m1"]
+        assert data["summary"]["m1"]["total_items_attempted"] == 2
+
+    def test_new_format_uses_incremental(self, tmp_path: Path):
+        """record_completion on new-format file (with _durations) uses incremental path."""
+        path = _tmp_stats_path(tmp_path)
+        # Write new-format data (summary with _durations)
+        new_data = {
+            "log": [
+                {"model": "m1", "duration_seconds": 50.0, "gate_passed": True, "timestamp": "2026-01-01T00:00:00"},
+            ],
+            "summary": {
+                "m1": {
+                    "total_items_attempted": 1,
+                    "total_items_succeeded": 1,
+                    "total_items_failed": 0,
+                    "total_duration_seconds": 50.0,
+                    "total_retries": 0,
+                    "average_duration": 50.0,
+                    "median_duration": 50.0,
+                    "stddev_duration": 0.0,
+                    "success_rate": 1.0,
+                    "last_used": "2026-01-01T00:00:00",
+                    "_durations": [50.0],
+                }
+            },
+        }
+        path.write_text(json.dumps(new_data), encoding="utf-8")
+
+        record_completion(_make_record(item_id="B", model="m1", duration=70.0, gate_passed=False), path)
+
+        data = load_model_stats(path)
+        assert len(data["log"]) == 2
+        s = data["summary"]["m1"]
+        assert s["total_items_attempted"] == 2
+        assert s["total_items_succeeded"] == 1
+        assert s["total_items_failed"] == 1
+        assert s["success_rate"] == 0.5
+        assert s["_durations"] == [50.0, 70.0]
+
+
+# ── get_model_summary strips internal fields ────────────────────────
+
+
+class TestGetModelSummaryStripsInternals:
+    def test_durations_not_exposed(self, tmp_path: Path):
+        """get_model_summary should not expose _durations to callers."""
+        path = _tmp_stats_path(tmp_path)
+        record_completion(_make_record(), path)
+        summary = get_model_summary(path)
+        for model_stats in summary.values():
+            assert "_durations" not in model_stats
