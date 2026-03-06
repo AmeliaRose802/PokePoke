@@ -102,6 +102,7 @@ def process_work_item(  # noqa: C901
         worktree_cwd = str(worktree_path)
         print(f"   Working directory: {worktree_cwd}\n")
         last_feedback = ""
+        accumulated_feedback: list[str] = []
         accumulated_stats = AgentStats()
         gate_success = False
         timeout_restart_count = 0
@@ -135,12 +136,15 @@ def process_work_item(  # noqa: C901
             # Append feedback if retrying
             if last_feedback:
                 print("\n🔄 Restarting Work Agent with feedback...")
-                item, work_agent_iteration = _apply_gate_feedback(item, last_feedback, work_agent_iteration)
+                accumulated_feedback, work_agent_iteration = _apply_gate_feedback(
+                    last_feedback, accumulated_feedback, work_agent_iteration)
 
             terminal_ui.ui.set_current_agent("Work Agent")
             from pokepoke.metrics_context import agent_type_context
             prompt_template = selected_prompt_template or "beads-item"
-            work_prompt = build_prompt_from_work_item(item, template_name=prompt_template)
+            work_prompt = build_prompt_from_work_item(
+                item, template_name=prompt_template,
+                retry_feedback=accumulated_feedback or None)
             with agent_type_context("work"):
                 is_retry = work_agent_iteration > 1
                 agent_id = f"{base_agent_id}-retry-{work_agent_iteration}" if is_retry else base_agent_id

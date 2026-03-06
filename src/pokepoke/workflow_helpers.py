@@ -194,17 +194,22 @@ def _extract_agent_stats(result: CopilotResult) -> AgentStats | None:
 
 
 def _apply_gate_feedback(
-    item: BeadsWorkItem, last_feedback: str, work_agent_iteration: int,
-) -> tuple[BeadsWorkItem, int]:
-    """Append gate-agent feedback to item description; return updated (item, iteration)."""
-    hdr = "**PREVIOUS GATE AGENT FEEDBACK:**"
-    desc = item.description or ""
-    base, sec = (desc.split(hdr, 1) if hdr in desc else (desc, ""))
-    prev = [e for e in sec.strip().splitlines() if e.strip().startswith("- ")]
-    base_stripped = base.rstrip()
-    sep = "\n\n" if base_stripped else ""
-    item.description = base_stripped + f"{sep}{hdr}\n" + "\n".join(prev[-2:] + [f"- {last_feedback}"])
-    return item, work_agent_iteration + 1
+    new_feedback: str,
+    accumulated_feedback: list[str],
+    work_agent_iteration: int,
+) -> tuple[list[str], int]:
+    """Record gate-agent feedback without mutating the work item.
+
+    Appends *new_feedback* to *accumulated_feedback* (keeping the last 3
+    entries to bound prompt size) and bumps the iteration counter.
+
+    Returns ``(updated_feedback_list, next_iteration)``.
+    """
+    accumulated_feedback = list(accumulated_feedback)  # defensive copy
+    accumulated_feedback.append(new_feedback)
+    # Keep only the most recent entries to avoid unbounded prompt growth
+    accumulated_feedback = accumulated_feedback[-3:]
+    return accumulated_feedback, work_agent_iteration + 1
 
 
 def _log_commit_status(worktree_cwd: str) -> None:

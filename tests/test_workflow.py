@@ -1342,8 +1342,8 @@ class TestProcessWorkItem:
         assert result.success is True
         assert result.request_count == 2
         assert mock_invoke.call_count == 2
-        # Feedback from failure should have been added to description
-        assert "[Copilot failure]" in (item.description or "")
+        # Description must NOT be mutated — feedback goes via prompt
+        assert item.description == ""
 
     @patch('pokepoke.workflow.get_config')
     @patch('pokepoke.workflow.run_gate_agent')
@@ -1485,8 +1485,8 @@ class TestProcessWorkItem:
         mock_add_comment.assert_called_once()  # Comment added for gate rejection
         assert mock_gate_agent.call_count == 2
 
-        assert item.description.startswith("**PREVIOUS GATE AGENT FEEDBACK:**\n")
-        assert not item.description.startswith("\n\n")
+        # Description must NOT be mutated — feedback goes via prompt
+        assert item.description == ""
 
     @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.add_comment')

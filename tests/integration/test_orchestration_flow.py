@@ -121,6 +121,7 @@ class WorkflowHarness:
         self.cleaned: list[tuple[str, bool]] = []
         self.copilot_results: list[CopilotResult] = []
         self.copilot_calls: list[str] = []
+        self.prompt_kwargs: list[dict] = []
         self.gate_results: list[tuple[bool, str, AgentStats | None]] = []
         self.cleanup_sequences: list[tuple[bool, int]] = []
         self.uncommitted_sequence: list[bool] = []
@@ -150,7 +151,7 @@ class WorkflowHarness:
         monkeypatch.setattr(workflow_helpers, "finalize_work_item", self._finalize_work_item)
         monkeypatch.setattr(workflow, "unassign_with_retry", self._unassign)
         monkeypatch.setattr(workflow, "add_comment", self._add_comment)
-        monkeypatch.setattr(workflow, "build_prompt_from_work_item", lambda *_args, **_kwargs: "prompt")
+        monkeypatch.setattr(workflow, "build_prompt_from_work_item", self._build_prompt)
         monkeypatch.setattr(workflow, "select_model_for_item", lambda *_args, **_kwargs: "test-model")
         monkeypatch.setattr(workflow, "get_assignment_for_item", lambda *_args, **_kwargs: ("work", "beads-item"))
         monkeypatch.setattr(workflow_helpers, "calculate_cost", lambda *_args, **_kwargs: 0.0)
@@ -177,6 +178,10 @@ class WorkflowHarness:
         result = self.copilot_results.pop(0)
         self.copilot_calls.append(result.work_item_id)
         return result
+
+    def _build_prompt(self, *_args, **kwargs) -> str:
+        self.prompt_kwargs.append(kwargs)
+        return "prompt"
 
     def _run_gate_agent(
         self,
@@ -276,7 +281,10 @@ def test_process_work_item_gate_rejection_retries_with_feedback(workflow_harness
     assert result.cleanup_agent_runs == 2
     assert result.gate_agent_runs == 2
     assert workflow_harness.comments == [("work-456", "Gate Agent Rejection:\nNeeds additional tests")]
-    assert "**PREVIOUS GATE AGENT FEEDBACK:**" in (item.description or "")
+    # Description must NOT be mutated — feedback goes via prompt, not description
+    assert item.description == "Work item description"
+    # Second prompt call should include retry feedback
+    assert workflow_harness.prompt_kwargs[1].get("retry_feedback") == ["Needs additional tests"]
     assert workflow_harness.copilot_calls == ["work-456", "work-456"]
 
 
@@ -548,6 +556,7 @@ def test_run_parallel_loop_handles_success_and_failures(monkeypatch: pytest.Monk
     monkeypatch.setattr(parallel, "get_ready_work_items", fake_ready)
     monkeypatch.setattr(parallel, "select_multiple_items", fake_select)
     monkeypatch.setattr(parallel, "is_item_claimable", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(parallel, "assign_and_sync_item", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(parallel, "process_work_item", fake_process)
     monkeypatch.setattr(parallel, "check_and_commit_main_repo", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(parallel, "_get_dynamic_max_agents", lambda: 3)

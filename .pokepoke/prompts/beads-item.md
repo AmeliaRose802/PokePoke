@@ -13,6 +13,14 @@ You are working on item: {{item_id}}
 **Labels:** {{labels}}
 {{/labels}}
 
+{{#retry_feedback}}
+
+## ⚠️ PREVIOUS ATTEMPT FEEDBACK
+
+The following feedback was provided by previous gate-agent or retry checks. **Address all of these issues in your implementation:**
+
+{{retry_feedback}}
+{{/retry_feedback}}
 
 ## ⚠️ CRITICAL: Avoiding Hung Commands
 
