@@ -479,6 +479,64 @@ class TestProcessWorkItem:
         assert result.success is False
         assert result.request_count == 0
 
+    @patch("pokepoke.workflow.unregister_agent")
+    @patch("pokepoke.workflow.register_agent")
+    @patch("pokepoke.workflow.cleanup_worktree")
+    @patch("pokepoke.workflow_helpers.finalize_work_item", return_value=True)
+    @patch("pokepoke.workflow.add_comment")
+    @patch("pokepoke.workflow.run_gate_agent")
+    @patch("pokepoke.workflow_helpers.has_uncommitted_changes", return_value=False)
+    @patch("pokepoke.git_operations.has_commits_ahead", return_value=1)
+    @patch("pokepoke.workflow.invoke_copilot")
+    @patch("pokepoke.workflow.build_prompt_from_work_item", return_value="prompt")
+    @patch("pokepoke.workflow.get_config")
+    @patch("pokepoke.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
+    @patch("pokepoke.workflow.terminal_ui")
+    @patch("pokepoke.workflow.terminal_ui.set_terminal_banner")
+    @patch("pokepoke.workflow.terminal_ui.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.workflow.get_agent_name", return_value="test-agent")
+    @patch("pokepoke.workflow.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.workflow.create_worktree")
+    @patch("pokepoke.workflow.is_shutting_down")
+    def test_retry_routes_output_to_retry_card(
+        self, mock_shutdown, mock_create, mock_assign, mock_agent_name,
+        mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
+        mock_model, mock_config, mock_prompt, mock_copilot,
+        mock_ahead, mock_uncommitted, mock_gate, mock_comment,
+        mock_finalize, mock_cleanup,
+        mock_register, mock_unregister, tmp_path,
+    ):
+        """Retry iterations must wrap invoke_copilot in agent_output_for with the retry agent_id."""
+        mock_shutdown.return_value = False
+        mock_create.return_value = tmp_path / "worktree"
+        (tmp_path / "worktree").mkdir()
+        mock_config.return_value = MagicMock(
+            command_timeout=300, max_parallel_agents=1,
+            gate_agent_enabled=True, max_copilot_failure_retries=0,
+            ai_backend=MagicMock(provider="copilot"),
+        )
+        mock_copilot.side_effect = [
+            CopilotResult(work_item_id="wf-1", success=True, attempt_count=1),
+            CopilotResult(work_item_id="wf-1", success=True, attempt_count=1),
+        ]
+        mock_gate.side_effect = [
+            (False, "needs fix", None),
+            (True, "ok", None),
+        ]
+        with patch("pokepoke.git_operations.build_handoff_context", return_value="ctx"):
+            result = process_work_item(_item(), interactive=False)
+        assert result.success is True
+
+        # agent_output_for must be called for both v1 (base id) and v2 (retry id)
+        output_for_calls = mock_ui.ui.agent_output_for.call_args_list
+        agent_ids_routed = [c.args[0] for c in output_for_calls]
+        # v1 uses base agent_id, v2 uses retry agent_id
+        assert "wf-1" in agent_ids_routed, f"Expected base agent_id 'wf-1' in {agent_ids_routed}"
+        assert any("retry" in aid for aid in agent_ids_routed), (
+            f"Expected retry agent_id in {agent_ids_routed}"
+        )
+
 
 # ── _pre_loop_validate (unit) ──────────────────────────────────────
 

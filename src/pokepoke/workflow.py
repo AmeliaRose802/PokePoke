@@ -153,9 +153,10 @@ def process_work_item(  # noqa: C901
                     parent_agent_id=base_agent_id if is_retry else None,
                     work_item_id=item.id, work_item_title=item.title, agent_type="work",
                     agent_prompt=work_prompt)
-                result = invoke_copilot(
-                    item, prompt=work_prompt, timeout=remaining_timeout,
-                    item_logger=item_logger, model=selected_model, cwd=worktree_cwd)
+                with terminal_ui.ui.agent_output_for(agent_id):
+                    result = invoke_copilot(
+                        item, prompt=work_prompt, timeout=remaining_timeout,
+                        item_logger=item_logger, model=selected_model, cwd=worktree_cwd)
             request_count += result.attempt_count
 
             current_stats = _extract_agent_stats(result)
