@@ -4,7 +4,8 @@ import asyncio
 import json
 from types import SimpleNamespace
 
-from pokepoke.sdk_event_handler import create_event_handler, _extract_command, _parse_created_items, _record_items_created
+from pokepoke.sdk_event_handler import create_event_handler
+from pokepoke.sdk_beads_tracker import extract_command as _extract_command, parse_created_items as _parse_created_items, record_items_created as _record_items_created
 
 
 class DummyLogger:
@@ -111,7 +112,7 @@ def test_beads_create_detected_from_powershell_tool(monkeypatch) -> None:
     errors: list[str] = []
 
     created: list[tuple[str, str]] = []
-    monkeypatch.setattr("pokepoke.sdk_event_handler._record_items_created", lambda items: created.extend(items))
+    monkeypatch.setattr("pokepoke.sdk_event_handler.record_items_created", lambda items: created.extend(items))
 
     handler, _ = create_event_handler(done, output_lines, errors)
     handler(_make_event(

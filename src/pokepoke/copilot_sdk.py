@@ -43,6 +43,7 @@ async def _cancel_watchdog(*args: Any, **kwargs: Any) -> None:
 def build_prompt_from_work_item(
     work_item: BeadsWorkItem,
     template_name: str = "beads-item",
+    retry_feedback: list[str] | None = None,
 ) -> str:
     """Build a prompt from a work item using the template system.
 
@@ -50,6 +51,9 @@ def build_prompt_from_work_item(
         work_item: The work item to build a prompt for.
         template_name: Name of the prompt template to use (default: ``"beads-item"``).
             Assignment rules may specify a custom template via ``prompt_template``.
+        retry_feedback: Optional list of feedback strings from previous gate-agent
+            rejections or copilot failures.  Rendered in a dedicated template section
+            so that the original item description stays unmodified.
     """
     config = get_config()
     service = PromptService()
@@ -59,6 +63,11 @@ def build_prompt_from_work_item(
         for k, v in config.test_data.items()
     ]
     test_data_section = "\n\n".join(test_data_lines) if test_data_lines else None
+    # Format retry feedback as a bullet list for the template
+    retry_feedback_section: str | None = None
+    if retry_feedback:
+        bullets = "\n".join(f"- {fb}" for fb in retry_feedback)
+        retry_feedback_section = bullets
     variables = {
         "item_id": work_item.id,
         "title": work_item.title,
@@ -69,6 +78,7 @@ def build_prompt_from_work_item(
         "mcp_enabled": config.mcp_server.enabled,
         "test_data_section": test_data_section,
         "command_timeout": config.command_timeout,
+        "retry_feedback": retry_feedback_section,
     }
 
     return service.load_and_render(template_name, variables)
@@ -108,7 +118,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     timeout: float | None = None,
     deny_write: bool = False,
     item_logger: 'ItemLogger | None' = None,
-    idle_timeout: float = 30.0,
+    idle_timeout: float | None = None,
     model: str | None = None,
     cwd: str | None = None,
     template_name: str | None = None
@@ -116,6 +126,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     """Invoke GitHub Copilot using the SDK. Falls back to Sonnet on rate limit."""
     final_prompt = prompt or build_prompt_from_work_item(work_item, template_name or "beads-item")
     max_timeout = timeout or 7200.0
+    if idle_timeout is None:
+        idle_timeout = float(get_config().activity_watchdog.idle_timeout_seconds)
     current_model = model or DEFAULT_MODEL
     watchdog_task: asyncio.Task[bool] | None = None  # Initialize early for finally block
 
@@ -156,7 +168,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         watchdog_task, watchdog_abort = _maybe_start_activity_watchdog(
             item_logger,
             proj_config,
-            get_last_activity_time=lambda: float(stats.get("last_event_time", 0.0)),
+            get_last_activity_time=lambda: float(stats.get("last_tool_activity_time", 0.0) or stats.get("last_event_time", 0.0)),
         )
 
         async def send_with_retry() -> bool:

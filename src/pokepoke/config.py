@@ -174,11 +174,13 @@ class ActivityWatchdogConfig:
     enabled: bool = True
     timeout_seconds: int = 600  # 10 minutes
     check_interval_seconds: int = 30
+    idle_timeout_seconds: int = 90  # Seconds to wait before confirming session idle
 
     def __post_init__(self) -> None:
         """Clamp values to valid ranges."""
         self.timeout_seconds = max(60, self.timeout_seconds)
         self.check_interval_seconds = max(10, self.check_interval_seconds)
+        self.idle_timeout_seconds = max(10, self.idle_timeout_seconds)
 
 
 @dataclass
