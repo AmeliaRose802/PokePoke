@@ -16,7 +16,6 @@ from . import terminal_ui
 from .shutdown import is_shutting_down
 from .process_utils import shutdown_copilot_client
 from .sdk_event_handler import create_event_handler
-from . import session_watchdog
 from .sdk_helpers import (
     _fail_result, _build_token_usage_callback, _build_copilot_result,
     _build_session_config, _check_early_exit, _await_completion,
@@ -26,18 +25,6 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .logging_utils import ItemLogger
-
-
-async def _activity_watchdog(*args: Any, **kwargs: Any) -> bool:
-    return await session_watchdog.activity_watchdog(*args, **kwargs)
-
-
-def _maybe_start_activity_watchdog(*args: Any, **kwargs: Any) -> tuple[asyncio.Task[bool] | None, asyncio.Event]:
-    return session_watchdog.maybe_start_activity_watchdog(*args, **kwargs)
-
-
-async def _cancel_watchdog(*args: Any, **kwargs: Any) -> None:
-    await session_watchdog.cancel_watchdog(*args, **kwargs)
 
 
 def build_prompt_from_work_item(
@@ -134,9 +121,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     final_prompt = prompt or build_prompt_from_work_item(work_item, template_name or "beads-item")
     max_timeout = timeout or 7200.0
     if idle_timeout is None:
-        idle_timeout = float(get_config().activity_watchdog.idle_timeout_seconds)
+        idle_timeout = float(get_config().idle_timeout_seconds)
     current_model = model or DEFAULT_MODEL
-    watchdog_task: asyncio.Task[bool] | None = None  # Initialize early for finally block
 
     client = _create_sdk_client(cwd)
 
@@ -166,33 +152,21 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         session.on(handle_event)
         timed_out = False
         interrupted = False
-        activity_timeout = False
         total_wall_duration = 0.0
         total_api_duration = 0.0
 
-        # Setup activity watchdog
-        proj_config = get_config()
-        watchdog_task, watchdog_abort = _maybe_start_activity_watchdog(
-            item_logger,
-            proj_config,
-            get_last_activity_time=lambda: float(stats.get("last_tool_activity_time", 0.0) or stats.get("last_event_time", 0.0)),
-        )
-
         async def send_with_retry() -> bool:
             """Send message, returns True if should retry with fallback model."""
-            nonlocal session, session_config, current_model, timed_out, interrupted, activity_timeout, total_wall_duration, total_api_duration
+            nonlocal session, session_config, current_model, timed_out, interrupted, total_wall_duration, total_api_duration
             print("[SDK] Sending message...\n")
             attempt_start = asyncio.get_event_loop().time()
             try:
                 await session.send({"prompt": final_prompt})
                 abort_reason = await _await_completion(
-                    session, client, done, watchdog_abort, max_timeout,
+                    session, client, done, max_timeout,
                 )
                 if abort_reason == "shutdown":
                     interrupted = True
-                    return False
-                if abort_reason == "watchdog":
-                    activity_timeout = True
                     return False
                 if abort_reason == "timeout":
                     timed_out = True
@@ -234,8 +208,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
 
         # Handle timeout/interrupt cases
         early = _check_early_exit(
-            work_item.id, timed_out, interrupted, activity_timeout,
-            max_timeout, proj_config,
+            work_item.id, timed_out, interrupted,
+            max_timeout,
         )
         if early is not None:
             return early
@@ -259,7 +233,6 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         print(f"\n[SDK] Exception: {e}")
         return _fail_result(work_item.id, f"SDK exception: {e}")
     finally:
-        await _cancel_watchdog(watchdog_task)
         await shutdown_copilot_client(client)
 
 

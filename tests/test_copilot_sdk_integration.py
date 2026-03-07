@@ -1,6 +1,5 @@
 """Integration tests for copilot_sdk module to improve coverage."""
 
-import asyncio
 import sys
 import time
 from unittest.mock import patch, Mock
@@ -10,10 +9,8 @@ from pokepoke.types import BeadsWorkItem, CopilotResult
 from pokepoke.copilot_sdk import (
     build_prompt_from_work_item,
     _fail_result,
-    _activity_watchdog,
     invoke_copilot_sdk_sync,
 )
-import contextlib
 
 
 class TestBuildPromptIntegration:
@@ -136,84 +133,6 @@ class TestFailResultIntegration:
         assert result.success is False
         assert result.error == "Test error message"
         assert result.attempt_count == 1
-
-
-class TestActivityWatchdogIntegration:
-    """Integration tests for _activity_watchdog."""
-
-    def teardown_method(self):
-        if sys.platform == "win32":
-            time.sleep(0.05)
-
-    @pytest.mark.asyncio
-    async def test_watchdog_detects_activity(self, tmp_path):
-        """Test that watchdog detects file activity and doesn't abort."""
-        log_file = tmp_path / "test.log"
-        log_file.write_text("Initial content")
-
-        abort_event = asyncio.Event()
-
-        # Start watchdog with short intervals
-        watchdog_task = asyncio.create_task(
-            _activity_watchdog(log_file, timeout_seconds=2.0, check_interval_seconds=0.5, abort_event=abort_event)
-        )
-
-        # Update file during watchdog run
-        await asyncio.sleep(0.6)
-        log_file.write_text("Updated content")
-        await asyncio.sleep(0.6)
-        log_file.write_text("More updates")
-
-        # Cancel watchdog
-        await asyncio.sleep(0.3)
-        watchdog_task.cancel()
-
-        try:
-            triggered = await watchdog_task
-            assert triggered is False  # Should not have triggered abort
-        except asyncio.CancelledError:
-            pass  # Expected cancellation
-
-    @pytest.mark.asyncio
-    async def test_watchdog_triggers_on_timeout(self, tmp_path):
-        """Test that watchdog triggers abort when no activity detected."""
-        log_file = tmp_path / "test.log"
-        log_file.write_text("Initial content")
-
-        abort_event = asyncio.Event()
-
-        # Start watchdog with very short timeout
-        watchdog_task = asyncio.create_task(
-            _activity_watchdog(log_file, timeout_seconds=1.0, check_interval_seconds=0.3, abort_event=abort_event)
-        )
-
-        # Don't update file - let it timeout
-        triggered = await watchdog_task
-
-        assert triggered is True
-        assert abort_event.is_set()
-
-    @pytest.mark.asyncio
-    async def test_watchdog_handles_missing_log_file(self, tmp_path):
-        """Test watchdog behavior when log file doesn't exist initially."""
-        log_file = tmp_path / "nonexistent.log"
-        abort_event = asyncio.Event()
-
-        # Start watchdog for nonexistent file
-        watchdog_task = asyncio.create_task(
-            _activity_watchdog(log_file, timeout_seconds=1.5, check_interval_seconds=0.3, abort_event=abort_event)
-        )
-
-        # Create file after a delay
-        await asyncio.sleep(0.4)
-        log_file.write_text("File created")
-
-        # Cancel before timeout
-        await asyncio.sleep(0.5)
-        watchdog_task.cancel()
-
-        with contextlib.suppress(asyncio.CancelledError):
-            await watchdog_task
 
 
 class TestInvokeCopilotSDKSyncIntegration:
@@ -339,26 +258,6 @@ class TestCopilotSDKErrorHandling:
 
         with pytest.raises(Exception, match="Template error"):
             build_prompt_from_work_item(work_item)
-
-    @pytest.mark.asyncio
-    async def test_watchdog_handles_file_not_found_gracefully(self, tmp_path):
-        """Test that watchdog handles file operations errors."""
-        log_file = tmp_path / "test.log"
-        # Don't create the file
-
-        abort_event = asyncio.Event()
-
-        # Watchdog should handle missing file without crashing
-        watchdog_task = asyncio.create_task(
-            _activity_watchdog(log_file, timeout_seconds=0.5, check_interval_seconds=0.1, abort_event=abort_event)
-        )
-
-        # Let it timeout
-        triggered = await watchdog_task
-
-        # Should timeout since no activity (file doesn't exist)
-        assert triggered is True
-
 
 class TestCopilotSDKConfiguration:
     """Tests for configuration handling in copilot_sdk."""

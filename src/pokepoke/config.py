@@ -169,21 +169,6 @@ class AssignmentConfig:
     rules: list[AssignmentRule] = field(default_factory=list)
     fallback: str = "weighted"
 @dataclass
-class ActivityWatchdogConfig:
-    """Configuration for the activity watchdog that detects hung Copilot sessions."""
-    enabled: bool = True
-    timeout_seconds: int = 600  # 10 minutes
-    check_interval_seconds: int = 30
-    idle_timeout_seconds: int = 90  # Seconds to wait before confirming session idle
-
-    def __post_init__(self) -> None:
-        """Clamp values to valid ranges."""
-        self.timeout_seconds = max(60, self.timeout_seconds)
-        self.check_interval_seconds = max(10, self.check_interval_seconds)
-        self.idle_timeout_seconds = max(10, self.idle_timeout_seconds)
-
-
-@dataclass
 class RepoConfig:
     """Configuration for an individual repository in multi-repo mode."""
     path: str = ""
@@ -212,7 +197,7 @@ class ProjectConfig:
     command_timeout: int = 300  # Default 5 minutes for long-running commands
     gate_agent_enabled: bool = True
     max_copilot_failure_retries: int = 2  # Max retries when Copilot session fails (0 = no retry)
-    activity_watchdog: ActivityWatchdogConfig = field(default_factory=ActivityWatchdogConfig)
+    idle_timeout_seconds: int = 90  # Seconds to wait before confirming a session is idle
     assignment: AssignmentConfig = field(default_factory=AssignmentConfig)
     repos: list[RepoConfig] = field(default_factory=list)
 
@@ -221,6 +206,7 @@ class ProjectConfig:
         self.max_parallel_agents = max(1, self.max_parallel_agents)
         self.command_timeout = max(30, self.command_timeout)
         self.max_copilot_failure_retries = max(0, self.max_copilot_failure_retries)
+        self.idle_timeout_seconds = max(10, self.idle_timeout_seconds)
 
     @staticmethod
     def from_dict(data: dict[str, Any]) -> 'ProjectConfig':
@@ -243,6 +229,13 @@ class ProjectConfig:
             if "agents" not in maint_data:
                 # No agents specified, keep default factory behavior
                 del processed_data["maintenance"]
+
+        # Migrate removed activity_watchdog config: extract idle_timeout_seconds
+        # if present, then drop the key so strict parsing doesn't fail.
+        if "activity_watchdog" in processed_data:
+            aw = processed_data.pop("activity_watchdog")
+            if isinstance(aw, dict) and "idle_timeout_seconds" in aw:
+                processed_data.setdefault("idle_timeout_seconds", aw["idle_timeout_seconds"])
 
         dacite_config = dacite.Config(
             strict=True,  # Raise on unknown keys

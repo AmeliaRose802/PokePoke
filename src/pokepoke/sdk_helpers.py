@@ -80,13 +80,9 @@ def _check_early_exit(
     work_item_id: str,
     timed_out: bool,
     interrupted: bool,
-    activity_timeout: bool,
     max_timeout: float,
-    proj_config: Any,
 ) -> CopilotResult | None:
     """Return a failure result if the session ended abnormally, else None."""
-    if activity_timeout:
-        return _fail_result(work_item_id, f"Activity timeout: no output for {proj_config.activity_watchdog.timeout_seconds}s")
     if timed_out:
         return _fail_result(work_item_id, f"SDK timeout after {max_timeout}s")
     if interrupted:
@@ -97,12 +93,12 @@ def _check_early_exit(
 
 async def _await_completion(
     session: Any, client: Any, done: asyncio.Event,
-    watchdog_abort: asyncio.Event, max_timeout: float,
+    max_timeout: float,
 ) -> str | None:
     """Poll until the session finishes or an abort condition is met.
 
     Returns ``None`` on normal completion, or a reason string
-    (``"shutdown"``, ``"watchdog"``, ``"timeout"``) on abort.
+    (``"shutdown"``, ``"timeout"``) on abort.
     """
     deadline = asyncio.get_event_loop().time() + max_timeout
     while not done.is_set():
@@ -110,10 +106,6 @@ async def _await_completion(
             print("\n[SDK] Shutdown requested - aborting session...")
             await session.abort()
             return "shutdown"
-        if watchdog_abort.is_set():
-            print("\n[SDK] Activity watchdog triggered - aborting session...")
-            await session.abort()
-            return "watchdog"
         try:
             client_state = client.get_state()
             if client_state in ("disconnected", "error"):

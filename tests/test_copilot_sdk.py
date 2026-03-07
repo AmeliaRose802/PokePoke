@@ -1,9 +1,6 @@
 """Tests for copilot_sdk.py module (direct SDK integration)."""
 
 import asyncio
-import contextlib
-import sys
-import time
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 
@@ -11,10 +8,7 @@ from pokepoke.copilot_sdk import (
     build_prompt_from_work_item,
     invoke_copilot_sdk_sync,
     _fail_result,
-    _activity_watchdog,
     _build_token_usage_callback,
-    _maybe_start_activity_watchdog,
-    _cancel_watchdog,
     _build_copilot_result,
 )
 from pokepoke.types import BeadsWorkItem
@@ -1389,111 +1383,6 @@ class TestFailResult:
         assert result.error == ""
 
 
-class TestActivityWatchdog:
-    """Tests for _activity_watchdog."""
-
-    def teardown_method(self):
-        if sys.platform == "win32":
-            time.sleep(0.05)
-
-    @pytest.mark.asyncio
-    async def test_watchdog_cancellation_returns_false(self, tmp_path):
-        log_file = tmp_path / "test.log"
-        log_file.write_text("initial")
-        abort = asyncio.Event()
-
-        task = asyncio.create_task(
-            _activity_watchdog(log_file, timeout_seconds=60, check_interval_seconds=0.05, abort_event=abort)
-        )
-        await asyncio.sleep(0.02)
-        task.cancel()
-        result = await task
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_watchdog_triggers_on_idle(self, tmp_path):
-        log_file = tmp_path / "test.log"
-        log_file.write_text("initial")
-        abort = asyncio.Event()
-
-        result = await _activity_watchdog(
-            log_file, timeout_seconds=0.05, check_interval_seconds=0.02, abort_event=abort
-        )
-        assert result is True
-        assert abort.is_set()
-
-    @pytest.mark.asyncio
-    async def test_watchdog_handles_missing_log_file(self, tmp_path):
-        log_file = tmp_path / "nonexistent.log"
-        abort = asyncio.Event()
-
-        result = await _activity_watchdog(
-            log_file, timeout_seconds=0.05, check_interval_seconds=0.02, abort_event=abort
-        )
-        assert result is True
-        assert abort.is_set()
-
-    @pytest.mark.asyncio
-    async def test_watchdog_resets_on_activity(self, tmp_path):
-        """Test that activity (file modification) resets the idle timer."""
-        log_file = tmp_path / "test.log"
-        log_file.write_text("initial")
-        abort = asyncio.Event()
-
-        async def update_file():
-            await asyncio.sleep(0.1)
-            log_file.write_text("updated")
-
-        update_task = asyncio.create_task(update_file())
-        task = asyncio.create_task(
-            _activity_watchdog(log_file, timeout_seconds=0.3, check_interval_seconds=0.05, abort_event=abort)
-        )
-        # Wait long enough for the update to happen but cancel before idle timeout
-        await asyncio.sleep(0.25)
-        task.cancel()
-        result = await task
-        assert result is False
-        if not update_task.done():
-            update_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await update_task
-
-    @pytest.mark.asyncio
-    async def test_watchdog_uses_event_activity_callback(self, tmp_path):
-        """Watchdog should respect SDK event timestamps when callback is provided."""
-        log_file = tmp_path / "test.log"
-        log_file.write_text("initial")
-        abort = asyncio.Event()
-
-        loop = asyncio.get_event_loop()
-        last_activity = {"value": loop.time()}
-
-        async def bump_activity():
-            await asyncio.sleep(0.05)
-            last_activity["value"] = loop.time()
-
-        bump_task = asyncio.create_task(bump_activity())
-        task = asyncio.create_task(
-            _activity_watchdog(
-                log_file,
-                timeout_seconds=0.2,
-                check_interval_seconds=0.02,
-                abort_event=abort,
-                get_last_activity_time=lambda: last_activity["value"],
-            )
-        )
-
-        await asyncio.sleep(0.12)
-        assert not abort.is_set()
-        task.cancel()
-        result = await task
-        assert result is False
-        if not bump_task.done():
-            bump_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await bump_task
-
-
 class TestBuildTokenUsageCallback:
     """Tests for _build_token_usage_callback."""
 
@@ -1517,77 +1406,6 @@ class TestBuildTokenUsageCallback:
         with patch('pokepoke.desktop_ui._thread_output', mock_thread):
             callback(100, 50)
         mock_ui.ui.push_agent_tokens.assert_not_called()
-
-
-class TestMaybeStartActivityWatchdog:
-    """Tests for _maybe_start_activity_watchdog."""
-
-    def teardown_method(self):
-        if sys.platform == "win32":
-            time.sleep(0.05)
-
-    def test_returns_none_task_when_no_logger(self):
-        proj_config = MagicMock()
-        task, abort = _maybe_start_activity_watchdog(None, proj_config)
-        assert task is None
-        assert isinstance(abort, asyncio.Event)
-        assert not abort.is_set()
-
-    def test_returns_none_task_when_watchdog_disabled(self):
-        proj_config = MagicMock()
-        proj_config.activity_watchdog.enabled = False
-        item_logger = MagicMock()
-        task, abort = _maybe_start_activity_watchdog(item_logger, proj_config)
-        assert task is None
-
-    @pytest.mark.asyncio
-    async def test_starts_watchdog_when_enabled(self, tmp_path):
-        log_file = tmp_path / "test.log"
-        log_file.write_text("data")
-        proj_config = MagicMock()
-        proj_config.activity_watchdog.enabled = True
-        proj_config.activity_watchdog.timeout_seconds = 60
-        proj_config.activity_watchdog.check_interval_seconds = 0.05
-        item_logger = MagicMock()
-        item_logger.log_path = str(log_file)
-        task, abort = _maybe_start_activity_watchdog(item_logger, proj_config)
-        assert task is not None
-        assert not task.done()
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
-
-
-class TestCancelWatchdog:
-    """Tests for _cancel_watchdog."""
-
-    def teardown_method(self):
-        if sys.platform == "win32":
-            time.sleep(0.05)
-
-    @pytest.mark.asyncio
-    async def test_cancel_none_is_noop(self):
-        await _cancel_watchdog(None)
-
-    @pytest.mark.asyncio
-    async def test_cancel_done_task_is_noop(self):
-        async def quick():
-            return True
-        task = asyncio.create_task(quick())
-        await task
-        await _cancel_watchdog(task)
-
-    @pytest.mark.asyncio
-    async def test_cancel_running_task(self, tmp_path):
-        log_file = tmp_path / "test.log"
-        log_file.write_text("data")
-        abort = asyncio.Event()
-        task = asyncio.create_task(
-            _activity_watchdog(log_file, timeout_seconds=999, check_interval_seconds=0.05, abort_event=abort)
-        )
-        await asyncio.sleep(0.02)
-        await _cancel_watchdog(task)
-        assert task.done()
 
 
 class TestBuildCopilotResult:
