@@ -6,12 +6,11 @@ Locks auto-release on process crash since they are backed by filelock.FileLock.
 
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
 import os
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from collections.abc import Generator
 
@@ -71,7 +70,7 @@ def _meta_path(lock_path: Path) -> Path:
 
 def _write_lock_metadata(lock_path: Path) -> None:
     """Write PID and timestamp into a sidecar file after lock acquisition."""
-    with contextlib.suppress(OSError):
+    with suppress(OSError):
         _meta_path(lock_path).write_text(json.dumps({
             "pid": os.getpid(),
             "timestamp": time.time(),
@@ -175,10 +174,8 @@ _WORKTREE_SETUP_LOCK = "worktree-setup"
 _MERGE_LOCK = "merge-queue"
 _MANIFEST_LOCK = "worktree-manifest"
 _BEADS_DB_LOCK = "beads-db"
-
-# Age threshold (seconds) after which a merge lock file is considered stale.
-# 15 minutes should be beyond any legitimate merge operation.
-_MERGE_LOCK_STALE_AGE = 900.0
+_COMMIT_LOCK = "pre-commit-hooks"
+_MERGE_LOCK_STALE_AGE = 900.0  # 15 min; must exceed any legitimate merge
 
 # Stale-timeout defaults (seconds) for dead-PID lock recovery.
 _WORKTREE_SETUP_STALE = 300.0   # 5 min
@@ -186,6 +183,7 @@ _MERGE_STALE = 600.0            # 10 min
 _MANIFEST_STALE = 120.0         # 2 min
 _CLEANUP_STALE = 300.0          # 5 min (main-repo-cleanup)
 _BEADS_DB_STALE = 300.0         # 5 min (beads DB mutations)
+_COMMIT_STALE = 600.0           # 10 min (pre-commit hooks)
 
 
 @contextmanager
@@ -233,25 +231,32 @@ def manifest_lock(timeout: float = 30.0) -> Generator[FileLock, None, None]:
         yield lock
 
 
+@contextmanager
+def commit_lock(timeout: float = 600.0) -> Generator[FileLock, None, None]:
+    """Serialize git commits so only one pre-commit hook suite runs at a time."""
+    with acquire_lock(
+        _COMMIT_LOCK, timeout=timeout, stale_timeout=_COMMIT_STALE,
+    ) as lock:
+        yield lock
+
+
 # ── Worktree lock (consolidated from worktree_coordination.py) ───────
 
 _WORKTREE_METRICS_DIR = Path(".pokepoke") / "stats"
 _WORKTREE_METRICS_PATH = _WORKTREE_METRICS_DIR / "worktree_metrics.json"
 
-# Default timeout for worktree lock (5 minutes)
-_WORKTREE_LOCK_DEFAULT_TIMEOUT = 300.0
+_WORKTREE_LOCK_DEFAULT_TIMEOUT = 300.0  # 5 minutes
+
+_DEFAULT_WORKTREE_METRICS: dict[str, float] = {
+    "total_attempts": 0, "total_successes": 0, "total_failures": 0,
+    "total_wait_time": 0.0, "max_wait_time": 0.0,
+}
 
 
 def _load_worktree_metrics() -> dict[str, float]:
     """Load worktree creation metrics from disk."""
     if not _WORKTREE_METRICS_PATH.exists():
-        return {
-            "total_attempts": 0,
-            "total_successes": 0,
-            "total_failures": 0,
-            "total_wait_time": 0.0,
-            "max_wait_time": 0.0,
-        }
+        return dict(_DEFAULT_WORKTREE_METRICS)
     try:
         with open(_WORKTREE_METRICS_PATH) as f:
             data = json.load(f)
@@ -259,13 +264,7 @@ def _load_worktree_metrics() -> dict[str, float]:
                 return data
     except (json.JSONDecodeError, OSError):
         pass
-    return {
-        "total_attempts": 0,
-        "total_successes": 0,
-        "total_failures": 0,
-        "total_wait_time": 0.0,
-        "max_wait_time": 0.0,
-    }
+    return dict(_DEFAULT_WORKTREE_METRICS)
 
 
 def _save_worktree_metrics(metrics: dict[str, float]) -> None:

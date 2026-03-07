@@ -7,6 +7,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+from .coordination import commit_lock  # noqa: E402
 from .git_helpers import restore_beads_stash, _run_git_status_with_retry  # noqa: E402
 
 __all__ = [
@@ -60,31 +61,37 @@ def has_uncommitted_changes(cwd: str | None = None) -> bool:
 
 
 def commit_all_changes(message: str = "Auto-commit by PokePoke", cwd: str | None = None) -> tuple[bool, str]:
-    """Commit all changes, triggering pre-commit hooks for validation."""
+    """Commit all changes, triggering pre-commit hooks for validation.
+
+    Acquires a cross-agent commit lock so that only one set of pre-commit
+    hooks (build, mypy, test suite) runs at a time, preventing resource
+    exhaustion when multiple parallel agents commit simultaneously.
+    """
     try:
-        subprocess.run(
-            ["git", "add", "-A"], check=True, capture_output=True,
-            text=True, encoding='utf-8', errors='replace',
-            timeout=240, cwd=cwd
-        )
+        with commit_lock():
+            subprocess.run(
+                ["git", "add", "-A"], check=True, capture_output=True,
+                text=True, encoding='utf-8', errors='replace',
+                timeout=240, cwd=cwd
+            )
 
-        result = subprocess.run(
-            ["git", "commit", "-m", message],
-            capture_output=True,
-            text=True,
-            encoding='utf-8', errors='replace',
-            timeout=300,  # 5 minutes for pre-commit hooks
-            cwd=cwd
-        )
+            result = subprocess.run(
+                ["git", "commit", "-m", message],
+                capture_output=True,
+                text=True,
+                encoding='utf-8', errors='replace',
+                timeout=300,  # 5 minutes for pre-commit hooks
+                cwd=cwd
+            )
 
-        if result.returncode == 0:
-            return True, ""
-        else:
-            error_lines = result.stderr.strip().split('\n') if result.stderr else []
-            if error_lines:
-                errors = [line for line in error_lines if line.strip() and not line.startswith('hint:')][:5]
-                return False, '\n   '.join(errors) if errors else "Commit failed"
-            return False, "Commit failed (unknown reason)"
+            if result.returncode == 0:
+                return True, ""
+            else:
+                error_lines = result.stderr.strip().split('\n') if result.stderr else []
+                if error_lines:
+                    errors = [line for line in error_lines if line.strip() and not line.startswith('hint:')][:5]
+                    return False, '\n   '.join(errors) if errors else "Commit failed"
+                return False, "Commit failed (unknown reason)"
     except subprocess.TimeoutExpired as e:
         return False, f"Commit timed out after {e.timeout} seconds (pre-commit hooks may be hanging)"
     except subprocess.CalledProcessError as e:

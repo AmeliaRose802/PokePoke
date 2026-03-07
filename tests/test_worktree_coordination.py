@@ -55,8 +55,15 @@ def cleanup_lock_files():
 
 def test_with_worktree_lock_basic(cleanup_lock_files, tmp_path, monkeypatch):
     """Test basic lock acquisition and release."""
-    monkeypatch.chdir(tmp_path)
-    lock_path = tmp_path / ".pokepoke" / "locks" / "worktree-setup.lock"
+    import os
+    lock_dir = tmp_path / ".pokepoke" / "locks"
+
+    def _isolated_lock_dir():
+        os.makedirs(lock_dir, exist_ok=True)
+        return lock_dir
+
+    monkeypatch.setattr("pokepoke.coordination._lock_dir", _isolated_lock_dir)
+    lock_path = lock_dir / "worktree-setup.lock"
     # Lock should be acquired and released without error
     with with_worktree_lock(timeout=5):
         # Verify lock file exists while locked

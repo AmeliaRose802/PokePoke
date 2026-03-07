@@ -12,7 +12,7 @@ from filelock import Timeout
 
 from pokepoke.coordination import (
     acquire_lock, try_lock, worktree_setup_lock, merge_lock, merge_lock_active,
-    manifest_lock, clear_lock_if_stale, check_lock_status, with_worktree_lock,
+    manifest_lock, commit_lock, clear_lock_if_stale, check_lock_status, with_worktree_lock,
     _load_worktree_metrics, _record_worktree_attempt, _save_worktree_metrics,
     _lock_dir, _lock_path, _MERGE_LOCK_STALE_AGE, _is_pid_alive, _read_lock_metadata,
     _write_lock_metadata,
@@ -275,6 +275,47 @@ class TestManifestLock:
                 raise ValueError("simulated failure")
             assert lock_ref is not None
             assert not lock_ref.is_locked
+
+
+class TestCommitLock:
+    """Tests for commit_lock – serializes pre-commit hook execution."""
+
+    def test_acquires_and_releases(self, tmp_path: Path) -> None:
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+            with commit_lock(timeout=5) as lock:
+                assert lock.is_locked
+            assert not lock.is_locked
+
+    def test_second_agent_times_out_while_first_holds_lock(self, tmp_path: Path) -> None:
+        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), commit_lock(timeout=5):  # noqa: SIM117
+            with pytest.raises(Timeout), commit_lock(timeout=0):
+                pass  # pragma: no cover
+
+    def test_serializes_two_threads(self, tmp_path: Path) -> None:
+        """Two threads must not hold commit_lock simultaneously."""
+        overlap_detected = threading.Event()
+        inside_count = [0]
+        lock_obj = threading.Lock()
+        errors: list[str] = []
+
+        def worker():
+            with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), commit_lock(timeout=10):
+                with lock_obj:
+                    inside_count[0] += 1
+                    if inside_count[0] > 1:
+                        errors.append("overlap!")
+                        overlap_detected.set()
+                time.sleep(0.05)
+                with lock_obj:
+                    inside_count[0] -= 1
+
+        threads = [threading.Thread(target=worker) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=15)
+
+        assert not errors, "Two threads were inside commit_lock simultaneously"
 
 
 class TestManifestFunctionsUseLocking:

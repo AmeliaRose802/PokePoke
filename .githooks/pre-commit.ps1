@@ -101,6 +101,54 @@ $allPassed = $true
 $passed = @()
 $failed = @()
 
+# ── Commit serialization lock ──────────────────────────────────────────
+# When multiple agents commit in parallel, each triggers heavy pre-commit
+# hooks (build, mypy, full test suite).  Running these concurrently
+# overwhelms the system.  Acquire a file lock so only ONE hook instance
+# runs the heavy checks at a time.
+$commitLockStream = $null
+try {
+    $gitCommonDir = git rev-parse --path-format=absolute --git-common-dir 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($gitCommonDir)) {
+        $mainRoot = $repoRoot
+    } else {
+        $mainRoot = Split-Path $gitCommonDir.Trim() -Parent
+    }
+    $lockDir = Join-Path $mainRoot ".pokepoke" "locks"
+    if (-not (Test-Path $lockDir)) {
+        New-Item -ItemType Directory -Force -Path $lockDir | Out-Null
+    }
+    $commitLockFile = Join-Path $lockDir "pre-commit-hooks.lock"
+
+    $lockMaxWait = 600  # 10 minutes max
+    $lockWaited = 0
+    $lockInterval = 5
+    while ($lockWaited -lt $lockMaxWait) {
+        try {
+            $commitLockStream = [System.IO.File]::Open(
+                $commitLockFile,
+                [System.IO.FileMode]::OpenOrCreate,
+                [System.IO.FileAccess]::ReadWrite,
+                [System.IO.FileShare]::None
+            )
+            break
+        }
+        catch {
+            if ($lockWaited -eq 0) {
+                Write-Host "  ⏳ Waiting for another commit's hooks to finish..." -ForegroundColor Yellow
+            }
+            Start-Sleep -Seconds $lockInterval
+            $lockWaited += $lockInterval
+        }
+    }
+    if (-not $commitLockStream) {
+        Write-Host "  ⚠️  Commit lock timeout (${lockMaxWait}s) — proceeding without lock" -ForegroundColor Yellow
+    }
+}
+catch {
+    Write-Host "  ⚠️  Could not acquire commit lock: $_ — proceeding without lock" -ForegroundColor Yellow
+}
+
 # Checks that don't depend on build artifacts - can run in parallel
 $staticChecks = @(
     @{ Name = "Pokepoke Boot"; Script = "check-pokepoke-import.ps1" }
@@ -200,6 +248,7 @@ function Stop-AllStaticJobs {
 # If build failed, stop parallel static jobs and exit early
 if ($buildFailed) {
     Stop-AllStaticJobs
+    if ($commitLockStream) { $commitLockStream.Close(); $commitLockStream = $null }
     Write-Host ""
     Write-Host "❌ Build failed: $($failed -join ', ') — downstream checks skipped" -ForegroundColor Red
     exit 1
@@ -250,6 +299,9 @@ finally {
 }
 
 Write-Host ""
+
+# Release commit serialization lock
+if ($commitLockStream) { $commitLockStream.Close(); $commitLockStream = $null }
 
 if ($allPassed) {
     Write-Host "✅ All checks passed" -ForegroundColor Green
