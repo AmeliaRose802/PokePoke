@@ -1,8 +1,9 @@
 """Integration tests for copilot_sdk module to improve coverage."""
 
+import asyncio
 import sys
 import time
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, AsyncMock, MagicMock
 import pytest
 
 from pokepoke.types import BeadsWorkItem, CopilotResult
@@ -331,3 +332,232 @@ class TestCopilotSDKConfiguration:
 
         # test_data_section should be None when no test data
         assert variables['test_data_section'] is None
+
+
+class TestAwaitCompletionInactivity:
+    """Tests for _await_completion inactivity detection."""
+
+    @pytest.mark.asyncio
+    async def test_inactivity_triggers_abort(self):
+        """When no events arrive for inactivity_timeout, returns 'inactivity'."""
+        from pokepoke.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        done = asyncio.Event()
+
+        # last_event_time far in the past → immediate inactivity
+        stats = {
+            'last_event_time': time.monotonic() - 700,
+            'event_count': 5,
+            'last_tool_activity_time': time.monotonic() - 700,
+        }
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=600,
+        )
+
+        assert result == "inactivity"
+        session.abort.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_no_inactivity_when_events_recent(self):
+        """When events are recent, inactivity check does not fire."""
+        from pokepoke.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic(),
+            'event_count': 10,
+            'last_tool_activity_time': time.monotonic(),
+        }
+
+        # Set done after a brief delay so the function exits normally
+        async def _set_done():
+            await asyncio.sleep(0.05)
+            done.set()
+        asyncio.create_task(_set_done())
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=600,
+        )
+
+        assert result is None  # Normal completion
+
+    @pytest.mark.asyncio
+    async def test_inactivity_disabled_when_zero(self):
+        """When inactivity_timeout=0, detection is disabled."""
+        from pokepoke.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic() - 9999,
+            'event_count': 1,
+            'last_tool_activity_time': 0.0,
+        }
+
+        async def _set_done():
+            await asyncio.sleep(0.05)
+            done.set()
+        asyncio.create_task(_set_done())
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=0,
+        )
+
+        assert result is None  # Should not trigger inactivity
+
+    @pytest.mark.asyncio
+    async def test_inactivity_without_stats_is_noop(self):
+        """When stats=None (default), inactivity check is skipped."""
+        from pokepoke.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        done = asyncio.Event()
+
+        async def _set_done():
+            await asyncio.sleep(0.05)
+            done.set()
+        asyncio.create_task(_set_done())
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+        )
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_inactivity_abort_failure_still_returns(self):
+        """If session.abort() raises during inactivity, still returns 'inactivity'."""
+        from pokepoke.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        session.abort.side_effect = Exception("abort failed")
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic() - 1000,
+            'event_count': 3,
+            'last_tool_activity_time': 0.0,
+        }
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=600,
+        )
+
+        assert result == "inactivity"
+
+
+class TestCheckInactivity:
+    """Tests for _check_inactivity helper."""
+
+    def test_returns_failure_when_detected(self):
+        from pokepoke.sdk_helpers import _check_inactivity
+
+        result = _check_inactivity("item-1", True, 600.0)
+        assert result is not None
+        assert not result.success
+        assert "no SDK events" in result.error
+        assert "600" in result.error
+
+    def test_returns_none_when_not_detected(self):
+        from pokepoke.sdk_helpers import _check_inactivity
+
+        result = _check_inactivity("item-1", False, 600.0)
+        assert result is None
+
+
+class TestSessionInactivityConfig:
+    """Tests for session_inactivity_timeout config field."""
+
+    def test_default_value(self):
+        from pokepoke.config import ProjectConfig
+        cfg = ProjectConfig()
+        assert cfg.session_inactivity_timeout == 600
+
+    def test_clamped_to_minimum(self):
+        from pokepoke.config import ProjectConfig
+        cfg = ProjectConfig(session_inactivity_timeout=10)
+        assert cfg.session_inactivity_timeout == 60
+
+    def test_custom_value_preserved(self):
+        from pokepoke.config import ProjectConfig
+        cfg = ProjectConfig(session_inactivity_timeout=900)
+        assert cfg.session_inactivity_timeout == 900
+
+
+@pytest.mark.asyncio
+class TestInvokeCopilotSDKInactivity:
+    """Test full invoke_copilot_sdk with inactivity detection."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_process_cleanup(self):
+        with patch('pokepoke.process_utils.wait_for_process_cleanup'):
+            yield
+
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_invoke_returns_failure_on_inactivity(self, mock_client_class):
+        """Full invoke_copilot_sdk returns failure when session goes inactive."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+
+        mock_client = AsyncMock()
+        mock_session = AsyncMock()
+        mock_session.session_id = "test-inactivity"
+        mock_session.abort = AsyncMock()
+
+        mock_client.start = AsyncMock()
+        mock_client.create_session = AsyncMock(return_value=mock_session)
+        mock_client.stop = AsyncMock()
+        mock_client.get_state.return_value = "running"
+        mock_client_class.return_value = mock_client
+
+        # Don't set done — simulate dead session
+        mock_session.on = lambda handler: None
+        mock_session.send = AsyncMock()
+        mock_session.destroy = AsyncMock()
+
+        work_item = BeadsWorkItem(
+            id="dead-session",
+            title="Dead session test",
+            status="ready",
+            priority=1,
+            issue_type="bug",
+        )
+
+        # Use very short inactivity timeout to trigger quickly
+        with patch('pokepoke.copilot_sdk.get_config') as mock_cfg:
+            cfg = Mock()
+            cfg.idle_timeout_seconds = 1
+            cfg.session_inactivity_timeout = 0.1  # 100ms
+            cfg.ai_backend.copilot_cli_path = "copilot.cmd"
+            cfg.ai_backend.provider = "copilot-sdk"
+            cfg.mcp_server.enabled = False
+            cfg.test_data = {}
+            cfg.command_timeout = 60
+            mock_cfg.return_value = cfg
+
+            result = await invoke_copilot_sdk(
+                work_item=work_item,
+                timeout=10.0,
+                idle_timeout=1.0,
+            )
+
+        assert not result.success
+        assert "no SDK events" in result.error.lower() or "session died" in result.error.lower()

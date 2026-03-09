@@ -1,6 +1,7 @@
 """Helper functions for the Copilot SDK integration."""
 import asyncio
 import logging
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -91,14 +92,30 @@ def _check_early_exit(
     return None
 
 
+def _check_inactivity(
+    work_item_id: str,
+    inactivity_detected: bool,
+    inactivity_timeout: float,
+) -> CopilotResult | None:
+    """Return a failure result if session died from inactivity, else None."""
+    if inactivity_detected:
+        return _fail_result(
+            work_item_id,
+            f"Session died: no SDK events for {inactivity_timeout:.0f}s",
+        )
+    return None
+
+
 async def _await_completion(
     session: Any, client: Any, done: asyncio.Event,
     max_timeout: float,
+    stats: SessionStats | None = None,
+    inactivity_timeout: float = 600.0,
 ) -> str | None:
     """Poll until the session finishes or an abort condition is met.
 
     Returns ``None`` on normal completion, or a reason string
-    (``"shutdown"``, ``"timeout"``) on abort.
+    (``"shutdown"``, ``"timeout"``, ``"inactivity"``) on abort.
     """
     deadline = asyncio.get_event_loop().time() + max_timeout
     while not done.is_set():
@@ -114,6 +131,26 @@ async def _await_completion(
                 break
         except Exception:
             pass
+        # Detect dead sessions: no SDK events for inactivity_timeout seconds
+        if stats is not None and inactivity_timeout > 0:
+            since_last_event = time.monotonic() - stats['last_event_time']
+            if since_last_event >= inactivity_timeout:
+                print(
+                    f"\n[SDK] SESSION DEAD: No events received for {since_last_event:.0f}s "
+                    f"(threshold: {inactivity_timeout:.0f}s) — aborting"
+                )
+                logger.error(
+                    "SDK session inactivity detected: no events for %.0fs "
+                    "(event_count=%d, last_tool_activity=%.0fs ago)",
+                    since_last_event,
+                    stats.get('event_count', 0),
+                    time.monotonic() - stats.get('last_tool_activity_time', 0),
+                )
+                try:
+                    await session.abort()
+                except Exception as e:
+                    logger.debug("Failed to abort dead session: %s", e)
+                return "inactivity"
         remaining = deadline - asyncio.get_event_loop().time()
         if remaining <= 0:
             print(f"\n[SDK] TIMEOUT after {max_timeout}s")

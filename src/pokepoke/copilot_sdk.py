@@ -18,7 +18,8 @@ from .process_utils import shutdown_copilot_client
 from .sdk_event_handler import create_event_handler
 from .sdk_helpers import (
     _fail_result, _build_token_usage_callback, _build_copilot_result,
-    _build_session_config, _check_early_exit, _await_completion,
+    _build_session_config, _check_early_exit, _check_inactivity,
+    _await_completion,
 )
 
 logger = logging.getLogger(__name__)
@@ -122,6 +123,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     max_timeout = timeout or 7200.0
     if idle_timeout is None:
         idle_timeout = float(get_config().idle_timeout_seconds)
+    inactivity_timeout = float(get_config().session_inactivity_timeout)
     current_model = model or DEFAULT_MODEL
 
     client = _create_sdk_client(cwd)
@@ -152,24 +154,29 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         session.on(handle_event)
         timed_out = False
         interrupted = False
+        inactivity_detected = False
         total_wall_duration = 0.0
         total_api_duration = 0.0
 
         async def send_with_retry() -> bool:
             """Send message, returns True if should retry with fallback model."""
-            nonlocal session, session_config, current_model, timed_out, interrupted, total_wall_duration, total_api_duration
+            nonlocal session, session_config, current_model, timed_out, interrupted, inactivity_detected, total_wall_duration, total_api_duration
             print("[SDK] Sending message...\n")
             attempt_start = asyncio.get_event_loop().time()
             try:
                 await session.send({"prompt": final_prompt})
                 abort_reason = await _await_completion(
                     session, client, done, max_timeout,
+                    stats=stats, inactivity_timeout=inactivity_timeout,
                 )
                 if abort_reason == "shutdown":
                     interrupted = True
                     return False
                 if abort_reason == "timeout":
                     timed_out = True
+                    return False
+                if abort_reason == "inactivity":
+                    inactivity_detected = True
                     return False
             except KeyboardInterrupt:
                 print("\n\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")
@@ -213,6 +220,13 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         )
         if early is not None:
             return early
+
+        # Handle inactivity (dead session) detection
+        inactivity_early = _check_inactivity(
+            work_item.id, inactivity_detected, inactivity_timeout,
+        )
+        if inactivity_early is not None:
+            return inactivity_early
 
         await session.destroy()
         return _build_copilot_result(

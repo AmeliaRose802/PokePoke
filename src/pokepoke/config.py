@@ -200,6 +200,7 @@ class ProjectConfig:
     gate_agent_enabled: bool = True
     max_copilot_failure_retries: int = 2  # Max retries when Copilot session fails (0 = no retry)
     idle_timeout_seconds: int = 90  # Seconds to wait before confirming a session is idle
+    session_inactivity_timeout: int = 600  # Seconds with no SDK events before treating session as dead
     assignment: AssignmentConfig = field(default_factory=AssignmentConfig)
     repos: list[RepoConfig] = field(default_factory=list)
 
@@ -209,6 +210,7 @@ class ProjectConfig:
         self.command_timeout = max(30, self.command_timeout)
         self.max_copilot_failure_retries = max(0, self.max_copilot_failure_retries)
         self.idle_timeout_seconds = max(10, self.idle_timeout_seconds)
+        self.session_inactivity_timeout = max(60, self.session_inactivity_timeout)
 
     @staticmethod
     def from_dict(data: dict[str, Any]) -> 'ProjectConfig':
