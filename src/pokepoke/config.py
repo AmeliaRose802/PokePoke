@@ -174,10 +174,12 @@ class RepoConfig:
     path: str = ""
     priority_weight: int = 1
     enabled: bool = True
+    max_workers: int = 0  # Per-repo worker cap (0 = no per-repo limit, uses global pool share)
 
     def __post_init__(self) -> None:
         """Clamp values to valid ranges."""
         self.priority_weight = max(1, self.priority_weight)
+        self.max_workers = max(0, self.max_workers)
 
 
 @dataclass
