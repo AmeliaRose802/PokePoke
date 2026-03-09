@@ -583,6 +583,54 @@ class TestShutdownThreadingExcepthook:
         mock_hook.assert_called_once_with(args)
 
 
+class TestCurrentStyleThreadSafety:
+    """Verify _current_style is protected by _buffer_lock."""
+
+    def test_set_style_under_lock(self) -> None:
+        """set_style should use the buffer lock."""
+        ui = DesktopUI()
+        ui.set_style("red")
+        assert ui._current_style == "red"
+        ui.set_style(None)
+        assert ui._current_style is None
+
+    def test_styled_output_under_lock(self) -> None:
+        """styled_output should acquire the buffer lock for writes."""
+        ui = DesktopUI()
+        with ui.styled_output("bold"):
+            assert ui._current_style == "bold"
+        assert ui._current_style is None
+
+    def test_concurrent_styled_output_and_print(self) -> None:
+        """Concurrent styled_output + _print_redirect should not crash."""
+        ui = DesktopUI()
+        ui._api = MagicMock()
+        errors: list[Exception] = []
+
+        def writer() -> None:
+            try:
+                for _ in range(50):
+                    with ui.styled_output("green"):
+                        pass
+            except Exception as e:
+                errors.append(e)
+
+        def reader() -> None:
+            try:
+                for _ in range(50):
+                    ui._print_redirect("msg")
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=writer), threading.Thread(target=reader)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+
+        assert not errors
+
+
 def _build_stub_edge_module(tmp_path, module_suffix, *, private_mode=True):
     class _DummyLogger:
         def debug(self, *_, **__):

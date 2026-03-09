@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
@@ -12,10 +13,10 @@ import yaml
 from pokepoke.desktop_api import DesktopAPI
 from pokepoke.desktop_api_ext import (
     _build_label_error_result,
-    _coerce_process_output,
     _discover_log_roots as _real_discover_log_roots,
     _update_current_labels,
 )
+from pokepoke.desktop_api_utils import coerce_process_output as _coerce_process_output
 
 
 @pytest.fixture(autouse=True)
@@ -165,7 +166,7 @@ def test_get_config_no_yaml(tmp_path, monkeypatch) -> None:
     api = DesktopAPI()
     (tmp_path / ".pokepoke").mkdir()
     (tmp_path / ".pokepoke" / "config.yaml").write_text("key: val\n", encoding="utf-8")
-    monkeypatch.setattr("pokepoke.desktop_api_ext._HAS_YAML", False)
+    monkeypatch.setattr("pokepoke.desktop_api_ext.HAS_YAML", False)
     with patch("pokepoke.config._find_repo_root", return_value=tmp_path), \
          pytest.raises(ImportError, match="PyYAML"):
         api.get_config()
@@ -214,7 +215,7 @@ def test_save_config_rejects_non_dict_yaml() -> None:
 
 def test_save_config_no_yaml(monkeypatch) -> None:
     api = DesktopAPI()
-    monkeypatch.setattr("pokepoke.desktop_api_ext._HAS_YAML", False)
+    monkeypatch.setattr("pokepoke.desktop_api_ext.HAS_YAML", False)
     with patch("pokepoke.config._find_repo_root"), pytest.raises(ImportError, match="PyYAML"):
         api.save_config({"key": "val"})
 
@@ -524,3 +525,34 @@ def test_check_beads_available_delegates() -> None:
     from pokepoke.desktop_api_ext import _check_beads_available
     with patch("pokepoke.project_utils.check_beads_available", return_value=False):
         assert _check_beads_available(Path(".")) is False
+
+
+# ── open_project thread safety ───────────────────────────────────────────
+
+
+def test_open_project_chdir_under_lock(tmp_path, monkeypatch) -> None:
+    """os.chdir inside open_project must happen under self._lock."""
+    (tmp_path / ".pokepoke").mkdir()
+    (tmp_path / ".pokepoke" / "config.yaml").write_text("project_name: P\n", encoding="utf-8")
+    (tmp_path / ".git").mkdir()
+
+    monkeypatch.setattr("pokepoke.desktop_api_ext._is_git_repo", lambda p: True)
+    monkeypatch.setattr("pokepoke.desktop_api_ext._resolve_git_toplevel", lambda p: p)
+    monkeypatch.setattr("pokepoke.desktop_api_ext._check_beads_available", lambda p: True)
+    monkeypatch.setattr("pokepoke.repo_utils.get_repository_name", lambda: "P")
+
+    api = DesktopAPI()
+    chdir_was_locked = []
+
+    original_chdir = os.chdir
+
+    def tracking_chdir(path):
+        # Check if lock is held (RLock._is_owned is a private method but safe for testing)
+        chdir_was_locked.append(api._lock._is_owned())
+        return original_chdir(path)
+
+    monkeypatch.setattr("pokepoke.desktop_api_ext.os.chdir", tracking_chdir)
+
+    result = api.open_project(str(tmp_path))
+    assert result["success"] is True
+    assert chdir_was_locked == [True], "os.chdir must be called while holding self._lock"

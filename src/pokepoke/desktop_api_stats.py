@@ -53,22 +53,26 @@ def snapshot_to_dict(snapshot: Any) -> dict[str, Any]:
 
 def serialize_live_stats(self: DesktopAPI) -> dict[str, Any] | None:
     """Serialize session stats fresh on every poll."""
+    with self._lock:
+        live = self._live_session_stats
+        cached = self._current_stats
+        session_start = self._session_start_time
+        session_end = self._session_end_time
+
     stats: dict[str, Any] | None = None
-    live = self._live_session_stats
     if live is not None:
         stats = snapshot_to_dict(live.snapshot())
-        cached = self._current_stats
         if cached is not None and "elapsed_time" in cached:
             stats["elapsed_time"] = cached["elapsed_time"]
-    elif self._current_stats is not None:
-        stats = dict(self._current_stats)
+    elif cached is not None:
+        stats = dict(cached)
 
     # Override with live elapsed_time if session start is known
-    if self._session_start_time is not None:
-        if self._session_end_time is not None:
-            elapsed = self._session_end_time - self._session_start_time
+    if session_start is not None:
+        if session_end is not None:
+            elapsed = session_end - session_start
         else:
-            elapsed = time.time() - self._session_start_time
+            elapsed = time.time() - session_start
 
         # Truncate to integer seconds so that shallowEqual on the stats dict
         # succeeds between polls when nothing else has changed.  Without this,
@@ -86,13 +90,13 @@ def serialize_live_stats(self: DesktopAPI) -> dict[str, Any] | None:
 
 def get_cached_leaderboard(self: DesktopAPI) -> dict[str, Any]:
     """Return model leaderboard, cached for 5s to avoid disk reads on every poll."""
-    now = time.time()
-    if now - self._leaderboard_cache_time > 5.0:
-        from pokepoke.model_stats_store import get_model_summary
-        self._leaderboard_cache = get_model_summary()
-        self._leaderboard_cache_time = now
-    result: dict[str, Any] = self._leaderboard_cache
-    return result
+    with self._lock:
+        now = time.time()
+        if now - self._leaderboard_cache_time > 5.0:
+            from pokepoke.model_stats_store import get_model_summary
+            self._leaderboard_cache = get_model_summary()
+            self._leaderboard_cache_time = now
+        return self._leaderboard_cache
 
 
 def get_model_leaderboard(self: DesktopAPI, repo_name: str = "") -> dict[str, Any]:

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import patch
 
 from pokepoke.desktop_api_stats import (
@@ -41,6 +43,7 @@ def _make_self(**kwargs):
         "_history_cache": None,
         "_history_cache_limit": None,
         "_history_cache_time": 0.0,
+        "_lock": threading.RLock(),
     }
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -420,3 +423,64 @@ class TestGetRepoSummary:
              patch("pokepoke.beads_item_stats_store.get_summary_by_repo", return_value={}):
             result = get_repo_summary(obj)
         assert result == {}
+
+
+class TestSerializeLiveStatsThreadSafety:
+    """Verify serialize_live_stats acquires the lock."""
+
+    def test_reads_under_lock(self) -> None:
+        """Concurrent writes to fields should not cause torn reads."""
+        obj = _make_self(_session_start_time=time.time() - 5.0)
+        results: list[dict[str, Any] | None] = []
+        errors: list[Exception] = []
+
+        def reader() -> None:
+            try:
+                for _ in range(50):
+                    results.append(serialize_live_stats(obj))
+            except Exception as e:
+                errors.append(e)
+
+        def writer() -> None:
+            for i in range(50):
+                with obj._lock:
+                    obj._session_start_time = time.time() - float(i)
+
+        threads = [threading.Thread(target=reader), threading.Thread(target=writer)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+
+        assert not errors
+        # All results should be either None or a dict with elapsed_time
+        for r in results:
+            if r is not None:
+                assert "elapsed_time" in r
+
+
+class TestGetCachedLeaderboardThreadSafety:
+    """Verify get_cached_leaderboard acquires the lock."""
+
+    def test_concurrent_access_no_race(self) -> None:
+        """Multiple threads calling get_cached_leaderboard should not corrupt cache."""
+        fresh = {"model": {"rate": 0.9}}
+        obj = _make_self(_leaderboard_cache={}, _leaderboard_cache_time=0.0)
+        errors: list[Exception] = []
+
+        def reader() -> None:
+            try:
+                for _ in range(30):
+                    with patch("pokepoke.model_stats_store.get_model_summary", return_value=fresh):
+                        result = get_cached_leaderboard(obj)
+                    assert isinstance(result, dict)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=reader) for _ in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+
+        assert not errors

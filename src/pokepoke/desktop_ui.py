@@ -211,7 +211,6 @@ class DesktopUI:
         self._is_running = False
 
     def exit(self) -> None:
-        """Exit."""
         self._is_running = False
 
     # ─── Print Redirect ───────────────────────────────────────────────
@@ -238,7 +237,10 @@ class DesktopUI:
 
         # Resolve per-thread overrides (set by context managers)
         target: str = getattr(_thread_output, "target", None) or self._target_buffer
-        style: str | None = getattr(_thread_output, "style", None) or self._current_style
+        style: str | None = getattr(_thread_output, "style", None)
+        if style is None:
+            with self._buffer_lock:
+                style = self._current_style
         agent_id: str | None = getattr(_thread_output, "agent_id", None)
 
         # Use per-thread line buffer to avoid interleaving partial lines
@@ -314,15 +316,18 @@ class DesktopUI:
 
     @contextmanager
     def styled_output(self, style: str) -> Iterator[None]:
-        prev_style = self._current_style
-        self._current_style = style
+        with self._buffer_lock:
+            prev_style = self._current_style
+            self._current_style = style
         try:
             yield
         finally:
-            self._current_style = prev_style
+            with self._buffer_lock:
+                self._current_style = prev_style
 
     def set_style(self, style: str | None) -> None:
-        self._current_style = style
+        with self._buffer_lock:
+            self._current_style = style
 
     # ─── State Updates ────────────────────────────────────────────────
 
@@ -352,9 +357,8 @@ class DesktopUI:
     def set_logs_dir(self, logs_dir: str) -> None:
         self._api.set_logs_dir(logs_dir)
 
-    def log_message(
-        self, message: str, target: str = "orchestrator", style: str | None = None
-    ) -> None:
+    def log_message(self, message: str, target: str = "orchestrator",
+                    style: str | None = None) -> None:
         self._api.push_log(message, target, style)
 
     def log_orchestrator(self, message: str, style: str | None = None) -> None:
@@ -379,15 +383,12 @@ class DesktopUI:
 
     def push_agent_log(self, agent_id: str, line: str) -> None:
         self._api.push_agent_log(agent_id, line)
-
     def push_agent_tokens(self, agent_id: str, input_tokens: int,
                           output_tokens: int) -> None:
-        """Update live token usage for an agent card."""
         self._api.push_agent_tokens(agent_id, input_tokens, output_tokens)
 
     def remove_agent(self, agent_id: str) -> None:
         self._api.remove_agent(agent_id)
-
     def pause_agent(self, agent_id: str) -> bool:
         return bool(self._api.pause_agent(agent_id).get("paused", False))
 

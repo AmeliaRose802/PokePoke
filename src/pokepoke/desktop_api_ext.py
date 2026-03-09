@@ -309,15 +309,22 @@ def open_project(self: DesktopAPI, path: str) -> dict[str, Any]:
         project_path = repo_root
 
     has_config = _has_pokepoke_config(project_path)
-    os.chdir(project_path)
     needs_beads_init = not _check_beads_available(project_path)
 
-    reset_config()
-    config = load_config()
-    repo_name = get_repository_name()
-    cancel_stop_after_current()
+    # Compute explicit config path so load_config does not depend on CWD
+    config_path = project_path / ".pokepoke" / "config.yaml"
 
     with self._lock:
+        # os.chdir is process-global; holding the lock serialises it with
+        # state reads in get_state() so other threads never observe a
+        # partially-updated CWD + state combination.
+        os.chdir(project_path)
+
+        reset_config()
+        config = load_config(config_path=config_path if config_path.exists() else None)
+        repo_name = get_repository_name()
+        cancel_stop_after_current()
+
         self._repository_name = repo_name
         self._current_work_item = None
         self._current_agent_name = ""
