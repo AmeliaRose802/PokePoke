@@ -1,5 +1,6 @@
 """Unit tests for agent_runner module."""
 
+import logging
 import subprocess
 from pathlib import Path
 from unittest.mock import Mock, MagicMock, patch
@@ -609,30 +610,30 @@ class TestRunMaintenanceAgent:
         assert stats is None
 
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
-    def test_missing_prompt_shows_agent_name_in_error(self, mock_get_dir: Mock, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_missing_prompt_shows_agent_name_in_error(self, mock_get_dir: Mock, caplog) -> None:
         """Test that missing prompt error includes agent name and available prompts."""
         fake_dir = Path(__file__).parent
         mock_get_dir.return_value = fake_dir
 
-        stats = run_maintenance_agent("Backlog Cleanup", "nonexistent-prompt.md")
+        with caplog.at_level(logging.DEBUG, logger="pokepoke.agent_runner"):
+            stats = run_maintenance_agent("Backlog Cleanup", "nonexistent-prompt.md")
 
         assert stats is None
-        captured = capsys.readouterr()
-        assert "Backlog Cleanup" in captured.out
-        assert "nonexistent-prompt.md" in captured.out
-        assert "failed to start" in captured.out
+        assert "Backlog Cleanup" in caplog.text
+        assert "nonexistent-prompt.md" in caplog.text
+        assert "failed to start" in caplog.text
 
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
-    def test_prompts_dir_not_found_shows_agent_name(self, mock_get_dir: Mock, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_prompts_dir_not_found_shows_agent_name(self, mock_get_dir: Mock, caplog) -> None:
         """Test that prompts dir not found error includes agent name."""
         mock_get_dir.side_effect = FileNotFoundError("Prompts directory not found")
 
-        stats = run_maintenance_agent("Code Review", "code-reviewer.md")
+        with caplog.at_level(logging.DEBUG, logger="pokepoke.agent_runner"):
+            stats = run_maintenance_agent("Code Review", "code-reviewer.md")
 
         assert stats is None
-        captured = capsys.readouterr()
-        assert "Code Review" in captured.out
-        assert "failed to start" in captured.out
+        assert "Code Review" in caplog.text
+        assert "failed to start" in caplog.text
 
 
 class TestRunBeadsOnlyAgent:

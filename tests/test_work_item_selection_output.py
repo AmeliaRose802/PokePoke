@@ -1,4 +1,5 @@
 
+import logging
 from unittest.mock import Mock, patch
 from pokepoke.work_item_selection import (
     select_work_item,
@@ -39,11 +40,11 @@ class TestSelectWorkItem:
     """Tests for select_work_item filtering logic."""
 
     @patch('builtins.print')
-    def test_empty_ready_items(self, mock_print: Mock):
-        result = select_work_item([], interactive=False)
+    def test_empty_ready_items(self, mock_print: Mock, caplog):
+        with caplog.at_level(logging.DEBUG, logger="pokepoke.work_item_selection"):
+            result = select_work_item([], interactive=False)
         assert result is None
-        printed = " ".join(str(c) for c in mock_print.call_args_list)
-        assert "No ready work" in printed
+        assert "No ready work" in caplog.text
 
     @patch('builtins.print')
     @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
@@ -58,44 +59,44 @@ class TestSelectWorkItem:
         assert call_args[0].id == "b"
 
     @patch('builtins.print')
-    def test_all_items_skipped(self, mock_print: Mock):
+    def test_all_items_skipped(self, mock_print: Mock, caplog):
         items = [_make_item(id="a")]
-        result = select_work_item(items, interactive=False, skip_ids={"a"})
+        with caplog.at_level(logging.DEBUG, logger="pokepoke.work_item_selection"):
+            result = select_work_item(items, interactive=False, skip_ids={"a"})
         assert result is None
-        printed = " ".join(str(c) for c in mock_print.call_args_list)
-        assert "previously skipped" in printed
+        assert "previously skipped" in caplog.text
 
     @patch('builtins.print')
     @patch('pokepoke.work_item_selection.is_assigned_to_current_user', return_value=False)
-    def test_filters_items_assigned_to_other_agents(self, _mock_assigned: Mock, mock_print: Mock):
+    def test_filters_items_assigned_to_other_agents(self, _mock_assigned: Mock, mock_print: Mock, caplog):
         items = [_make_item(id="a")]
-        result = select_work_item(items, interactive=False)
+        with caplog.at_level(logging.DEBUG, logger="pokepoke.work_item_selection"):
+            result = select_work_item(items, interactive=False)
         assert result is None
-        printed = " ".join(str(c) for c in mock_print.call_args_list)
-        assert "Skipped" in printed
+        assert "Skipped" in caplog.text
 
     @patch('builtins.print')
     @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
     @patch('pokepoke.work_item_selection.is_assigned_to_current_user', return_value=True)
     @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
-    def test_filters_human_required_items(self, mock_select: Mock, _m1: Mock, _m2: Mock, mock_print: Mock):
+    def test_filters_human_required_items(self, mock_select: Mock, _m1: Mock, _m2: Mock, mock_print: Mock, caplog):
         human = _make_item(id="h", labels=["human-required"])
         normal = _make_item(id="n")
         mock_select.return_value = normal
-        result = select_work_item([human, normal], interactive=False)
+        with caplog.at_level(logging.DEBUG, logger="pokepoke.work_item_selection"):
+            result = select_work_item([human, normal], interactive=False)
         assert result is normal
-        printed = " ".join(str(c) for c in mock_print.call_args_list)
-        assert "human-required" in printed
+        assert "human-required" in caplog.text
 
     @patch('builtins.print')
     @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=True)
     @patch('pokepoke.work_item_selection.is_assigned_to_current_user', return_value=True)
-    def test_filters_items_with_unmet_dependencies(self, _m1: Mock, _m2: Mock, mock_print: Mock):
+    def test_filters_items_with_unmet_dependencies(self, _m1: Mock, _m2: Mock, mock_print: Mock, caplog):
         items = [_make_item(id="a")]
-        result = select_work_item(items, interactive=False)
+        with caplog.at_level(logging.DEBUG, logger="pokepoke.work_item_selection"):
+            result = select_work_item(items, interactive=False)
         assert result is None
-        printed = " ".join(str(c) for c in mock_print.call_args_list)
-        assert "blocking dependencies" in printed
+        assert "blocking dependencies" in caplog.text
 
     @patch('builtins.print')
     @patch('builtins.input')

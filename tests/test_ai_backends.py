@@ -1,5 +1,6 @@
 """Tests for AI backend registry and adapters."""
 
+import logging
 import subprocess
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -59,14 +60,14 @@ def test_claude_code_backend_handles_missing_cli(mock_get_config, mock_which):
 
 
 @patch("pokepoke.ai_backends.get_config")
-def test_unknown_backend_falls_back_to_copilot(mock_get_config, capsys):
+def test_unknown_backend_falls_back_to_copilot(mock_get_config, caplog):
     mock_get_config.return_value = _config("mystery")
 
-    backend = get_backend()
+    with caplog.at_level(logging.DEBUG, logger="pokepoke.ai_backends"):
+        backend = get_backend()
 
     assert isinstance(backend, CopilotBackend)
-    captured = capsys.readouterr()
-    assert "Unknown AI backend" in captured.out
+    assert "Unknown AI backend" in caplog.text
 
 
 def test_claude_backend_subprocess_failure_is_captured():
