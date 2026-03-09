@@ -98,7 +98,7 @@ class TestCreateWorktree:
 
         result = create_worktree('task-123')
 
-        assert result == Path('worktrees') / 'task-task-123'
+        assert result == (Path('worktrees') / 'task-task-123').resolve()
         mock_run_git.assert_called_once()
         call_args = mock_run_git.call_args[0][0]
         assert 'git' in call_args

@@ -270,7 +270,7 @@ class TestCreateWorktree:
 
             result = create_worktree('incredible_icm-42')
 
-            assert result == Path('worktrees/task-incredible_icm-42')
+            assert result == Path('worktrees/task-incredible_icm-42').resolve()
             # mkdir is called for: worktrees/, .pokepoke/locks/, and .pokepoke/stats/
             assert mock_mkdir.call_count >= 1
             # Verify worktrees directory creation was called
@@ -292,7 +292,7 @@ class TestCreateWorktree:
 
             result = create_worktree('incredible_icm-42', base_branch='develop')
 
-            assert result == Path('worktrees/task-incredible_icm-42')
+            assert result == Path('worktrees/task-incredible_icm-42').resolve()
             # Verify the call was made with custom base branch
             assert mock_run.call_count == 1
             call_args = mock_run.call_args[0][0]
@@ -349,12 +349,13 @@ class TestCreateWorktree:
             
             result = create_worktree('incredible_icm-42')
             
-            assert result == existing_path
+            assert result == existing_path.resolve()
             mock_print.assert_called_once()
             assert 'Reusing existing worktree directory' in mock_print.call_args[0][0]
             mock_run.assert_called_once_with(
                 ["git", "rev-parse", "--is-inside-work-tree"],
-                cwd=existing_path,
+                cwd=existing_path.resolve(),
+
                 capture_output=True,
                 text=True,
                 check=True
@@ -379,12 +380,12 @@ class TestCreateWorktree:
             
             result = create_worktree('incredible_icm-42')
             
-            assert result == existing_path
-            mock_remove.assert_called_once_with(existing_path)
+            assert result == existing_path.resolve()
+            mock_remove.assert_called_once_with(existing_path.resolve())
             # Should have called git worktree prune and git worktree add
             assert mock_run_git.call_count == 2
             assert mock_run_git.call_args_list[0][0][0] == ["git", "worktree", "prune"]
-            assert mock_run_git.call_args_list[1][0][0] == ["git", "worktree", "add", str(existing_path), "-b", "task/incredible_icm-42", "master"]
+            assert mock_run_git.call_args_list[1][0][0] == ["git", "worktree", "add", str(existing_path.resolve()), "-b", "task/incredible_icm-42", "master"]
 
     def test_create_worktree_branch_already_exists_error_recovery(self):
         """Test recovery when branch already exists."""
@@ -1771,7 +1772,7 @@ class TestCreateWorktreeLockAndEdgeCases:
             mock_run.return_value = Mock(returncode=0, stderr='', stdout='')
 
             result = create_worktree('test-item')
-            assert result == Path('worktrees/task-test-item')
+            assert result == Path('worktrees/task-test-item').resolve()
 
     def test_create_worktree_race_condition_double_check(self):
         """Test that worktree found during double-check inside lock is reused (lines 83-87)."""

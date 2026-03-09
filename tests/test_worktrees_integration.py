@@ -41,7 +41,7 @@ class TestCreateWorktreeIntegration:
         result = create_worktree('test-123')
 
         # Verify
-        assert result == Path('worktrees/task-test-123')
+        assert result == Path('worktrees/task-test-123').resolve()
         # mkdir is called for: worktrees/, .pokepoke/locks/, and .pokepoke/stats/
         assert mock_mkdir.call_count >= 1
         # Verify at least one call had exist_ok=True

@@ -46,8 +46,8 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
     # Sanitize the item_id for use in branch names
     sanitized_id = sanitize_branch_name(item_id)
 
-    # Worktree path: ./worktrees/task-{sanitized_id}
-    worktree_path = Path("worktrees") / f"task-{sanitized_id}"
+    # Worktree path: ./worktrees/task-{sanitized_id}  (resolved to absolute)
+    worktree_path = (Path("worktrees") / f"task-{sanitized_id}").resolve()
 
     # Branch name for the worktree
     branch_name = f"task/{sanitized_id}"
