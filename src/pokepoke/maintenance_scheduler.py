@@ -185,18 +185,6 @@ class MaintenanceScheduler:
                 )
                 return
 
-        # Check for conflicts with currently running agents
-        if agent_cfg.conflicts_with:
-            running = self._get_running_agents()
-            conflicts = set(agent_cfg.conflicts_with) & running
-            if conflicts:
-                conflict_list = ", ".join(sorted(conflicts))
-                run_logger.log_maintenance(
-                    log_key,
-                    f"Deferring {agent_name} Agent - conflicts with running agent(s): {conflict_list}",
-                )
-                return
-
         if agent_name in _PARALLEL_SAFE_AGENTS:
             # Parallel-safe agents don't need singleton coordination
             self._run_agent_with_coordination(agent_name, agent_cfg, pokepoke_repo, session_stats, run_logger)

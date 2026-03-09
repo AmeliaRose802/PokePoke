@@ -1142,7 +1142,7 @@ def test_get_config_no_yaml(monkeypatch) -> None:
             cfg.write_text("key: val\n", encoding="utf-8")
             mock_root.return_value = root
 
-            monkeypatch.setattr("pokepoke.desktop_api_ext._HAS_YAML", False)
+            monkeypatch.setattr("pokepoke.desktop_api_ext.HAS_YAML", False)
             with pytest.raises(ImportError, match="PyYAML"):
                 api.get_config()
 
@@ -1169,7 +1169,7 @@ def test_save_config_no_yaml(monkeypatch) -> None:
     from unittest.mock import patch
 
     api = DesktopAPI()
-    monkeypatch.setattr("pokepoke.desktop_api_ext._HAS_YAML", False)
+    monkeypatch.setattr("pokepoke.desktop_api_ext.HAS_YAML", False)
     with patch("pokepoke.config._find_repo_root"), pytest.raises(ImportError, match="PyYAML"):
         api.save_config({"key": "val"})
 

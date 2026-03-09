@@ -179,12 +179,28 @@ def test_git_init_failure(tmp_path: Path) -> None:
 
 
 def test_coerce_process_output() -> None:
-    from pokepoke.desktop_api_setup import _coerce_process_output
+    from pokepoke.desktop_api_utils import coerce_process_output
 
-    assert _coerce_process_output(None) is None
-    assert _coerce_process_output("") is None
-    assert _coerce_process_output("  ") is None
-    assert _coerce_process_output("hello\n") == "hello"
+    assert coerce_process_output(None) is None
+    assert coerce_process_output("") is None
+    assert coerce_process_output("  ") is None
+    assert coerce_process_output("hello\n") == "hello"
+
+
+def test_require_yaml_available() -> None:
+    """require_yaml should not raise when yaml is installed."""
+    from pokepoke.desktop_api_utils import require_yaml
+    require_yaml("load config")  # should not raise
+
+
+def test_require_yaml_missing(monkeypatch) -> None:
+    """require_yaml should raise ImportError when HAS_YAML is False."""
+    import pytest
+    import pokepoke.desktop_api_utils as dau
+
+    monkeypatch.setattr(dau, "HAS_YAML", False)
+    with pytest.raises(ImportError, match="PyYAML is required"):
+        dau.require_yaml("load config")
 
 
 def test_bd_init_delegates(tmp_path: Path) -> None:

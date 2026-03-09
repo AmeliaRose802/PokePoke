@@ -6,7 +6,6 @@ before the main pywebview UI is created.
 
 from __future__ import annotations
 
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,21 +15,6 @@ class LaunchConfig:
     """Settings collected from the launch dialog."""
     repo_path: Path
     max_agents: int = 1
-
-
-def _is_git_repo(path: Path) -> bool:
-    """Quick check whether *path* is inside a git repository."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--git-dir"],
-            capture_output=True,
-            text=True,
-            cwd=str(path),
-            timeout=5,
-        )
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, OSError):
-        return False
 
 
 def _prompt_for_repo() -> LaunchConfig | None:

@@ -12,11 +12,12 @@ from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
-try:
+from contextlib import suppress
+
+from pokepoke.desktop_api_utils import HAS_YAML, coerce_process_output
+
+with suppress(ImportError):
     import yaml  # type: ignore[import-untyped]
-    _HAS_YAML = True
-except ImportError:
-    _HAS_YAML = False
 
 
 def _discover_log_roots() -> list[Path]:
@@ -50,7 +51,7 @@ def get_config(self: Any) -> dict[str, Any]:
     if not config_path.exists():
         return {"path": str(config_path), "config": {}, "exists": False}
 
-    if not _HAS_YAML:
+    if not HAS_YAML:
         raise ImportError(
             "PyYAML is required to load .yaml config files. Install it with: pip install pyyaml"
         )
@@ -72,7 +73,7 @@ def save_config(self: Any, config: Any) -> dict[str, Any]:
     """
     from pokepoke.config import _find_repo_root, reset_config
 
-    if not _HAS_YAML:
+    if not HAS_YAML:
         raise ImportError(
             "PyYAML is required to save .yaml config files. Install it with: pip install pyyaml"
         )
@@ -182,12 +183,6 @@ def _update_current_labels(self: Any, item_id: str, label: str, action: str) -> 
         return labels
 
 
-def _coerce_process_output(output: str | None) -> str | None:
-    if output is None:
-        return None
-    stripped = output.strip()
-    return stripped or None
-
 
 def _build_label_error_result(
     item_id: str,
@@ -240,10 +235,10 @@ def _mutate_work_item_label(
             item_id,
             label,
             "Label update timed out",
-            stderr=_coerce_process_output(getattr(exc, "stderr", None)),
+            stderr=coerce_process_output(getattr(exc, "stderr", None)),
         )
     except subprocess.CalledProcessError as exc:
-        stderr = _coerce_process_output(exc.stderr)
+        stderr = coerce_process_output(exc.stderr)
         message = stderr or f"'bd update' failed with exit code {exc.returncode}"
         logger.warning(
             "Label %s for %s failed: %s",
