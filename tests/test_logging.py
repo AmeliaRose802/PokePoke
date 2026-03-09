@@ -2,8 +2,8 @@
 
 import logging
 from pathlib import Path
-import sys
 import tempfile
+import time
 from pokepoke.logging_utils import RunLogger, ItemLogger, configure_logging
 
 
@@ -528,3 +528,149 @@ def test_item_logger_full_agent_session():
         assert "Rate limit exceeded" in content
         assert "SUCCESS" in content
         assert "Agent requests: 3" in content
+
+
+def test_log_polling_first_cycle_is_debug():
+    """First poll cycle should be logged at DEBUG (not INFO)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir, poll_log_interval=5)
+
+        logger.log_polling("Checking status")
+
+        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+            content = f.read()
+
+        assert "[DEBUG]" in content
+        assert "[poll #1]" in content
+        assert "Checking status" in content
+
+
+def test_log_polling_nth_cycle_is_info():
+    """Every Nth poll cycle should be logged at INFO."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir, poll_log_interval=3)
+
+        for _ in range(3):
+            logger.log_polling("status check")
+
+        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+            content = f.read()
+
+        lines = [ln for ln in content.splitlines() if "status check" in ln]
+        assert len(lines) == 3
+        # Cycles 1, 2 are DEBUG; cycle 3 is INFO
+        assert "[DEBUG]" in lines[0]
+        assert "[DEBUG]" in lines[1]
+        assert "[INFO]" in lines[2]
+        assert "[poll #3]" in lines[2]
+
+
+def test_log_polling_suppresses_most_cycles():
+    """With default interval=50, only cycle 50 out of 50 should be INFO."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir)
+
+        for _ in range(50):
+            logger.log_polling("polling message")
+
+        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+            content = f.read()
+
+        poll_lines = [ln for ln in content.splitlines() if "polling message" in ln]
+        info_lines = [ln for ln in poll_lines if "[INFO]" in ln]
+        debug_lines = [ln for ln in poll_lines if "[DEBUG]" in ln]
+        assert len(poll_lines) == 50
+        assert len(info_lines) == 1
+        assert len(debug_lines) == 49
+
+
+def test_enter_idle_logs_once():
+    """enter_idle should log a message on first call, be a no-op on subsequent calls."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir)
+
+        logger.enter_idle()
+        logger.enter_idle()  # should be no-op
+
+        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+            content = f.read()
+
+        idle_lines = [ln for ln in content.splitlines() if "Entering idle state" in ln]
+        assert len(idle_lines) == 1
+
+
+def test_exit_idle_logs_duration():
+    """exit_idle should log idle duration and reset poll cycle counter."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir)
+
+        logger._idle_since = time.time() - 65  # 1m 5s ago
+        logger._poll_cycle = 42
+
+        logger.exit_idle()
+
+        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+            content = f.read()
+
+        assert "Exiting idle state" in content
+        assert "1m" in content
+        assert "42 poll cycles" in content
+        assert logger._idle_since is None
+        assert logger._poll_cycle == 0
+
+
+def test_exit_idle_noop_when_not_idle():
+    """exit_idle should be a no-op if not currently idle."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir)
+
+        logger.exit_idle()  # not idle — should not log anything
+
+        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+            content = f.read()
+
+        assert "Exiting idle state" not in content
+
+
+def test_exit_idle_resets_poll_cycle():
+    """exit_idle should reset the poll cycle counter so INFO cycles restart."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir, poll_log_interval=3)
+
+        # Simulate idle period with some polls
+        logger.enter_idle()
+        for _ in range(5):
+            logger.log_polling("idle poll")
+
+        logger._idle_since = time.time() - 10
+        logger.exit_idle()
+
+        # After exit, poll cycle should restart from 0
+        assert logger._poll_cycle == 0
+
+        # Next cycle 3 should be INFO again
+        for _ in range(3):
+            logger.log_polling("active poll")
+
+        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+            content = f.read()
+
+        active_lines = [ln for ln in content.splitlines() if "active poll" in ln]
+        assert "[INFO]" in active_lines[2]
+        assert "[poll #3]" in active_lines[2]
+
+
+def test_idle_duration_hours_format():
+    """Long idle periods should format with hours."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir)
+
+        logger._idle_since = time.time() - 3661  # 1h 1m 1s
+        logger._poll_cycle = 100
+
+        logger.exit_idle()
+
+        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+            content = f.read()
+
+        assert "1h 1m 1s" in content

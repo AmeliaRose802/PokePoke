@@ -260,16 +260,13 @@ def run_preflight_and_repo_checks(
     check_and_commit_main_repo_fn: Any = None,
     get_ready_work_items_fn: Any = None,
 ) -> tuple[bool, int, list[BeadsWorkItem]]:
-    """Run pre-flight health checks, repo status check, and fetch ready items.
-
-    Returns (should_continue, updated_preflight_failures, ready_items).
-    """
+    """Run pre-flight health checks, repo status check, and fetch ready items."""
     if check_and_commit_main_repo_fn is None:
         from pokepoke.repo_check import check_and_commit_main_repo as check_and_commit_main_repo_fn
     if get_ready_work_items_fn is None:
         from pokepoke.beads import get_ready_work_items as get_ready_work_items_fn
 
-    run_logger.log_orchestrator("Running pre-flight health checks")
+    run_logger.log_polling("Running pre-flight health checks")
     should_continue, is_critical = handle_preflight_checks(main_repo_path, run_logger)
     if not should_continue:
         if is_critical:
@@ -282,12 +279,12 @@ def run_preflight_and_repo_checks(
         return False, consecutive_preflight_failures, []
     consecutive_preflight_failures = 0
 
-    run_logger.log_orchestrator("Checking main repository status")
+    run_logger.log_polling("Checking main repository status")
     if not check_and_commit_main_repo_fn(main_repo_path, run_logger):
         run_logger.log_orchestrator("Main repo check failed", level="ERROR")
         return False, consecutive_preflight_failures, []
 
-    run_logger.log_orchestrator("Fetching ready work from beads")
+    run_logger.log_polling("Fetching ready work from beads")
     try:
         ready_items = get_ready_work_items_fn()
     except Exception as e:
@@ -332,7 +329,7 @@ def check_loop_exit(
         return "break-done"
 
     if not futures and not ready_items:
-        run_logger.log_orchestrator("No ready items - double-checking beads")
+        run_logger.log_polling("No ready items - double-checking beads")
         try:
             final_check = get_ready_work_items_fn()
             if final_check:
@@ -342,7 +339,8 @@ def check_loop_exit(
             run_logger.log_orchestrator(f"Final beads check failed: {e}", level="WARNING")
 
         if continuous:
-            run_logger.log_orchestrator(f"Continuous: sleeping {idle_sleep:.1f}s (no items)")
+            run_logger.enter_idle()
+            run_logger.log_polling(f"Continuous: sleeping {idle_sleep:.1f}s (no items)")
             terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", "Waiting for work...")
             time.sleep(idle_sleep)
             return "idle-continue"
@@ -352,6 +350,8 @@ def check_loop_exit(
         finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
         return "break-empty"
 
+    # Work is available — if we were idle, log the transition
+    run_logger.exit_idle()
     return None
 
 
@@ -395,5 +395,5 @@ def compute_slots(
         run_logger.log_orchestrator(f"Memory low ({avail_mb}MB) — blocking agents", level="WARNING")
     elif avail_mb > 0 and slots < current_max - len(futures):
         run_logger.log_orchestrator(f"Memory pressure ({avail_mb}MB) — {slots} slot(s)", level="WARNING")
-    run_logger.log_orchestrator(f"Lifecycle: active={len(futures)} max={current_max} slots={slots} mem={avail_mb}MB")
+    run_logger.log_polling(f"Lifecycle: active={len(futures)} max={current_max} slots={slots} mem={avail_mb}MB")
     return current_active, slots, avail_mb

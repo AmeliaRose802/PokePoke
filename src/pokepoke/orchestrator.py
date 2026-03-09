@@ -190,7 +190,7 @@ def run_orchestrator(  # noqa: C901
         else:
             while not is_shutting_down():
                 print("\n🔍 Running pre-flight health checks...")
-                run_logger.log_orchestrator("Running pre-flight health checks")
+                run_logger.log_polling("Running pre-flight health checks")
 
                 # Import and run preflight health checks
                 from pokepoke.preflight_health import run_preflight_checks
@@ -256,12 +256,12 @@ def run_orchestrator(  # noqa: C901
                     run_logger.log_orchestrator("Pre-flight health checks disabled via config")
 
                 print("\n\ud83d\udd0d Checking main repository status...")
-                run_logger.log_orchestrator("Checking main repository status")
+                run_logger.log_polling("Checking main repository status")
                 if not check_and_commit_main_repo(main_repo_path, run_logger):
                     run_logger.log_orchestrator("Main repo check failed", level="ERROR")
                     return 1
                 print("\nFetching ready work from beads...")
-                run_logger.log_orchestrator("Fetching ready work from beads")
+                run_logger.log_polling("Fetching ready work from beads")
                 ready_items = get_ready_work_items()
                 if interactive:
                     terminal_ui.ui.stop()
