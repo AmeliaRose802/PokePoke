@@ -99,10 +99,10 @@ class DesktopAPI:
 
     # Stats serialization — delegated to desktop_api_stats
     (_snapshot_to_dict, _serialize_live_stats, _get_cached_leaderboard,
-     get_model_leaderboard, get_model_history, push_stats) = (
+     get_model_leaderboard, get_model_history, push_stats, get_repo_summary) = (
         staticmethod(_stats.snapshot_to_dict), _stats.serialize_live_stats,
         _stats.get_cached_leaderboard, _stats.get_model_leaderboard,
-        _stats.get_model_history, _stats.push_stats)
+        _stats.get_model_history, _stats.push_stats, _stats.get_repo_summary)
 
     def get_state(self) -> dict[str, Any]:
         """State snapshot + new log entries since last poll (single IPC call)."""

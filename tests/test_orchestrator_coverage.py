@@ -15,6 +15,10 @@ from pokepoke.types import (
 from pokepoke.orchestrator import (
     _finalize_session,
     _record_item_result,
+    _setup_orchestrator,
+    _run_preflight,
+    _run_main_loop,
+    _OrchestratorContext,
     run_orchestrator,
 )
 
@@ -396,3 +400,167 @@ class TestRunOrchestrator:
             exit_code = run_orchestrator(interactive=False, continuous=False)
         assert exit_code == 0
         mock_retry.assert_called_once()
+
+
+# ── _setup_orchestrator ────────────────────────────────────────────
+
+class TestSetupOrchestrator:
+
+    @patch("pokepoke.orchestrator.register_shutdown_handlers")
+    @patch("pokepoke.orchestrator.terminal_ui")
+    @patch("pokepoke.orchestrator.set_terminal_banner")
+    @patch("pokepoke.orchestrator.initialize_agent_name", return_value="test-agent")
+    @patch("pokepoke.orchestrator.load_config")
+    @patch("pokepoke.orchestrator.get_beads_stats", return_value=BeadsStats())
+    @patch("pokepoke.beads.get_failed_unassign_count", return_value=0)
+    def test_returns_context(
+        self, mock_unassign_count, mock_beads_stats, mock_config,
+        mock_init, mock_banner, mock_ui, mock_register,
+    ):
+        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
+        with (
+            patch("pokepoke.beads_item_stats_backfill.backfill_from_beads_db",
+                  return_value={"backfilled": 0}),
+            patch("pokepoke.beads_item_stats_store.get_summary",
+                  return_value={"total_created": 0, "total_completed": 0}),
+        ):
+            ctx = _setup_orchestrator(
+                interactive=False, continuous=True,
+                run_beta_first=False, agent_name_override=None,
+                max_parallel_agents=1,
+            )
+        assert isinstance(ctx, _OrchestratorContext)
+        assert ctx.agent_name == "test-agent"
+        assert ctx.mode_name == "Autonomous"
+        assert ctx.interactive is False
+        assert ctx.continuous is True
+        assert ctx.effective_parallel == 1
+        assert ctx.items_completed == 0
+        assert ctx.total_requests == 0
+
+    @patch("pokepoke.orchestrator.register_shutdown_handlers")
+    @patch("pokepoke.orchestrator.terminal_ui")
+    @patch("pokepoke.orchestrator.set_terminal_banner")
+    @patch("pokepoke.orchestrator.initialize_agent_name", return_value="test-agent")
+    @patch("pokepoke.orchestrator.load_config")
+    @patch("pokepoke.orchestrator.get_beads_stats", return_value=BeadsStats())
+    @patch("pokepoke.beads.get_failed_unassign_count", return_value=0)
+    def test_interactive_mode_name(
+        self, mock_unassign_count, mock_beads_stats, mock_config,
+        mock_init, mock_banner, mock_ui, mock_register,
+    ):
+        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
+        with (
+            patch("pokepoke.beads_item_stats_backfill.backfill_from_beads_db",
+                  return_value={"backfilled": 0}),
+            patch("pokepoke.beads_item_stats_store.get_summary",
+                  return_value={"total_created": 0, "total_completed": 0}),
+        ):
+            ctx = _setup_orchestrator(
+                interactive=True, continuous=False,
+                run_beta_first=False, agent_name_override=None,
+                max_parallel_agents=1,
+            )
+        assert ctx.mode_name == "Interactive"
+        assert ctx.interactive is True
+
+    @patch("pokepoke.orchestrator.register_shutdown_handlers")
+    @patch("pokepoke.orchestrator.terminal_ui")
+    @patch("pokepoke.orchestrator.set_terminal_banner")
+    @patch("pokepoke.orchestrator.initialize_agent_name", return_value="test-agent")
+    @patch("pokepoke.orchestrator.load_config")
+    @patch("pokepoke.orchestrator.get_beads_stats", return_value=BeadsStats())
+    @patch("pokepoke.beads.get_failed_unassign_count", return_value=0)
+    def test_parallel_forced_to_one_in_interactive(
+        self, mock_unassign_count, mock_beads_stats, mock_config,
+        mock_init, mock_banner, mock_ui, mock_register,
+    ):
+        mock_config.return_value = MagicMock(max_parallel_agents=4, preflight_health=MagicMock(enabled=False))
+        with (
+            patch("pokepoke.beads_item_stats_backfill.backfill_from_beads_db",
+                  return_value={"backfilled": 0}),
+            patch("pokepoke.beads_item_stats_store.get_summary",
+                  return_value={"total_created": 0, "total_completed": 0}),
+        ):
+            ctx = _setup_orchestrator(
+                interactive=True, continuous=False,
+                run_beta_first=False, agent_name_override=None,
+                max_parallel_agents=4,
+            )
+        assert ctx.effective_parallel == 1
+
+
+# ── _run_preflight ─────────────────────────────────────────────────
+
+class TestRunPreflight:
+
+    def _make_ctx(self) -> _OrchestratorContext:
+        return _OrchestratorContext(
+            agent_name="test", mode_name="Autonomous",
+            run_logger=MagicMock(), main_repo_path=MagicMock(),
+            start_time=time.time(), session_stats=SessionStats(agent_stats=AgentStats()),
+            failed_claim_ids=set(),
+            cfg=MagicMock(preflight_health=MagicMock(enabled=False)),
+            effective_parallel=1, interactive=False, continuous=False,
+        )
+
+    @patch("pokepoke.orchestrator.terminal_ui")
+    @patch("pokepoke.parallel_support.handle_preflight_checks", return_value=(True, False))
+    def test_continues_when_checks_pass(self, mock_preflight, mock_ui):
+        ctx = self._make_ctx()
+        result = _run_preflight(ctx)
+        assert result is None
+
+    @patch("pokepoke.orchestrator.terminal_ui")
+    @patch("pokepoke.orchestrator.print_stats")
+    @patch("pokepoke.orchestrator.clear_terminal_banner")
+    @patch("pokepoke.orchestrator.get_beads_stats", return_value=BeadsStats())
+    @patch("pokepoke.orchestrator.is_shutting_down", return_value=False)
+    @patch("pokepoke.parallel_support.handle_preflight_checks", return_value=(False, True))
+    def test_returns_exit_code_on_critical_failure(
+        self, mock_preflight, mock_shutdown, mock_beads, mock_clear, mock_print, mock_ui,
+    ):
+        ctx = self._make_ctx()
+        result = _run_preflight(ctx)
+        assert result == 1
+
+
+# ── _run_main_loop ─────────────────────────────────────────────────
+
+class TestRunMainLoop:
+
+    def _make_ctx(self, **overrides) -> _OrchestratorContext:
+        defaults = dict(
+            agent_name="test", mode_name="Autonomous",
+            run_logger=MagicMock(), main_repo_path=MagicMock(),
+            start_time=time.time(), session_stats=SessionStats(agent_stats=AgentStats()),
+            failed_claim_ids=set(),
+            cfg=MagicMock(preflight_health=MagicMock(enabled=False)),
+            effective_parallel=1, interactive=False, continuous=False,
+        )
+        defaults.update(overrides)
+        return _OrchestratorContext(**defaults)
+
+    @patch("pokepoke.orchestrator.terminal_ui")
+    @patch("pokepoke.orchestrator.print_stats")
+    @patch("pokepoke.orchestrator.clear_terminal_banner")
+    @patch("pokepoke.orchestrator.get_beads_stats", return_value=BeadsStats())
+    @patch("pokepoke.orchestrator.is_shutting_down", return_value=False)
+    @patch("pokepoke.orchestrator.select_work_item", return_value=None)
+    @patch("pokepoke.orchestrator.get_ready_work_items", return_value=[])
+    @patch("pokepoke.orchestrator.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.parallel_support.handle_preflight_checks", return_value=(True, False))
+    def test_no_items_returns_zero(
+        self, mock_preflight, mock_repo, mock_ready, mock_select,
+        mock_shutdown, mock_beads, mock_clear, mock_print, mock_ui,
+    ):
+        ctx = self._make_ctx()
+        assert _run_main_loop(ctx) == 0
+
+    @patch("pokepoke.orchestrator.terminal_ui")
+    @patch("pokepoke.orchestrator.is_shutting_down", return_value=False)
+    @patch("pokepoke.orchestrator.check_and_commit_main_repo", return_value=False)
+    @patch("pokepoke.parallel_support.handle_preflight_checks", return_value=(True, False))
+    def test_repo_check_failure(self, mock_preflight, mock_repo, mock_shutdown, mock_ui):
+        ctx = self._make_ctx()
+        assert _run_main_loop(ctx) == 1

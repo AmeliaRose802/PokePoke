@@ -55,6 +55,8 @@ def _empty_store() -> dict[str, Any]:
 
 def _record_to_dict(record: ModelCompletionRecord) -> dict[str, Any]:
     """Serialise a ModelCompletionRecord to a plain dict."""
+    from pokepoke.metrics_context import get_current_repo_name
+
     return {
         "item_id": record.item_id,
         "model": record.model,
@@ -64,6 +66,7 @@ def _record_to_dict(record: ModelCompletionRecord) -> dict[str, Any]:
         "output_tokens": record.output_tokens,
         "agent_turns": record.agent_turns,
         "cost": record.cost,
+        "repo_name": get_current_repo_name(),
         "timestamp": datetime.now(UTC).isoformat(),
     }
 
@@ -257,8 +260,15 @@ def get_model_summary(path: Path | None = None) -> dict[str, dict[str, Any]]:
     }
 
 
-def get_model_history(path: Path | None = None, limit: int = 200) -> list[dict[str, Any]]:
-    """Return the most recent completion log entries up to ``limit``."""
+def get_model_history(
+    path: Path | None = None,
+    limit: int = 200,
+    repo_name: str = "",
+) -> list[dict[str, Any]]:
+    """Return the most recent completion log entries up to ``limit``.
+
+    If *repo_name* is given, only entries for that repo are returned.
+    """
     capped_limit = int(limit)
     if capped_limit <= 0:
         return []
@@ -266,6 +276,8 @@ def get_model_history(path: Path | None = None, limit: int = 200) -> list[dict[s
     log = data.get("log", [])
     if not isinstance(log, list):
         return []
+    if repo_name:
+        log = [e for e in log if e.get("repo_name", "") == repo_name]
     slice_start = max(0, len(log) - capped_limit)
     return list(log[slice_start:])
 
@@ -327,5 +339,53 @@ def print_model_leaderboard(path: Path | None = None) -> None:
         print(f"\n  #{i} {display_name}")
         print(f"     Attempted: {attempted}  |  ✅ {succeeded}  ❌ {failed}  |  Rate: {rate:.0%}")
         print(f"     Median:    {median_dur:.1f}s ±{stddev_dur:.1f}s  |  Avg: {avg_dur:.1f}s  |  Last: {last[:19]}")
-
     print("\n" + "=" * 70)
+
+
+def get_model_summary_by_repo(
+    path: Path | None = None,
+    repo_name: str = "",
+) -> dict[str, dict[str, Any]]:
+    """Return per-model summary filtered to *repo_name* (empty → global)."""
+    if not repo_name:
+        return get_model_summary(path)
+    data = load_model_stats(path)
+    log = data.get("log", [])
+    filtered = [e for e in log if e.get("repo_name", "") == repo_name]
+    raw = _rebuild_summary(filtered)
+    return {
+        model: {k: v for k, v in stats.items() if not k.startswith("_")}
+        for model, stats in raw.items()
+    }
+
+
+def get_repo_summary_metrics(path: Path | None = None) -> dict[str, dict[str, Any]]:
+    """Return per-repo metrics: total_items_processed, success_rate, total_cost."""
+    data = load_model_stats(path)
+    log = data.get("log", [])
+
+    buckets: dict[str, dict[str, Any]] = {}
+    for entry in log:
+        repo = entry.get("repo_name", "") or ""
+        if repo not in buckets:
+            buckets[repo] = {
+                "total_items_processed": 0,
+                "total_succeeded": 0,
+                "total_failed": 0,
+                "total_cost": 0.0,
+            }
+        b = buckets[repo]
+        b["total_items_processed"] += 1
+        gp = entry.get("gate_passed")
+        if gp is True:
+            b["total_succeeded"] += 1
+        elif gp is False:
+            b["total_failed"] += 1
+        b["total_cost"] += entry.get("cost", 0.0) or 0.0
+
+    for b in buckets.values():
+        decided = b["total_succeeded"] + b["total_failed"]
+        b["success_rate"] = round(b["total_succeeded"] / decided, 4) if decided else 0.0
+        b["total_cost"] = round(b["total_cost"], 4)
+
+    return buckets

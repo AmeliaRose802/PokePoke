@@ -26,6 +26,8 @@ from pokepoke.model_stats_store import (
     get_model_summary,
     get_model_weights,
     get_model_history,
+    get_model_summary_by_repo,
+    get_repo_summary_metrics,
     print_model_leaderboard,
     _rebuild_summary,
     _update_summary_incremental,
@@ -623,3 +625,133 @@ class TestGetModelSummaryStripsInternals:
         summary = get_model_summary(path)
         for model_stats in summary.values():
             assert "_durations" not in model_stats
+
+
+# ── Repo-level filtering ────────────────────────────────────────────
+
+
+class TestRecordToDictRepoName:
+    def test_includes_repo_name_from_context(self):
+        """_record_to_dict should capture repo_name from thread-local context."""
+        from pokepoke.metrics_context import set_current_repo_name
+        set_current_repo_name("MyRepo")
+        try:
+            d = _record_to_dict(_make_record())
+            assert d["repo_name"] == "MyRepo"
+        finally:
+            set_current_repo_name(None)
+
+    def test_repo_name_empty_when_not_set(self):
+        from pokepoke.metrics_context import set_current_repo_name
+        set_current_repo_name(None)
+        d = _record_to_dict(_make_record())
+        assert d["repo_name"] == ""
+
+
+class TestGetModelHistoryByRepo:
+    def test_filter_by_repo(self, tmp_path: Path):
+        path = _tmp_stats_path(tmp_path)
+        from pokepoke.metrics_context import set_current_repo_name
+        set_current_repo_name("RepoA")
+        record_completion(_make_record(item_id="A1"), path)
+        set_current_repo_name("RepoB")
+        record_completion(_make_record(item_id="B1"), path)
+        set_current_repo_name(None)
+
+        all_history = get_model_history(path, limit=100)
+        assert len(all_history) == 2
+
+        repo_a_history = get_model_history(path, limit=100, repo_name="RepoA")
+        assert len(repo_a_history) == 1
+        assert repo_a_history[0]["item_id"] == "A1"
+
+        repo_b_history = get_model_history(path, limit=100, repo_name="RepoB")
+        assert len(repo_b_history) == 1
+        assert repo_b_history[0]["item_id"] == "B1"
+
+    def test_filter_nonexistent_repo_returns_empty(self, tmp_path: Path):
+        path = _tmp_stats_path(tmp_path)
+        from pokepoke.metrics_context import set_current_repo_name
+        set_current_repo_name("RepoA")
+        record_completion(_make_record(), path)
+        set_current_repo_name(None)
+
+        result = get_model_history(path, limit=100, repo_name="NoSuchRepo")
+        assert result == []
+
+
+class TestGetModelSummaryByRepo:
+    def test_summary_for_specific_repo(self, tmp_path: Path):
+        path = _tmp_stats_path(tmp_path)
+        from pokepoke.metrics_context import set_current_repo_name
+        set_current_repo_name("RepoA")
+        record_completion(_make_record(item_id="A1", model="m1", gate_passed=True), path)
+        set_current_repo_name("RepoB")
+        record_completion(_make_record(item_id="B1", model="m1", gate_passed=False), path)
+        record_completion(_make_record(item_id="B2", model="m2", gate_passed=True), path)
+        set_current_repo_name(None)
+
+        summary_a = get_model_summary_by_repo(path, repo_name="RepoA")
+        assert "m1" in summary_a
+        assert summary_a["m1"]["total_items_attempted"] == 1
+        assert summary_a["m1"]["success_rate"] == 1.0
+        assert "m2" not in summary_a
+
+        summary_b = get_model_summary_by_repo(path, repo_name="RepoB")
+        assert "m1" in summary_b
+        assert summary_b["m1"]["success_rate"] == 0.0
+        assert "m2" in summary_b
+
+    def test_empty_repo_returns_global_summary(self, tmp_path: Path):
+        path = _tmp_stats_path(tmp_path)
+        record_completion(_make_record(), path)
+        result = get_model_summary_by_repo(path, repo_name="")
+        assert result == get_model_summary(path)
+
+
+class TestGetRepoSummaryMetrics:
+    def test_segments_by_repo(self, tmp_path: Path):
+        path = _tmp_stats_path(tmp_path)
+        from pokepoke.metrics_context import set_current_repo_name
+        set_current_repo_name("RepoA")
+        record_completion(_make_record(item_id="A1", gate_passed=True), path)
+        record_completion(_make_record(item_id="A2", gate_passed=False), path)
+        set_current_repo_name("RepoB")
+        record_completion(_make_record(item_id="B1", gate_passed=True), path)
+        set_current_repo_name(None)
+
+        metrics = get_repo_summary_metrics(path)
+        assert "RepoA" in metrics
+        assert metrics["RepoA"]["total_items_processed"] == 2
+        assert metrics["RepoA"]["total_succeeded"] == 1
+        assert metrics["RepoA"]["total_failed"] == 1
+        assert metrics["RepoA"]["success_rate"] == 0.5
+
+        assert "RepoB" in metrics
+        assert metrics["RepoB"]["total_items_processed"] == 1
+        assert metrics["RepoB"]["total_succeeded"] == 1
+        assert metrics["RepoB"]["success_rate"] == 1.0
+
+    def test_empty_log_returns_empty(self, tmp_path: Path):
+        path = _tmp_stats_path(tmp_path)
+        metrics = get_repo_summary_metrics(path)
+        assert metrics == {}
+
+    def test_cost_tracking_per_repo(self, tmp_path: Path):
+        path = _tmp_stats_path(tmp_path)
+        from pokepoke.metrics_context import set_current_repo_name
+
+        set_current_repo_name("RepoA")
+        rec = _make_record(item_id="A1")
+        rec.cost = 0.05
+        record_completion(rec, path)
+
+        set_current_repo_name("RepoB")
+        rec2 = _make_record(item_id="B1")
+        rec2.cost = 0.10
+        record_completion(rec2, path)
+        set_current_repo_name(None)
+
+        metrics = get_repo_summary_metrics(path)
+        assert metrics["RepoA"]["total_cost"] == 0.05
+        assert metrics["RepoB"]["total_cost"] == 0.10

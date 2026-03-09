@@ -62,14 +62,21 @@ class RunLogger:
     # Default: only log polling messages at INFO every Nth cycle
     DEFAULT_POLL_LOG_INTERVAL = 50
 
-    def __init__(self, base_dir: str = ".pokepoke/logs", poll_log_interval: int | None = None):
+    def __init__(
+        self,
+        base_dir: str = ".pokepoke/logs",
+        poll_log_interval: int | None = None,
+        repo_name: str = "",
+    ):
         """Initialize the run logger.
 
         Args:
             base_dir: Base directory for all log runs (default: ".pokepoke/logs")
             poll_log_interval: Log polling messages at INFO every N cycles (default: 50).
                 Other cycles are logged at DEBUG.
+            repo_name: Repository name for log context (optional).
         """
+        self.repo_name = repo_name
         self.run_id = self._generate_run_id()
         # Use absolute path to avoid issues when CWD changes during workflow
         self.base_dir = Path(base_dir).resolve()
@@ -104,20 +111,29 @@ class RunLogger:
             f.write("PokePoke Orchestrator Log\n")
             f.write("=" * 80 + "\n")
             f.write(f"Run ID: {self.run_id}\n")
+            if self.repo_name:
+                f.write(f"Repository: {self.repo_name}\n")
             f.write(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write("=" * 80 + "\n\n")
 
     def log_orchestrator(self, message: str, level: str = "INFO") -> None:
         """Log a message to the orchestrator log.
 
+        Includes the repo name from thread-local context (if set) so log
+        lines from different repos are distinguishable.
+
         Args:
             message: Message to log
             level: Log level (INFO, WARNING, ERROR, etc.)
         """
+        from pokepoke.metrics_context import get_current_repo_name
+
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        repo = self.repo_name or get_current_repo_name()
+        repo_tag = f"[{repo}] " if repo else ""
         self.orchestrator_log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.orchestrator_log_path, 'a', encoding='utf-8') as f:
-            f.write(f"[{timestamp}] [{level}] {message}\n")
+            f.write(f"[{timestamp}] [{level}] {repo_tag}{message}\n")
 
     def log_polling(self, message: str) -> None:
         """Log a polling-loop message; INFO every Nth cycle, DEBUG otherwise."""

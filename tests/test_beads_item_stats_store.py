@@ -7,6 +7,7 @@ import pytest
 
 from pokepoke.beads_item_stats_store import (
     get_summary,
+    get_summary_by_repo,
     load_beads_item_stats,
     record_item_completed,
     record_item_created,
@@ -152,4 +153,73 @@ def test_summary_deduplicates_events_by_item_id() -> None:
         assert summary["total_created"] == 2
         assert summary["total_completed"] == 2
         assert summary["net_delta"] == 0
+
+
+# ── Repo-level isolation tests ──────────────────────────────────────
+
+
+def test_record_event_includes_repo_name_from_context() -> None:
+    """Events should capture repo_name from thread-local context."""
+    from pokepoke.metrics_context import set_current_repo_name
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "stats.json"
+        set_current_repo_name("MyRepo")
+        try:
+            record_item_created("PP-1", agent_type="work", path=path)
+        finally:
+            set_current_repo_name(None)
+
+        data = load_beads_item_stats(path)
+        assert data["log"][0]["repo_name"] == "MyRepo"
+
+
+def test_record_event_explicit_repo_name_overrides_context() -> None:
+    """Explicit repo_name parameter should override thread-local context."""
+    from pokepoke.metrics_context import set_current_repo_name
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "stats.json"
+        set_current_repo_name("ContextRepo")
+        try:
+            record_item_created("PP-1", agent_type="work", path=path, repo_name="ExplicitRepo")
+        finally:
+            set_current_repo_name(None)
+
+        data = load_beads_item_stats(path)
+        assert data["log"][0]["repo_name"] == "ExplicitRepo"
+
+
+def test_get_summary_by_repo() -> None:
+    """get_summary_by_repo should segment created/completed counts per repo."""
+    from pokepoke.metrics_context import set_current_repo_name
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "stats.json"
+
+        set_current_repo_name("RepoA")
+        record_item_created("PP-1", agent_type="janitor", path=path)
+        record_item_created("PP-2", agent_type="janitor", path=path)
+        record_item_completed("PP-3", agent_type="work", path=path)
+
+        set_current_repo_name("RepoB")
+        record_item_created("PP-4", agent_type="work", path=path)
+        set_current_repo_name(None)
+
+        by_repo = get_summary_by_repo(path)
+        assert "RepoA" in by_repo
+        assert by_repo["RepoA"]["total_created"] == 2
+        assert by_repo["RepoA"]["total_completed"] == 1
+        assert by_repo["RepoA"]["net_delta"] == 1
+
+        assert "RepoB" in by_repo
+        assert by_repo["RepoB"]["total_created"] == 1
+        assert by_repo["RepoB"]["total_completed"] == 0
+        assert by_repo["RepoB"]["net_delta"] == 1
+
+
+def test_get_summary_by_repo_empty() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "stats.json"
+        assert get_summary_by_repo(path) == {}
 
