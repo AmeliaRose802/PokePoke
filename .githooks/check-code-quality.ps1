@@ -41,6 +41,36 @@ if ($stagedFiles.Count -eq 0) {
 
 Write-Host "🔍 Running mypy type checking on $($stagedFiles.Count) file(s)..." -ForegroundColor Cyan
 
+# Ban `self: Any` in function signatures — use TYPE_CHECKING guard with the real class instead
+$selfAnyViolations = @()
+foreach ($file in $stagedFiles) {
+    $lineNum = 0
+    foreach ($line in (Get-Content $file)) {
+        $lineNum++
+        if ($line -match '^\s*def\s+\w+\s*\(\s*self\s*:\s*Any\b' -or
+            $line -match '^\s*self\s*:\s*Any\s*,') {
+            $relPath = $file -replace [regex]::Escape((git rev-parse --show-toplevel) + [IO.Path]::DirectorySeparatorChar), ''
+            $selfAnyViolations += "${relPath}:${lineNum}: $($line.Trim())"
+        }
+    }
+}
+
+if ($selfAnyViolations.Count -gt 0) {
+    Write-Host ""
+    Write-Host "❌ BANNED PATTERN: self: Any" -ForegroundColor Red
+    Write-Host ""
+    foreach ($v in $selfAnyViolations) {
+        Write-Host "  $v" -ForegroundColor Yellow
+    }
+    Write-Host ""
+    Write-Host "Use a TYPE_CHECKING guard with the real class instead:" -ForegroundColor Cyan
+    Write-Host "  from typing import TYPE_CHECKING" -ForegroundColor Cyan
+    Write-Host "  if TYPE_CHECKING:" -ForegroundColor Cyan
+    Write-Host "      from .my_module import MyClass" -ForegroundColor Cyan
+    Write-Host "  def my_method(self: MyClass, ...) -> ...:" -ForegroundColor Cyan
+    exit 1
+}
+
 # Run mypy on staged files only (follows imports as needed for context)
 # Use incremental cache for faster repeated runs
 python -m mypy $stagedFiles --strict --show-error-codes --no-error-summary

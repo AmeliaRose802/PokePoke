@@ -8,7 +8,10 @@ import logging
 import os
 import subprocess
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pokepoke.desktop_api import DesktopAPI
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +46,7 @@ def _discover_log_roots() -> list[Path]:
     return [root for root in roots if root.is_dir()]
 
 
-def get_config(self: Any) -> dict[str, Any]:
+def get_config(self: DesktopAPI) -> dict[str, Any]:
     """Load the project config file as a JSON-serializable dict."""
     from pokepoke.config import _find_repo_root
 
@@ -65,7 +68,7 @@ def get_config(self: Any) -> dict[str, Any]:
     }
 
 
-def save_config(self: Any, config: Any) -> dict[str, Any]:
+def save_config(self: DesktopAPI, config: Any) -> dict[str, Any]:
     """Persist a new project config to `.pokepoke/config.yaml`.
 
     Args:
@@ -108,7 +111,7 @@ def save_config(self: Any, config: Any) -> dict[str, Any]:
     return {"path": str(config_path), "saved": True}
 
 
-def list_prompts(self: Any) -> list[dict[str, Any]]:
+def list_prompts(self: DesktopAPI) -> list[dict[str, Any]]:
     """List all prompt templates with override metadata.
 
     Returns a list of dicts with keys: name, is_override, has_builtin, source.
@@ -119,7 +122,7 @@ def list_prompts(self: Any) -> list[dict[str, Any]]:
     return service.list_prompts()
 
 
-def get_prompt(self: Any, name: str) -> dict[str, Any]:
+def get_prompt(self: DesktopAPI, name: str) -> dict[str, Any]:
     """Get a prompt template's content and metadata.
 
     Args:
@@ -135,7 +138,7 @@ def get_prompt(self: Any, name: str) -> dict[str, Any]:
     return service.get_prompt_metadata(name)
 
 
-def save_prompt(self: Any, name: str, content: str) -> dict[str, Any]:
+def save_prompt(self: DesktopAPI, name: str, content: str) -> dict[str, Any]:
     """Save a prompt override to the user prompts directory.
 
     Args:
@@ -151,7 +154,7 @@ def save_prompt(self: Any, name: str, content: str) -> dict[str, Any]:
     return service.save_prompt(name, content)
 
 
-def reset_prompt(self: Any, name: str) -> dict[str, Any]:
+def reset_prompt(self: DesktopAPI, name: str) -> dict[str, Any]:
     """Reset a prompt to the built-in default by removing the user override.
 
     Args:
@@ -166,7 +169,7 @@ def reset_prompt(self: Any, name: str) -> dict[str, Any]:
     return service.reset_prompt(name)
 
 
-def _update_current_labels(self: Any, item_id: str, label: str, action: str) -> list[str] | None:
+def _update_current_labels(self: DesktopAPI, item_id: str, label: str, action: str) -> list[str] | None:
     with self._lock:
         current = self._current_work_item
         if not current or current.get("item_id") != item_id:
@@ -206,7 +209,7 @@ def _build_label_error_result(
 
 
 def _mutate_work_item_label(
-    self: Any,
+    self: DesktopAPI,
     item_id: str,
     label: str,
     action: Literal["add", "remove"],
@@ -282,7 +285,7 @@ def _check_beads_available(path: Path) -> bool:
     return check_beads_available(path)
 
 
-def open_project(self: Any, path: str) -> dict[str, Any]:
+def open_project(self: DesktopAPI, path: str) -> dict[str, Any]:
     """Open a project directory, validating it and updating internal state."""
     from pokepoke.config import reset_config, load_config
     from pokepoke.repo_utils import get_repository_name
@@ -340,7 +343,7 @@ def open_project(self: Any, path: str) -> dict[str, Any]:
     }
 
 
-def browse_for_project(self: Any) -> dict[str, Any]:
+def browse_for_project(self: DesktopAPI) -> dict[str, Any]:
     """Open a native folder picker dialog and open the selected project.
 
     Uses pywebview's native folder dialog. If no folder is selected
@@ -370,14 +373,14 @@ def browse_for_project(self: Any) -> dict[str, Any]:
     return open_project(self, str(selected))
 
 
-def add_work_item_label(self: Any, item_id: str, label: str) -> dict[str, Any]:
+def add_work_item_label(self: DesktopAPI, item_id: str, label: str) -> dict[str, Any]:
     """Add a label to a beads work item and update the cached UI state."""
     if not label.strip():
         raise ValueError("Label cannot be empty")
     return _mutate_work_item_label(self, item_id, label, "add")
 
 
-def remove_work_item_label(self: Any, item_id: str, label: str) -> dict[str, Any]:
+def remove_work_item_label(self: DesktopAPI, item_id: str, label: str) -> dict[str, Any]:
     """Remove a label from a beads work item and update the cached UI state."""
     if not label.strip():
         raise ValueError("Label cannot be empty")

@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import time
 from dataclasses import asdict
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pokepoke.desktop_api import DesktopAPI
 
 from pokepoke.agent_types import iter_agent_types
 
@@ -48,7 +51,7 @@ def snapshot_to_dict(snapshot: Any) -> dict[str, Any]:
     return stats
 
 
-def serialize_live_stats(self: Any) -> dict[str, Any] | None:
+def serialize_live_stats(self: DesktopAPI) -> dict[str, Any] | None:
     """Serialize session stats fresh on every poll."""
     stats: dict[str, Any] | None = None
     live = self._live_session_stats
@@ -81,7 +84,7 @@ def serialize_live_stats(self: Any) -> dict[str, Any] | None:
     return stats
 
 
-def get_cached_leaderboard(self: Any) -> dict[str, Any]:
+def get_cached_leaderboard(self: DesktopAPI) -> dict[str, Any]:
     """Return model leaderboard, cached for 5s to avoid disk reads on every poll."""
     now = time.time()
     if now - self._leaderboard_cache_time > 5.0:
@@ -92,7 +95,7 @@ def get_cached_leaderboard(self: Any) -> dict[str, Any]:
     return result
 
 
-def get_model_leaderboard(self: Any, repo_name: str = "") -> dict[str, Any]:
+def get_model_leaderboard(self: DesktopAPI, repo_name: str = "") -> dict[str, Any]:
     """Get all-time model performance stats from persistent storage.
 
     If *repo_name* is given, returns stats only for that repo.
@@ -103,7 +106,7 @@ def get_model_leaderboard(self: Any, repo_name: str = "") -> dict[str, Any]:
     return get_model_summary()
 
 
-def get_model_history(self: Any, limit: int = 200, repo_name: str = "") -> list[dict[str, Any]]:
+def get_model_history(self: DesktopAPI, limit: int = 200, repo_name: str = "") -> list[dict[str, Any]]:
     """Return recent model completion history for trend charts.
 
     If *repo_name* is given, only entries for that repo are returned.
@@ -163,7 +166,7 @@ def get_model_history(self: Any, limit: int = 200, repo_name: str = "") -> list[
     return list(history)
 
 
-def push_stats(self: Any, session_stats: Any, elapsed_time: float = 0.0) -> None:
+def push_stats(self: DesktopAPI, session_stats: Any, elapsed_time: float = 0.0) -> None:
     """Update session statistics (snapshot fallback)."""
     if getattr(self, "_window_disposed", False):  # Silently ignore after window disposal
         return
@@ -176,13 +179,13 @@ def push_stats(self: Any, session_stats: Any, elapsed_time: float = 0.0) -> None
     self._current_stats = stats_data
 
 
-def get_lock_contention_stats(self: Any) -> dict[str, Any]:
+def get_lock_contention_stats(self: DesktopAPI) -> dict[str, Any]:
     """Get lock contention metrics for all named locks."""
     from pokepoke.lock_contention import get_lock_contention_stats as _get
     return _get()
 
 
-def get_repo_summary(self: Any) -> dict[str, dict[str, Any]]:
+def get_repo_summary(self: DesktopAPI) -> dict[str, dict[str, Any]]:
     """Return per-repo summary metrics for the dashboard.
 
     Combines model stats (items processed, success rate, cost) with
