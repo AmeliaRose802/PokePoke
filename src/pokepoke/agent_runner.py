@@ -34,10 +34,10 @@ def _generate_unique_agent_id(agent_type: str) -> str:
 
 
 def _print_preserved_worktree_debug(agent_id: str, worktree_path: Path, repo_root: Path) -> None:
-    """Print consistent guidance when a worktree is preserved for debugging."""
-    print(f"\n🔍 Worktree preserved for debugging at: {worktree_path}")
-    print(f"   Logs: {repo_root}/.pokepoke/logs/")
-    print(f"   Cleanup: cleanup_worktree('{agent_id}', force=True)")
+    """Log consistent guidance when a worktree is preserved for debugging."""
+    logger.info("Worktree preserved for debugging at: %s", worktree_path)
+    logger.info("Logs: %s/.pokepoke/logs/", repo_root)
+    logger.info("Cleanup: cleanup_worktree('%s', force=True)", agent_id)
 
 def run_gate_agent(
     item: BeadsWorkItem,
@@ -138,14 +138,16 @@ def run_maintenance_agent(
         prompts_dir = get_pokepoke_prompts_dir()
         prompt_path = prompts_dir / prompt_file
     except FileNotFoundError as e:
-        print(f"❌ {agent_name} Agent failed to start: {e}")
-        print("   The prompts directory is missing. Ensure .pokepoke/prompts/ exists in the PokePoke installation.")
+        logger.error("%s Agent failed to start: %s", agent_name, e)
+        logger.error("The prompts directory is missing. Ensure .pokepoke/prompts/ exists in the PokePoke installation.")
         return None
 
     if not prompt_path.exists():
-        print(f"❌ {agent_name} Agent failed to start: prompt file '{prompt_file}' not found")
-        print(f"   Expected location: {prompt_path}")
-        print(f"   Available prompts: {', '.join(p.name for p in prompts_dir.glob('*.md'))}")
+        logger.error(
+            "%s Agent failed to start: prompt file '%s' not found (expected: %s, available: %s)",
+            agent_name, prompt_file, prompt_path,
+            ", ".join(p.name for p in prompts_dir.glob("*.md")),
+        )
         return None
 
     agent_prompt = prompt_path.read_text(encoding='utf-8')
@@ -177,15 +179,15 @@ def _run_simple_agent(
     model: str | None = None, cwd: str | None = None, item_logger: 'ItemLogger | None' = None
 ) -> AgentStats | None:
     """Run a simple agent in the main repo with configurable write access."""
-    print(f"\n📋 Running {agent_name} ({'no write' if deny_write else 'write enabled'}){f', model={model}' if model else ''}")
+    logger.info("Running %s (%s)%s", agent_name, "no write" if deny_write else "write enabled", f", model={model}" if model else "")
     from pokepoke.metrics_context import agent_type_context
     normalized = agent_name.lower().replace(" ", "_")
     with agent_type_context(normalized):
         result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=deny_write, model=model, cwd=cwd, item_logger=item_logger)
     if result.success:
-        print(f"✅ {agent_name} completed")
+        logger.info("%s completed", agent_name)
         return (parse_agent_stats(result.output) if result.output else None) or AgentStats()
-    print(f"❌ {agent_name} failed: {result.error}")
+    logger.error("%s failed: %s", agent_name, result.error)
     return None
 
 def _run_beads_only_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: str | None = None, cwd: str | None = None, item_logger: 'ItemLogger | None' = None) -> AgentStats | None:
@@ -204,7 +206,7 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
     from pokepoke.worktree_cleanup import retry_failed_cleanups, get_uncleaned_worktree_count
 
     if not has_unmerged_worktrees():
-        print("\n🌳 No unmerged worktrees detected — skipping Worktree Cleanup Agent")
+        logger.info("No unmerged worktrees detected — skipping Worktree Cleanup Agent")
         return None
 
     agent_id = "worktree-cleanup"
@@ -213,21 +215,21 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
 
     failed_count = get_uncleaned_worktree_count()
     if failed_count > 0:
-        print(f"\n🔧 Pre-cleanup: Retrying {failed_count} previously failed worktree removals...")
+        logger.info("Pre-cleanup: Retrying %d previously failed worktree removals...", failed_count)
         cleaned_count = retry_failed_cleanups()
-        print(f"   Recovered {cleaned_count}/{failed_count} failed worktrees")
+        logger.info("Recovered %d/%d failed worktrees", cleaned_count, failed_count)
 
     try:
         try:
             prompts_dir = get_pokepoke_prompts_dir()
             prompt_path = prompts_dir / "worktree-cleanup.md"
         except FileNotFoundError as e:
-            print(f"❌ {e}")
+            logger.error("Worktree cleanup failed: %s", e)
             terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed", parent_agent_id=parent_agent_id, agent_type="worktree_cleanup")
             return None
 
         if not prompt_path.exists():
-            print(f"❌ Prompt not found at {prompt_path}")
+            logger.error("Prompt not found at %s", prompt_path)
             terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed", parent_agent_id=parent_agent_id, agent_type="worktree_cleanup")
             return None
 
@@ -271,18 +273,18 @@ def _run_worktree_agent(
     parent_agent_id: str | None = None
 ) -> AgentStats | None:
     """Run a code-modifying maintenance agent in a worktree."""
-    print(f"\n🌳 Creating worktree for {agent_id}...")
+    logger.info("Creating worktree for %s...", agent_id)
     try:
         worktree_path = create_worktree(agent_id)
-        print(f"   Created at: {worktree_path}")
+        logger.info("Worktree created at: %s", worktree_path)
     except Exception as e:
-        print(f"\n❌ Failed to create worktree: {e}")
+        logger.error("Failed to create worktree: %s", e)
         return None
 
     worktree_cwd = str(worktree_path)
-    print(f"   Working directory: {worktree_cwd}\n")
+    logger.debug("Working directory: %s", worktree_cwd)
     if model:
-        print(f"   Model: {model}")
+        logger.debug("Model: %s", model)
 
     worktree_cleaned = False
     preserve_for_debugging = True
@@ -302,7 +304,7 @@ def _run_worktree_agent(
                 )
                 result = invoke_copilot(agent_item, prompt=agent_prompt, model=model, cwd=worktree_cwd, item_logger=item_logger)
         except Exception as e:
-            print(f"❌ Error invoking Copilot: {e}")
+            logger.error("Error invoking Copilot: %s", e)
             from pokepoke.types import CopilotResult
             result = CopilotResult(
                 work_item_id=agent_item.id, success=False, output="", error=str(e), attempt_count=1
@@ -319,17 +321,17 @@ def _run_worktree_agent(
             result.success = False
 
         if result.success:
-            print(f"\n✅ {agent_name} agent completed successfully!")
+            logger.info("%s agent completed successfully!", agent_name)
 
             if not merge_changes:
-                print("   Discarding worktree (merge_changes=False)")
+                logger.info("Discarding worktree (merge_changes=False)")
                 try:
                     cleanup_worktree(agent_id, force=True)
                     worktree_cleaned = True
                     preserve_for_debugging = False
                     return parse_agent_stats(result.output) if result.output else None
                 except Exception as cleanup_error:
-                    print(f"⚠️  Explicit cleanup failed: {cleanup_error}")
+                    logger.warning("Explicit cleanup failed: %s", cleanup_error)
                     from pokepoke.worktree_cleanup import add_uncleaned_worktree
                     add_uncleaned_worktree(
                         agent_id,
@@ -337,7 +339,7 @@ def _run_worktree_agent(
                         f"Failed explicit cleanup: {cleanup_error}",
                     )
                     return None
-            print("   All changes committed and validated")
+            logger.info("All changes committed and validated")
 
             agent_stats = parse_agent_stats(result.output) if result.output else None
 
@@ -352,10 +354,10 @@ def _run_worktree_agent(
                 return None
 
             preserve_for_debugging = not worktree_cleaned
-            print("   Merged and cleaned up worktree")
+            logger.info("Merged and cleaned up worktree")
             return agent_stats
         else:
-            print(f"\n❌ {agent_name} agent failed: {result.error}")
+            logger.error("%s agent failed: %s", agent_name, result.error)
             _print_preserved_worktree_debug(agent_id, worktree_path, repo_root)
             return None
 
@@ -364,23 +366,22 @@ def _run_worktree_agent(
             f"Unhandled error while running {agent_name} in worktree {agent_id}: {e}",
             exc_info=True,
         )
-        print(f"\n❌ Unexpected error in {agent_name} agent: {e}")
+        logger.error("Unexpected error in %s agent: %s", agent_name, e)
         _print_preserved_worktree_debug(agent_id, worktree_path, repo_root)
         return None
 
     finally:
         if preserve_for_debugging:
             logger.info(f"Worktree preserved for debugging: {worktree_path}")
-            print(f"\n📝 Worktree preserved at: {worktree_path}")
-            print("   Manual cleanup required when investigation complete")
+            logger.info("Worktree preserved at: %s — manual cleanup required when investigation complete", worktree_path)
         elif not worktree_cleaned:
-            print(f"\n🧹 Final cleanup: removing worktree {agent_id}...")
+            logger.info("Final cleanup: removing worktree %s...", agent_id)
             try:
                 cleanup_worktree(agent_id, force=True)
                 from pokepoke.worktree_cleanup import remove_from_manifest
                 remove_from_manifest(agent_id)
             except Exception as cleanup_error:
-                print(f"⚠️  Final cleanup failed: {cleanup_error}")
+                logger.warning("Final cleanup failed: %s", cleanup_error)
                 from pokepoke.worktree_cleanup import add_uncleaned_worktree
                 add_uncleaned_worktree(agent_id, str(worktree_path), f"Failed final cleanup: {cleanup_error}")
 

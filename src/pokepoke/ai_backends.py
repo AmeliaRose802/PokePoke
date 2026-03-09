@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
@@ -12,6 +13,8 @@ from typing import Any, Protocol
 from pokepoke.config import get_config
 from pokepoke.copilot_sdk import build_prompt_from_work_item, invoke_copilot_sdk_sync
 from pokepoke.types import BeadsWorkItem, CopilotResult, RetryConfig
+
+logger = logging.getLogger(__name__)
 
 
 class AIBackend(Protocol):
@@ -182,8 +185,7 @@ def get_backend(provider: str | None = None) -> AIBackend:
     name = (provider or cfg.ai_backend.provider or "copilot").lower()
     factory = _BACKENDS.get(name)
     if factory is None:
-        # Fallback to default backend with a clear warning in output
-        print(f"⚠️  Unknown AI backend '{name}', falling back to Copilot")
+        logger.warning("Unknown AI backend '%s', falling back to Copilot", name)
         return _BACKENDS["copilot"]()
     return factory()
 
