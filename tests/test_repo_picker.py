@@ -4,7 +4,8 @@ import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from pokepoke.repo_picker import LaunchConfig, _is_git_repo
+from pokepoke.repo_picker import LaunchConfig
+from pokepoke.project_utils import is_git_repo as _is_git_repo
 
 
 class TestLaunchConfig:
@@ -23,21 +24,21 @@ class TestLaunchConfig:
 class TestIsGitRepo:
     """Test _is_git_repo helper."""
 
-    @patch("pokepoke.repo_picker.subprocess.run")
+    @patch("pokepoke.project_utils.subprocess.run")
     def test_returns_true_for_git_repo(self, mock_run: MagicMock, tmp_path: Path) -> None:
         mock_run.return_value = MagicMock(returncode=0)
         assert _is_git_repo(tmp_path) is True
 
-    @patch("pokepoke.repo_picker.subprocess.run")
+    @patch("pokepoke.project_utils.subprocess.run")
     def test_returns_false_for_non_git(self, mock_run: MagicMock, tmp_path: Path) -> None:
         mock_run.return_value = MagicMock(returncode=128)
         assert _is_git_repo(tmp_path) is False
 
-    @patch("pokepoke.repo_picker.subprocess.run", side_effect=OSError("no git"))
+    @patch("pokepoke.project_utils.subprocess.run", side_effect=OSError("no git"))
     def test_returns_false_on_os_error(self, mock_run: MagicMock, tmp_path: Path) -> None:
         assert _is_git_repo(tmp_path) is False
 
-    @patch("pokepoke.repo_picker.subprocess.run")
+    @patch("pokepoke.project_utils.subprocess.run")
     def test_returns_false_on_timeout(self, mock_run: MagicMock, tmp_path: Path) -> None:
         import subprocess
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="git", timeout=5)

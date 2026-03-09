@@ -10,18 +10,12 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-try:
+from contextlib import suppress
+
+from pokepoke.desktop_api_utils import HAS_YAML, coerce_process_output
+
+with suppress(ImportError):
     import yaml  # type: ignore[import-untyped]
-    _HAS_YAML = True
-except ImportError:
-    _HAS_YAML = False
-
-
-def _coerce_process_output(output: str | None) -> str | None:
-    if output is None:
-        return None
-    stripped = output.strip()
-    return stripped or None
 
 
 def check_setup_status(self: Any) -> dict[str, Any]:
@@ -76,22 +70,22 @@ def git_init(self: Any, default_branch: str | None = None) -> dict[str, Any]:
         return {
             "success": False,
             "error": "git init timed out",
-            "stdout": _coerce_process_output(getattr(exc, "stdout", None)),
-            "stderr": _coerce_process_output(getattr(exc, "stderr", None)),
+            "stdout": coerce_process_output(getattr(exc, "stdout", None)),
+            "stderr": coerce_process_output(getattr(exc, "stderr", None)),
         }
     except (subprocess.CalledProcessError, OSError) as exc:
-        stderr = _coerce_process_output(getattr(exc, "stderr", None))
+        stderr = coerce_process_output(getattr(exc, "stderr", None))
         return {
             "success": False,
             "error": stderr or f"git init failed: {exc}",
-            "stdout": _coerce_process_output(getattr(exc, "stdout", None)),
+            "stdout": coerce_process_output(getattr(exc, "stdout", None)),
             "stderr": stderr,
         }
 
     return {
         "success": True,
-        "stdout": _coerce_process_output(result.stdout),
-        "stderr": _coerce_process_output(result.stderr),
+        "stdout": coerce_process_output(result.stdout),
+        "stderr": coerce_process_output(result.stderr),
     }
 
 
@@ -110,7 +104,7 @@ def create_default_config(self: Any, config: Any) -> dict[str, Any]:
     from pokepoke.config import DEFAULT_MODEL, FALLBACK_MODEL, reset_config
     from pokepoke.project_utils import resolve_git_toplevel
 
-    if not _HAS_YAML:
+    if not HAS_YAML:
         raise ImportError(
             "PyYAML is required to save .yaml config files. Install it with: pip install pyyaml"
         )
