@@ -95,11 +95,7 @@ def get_cached_leaderboard(self: DesktopAPI) -> dict[str, Any]:
     return result
 
 
-<<<<<<< HEAD
 def get_model_leaderboard(self: DesktopAPI, repo_name: str = "") -> dict[str, Any]:
-=======
-def get_model_leaderboard(self: Any, repo_name: str = "") -> dict[str, Any]:
->>>>>>> task/PokePoke-vymq
     """Get all-time model performance stats from persistent storage.
 
     If *repo_name* is given, returns stats only for that repo.
@@ -110,11 +106,7 @@ def get_model_leaderboard(self: Any, repo_name: str = "") -> dict[str, Any]:
     return get_model_summary()
 
 
-<<<<<<< HEAD
 def get_model_history(self: DesktopAPI, limit: int = 200, repo_name: str = "") -> list[dict[str, Any]]:
-=======
-def get_model_history(self: Any, limit: int = 200, repo_name: str = "") -> list[dict[str, Any]]:
->>>>>>> task/PokePoke-vymq
     """Return recent model completion history for trend charts.
 
     If *repo_name* is given, only entries for that repo are returned.
@@ -193,11 +185,7 @@ def get_lock_contention_stats(self: DesktopAPI) -> dict[str, Any]:
     return _get()
 
 
-<<<<<<< HEAD
 def get_repo_summary(self: DesktopAPI) -> dict[str, dict[str, Any]]:
-=======
-def get_repo_summary(self: Any) -> dict[str, dict[str, Any]]:
->>>>>>> task/PokePoke-vymq
     """Return per-repo summary metrics for the dashboard.
 
     Combines model stats (items processed, success rate, cost) with
