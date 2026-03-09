@@ -432,26 +432,6 @@ class TestCommitAllChanges:
         error_lines = error_msg.split('\n')
         assert len(error_lines) <= 6  # 5 errors + potential join artifacts
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
-    def test_commit_acquires_commit_lock(self, mock_run: Mock) -> None:
-        """Verify commit_all_changes calls commit_lock for serialization."""
-        mock_run.return_value = Mock(returncode=0, stderr="")
-        lock_entered = False
-
-        from contextlib import contextmanager
-
-        @contextmanager
-        def tracking_lock():
-            nonlocal lock_entered
-            lock_entered = True
-            yield
-
-        with patch('src.pokepoke.git_operations.commit_lock', tracking_lock):
-            success, _ = commit_all_changes("Test commit")
-
-        assert success is True
-        assert lock_entered, "commit_all_changes must acquire commit_lock"
-
 
 class TestExecuteMergeSequence:
     """Tests for execute_merge_sequence stash handling."""

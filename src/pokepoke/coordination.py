@@ -174,8 +174,10 @@ _WORKTREE_SETUP_LOCK = "worktree-setup"
 _MERGE_LOCK = "merge-queue"
 _MANIFEST_LOCK = "worktree-manifest"
 _BEADS_DB_LOCK = "beads-db"
-_COMMIT_LOCK = "pre-commit-hooks"
-_MERGE_LOCK_STALE_AGE = 900.0  # 15 min; must exceed any legitimate merge
+
+# Age threshold (seconds) after which a merge lock file is considered stale.
+# 15 minutes should be beyond any legitimate merge operation.
+_MERGE_LOCK_STALE_AGE = 900.0
 
 # Stale-timeout defaults (seconds) for dead-PID lock recovery.
 _WORKTREE_SETUP_STALE = 300.0   # 5 min
@@ -183,7 +185,6 @@ _MERGE_STALE = 600.0            # 10 min
 _MANIFEST_STALE = 120.0         # 2 min
 _CLEANUP_STALE = 300.0          # 5 min (main-repo-cleanup)
 _BEADS_DB_STALE = 300.0         # 5 min (beads DB mutations)
-_COMMIT_STALE = 600.0           # 10 min (pre-commit hooks)
 
 
 @contextmanager
@@ -227,15 +228,6 @@ def manifest_lock(timeout: float = 30.0) -> Generator[FileLock, None, None]:
     """Serialize worktree manifest read-modify-write operations."""
     with acquire_lock(
         _MANIFEST_LOCK, timeout=timeout, stale_timeout=_MANIFEST_STALE,
-    ) as lock:
-        yield lock
-
-
-@contextmanager
-def commit_lock(timeout: float = 600.0) -> Generator[FileLock, None, None]:
-    """Serialize git commits so only one pre-commit hook suite runs at a time."""
-    with acquire_lock(
-        _COMMIT_LOCK, timeout=timeout, stale_timeout=_COMMIT_STALE,
     ) as lock:
         yield lock
 
