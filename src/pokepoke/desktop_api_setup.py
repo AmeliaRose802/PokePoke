@@ -8,7 +8,10 @@ from __future__ import annotations
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pokepoke.desktop_api import DesktopAPI
 
 try:
     import yaml  # type: ignore[import-untyped]
@@ -24,7 +27,7 @@ def _coerce_process_output(output: str | None) -> str | None:
     return stripped or None
 
 
-def check_setup_status(self: Any) -> dict[str, Any]:
+def check_setup_status(self: DesktopAPI) -> dict[str, Any]:
     """Return setup status for the current working directory.
 
     Used by the desktop first-time setup wizard.
@@ -55,7 +58,7 @@ def check_setup_status(self: Any) -> dict[str, Any]:
     }
 
 
-def git_init(self: Any, default_branch: str | None = None) -> dict[str, Any]:
+def git_init(self: DesktopAPI, default_branch: str | None = None) -> dict[str, Any]:
     """Initialize a git repository in the current working directory."""
     cwd = Path.cwd().resolve()
     command = ["git", "init"]
@@ -95,7 +98,7 @@ def git_init(self: Any, default_branch: str | None = None) -> dict[str, Any]:
     }
 
 
-def bd_init(self: Any) -> dict[str, Any]:
+def bd_init(self: DesktopAPI) -> dict[str, Any]:
     """Initialize beads in the current project (equivalent to running `bd init`)."""
     from pokepoke.project_utils import resolve_git_toplevel
     from pokepoke.repo_check import initialize_beads_repo
@@ -105,7 +108,7 @@ def bd_init(self: Any) -> dict[str, Any]:
     return {"success": bool(ok)}
 
 
-def create_default_config(self: Any, config: Any) -> dict[str, Any]:
+def create_default_config(self: DesktopAPI, config: Any) -> dict[str, Any]:
     """Create `.pokepoke/config.yaml` with sensible defaults."""
     from pokepoke.config import DEFAULT_MODEL, FALLBACK_MODEL, reset_config
     from pokepoke.project_utils import resolve_git_toplevel
@@ -162,7 +165,7 @@ def create_default_config(self: Any, config: Any) -> dict[str, Any]:
 
 
 def scaffold_prompt_overrides(
-    self: Any,
+    self: DesktopAPI,
     templates: list[str] | None = None,
     force: bool = False,
 ) -> dict[str, Any]:
@@ -190,7 +193,7 @@ def scaffold_prompt_overrides(
     return {"success": True, "written": written}
 
 
-def complete_setup(self: Any) -> dict[str, Any]:
+def complete_setup(self: DesktopAPI) -> dict[str, Any]:
     """Signal that the setup wizard is complete so the orchestrator may proceed."""
     event = getattr(self, "_setup_complete_event", None)
     if event is None:
@@ -199,7 +202,7 @@ def complete_setup(self: Any) -> dict[str, Any]:
     return {"success": True}
 
 
-def wait_for_setup_complete(self: Any, timeout: float | None = None) -> bool:
+def wait_for_setup_complete(self: DesktopAPI, timeout: float | None = None) -> bool:
     """Wait until setup is complete; returns True if completed, False on timeout."""
     event = getattr(self, "_setup_complete_event", None)
     if event is None:
