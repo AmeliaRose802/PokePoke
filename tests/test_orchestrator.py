@@ -180,7 +180,7 @@ class TestProcessWorkItem:
         mock_uncommitted.return_value = False
         mock_perform.return_value = (True, True)
         mock_close.return_value = True
-        mock_gate_agent.return_value = (True, "Gate passed", None)  # Gate agent passes
+        mock_gate_agent.return_value = (True, "Gate passed", None, False)  # Gate agent passes
         mock_invoke.return_value = CopilotResult(
             work_item_id="task-1",
             success=True,
@@ -255,7 +255,7 @@ class TestProcessWorkItem:
         mock_getcwd.return_value = '/original'
         mock_perform.return_value = (True, True)
         mock_close.return_value = True
-        mock_gate_agent.return_value = (True, "Gate passed", None)  # Gate agent passes
+        mock_gate_agent.return_value = (True, "Gate passed", None, False)  # Gate agent passes
         mock_invoke.return_value = CopilotResult(
             work_item_id="task-1",
             success=True,
@@ -328,7 +328,7 @@ class TestProcessWorkItem:
         mock_getcwd.return_value = '/original'
         mock_uncommitted.return_value = False
         mock_perform.return_value = (True, True)
-        mock_gate_agent.return_value = (True, "Gate passed", None)  # Gate agent passes
+        mock_gate_agent.return_value = (True, "Gate passed", None, False)  # Gate agent passes
 
         # Copilot fails
         mock_invoke.return_value = CopilotResult(

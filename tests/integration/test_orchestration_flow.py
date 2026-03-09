@@ -186,10 +186,14 @@ class WorkflowHarness:
         self,
         item,
         **_kwargs,
-    ) -> tuple[bool, str, AgentStats | None]:
+    ) -> tuple[bool, str, AgentStats | None, bool]:
         if self.gate_results:
-            return self.gate_results.pop(0)
-        return True, "ok", None
+            result = self.gate_results.pop(0)
+            # Support both 3-tuple and 4-tuple in test data
+            if len(result) == 3:
+                return (*result, False)
+            return result
+        return True, "ok", None, False
 
     def _run_cleanup_loop(self, *_args, **_kwargs) -> tuple[bool, int]:
         if self.cleanup_sequences:
@@ -287,6 +291,42 @@ def test_process_work_item_gate_rejection_retries_with_feedback(workflow_harness
     assert workflow_harness.copilot_calls == ["work-456", "work-456"]
 
 
+def test_process_work_item_gate_crash_retries_gate_not_work_agent(workflow_harness: WorkflowHarness):
+    """Gate agent SDK crash should retry the gate, not restart the work agent."""
+    item = _make_item("work-789")
+    workflow_harness.uncommitted_sequence = [True, False]
+    workflow_harness.cleanup_sequences = [(True, 1)]
+    workflow_harness.copilot_results.extend(
+        [
+            CopilotResult(
+                work_item_id=item.id,
+                success=True,
+                output="code-done",
+                attempt_count=1,
+                stats=AgentStats(input_tokens=4, output_tokens=2),
+            ),
+        ]
+    )
+    # First gate call: infra crash. Second: genuine approval.
+    workflow_harness.gate_results.extend(
+        [
+            (False, "Gate Agent execution failed: SDK exception: [Errno 22]", None, True),
+            (True, "All good", None, False),
+        ]
+    )
+
+    result = workflow.process_work_item(item, interactive=False, run_logger=None, run_beta_test=False)
+
+    assert result.success is True
+    # Work agent should only have been called once — the crash retried the gate, not work
+    assert result.request_count == 1
+    assert result.gate_agent_runs == 2
+    # No "Gate Agent Rejection" comment — crashes don't produce rejection comments
+    assert workflow_harness.comments == []
+    # Only one copilot invocation (the work agent)
+    assert workflow_harness.copilot_calls == ["work-789"]
+
+
 class _DummyRunLogger:
     def __init__(self, base_dir: Path) -> None:
         self._run_dir = base_dir / "orchestrator-run"
@@ -302,6 +342,15 @@ class _DummyRunLogger:
 
     def log_orchestrator(self, message: str, level: str = "INFO") -> None:
         self.logs.append(f"[{level}] {message}")
+
+    def log_polling(self, message: str, level: str = "INFO") -> None:
+        self.logs.append(f"[POLL/{level}] {message}")
+
+    def enter_idle(self) -> None:
+        pass
+
+    def exit_idle(self) -> None:
+        pass
 
     def finalize(self, items_completed: int, total_requests: int, *_args) -> None:
         self.finalized = (items_completed, total_requests)

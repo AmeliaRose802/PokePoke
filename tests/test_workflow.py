@@ -1041,7 +1041,7 @@ class TestProcessWorkItem:
         mock_getcwd.return_value = "/original"
         mock_uncommitted.return_value = False
         mock_commits_ahead.return_value = 0
-        mock_gate_agent.return_value = (True, "Gate passed", None)  # Gate agent passes
+        mock_gate_agent.return_value = (True, "Gate passed", None, False)  # Gate agent passes
         mock_invoke.return_value = CopilotResult(
             work_item_id="task-1",
             success=True,
@@ -1109,7 +1109,7 @@ class TestProcessWorkItem:
         mock_getcwd.return_value = "/original"
         mock_uncommitted.return_value = False
         mock_commits_ahead.return_value = 2  # 2 commits ahead
-        mock_gate_agent.return_value = (True, "Gate passed", None)
+        mock_gate_agent.return_value = (True, "Gate passed", None, False)
         mock_invoke.return_value = CopilotResult(
             work_item_id="task-1",
             success=True,
@@ -1174,7 +1174,7 @@ class TestProcessWorkItem:
         mock_setup.return_value = Path("/fake/worktree")
         mock_getcwd.return_value = "/original"
         mock_uncommitted.return_value = True
-        mock_gate_agent.return_value = (True, "Gate passed", None)  # Gate agent passes
+        mock_gate_agent.return_value = (True, "Gate passed", None, False)  # Gate agent passes
         mock_invoke.return_value = CopilotResult(
             work_item_id="task-1",
             success=False,
@@ -1319,7 +1319,7 @@ class TestProcessWorkItem:
         mock_cleanup_timeout.return_value = (True, 0)
         mock_finalize.return_value = True
         mock_beta.return_value = None
-        mock_gate_agent.return_value = (True, "Gate passed", None)
+        mock_gate_agent.return_value = (True, "Gate passed", None, False)
         mock_config.return_value.max_copilot_failure_retries = 2
         mock_config.return_value.gate_agent_enabled = True
         mock_config.return_value.ai_backend.provider = "copilot"
@@ -1467,8 +1467,8 @@ class TestProcessWorkItem:
         # First invoke: work agent succeeds
         # Gate agent fails first time, passes second time
         mock_gate_agent.side_effect = [
-            (False, "Tests failed", None),
-            (True, "All tests pass", None)
+            (False, "Tests failed", None, False),
+            (True, "All tests pass", None, False)
         ]
         # Two work agent invocations
         mock_invoke.side_effect = [
@@ -1549,7 +1549,7 @@ class TestProcessWorkItem:
             output_tokens=25,
             premium_requests=1
         )
-        mock_gate_agent.return_value = (True, "Pass", gate_stats)
+        mock_gate_agent.return_value = (True, "Pass", gate_stats, False)
 
         work_stats = AgentStats(
             wall_duration=10.0,
@@ -1620,7 +1620,7 @@ class TestProcessWorkItem:
         mock_setup.return_value = Path("/fake/worktree")
         mock_getcwd.return_value = "/original"
         mock_uncommitted.return_value = True
-        mock_gate_agent.return_value = (True, "Pass", None)
+        mock_gate_agent.return_value = (True, "Pass", None, False)
         mock_beta.return_value = None
 
         work_stats = AgentStats(
@@ -1707,7 +1707,7 @@ class TestProcessWorkItem:
         )
         mock_cleanup_timeout.return_value = (True, 0)
         # Gate rejects, forcing loop to continue to next timeout check
-        mock_gate_agent.return_value = (False, "Rejected", None)
+        mock_gate_agent.return_value = (False, "Rejected", None, False)
 
         result = process_work_item(
             item, interactive=True, timeout_hours=0.001, max_timeout_restarts=2
@@ -1772,7 +1772,7 @@ class TestProcessWorkItem:
         mock_setup.return_value = Path("/fake/worktree")
         mock_uncommitted.return_value = False
         mock_commits_ahead.return_value = 0
-        mock_gate_agent.return_value = (True, "Gate passed", None)
+        mock_gate_agent.return_value = (True, "Gate passed", None, False)
         mock_invoke.return_value = CopilotResult(
             work_item_id="task-1",
             success=True,
@@ -2022,7 +2022,7 @@ class TestUnassignOnFailure:
             work_item_id="task-finalize-fail", success=True, output="Done", attempt_count=1
         )
         mock_cleanup_timeout.return_value = (True, 0)
-        mock_gate_agent.return_value = (True, "OK", None)
+        mock_gate_agent.return_value = (True, "OK", None, False)
         mock_finalize.return_value = False  # Finalization fails
 
         result = process_work_item(item, interactive=False)
@@ -2113,7 +2113,7 @@ class TestUnassignOnFailure:
             work_item_id="task-success", success=True, output="Done", attempt_count=1
         )
         mock_cleanup_timeout.return_value = (True, 0)
-        mock_gate_agent.return_value = (True, "OK", None)
+        mock_gate_agent.return_value = (True, "OK", None, False)
         mock_finalize.return_value = True  # Finalization succeeds
 
         result = process_work_item(item, interactive=False)

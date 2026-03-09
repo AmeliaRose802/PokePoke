@@ -362,7 +362,7 @@ class TestProcessWorkItem:
         mock_copilot.return_value = CopilotResult(
             work_item_id="wf-1", success=True, attempt_count=1,
         )
-        mock_gate.return_value = (True, "looks good", None)
+        mock_gate.return_value = (True, "looks good", None, False)
         with patch("pokepoke.git_operations.build_handoff_context", return_value="ctx"):
             result = process_work_item(_item(), interactive=False)
         assert result.success is True
@@ -410,8 +410,8 @@ class TestProcessWorkItem:
             CopilotResult(work_item_id="wf-1", success=True, attempt_count=1),
         ]
         mock_gate.side_effect = [
-            (False, "needs fix", None),
-            (True, "ok", None),
+            (False, "needs fix", None, False),
+            (True, "ok", None, False),
         ]
         with patch("pokepoke.git_operations.build_handoff_context", return_value="ctx"):
             result = process_work_item(_item(), interactive=False)
@@ -521,8 +521,8 @@ class TestProcessWorkItem:
             CopilotResult(work_item_id="wf-1", success=True, attempt_count=1),
         ]
         mock_gate.side_effect = [
-            (False, "needs fix", None),
-            (True, "ok", None),
+            (False, "needs fix", None, False),
+            (True, "ok", None, False),
         ]
         with patch("pokepoke.git_operations.build_handoff_context", return_value="ctx"):
             result = process_work_item(_item(), interactive=False)
@@ -588,16 +588,17 @@ class TestRunGateCheck:
     """Direct unit tests for _run_gate_check."""
 
     @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.run_gate_agent", return_value=(True, "all good", None))
+    @patch("pokepoke.workflow_helpers.run_gate_agent", return_value=(True, "all good", None, False))
     @patch("pokepoke.git_operations.build_handoff_context", return_value="ctx")
     def test_success_path(self, mock_ctx, mock_gate, mock_tui):
-        success, reason, runs = _run_gate_check(
+        success, reason, runs, crashed = _run_gate_check(
             _item(), worktree_cwd="/tmp/wt", selected_model="gpt-4",
             gate_agent_runs=0, base_agent_id="agent-1",
         )
         assert success is True
         assert reason == "all good"
         assert runs == 1
+        assert crashed is False
         mock_tui.ui.push_agent_status.assert_called_once()
         call_kwargs = mock_tui.ui.push_agent_status.call_args
         assert call_kwargs[1]["status"] == "success"

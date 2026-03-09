@@ -454,29 +454,47 @@ class TestRunGateCheck:
     @patch("pokepoke.workflow_helpers.run_gate_agent")
     @patch("pokepoke.git_operations.build_handoff_context", return_value="ctx")
     def test_gate_success(self, mock_ctx, mock_gate, mock_tui, sample_item):
-        mock_gate.return_value = (True, None, None)
+        mock_gate.return_value = (True, None, None, False)
         mock_tui.ui.agent_output_for.return_value.__enter__ = MagicMock()
         mock_tui.ui.agent_output_for.return_value.__exit__ = MagicMock(return_value=False)
-        success, reason, runs = _run_gate_check(
+        success, reason, runs, crashed = _run_gate_check(
             sample_item, "/wt", "model-a", gate_agent_runs=0, base_agent_id="agent-1",
         )
         assert success is True
         assert reason is None
         assert runs == 1
+        assert crashed is False
 
     @patch("pokepoke.workflow_helpers.terminal_ui")
     @patch("pokepoke.workflow_helpers.run_gate_agent")
     @patch("pokepoke.git_operations.build_handoff_context", return_value="ctx")
     def test_gate_failure(self, mock_ctx, mock_gate, mock_tui, sample_item):
-        mock_gate.return_value = (False, "tests failed", None)
+        mock_gate.return_value = (False, "tests failed", None, False)
         mock_tui.ui.agent_output_for.return_value.__enter__ = MagicMock()
         mock_tui.ui.agent_output_for.return_value.__exit__ = MagicMock(return_value=False)
-        success, reason, runs = _run_gate_check(
+        success, reason, runs, crashed = _run_gate_check(
             sample_item, "/wt", "model-a", gate_agent_runs=1, base_agent_id="agent-1",
         )
         assert success is False
         assert reason == "tests failed"
         assert runs == 2
+        assert crashed is False
+
+    @patch("pokepoke.workflow_helpers.terminal_ui")
+    @patch("pokepoke.workflow_helpers.run_gate_agent")
+    @patch("pokepoke.git_operations.build_handoff_context", return_value="ctx")
+    def test_gate_infra_crash(self, mock_ctx, mock_gate, mock_tui, sample_item):
+        """SDK crash returns crashed=True so callers can retry the gate."""
+        mock_gate.return_value = (False, "Gate Agent execution failed: SDK exception", None, True)
+        mock_tui.ui.agent_output_for.return_value.__enter__ = MagicMock()
+        mock_tui.ui.agent_output_for.return_value.__exit__ = MagicMock(return_value=False)
+        success, reason, runs, crashed = _run_gate_check(
+            sample_item, "/wt", "model-a", gate_agent_runs=0, base_agent_id="agent-1",
+        )
+        assert success is False
+        assert "SDK exception" in reason
+        assert runs == 1
+        assert crashed is True
 
     @patch("pokepoke.workflow_helpers.terminal_ui")
     @patch("pokepoke.workflow_helpers.run_gate_agent", side_effect=RuntimeError("crash"))

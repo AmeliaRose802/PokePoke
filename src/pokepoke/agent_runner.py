@@ -48,11 +48,14 @@ def run_gate_agent(
     agent_iteration: int = 1,
     parent_agent_id: str | None = None,
     item_logger: 'ItemLogger | None' = None,
-) -> tuple[bool, str, AgentStats | None]:
+) -> tuple[bool, str, AgentStats | None, bool]:
     """Run the Gate Agent to verify a fixed work item.
 
     Returns:
-        Tuple of (success, reason, stats).
+        Tuple of (success, reason, stats, crashed).
+        ``crashed`` is True when the gate agent failed due to an infrastructure
+        error (SDK exception, network failure, etc.) rather than a deliberate
+        code-quality rejection.
     """
     terminal_ui.ui.set_current_agent("Gate Agent")
     print(f"\n{'='*60}\n🕵️ Running Gate Agent on {item.id}\n{'='*60}")
@@ -72,7 +75,7 @@ def run_gate_agent(
             "default_branch": get_default_branch(),
         })
     except Exception as e:
-        return False, f"Failed to render prompt: {e}", None
+        return False, f"Failed to render prompt: {e}", None, True
 
     from pokepoke.metrics_context import agent_type_context
     with agent_type_context("gate"):
@@ -88,7 +91,7 @@ def run_gate_agent(
     stats = parse_agent_stats(result.output) if result.output else None
 
     if not result.success:
-        return False, f"Gate Agent execution failed: {result.error}", stats
+        return False, f"Gate Agent execution failed: {result.error}", stats, True
 
     output = result.output or ""
 
@@ -109,19 +112,19 @@ def run_gate_agent(
                 if recommendation:
                     full_message += f"\nRecommendation: {recommendation}"
 
-                return True, full_message, stats
+                return True, full_message, stats, False
             else:
                 reason = data.get("reason", "Verification failed")
                 details = data.get("details", "")
                 full_reason = f"{reason}\nDetails: {details}"
-                return False, full_reason, stats
+                return False, full_reason, stats, False
         except json.JSONDecodeError:
             pass
 
     if "VERIFICATION SUCCESSFUL" in output or "NEW_WORK_VERIFIED" in output:
-        return True, "Verification successful (text match)", stats
+        return True, "Verification successful (text match)", stats, False
 
-    return False, "Gate Agent did not explicitly approve the fix. Check logs.", stats
+    return False, "Gate Agent did not explicitly approve the fix. Check logs.", stats, False
 
 
 def run_maintenance_agent(

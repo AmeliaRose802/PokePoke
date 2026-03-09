@@ -146,15 +146,19 @@ def _run_gate_check(
     selected_model: str,
     gate_agent_runs: int,
     base_agent_id: str,
-) -> tuple[bool, str | None, int]:
-    """Invoke the gate agent. Returns (gate_success, gate_reason, updated_gate_runs)."""
+) -> tuple[bool, str | None, int, bool]:
+    """Invoke the gate agent. Returns (gate_success, gate_reason, updated_gate_runs, crashed).
+
+    ``crashed`` is True when the gate agent failed due to an infrastructure
+    error rather than a deliberate code-quality rejection.
+    """
     from pokepoke.git_operations import build_handoff_context
     handoff_ctx = build_handoff_context(cwd=worktree_cwd)
     gate_iteration = gate_agent_runs + 1
     gate_agent_id = f"{base_agent_id}-gate-{gate_iteration}"
     try:
         with terminal_ui.ui.agent_output_for(gate_agent_id):
-            gate_success, gate_reason, _ = run_gate_agent(
+            gate_success, gate_reason, _, gate_crashed = run_gate_agent(
                 item, cwd=worktree_cwd, work_model=selected_model,
                 handoff_context=handoff_ctx,
                 agent_id=gate_agent_id, agent_iteration=gate_iteration,
@@ -176,7 +180,7 @@ def _run_gate_check(
         parent_agent_id=base_agent_id, work_item_id=item.id,
         work_item_title=item.title, agent_type="gate",
     )
-    return gate_success, gate_reason, gate_agent_runs
+    return gate_success, gate_reason, gate_agent_runs, gate_crashed
 
 
 # ── Small loop-body helpers ──────────────────────────────────────────────────

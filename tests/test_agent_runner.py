@@ -139,11 +139,12 @@ class TestRunGateAgent:
             output_tokens=50, lines_added=0, lines_removed=0, premium_requests=1
         )
 
-        success, reason, stats = run_gate_agent(work_item)
+        success, reason, stats, crashed = run_gate_agent(work_item)
 
         assert success is True
         assert "All tests pass" in reason
         assert stats is not None
+        assert crashed is False
         mock_invoke.assert_called_once_with(work_item, prompt="Gate prompt", deny_write=True, cwd=None, model=None, item_logger=None)
 
     @patch('pokepoke.agent_runner.parse_agent_stats')
@@ -169,11 +170,12 @@ class TestRunGateAgent:
         )
         mock_parse.return_value = None
 
-        success, reason, stats = run_gate_agent(work_item)
+        success, reason, stats, crashed = run_gate_agent(work_item)
 
         assert success is False
         assert "Tests failed" in reason
         assert "3 tests failed" in reason
+        assert crashed is False
 
     @patch('pokepoke.agent_runner.parse_agent_stats')
     @patch('pokepoke.agent_runner.invoke_copilot')
@@ -198,7 +200,7 @@ class TestRunGateAgent:
         )
         mock_parse.return_value = None
 
-        success, reason, stats = run_gate_agent(work_item)
+        success, reason, stats, crashed = run_gate_agent(work_item)
 
         assert success is True
         assert "text match" in reason
@@ -226,7 +228,7 @@ class TestRunGateAgent:
         )
         mock_parse.return_value = None
 
-        success, reason, stats = run_gate_agent(work_item)
+        success, reason, stats, crashed = run_gate_agent(work_item)
 
         assert success is True
         assert "text match" in reason
@@ -269,7 +271,7 @@ class TestRunGateAgent:
         )
         mock_parse.return_value = None
 
-        success, reason, stats = run_gate_agent(work_item)
+        success, reason, stats, crashed = run_gate_agent(work_item)
 
         assert success is True
         assert "new_work_verified" in reason
@@ -296,10 +298,11 @@ class TestRunGateAgent:
             attempt_count=1
         )
 
-        success, reason, stats = run_gate_agent(work_item)
+        success, reason, stats, crashed = run_gate_agent(work_item)
 
         assert success is False
         assert "execution failed" in reason
+        assert crashed is True
 
     @patch('pokepoke.agent_runner.PromptService')
     def test_prompt_render_failure(
@@ -312,11 +315,12 @@ class TestRunGateAgent:
         mock_service.load_and_render.side_effect = Exception("Template not found")
         mock_service_cls.return_value = mock_service
 
-        success, reason, stats = run_gate_agent(work_item)
+        success, reason, stats, crashed = run_gate_agent(work_item)
 
         assert success is False
         assert "Failed to render prompt" in reason
         assert stats is None
+        assert crashed is True
 
     @patch('pokepoke.agent_runner.invoke_copilot')
     @patch('pokepoke.agent_runner.PromptService')
@@ -338,7 +342,7 @@ class TestRunGateAgent:
             attempt_count=1
         )
 
-        success, reason, stats = run_gate_agent(work_item)
+        success, reason, stats, crashed = run_gate_agent(work_item)
 
         assert success is False
         assert "did not explicitly approve" in reason
@@ -368,7 +372,7 @@ class TestRunGateAgent:
         )
         mock_parse.return_value = None
 
-        success, reason, stats = run_gate_agent(work_item)
+        success, reason, stats, crashed = run_gate_agent(work_item)
 
         assert success is True
         assert "work_already_complete" in reason
@@ -404,7 +408,7 @@ class TestRunGateAgent:
         mock_parse.return_value = None
 
         # Call with work_model parameter
-        success, reason, stats = run_gate_agent(work_item, work_model="claude-opus-4.6")
+        success, reason, stats, crashed = run_gate_agent(work_item, work_model="claude-opus-4.6")
 
         assert success is True
         # Verify select_gate_model was called with work model
@@ -443,7 +447,7 @@ class TestRunGateAgent:
         mock_parse.return_value = None
 
         handoff = "## Work Agent Handoff Context\n### Changed Files\nM\tsrc/foo.py"
-        success, reason, stats = run_gate_agent(work_item, handoff_context=handoff)
+        success, reason, stats, crashed = run_gate_agent(work_item, handoff_context=handoff)
 
         assert success is True
         # Verify handoff_context was included in template variables
@@ -1862,7 +1866,7 @@ class TestGateAgentJsonDecodeError:
             attempt_count=1
         )
         mock_parse.return_value = None
-        success, reason, stats = run_gate_agent(work_item)
+        success, reason, stats, crashed = run_gate_agent(work_item)
         assert success is False
         assert "did not explicitly approve" in reason
 
@@ -2004,7 +2008,7 @@ class TestGateAgentWithAgentId:
         )
         mock_parse.return_value = None
 
-        success, reason, stats = run_gate_agent(
+        success, reason, stats, crashed = run_gate_agent(
             work_item, agent_id="gate-123", parent_agent_id="parent-1",
         )
 

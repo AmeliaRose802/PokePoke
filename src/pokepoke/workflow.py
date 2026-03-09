@@ -30,6 +30,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_MAX_GATE_CRASH_RETRIES = 3  # Retry gate agent up to 3 times on infra crashes
+
 
 def process_work_item(  # noqa: C901
     item: BeadsWorkItem,
@@ -195,42 +197,66 @@ def process_work_item(  # noqa: C901
                 gate_success = True
                 break
 
-            # Build handoff context so gate agent skips re-discovering the codebase
-            from pokepoke.git_operations import build_handoff_context
-            handoff_ctx = build_handoff_context(cwd=worktree_cwd)
-            gate_iteration = gate_agent_runs + 1
-            gate_agent_id = f"{base_agent_id}-gate-{gate_iteration}"
-            try:
-                with terminal_ui.ui.agent_output_for(gate_agent_id):
-                    gate_success, gate_reason, gate_stats = run_gate_agent(
-                        item, cwd=worktree_cwd, work_model=selected_model,
-                        handoff_context=handoff_ctx,
-                        agent_id=gate_agent_id, agent_iteration=gate_iteration,
-                        parent_agent_id=base_agent_id,
-                        item_logger=item_logger,
-                    )
-            except Exception as e:
-                logger.warning(f"Gate agent raised exception: {e}", exc_info=True)
+            # Run gate agent with crash retry loop
+            gate_crash_attempts = 0
+            while gate_crash_attempts < _MAX_GATE_CRASH_RETRIES:
+                from pokepoke.git_operations import build_handoff_context
+                handoff_ctx = build_handoff_context(cwd=worktree_cwd)
+                gate_iteration = gate_agent_runs + 1
+                gate_agent_id = f"{base_agent_id}-gate-{gate_iteration}"
+                gate_crashed = False
+                try:
+                    with terminal_ui.ui.agent_output_for(gate_agent_id):
+                        gate_success, gate_reason, gate_stats, gate_crashed = run_gate_agent(
+                            item, cwd=worktree_cwd, work_model=selected_model,
+                            handoff_context=handoff_ctx,
+                            agent_id=gate_agent_id, agent_iteration=gate_iteration,
+                            parent_agent_id=base_agent_id,
+                            item_logger=item_logger,
+                        )
+                except Exception as e:
+                    logger.warning(f"Gate agent raised exception: {e}", exc_info=True)
+                    gate_agent_runs += 1
+                    gate_crash_attempts += 1
+                    terminal_ui.ui.push_agent_status(gate_agent_id, "Gate Agent",
+                        iteration=gate_agent_runs, status="failed",
+                        parent_agent_id=base_agent_id, work_item_id=item.id, work_item_title=item.title,
+                        agent_type="gate")
+                    if gate_crash_attempts < _MAX_GATE_CRASH_RETRIES:
+                        print(f"\n⚠️  Gate Agent crashed (attempt {gate_crash_attempts}/{_MAX_GATE_CRASH_RETRIES}): {e}")
+                        print("   Retrying gate agent...")
+                        continue
+                    print(f"\n❌ Gate Agent crashed {gate_crash_attempts} times — giving up")
+                    raise
+
                 gate_agent_runs += 1
                 terminal_ui.ui.push_agent_status(gate_agent_id, "Gate Agent",
-                    iteration=gate_agent_runs, status="failed",
+                    iteration=gate_agent_runs, status="success" if gate_success else "failed",
                     parent_agent_id=base_agent_id, work_item_id=item.id, work_item_title=item.title,
                     agent_type="gate")
-                raise
-            gate_agent_runs += 1
-            terminal_ui.ui.push_agent_status(gate_agent_id, "Gate Agent",
-                iteration=gate_agent_runs, status="success" if gate_success else "failed",
-                parent_agent_id=base_agent_id, work_item_id=item.id, work_item_title=item.title,
-                agent_type="gate")
+
+                if gate_crashed:
+                    gate_crash_attempts += 1
+                    if gate_crash_attempts < _MAX_GATE_CRASH_RETRIES:
+                        print(f"\n⚠️  Gate Agent crashed (attempt {gate_crash_attempts}/{_MAX_GATE_CRASH_RETRIES}): {gate_reason}")
+                        print("   Retrying gate agent...")
+                        continue
+                    print(f"\n❌ Gate Agent crashed {gate_crash_attempts} times — giving up")
+                    add_comment(item.id, f"Gate Agent crashed {gate_crash_attempts} times:\n{gate_reason}")
+                break  # Not a crash — exit the gate retry loop
 
             if gate_success:
                 print("\n✅ Gate Agent signed off!")
                 break
-            else:
-                print(f"\n❌ Gate Agent rejected fix: {gate_reason}")
+            elif not gate_crashed:
+                # Genuine code rejection — restart work agent with feedback
+                print(f"\n❌ Gate Agent rejected: {gate_reason}")
                 add_comment(item.id, f"Gate Agent Rejection:\n{gate_reason}")
                 last_feedback = gate_reason
-                # Loop continues...
+                # Outer loop continues with work agent retry...
+            else:
+                # All gate crash retries exhausted — fail the item
+                break
 
         final_result, finalized_successfully = _finalize_item_result(
             result, item, worktree_path, selected_model, start_time,
