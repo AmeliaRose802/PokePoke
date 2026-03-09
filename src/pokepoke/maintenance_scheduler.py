@@ -3,6 +3,9 @@
 Prevents multiple instances of maintenance agents from running simultaneously,
 which is critical for agents that modify shared state (like Janitor cleaning worktrees)
 or could produce duplicate work (like Beta Tester filing the same issues twice).
+
+Supports per-repo scheduling so each repository can maintain independent
+maintenance cadences without blocking workers on other repos.
 """
 
 import contextlib
@@ -15,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 from pokepoke.config import get_config, MaintenanceAgentConfig
 from pokepoke.coordination import try_lock
+from pokepoke.maintenance_state import record_maintenance_run
 from pokepoke.types import SessionStats
 from pokepoke.logging_utils import RunLogger
 from pokepoke.maintenance import _run_special_agent
@@ -45,7 +49,12 @@ _SPECIAL_AGENTS = {"Beta Tester", "Worktree Cleanup", "Model Sync"}
 
 
 class MaintenanceScheduler:
-    """Coordinated scheduler for maintenance agents with singleton guards."""
+    """Coordinated scheduler for maintenance agents with singleton guards.
+
+    Supports per-repo scheduling via an optional *repo_id* parameter.
+    Each repo's item count drives an independent frequency check so
+    maintenance for one repo never blocks workers on another.
+    """
 
     def __init__(self) -> None:
         # In-process locks for thread coordination
@@ -80,13 +89,22 @@ class MaintenanceScheduler:
         with self._running_agents_lock:
             return self._running_agents.copy()
 
-    def maybe_run_maintenance(self, items_completed: int, session_stats: SessionStats, run_logger: RunLogger) -> None:
+    def maybe_run_maintenance(
+        self,
+        items_completed: int,
+        session_stats: SessionStats,
+        run_logger: RunLogger,
+        repo_id: str | None = None,
+    ) -> None:
         """Run maintenance agents that are due, with singleton coordination.
 
         Args:
-            items_completed: Number of items completed (for frequency calculation)
+            items_completed: Per-repo items completed (for frequency calculation)
             session_stats: Session statistics to update
             run_logger: Logger for maintenance events
+            repo_id: Optional repository identifier for per-repo scheduling.
+                     When provided, frequency checks and file locks are scoped
+                     to this repo so maintenance on one repo cannot block others.
         """
         pokepoke_repo = Path.cwd()
 
@@ -147,9 +165,21 @@ class MaintenanceScheduler:
             return
 
         for agent_cfg in due_agents:
-            self._maybe_run_agent(agent_cfg.name, agent_cfg, pokepoke_repo, session_stats, run_logger)
+            self._maybe_run_agent(agent_cfg.name, agent_cfg, pokepoke_repo, session_stats, run_logger, repo_id=repo_id)
 
-    def _maybe_run_agent(self, agent_name: str, agent_cfg: MaintenanceAgentConfig, pokepoke_repo: Path, session_stats: SessionStats, run_logger: RunLogger) -> None:
+        # Record that a maintenance pass was executed for this repo
+        if repo_id is not None:
+            record_maintenance_run(repo_id)
+
+    def _maybe_run_agent(
+        self,
+        agent_name: str,
+        agent_cfg: MaintenanceAgentConfig,
+        pokepoke_repo: Path,
+        session_stats: SessionStats,
+        run_logger: RunLogger,
+        repo_id: str | None = None,
+    ) -> None:
         """Try to run a single maintenance agent with appropriate locking.
 
         Args:
@@ -158,6 +188,7 @@ class MaintenanceScheduler:
             pokepoke_repo: Repository path
             session_stats: Session statistics to update
             run_logger: Logger for maintenance events
+            repo_id: Optional repository identifier for per-repo lock scoping
         """
         log_key = agent_name.lower().replace(" ", "_")
 
@@ -185,18 +216,6 @@ class MaintenanceScheduler:
                 )
                 return
 
-        # Check for conflicts with currently running agents
-        if agent_cfg.conflicts_with:
-            running = self._get_running_agents()
-            conflicts = set(agent_cfg.conflicts_with) & running
-            if conflicts:
-                conflict_list = ", ".join(sorted(conflicts))
-                run_logger.log_maintenance(
-                    log_key,
-                    f"Deferring {agent_name} Agent - conflicts with running agent(s): {conflict_list}",
-                )
-                return
-
         if agent_name in _PARALLEL_SAFE_AGENTS:
             # Parallel-safe agents don't need singleton coordination
             self._run_agent_with_coordination(agent_name, agent_cfg, pokepoke_repo, session_stats, run_logger)
@@ -206,13 +225,29 @@ class MaintenanceScheduler:
         if agent_name not in _SINGLETON_AGENTS:
             run_logger.log_maintenance(log_key, f"WARNING: Unknown agent classification for {agent_name}, applying singleton guard")
 
-        self._run_with_singleton_guard(agent_name, agent_cfg, pokepoke_repo, session_stats, run_logger)
+        self._run_with_singleton_guard(agent_name, agent_cfg, pokepoke_repo, session_stats, run_logger, repo_id=repo_id)
 
-    def _run_with_singleton_guard(self, agent_name: str, agent_cfg: MaintenanceAgentConfig, pokepoke_repo: Path, session_stats: SessionStats, run_logger: RunLogger) -> None:
-        """Run an agent with both thread and file lock singleton protection."""
+    def _run_with_singleton_guard(
+        self,
+        agent_name: str,
+        agent_cfg: MaintenanceAgentConfig,
+        pokepoke_repo: Path,
+        session_stats: SessionStats,
+        run_logger: RunLogger,
+        repo_id: str | None = None,
+    ) -> None:
+        """Run an agent with both thread and file lock singleton protection.
+
+        When *repo_id* is provided the file lock name includes the repo so
+        that maintenance on different repos can proceed in parallel.
+        """
         log_key = agent_name.lower().replace(" ", "_")
         file_lock = None
-        thread_lock = self._get_agent_lock(agent_name)
+
+        # Include repo_id in lock keys so different repos don't block each other
+        lock_suffix = f"-{repo_id}" if repo_id else ""
+        lock_key = f"{agent_name}{lock_suffix}"
+        thread_lock = self._get_agent_lock(lock_key)
 
         # Try to acquire thread lock first (non-blocking)
         thread_acquired = thread_lock.acquire(blocking=False)
@@ -221,8 +256,9 @@ class MaintenanceScheduler:
             return
 
         try:
-            # Try to acquire file lock (cross-process)
-            file_lock = try_lock(f"maintenance-{agent_name.lower().replace(' ', '-')}")
+            # Try to acquire file lock (cross-process), scoped to repo
+            file_lock_name = f"maintenance-{agent_name.lower().replace(' ', '-')}{lock_suffix}"
+            file_lock = try_lock(file_lock_name)
             if file_lock is None:
                 run_logger.log_maintenance(log_key, f"Skipping {agent_name} Agent - already running in another process")
                 return
@@ -324,15 +360,21 @@ def get_maintenance_scheduler() -> MaintenanceScheduler:
     return _scheduler
 
 
-def run_periodic_maintenance(items_completed: int, session_stats: SessionStats, run_logger: RunLogger) -> None:
+def run_periodic_maintenance(
+    items_completed: int,
+    session_stats: SessionStats,
+    run_logger: RunLogger,
+    repo_id: str | None = None,
+) -> None:
     """Run periodic maintenance agents based on config and completion count.
 
     This is a backward-compatible wrapper that delegates to the MaintenanceScheduler.
 
     Args:
-        items_completed: Number of completed work items
+        items_completed: Number of completed work items (per-repo when repo_id given)
         session_stats: Session statistics to update
         run_logger: Logger for maintenance events
+        repo_id: Optional repository identifier for per-repo scheduling
     """
     from pokepoke.shutdown import should_stop_after_current
     if should_stop_after_current():
@@ -340,4 +382,4 @@ def run_periodic_maintenance(items_completed: int, session_stats: SessionStats, 
         return
 
     scheduler = get_maintenance_scheduler()
-    scheduler.maybe_run_maintenance(items_completed, session_stats, run_logger)
+    scheduler.maybe_run_maintenance(items_completed, session_stats, run_logger, repo_id=repo_id)

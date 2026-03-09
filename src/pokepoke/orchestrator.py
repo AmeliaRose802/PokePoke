@@ -75,10 +75,10 @@ def _record_item_result(selected_item: BeadsWorkItem, result: WorkItemResult, se
         from pokepoke.beads_item_stats_store import record_item_completed
         beads_summary = record_item_completed(selected_item.id, agent_type="work")
         session_stats.set_lifetime_beads_item_totals(created=int(beads_summary.get("total_created", 0)), completed=int(beads_summary.get("total_completed", 0)))
-        total_persistent_count = increment_items_completed()
+        total_persistent_count = increment_items_completed(repo_id=str(Path.cwd()))
         print(f"\n📈 Items completed this session: {items_completed}\n📈 Total items completed (lifetime): {total_persistent_count}\n📈 Beads created (lifetime): {session_stats.lifetime_items_created}\n📈 Beads net delta (lifetime): {session_stats.lifetime_items_created - session_stats.lifetime_items_completed:+d}")
         run_logger.log_orchestrator(f"Items completed this session: {items_completed}")
-        run_periodic_maintenance(total_persistent_count, session_stats, run_logger)
+        run_periodic_maintenance(total_persistent_count, session_stats, run_logger, repo_id=str(Path.cwd()))
     return result.success, session_stats.items_completed
 
 

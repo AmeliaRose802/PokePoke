@@ -426,7 +426,7 @@ class TestBackwardCompatibility:
 
         run_periodic_maintenance(5, session_stats, run_logger)
 
-        mock_scheduler.maybe_run_maintenance.assert_called_once_with(5, session_stats, run_logger)
+        mock_scheduler.maybe_run_maintenance.assert_called_once_with(5, session_stats, run_logger, repo_id=None)
 
     @patch('pokepoke.shutdown.should_stop_after_current', return_value=True)
     @patch('pokepoke.maintenance_scheduler.get_maintenance_scheduler')
@@ -813,3 +813,115 @@ class TestConflictResolution:
 
         # Agent should be removed after execution
         assert "Janitor" not in scheduler._get_running_agents()
+
+
+class TestPerRepoScheduling:
+    """Test per-repo maintenance scheduling."""
+
+    @patch("pokepoke.maintenance_scheduler.get_config")
+    def test_maybe_run_maintenance_accepts_repo_id(self, mock_config):
+        """Test that maybe_run_maintenance accepts optional repo_id."""
+        mock_config.return_value = _make_default_config()
+        scheduler = MaintenanceScheduler()
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        with patch.object(scheduler, '_maybe_run_agent') as mock_run:
+            scheduler.maybe_run_maintenance(2, session_stats, run_logger, repo_id="repo-a")
+            # Should pass repo_id down to _maybe_run_agent
+            assert mock_run.called
+            for call in mock_run.call_args_list:
+                assert call.kwargs.get("repo_id") == "repo-a"
+
+    @patch("pokepoke.maintenance_scheduler.get_config")
+    def test_independent_repo_frequencies(self, mock_config):
+        """Maintenance for different repos uses independent counters."""
+        config = ProjectConfig()
+        config.maintenance = MaintenanceConfig(agents=[
+            MaintenanceAgentConfig(name="Janitor", prompt_file="janitor.md", frequency=2, enabled=True),
+        ])
+        mock_config.return_value = config
+        scheduler = MaintenanceScheduler()
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        with patch.object(scheduler, '_maybe_run_agent') as mock_run:
+            # Repo A at count 1 — not due (freq=2)
+            scheduler.maybe_run_maintenance(1, session_stats, run_logger, repo_id="repo-a")
+            assert not mock_run.called
+
+            # Repo B at count 2 — due
+            mock_run.reset_mock()
+            scheduler.maybe_run_maintenance(2, session_stats, run_logger, repo_id="repo-b")
+            assert mock_run.called
+
+    @patch("pokepoke.maintenance_scheduler.get_active_agent_count", return_value=0)
+    @patch("pokepoke.maintenance_scheduler.try_lock")
+    def test_per_repo_file_locks_are_independent(self, mock_lock, _mock_active):
+        """File locks include repo_id so different repos don't block each other."""
+        mock_lock.return_value = Mock()  # Lock available
+
+        scheduler = MaintenanceScheduler()
+        agent_cfg = MaintenanceAgentConfig(name="Janitor", prompt_file="janitor.md", frequency=2)
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        with patch.object(scheduler, '_run_agent_with_coordination'):
+            scheduler._maybe_run_agent("Janitor", agent_cfg, Path.cwd(), session_stats, run_logger, repo_id="repo-a")
+            scheduler._maybe_run_agent("Janitor", agent_cfg, Path.cwd(), session_stats, run_logger, repo_id="repo-b")
+
+        # Should have been called with different lock names
+        lock_names = [call.args[0] for call in mock_lock.call_args_list]
+        assert "maintenance-janitor-repo-a" in lock_names
+        assert "maintenance-janitor-repo-b" in lock_names
+
+    @patch("pokepoke.maintenance_scheduler.record_maintenance_run")
+    @patch("pokepoke.maintenance_scheduler.get_config")
+    def test_records_maintenance_run_for_repo(self, mock_config, mock_record):
+        """Maintenance run timestamp is recorded per-repo after execution."""
+        config = ProjectConfig()
+        config.maintenance = MaintenanceConfig(agents=[
+            MaintenanceAgentConfig(name="Tech Debt", prompt_file="tech-debt.md", frequency=1, enabled=True),
+        ])
+        mock_config.return_value = config
+        scheduler = MaintenanceScheduler()
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        with patch.object(scheduler, '_maybe_run_agent'):
+            scheduler.maybe_run_maintenance(1, session_stats, run_logger, repo_id="repo-a")
+
+        mock_record.assert_called_once_with("repo-a")
+
+    @patch("pokepoke.maintenance_scheduler.record_maintenance_run")
+    @patch("pokepoke.maintenance_scheduler.get_config")
+    def test_no_record_when_repo_id_is_none(self, mock_config, mock_record):
+        """No per-repo timestamp recorded when repo_id is None (legacy mode)."""
+        config = ProjectConfig()
+        config.maintenance = MaintenanceConfig(agents=[
+            MaintenanceAgentConfig(name="Tech Debt", prompt_file="tech-debt.md", frequency=1, enabled=True),
+        ])
+        mock_config.return_value = config
+        scheduler = MaintenanceScheduler()
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        with patch.object(scheduler, '_maybe_run_agent'):
+            scheduler.maybe_run_maintenance(1, session_stats, run_logger, repo_id=None)
+
+        mock_record.assert_not_called()
+
+    @patch('pokepoke.maintenance_scheduler.get_maintenance_scheduler')
+    def test_run_periodic_maintenance_passes_repo_id(self, mock_get_scheduler):
+        """Test that run_periodic_maintenance passes repo_id through."""
+        mock_scheduler = Mock()
+        mock_get_scheduler.return_value = mock_scheduler
+
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        run_periodic_maintenance(5, session_stats, run_logger, repo_id="my-repo")
+
+        mock_scheduler.maybe_run_maintenance.assert_called_once_with(
+            5, session_stats, run_logger, repo_id="my-repo"
+        )
