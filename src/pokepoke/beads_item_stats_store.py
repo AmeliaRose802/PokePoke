@@ -168,12 +168,17 @@ def record_event(
     agent_type: str = "unknown",
     *,
     path: Path | None = None,
+    repo_name: str = "",
 ) -> dict[str, Any]:
     """Record a created/completed event and return the updated summary."""
+    from pokepoke.metrics_context import get_current_repo_name
+
+    resolved_repo = repo_name or get_current_repo_name()
     entry = {
         "event": event,
         "item_id": item_id,
         "agent_type": agent_type or "unknown",
+        "repo_name": resolved_repo,
         "timestamp": _now_iso(),
     }
 
@@ -187,12 +192,24 @@ def record_event(
         return summary
 
 
-def record_item_created(item_id: str, agent_type: str = "unknown", *, path: Path | None = None) -> dict[str, Any]:
-    return record_event("created", item_id, agent_type, path=path)
+def record_item_created(
+    item_id: str,
+    agent_type: str = "unknown",
+    *,
+    path: Path | None = None,
+    repo_name: str = "",
+) -> dict[str, Any]:
+    return record_event("created", item_id, agent_type, path=path, repo_name=repo_name)
 
 
-def record_item_completed(item_id: str, agent_type: str = "unknown", *, path: Path | None = None) -> dict[str, Any]:
-    return record_event("completed", item_id, agent_type, path=path)
+def record_item_completed(
+    item_id: str,
+    agent_type: str = "unknown",
+    *,
+    path: Path | None = None,
+    repo_name: str = "",
+) -> dict[str, Any]:
+    return record_event("completed", item_id, agent_type, path=path, repo_name=repo_name)
 
 
 def get_summary(path: Path | None = None) -> dict[str, Any]:
@@ -201,3 +218,40 @@ def get_summary(path: Path | None = None) -> dict[str, Any]:
     if not isinstance(summary, dict):
         return _empty_store()["summary"]
     return summary
+
+
+def get_summary_by_repo(path: Path | None = None) -> dict[str, dict[str, Any]]:
+    """Return beads item stats summary segmented by repo name.
+
+    Returns a mapping of ``repo_name`` → summary dict with total_created,
+    total_completed, and net_delta.
+    """
+    data = load_beads_item_stats(path)
+    log = data.get("log", [])
+    if not isinstance(log, list):
+        return {}
+
+    buckets: dict[str, dict[str, set[str]]] = {}
+    for entry in log:
+        repo = entry.get("repo_name", "") or ""
+        item_id = entry.get("item_id")
+        event = entry.get("event")
+        if not item_id:
+            continue
+        if repo not in buckets:
+            buckets[repo] = {"created": set(), "completed": set()}
+        if event == "created":
+            buckets[repo]["created"].add(item_id)
+        elif event == "completed":
+            buckets[repo]["completed"].add(item_id)
+
+    result: dict[str, dict[str, Any]] = {}
+    for repo, sets in buckets.items():
+        created = len(sets["created"])
+        completed = len(sets["completed"])
+        result[repo] = {
+            "total_created": created,
+            "total_completed": completed,
+            "net_delta": created - completed,
+        }
+    return result

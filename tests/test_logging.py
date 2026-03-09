@@ -674,3 +674,65 @@ def test_idle_duration_hours_format():
             content = f.read()
 
         assert "1h 1m 1s" in content
+
+
+# ── Repo-context logging tests ───────────────────────────────────────
+
+
+def test_run_logger_repo_name_in_header():
+    """RunLogger with repo_name should include it in the orchestrator log header."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir, repo_name="PokePoke")
+
+        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+            content = f.read()
+
+        assert "Repository: PokePoke" in content
+
+
+def test_run_logger_repo_name_in_log_lines():
+    """Log lines should include repo name tag when set."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir, repo_name="MyRepo")
+        logger.log_orchestrator("something happened")
+
+        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+            content = f.read()
+
+        assert "[MyRepo]" in content
+        assert "something happened" in content
+
+
+def test_run_logger_no_repo_name_omits_tag():
+    """When no repo name is set, log lines should not have an empty tag."""
+    from pokepoke.metrics_context import set_current_repo_name
+    set_current_repo_name(None)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir)
+        logger.log_orchestrator("plain message")
+
+        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+            content = f.read()
+
+        lines = [ln for ln in content.splitlines() if "plain message" in ln]
+        assert len(lines) == 1
+        assert "[]" not in lines[0]
+
+
+def test_run_logger_picks_up_thread_local_repo():
+    """Without repo_name param, log_orchestrator should read thread-local context."""
+    from pokepoke.metrics_context import set_current_repo_name
+    set_current_repo_name("ThreadRepo")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        try:
+            logger = RunLogger(base_dir=tmpdir)
+            logger.log_orchestrator("from context")
+
+            with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+                content = f.read()
+
+            assert "[ThreadRepo]" in content
+        finally:
+            set_current_repo_name(None)

@@ -92,14 +92,21 @@ def get_cached_leaderboard(self: Any) -> dict[str, Any]:
     return result
 
 
-def get_model_leaderboard(self: Any) -> dict[str, Any]:
-    """Get all-time model performance stats from persistent storage."""
-    from pokepoke.model_stats_store import get_model_summary
+def get_model_leaderboard(self: Any, repo_name: str = "") -> dict[str, Any]:
+    """Get all-time model performance stats from persistent storage.
+
+    If *repo_name* is given, returns stats only for that repo.
+    """
+    from pokepoke.model_stats_store import get_model_summary, get_model_summary_by_repo
+    if repo_name:
+        return get_model_summary_by_repo(repo_name=repo_name)
     return get_model_summary()
 
 
-def get_model_history(self: Any, limit: int = 200) -> list[dict[str, Any]]:
+def get_model_history(self: Any, limit: int = 200, repo_name: str = "") -> list[dict[str, Any]]:
     """Return recent model completion history for trend charts.
+
+    If *repo_name* is given, only entries for that repo are returned.
 
     Reads from model_history.jsonl which includes labels and issue_type for better charting.
     Falls back to model_stats.json if history file doesn't exist (backward compatibility).
@@ -111,13 +118,16 @@ def get_model_history(self: Any, limit: int = 200) -> list[dict[str, Any]]:
     """
     if limit <= 0:
         return []
-    now = time.time()
-    if (
-        self._history_cache
-        and limit == self._history_cache_limit
-        and now - self._history_cache_time <= 5.0
-    ):
-        return list(self._history_cache)
+
+    # Skip cache when filtering by repo
+    if not repo_name:
+        now = time.time()
+        if (
+            self._history_cache
+            and limit == self._history_cache_limit
+            and now - self._history_cache_time <= 5.0
+        ):
+            return list(self._history_cache)
 
     # Try to load from detailed history first (includes labels and issue_type)
     from pokepoke.model_history import load_model_history_entries
@@ -126,11 +136,14 @@ def get_model_history(self: Any, limit: int = 200) -> list[dict[str, Any]]:
     # Fall back to model_stats.json if history file doesn't exist
     if not raw_history:
         from pokepoke.model_stats_store import get_model_history as _get_model_history
-        raw_history = list(_get_model_history(limit=limit))
+        raw_history = list(_get_model_history(limit=limit, repo_name=repo_name))
 
     # Normalize keys to match frontend schema
     history = []
     for entry in raw_history:
+        # Apply repo filter if requested (for model_history.jsonl path)
+        if repo_name and entry.get("repo_name", "") != repo_name:
+            continue
         normalized = dict(entry)
 
         # Map backend keys to frontend keys
@@ -143,9 +156,10 @@ def get_model_history(self: Any, limit: int = 200) -> list[dict[str, Any]]:
 
         history.append(normalized)
 
-    self._history_cache = history
-    self._history_cache_limit = limit
-    self._history_cache_time = now
+    if not repo_name:
+        self._history_cache = history
+        self._history_cache_limit = limit
+        self._history_cache_time = time.time()
     return list(history)
 
 
@@ -166,3 +180,33 @@ def get_lock_contention_stats(self: Any) -> dict[str, Any]:
     """Get lock contention metrics for all named locks."""
     from pokepoke.lock_contention import get_lock_contention_stats as _get
     return _get()
+
+
+def get_repo_summary(self: Any) -> dict[str, dict[str, Any]]:
+    """Return per-repo summary metrics for the dashboard.
+
+    Combines model stats (items processed, success rate, cost) with
+    beads item stats (items created/completed) per repo.
+    """
+    from pokepoke.model_stats_store import get_repo_summary_metrics
+    from pokepoke.beads_item_stats_store import get_summary_by_repo
+
+    model_metrics = get_repo_summary_metrics()
+    beads_metrics = get_summary_by_repo()
+
+    all_repos = set(model_metrics) | set(beads_metrics)
+    result: dict[str, dict[str, Any]] = {}
+    for repo in sorted(all_repos):
+        mm = model_metrics.get(repo, {})
+        bm = beads_metrics.get(repo, {})
+        result[repo] = {
+            "total_items_processed": mm.get("total_items_processed", 0),
+            "total_succeeded": mm.get("total_succeeded", 0),
+            "total_failed": mm.get("total_failed", 0),
+            "success_rate": mm.get("success_rate", 0.0),
+            "total_cost": mm.get("total_cost", 0.0),
+            "items_created": bm.get("total_created", 0),
+            "items_completed": bm.get("total_completed", 0),
+            "net_items_delta": bm.get("net_delta", 0),
+        }
+    return result

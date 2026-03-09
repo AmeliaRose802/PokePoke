@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import threading
 
-from pokepoke.metrics_context import agent_type_context, get_current_agent_type, set_current_agent_type
+from pokepoke.metrics_context import (
+    agent_type_context,
+    get_current_agent_type,
+    get_current_repo_name,
+    repo_context,
+    set_current_agent_type,
+    set_current_repo_name,
+)
 
 
 def test_agent_type_context_sets_and_restores() -> None:
@@ -38,3 +45,68 @@ def test_thread_local_isolated_between_threads() -> None:
     t.join()
     assert results == ["janitor"]
     assert get_current_agent_type() == "unknown"
+
+
+# ── Repo name context tests ─────────────────────────────────────────
+
+
+def test_repo_name_default_empty() -> None:
+    set_current_repo_name(None)
+    assert get_current_repo_name() == ""
+
+
+def test_repo_name_default_custom() -> None:
+    set_current_repo_name(None)
+    assert get_current_repo_name(default="fallback") == "fallback"
+
+
+def test_set_and_get_repo_name() -> None:
+    set_current_repo_name("PokePoke")
+    assert get_current_repo_name() == "PokePoke"
+    set_current_repo_name(None)
+
+
+def test_repo_context_sets_and_restores() -> None:
+    set_current_repo_name(None)
+    assert get_current_repo_name() == ""
+    with repo_context("MyRepo"):
+        assert get_current_repo_name() == "MyRepo"
+    assert get_current_repo_name() == ""
+
+
+def test_repo_context_restores_previous_value() -> None:
+    set_current_repo_name("RepoA")
+    with repo_context("RepoB"):
+        assert get_current_repo_name() == "RepoB"
+    assert get_current_repo_name() == "RepoA"
+    set_current_repo_name(None)
+
+
+def test_repo_context_nested() -> None:
+    set_current_repo_name(None)
+    with repo_context("outer"):
+        assert get_current_repo_name() == "outer"
+        with repo_context("inner"):
+            assert get_current_repo_name() == "inner"
+        assert get_current_repo_name() == "outer"
+    assert get_current_repo_name() == ""
+
+
+def test_repo_name_thread_local_isolated() -> None:
+    set_current_repo_name(None)
+    results: list[str] = []
+
+    def worker() -> None:
+        with repo_context("WorkerRepo"):
+            results.append(get_current_repo_name())
+
+    t = threading.Thread(target=worker)
+    t.start()
+    t.join()
+    assert results == ["WorkerRepo"]
+    assert get_current_repo_name() == ""
+
+
+def test_repo_name_empty_string_uses_default() -> None:
+    set_current_repo_name("")
+    assert get_current_repo_name(default="default-repo") == "default-repo"

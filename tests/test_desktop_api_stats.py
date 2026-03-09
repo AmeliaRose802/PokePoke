@@ -10,6 +10,7 @@ from pokepoke.desktop_api_stats import (
     get_cached_leaderboard,
     get_model_history,
     get_model_leaderboard,
+    get_repo_summary,
     push_stats,
     serialize_live_stats,
     snapshot_to_dict,
@@ -320,3 +321,102 @@ class TestPushStats:
         push_stats(obj, None, elapsed_time=5.0)
         assert obj._current_stats["elapsed_time"] == 5.0
         assert obj._live_session_stats is None
+
+
+# ── Repo-filtered leaderboard and history ────────────────────────────
+
+
+class TestGetModelLeaderboardByRepo:
+    def test_no_repo_calls_global_summary(self) -> None:
+        obj = _make_self()
+        expected = {"model-x": {"total_items_attempted": 5}}
+        with patch("pokepoke.model_stats_store.get_model_summary", return_value=expected):
+            result = get_model_leaderboard(obj)
+        assert result == expected
+
+    def test_with_repo_calls_summary_by_repo(self) -> None:
+        obj = _make_self()
+        expected = {"model-y": {"total_items_attempted": 3}}
+        with patch("pokepoke.model_stats_store.get_model_summary_by_repo", return_value=expected) as mock_fn:
+            result = get_model_leaderboard(obj, repo_name="RepoA")
+        assert result == expected
+        mock_fn.assert_called_once_with(repo_name="RepoA")
+
+
+class TestGetModelHistoryByRepo:
+    def test_repo_filter_applied(self) -> None:
+        obj = _make_self()
+        raw_data = [
+            {"item_id": "A1", "repo_name": "RepoA", "duration_seconds": 10},
+            {"item_id": "B1", "repo_name": "RepoB", "duration_seconds": 20},
+        ]
+        with patch("pokepoke.model_history.load_model_history_entries", return_value=raw_data):
+            result = get_model_history(obj, limit=10, repo_name="RepoA")
+        assert len(result) == 1
+        assert result[0]["item_id"] == "A1"
+
+    def test_repo_filter_skips_cache(self) -> None:
+        """Filtering by repo should bypass the history cache."""
+        cached = [{"item_id": "cached", "repo_name": ""}]
+        obj = _make_self(
+            _history_cache=cached,
+            _history_cache_limit=200,
+            _history_cache_time=time.time(),
+        )
+        raw_data = [{"item_id": "X1", "repo_name": "RepoX"}]
+        with patch("pokepoke.model_history.load_model_history_entries", return_value=raw_data):
+            result = get_model_history(obj, limit=200, repo_name="RepoX")
+        assert len(result) == 1
+        assert result[0]["item_id"] == "X1"
+
+
+class TestGetRepoSummary:
+    def test_combines_model_and_beads_metrics(self) -> None:
+        obj = _make_self()
+        model_metrics = {
+            "RepoA": {
+                "total_items_processed": 10,
+                "total_succeeded": 8,
+                "total_failed": 2,
+                "success_rate": 0.8,
+                "total_cost": 1.50,
+            },
+        }
+        beads_metrics = {
+            "RepoA": {
+                "total_created": 5,
+                "total_completed": 3,
+                "net_delta": 2,
+            },
+        }
+        with patch("pokepoke.model_stats_store.get_repo_summary_metrics", return_value=model_metrics), \
+             patch("pokepoke.beads_item_stats_store.get_summary_by_repo", return_value=beads_metrics):
+            result = get_repo_summary(obj)
+
+        assert "RepoA" in result
+        assert result["RepoA"]["total_items_processed"] == 10
+        assert result["RepoA"]["success_rate"] == 0.8
+        assert result["RepoA"]["total_cost"] == 1.50
+        assert result["RepoA"]["items_created"] == 5
+        assert result["RepoA"]["items_completed"] == 3
+        assert result["RepoA"]["net_items_delta"] == 2
+
+    def test_handles_repos_only_in_beads(self) -> None:
+        obj = _make_self()
+        beads_metrics = {
+            "RepoB": {"total_created": 2, "total_completed": 0, "net_delta": 2},
+        }
+        with patch("pokepoke.model_stats_store.get_repo_summary_metrics", return_value={}), \
+             patch("pokepoke.beads_item_stats_store.get_summary_by_repo", return_value=beads_metrics):
+            result = get_repo_summary(obj)
+
+        assert "RepoB" in result
+        assert result["RepoB"]["total_items_processed"] == 0
+        assert result["RepoB"]["items_created"] == 2
+
+    def test_empty_returns_empty(self) -> None:
+        obj = _make_self()
+        with patch("pokepoke.model_stats_store.get_repo_summary_metrics", return_value={}), \
+             patch("pokepoke.beads_item_stats_store.get_summary_by_repo", return_value={}):
+            result = get_repo_summary(obj)
+        assert result == {}
