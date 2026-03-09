@@ -19,13 +19,13 @@ _Future = concurrent.futures.Future[WorkItemResult]
 
 
 def handle_preflight_checks(
-    main_repo_path: Any, run_logger: RunLogger,
+    main_repo_path: Any, run_logger: RunLogger, cfg: Any = None,
 ) -> tuple[bool, bool]:
     """Run preflight health checks. Returns (should_continue, is_critical_failure)."""
-    from pokepoke.config import get_config
     from pokepoke.preflight_health import run_preflight_checks
-
-    cfg = get_config()
+    if cfg is None:
+        from pokepoke.config import get_config
+        cfg = get_config()
     if not cfg.preflight_health.enabled:
         print("⏭️  Pre-flight health checks disabled via config")
         run_logger.log_orchestrator("Pre-flight health checks disabled via config")
