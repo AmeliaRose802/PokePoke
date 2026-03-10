@@ -18,6 +18,7 @@ from pokepoke.shutdown import is_shutting_down, register_agent, unregister_agent
 from pokepoke.model_selection import select_model_for_item, get_assignment_for_item
 from pokepoke.agent_context import get_agent_name
 from pokepoke.config import get_config
+from pokepoke.metrics_context import set_current_work_item_id
 from pokepoke.workflow_helpers import (
     _apply_gate_feedback, _extract_agent_stats, _fail_result,
     _finalize_item_result, _log_commit_status, _log_failure,
@@ -63,7 +64,6 @@ def process_work_item(  # noqa: C901
         worktree_lock_timeout = max(float(config.command_timeout), 120.0 * max(1, int(config.max_parallel_agents)))
 
         # Set work-item correlation ID for structured logging
-        from pokepoke.metrics_context import set_current_work_item_id
         set_current_work_item_id(item.id)
 
         terminal_ui.ui.push_agent_status(base_agent_id, get_agent_name(default="pokepoke"),
