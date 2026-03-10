@@ -135,7 +135,7 @@ def kill_orphaned_copilot_processes(expected_count: int = 0) -> int:
                 )
                 killed += 1
             except Exception as e:
-                logger.debug(f"Failed to kill copilot PID {pid}: {e}")
+                logger.warning(f"Failed to kill copilot PID {pid}: {e}")
 
         if killed > 0:
             logger.info(f"Killed {killed} orphaned Copilot CLI process(es)")
@@ -145,7 +145,7 @@ def kill_orphaned_copilot_processes(expected_count: int = 0) -> int:
 
         return killed
     except Exception as e:
-        logger.debug(f"Failed to clean orphaned Copilot processes: {e}")
+        logger.warning(f"Failed to clean orphaned Copilot processes: {e}")
         return 0
 
 
