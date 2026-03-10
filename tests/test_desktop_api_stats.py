@@ -9,9 +9,14 @@ from typing import Any
 from unittest.mock import patch
 
 from pokepoke.desktop_api_stats import (
+    _compute_idle_ratio,
     get_cached_leaderboard,
+    get_lock_contention_stats,
+    get_merge_queue_stats,
     get_model_history,
     get_model_leaderboard,
+    get_operation_timings,
+    get_performance_metrics,
     get_repo_summary,
     push_stats,
     serialize_live_stats,
@@ -77,6 +82,7 @@ class TestSnapshotToDict:
             "worktree_cleanup_agent_runs",
             "agent_type_elapsed_seconds",
             "model_completions",
+            "merge_queue_stats",
         }
         assert expected_keys.issubset(d.keys())
 
@@ -484,3 +490,211 @@ class TestGetCachedLeaderboardThreadSafety:
             t.join(timeout=10)
 
         assert not errors
+
+
+# ── Merge queue stats in snapshot ────────────────────────────────────
+
+
+class TestSnapshotMergeQueueStats:
+    """Tests for merge_queue_stats in snapshot_to_dict."""
+
+    def test_merge_queue_stats_present_in_snapshot(self) -> None:
+        stats = _make_stats()
+        d = snapshot_to_dict(stats.snapshot())
+        assert "merge_queue_stats" in d
+        assert isinstance(d["merge_queue_stats"], dict)
+
+    def test_merge_queue_stats_default_values(self) -> None:
+        stats = _make_stats()
+        d = snapshot_to_dict(stats.snapshot())
+        mq = d["merge_queue_stats"]
+        assert mq["total_merges"] == 0
+        assert mq["successful_merges"] == 0
+        assert mq["avg_merge_duration_s"] == 0.0
+
+    def test_merge_queue_stats_with_data(self) -> None:
+        from pokepoke.merge_queue_stats import MergeQueueStats
+        mqs = MergeQueueStats(
+            total_merges=10,
+            successful_merges=8,
+            failed_merges=2,
+            merge_durations=[1.0, 2.0, 3.0],
+        )
+        stats = _make_stats()
+        stats.record_merge_queue_stats(mqs)
+        d = snapshot_to_dict(stats.snapshot())
+        mq = d["merge_queue_stats"]
+        assert mq["total_merges"] == 10
+        assert mq["successful_merges"] == 8
+        assert mq["failed_merges"] == 2
+        assert mq["avg_merge_duration_s"] == 2.0
+
+
+# ── Lock contention stats ────────────────────────────────────────────
+
+
+class TestGetLockContentionStats:
+    def test_returns_dict(self) -> None:
+        obj = _make_self()
+        mock_data = {"merge-queue": {"acquired": 5, "timeouts": 0}}
+        with patch("pokepoke.lock_contention.get_lock_contention_stats", return_value=mock_data):
+            result = get_lock_contention_stats(obj)
+        assert result == mock_data
+
+    def test_returns_empty_when_no_contention(self) -> None:
+        obj = _make_self()
+        with patch("pokepoke.lock_contention.get_lock_contention_stats", return_value={}):
+            result = get_lock_contention_stats(obj)
+        assert result == {}
+
+
+# ── Merge queue stats endpoint ───────────────────────────────────────
+
+
+class TestGetMergeQueueStats:
+    def test_returns_queue_summary_with_live_depth(self) -> None:
+        obj = _make_self()
+        mock_mq = SimpleNamespace(
+            stats=SimpleNamespace(to_summary_dict=lambda: {
+                "total_merges": 5, "successful_merges": 4, "failed_merges": 1,
+            }),
+            pending_count=2,
+            is_running=True,
+        )
+        with patch("pokepoke.merge_queue.get_merge_queue", return_value=mock_mq):
+            result = get_merge_queue_stats(obj)
+        assert result["total_merges"] == 5
+        assert result["current_queue_depth"] == 2
+        assert result["is_running"] is True
+
+    def test_returns_empty_on_exception(self) -> None:
+        obj = _make_self()
+        with patch("pokepoke.merge_queue.get_merge_queue", side_effect=RuntimeError("not started")):
+            result = get_merge_queue_stats(obj)
+        assert result == {}
+
+
+# ── Operation timings endpoint ───────────────────────────────────────
+
+
+class TestGetOperationTimings:
+    def test_returns_timing_summary(self) -> None:
+        obj = _make_self()
+        mock_summary = {
+            "worktree.create": {"count": 3, "mean": 1.5, "p50": 1.2, "p95": 2.0, "p99": 2.1,
+                                "min": 0.8, "max": 2.5, "total": 4.5},
+        }
+        with patch("pokepoke.perf_timing.get_registry") as mock_reg:
+            mock_reg.return_value.summary.return_value = mock_summary
+            result = get_operation_timings(obj)
+        assert "worktree.create" in result
+        assert result["worktree.create"]["count"] == 3
+
+    def test_returns_empty_when_no_timings(self) -> None:
+        obj = _make_self()
+        with patch("pokepoke.perf_timing.get_registry") as mock_reg:
+            mock_reg.return_value.summary.return_value = {}
+            result = get_operation_timings(obj)
+        assert result == {}
+
+
+# ── Idle/productive ratio ────────────────────────────────────────────
+
+
+class TestComputeIdleRatio:
+    def test_no_session_start_returns_zeros(self) -> None:
+        obj = _make_self(_session_start_time=None)
+        result = _compute_idle_ratio(obj)
+        assert result["total_seconds"] == 0.0
+        assert result["idle_ratio"] == 0.0
+
+    def test_all_idle_when_no_stats(self) -> None:
+        obj = _make_self(
+            _session_start_time=time.time() - 100.0,
+            _session_end_time=None,
+            _live_session_stats=None,
+        )
+        result = _compute_idle_ratio(obj)
+        assert result["total_seconds"] >= 99.0
+        assert result["productive_seconds"] == 0.0
+        assert result["idle_ratio"] >= 0.99
+
+    def test_with_productive_time(self) -> None:
+        stats = _make_stats()
+        stats.record_agent_elapsed_time("work", 40.0)
+        stats.record_agent_elapsed_time("gate", 10.0)
+        t0 = time.time() - 100.0
+        obj = _make_self(
+            _session_start_time=t0,
+            _session_end_time=t0 + 100.0,
+            _live_session_stats=stats,
+        )
+        result = _compute_idle_ratio(obj)
+        assert result["total_seconds"] == 100.0
+        assert result["productive_seconds"] == 50.0
+        assert result["idle_seconds"] == 50.0
+        assert abs(result["idle_ratio"] - 0.5) < 0.01
+
+    def test_uses_session_end_time(self) -> None:
+        t0 = time.time() - 200.0
+        obj = _make_self(
+            _session_start_time=t0,
+            _session_end_time=t0 + 60.0,
+            _live_session_stats=None,
+        )
+        result = _compute_idle_ratio(obj)
+        assert abs(result["total_seconds"] - 60.0) < 1.0
+
+
+# ── Combined performance metrics ─────────────────────────────────────
+
+
+class TestGetPerformanceMetrics:
+    def test_returns_all_sections(self) -> None:
+        obj = _make_self(
+            _session_start_time=time.time() - 10.0,
+            _session_end_time=None,
+            _live_session_stats=None,
+        )
+        mock_mq = SimpleNamespace(
+            stats=SimpleNamespace(to_summary_dict=lambda: {"total_merges": 1}),
+            pending_count=0,
+            is_running=False,
+        )
+        mock_monitor = SimpleNamespace(snapshot=lambda: {
+            "enabled": True, "total_checks": 5, "total_alerts": 1,
+        })
+        with patch("pokepoke.merge_queue.get_merge_queue", return_value=mock_mq), \
+             patch("pokepoke.lock_contention.get_lock_contention_stats", return_value={"lock-a": {}}), \
+             patch("pokepoke.perf_timing.get_registry") as mock_reg, \
+             patch("pokepoke.performance_monitor.get_performance_monitor", return_value=mock_monitor):
+            mock_reg.return_value.summary.return_value = {"op.x": {"count": 2}}
+            result = get_performance_metrics(obj)
+
+        assert "merge_queue" in result
+        assert result["merge_queue"]["total_merges"] == 1
+        assert "lock_contention" in result
+        assert "lock-a" in result["lock_contention"]
+        assert "operation_timings" in result
+        assert "op.x" in result["operation_timings"]
+        assert "performance_monitor" in result
+        assert result["performance_monitor"]["enabled"] is True
+        assert "idle_productive_ratio" in result
+        assert result["idle_productive_ratio"]["total_seconds"] >= 9.0
+
+    def test_merge_queue_failure_returns_empty_section(self) -> None:
+        obj = _make_self(
+            _session_start_time=None,
+            _session_end_time=None,
+            _live_session_stats=None,
+        )
+        mock_monitor = SimpleNamespace(snapshot=lambda: {"enabled": False})
+        with patch("pokepoke.merge_queue.get_merge_queue", side_effect=RuntimeError), \
+             patch("pokepoke.lock_contention.get_lock_contention_stats", return_value={}), \
+             patch("pokepoke.perf_timing.get_registry") as mock_reg, \
+             patch("pokepoke.performance_monitor.get_performance_monitor", return_value=mock_monitor):
+            mock_reg.return_value.summary.return_value = {}
+            result = get_performance_metrics(obj)
+
+        assert result["merge_queue"] == {}
+        assert result["idle_productive_ratio"]["total_seconds"] == 0.0

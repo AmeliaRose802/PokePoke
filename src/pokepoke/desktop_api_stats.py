@@ -45,6 +45,7 @@ def snapshot_to_dict(snapshot: Any) -> dict[str, Any]:
         ],
         "agent_type_elapsed_seconds": dict(snapshot.agent_type_elapsed_seconds),
         "model_completions": [asdict(mc) for mc in snapshot.model_completions],
+        "merge_queue_stats": snapshot.merge_queue_stats.to_summary_dict(),
     }
     for agent in iter_agent_types():
         stats[agent.run_attr] = snapshot.agent_run_counts.get(agent.key, 0)
@@ -187,6 +188,115 @@ def get_lock_contention_stats(self: DesktopAPI) -> dict[str, Any]:
     """Get lock contention metrics for all named locks."""
     from pokepoke.lock_contention import get_lock_contention_stats as _get
     return _get()
+
+
+def get_merge_queue_stats(self: DesktopAPI) -> dict[str, Any]:
+    """Get live merge queue depth and throughput metrics.
+
+    Returns current queue depth plus the cumulative summary from
+    MergeQueueStats (merge/rebase counts, durations, wait times).
+    """
+    try:
+        from pokepoke.merge_queue import get_merge_queue
+        mq = get_merge_queue()
+        summary = mq.stats.to_summary_dict()
+        summary["current_queue_depth"] = mq.pending_count
+        summary["is_running"] = mq.is_running
+        return summary
+    except Exception:
+        return {}
+
+
+def get_operation_timings(self: DesktopAPI) -> dict[str, dict[str, Any]]:
+    """Get subprocess and operation execution time metrics.
+
+    Returns the perf_timing registry summary: per-operation count,
+    mean, total, p50, p95, p99, min, and max durations.
+    """
+    from pokepoke.perf_timing import get_registry
+    return get_registry().summary()
+
+
+def get_performance_metrics(self: DesktopAPI) -> dict[str, Any]:
+    """Combined performance metrics endpoint for the dashboard.
+
+    Aggregates merge queue stats, lock contention, operation timings,
+    performance monitor alerts, and idle-vs-productive time ratio into
+    a single response.
+    """
+    from pokepoke.perf_timing import get_registry
+    from pokepoke.lock_contention import get_lock_contention_stats as _get_lock
+    from pokepoke.performance_monitor import get_performance_monitor
+
+    # Merge queue
+    merge_queue: dict[str, Any] = {}
+    try:
+        from pokepoke.merge_queue import get_merge_queue
+        mq = get_merge_queue()
+        merge_queue = mq.stats.to_summary_dict()
+        merge_queue["current_queue_depth"] = mq.pending_count
+        merge_queue["is_running"] = mq.is_running
+    except Exception:
+        pass
+
+    # Lock contention
+    lock_contention = _get_lock()
+
+    # Operation timings (subprocess execution times, iteration timing)
+    operation_timings = get_registry().summary()
+
+    # Performance monitor (memory pressure events, throttling, alerts)
+    monitor = get_performance_monitor()
+    monitor_snapshot = monitor.snapshot()
+
+    # Idle vs productive time ratio
+    idle_ratio = _compute_idle_ratio(self)
+
+    return {
+        "merge_queue": merge_queue,
+        "lock_contention": lock_contention,
+        "operation_timings": operation_timings,
+        "performance_monitor": monitor_snapshot,
+        "idle_productive_ratio": idle_ratio,
+    }
+
+
+def _compute_idle_ratio(api: DesktopAPI) -> dict[str, Any]:
+    """Compute idle vs productive time from session timing data.
+
+    Productive time = sum of agent_type_elapsed_seconds.
+    Total time = wall-clock elapsed since session start.
+    Idle time = total - productive (clamped to >= 0).
+    """
+    with api._lock:
+        session_start = api._session_start_time
+        session_end = api._session_end_time
+        live = api._live_session_stats
+
+    if session_start is None:
+        return {"total_seconds": 0.0, "productive_seconds": 0.0,
+                "idle_seconds": 0.0, "idle_ratio": 0.0}
+
+    if session_end is not None:
+        total = session_end - session_start
+    else:
+        total = time.time() - session_start
+    total = max(total, 0.0)
+
+    productive = 0.0
+    if live is not None:
+        snap = live.snapshot()
+        productive = sum(snap.agent_type_elapsed_seconds.values())
+
+    idle = max(total - productive, 0.0)
+    ratio = idle / total if total > 0 else 0.0
+
+    return {
+        "total_seconds": round(total, 2),
+        "productive_seconds": round(productive, 2),
+        "idle_seconds": round(idle, 2),
+        "idle_ratio": round(ratio, 4),
+    }
 
 
 def get_repo_summary(self: DesktopAPI) -> dict[str, dict[str, Any]]:

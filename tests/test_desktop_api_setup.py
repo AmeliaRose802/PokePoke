@@ -12,10 +12,10 @@ import pytest
 
 from pokepoke.desktop_api import DesktopAPI
 from pokepoke.desktop_api_setup import (
-    _coerce_process_output,
     complete_setup,
     wait_for_setup_complete,
 )
+from pokepoke.desktop_api_utils import coerce_process_output
 
 
 @pytest.fixture(autouse=True)
@@ -35,23 +35,23 @@ def _chdir(path: Path):
         os.chdir(old)
 
 
-# ── _coerce_process_output ───────────────────────────────────────────────
+# ── coerce_process_output ───────────────────────────────────────────────
 
 
 def test_coerce_none() -> None:
-    assert _coerce_process_output(None) is None
+    assert coerce_process_output(None) is None
 
 
 def test_coerce_empty() -> None:
-    assert _coerce_process_output("") is None
+    assert coerce_process_output("") is None
 
 
 def test_coerce_whitespace() -> None:
-    assert _coerce_process_output("   ") is None
+    assert coerce_process_output("   ") is None
 
 
 def test_coerce_strips() -> None:
-    assert _coerce_process_output("  hi\n") == "hi"
+    assert coerce_process_output("  hi\n") == "hi"
 
 
 # ── check_setup_status ───────────────────────────────────────────────────
@@ -275,7 +275,8 @@ def test_create_default_config_rejects_non_dict() -> None:
 
 def test_create_default_config_no_yaml(monkeypatch) -> None:
     api = DesktopAPI()
-    monkeypatch.setattr("pokepoke.desktop_api_setup._HAS_YAML", False)
+    monkeypatch.setattr("pokepoke.desktop_api_utils.HAS_YAML", False)
+    monkeypatch.setattr("pokepoke.desktop_api_setup.HAS_YAML", False)
     with pytest.raises(ImportError, match="PyYAML"):
         api.create_default_config({"project_name": "x"})
 
