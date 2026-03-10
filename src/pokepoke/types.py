@@ -393,3 +393,5 @@ class CopilotResult:
     is_rate_limited: bool = False  # True if error was due to rate limiting
     stats: AgentStats | None = None
     model: str | None = None  # Model used for this invocation
+    session_id: str | None = None  # SDK session ID, reusable for resume on timeout
+    last_output_summary: str | None = None  # Truncated output summary for retry context

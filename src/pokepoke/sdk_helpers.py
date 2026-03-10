@@ -13,9 +13,17 @@ from . import terminal_ui
 logger = logging.getLogger(__name__)
 
 
-def _fail_result(work_item_id: str, error: str) -> CopilotResult:
+def _fail_result(
+    work_item_id: str,
+    error: str,
+    session_id: str | None = None,
+    last_output_summary: str | None = None,
+) -> CopilotResult:
     """Create a failed CopilotResult."""
-    return CopilotResult(work_item_id=work_item_id, success=False, error=error, attempt_count=1)
+    return CopilotResult(
+        work_item_id=work_item_id, success=False, error=error, attempt_count=1,
+        session_id=session_id, last_output_summary=last_output_summary,
+    )
 
 
 def _build_token_usage_callback() -> Callable[[int, int], None]:
@@ -37,6 +45,7 @@ def _build_copilot_result(
     current_model: str,
     total_api_duration: float,
     total_wall_duration: float,
+    session_id: str | None = None,
 ) -> CopilotResult:
     """Assemble the final CopilotResult and print summary statistics."""
     output_text = "".join(output_lines)
@@ -63,17 +72,20 @@ def _build_copilot_result(
         attempt_count=1,
         stats=agent_stats,
         model=current_model,
+        session_id=session_id,
     )
 
 
 def _build_session_config(
-    model: str, deny_write: bool,
+    model: str, deny_write: bool, session_id: str | None = None,
 ) -> dict[str, Any]:
     """Build the SDK session configuration dict."""
     config: dict[str, Any] = {"model": model, "streaming": True}
     config["on_permission_request"] = lambda _req, _ctx: {"kind": "approved"}
     if deny_write:
         config["excluded_tools"] = ["write", "edit"]
+    if session_id:
+        config["session_id"] = session_id
     return config
 
 
@@ -167,3 +179,79 @@ async def _await_completion(
         except TimeoutError:
             continue
     return None
+
+
+# ── Session resume helpers ───────────────────────────────────────────────────
+
+# Maximum characters to include in an output summary for resume context
+_MAX_OUTPUT_SUMMARY_LEN = 2000
+
+
+def _summarize_output(
+    output_lines: list[str], max_length: int = _MAX_OUTPUT_SUMMARY_LEN,
+) -> str | None:
+    """Extract a truncated summary from agent output lines.
+
+    Keeps the most recent output (tail), which represents the agent's
+    latest progress and is most useful for resume context.
+
+    Returns ``None`` if there is no meaningful output.
+    """
+    text = "".join(output_lines).strip()
+    if not text:
+        return None
+    if len(text) <= max_length:
+        return text
+    return "...(earlier output truncated)...\n" + text[-max_length:]
+
+
+def build_resume_prompt(
+    work_item: BeadsWorkItem,
+    previous_output_summary: str | None = None,
+    retry_feedback: list[str] | None = None,
+) -> str:
+    """Build a prompt for resuming a timed-out session.
+
+    The prompt is shorter than a full ``beads-item`` prompt since the SDK
+    may have restored the conversation history.  It includes enough
+    context for the agent to orient itself if the session did *not*
+    actually resume.
+    """
+    lines = [
+        f"## Session Resume — {work_item.id}: {work_item.title}",
+        "",
+        "Your previous session **timed out** before completing the task.",
+        "You are being resumed in the same SDK session so your earlier",
+        "tool results, file reads, and reasoning should still be available.",
+        "",
+        "**Continue from where you left off and complete the task.**",
+        "",
+        f"**Item:** {work_item.id} — {work_item.title}",
+        f"**Type:** {work_item.issue_type} | **Priority:** {work_item.priority}",
+    ]
+    if work_item.description:
+        lines.extend(["", "**Description:**", work_item.description])
+    if previous_output_summary:
+        lines.extend([
+            "",
+            "### Previous Progress",
+            "",
+            "Here is the tail of your previous session output for context:",
+            "",
+            "```",
+            previous_output_summary,
+            "```",
+        ])
+    if retry_feedback:
+        lines.extend(["", "### Feedback from Previous Attempts", ""])
+        for fb in retry_feedback:
+            lines.append(f"- {fb}")
+
+    lines.extend([
+        "",
+        "**Success Criteria:**",
+        "- Provided item is fully implemented",
+        "- All pre-commit validation passes successfully",
+        "- All changes are committed and the worktree has been merged",
+    ])
+    return "\n".join(lines)

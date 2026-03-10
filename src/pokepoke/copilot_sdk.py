@@ -21,7 +21,7 @@ from .sdk_event_handler import create_event_handler, RateLimitError, SessionStat
 from .sdk_helpers import (
     _fail_result, _build_token_usage_callback, _build_copilot_result,
     _build_session_config, _check_early_exit, _check_inactivity,
-    _await_completion,
+    _await_completion, _summarize_output, build_resume_prompt,
 )
 
 logger = logging.getLogger(__name__)
@@ -165,6 +165,21 @@ async def _run_attempt(
     return result
 
 
+def _resolve_prompt(
+    work_item: BeadsWorkItem,
+    prompt: str | None,
+    template_name: str | None,
+    is_resume: bool,
+    session_id: str | None,
+) -> str:
+    """Choose the right prompt: explicit > resume > full template."""
+    if prompt:
+        return prompt
+    if is_resume and session_id:
+        return build_resume_prompt(work_item)
+    return build_prompt_from_work_item(work_item, template_name or "beads-item")
+
+
 async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     work_item: BeadsWorkItem,
     prompt: str | None = None,
@@ -175,10 +190,26 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     idle_timeout: float | None = None,
     model: str | None = None,
     cwd: str | None = None,
-    template_name: str | None = None
+    template_name: str | None = None,
+    session_id: str | None = None,
+    is_resume: bool = False,
 ) -> CopilotResult:
-    """Invoke GitHub Copilot using the SDK. Falls back to Sonnet on rate limit."""
-    final_prompt = prompt or build_prompt_from_work_item(work_item, template_name or "beads-item")
+    """Invoke GitHub Copilot using the SDK. Falls back to Sonnet on rate limit.
+
+    Args:
+        session_id: Optional SDK session ID for resuming a timed-out session.
+            When provided, the SDK will attempt to restore the previous
+            conversation history.
+        is_resume: When ``True``, the invocation is a resume after timeout.
+            A shorter resume-oriented prompt is sent instead of the full
+            template.
+    """
+    final_prompt = _resolve_prompt(work_item, prompt, template_name, is_resume, session_id)
+
+    # Generate a stable session_id for this work item if none provided
+    if session_id is None:
+        session_id = f"pokepoke-{work_item.id}"
+
     max_timeout = timeout or DEFAULT_AGENT_TIMEOUT
     if idle_timeout is None:
         idle_timeout = float(get_config().idle_timeout_seconds)
@@ -205,8 +236,12 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         attempt_result = _AttemptResult()
 
         for attempt in range(max_attempts):
-            session_config = _build_session_config(current_model, deny_write)
+            session_config = _build_session_config(
+                current_model, deny_write, session_id=session_id,
+            )
             print(f"[SDK] Using model: {current_model}")
+            if is_resume:
+                print(f"[SDK] Resuming session: {session_id}")
 
             session = await client.create_session(session_config)  # type: ignore[arg-type]
             print(f"[SDK] Session created: {session.session_id}\n")
@@ -265,12 +300,16 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             attempt_result.interrupted and abort_reason is None
         )
         inactivity_detected = abort_reason == "inactivity"
+        # Capture output summary for potential resume on next retry
+        output_summary = _summarize_output(output_lines) if (timed_out or inactivity_detected) else None
         early = _check_early_exit(
             work_item.id, timed_out, interrupted, max_timeout,
         ) or _check_inactivity(
             work_item.id, inactivity_detected, inactivity_timeout,
         )
         if early is not None:
+            early.session_id = session_id
+            early.last_output_summary = output_summary
             return early
 
         assert stats is not None  # Always set in first loop iteration
@@ -282,15 +321,16 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             current_model=current_model,
             total_api_duration=total_api_duration,
             total_wall_duration=total_wall_duration,
+            session_id=session_id,
         )
 
     except KeyboardInterrupt:
         error = "Session aborted due to application shutdown" if is_shutting_down() else "Interrupted by user"
         print(f"\n[SDK] ⚠️  {error}")
-        return _fail_result(work_item.id, error)
+        return _fail_result(work_item.id, error, session_id=session_id)
     except Exception as e:
         print(f"\n[SDK] Exception: {e}")
-        return _fail_result(work_item.id, f"SDK exception: {e}")
+        return _fail_result(work_item.id, f"SDK exception: {e}", session_id=session_id)
     finally:
         await shutdown_copilot_client(client)
 
@@ -304,7 +344,9 @@ def invoke_copilot_sdk_sync(  # type: ignore[no-any-unimported]
     item_logger: 'ItemLogger | None' = None,
     model: str | None = None,
     cwd: str | None = None,
-    template_name: str | None = None
+    template_name: str | None = None,
+    session_id: str | None = None,
+    is_resume: bool = False,
 ) -> CopilotResult:
     """Synchronous wrapper around invoke_copilot_sdk."""
     return asyncio.run(invoke_copilot_sdk(
@@ -316,5 +358,7 @@ def invoke_copilot_sdk_sync(  # type: ignore[no-any-unimported]
         item_logger=item_logger,
         model=model,
         cwd=cwd,
-        template_name=template_name
+        template_name=template_name,
+        session_id=session_id,
+        is_resume=is_resume,
     ))
