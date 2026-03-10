@@ -282,3 +282,49 @@ class TestLoadModelHistoryEntries:
         with patch.object(Path, 'open', side_effect=OSError("Permission denied")):
             result = load_model_history_entries(path=history_path)
         assert result == []
+
+    def test_repo_name_filters_before_limit(self, tmp_path: Path) -> None:
+        """Regression: limit must apply *after* repo_name filtering.
+
+        Previously the limit was applied first, so a repo with entries only
+        beyond the global limit window would return zero results.
+        """
+        history_path = tmp_path / "model_history.jsonl"
+        lines: list[str] = []
+        # Write 10 entries for RepoA, then 10 for RepoB
+        for i in range(10):
+            lines.append(json.dumps({"work_item_id": f"A-{i}", "repo_name": "RepoA"}))
+        for i in range(10):
+            lines.append(json.dumps({"work_item_id": f"B-{i}", "repo_name": "RepoB"}))
+        history_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        # With limit=5 and repo_name="RepoA", we should get 5 RepoA entries
+        # even though RepoA entries are in the first half of the file.
+        result = load_model_history_entries(path=history_path, limit=5, repo_name="RepoA")
+        assert len(result) == 5
+        assert all(e["repo_name"] == "RepoA" for e in result)
+
+    def test_repo_name_returns_all_when_under_limit(self, tmp_path: Path) -> None:
+        history_path = tmp_path / "model_history.jsonl"
+        lines = [
+            json.dumps({"work_item_id": "A-0", "repo_name": "RepoA"}),
+            json.dumps({"work_item_id": "B-0", "repo_name": "RepoB"}),
+            json.dumps({"work_item_id": "A-1", "repo_name": "RepoA"}),
+        ]
+        history_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        result = load_model_history_entries(path=history_path, limit=200, repo_name="RepoA")
+        assert len(result) == 2
+        assert result[0]["work_item_id"] == "A-0"
+        assert result[1]["work_item_id"] == "A-1"
+
+    def test_repo_name_empty_returns_all_repos(self, tmp_path: Path) -> None:
+        history_path = tmp_path / "model_history.jsonl"
+        lines = [
+            json.dumps({"work_item_id": "A-0", "repo_name": "RepoA"}),
+            json.dumps({"work_item_id": "B-0", "repo_name": "RepoB"}),
+        ]
+        history_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        result = load_model_history_entries(path=history_path, limit=200, repo_name="")
+        assert len(result) == 2

@@ -353,14 +353,18 @@ class TestGetModelLeaderboardByRepo:
 
 
 class TestGetModelHistoryByRepo:
-    def test_repo_filter_applied(self) -> None:
+    def test_repo_filter_passed_to_loader(self) -> None:
+        """repo_name must be forwarded to load_model_history_entries."""
         obj = _make_self()
-        raw_data = [
+        filtered_data = [
             {"item_id": "A1", "repo_name": "RepoA", "duration_seconds": 10},
-            {"item_id": "B1", "repo_name": "RepoB", "duration_seconds": 20},
         ]
-        with patch("pokepoke.model_history.load_model_history_entries", return_value=raw_data):
+        with patch(
+            "pokepoke.model_history.load_model_history_entries",
+            return_value=filtered_data,
+        ) as mock_load:
             result = get_model_history(obj, limit=10, repo_name="RepoA")
+        mock_load.assert_called_once_with(limit=10, repo_name="RepoA")
         assert len(result) == 1
         assert result[0]["item_id"] == "A1"
 

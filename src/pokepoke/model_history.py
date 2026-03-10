@@ -122,7 +122,9 @@ def append_model_history_entry(
         f.write(line + "\n")
 
 
-def load_model_history_entries(path: Path | None = None, limit: int = 200) -> list[dict[str, Any]]:
+def load_model_history_entries(
+    path: Path | None = None, limit: int = 200, repo_name: str = ""
+) -> list[dict[str, Any]]:
     """Load recent model history entries from .pokepoke/model_history.jsonl.
 
     Returns entries from the JSONL file with full details including labels and issue_type.
@@ -131,6 +133,9 @@ def load_model_history_entries(path: Path | None = None, limit: int = 200) -> li
     Args:
         path: Optional path to model_history.jsonl (defaults to HISTORY_FILE).
         limit: Maximum number of recent entries to return (default 200).
+        repo_name: If provided, only entries matching this repo are returned.
+            The limit is applied *after* filtering so the caller always gets
+            up to ``limit`` results for the requested repo.
 
     Returns:
         List of history entry dicts, most recent last.
@@ -148,10 +153,12 @@ def load_model_history_entries(path: Path | None = None, limit: int = 200) -> li
                     continue
                 try:
                     entry = json.loads(line)
-                    entries.append(entry)
                 except json.JSONDecodeError:
                     # Skip malformed lines
                     continue
+                if repo_name and entry.get("repo_name", "") != repo_name:
+                    continue
+                entries.append(entry)
     except OSError:
         # File disappeared or unreadable
         return []

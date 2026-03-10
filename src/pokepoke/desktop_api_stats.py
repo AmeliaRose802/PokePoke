@@ -139,7 +139,7 @@ def get_model_history(self: DesktopAPI, limit: int = 200, repo_name: str = "") -
 
     # Try to load from detailed history first (includes labels and issue_type)
     from pokepoke.model_history import load_model_history_entries
-    raw_history = load_model_history_entries(limit=limit)
+    raw_history = load_model_history_entries(limit=limit, repo_name=repo_name)
 
     # Fall back to model_stats.json if history file doesn't exist
     if not raw_history:
@@ -149,9 +149,6 @@ def get_model_history(self: DesktopAPI, limit: int = 200, repo_name: str = "") -
     # Normalize keys to match frontend schema
     history = []
     for entry in raw_history:
-        # Apply repo filter if requested (for model_history.jsonl path)
-        if repo_name and entry.get("repo_name", "") != repo_name:
-            continue
         normalized = dict(entry)
 
         # Map backend keys to frontend keys
