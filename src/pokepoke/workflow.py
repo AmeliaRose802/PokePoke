@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from pokepoke.ai_backends import invoke_copilot
 from pokepoke.copilot_sdk import build_prompt_from_work_item
+from pokepoke.sdk_helpers import build_resume_prompt
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, WorkItemResult
 from pokepoke.worktrees import create_worktree, cleanup_worktree
 from pokepoke.beads import assign_and_sync_item, add_comment, unassign_with_retry
@@ -114,6 +115,9 @@ def process_work_item(  # noqa: C901
         timeout_restart_count = 0
         work_agent_iteration = 1
         copilot_failure_count = 0
+        # Session resume state: track session_id and output from timed-out sessions
+        resume_session_id: str | None = None
+        resume_output_summary: str | None = None
 
         # Default result for shutdown before first loop iteration.
         result = CopilotResult(work_item_id=item.id, success=False,
@@ -148,9 +152,17 @@ def process_work_item(  # noqa: C901
             terminal_ui.ui.set_current_agent("Work Agent")
             from pokepoke.metrics_context import agent_type_context
             prompt_template = selected_prompt_template or "beads-item"
-            work_prompt = build_prompt_from_work_item(
-                item, template_name=prompt_template,
-                retry_feedback=accumulated_feedback or None)
+            is_resume = resume_session_id is not None
+            if is_resume:
+                work_prompt = build_resume_prompt(
+                    item,
+                    previous_output_summary=resume_output_summary,
+                    retry_feedback=accumulated_feedback or None,
+                )
+            else:
+                work_prompt = build_prompt_from_work_item(
+                    item, template_name=prompt_template,
+                    retry_feedback=accumulated_feedback or None)
             with agent_type_context("work"):
                 is_retry = work_agent_iteration > 1
                 agent_id = f"{base_agent_id}-retry-{work_agent_iteration}" if is_retry else base_agent_id
@@ -162,7 +174,8 @@ def process_work_item(  # noqa: C901
                 with terminal_ui.ui.agent_output_for(agent_id):
                     result = invoke_copilot(
                         item, prompt=work_prompt, timeout=remaining_timeout,
-                        item_logger=item_logger, model=selected_model, cwd=worktree_cwd)
+                        item_logger=item_logger, model=selected_model, cwd=worktree_cwd,
+                        session_id=resume_session_id, is_resume=is_resume)
             request_count += result.attempt_count
 
             current_stats = _extract_agent_stats(result)
@@ -171,6 +184,19 @@ def process_work_item(  # noqa: C901
 
             if not result.success:
                 copilot_failure_count += 1
+                # Capture session state for potential resume on timeout/inactivity
+                is_timeout_failure = (
+                    result.error and ("timeout" in result.error.lower()
+                                      or "inactivity" in result.error.lower())
+                )
+                if is_timeout_failure and result.session_id:
+                    resume_session_id = result.session_id
+                    resume_output_summary = result.last_output_summary
+                    print(f"\n📎 Session state saved for resume (session: {resume_session_id})")
+                else:
+                    # Non-timeout failure: clear resume state for a fresh start
+                    resume_session_id = None
+                    resume_output_summary = None
                 retry, feedback = _maybe_retry_copilot(
                     result, copilot_failure_count, config.max_copilot_failure_retries, run_logger, item.id)
                 if retry:
@@ -254,6 +280,9 @@ def process_work_item(  # noqa: C901
                 break
             elif not gate_crashed:
                 # Genuine code rejection — restart work agent with feedback
+                # Clear resume state: gate rejection means a fresh approach is needed
+                resume_session_id = None
+                resume_output_summary = None
                 print(f"\n❌ Gate Agent rejected: {gate_reason}")
                 add_comment(item.id, f"Gate Agent Rejection:\n{gate_reason}")
                 last_feedback = gate_reason

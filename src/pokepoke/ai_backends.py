@@ -34,6 +34,8 @@ class AIBackend(Protocol):
         model: str | None = None,
         cwd: str | None = None,
         template_name: str | None = None,
+        session_id: str | None = None,
+        is_resume: bool = False,
     ) -> CopilotResult:
         ...
 
@@ -55,6 +57,8 @@ class CopilotBackend:
         model: str | None = None,
         cwd: str | None = None,
         template_name: str | None = None,
+        session_id: str | None = None,
+        is_resume: bool = False,
     ) -> CopilotResult:
         return invoke_copilot_sdk_sync(
             work_item=work_item,
@@ -66,6 +70,8 @@ class CopilotBackend:
             model=model,
             cwd=cwd,
             template_name=template_name,
+            session_id=session_id,
+            is_resume=is_resume,
         )
 
 
@@ -91,9 +97,12 @@ class ClaudeCodeBackend:
         model: str | None = None,
         cwd: str | None = None,
         template_name: str | None = None,
+        session_id: str | None = None,
+        is_resume: bool = False,
     ) -> CopilotResult:
         final_prompt = prompt or build_prompt_from_work_item(work_item, template_name or "beads-item")
         # Claude Code is read-only by design; deny_write is inherent.
+        # session_id / is_resume are not supported by Claude Code CLI.
         if shutil.which(self.cli_path) is None:
             return CopilotResult(
                 work_item_id=work_item.id,
@@ -202,6 +211,8 @@ def invoke_copilot(
     cwd: str | None = None,
     provider: str | None = None,
     template_name: str | None = None,
+    session_id: str | None = None,
+    is_resume: bool = False,
 ) -> CopilotResult:
     """Invoke an AI backend to process a work item.
 
@@ -216,6 +227,8 @@ def invoke_copilot(
         cwd: Optional working directory for the process.
         provider: Optional backend provider override (e.g., 'copilot', 'claude-code').
         template_name: Optional prompt template name from assignment rules.
+        session_id: Optional SDK session ID for resuming a timed-out session.
+        is_resume: When True, the invocation is a resume after timeout.
 
     Returns:
         Result of the invocation.
@@ -231,4 +244,6 @@ def invoke_copilot(
         model=model,
         cwd=cwd,
         template_name=template_name,
+        session_id=session_id,
+        is_resume=is_resume,
     )

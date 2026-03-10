@@ -241,10 +241,12 @@ def _maybe_retry_copilot(
     if failure_count > max_retries or result.is_rate_limited:
         return False, ""
     feedback = result.error or "Copilot agent did not complete the task"
-    print(f"\n🔄 Copilot attempt {failure_count} failed, retrying ({failure_count}/{max_retries})...")
+    has_resume = result.session_id is not None and result.last_output_summary is not None
+    resume_note = " (will resume session)" if has_resume else ""
+    print(f"\n🔄 Copilot attempt {failure_count} failed, retrying ({failure_count}/{max_retries}){resume_note}...")
     if run_logger:
         run_logger.log_orchestrator(
-            f"Copilot failure on attempt {failure_count} for {item_id}, retrying with feedback",
+            f"Copilot failure on attempt {failure_count} for {item_id}, retrying with feedback{resume_note}",
         )
     return True, f"[Copilot failure] {feedback}"
 
