@@ -7,6 +7,7 @@ from typing import Any
 from pokepoke.agent_types import (
     AGENT_TYPES, _empty_agent_run_counts, _normalize_agent_key, resolve_agent_type,
 )
+from pokepoke.merge_queue_stats import MergeQueueStats as MergeQueueStats  # re-export
 
 
 @dataclass
@@ -151,33 +152,21 @@ class SessionStatsSnapshot:
     """Frozen snapshot of session stats for UI display."""
 
     agent_stats: AgentStats
-
-    # Per-session beads throughput
     items_completed: int = 0
     items_created: int = 0
     completed_items_list: tuple[BeadsWorkItem, ...] = ()
     created_items_list: tuple[BeadsCreatedItem, ...] = ()
-
-    # Per-session breakdowns
     created_counts_by_agent_type: dict[str, int] = field(default_factory=dict)
     completed_counts_by_agent_type: dict[str, int] = field(default_factory=dict)
-
-    # Lifetime totals (persisted)
     lifetime_items_created: int = 0
     lifetime_items_completed: int = 0
-
-    # Agent runs
     agent_run_counts: dict[str, int] = field(default_factory=_empty_agent_run_counts)
     janitor_lines_removed: int = 0
-
-    # Elapsed wall-clock seconds spent in each agent type
     agent_type_elapsed_seconds: dict[str, float] = field(default_factory=dict)
-
-    # Beads DB stats snapshot
     starting_beads_stats: BeadsStats | None = None
     ending_beads_stats: BeadsStats | None = None
-
     model_completions: tuple[ModelCompletionRecord, ...] = ()
+    merge_queue_stats: MergeQueueStats = field(default_factory=MergeQueueStats)
 
     def get_agent_run_count(self, agent_type: str) -> int:
         """Return the recorded run count for the requested agent (slug or display)."""
@@ -219,6 +208,7 @@ class SessionStats:
     starting_beads_stats: BeadsStats | None = None
     ending_beads_stats: BeadsStats | None = None
     model_completions: list[ModelCompletionRecord] = field(default_factory=list)
+    merge_queue_stats: MergeQueueStats = field(default_factory=MergeQueueStats)
 
     _created_item_ids: set[str] = field(default_factory=set, init=False, repr=False, compare=False)
     _lock: threading.Lock = field(
@@ -338,6 +328,11 @@ class SessionStats:
         with self._lock:
             self.ending_beads_stats = self._safe_copy_stats(stats)
 
+    def record_merge_queue_stats(self, stats: MergeQueueStats) -> None:
+        """Copy merge queue stats into the session (called at shutdown)."""
+        with self._lock:
+            self.merge_queue_stats = stats.copy()
+
     def snapshot(self) -> SessionStatsSnapshot:
         """Return a frozen snapshot for UI display without holding the lock."""
         with self._lock:
@@ -357,6 +352,7 @@ class SessionStats:
                 starting_beads_stats=self._safe_copy_stats(self.starting_beads_stats),
                 ending_beads_stats=self._safe_copy_stats(self.ending_beads_stats),
                 model_completions=tuple(replace(mc) for mc in self.model_completions),
+                merge_queue_stats=self.merge_queue_stats.copy(),
             )
 
     def __getattr__(self, name: str) -> Any:

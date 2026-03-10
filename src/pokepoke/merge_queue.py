@@ -20,6 +20,7 @@ from pathlib import Path
 from queue import Empty, Queue
 
 from .git_operations import get_default_branch, is_worktree_clean
+from .merge_queue_stats import MergeQueueStats
 from .shutdown import is_shutting_down
 from .types import BeadsWorkItem
 from .beads import is_high_conflict_risk
@@ -52,6 +53,7 @@ class _MergeRequest:
     worktree_path: Path
     item: BeadsWorkItem
     future: Future[MergeResult]
+    submit_time: float = 0.0
 
 
 class MergeQueue:
@@ -68,6 +70,8 @@ class MergeQueue:
         self._started = False
         self._shutdown_event = threading.Event()
         self._lock = threading.Lock()
+        self._stats = MergeQueueStats()
+        self._stats_lock = threading.Lock()
 
     def start(self) -> None:
         """Start the merge worker thread."""
@@ -104,9 +108,13 @@ class MergeQueue:
             worktree_path=worktree_path,
             item=item,
             future=future,
+            submit_time=time.monotonic(),
         )
         self._queue.put(request)
-        logger.info("Queued merge for %s (queue size: %d)", item.id, self._queue.qsize())
+        depth = self._queue.qsize()
+        with self._stats_lock:
+            self._stats.queue_depth_samples.append(depth)
+        logger.info("Queued merge for %s (queue size: %d)", item.id, depth)
         return future
 
     def shutdown(self, timeout: float = 30.0) -> None:
@@ -149,6 +157,12 @@ class MergeQueue:
         worker = self._worker
         return worker is not None and worker.is_alive()
 
+    @property
+    def stats(self) -> MergeQueueStats:
+        """Return a snapshot copy of the current merge queue stats."""
+        with self._stats_lock:
+            return self._stats.copy()
+
     def _worker_loop(self) -> None:
         """Main loop for the merge worker thread."""
         logger.info("Merge queue worker started")
@@ -175,6 +189,8 @@ class MergeQueue:
 
     def _process_request(self, request: _MergeRequest) -> None:
         """Process a single merge request. All exceptions caught to guarantee Future resolution."""
+        process_start = time.monotonic()
+        wait_time = process_start - request.submit_time if request.submit_time else 0.0
         try:
             item = request.item
             worktree_path = request.worktree_path
@@ -184,77 +200,77 @@ class MergeQueue:
             if high_conflict:
                 logger.info("Applying cautious merge strategy for high-conflict item %s", item.id)
 
-            # Rebase worktree against target branch to incorporate any previous merges
             target_branch = get_default_branch()
             rebase_ok = _rebase_worktree(worktree_path, target_branch=target_branch)
+            self._record_rebase(rebase_ok)
+
             if high_conflict and rebase_ok:
                 logger.info("Second safety rebase for high-conflict item %s", item.id)
-                rebase_ok = _rebase_worktree(worktree_path, target_branch=target_branch) and rebase_ok
+                dr_start = time.monotonic()
+                second_ok = _rebase_worktree(worktree_path, target_branch=target_branch)
+                rebase_ok = second_ok and rebase_ok
                 time.sleep(1.0)
+                self._record_rebase(second_ok)
+                with self._stats_lock:
+                    self._stats.high_conflict_merges += 1
+                    self._stats.double_rebase_overhead_seconds.append(time.monotonic() - dr_start)
+
             if not rebase_ok:
                 if not is_worktree_clean(worktree_path):
-                    logger.error(
-                        "Worktree %s is dirty after failed rebase for %s - skipping merge",
-                        worktree_path,
-                        item.id,
-                    )
+                    logger.error("Worktree %s is dirty after failed rebase for %s - skipping merge", worktree_path, item.id)
                     from .worktree_cleanup import add_uncleaned_worktree
-
-                    add_uncleaned_worktree(
-                        worktree_id=item.id,
-                        worktree_path=str(worktree_path),
-                        reason="Rebase failed and abort left worktree in dirty state",
-                    )
-                    request.future.set_result(
-                        MergeResult(
-                            status=MergeStatus.FAILED,
-                            item_id=item.id,
-                            message="Rebase failed and worktree is in dirty state after abort",
-                        )
-                    )
+                    add_uncleaned_worktree(worktree_id=item.id, worktree_path=str(worktree_path),
+                                           reason="Rebase failed and abort left worktree in dirty state")
+                    request.future.set_result(MergeResult(
+                        status=MergeStatus.FAILED, item_id=item.id,
+                        message="Rebase failed and worktree is in dirty state after abort"))
+                    self._record_merge_end(process_start, wait_time, success=False)
                     return
-                logger.warning(
-                    "Rebase failed for %s but worktree is clean - attempting merge", item.id
-                )
+                logger.warning("Rebase failed for %s but worktree is clean - attempting merge", item.id)
 
             try:
                 from .worktree_finalization import merge_worktree_to_dev
-
                 success = merge_worktree_to_dev(item, worktree_path=worktree_path)
-                if success:
-                    result = MergeResult(
-                        status=MergeStatus.SUCCESS,
-                        item_id=item.id,
-                        message="Merge completed successfully",
-                    )
-                else:
-                    result = MergeResult(
-                        status=MergeStatus.FAILED,
-                        item_id=item.id,
-                        message="merge_worktree_to_dev returned False",
-                    )
+                status = MergeStatus.SUCCESS if success else MergeStatus.FAILED
+                msg = "Merge completed successfully" if success else "merge_worktree_to_dev returned False"
+                result = MergeResult(status=status, item_id=item.id, message=msg)
             except Exception as exc:
                 logger.exception("Merge failed for %s", item.id)
-                result = MergeResult(
-                    status=MergeStatus.FAILED,
-                    item_id=item.id,
-                    message=str(exc),
-                )
+                result = MergeResult(status=MergeStatus.FAILED, item_id=item.id, message=str(exc))
 
             request.future.set_result(result)
+            self._record_merge_end(process_start, wait_time, success=(result.status == MergeStatus.SUCCESS))
         except BaseException as exc:
-            # Catch ALL exceptions to guarantee the Future is always resolved
             logger.exception("Unhandled exception in merge request processing for %s", request.item.id)
             if not request.future.done():
-                request.future.set_result(
-                    MergeResult(
-                        status=MergeStatus.FAILED,
-                        item_id=request.item.id,
-                        message=f"Unhandled exception: {exc}",
-                    )
-                )
-            # Re-raise to allow worker loop exception handler to log
+                request.future.set_result(MergeResult(
+                    status=MergeStatus.FAILED, item_id=request.item.id,
+                    message=f"Unhandled exception: {exc}"))
+            self._record_merge_end(process_start, wait_time, success=False)
             raise
+
+    def _record_rebase(self, success: bool) -> None:
+        """Record a rebase attempt outcome."""
+        with self._stats_lock:
+            self._stats.total_rebases += 1
+            if success:
+                self._stats.successful_rebases += 1
+            else:
+                self._stats.failed_rebases += 1
+
+    def _record_merge_end(
+        self, process_start: float, wait_time: float, *, success: bool
+    ) -> None:
+        """Record timing metrics at the end of a merge."""
+        duration = time.monotonic() - process_start
+        with self._stats_lock:
+            self._stats.total_merges += 1
+            if success:
+                self._stats.successful_merges += 1
+            else:
+                self._stats.failed_merges += 1
+            self._stats.merge_durations.append(duration)
+            self._stats.wait_times.append(wait_time)
 
     def _drain_on_shutdown(self) -> None:
         """Drain remaining queue items, setting shutdown results."""
@@ -274,99 +290,52 @@ class MergeQueue:
 
 
 def _abort_rebase(worktree_path: Path) -> None:
-    """Abort a rebase and verify worktree state.
-
-    Attempts to abort an in-progress rebase. If the abort fails,
-    verifies the worktree state and logs any inconsistencies.
-    """
+    """Abort an in-progress rebase and verify worktree state."""
     try:
         subprocess.run(
-            ["git", "rebase", "--abort"],
-            cwd=str(worktree_path),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors='replace',
-            timeout=30,
-            check=True,
+            ["git", "rebase", "--abort"], cwd=str(worktree_path),
+            capture_output=True, text=True, encoding="utf-8", errors='replace',
+            timeout=30, check=True,
         )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as abort_exc:
         logger.warning(
             "Failed to abort rebase in %s: %s. Worktree may be in inconsistent state.",
-            worktree_path,
-            abort_exc.stderr if hasattr(abort_exc, "stderr") else str(abort_exc),
+            worktree_path, abort_exc.stderr if hasattr(abort_exc, "stderr") else str(abort_exc),
         )
-        # Verify worktree state after abort failure
         try:
             status_result = subprocess.run(
-                ["git", "status", "--porcelain"],
-                cwd=str(worktree_path),
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors='replace',
-                timeout=10,
-                check=True,
+                ["git", "status", "--porcelain"], cwd=str(worktree_path),
+                capture_output=True, text=True, encoding="utf-8", errors='replace',
+                timeout=10, check=True,
             )
             if status_result.stdout.strip():
-                logger.error(
-                    "Worktree %s is dirty after failed rebase abort: %s",
-                    worktree_path,
-                    status_result.stdout[:200],
-                )
+                logger.error("Worktree %s is dirty after failed rebase abort: %s",
+                             worktree_path, status_result.stdout[:200])
         except Exception as status_exc:
-            logger.error(
-                "Unable to verify worktree state in %s: %s",
-                worktree_path,
-                str(status_exc),
-            )
+            logger.error("Unable to verify worktree state in %s: %s", worktree_path, str(status_exc))
 
 
 def _rebase_worktree(worktree_path: Path, target_branch: str | None = None) -> bool:
     """Rebase a worktree onto the latest target branch.
-
-    Uses explicit ``git fetch origin`` + ``git rebase origin/<target>``
-    instead of ``git pull --rebase`` to avoid the
-    "Cannot rebase onto multiple branches" error that occurs when
-    FETCH_HEAD contains multiple merge entries (common when beads-sync
-    or other branches are being pushed concurrently).
 
     Returns True if rebase succeeded or was unnecessary, False on failure.
     """
     if not worktree_path.exists():
         logger.warning("Worktree path does not exist: %s", worktree_path)
         return False
-
     if target_branch is None:
         target_branch = get_default_branch()
-
     try:
-        subprocess.run(
-            ["git", "fetch", "origin", target_branch],
-            cwd=str(worktree_path),
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors='replace',
-            timeout=60,
-        )
-        subprocess.run(
-            ["git", "rebase", f"origin/{target_branch}"],
-            cwd=str(worktree_path),
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors='replace',
-            timeout=120,
-        )
+        subprocess.run(["git", "fetch", "origin", target_branch],
+                       cwd=str(worktree_path), check=True, capture_output=True,
+                       text=True, encoding="utf-8", errors='replace', timeout=60)
+        subprocess.run(["git", "rebase", f"origin/{target_branch}"],
+                       cwd=str(worktree_path), check=True, capture_output=True,
+                       text=True, encoding="utf-8", errors='replace', timeout=120)
         logger.info("Rebased worktree %s onto origin/%s successfully", worktree_path, target_branch)
         return True
     except subprocess.CalledProcessError as exc:
-        logger.warning(
-            "Rebase failed in %s: %s", worktree_path, exc.stderr or str(exc)
-        )
+        logger.warning("Rebase failed in %s: %s", worktree_path, exc.stderr or str(exc))
         _abort_rebase(worktree_path)
         return False
     except subprocess.TimeoutExpired:

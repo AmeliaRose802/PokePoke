@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 from pokepoke.agent_types import iter_agent_types
 from pokepoke.file_utils import replace_with_retry
-from pokepoke.types import AgentStats, SessionStats, ModelCompletionRecord
+from pokepoke.types import AgentStats, MergeQueueStats, SessionStats, ModelCompletionRecord
 
 
 def parse_agent_stats(output: str) -> AgentStats | None:
@@ -98,68 +98,16 @@ def print_stats(items_completed: int, total_requests: int, elapsed_seconds: floa
 
     print(f"⏱️  Total time:         {_format_duration(elapsed_seconds)}")
 
-    # Print beads statistics if available
-    if session_stats and session_stats.starting_beads_stats and session_stats.ending_beads_stats:
-        start = session_stats.starting_beads_stats
-        end = session_stats.ending_beads_stats
-
-        print("\n" + "=" * 60)
-        print("📋 Beads Database Statistics")
-        print("=" * 60)
-        print("                      Start → End (Change)")
-        print(f"📝 Total issues:      {start.total_issues:5} → {end.total_issues:5} ({end.total_issues - start.total_issues:+d})")
-        print(f"🔓 Open issues:       {start.open_issues:5} → {end.open_issues:5} ({end.open_issues - start.open_issues:+d})")
-        print(f"🏃 In progress:       {start.in_progress_issues:5} → {end.in_progress_issues:5} ({end.in_progress_issues - start.in_progress_issues:+d})")
-        print(f"✅ Closed issues:     {start.closed_issues:5} → {end.closed_issues:5} ({end.closed_issues - start.closed_issues:+d})")
-        print(f"🚀 Ready to work:     {start.ready_issues:5} → {end.ready_issues:5} ({end.ready_issues - start.ready_issues:+d})")
-
-    # Print agent run counts
     if session_stats:
-        print("\n" + "=" * 60)
-        print("🤖 Agent Run Counts")
-        print("=" * 60)
-        for agent in iter_agent_types():
-            count = session_stats.get_agent_run_count(agent.key)
-            if count <= 0 and not agent.always_show:
-                continue
-            emoji = f"{agent.emoji} " if agent.emoji else ""
-            print(f"{emoji}{agent.display_name} agents:".ljust(28) + f"{count}")
-
-    # Print agent statistics if available and has non-zero values
-    if session_stats and session_stats.agent_stats and (
-        session_stats.agent_stats.wall_duration > 0 or
-        session_stats.agent_stats.input_tokens > 0 or
-        session_stats.agent_stats.output_tokens > 0 or
-        session_stats.agent_stats.lines_added > 0 or
-        session_stats.agent_stats.lines_removed > 0 or
-        session_stats.agent_stats.premium_requests > 0
-    ):
-        print("\n" + "=" * 60)
-        print("🤖 Agent Usage Statistics")
-        print("=" * 60)
-        astats = session_stats.agent_stats
-        if astats.wall_duration > 0:
-            print(f"⏱️  Wall duration:      {astats.wall_duration:.1f}s")
-        if astats.api_duration > 0:
-            print(f"⚡ API duration:       {astats.api_duration:.1f}s")
-        if astats.input_tokens > 0:
-            print(f"📊 Input tokens:       {astats.input_tokens:,}")
-        if astats.output_tokens > 0:
-            print(f"📤 Output tokens:      {astats.output_tokens:,}")
-        if astats.lines_added > 0:
-            print(f"➕ Lines added:        {astats.lines_added:,}")
-        if astats.lines_removed > 0:
-            print(f"➖ Lines removed:      {astats.lines_removed:,}")
-        if astats.premium_requests > 0:
-            print(f"💎 Premium requests:   {astats.premium_requests}")
+        _print_beads_stats(session_stats)
+        _print_agent_run_counts(session_stats)
+        _print_agent_usage_stats(session_stats)
     else:
         print("\n⚠️  No agent statistics available (stats parsing may have failed)")
 
-    # Calculate average time per item if any completed
     if items_completed > 0:
         print(f"📈 Avg time per item:  {_format_duration(elapsed_seconds / items_completed)}")
 
-    # Print list of completed items
     if session_stats and session_stats.completed_items_list:
         print("\n" + "=" * 60)
         print("✅ Completed Work Items")
@@ -167,15 +115,78 @@ def print_stats(items_completed: int, total_requests: int, elapsed_seconds: floa
         for item in session_stats.completed_items_list:
             print(f"• {item.id}: {item.title}")
 
-    # Print model comparison stats (A/B testing) - current session
     if session_stats and session_stats.model_completions:
         _print_model_comparison(session_stats.model_completions)
 
-    # Print all-time model leaderboard from persistent stats
     from pokepoke.model_stats_store import print_model_leaderboard
     print_model_leaderboard()
 
+    mqs = getattr(session_stats, 'merge_queue_stats', None) if session_stats else None
+    if isinstance(mqs, MergeQueueStats) and mqs.total_merges > 0:
+        _print_merge_queue_stats(mqs)
+
     print("=" * 60)
+
+
+def _print_beads_stats(session_stats: SessionStats) -> None:
+    """Print beads database statistics if available."""
+    if not (session_stats.starting_beads_stats and session_stats.ending_beads_stats):
+        return
+    start = session_stats.starting_beads_stats
+    end = session_stats.ending_beads_stats
+    print("\n" + "=" * 60)
+    print("📋 Beads Database Statistics")
+    print("=" * 60)
+    print("                      Start → End (Change)")
+    print(f"📝 Total issues:      {start.total_issues:5} → {end.total_issues:5} ({end.total_issues - start.total_issues:+d})")
+    print(f"🔓 Open issues:       {start.open_issues:5} → {end.open_issues:5} ({end.open_issues - start.open_issues:+d})")
+    print(f"🏃 In progress:       {start.in_progress_issues:5} → {end.in_progress_issues:5} ({end.in_progress_issues - start.in_progress_issues:+d})")
+    print(f"✅ Closed issues:     {start.closed_issues:5} → {end.closed_issues:5} ({end.closed_issues - start.closed_issues:+d})")
+    print(f"🚀 Ready to work:     {start.ready_issues:5} → {end.ready_issues:5} ({end.ready_issues - start.ready_issues:+d})")
+
+
+def _print_agent_run_counts(session_stats: SessionStats) -> None:
+    """Print per-agent run counts."""
+    print("\n" + "=" * 60)
+    print("🤖 Agent Run Counts")
+    print("=" * 60)
+    for agent in iter_agent_types():
+        count = session_stats.get_agent_run_count(agent.key)
+        if count <= 0 and not agent.always_show:
+            continue
+        emoji = f"{agent.emoji} " if agent.emoji else ""
+        print(f"{emoji}{agent.display_name} agents:".ljust(28) + f"{count}")
+
+
+def _print_agent_usage_stats(session_stats: SessionStats) -> None:
+    """Print agent usage statistics (tokens, durations, etc)."""
+    astats = session_stats.agent_stats
+    has_stats = astats and (
+        astats.wall_duration > 0 or astats.input_tokens > 0 or
+        astats.output_tokens > 0 or astats.lines_added > 0 or
+        astats.lines_removed > 0 or astats.premium_requests > 0
+    )
+    if not has_stats:
+        print("\n⚠️  No agent statistics available (stats parsing may have failed)")
+        return
+
+    print("\n" + "=" * 60)
+    print("🤖 Agent Usage Statistics")
+    print("=" * 60)
+    if astats.wall_duration > 0:
+        print(f"⏱️  Wall duration:      {astats.wall_duration:.1f}s")
+    if astats.api_duration > 0:
+        print(f"⚡ API duration:       {astats.api_duration:.1f}s")
+    if astats.input_tokens > 0:
+        print(f"📊 Input tokens:       {astats.input_tokens:,}")
+    if astats.output_tokens > 0:
+        print(f"📤 Output tokens:      {astats.output_tokens:,}")
+    if astats.lines_added > 0:
+        print(f"➕ Lines added:        {astats.lines_added:,}")
+    if astats.lines_removed > 0:
+        print(f"➖ Lines removed:      {astats.lines_removed:,}")
+    if astats.premium_requests > 0:
+        print(f"💎 Premium requests:   {astats.premium_requests}")
 
 
 def _format_duration(seconds: float) -> str:
@@ -234,6 +245,32 @@ def _print_model_comparison(completions: list[ModelCompletionRecord]) -> None:
             print(f"     Gate pass rate:   {pass_pct:.0f}% ({gate_passed}/{gate_total})")
         else:
             print("     Gate pass rate:   N/A (no gate runs)")
+
+
+def _print_merge_queue_stats(mqs: MergeQueueStats) -> None:
+    """Print merge queue performance metrics section."""
+    print("\n" + "=" * 60)
+    print("🔀 Merge Queue Performance")
+    print("=" * 60)
+    print(f"📦 Total merges:       {mqs.total_merges}")
+    print(f"✅ Successful:         {mqs.successful_merges}")
+    print(f"❌ Failed:             {mqs.failed_merges}")
+    if mqs.total_rebases > 0:
+        rate_pct = mqs.rebase_success_rate * 100
+        print(f"🔄 Rebases:            {mqs.successful_rebases}/{mqs.total_rebases} succeeded ({rate_pct:.0f}%)")
+    if mqs.high_conflict_merges > 0:
+        print(f"⚠️  High-conflict:     {mqs.high_conflict_merges}")
+        if mqs.double_rebase_overhead_seconds:
+            print(f"   Double-rebase avg:  {_format_duration(mqs.avg_double_rebase_overhead)}")
+    if mqs.merge_durations:
+        print(f"⏱️  Merge duration avg: {_format_duration(mqs.avg_merge_duration)}")
+        print(f"   Merge duration max: {_format_duration(mqs.max_merge_duration)}")
+    if mqs.wait_times:
+        print(f"⏳ Queue wait avg:     {_format_duration(mqs.avg_wait_time)}")
+        print(f"   Queue wait max:     {_format_duration(mqs.max_wait_time)}")
+    if mqs.queue_depth_samples:
+        print(f"📊 Max queue depth:    {mqs.max_queue_depth}")
+        print(f"   Avg queue depth:    {mqs.avg_queue_depth:.1f}")
 
 
 def serialize_session_stats(
@@ -303,6 +340,11 @@ def serialize_session_stats(
             "closed_issues": end.closed_issues - start.closed_issues,
             "ready_issues": end.ready_issues - start.ready_issues,
         }
+
+    # Merge queue performance
+    mqs = getattr(session_stats, 'merge_queue_stats', None)
+    if isinstance(mqs, MergeQueueStats) and mqs.total_merges > 0:
+        data["merge_queue"] = mqs.to_summary_dict()
 
     return data
 
