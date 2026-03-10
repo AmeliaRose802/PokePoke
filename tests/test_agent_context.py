@@ -78,11 +78,11 @@ class TestThreadIsolation:
     def test_threads_get_independent_names(self) -> None:
         """Each thread should resolve its own name without cross-talk."""
         results: dict[str, str] = {}
-        barrier = threading.Barrier(3)
+        barrier = threading.Barrier(3, timeout=5)
 
         def worker(name: str) -> None:
             set_agent_name(name)
-            barrier.wait()  # ensure all threads have set their names
+            barrier.wait(timeout=5)  # ensure all threads have set their names
             results[name] = get_agent_name()
             clear_agent_name()
 
