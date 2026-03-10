@@ -24,6 +24,7 @@ from pokepoke.workflow_helpers import (
     _finalize_item_result,
 )
 from pokepoke.workflow import process_work_item
+from pokepoke.work_item_session import WorkItemSession
 
 
 def _item(id: str = "wf-1", desc: str | None = "desc") -> BeadsWorkItem:
@@ -216,7 +217,7 @@ class TestProcessWorkItem:
 
     @patch("pokepoke.workflow.unregister_agent")
     @patch("pokepoke.workflow.register_agent")
-    @patch("pokepoke.workflow.unassign_with_retry")
+    @patch.object(WorkItemSession, "cleanup_on_failure")
     @patch("pokepoke.workflow.cleanup_worktree")
     @patch("pokepoke.workflow.get_config")
     @patch("pokepoke.workflow.select_model_for_item", return_value="gpt-4")
@@ -230,7 +231,7 @@ class TestProcessWorkItem:
     def test_worktree_failure(self, mock_create, mock_assign, mock_agent_name,
                               mock_banner_fmt, mock_set_banner, mock_ui,
                               mock_assignment, mock_model, mock_config,
-                              mock_cleanup, mock_unassign,
+                              mock_cleanup, mock_session_cleanup,
                               mock_register, mock_unregister):
         mock_config.return_value = MagicMock(
             command_timeout=300, max_parallel_agents=1,
@@ -285,7 +286,7 @@ class TestProcessWorkItem:
 
     @patch("pokepoke.workflow.unregister_agent")
     @patch("pokepoke.workflow.register_agent")
-    @patch("pokepoke.workflow.unassign_with_retry")
+    @patch.object(WorkItemSession, "cleanup_on_failure")
     @patch("pokepoke.workflow.cleanup_worktree")
     @patch("pokepoke.workflow_helpers.has_uncommitted_changes", return_value=False)
     @patch("pokepoke.git_operations.has_commits_ahead", return_value=0)
@@ -305,7 +306,7 @@ class TestProcessWorkItem:
         self, mock_shutdown, mock_create, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
         mock_model, mock_config, mock_prompt, mock_copilot,
-        mock_ahead, mock_uncommitted, mock_cleanup, mock_unassign,
+        mock_ahead, mock_uncommitted, mock_cleanup, mock_session_cleanup,
         mock_register, mock_unregister, tmp_path,
     ):
         mock_create.return_value = tmp_path / "worktree"
@@ -322,7 +323,7 @@ class TestProcessWorkItem:
         result = process_work_item(_item(), interactive=False)
         assert result.success is False
         assert result.request_count == 1
-        mock_cleanup.assert_called()
+        mock_session_cleanup.assert_called()
 
     @patch("pokepoke.workflow.unregister_agent")
     @patch("pokepoke.workflow.register_agent")

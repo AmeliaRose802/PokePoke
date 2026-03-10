@@ -24,6 +24,7 @@ from pokepoke.worktree_finalization import (
     check_parent_hierarchy
 )
 from pokepoke.types import BeadsWorkItem, CopilotResult, AgentStats
+from pokepoke.work_item_session import WorkItemSession
 
 
 class TestSelectWorkItem:
@@ -912,6 +913,7 @@ class TestProcessWorkItem:
         assert result.cleanup_agent_runs == 0
         mock_setup.assert_not_called()
 
+    @patch.object(WorkItemSession, 'cleanup_on_failure')
     @patch('pokepoke.workflow._setup_worktree')
     @patch('pokepoke.workflow.assign_and_sync_item')
     @patch('builtins.input')
@@ -922,6 +924,7 @@ class TestProcessWorkItem:
         mock_input: Mock,
         mock_assign: Mock,
         mock_setup: Mock,
+        mock_session_cleanup: Mock,
     ) -> None:
         """Test when worktree setup fails, process returns failure."""
         item = BeadsWorkItem(
@@ -946,6 +949,7 @@ class TestProcessWorkItem:
         assert result.stats is None
         assert result.cleanup_agent_runs == 0
 
+    @patch.object(WorkItemSession, 'cleanup_on_failure')
     @patch('pokepoke.workflow.cleanup_worktree')
     @patch('pokepoke.workflow.invoke_copilot')
     @patch('pokepoke.workflow._setup_worktree')
@@ -962,6 +966,7 @@ class TestProcessWorkItem:
         mock_setup: Mock,
         mock_invoke: Mock,
         mock_cleanup_worktree: Mock,
+        mock_session_cleanup: Mock,
     ) -> None:
         """Shutdown before first loop iteration should not raise UnboundLocalError."""
         item = BeadsWorkItem(
@@ -991,7 +996,7 @@ class TestProcessWorkItem:
         assert result.gate_agent_runs == 0
         assert result.model_completion is not None
         mock_invoke.assert_not_called()
-        mock_cleanup_worktree.assert_any_call(item.id, force=True)
+        mock_session_cleanup.assert_called()
 
     @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.run_gate_agent')  # Mock gate agent
@@ -1129,6 +1134,7 @@ class TestProcessWorkItem:
         # Verify has_commits_ahead was called (distinguishes from "no changes")
         mock_commits_ahead.assert_called_once()
 
+    @patch.object(WorkItemSession, 'cleanup_on_failure')
     @patch('pokepoke.workflow.get_config')
     @patch('pokepoke.workflow.run_gate_agent')  # Mock gate agent
     @patch('pokepoke.workflow_helpers.run_beta_tester')  # Mock beta tester
@@ -1157,6 +1163,7 @@ class TestProcessWorkItem:
         mock_beta: Mock,
         mock_gate_agent: Mock,
         mock_config: Mock,
+        mock_session_cleanup: Mock,
     ) -> None:
         """Test when Copilot CLI fails (no retries configured)."""
         item = BeadsWorkItem(
@@ -1196,8 +1203,9 @@ class TestProcessWorkItem:
 
         assert result.success is False
         assert result.request_count == 1
-        mock_cleanup.assert_called_with("task-1", force=True)
+        mock_session_cleanup.assert_called()
 
+    @patch.object(WorkItemSession, 'cleanup_on_failure')
     @patch('pokepoke.workflow.get_config')
     @patch('pokepoke.workflow.run_gate_agent')
     @patch('pokepoke.workflow_helpers.run_beta_tester')
@@ -1226,6 +1234,7 @@ class TestProcessWorkItem:
         mock_beta: Mock,
         mock_gate_agent: Mock,
         mock_config: Mock,
+        mock_session_cleanup: Mock,
     ) -> None:
         """Test that all retries are attempted when Copilot fails, then item fails."""
         item = BeadsWorkItem(
@@ -1265,7 +1274,7 @@ class TestProcessWorkItem:
         # 1 initial + 2 retries = 3 total invocations, each with attempt_count=1
         assert result.request_count == 3
         assert mock_invoke.call_count == 3
-        mock_cleanup.assert_called_with("task-1", force=True)
+        mock_session_cleanup.assert_called()
 
     @patch('pokepoke.workflow.get_config')
     @patch('pokepoke.git_operations.build_handoff_context', return_value='')
@@ -1345,6 +1354,7 @@ class TestProcessWorkItem:
         # Description must NOT be mutated — feedback goes via prompt
         assert item.description == ""
 
+    @patch.object(WorkItemSession, 'cleanup_on_failure')
     @patch('pokepoke.workflow.get_config')
     @patch('pokepoke.workflow.run_gate_agent')
     @patch('pokepoke.workflow_helpers.run_beta_tester')
@@ -1373,6 +1383,7 @@ class TestProcessWorkItem:
         mock_beta: Mock,
         mock_gate_agent: Mock,
         mock_config: Mock,
+        mock_session_cleanup: Mock,
     ) -> None:
         """Test that rate-limited failures are not retried."""
         item = BeadsWorkItem(
@@ -1577,6 +1588,7 @@ class TestProcessWorkItem:
         assert result.stats.input_tokens == 100  # Only work agent tokens
         assert result.gate_agent_runs == 1  # Gate agent ran once
 
+    @patch.object(WorkItemSession, 'cleanup_on_failure')
     @patch('pokepoke.workflow.run_gate_agent')
     @patch('pokepoke.workflow_helpers.run_beta_tester')
     @patch('pokepoke.workflow.cleanup_worktree')
@@ -1602,7 +1614,8 @@ class TestProcessWorkItem:
         mock_chdir: Mock,
         mock_cleanup: Mock,
         mock_beta: Mock,
-        mock_gate_agent: Mock
+        mock_gate_agent: Mock,
+        mock_session_cleanup: Mock,
     ) -> None:
         """Test that cleanup failure returns accumulated stats."""
         item = BeadsWorkItem(
@@ -1647,6 +1660,7 @@ class TestProcessWorkItem:
         assert result.stats is not None  # Stats should be returned even on failure
         assert result.stats.wall_duration == 10.0
 
+    @patch.object(WorkItemSession, 'cleanup_on_failure')
     @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.add_comment')
     @patch('pokepoke.workflow.run_gate_agent')
@@ -1674,7 +1688,8 @@ class TestProcessWorkItem:
         mock_select_model: Mock,
         mock_gate_agent: Mock,
         mock_add_comment: Mock,
-        mock_handoff: Mock
+        mock_handoff: Mock,
+        mock_session_cleanup: Mock,
     ) -> None:
         """Test that repeated timeouts are bounded by max_timeout_restarts."""
         item = BeadsWorkItem(
@@ -1825,6 +1840,7 @@ class TestProcessWorkItemCoordination:
         assert result.stats is None
         mock_setup.assert_not_called()
 
+    @patch.object(WorkItemSession, 'cleanup_on_failure')
     @patch('pokepoke.workflow._setup_worktree')
     @patch('pokepoke.workflow.assign_and_sync_item')
     @patch('time.time')
@@ -1833,6 +1849,7 @@ class TestProcessWorkItemCoordination:
         mock_time: Mock,
         mock_assign: Mock,
         mock_setup: Mock,
+        mock_session_cleanup: Mock,
     ) -> None:
         """When create_worktree times out (another agent holds the lock),
         process_work_item must return (False, 0, ...) without crashing.
@@ -1865,7 +1882,7 @@ class TestProcessWorkItemCoordination:
         assert result.request_count == 0
         assert result.stats is None
 
-    @patch('pokepoke.workflow.unassign_with_retry')
+    @patch.object(WorkItemSession, 'cleanup_on_failure')
     @patch('pokepoke.workflow._setup_worktree')
     @patch('pokepoke.workflow.assign_and_sync_item')
     @patch('time.time')
@@ -1874,10 +1891,10 @@ class TestProcessWorkItemCoordination:
         mock_time: Mock,
         mock_assign: Mock,
         mock_setup: Mock,
-        mock_unassign: Mock,
+        mock_cleanup: Mock,
     ) -> None:
         """When worktree creation fails after a successful claim,
-        process_work_item must unassign the item so other agents can pick it up."""
+        process_work_item must run session cleanup so the item is unassigned."""
         item = BeadsWorkItem(
             id="task-wt-fail",
             title="Worktree Fail Task",
@@ -1889,7 +1906,6 @@ class TestProcessWorkItemCoordination:
         mock_time.return_value = 0.0
         mock_assign.return_value = True
         mock_setup.return_value = None  # Worktree creation failed
-        mock_unassign.return_value = True
 
         result = process_work_item(
             item, interactive=False
@@ -1897,7 +1913,7 @@ class TestProcessWorkItemCoordination:
 
         assert result.success is False
         assert result.request_count == 0
-        mock_unassign.assert_called_once_with(item.id)
+        mock_cleanup.assert_called_once()
 
 
 class TestGateAgentDisabled:
@@ -1973,9 +1989,9 @@ class TestGateAgentDisabled:
 
 
 class TestUnassignOnFailure:
-    """Tests that work items are unassigned when processing fails after assignment."""
+    """Tests that work items are cleaned up when processing fails after assignment."""
 
-    @patch('pokepoke.workflow.unassign_with_retry')
+    @patch.object(WorkItemSession, 'cleanup_on_failure')
     @patch('pokepoke.workflow.cleanup_worktree')
     @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.run_gate_agent')
@@ -1988,7 +2004,7 @@ class TestUnassignOnFailure:
     @patch('pokepoke.workflow._setup_worktree')
     @patch('pokepoke.workflow.assign_and_sync_item')
     @patch('time.time')
-    def test_finalization_failure_triggers_unassign(
+    def test_finalization_failure_triggers_cleanup(
         self,
         mock_time: Mock,
         mock_assign: Mock,
@@ -2002,9 +2018,9 @@ class TestUnassignOnFailure:
         mock_gate_agent: Mock,
         mock_handoff: Mock,
         mock_cleanup_wt: Mock,
-        mock_unassign: Mock,
+        mock_cleanup: Mock,
     ) -> None:
-        """When finalize_work_item returns False, item must be unassigned."""
+        """When finalize_work_item returns False, session cleanup must run."""
         item = BeadsWorkItem(
             id="task-finalize-fail",
             title="Finalize Fail Task",
@@ -2028,24 +2044,24 @@ class TestUnassignOnFailure:
         result = process_work_item(item, interactive=False)
 
         assert result.success is False
-        mock_unassign.assert_called_once_with(item.id)
+        mock_cleanup.assert_called_once()
 
-    @patch('pokepoke.workflow.unassign_with_retry')
+    @patch.object(WorkItemSession, 'cleanup_on_failure')
     @patch('pokepoke.workflow.cleanup_worktree')
     @patch('pokepoke.workflow.invoke_copilot')
     @patch('pokepoke.workflow._setup_worktree')
     @patch('pokepoke.workflow.assign_and_sync_item')
     @patch('time.time')
-    def test_work_agent_failure_triggers_unassign(
+    def test_work_agent_failure_triggers_cleanup(
         self,
         mock_time: Mock,
         mock_assign: Mock,
         mock_setup: Mock,
         mock_invoke: Mock,
         mock_cleanup_wt: Mock,
-        mock_unassign: Mock,
+        mock_cleanup: Mock,
     ) -> None:
-        """When work agent fails, item must be unassigned."""
+        """When work agent fails, session cleanup must run."""
         item = BeadsWorkItem(
             id="task-agent-fail",
             title="Agent Fail Task",
@@ -2064,9 +2080,9 @@ class TestUnassignOnFailure:
         result = process_work_item(item, interactive=False)
 
         assert result.success is False
-        mock_unassign.assert_called_once_with(item.id)
+        mock_cleanup.assert_called_once()
 
-    @patch('pokepoke.workflow.unassign_with_retry')
+    @patch.object(WorkItemSession, 'cleanup_on_failure')
     @patch('pokepoke.workflow.cleanup_worktree')
     @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.run_gate_agent')
@@ -2079,7 +2095,7 @@ class TestUnassignOnFailure:
     @patch('pokepoke.workflow._setup_worktree')
     @patch('pokepoke.workflow.assign_and_sync_item')
     @patch('time.time')
-    def test_successful_finalization_does_not_unassign(
+    def test_successful_finalization_skips_cleanup(
         self,
         mock_time: Mock,
         mock_assign: Mock,
@@ -2093,9 +2109,9 @@ class TestUnassignOnFailure:
         mock_gate_agent: Mock,
         mock_handoff: Mock,
         mock_cleanup_wt: Mock,
-        mock_unassign: Mock,
+        mock_cleanup: Mock,
     ) -> None:
-        """When finalization succeeds, item must NOT be unassigned."""
+        """When finalization succeeds, session cleanup must NOT run."""
         item = BeadsWorkItem(
             id="task-success",
             title="Success Task",
@@ -2119,7 +2135,7 @@ class TestUnassignOnFailure:
         result = process_work_item(item, interactive=False)
 
         assert result.success is True
-        mock_unassign.assert_not_called()
+        mock_cleanup.assert_not_called()
 
 
 class TestLogFailure:
@@ -2143,7 +2159,7 @@ class TestLogFailure:
 class TestWorkflowGateException:
     """Tests for gate agent exception handling."""
 
-    @patch('pokepoke.workflow.unassign_with_retry')
+    @patch.object(WorkItemSession, 'cleanup_on_failure')
     @patch('pokepoke.workflow.cleanup_worktree')
     @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.run_gate_agent', side_effect=RuntimeError("gate crashed"))
@@ -2166,10 +2182,9 @@ class TestWorkflowGateException:
         mock_gate_agent: Mock,
         mock_handoff: Mock,
         mock_cleanup_wt: Mock,
-        mock_unassign: Mock,
+        mock_cleanup: Mock,
     ) -> None:
-        """Covers lines 237-244: gate agent exception is logged, re-raised,
-        and finally block handles cleanup."""
+        """Gate agent exception is re-raised and session cleanup runs in finally."""
         import pytest
         item = BeadsWorkItem(
             id="task-gate-ex", title="Gate Ex Task", description="",
@@ -2188,30 +2203,32 @@ class TestWorkflowGateException:
         with pytest.raises(RuntimeError, match="gate crashed"):
             process_work_item(item, interactive=False)
 
-        # Finally block should have run cleanup and unassign
-        mock_cleanup_wt.assert_called()
-        mock_unassign.assert_called()
+        # Finally block should have run session cleanup
+        mock_cleanup.assert_called()
 
 
 class TestWorkflowCleanupException:
-    """Tests for worktree cleanup and unassign exception in finally."""
+    """Tests for session cleanup exception handling in finally."""
 
-    @patch('pokepoke.workflow.unassign_with_retry')
+    @patch.object(WorkItemSession, 'cleanup_on_failure', side_effect=RuntimeError("cleanup exploded"))
     @patch('pokepoke.workflow.cleanup_worktree')
     @patch('pokepoke.workflow.invoke_copilot')
     @patch('pokepoke.workflow._setup_worktree')
     @patch('pokepoke.workflow.assign_and_sync_item')
     @patch('time.time')
-    def test_cleanup_worktree_exception_in_finally_handled(
+    def test_cleanup_exception_in_finally_propagates(
         self,
         mock_time: Mock,
         mock_assign: Mock,
         mock_setup: Mock,
         mock_invoke: Mock,
         mock_cleanup_wt: Mock,
-        mock_unassign: Mock,
+        mock_cleanup: Mock,
     ) -> None:
-        """Covers lines 348-349: cleanup_worktree exception in finally is caught."""
+        """When cleanup_on_failure raises, the exception propagates
+        (cleanup_on_failure itself should never raise, but if it does
+        the finally block does not swallow it)."""
+        import pytest
         item = BeadsWorkItem(
             id="task-cleanup-ex", title="Cleanup Ex", description="",
             status="open", priority=1, issue_type="task",
@@ -2222,28 +2239,26 @@ class TestWorkflowCleanupException:
         mock_invoke.return_value = CopilotResult(
             work_item_id="task-cleanup-ex", success=False, error="Failed", attempt_count=1
         )
-        # First call at line 315 succeeds, second call in finally raises
-        mock_cleanup_wt.side_effect = [None, RuntimeError("cleanup exploded")]
 
-        result = process_work_item(item, interactive=False)
-        assert result.success is False
+        with pytest.raises(RuntimeError, match="cleanup exploded"):
+            process_work_item(item, interactive=False)
 
-    @patch('pokepoke.workflow.unassign_with_retry', side_effect=RuntimeError("unassign failed"))
+    @patch.object(WorkItemSession, 'cleanup_on_failure')
     @patch('pokepoke.workflow.cleanup_worktree')
     @patch('pokepoke.workflow.invoke_copilot')
     @patch('pokepoke.workflow._setup_worktree')
     @patch('pokepoke.workflow.assign_and_sync_item')
     @patch('time.time')
-    def test_unassign_exception_handled(
+    def test_cleanup_called_on_work_agent_failure(
         self,
         mock_time: Mock,
         mock_assign: Mock,
         mock_setup: Mock,
         mock_invoke: Mock,
         mock_cleanup_wt: Mock,
-        mock_unassign: Mock,
+        mock_cleanup: Mock,
     ) -> None:
-        """Covers lines 354-355: unassign exception in finally."""
+        """Session cleanup runs when work agent fails."""
         item = BeadsWorkItem(
             id="task-unassign-ex", title="Unassign Ex", description="",
             status="open", priority=1, issue_type="task",
@@ -2257,6 +2272,7 @@ class TestWorkflowCleanupException:
 
         result = process_work_item(item, interactive=False)
         assert result.success is False
+        mock_cleanup.assert_called_once()
 
 
 class TestWorktreeLockTimeout:
@@ -2284,6 +2300,7 @@ class TestWorktreeLockTimeout:
         expected = max(float(cfg.command_timeout), 120.0 * max(1, int(cfg.max_parallel_agents)))
         assert expected == 1200.0
 
+    @patch.object(WorkItemSession, 'cleanup_on_failure')
     @patch('pokepoke.workflow.assign_and_sync_item', return_value=True)
     @patch('pokepoke.workflow._setup_worktree', return_value=None)
     @patch('time.time', return_value=0.0)
@@ -2292,6 +2309,7 @@ class TestWorktreeLockTimeout:
         mock_time: Mock,
         mock_setup: Mock,
         mock_assign: Mock,
+        mock_session_cleanup: Mock,
     ) -> None:
         """process_work_item passes scaled lock_timeout to _setup_worktree.
 

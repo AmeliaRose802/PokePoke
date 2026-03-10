@@ -1,6 +1,5 @@
 """Workflow management for work item selection and processing."""
 
-import contextlib
 import logging
 import time
 from pathlib import Path
@@ -10,7 +9,7 @@ from pokepoke.ai_backends import invoke_copilot
 from pokepoke.copilot_sdk import build_prompt_from_work_item
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, WorkItemResult
 from pokepoke.worktrees import create_worktree, cleanup_worktree
-from pokepoke.beads import assign_and_sync_item, add_comment, unassign_with_retry
+from pokepoke.beads import assign_and_sync_item, add_comment
 from pokepoke.agent_runner import run_gate_agent  # noqa: F401  # re-exported via workflow_helpers
 from pokepoke.work_item_selection import select_work_item  # noqa: F401  # re-exported
 from pokepoke import terminal_ui
@@ -19,6 +18,7 @@ from pokepoke.model_selection import select_model_for_item, get_assignment_for_i
 from pokepoke.agent_context import get_agent_name
 from pokepoke.config import get_config
 from pokepoke.metrics_context import set_current_work_item_id
+from pokepoke.work_item_session import WorkItemSession
 from pokepoke.workflow_helpers import (
     _apply_gate_feedback, _extract_agent_stats, _fail_result,
     _finalize_item_result, _log_commit_status, _log_failure,
@@ -46,9 +46,7 @@ def process_work_item(  # noqa: C901
     """Process a single work item with timeout protection."""
     # Register this agent for shutdown coordination
     register_agent()
-    worktree_path: Path | None = None
-    was_assigned = False
-    finalized_successfully = False
+    _session: WorkItemSession | None = None
 
     try:
         start_time = time.time()
@@ -91,7 +89,13 @@ def process_work_item(  # noqa: C901
             print(f"❌ Failed to assign work item {item.id}")
             _log_failure(run_logger, item_logger)
             return _fail_result()
-        was_assigned = True
+
+        # Track assigned state via WorkItemSession for deterministic cleanup
+        _session = WorkItemSession(
+            item_id=item.id,
+            agent_name=get_agent_name(default="pokepoke"),
+        )
+        _session._assigned = True
 
         # create_worktree has its own lock (worktree-setup.lock) via with_worktree_lock
         worktree_path = _setup_worktree(
@@ -103,6 +107,11 @@ def process_work_item(  # noqa: C901
             print(f"↩️  Returning {item.id} to queue (unassigning due to worktree failure)...")
             _log_failure(run_logger, item_logger)
             return _fail_result()
+
+        # Update session with acquired worktree resources
+        _session.worktree_path = str(worktree_path)
+        _session._worktree_created = True
+        _session._branch_created = True
 
         pokepoke_root = Path.cwd()
         worktree_cwd = str(worktree_path)
@@ -262,30 +271,22 @@ def process_work_item(  # noqa: C901
                 # All gate crash retries exhausted — fail the item
                 break
 
-        final_result, finalized_successfully = _finalize_item_result(
+        final_result, finalized = _finalize_item_result(
             result, item, worktree_path, selected_model, start_time,
             request_count, accumulated_stats, cleanup_agent_runs, gate_agent_runs,
             gate_success, run_logger, item_logger, base_agent_id, run_beta_test,
         )
+        if finalized:
+            _session = None  # Finalization succeeded — skip cleanup
         return final_result
 
     finally:
         # Clear work-item correlation ID
         set_current_work_item_id(None)
 
-        if worktree_path is not None and not finalized_successfully:
-            try:
-                cleanup_worktree(item.id, force=True)
-            except Exception as e:
-                logger.error("Failed to cleanup worktree for %s: %s", item.id, e)
-                with contextlib.suppress(Exception):
-                    from pokepoke.worktree_cleanup import add_uncleaned_worktree
-                    add_uncleaned_worktree(item.id, str(worktree_path), f"Finally-block cleanup failed: {e}")
-        if was_assigned and not finalized_successfully:
-            try:
-                unassign_with_retry(item.id)
-            except Exception as e:
-                logger.error("Failed to unassign item %s — item may be stuck in assigned state: %s", item.id, e)
+        # Deterministic cleanup via WorkItemSession if finalization did not succeed
+        if _session is not None:
+            _session.cleanup_on_failure()
         unregister_agent()
 
 
