@@ -127,27 +127,22 @@ export function AgentsPanel({
         }}
       >
         <div className="agent-card-top">
-          {(() => {
-            if (agentIconPath) {
-              return (
-                <img
-                  src={agentIconPath}
-                  alt={iconAlt}
-                  className="agent-card-avatar agent-card-snake-icon agent-card-icon"
-                  onError={(e) => {
-                    // Fallback to emoji if image fails to load
-                    const target = e.currentTarget;
-                    const parent = target.parentElement;
-                    if (parent) {
-                      parent.innerHTML = `<span class="agent-card-avatar">${fallbackEmoji}</span>`;
-                    }
-                  }}
-                />
-              );
-            } else {
-              return <span className="agent-card-avatar">{fallbackEmoji}</span>;
-            }
-          })()}
+          {agentIconPath ? (
+            <img
+              src={agentIconPath}
+              alt={iconAlt}
+              className="agent-card-avatar agent-card-snake-icon agent-card-icon"
+              onError={(e) => {
+                const target = e.currentTarget;
+                const parentEl = target.parentElement;
+                if (parentEl) {
+                  parentEl.innerHTML = `<span class="agent-card-avatar">${fallbackEmoji}</span>`;
+                }
+              }}
+            />
+          ) : (
+            <span className="agent-card-avatar">{fallbackEmoji}</span>
+          )}
           <div className="agent-card-info">
             <span className="agent-card-name">{label}</span>
             {showAttempt ? (

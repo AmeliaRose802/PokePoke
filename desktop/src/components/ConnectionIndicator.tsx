@@ -10,10 +10,10 @@ interface Props {
   status: ConnectionStatus;
 }
 
-const STATUS_CONFIG: Record<ConnectionStatus, { color: string; label: string; pulse: boolean }> = {
-  connecting: { color: "#f0ad4e", label: "Connecting...", pulse: true },
-  connected: { color: "#5cb85c", label: "Running", pulse: false },
-  disconnected: { color: "#d9534f", label: "Stopped", pulse: true },
+const STATUS_CONFIG: Record<ConnectionStatus, { label: string; pulse: boolean }> = {
+  connecting: { label: "Connecting...", pulse: true },
+  connected: { label: "Running", pulse: false },
+  disconnected: { label: "Stopped", pulse: true },
 };
 
 export function ConnectionIndicator({ status }: Props) {
