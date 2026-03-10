@@ -26,11 +26,7 @@ export function UpdatesSection({ checkForUpdates }: Props) {
     <div className="settings-section">
       <h3 className="settings-section-title">🔄 Updates</h3>
       <div className="settings-field">
-        <button
-          className="prompt-btn save"
-          onClick={handleCheck}
-          disabled={checking}
-        >
+        <button className="prompt-btn save" onClick={handleCheck} disabled={checking}>
           {checking ? "Checking…" : "Check for Updates"}
         </button>
         {result && (

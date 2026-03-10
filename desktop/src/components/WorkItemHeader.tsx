@@ -20,11 +20,7 @@ interface Props {
   repositoryName: string;
 }
 
-export function WorkItemHeader({
-  workItem,
-  agentName,
-  repositoryName,
-}: Props) {
+export function WorkItemHeader({ workItem, agentName, repositoryName }: Props) {
   const [frame, setFrame] = useState(0);
 
   useEffect(() => {
@@ -35,9 +31,7 @@ export function WorkItemHeader({
     return () => clearInterval(id);
   }, [agentName]);
 
-  const statusClass = workItem?.status
-    ? `status-${workItem.status.toLowerCase().replace(/\s+/g, "-")}`
-    : "";
+  const statusClass = workItem?.status ? `status-${workItem.status.toLowerCase().replace(/\s+/g, "-")}` : "";
   const labels = workItem?.labels ?? [];
 
   return (
@@ -46,9 +40,7 @@ export function WorkItemHeader({
         <span className="ticket-icon">🎫</span>
         <span className="item-id">{workItem?.item_id ?? "PokePoke"}</span>
         <span className="separator">│</span>
-        <span className="item-title">
-          {workItem?.title ?? "Waiting for orchestrator..."}
-        </span>
+        <span className="item-title">{workItem?.title ?? "Waiting for orchestrator..."}</span>
         {repositoryName && (
           <>
             <span className="separator">│</span>
@@ -57,15 +49,10 @@ export function WorkItemHeader({
         )}
       </div>
       <div className="work-item-meta-line">
-        {workItem?.status && (
-          <span className={`status-badge ${statusClass}`}>
-            [{workItem.status.toUpperCase()}]
-          </span>
-        )}
+        {workItem?.status && <span className={`status-badge ${statusClass}`}>[{workItem.status.toUpperCase()}]</span>}
         {agentName && (
           <span className="agent-name">
-            <span className="agent-spinner">{SPINNER_FRAMES[frame]}</span>{" "}
-            {agentName}
+            <span className="agent-spinner">{SPINNER_FRAMES[frame]}</span> {agentName}
           </span>
         )}
       </div>
@@ -74,10 +61,7 @@ export function WorkItemHeader({
           <span className="labels-title">Tags</span>
           <div className="label-chips">
             {labels.map((label) => (
-              <span
-                key={label}
-                className={`label-chip${SPECIAL_TAG_IDS.has(label) ? " label-chip-special" : ""}`}
-              >
+              <span key={label} className={`label-chip${SPECIAL_TAG_IDS.has(label) ? " label-chip-special" : ""}`}>
                 {label}
               </span>
             ))}

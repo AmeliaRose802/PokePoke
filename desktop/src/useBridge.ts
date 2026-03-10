@@ -3,15 +3,15 @@
  * in-process calls through window.pywebview.api (no network).
  */
 
-import { useCallback,useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type {
-   AgentInfo,
+  AgentInfo,
   ConfigResponse,
   ConnectionStatus,
   LogEntry,
-   ModelHistoryEntry,
-   ModelPerformanceSummary,
+  ModelHistoryEntry,
+  ModelPerformanceSummary,
   ProgressState,
   ProjectConfig,
   PromptDetail,
@@ -36,7 +36,7 @@ const MAX_FRONTEND_LOG_ENTRIES = 2000;
  */
 export function shallowEqual(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
-  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
   const keysA = Object.keys(a as Record<string, unknown>);
   const keysB = Object.keys(b as Record<string, unknown>);
   if (keysA.length !== keysB.length) return false;
@@ -49,7 +49,7 @@ export function shallowEqual(a: unknown, b: unknown): boolean {
 /** setState wrapper that skips update when value is shallow-equal to current */
 function setIfChanged<T>(setter: React.Dispatch<React.SetStateAction<T>>): (value: T) => void {
   return (value: T) => {
-    setter(prev => shallowEqual(prev, value) ? prev : value);
+    setter((prev) => (shallowEqual(prev, value) ? prev : value));
   };
 }
 
@@ -106,7 +106,9 @@ interface PyWebViewAPI {
 
   // First-time setup wizard API
   check_setup_status(): Promise<SetupStatus>;
-  git_init(default_branch?: string): Promise<{ success: boolean; error?: string; stdout?: string | null; stderr?: string | null }>;
+  git_init(
+    default_branch?: string,
+  ): Promise<{ success: boolean; error?: string; stdout?: string | null; stderr?: string | null }>;
   bd_init(): Promise<{ success: boolean }>;
   create_default_config(config: SetupConfigPayload): Promise<{ path: string; saved: boolean }>;
   scaffold_prompt_overrides(templates?: string[], force?: boolean): Promise<{ success: boolean; written: string[] }>;
@@ -122,14 +124,11 @@ declare global {
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** Retries an async function with exponential backoff */
-async function retryWithBackoff<T>(
-  fn: () => Promise<T>,
-  config = INITIAL_RETRY_CONFIG
-): Promise<T> {
+async function retryWithBackoff<T>(fn: () => Promise<T>, config = INITIAL_RETRY_CONFIG): Promise<T> {
   let lastError: Error | null = null;
   let delay = config.BASE_DELAY_MS;
   for (let attempt = 0; attempt <= config.MAX_RETRIES; attempt++) {
@@ -142,7 +141,7 @@ async function retryWithBackoff<T>(
       delay = Math.floor(delay * config.BACKOFF_MULTIPLIER);
     }
   }
-  throw lastError || new Error('Retry failed');
+  throw lastError || new Error("Retry failed");
 }
 
 export interface BridgeStateBase {
@@ -185,8 +184,7 @@ export type BridgeState = BridgeStateBase & SetupBridgeMethods;
  * Direct in-process calls via pywebview — no network, no server.
  */
 export function useBridge(): BridgeState {
-  const [connectionStatus, setConnectionStatus] =
-    useState<ConnectionStatus>("connecting");
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting");
   const [orchestratorLogs, setOrchestratorLogs] = useState<LogEntry[]>([]);
   const [agentLogs, setAgentLogs] = useState<LogEntry[]>([]);
   const [workItem, setWorkItem] = useState<WorkItem | null>(null);
@@ -204,14 +202,10 @@ export function useBridge(): BridgeState {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [logsDir, setLogsDir] = useState<string | null>(null);
 
-  const clearLogs = useCallback(
-    (target: "orchestrator" | "agent" | "all") => {
-      if (target === "orchestrator" || target === "all")
-        setOrchestratorLogs([]);
-      if (target === "agent" || target === "all") setAgentLogs([]);
-    },
-    []
-  );
+  const clearLogs = useCallback((target: "orchestrator" | "agent" | "all") => {
+    if (target === "orchestrator" || target === "all") setOrchestratorLogs([]);
+    if (target === "agent" || target === "all") setAgentLogs([]);
+  }, []);
 
   const listPrompts = useCallback(async (): Promise<PromptInfo[]> => {
     if (!window.pywebview?.api) return [];
@@ -246,17 +240,14 @@ export function useBridge(): BridgeState {
     return result.saved;
   }, []);
 
-  const getModelHistory = useCallback(
-    async (limit = 200): Promise<ModelHistoryEntry[]> => {
-      if (!window.pywebview?.api) return [];
-      try {
-        return await window.pywebview.api.get_model_history(limit);
-      } catch {
-        return [];
-      }
-    },
-    []
-  );
+  const getModelHistory = useCallback(async (limit = 200): Promise<ModelHistoryEntry[]> => {
+    if (!window.pywebview?.api) return [];
+    try {
+      return await window.pywebview.api.get_model_history(limit);
+    } catch {
+      return [];
+    }
+  }, []);
 
   const requestStopAfterCurrent = useCallback(async (): Promise<void> => {
     if (!window.pywebview?.api) return;
@@ -270,29 +261,35 @@ export function useBridge(): BridgeState {
     setStopAfterCurrent(false);
   }, []);
 
-  const addWorkItemLabel = useCallback(async (label: string): Promise<void> => {
-    if (!window.pywebview?.api || !workItem) return;
-    try {
-      const result = await window.pywebview.api.add_work_item_label(workItem.item_id, label);
-      if (result?.labels) {
-        setWorkItem((prev) => (prev ? { ...prev, labels: result.labels } : prev));
+  const addWorkItemLabel = useCallback(
+    async (label: string): Promise<void> => {
+      if (!window.pywebview?.api || !workItem) return;
+      try {
+        const result = await window.pywebview.api.add_work_item_label(workItem.item_id, label);
+        if (result?.labels) {
+          setWorkItem((prev) => (prev ? { ...prev, labels: result.labels } : prev));
+        }
+      } catch (error) {
+        console.error("Failed to add work item label:", error);
       }
-    } catch (error) {
-      console.error("Failed to add work item label:", error);
-    }
-  }, [workItem]);
+    },
+    [workItem],
+  );
 
-  const removeWorkItemLabel = useCallback(async (label: string): Promise<void> => {
-    if (!window.pywebview?.api || !workItem) return;
-    try {
-      const result = await window.pywebview.api.remove_work_item_label(workItem.item_id, label);
-      if (result?.labels) {
-        setWorkItem((prev) => (prev ? { ...prev, labels: result.labels } : prev));
+  const removeWorkItemLabel = useCallback(
+    async (label: string): Promise<void> => {
+      if (!window.pywebview?.api || !workItem) return;
+      try {
+        const result = await window.pywebview.api.remove_work_item_label(workItem.item_id, label);
+        if (result?.labels) {
+          setWorkItem((prev) => (prev ? { ...prev, labels: result.labels } : prev));
+        }
+      } catch (error) {
+        console.error("Failed to remove work item label:", error);
       }
-    } catch (error) {
-      console.error("Failed to remove work item label:", error);
-    }
-  }, [workItem]);
+    },
+    [workItem],
+  );
 
   const getAgentDetail = useCallback(async (agentId: string): Promise<AgentInfo | null> => {
     if (!window.pywebview?.api) return null;
@@ -347,8 +344,8 @@ export function useBridge(): BridgeState {
       const next = [...prev, ...added];
       return next.length > MAX_FRONTEND_LOG_ENTRIES ? next.slice(-MAX_FRONTEND_LOG_ENTRIES) : next;
     };
-    if (orchLogs.length > 0) setOrchestratorLogs(p => cap(p, orchLogs));
-    if (agLogs.length > 0) setAgentLogs(p => cap(p, agLogs));
+    if (orchLogs.length > 0) setOrchestratorLogs((p) => cap(p, orchLogs));
+    if (agLogs.length > 0) setAgentLogs((p) => cap(p, agLogs));
   }, []);
 
   useEffect(() => {
@@ -369,7 +366,7 @@ export function useBridge(): BridgeState {
       const state = await retryWithBackoff(async () => {
         return await api.get_state();
       });
-      
+
       if (state.work_item) setWorkItem(state.work_item);
       if (state.agent_name) setAgentName(state.agent_name);
       if (state.repository_name) setRepositoryName(state.repository_name);
@@ -428,7 +425,7 @@ export function useBridge(): BridgeState {
           setConnectionStatus("connected");
         } catch {
           consecutiveFailures++;
-          
+
           // Only set disconnected after multiple consecutive failures
           if (consecutiveFailures >= POLL_RESILIENCE_CONFIG.MAX_CONSECUTIVE_FAILURES) {
             setConnectionStatus("disconnected");

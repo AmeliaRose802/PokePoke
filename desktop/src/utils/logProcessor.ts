@@ -87,11 +87,8 @@ function parseCopilotToolBatchHeaderCount(message: string): number | undefined {
 export function isNarrationCandidate(message: string): boolean {
   const trimmed = message.trim();
   if (trimmed.length < 6) return false;
-  if (isToolCallMessage(trimmed) || isToolResultMessage(trimmed) || isCopilotToolBatchHeader(trimmed))
-    return false;
-  return /^(now|next|then|after|first|second|third|i\s*(?:'m|am|will)|i\s*need|let'?s)\b/i.test(
-    trimmed
-  );
+  if (isToolCallMessage(trimmed) || isToolResultMessage(trimmed) || isCopilotToolBatchHeader(trimmed)) return false;
+  return /^(now|next|then|after|first|second|third|i\s*(?:'m|am|will)|i\s*need|let'?s)\b/i.test(trimmed);
 }
 
 function isApplyPatchToolCall(message: string): boolean {
@@ -138,12 +135,8 @@ export function buildToolSummary(callMessage: string, resultMessage?: string): T
   const fallbackMatch = resultMessage.match(TOOL_RESULT_FALLBACK);
   const summaryText = resultMatch?.[2] ?? fallbackMatch?.[1] ?? resultMessage.trim();
   const statusEmoji = resultMatch?.[1];
-  const statusClass =
-    statusEmoji === "✅" ? "log-success" : statusEmoji === "❌" ? "log-error" : undefined;
-  const resultSummary = `${statusEmoji ? `${statusEmoji} ` : ""}${truncateText(
-    summaryText,
-    120
-  )}`.trim();
+  const statusClass = statusEmoji === "✅" ? "log-success" : statusEmoji === "❌" ? "log-error" : undefined;
+  const resultSummary = `${statusEmoji ? `${statusEmoji} ` : ""}${truncateText(summaryText, 120)}`.trim();
   return {
     toolLabel,
     description,
@@ -221,11 +214,9 @@ function buildToolGroupSummary(toolName: string, items: ToolItem[]): string | un
 /** Map log content keywords to CSS class names */
 export function detectLevel(message: string): string {
   const lower = message.toLowerCase();
-  if (lower.includes("error") || lower.includes("failed") || lower.includes("exception"))
-    return "log-error";
+  if (lower.includes("error") || lower.includes("failed") || lower.includes("exception")) return "log-error";
   if (lower.includes("warn")) return "log-warning";
-  if (lower.includes("success") || lower.includes("completed") || message.includes("✅"))
-    return "log-success";
+  if (lower.includes("success") || lower.includes("completed") || message.includes("✅")) return "log-success";
   if (lower.includes("debug")) return "log-debug";
   return "log-info";
 }
@@ -248,7 +239,10 @@ function collectIntermediateLines(
     const msg = logs[j].message;
     if (isToolCallMessage(msg) || isCopilotToolBatchHeader(msg) || isToolResultMessage(msg)) break;
     entries.push(logs[j]);
-    if (stopOnPatchEnd && PATCH_END_RE.test(msg)) { j += 1; break; }
+    if (stopOnPatchEnd && PATCH_END_RE.test(msg)) {
+      j += 1;
+      break;
+    }
     j += 1;
   }
   const result = logs[j] && isToolResultMessage(logs[j].message) ? logs[j] : undefined;
@@ -262,15 +256,24 @@ export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
     const entry = logs[index];
     if (isApplyPatchToolCall(entry.message)) {
       const { entries: additionalEntries, result, nextIndex } = collectIntermediateLines(logs, index + 1, true);
-      const filePaths = additionalEntries.flatMap(e => {
+      const filePaths = additionalEntries.flatMap((e) => {
         const m = e.message.match(PATCH_UPDATE_FILE_RE);
         return m ? [m[1].trim()] : [];
       });
-      const fileLabel = filePaths.length > 0
-        ? ` — ${filePaths.map(p => p.replace(/^.*[/\\]/, "")).join(", ")}` : "";
+      const fileLabel = filePaths.length > 0 ? ` — ${filePaths.map((p) => p.replace(/^.*[/\\]/, "")).join(", ")}` : "";
       const rs = result ? buildToolSummary("", result.message) : undefined;
       return {
-        tool: { toolName: "apply_patch", entry, result, additionalEntries, summary: { toolLabel: `🔧 apply_patch${fileLabel}`, resultSummary: rs?.resultSummary, statusClass: rs?.statusClass } },
+        tool: {
+          toolName: "apply_patch",
+          entry,
+          result,
+          additionalEntries,
+          summary: {
+            toolLabel: `🔧 apply_patch${fileLabel}`,
+            resultSummary: rs?.resultSummary,
+            statusClass: rs?.statusClass,
+          },
+        },
         nextIndex,
       };
     }
@@ -280,7 +283,14 @@ export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
     // Only attach intermediate entries when a result follows; otherwise leave them for separate rendering
     const hasIntermediate = result && entries.length > 0;
     return {
-      tool: { toolName: parts.toolName, argsText: parts.argsText, entry, result, additionalEntries: hasIntermediate ? entries : undefined, summary: buildToolSummary(entry.message, result?.message) },
+      tool: {
+        toolName: parts.toolName,
+        argsText: parts.argsText,
+        entry,
+        result,
+        additionalEntries: hasIntermediate ? entries : undefined,
+        summary: buildToolSummary(entry.message, result?.message),
+      },
       nextIndex: result ? nextIndex : index + 1,
     };
   }
@@ -315,16 +325,13 @@ export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
     if (isNarrationCandidate(entry.message)) {
       const narration: LogEntry[] = [];
       const startedAt = entry.timestamp;
-      while (
-        i < logs.length &&
-        isNarrationCandidate(logs[i].message) &&
-        !isCopilotToolBatchHeader(logs[i].message)
-      ) {
+      while (i < logs.length && isNarrationCandidate(logs[i].message) && !isCopilotToolBatchHeader(logs[i].message)) {
         narration.push(logs[i]);
         i += 1;
       }
       const next = logs[i];
-      const followedByTools = Boolean(next) && (isCopilotToolBatchHeader(next.message) || isToolCallMessage(next.message));
+      const followedByTools =
+        Boolean(next) && (isCopilotToolBatchHeader(next.message) || isToolCallMessage(next.message));
       if (followedByTools && narration.length > 0) {
         items.push({ type: "narration", entries: narration, startedAt });
         continue;

@@ -11,9 +11,7 @@ describe("useResizable", () => {
   });
 
   it("accepts a custom initial fraction", () => {
-    const { result } = renderHook(() =>
-      useResizable({ initialFraction: 0.5 })
-    );
+    const { result } = renderHook(() => useResizable({ initialFraction: 0.5 }));
     expect(result.current.fraction).toBeCloseTo(0.5);
   });
 

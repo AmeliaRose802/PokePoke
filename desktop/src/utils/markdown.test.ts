@@ -2,7 +2,7 @@
  * Tests for markdown rendering with XSS sanitization.
  */
 
-import { describe, expect,it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { renderMarkdown } from "./markdown";
 
@@ -57,7 +57,7 @@ describe("renderMarkdown", () => {
   });
 
   it("strips javascript: URLs (XSS prevention)", () => {
-    const html = renderMarkdown('[click](javascript:alert(1))');
+    const html = renderMarkdown("[click](javascript:alert(1))");
     expect(html).not.toContain("javascript:");
   });
 

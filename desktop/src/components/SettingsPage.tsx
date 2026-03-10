@@ -1,15 +1,11 @@
 /** Settings page — reads/writes pokepoke.config.yaml via DesktopAPI bridge. */
 
-import{ useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import type { ConfigResponse, MaintenanceAgent, McpServerConfig,ModelsConfig, ProjectConfig } from "../types";
+import type { ConfigResponse, MaintenanceAgent, McpServerConfig, ModelsConfig, ProjectConfig } from "../types";
 import { MaintenanceAgentsSection } from "./MaintenanceAgentsSection";
-import { isAbTestingEnabled,KNOWN_MODELS } from "./settingsHelpers";
-
-const SPECIAL_EFFECT_TAGS = [
-  { id: "human-required", label: "Human required", description: "Skip this item until a human can handle it." },
-  { id: "high-conflict-risk", label: "High conflict risk", description: "Runs serially to avoid merge conflicts." },
-];
+import { isAbTestingEnabled, KNOWN_MODELS } from "./settingsHelpers";
+import { SpecialEffectTagsSection } from "./SpecialEffectTagsSection";
 
 interface Props {
   getConfig: () => Promise<ConfigResponse | null>;
@@ -54,7 +50,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
       setMcpName(mcpServer.name ?? "");
       setMcpRestartScript(mcpServer.restart_script ?? "");
       setMaxParallelAgents(Math.max(1, resp.config.max_parallel_agents ?? 1));
-      
+
       // Load maintenance agents
       const maintenance = resp.config.maintenance;
       if (maintenance && Array.isArray(maintenance.agents)) {
@@ -76,7 +72,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
       setAbTestingEnabled(enabled);
       markDirty();
     },
-    [markDirty]
+    [markDirty],
   );
 
   const handleSave = useCallback(async () => {
@@ -89,8 +85,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
         ab_testing_enabled: abTestingEnabled,
         default: defaultModel || undefined,
         fallback: fallbackModel || undefined,
-        candidate_models:
-          candidateModels.length > 0 ? candidateModels : undefined,
+        candidate_models: candidateModels.length > 0 ? candidateModels : undefined,
       } as ModelsConfig,
       mcp_server: {
         ...(config.mcp_server ?? {}),
@@ -113,7 +108,19 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
     } else {
       setMessage("Save failed");
     }
-  }, [config, defaultModel, fallbackModel, candidateModels, maintenanceAgents, abTestingEnabled, mcpEnabled, mcpName, mcpRestartScript, maxParallelAgents, saveConfig]);
+  }, [
+    config,
+    defaultModel,
+    fallbackModel,
+    candidateModels,
+    maintenanceAgents,
+    abTestingEnabled,
+    mcpEnabled,
+    mcpName,
+    mcpRestartScript,
+    maxParallelAgents,
+    saveConfig,
+  ]);
 
   const handleReset = useCallback(() => {
     if (!config) return;
@@ -129,7 +136,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
     setMcpName(mcpServer.name ?? "");
     setMcpRestartScript(mcpServer.restart_script ?? "");
     setMaxParallelAgents(Math.max(1, config.max_parallel_agents ?? 1));
-    
+
     // Reset maintenance agents
     const maintenance = config.maintenance;
     if (maintenance && Array.isArray(maintenance.agents)) {
@@ -137,7 +144,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
     } else {
       setMaintenanceAgents([]);
     }
-    
+
     setDirty(false);
     setMessage("Reset to saved values");
   }, [config]);
@@ -162,7 +169,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
       setChipInput("");
       markDirty();
     },
-    [abTestingEnabled, candidateModels, markDirty]
+    [abTestingEnabled, candidateModels, markDirty],
   );
 
   const removeChip = useCallback(
@@ -171,7 +178,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
       setCandidateModels((prev) => prev.filter((m) => m !== model));
       markDirty();
     },
-    [abTestingEnabled, markDirty]
+    [abTestingEnabled, markDirty],
   );
 
   const handleChipKeyDown = useCallback(
@@ -180,43 +187,41 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
       if (e.key === "Enter" || e.key === ",") {
         e.preventDefault();
         addChip(chipInput);
-      } else if (
-        e.key === "Backspace" &&
-        chipInput === "" &&
-        candidateModels.length > 0
-      ) {
+      } else if (e.key === "Backspace" && chipInput === "" && candidateModels.length > 0) {
         removeChip(candidateModels[candidateModels.length - 1]);
       }
     },
-    [abTestingEnabled, chipInput, candidateModels, addChip, removeChip]
+    [abTestingEnabled, chipInput, candidateModels, addChip, removeChip],
   );
 
   // Maintenance agent handlers
   const updateMaintenanceAgent = useCallback(
     (index: number, updates: Partial<MaintenanceAgent>) => {
-      setMaintenanceAgents((prev) =>
-        prev.map((agent, i) => (i === index ? { ...agent, ...updates } : agent))
-      );
+      setMaintenanceAgents((prev) => prev.map((agent, i) => (i === index ? { ...agent, ...updates } : agent)));
       markDirty();
     },
-    [markDirty]
+    [markDirty],
   );
 
   const removeMaintenanceAgent = useCallback(
-    (index: number) => { setMaintenanceAgents((prev) => prev.filter((_, i) => i !== index)); markDirty(); },
-    [markDirty]
+    (index: number) => {
+      setMaintenanceAgents((prev) => prev.filter((_, i) => i !== index));
+      markDirty();
+    },
+    [markDirty],
   );
 
   const addMaintenanceAgent = useCallback(
-    (agent: MaintenanceAgent) => { setMaintenanceAgents((prev) => [...prev, agent]); markDirty(); },
-    [markDirty]
+    (agent: MaintenanceAgent) => {
+      setMaintenanceAgents((prev) => [...prev, agent]);
+      markDirty();
+    },
+    [markDirty],
   );
 
   // Filter suggestions: known models not already in the candidate list
   const suggestions = KNOWN_MODELS.filter(
-    (m) =>
-      !candidateModels.includes(m) &&
-      m.toLowerCase().includes(chipInput.toLowerCase())
+    (m) => !candidateModels.includes(m) && m.toLowerCase().includes(chipInput.toLowerCase()),
   );
 
   return (
@@ -230,18 +235,12 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
           </button>
         </div>
 
-        {dirty && (
-          <div className="settings-unsaved-banner">
-            ⚠️ You have unsaved changes
-          </div>
-        )}
+        {dirty && <div className="settings-unsaved-banner">⚠️ You have unsaved changes</div>}
 
         {loading ? (
           <div className="settings-loading">Loading configuration…</div>
         ) : !config ? (
-          <div className="settings-loading">
-            Could not load configuration.
-          </div>
+          <div className="settings-loading">Could not load configuration.</div>
         ) : (
           <div className="settings-body">
             {/* Section: Model Configuration */}
@@ -289,9 +288,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
                   ))}
                 </datalist>
                 <span className="settings-hint">
-                  {abTestingEnabled
-                    ? "Ignored while A/B testing is active"
-                    : "Primary model for agent tasks"}
+                  {abTestingEnabled ? "Ignored while A/B testing is active" : "Primary model for agent tasks"}
                 </span>
               </div>
 
@@ -317,20 +314,14 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
                     <option key={m} value={m} />
                   ))}
                 </datalist>
-                <span className="settings-hint">
-                  Used when the default model is unavailable
-                </span>
+                <span className="settings-hint">Used when the default model is unavailable</span>
               </div>
 
               {/* Candidate Models (tag chips) */}
               <div className="settings-field">
-                <label className="settings-label">
-                  A/B Candidate Models
-                </label>
+                <label className="settings-label">A/B Candidate Models</label>
                 <div
-                  className={`chip-container ${
-                    !abTestingEnabled ? "chip-container-disabled" : ""
-                  }`}
+                  className={`chip-container ${!abTestingEnabled ? "chip-container-disabled" : ""}`}
                   aria-disabled={!abTestingEnabled}
                 >
                   {candidateModels.map((m) => (
@@ -355,11 +346,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
                       onBlur={() => {
                         if (chipInput.trim()) addChip(chipInput);
                       }}
-                      placeholder={
-                        candidateModels.length === 0
-                          ? "Type model name and press Enter"
-                          : "Add model…"
-                      }
+                      placeholder={candidateModels.length === 0 ? "Type model name and press Enter" : "Add model…"}
                       list="chip-suggestions"
                     />
                   )}
@@ -381,16 +368,24 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
             <div className="settings-section">
               <h3 className="settings-section-title">⚡ Orchestrator</h3>
               <div className="settings-field">
-                <label className="settings-label" htmlFor="max-parallel-agents">Max Parallel Agents</label>
+                <label className="settings-label" htmlFor="max-parallel-agents">
+                  Max Parallel Agents
+                </label>
                 <input
-                  id="max-parallel-agents" className="settings-input settings-input-number"
-                  type="number" min={1} max={8} value={maxParallelAgents}
-                  onChange={(e) => { const v = Math.max(1, Math.min(8, parseInt(e.target.value, 10) || 1)); setMaxParallelAgents(v); markDirty(); }}
+                  id="max-parallel-agents"
+                  className="settings-input settings-input-number"
+                  type="number"
+                  min={1}
+                  max={8}
+                  value={maxParallelAgents}
+                  onChange={(e) => {
+                    const v = Math.max(1, Math.min(8, parseInt(e.target.value, 10) || 1));
+                    setMaxParallelAgents(v);
+                    markDirty();
+                  }}
                 />
                 <span className="settings-hint">Controls how many work items are processed concurrently (1–8).</span>
-                {maxParallelAgents > 1 && (
-                  <span className="settings-hint">⚠️ Parallel mode is experimental.</span>
-                )}
+                {maxParallelAgents > 1 && <span className="settings-hint">⚠️ Parallel mode is experimental.</span>}
               </div>
             </div>
 
@@ -399,30 +394,59 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
               <h3 className="settings-section-title">🖧 MCP Server</h3>
 
               <div className="settings-field">
-                <label className="settings-label" htmlFor="mcp-enabled">Enable MCP server</label>
+                <label className="settings-label" htmlFor="mcp-enabled">
+                  Enable MCP server
+                </label>
                 <div className="settings-checkbox-row">
-                  <input id="mcp-enabled" type="checkbox" checked={mcpEnabled}
-                    onChange={(e) => { setMcpEnabled(e.target.checked); markDirty(); }} />
+                  <input
+                    id="mcp-enabled"
+                    type="checkbox"
+                    checked={mcpEnabled}
+                    onChange={(e) => {
+                      setMcpEnabled(e.target.checked);
+                      markDirty();
+                    }}
+                  />
                   <span className="settings-hint">Controls MCP server integration and restart script usage.</span>
                 </div>
               </div>
 
-              {mcpEnabled && (<>
-                <div className="settings-field">
-                  <label className="settings-label" htmlFor="mcp-name">MCP server name (optional)</label>
-                  <input id="mcp-name" className="settings-input" value={mcpName}
-                    onChange={(e) => { setMcpName(e.target.value); markDirty(); }}
-                    placeholder="e.g. My MCP Server" />
-                  <span className="settings-hint">Friendly display name for the MCP server.</span>
-                </div>
-                <div className="settings-field">
-                  <label className="settings-label" htmlFor="mcp-restart-script">Restart script (optional)</label>
-                  <input id="mcp-restart-script" className="settings-input" value={mcpRestartScript}
-                    onChange={(e) => { setMcpRestartScript(e.target.value); markDirty(); }}
-                    placeholder="scripts/Restart-MCPServer.ps1" />
-                  <span className="settings-hint">Path to restart the MCP server after configuration changes.</span>
-                </div>
-              </>)}
+              {mcpEnabled && (
+                <>
+                  <div className="settings-field">
+                    <label className="settings-label" htmlFor="mcp-name">
+                      MCP server name (optional)
+                    </label>
+                    <input
+                      id="mcp-name"
+                      className="settings-input"
+                      value={mcpName}
+                      onChange={(e) => {
+                        setMcpName(e.target.value);
+                        markDirty();
+                      }}
+                      placeholder="e.g. My MCP Server"
+                    />
+                    <span className="settings-hint">Friendly display name for the MCP server.</span>
+                  </div>
+                  <div className="settings-field">
+                    <label className="settings-label" htmlFor="mcp-restart-script">
+                      Restart script (optional)
+                    </label>
+                    <input
+                      id="mcp-restart-script"
+                      className="settings-input"
+                      value={mcpRestartScript}
+                      onChange={(e) => {
+                        setMcpRestartScript(e.target.value);
+                        markDirty();
+                      }}
+                      placeholder="scripts/Restart-MCPServer.ps1"
+                    />
+                    <span className="settings-hint">Path to restart the MCP server after configuration changes.</span>
+                  </div>
+                </>
+              )}
             </div>
 
             <MaintenanceAgentsSection
@@ -433,58 +457,21 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
               onOpenPromptEditor={onOpenPromptEditor}
             />
 
-            {/* Section: Special-Effect Tags */}
-            <div className="settings-section">
-              <h3 className="settings-section-title">🏷️ Special-Effect Tags</h3>
-              <p className="settings-hint">
-                These tags modify how the orchestrator handles individual beads work items. They represent global orchestrator behaviors, not per-agent settings.
-              </p>
-              <div className="special-tags-grid">
-                {SPECIAL_EFFECT_TAGS.map((tag) => (
-                  <div key={tag.id} className="special-tag-card">
-                    <div className="special-tag-header">
-                      <span className="special-tag-name">{tag.label}</span>
-                      <code
-                        className="special-tag-id copyable"
-                        title="Click to copy tag ID"
-                        onClick={() => navigator.clipboard.writeText(tag.id)}
-                      >{tag.id} 📋</code>
-                    </div>
-                    <div className="special-tag-description">{tag.description}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <SpecialEffectTagsSection />
 
             {/* Footer actions */}
             <div className="settings-footer">
               {message && (
-                <span
-                  className={`settings-message ${
-                    message === "Save failed"
-                      ? "settings-message-error"
-                      : ""
-                  }`}
-                >
+                <span className={`settings-message ${message === "Save failed" ? "settings-message-error" : ""}`}>
                   {message}
                 </span>
               )}
-              {dirty && (
-                <span className="settings-unsaved">Unsaved changes</span>
-              )}
+              {dirty && <span className="settings-unsaved">Unsaved changes</span>}
               <div className="settings-actions">
-                <button
-                  className="prompt-btn reset"
-                  onClick={handleReset}
-                  disabled={!dirty}
-                >
+                <button className="prompt-btn reset" onClick={handleReset} disabled={!dirty}>
                   ↩ Reset
                 </button>
-                <button
-                  className="prompt-btn save"
-                  onClick={handleSave}
-                  disabled={!dirty || saving}
-                >
+                <button className="prompt-btn save" onClick={handleSave} disabled={!dirty || saving}>
                   {saving ? "…" : "💾 Save"}
                 </button>
               </div>

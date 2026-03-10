@@ -33,12 +33,7 @@ export function TrendChart({ title, data, color, valueFormatter, emptyLabel }: T
       </div>
       <div className="trend-chart">
         <svg viewBox="0 0 100 100" preserveAspectRatio="none">
-          <polyline
-            fill="none"
-            stroke={color}
-            strokeWidth="2"
-            points={points.join(" ")}
-          />
+          <polyline fill="none" stroke={color} strokeWidth="2" points={points.join(" ")} />
         </svg>
         <ul className="trend-chart-labels">
           {data.map((point) => (

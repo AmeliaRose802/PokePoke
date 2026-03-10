@@ -41,10 +41,7 @@ export function buildTitle(agentName: string, projectName: string): string {
  * @param agentName - Currently active agent name
  * @param projectName - Project/repo name from config
  */
-export function useDocumentTitle(
-  agentName: string,
-  projectName: string
-): void {
+export function useDocumentTitle(agentName: string, projectName: string): void {
   useEffect(() => {
     document.title = buildTitle(agentName, projectName);
   }, [agentName, projectName]);

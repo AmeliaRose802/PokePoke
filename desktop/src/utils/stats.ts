@@ -1,10 +1,4 @@
-import type {
-  CompletedItem,
-  CreatedItem,
-  ModelHistoryEntry,
-  ModelPerformanceSummary,
-  SessionStats,
-} from "../types";
+import type { CompletedItem, CreatedItem, ModelHistoryEntry, ModelPerformanceSummary, SessionStats } from "../types";
 
 export function formatTokens(count: number | undefined): string {
   if (!Number.isFinite(count ?? 0)) return "0";
@@ -24,7 +18,7 @@ export function formatTotalTokens(stats: SessionStats | null): string {
 
 /**
  * Format duration in seconds to a readable string with proper decimal handling.
- * 
+ *
  * Rules:
  * - Under 1 minute: 2 decimal places (e.g., '12.45s'), removing trailing zeros
  * - 1-10 minutes: Show with decimal (e.g., '2.0m', '5.2m')
@@ -34,17 +28,17 @@ export function formatTotalTokens(stats: SessionStats | null): string {
 export function formatDurationShort(seconds: number | undefined): string {
   if (!Number.isFinite(seconds ?? 0)) return "0s";
   const value = Math.max(0, seconds ?? 0);
-  
+
   if (value < 60) {
     // Under 1 minute: 2 decimal places, remove trailing zeros
     const formatted = value.toFixed(2);
     return `${removeTrailingZeros(formatted)}s`;
   }
-  
+
   if (value < 3600) {
     // 1-60 minutes: format with precision
     const minutes = value / 60;
-    
+
     if (minutes < 10) {
       // For minutes < 10, always show with at least one decimal
       const formatted = minutes.toFixed(1);
@@ -58,16 +52,16 @@ export function formatDurationShort(seconds: number | undefined): string {
       return `${removeTrailingZeros(formatted, true)}m`;
     }
   }
-  
+
   // Over 1 hour: use h:m format for readability
   const hours = Math.floor(value / 3600);
   const remainingSeconds = value % 3600;
   const minutes = Math.round(remainingSeconds / 60);
-  
+
   if (minutes === 60) {
     return `${hours + 1}h 0m`;
   }
-  
+
   return `${hours}h ${minutes}m`;
 }
 
@@ -77,16 +71,16 @@ export function formatDurationShort(seconds: number | undefined): string {
  * When keepOneDecimal=false: removes all trailing zeros (e.g., "51.00" becomes "51", "51.70" becomes "51.7")
  */
 function removeTrailingZeros(numStr: string, keepOneDecimal: boolean = false): string {
-  if (!numStr.includes('.')) {
+  if (!numStr.includes(".")) {
     return numStr;
   }
-  
+
   // Split into whole and decimal parts
-  const [whole, decimal] = numStr.split('.');
-  
+  const [whole, decimal] = numStr.split(".");
+
   // Remove trailing zeros
-  const trimmed = decimal.replace(/0+$/, '');
-  
+  const trimmed = decimal.replace(/0+$/, "");
+
   if (trimmed.length === 0) {
     // No decimal part left after removing zeros
     if (keepOneDecimal) {
@@ -94,14 +88,11 @@ function removeTrailingZeros(numStr: string, keepOneDecimal: boolean = false): s
     }
     return whole;
   }
-  
+
   return `${whole}.${trimmed}`;
 }
 
-export function formatDurationWithSpread(
-  median: number | undefined,
-  stddev: number | undefined
-): string {
+export function formatDurationWithSpread(median: number | undefined, stddev: number | undefined): string {
   const med = formatDurationShort(median);
   if (!Number.isFinite(stddev ?? 0) || (stddev ?? 0) === 0) return med;
   const dev = formatDurationShort(stddev);
@@ -113,9 +104,7 @@ export function formatElapsed(seconds: number | undefined): string {
   const h = Math.floor(value / 3600);
   const m = Math.floor((value % 3600) / 60);
   const s = Math.floor(value % 60);
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(
-    s
-  ).padStart(2, "0")}`;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 export function formatPercent(value: number | null | undefined, digits = 0): string {
@@ -132,7 +121,7 @@ export interface CurrentModelInfo {
 export function inferCurrentModel(
   stats: SessionStats | null,
   leaderboard: Record<string, ModelPerformanceSummary>,
-  activeAgentModel?: string | null
+  activeAgentModel?: string | null,
 ): CurrentModelInfo {
   const normalizedActive = activeAgentModel?.trim();
   if (normalizedActive) {
@@ -153,9 +142,7 @@ export function inferCurrentModel(
 
   const leaderboardEntries = Object.entries(leaderboard);
   if (leaderboardEntries.length > 0) {
-    const [model, summary] = leaderboardEntries.sort(
-      (a, b) => (b[1].success_rate ?? 0) - (a[1].success_rate ?? 0)
-    )[0];
+    const [model, summary] = leaderboardEntries.sort((a, b) => (b[1].success_rate ?? 0) - (a[1].success_rate ?? 0))[0];
     return {
       model,
       gatePassed: null,
@@ -188,7 +175,7 @@ export function getDoneCount(stats: SessionStats | null): number {
   if (stats?.items_completed != null && stats.items_completed > 0) {
     return stats.items_completed;
   }
-  
+
   // Fallback to array length if counter not available
   const completed = getCompletedItems(stats);
   return completed.length;
@@ -196,7 +183,7 @@ export function getDoneCount(stats: SessionStats | null): number {
 
 export interface AgentRunCounts {
   work: number;
-  cleanup: number; 
+  cleanup: number;
   other: number;
 }
 
@@ -204,10 +191,10 @@ export function getAgentRunCounts(stats: SessionStats | null): AgentRunCounts {
   if (!stats) return { work: 0, cleanup: 0, other: 0 };
 
   // Work: productive development work
-  const work = (stats.work_agent_runs ?? 0);
+  const work = stats.work_agent_runs ?? 0;
 
-  // Cleanup: maintenance and cleanup activities  
-  const cleanup = 
+  // Cleanup: maintenance and cleanup activities
+  const cleanup =
     (stats.cleanup_agent_runs ?? 0) +
     (stats.janitor_agent_runs ?? 0) +
     (stats.backlog_cleanup_agent_runs ?? 0) +
@@ -225,7 +212,7 @@ export function getAgentRunCounts(stats: SessionStats | null): AgentRunCounts {
 
 export function formatAgentRuns(counts: AgentRunCounts): string {
   const parts: string[] = [];
-  
+
   if (counts.work > 0) {
     parts.push(`Work ${counts.work}`);
   }
@@ -235,7 +222,7 @@ export function formatAgentRuns(counts: AgentRunCounts): string {
   if (counts.other > 0) {
     parts.push(`Other ${counts.other}`);
   }
-  
+
   return parts.length > 0 ? parts.join(" · ") : "—";
 }
 
@@ -261,7 +248,7 @@ export function getAddedCount(stats: SessionStats | null): number {
   if (stats?.items_created != null && stats.items_created > 0) {
     return stats.items_created;
   }
-  
+
   // Fallback to array length if counter not available
   const created = getCreatedItems(stats);
   return created.length;
@@ -276,16 +263,12 @@ export function getNetDelta(stats: SessionStats | null): number {
  * Calculate average completion time by tag with rolling averages
  * Groups historical entries by primary tag (first label) and computes mean duration
  */
-export function buildCompletionTimeByType(
-  history: ModelHistoryEntry[]
-): Record<string, number> {
+export function buildCompletionTimeByType(history: ModelHistoryEntry[]): Record<string, number> {
   const byTag = new Map<string, number[]>();
 
   for (const entry of history) {
     // Use first label as primary tag, or "untagged" if no labels
-    const tag = (entry.labels && entry.labels.length > 0) 
-      ? entry.labels[0] 
-      : "untagged";
+    const tag = entry.labels && entry.labels.length > 0 ? entry.labels[0] : "untagged";
     const durations = byTag.get(tag) ?? [];
     durations.push(entry.duration_seconds);
     byTag.set(tag, durations);
@@ -304,21 +287,13 @@ export function buildCompletionTimeByType(
  * Returns data grouped by primary tag (first label) for multi-series chart
  */
 export function buildCompletionTimeSeries(
-  history: ModelHistoryEntry[]
-): Record<
-  string,
-  Array<{ label: string; value: number }>
-> {
-  const byTagAndDay = new Map<
-    string,
-    Map<string, { durations: number[]; count: number }>
-  >();
+  history: ModelHistoryEntry[],
+): Record<string, Array<{ label: string; value: number }>> {
+  const byTagAndDay = new Map<string, Map<string, { durations: number[]; count: number }>>();
 
   for (const entry of history) {
     // Use first label as primary tag, or "untagged" if no labels
-    const tag = (entry.labels && entry.labels.length > 0) 
-      ? entry.labels[0] 
-      : "untagged";
+    const tag = entry.labels && entry.labels.length > 0 ? entry.labels[0] : "untagged";
     const dateKey = (entry.timestamp ?? "").slice(0, 10) || "unknown";
 
     if (!byTagAndDay.has(tag)) {
@@ -341,9 +316,7 @@ export function buildCompletionTimeSeries(
     result[tag] = trimmed.map((date) => {
       const bucket = tagMap.get(date)!;
       const avg =
-        bucket.durations.length > 0
-          ? bucket.durations.reduce((a, b) => a + b, 0) / bucket.durations.length
-          : 0;
+        bucket.durations.length > 0 ? bucket.durations.reduce((a, b) => a + b, 0) / bucket.durations.length : 0;
       return { label: date, value: avg };
     });
   }
@@ -364,7 +337,10 @@ export function formatCost(cost: number | undefined): string {
   return `$${value.toFixed(2)}`;
 }
 
-export interface TrendPoint { label: string; value: number; }
+export interface TrendPoint {
+  label: string;
+  value: number;
+}
 
 interface AggregatedDay {
   dateLabel: string;

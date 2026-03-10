@@ -3,7 +3,7 @@
  */
 
 import { renderHook } from "@testing-library/react";
-import { afterEach,beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { buildTitle, useDocumentTitle } from "./useDocumentTitle";
 
@@ -21,9 +21,7 @@ describe("buildTitle", () => {
   });
 
   it("returns full title with agent and project", () => {
-    expect(buildTitle("Janitor", "MyProject")).toBe(
-      "Janitor | MyProject - PokePoke"
-    );
+    expect(buildTitle("Janitor", "MyProject")).toBe("Janitor | MyProject - PokePoke");
   });
 
   it("handles whitespace-only agent name as empty", () => {
@@ -49,10 +47,9 @@ describe("useDocumentTitle", () => {
   });
 
   it("updates document title when agent changes", () => {
-    const { rerender } = renderHook(
-      ({ agent, project }) => useDocumentTitle(agent, project),
-      { initialProps: { agent: "Agent1", project: "Project" } }
-    );
+    const { rerender } = renderHook(({ agent, project }) => useDocumentTitle(agent, project), {
+      initialProps: { agent: "Agent1", project: "Project" },
+    });
 
     expect(document.title).toBe("Agent1 | Project - PokePoke");
 
@@ -61,10 +58,9 @@ describe("useDocumentTitle", () => {
   });
 
   it("updates document title when project changes", () => {
-    const { rerender } = renderHook(
-      ({ agent, project }) => useDocumentTitle(agent, project),
-      { initialProps: { agent: "Agent", project: "Project1" } }
-    );
+    const { rerender } = renderHook(({ agent, project }) => useDocumentTitle(agent, project), {
+      initialProps: { agent: "Agent", project: "Project1" },
+    });
 
     expect(document.title).toBe("Agent | Project1 - PokePoke");
 
@@ -73,10 +69,9 @@ describe("useDocumentTitle", () => {
   });
 
   it("clears to base title when agent is cleared", () => {
-    const { rerender } = renderHook(
-      ({ agent, project }) => useDocumentTitle(agent, project),
-      { initialProps: { agent: "Agent", project: "Project" } }
-    );
+    const { rerender } = renderHook(({ agent, project }) => useDocumentTitle(agent, project), {
+      initialProps: { agent: "Agent", project: "Project" },
+    });
 
     expect(document.title).toBe("Agent | Project - PokePoke");
 

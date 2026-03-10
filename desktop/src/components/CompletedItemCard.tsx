@@ -1,5 +1,5 @@
 import type { CompletedItem, ModelHistoryEntry } from "../types";
-import { formatCost,formatDurationShort, formatTokens } from "../utils/stats";
+import { formatCost, formatDurationShort, formatTokens } from "../utils/stats";
 
 interface CompletedItemCardProps {
   item: CompletedItem;
@@ -19,7 +19,7 @@ interface ItemStats {
 
 function getItemStats(itemId: string, history: ModelHistoryEntry[]): ItemStats | null {
   // Find all entries for this item
-  const itemEntries = history.filter(entry => entry.item_id === itemId);
+  const itemEntries = history.filter((entry) => entry.item_id === itemId);
   if (itemEntries.length === 0) return null;
 
   // Get the most recent entry (last in the array)
@@ -42,8 +42,7 @@ function getItemStats(itemId: string, history: ModelHistoryEntry[]): ItemStats |
   };
 }
 
-const gateStatusText = (v: boolean | null) =>
-  v === true ? "Passed gate" : v === false ? "Failed gate" : "Pending";
+const gateStatusText = (v: boolean | null) => (v === true ? "Passed gate" : v === false ? "Failed gate" : "Pending");
 
 const statusClass = (v: boolean | null) =>
   v === true ? "status-pass" : v === false ? "status-fail" : "status-neutral";
@@ -79,22 +78,25 @@ export function CompletedItemCard({ item, modelHistory }: CompletedItemCardProps
               <span className="item-stat-value">{itemStats.attempts}</span>
             </span>
           )}
-          {typeof itemStats.agent_turns === 'number' && itemStats.agent_turns > 0 && (
+          {typeof itemStats.agent_turns === "number" && itemStats.agent_turns > 0 && (
             <span className="item-stat">
               <span className="item-stat-label">Agent Turns:</span>
               <span className="item-stat-value">{itemStats.agent_turns}</span>
             </span>
           )}
-          {typeof itemStats.input_tokens === 'number' && typeof itemStats.output_tokens === 'number' && (
+          {typeof itemStats.input_tokens === "number" && typeof itemStats.output_tokens === "number" && (
             <span className="item-stat">
               <span className="item-stat-label">Tokens:</span>
               <span className="item-stat-value">
                 {formatTokens(itemStats.input_tokens + itemStats.output_tokens)}
-                <span className="item-stat-detail"> ({formatTokens(itemStats.input_tokens)} in / {formatTokens(itemStats.output_tokens)} out)</span>
+                <span className="item-stat-detail">
+                  {" "}
+                  ({formatTokens(itemStats.input_tokens)} in / {formatTokens(itemStats.output_tokens)} out)
+                </span>
               </span>
             </span>
           )}
-          {typeof itemStats.cost === 'number' && itemStats.cost > 0 && (
+          {typeof itemStats.cost === "number" && itemStats.cost > 0 && (
             <span className="item-stat">
               <span className="item-stat-label">Cost:</span>
               <span className="item-stat-value">{formatCost(itemStats.cost)}</span>

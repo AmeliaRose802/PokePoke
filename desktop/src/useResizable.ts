@@ -31,14 +31,8 @@ const DEFAULT_MIN_RIGHT = 200;
  * Hook that enables drag-to-resize between two horizontally adjacent panels.
  * Returns a fraction representing the left panel's share of container width.
  */
-export function useResizable(
-  options: UseResizableOptions = {}
-): UseResizableReturn {
-  const {
-    initialFraction = DEFAULT_FRACTION,
-    minLeftPx = DEFAULT_MIN_LEFT,
-    minRightPx = DEFAULT_MIN_RIGHT,
-  } = options;
+export function useResizable(options: UseResizableOptions = {}): UseResizableReturn {
+  const { initialFraction = DEFAULT_FRACTION, minLeftPx = DEFAULT_MIN_LEFT, minRightPx = DEFAULT_MIN_RIGHT } = options;
 
   const [fraction, setFraction] = useState(initialFraction);
   const [isDragging, setIsDragging] = useState(false);

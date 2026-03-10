@@ -4,7 +4,9 @@ export function InProgressItemsSection({ items }: { items: InProgressItem[] }) {
   if (items.length === 0) return null;
   return (
     <div className="stats-panel-card">
-      <h3>In progress <span className="stats-panel-subtitle">Active work items</span></h3>
+      <h3>
+        In progress <span className="stats-panel-subtitle">Active work items</span>
+      </h3>
       <ul className="in-progress-items-list">
         {items.map((item) => (
           <InProgressItemCard key={item.id} item={item} />

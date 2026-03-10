@@ -10,18 +10,14 @@ import type { SetupConfigPayload, SetupStatus } from "./types";
 
 export interface SetupBridgeMethods {
   checkSetupStatus: () => Promise<SetupStatus>;
-  gitInit: (
-    defaultBranch?: string,
-  ) => Promise<{
+  gitInit: (defaultBranch?: string) => Promise<{
     success: boolean;
     error?: string;
     stdout?: string | null;
     stderr?: string | null;
   } | null>;
   bdInit: () => Promise<{ success: boolean } | null>;
-  createDefaultConfig: (
-    config: SetupConfigPayload,
-  ) => Promise<{ path: string; saved: boolean } | null>;
+  createDefaultConfig: (config: SetupConfigPayload) => Promise<{ path: string; saved: boolean } | null>;
   scaffoldPromptOverrides: (
     templates?: string[],
     force?: boolean,
@@ -47,21 +43,15 @@ export function useSetupBridge(): SetupBridgeMethods {
     return window.pywebview.api.bd_init();
   }, []);
 
-  const createDefaultConfig = useCallback(
-    async (config: SetupConfigPayload) => {
-      if (!window.pywebview?.api) return null;
-      return window.pywebview.api.create_default_config(config);
-    },
-    [],
-  );
+  const createDefaultConfig = useCallback(async (config: SetupConfigPayload) => {
+    if (!window.pywebview?.api) return null;
+    return window.pywebview.api.create_default_config(config);
+  }, []);
 
-  const scaffoldPromptOverrides = useCallback(
-    async (templates?: string[], force?: boolean) => {
-      if (!window.pywebview?.api) return null;
-      return window.pywebview.api.scaffold_prompt_overrides(templates, force);
-    },
-    [],
-  );
+  const scaffoldPromptOverrides = useCallback(async (templates?: string[], force?: boolean) => {
+    if (!window.pywebview?.api) return null;
+    return window.pywebview.api.scaffold_prompt_overrides(templates, force);
+  }, []);
 
   const completeSetup = useCallback(async () => {
     if (!window.pywebview?.api) return null;

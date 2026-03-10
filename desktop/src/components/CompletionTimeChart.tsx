@@ -73,9 +73,7 @@ export function CompletionTimeChart({ data, emptyLabel }: CompletionTimeChartPro
   }
 
   // Filter to selected tag or show all
-  const visibleSeries = selectedTag
-    ? allSeriesData.filter((s) => s.type === selectedTag)
-    : allSeriesData;
+  const visibleSeries = selectedTag ? allSeriesData.filter((s) => s.type === selectedTag) : allSeriesData;
 
   const overallMax = Math.max(...visibleSeries.map((s) => s.maxValue), 1);
 
@@ -88,15 +86,17 @@ export function CompletionTimeChart({ data, emptyLabel }: CompletionTimeChartPro
   };
 
   // Generate dynamic CSS for tag colors (avoids inline style prop forbidden by ESLint)
-  const tagStyleRules = sortedTags.map((series, idx) => {
-    const cls = `tag-chip-${idx}`;
-    const scale = 0.75 + (series.totalPoints / maxPoints) * 0.5;
-    return [
-      `.${cls} { border-color: ${series.color}; font-size: ${scale}rem; }`,
-      `.${cls}.tag-cloud-chip-active { background-color: ${series.color}; color: #1a1b26; }`,
-      `.${cls} .tag-cloud-dot { background-color: ${series.color}; }`,
-    ].join("\n");
-  }).join("\n");
+  const tagStyleRules = sortedTags
+    .map((series, idx) => {
+      const cls = `tag-chip-${idx}`;
+      const scale = 0.75 + (series.totalPoints / maxPoints) * 0.5;
+      return [
+        `.${cls} { border-color: ${series.color}; font-size: ${scale}rem; }`,
+        `.${cls}.tag-cloud-chip-active { background-color: ${series.color}; color: #1a1b26; }`,
+        `.${cls} .tag-cloud-dot { background-color: ${series.color}; }`,
+      ].join("\n");
+    })
+    .join("\n");
 
   return (
     <div>
@@ -116,21 +116,14 @@ export function CompletionTimeChart({ data, emptyLabel }: CompletionTimeChartPro
               onClick={() => handleTagClick(series.type)}
               title={`${series.type}: avg ${formatDurationShort(series.avgValue)}`}
             >
-              <span
-                className="tag-cloud-dot"
-                aria-hidden="true"
-              />
+              <span className="tag-cloud-dot" aria-hidden="true" />
               {series.type}
               <span className="tag-cloud-avg">{formatDurationShort(series.avgValue)}</span>
             </button>
           );
         })}
         {selectedTag && (
-          <button
-            type="button"
-            className="tag-cloud-clear"
-            onClick={() => setSelectedTag(null)}
-          >
+          <button type="button" className="tag-cloud-clear" onClick={() => setSelectedTag(null)}>
             ✕ Clear filter
           </button>
         )}
@@ -150,16 +143,11 @@ export function CompletionTimeChart({ data, emptyLabel }: CompletionTimeChartPro
 
             return (
               <g key={typeSeries.type}>
-                <polyline
-                  fill="none"
-                  stroke={typeSeries.color}
-                  strokeWidth="1.5"
-                  points={points.join(" ")}
-                />
+                <polyline fill="none" stroke={typeSeries.color} strokeWidth="1.5" points={points.join(" ")} />
                 {typeSeries.values.map((value, index) => (
                   <circle
                     key={index}
-                    cx={(labels.length === 1 ? 50 : (index / (labels.length - 1)) * 100)}
+                    cx={labels.length === 1 ? 50 : (index / (labels.length - 1)) * 100}
                     cy={yOffset - (overallMax === 0 ? 0 : (value / overallMax) * 20)}
                     r="0.8"
                     fill={typeSeries.color}

@@ -35,9 +35,7 @@ export function McpServerSection({ mcpConfig, onChange }: Props) {
             <span className="toggle-slider"></span>
           </label>
         </div>
-        <span className="settings-hint">
-          Restart an MCP server between agent runs
-        </span>
+        <span className="settings-hint">Restart an MCP server between agent runs</span>
       </div>
 
       {enabled && (
@@ -54,9 +52,7 @@ export function McpServerSection({ mcpConfig, onChange }: Props) {
               onChange={(e) => onChange({ name: e.target.value })}
               placeholder="e.g. My MCP Server"
             />
-            <span className="settings-hint">
-              Display name for the MCP server
-            </span>
+            <span className="settings-hint">Display name for the MCP server</span>
           </div>
 
           {/* Restart Script */}
@@ -71,9 +67,7 @@ export function McpServerSection({ mcpConfig, onChange }: Props) {
               onChange={(e) => onChange({ restart_script: e.target.value })}
               placeholder="e.g. scripts/Restart-MCPServer.ps1"
             />
-            <span className="settings-hint">
-              Path to the script that restarts the MCP server
-            </span>
+            <span className="settings-hint">Path to the script that restarts the MCP server</span>
           </div>
         </>
       )}

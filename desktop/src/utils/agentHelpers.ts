@@ -39,9 +39,7 @@ export function parseGateVerdict(logLines: string[]): GateVerdict | null {
   }
 
   // Fallback: search for a JSON object containing a status field
-  const rawJsonMatch = combinedText.match(
-    /\{\s*"status"\s*:\s*"(?:success|failure)"[\s\S]*?\}/
-  );
+  const rawJsonMatch = combinedText.match(/\{\s*"status"\s*:\s*"(?:success|failure)"[\s\S]*?\}/);
   if (rawJsonMatch) {
     try {
       const parsed = JSON.parse(rawJsonMatch[0]) as unknown;
@@ -116,9 +114,7 @@ export function isGateAgent(agent: AgentInfo): boolean {
 
 export function getAgentPrimaryLabel(agent: AgentInfo): string {
   if (agent.work_item_id) {
-    return agent.work_item_title
-      ? `${agent.work_item_id}: ${agent.work_item_title}`
-      : agent.work_item_id;
+    return agent.work_item_title ? `${agent.work_item_id}: ${agent.work_item_title}` : agent.work_item_id;
   }
   return agent.name;
 }
@@ -168,7 +164,7 @@ export function formatModelName(model: string | null | undefined): string {
   // Claude models - preserve version numbers
   if (modelStr.includes("claude")) {
     let result = "Claude";
-    
+
     // Extract variant (Sonnet, Opus, Haiku)
     if (modelStr.includes("sonnet")) {
       result += " Sonnet";
@@ -177,7 +173,7 @@ export function formatModelName(model: string | null | undefined): string {
     } else if (modelStr.includes("haiku")) {
       result += " Haiku";
     }
-    
+
     // Extract version number - handle multiple patterns:
     // - "claude-3-5-sonnet" -> "3.5"
     // - "claude-3-haiku" -> "3"
@@ -189,10 +185,10 @@ export function formatModelName(model: string | null | undefined): string {
       const major = versionMatch[1];
       const minor = versionMatch[2];
       const patch = versionMatch[3];
-      
+
       // For patterns like "3-5-sonnet" or "3-haiku", use major.minor format
       let version = `${major}.${minor}`;
-      
+
       // If the second number looks like a date (e.g., "20241022"), just use major
       if (parseInt(minor) > 100) {
         version = major;
@@ -200,7 +196,7 @@ export function formatModelName(model: string | null | undefined): string {
         // If there's a third number that's not a date, include it
         version += `.${patch}`;
       }
-      
+
       result += ` ${version}`;
     } else {
       // Fallback: try to match single digit version (e.g., "claude-3")
@@ -209,20 +205,20 @@ export function formatModelName(model: string | null | undefined): string {
         result += ` ${singleVersionMatch[1]}`;
       }
     }
-    
+
     return result;
   }
 
   // GPT models - preserve version numbers
   if (modelStr.includes("gpt")) {
     let result = "GPT";
-    
+
     // Extract base version (e.g., "4", "5.3", "3.5")
     const versionMatch = modelStr.match(/gpt-?(\d+(?:\.\d+)?(?:\.\d+)?)/);
     if (versionMatch) {
       result += `-${versionMatch[1]}`;
     }
-    
+
     // Add variant suffix (Turbo, Codex, etc.)
     if (modelStr.includes("turbo")) {
       result += " Turbo";
@@ -231,27 +227,27 @@ export function formatModelName(model: string | null | undefined): string {
     } else if (modelStr.includes("4o")) {
       result = "GPT-4o";
     }
-    
+
     return result;
   }
 
   // Gemini models - preserve version numbers
   if (modelStr.includes("gemini")) {
     let result = "Gemini";
-    
+
     // Extract version (e.g., "1.5", "2.0")
     const versionMatch = modelStr.match(/(\d+\.\d+)/);
     if (versionMatch) {
       result += ` ${versionMatch[1]}`;
     }
-    
+
     // Add variant (Pro, Flash, etc.)
     if (modelStr.includes("pro")) {
       result += " Pro";
     } else if (modelStr.includes("flash")) {
       result += " Flash";
     }
-    
+
     return result;
   }
 
