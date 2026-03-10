@@ -193,7 +193,7 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
           <img
             src={agentIconPath}
             alt={iconAlt}
-            className="agent-log-panel-avatar agent-log-panel-icon"
+            className="agent-log-panel-avatar agent-log-panel-icon agent-log-panel-snake-icon"
             onError={(e) => {
               const parent = e.currentTarget.parentElement;
               if (parent) {
