@@ -48,23 +48,19 @@ def handle_preflight_checks(
     print(f"\n❌ Pre-flight health checks failed ({len(health_result.errors)} error(s))")
     for e in health_result.errors:
         print(f"   • {e.check_name}: {e.message}")
-
     if health_result.self_repair_attempted:
         status = "completed successfully" if health_result.self_repair_successful else "failed"
-        emoji = "✅" if health_result.self_repair_successful else "❌"
-        print(f"{emoji} Self-repair {status}")
-
-    if health_result.has_critical_errors() and cfg.preflight_health.fail_on_critical_errors:
+        print(f"{'✅' if health_result.self_repair_successful else '❌'} Self-repair {status}")
+    ph = cfg.preflight_health
+    if health_result.has_critical_errors() and ph.fail_on_critical_errors:
         print("\n🚨 Critical health check failures detected - shutting down gracefully")
         run_logger.log_orchestrator("Critical health check failures - shutting down", level="ERROR")
         return False, True
-
-    if health_result.has_environmental_errors() and cfg.preflight_health.fail_on_environmental_errors:
+    if health_result.has_environmental_errors() and ph.fail_on_environmental_errors:
         print("\n⚠️  Environmental health check failures detected - shutting down gracefully")
         run_logger.log_orchestrator("Environmental health check failures - shutting down", level="ERROR")
-        if cfg.preflight_health.graceful_shutdown_on_failure:
+        if ph.graceful_shutdown_on_failure:
             return False, True
-
     for w in health_result.warnings:
         print(f"   ⚠️  Warning: {w}")
     run_logger.log_orchestrator(
@@ -111,8 +107,6 @@ def finalize_workers(
     kill_orphaned_copilot_processes(expected_count=0)
     terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
     return total_requests, timeout_occurred
-
-
 def _drain_orphaned_futures(
     futures: dict[_Future, BeadsWorkItem],
     session_stats: SessionStats,
@@ -132,30 +126,20 @@ def _drain_orphaned_futures(
     )
     for fut, item in orphaned:
         result = WorkItemResult(success=False, request_count=0)
-        # Try to harvest an actual result if the future completed during drain
         if fut.done():
             try:
                 result = fut.result(timeout=0)
                 run_logger.log_orchestrator(f"Orphan {item.id} had completed result")
             except Exception as e:
-                run_logger.log_orchestrator(
-                    f"Orphan {item.id} raised: {e}", level="ERROR",
-                )
+                run_logger.log_orchestrator(f"Orphan {item.id} raised: {e}", level="ERROR")
         try:
             record_fn(item, result, session_stats, run_logger)
         except Exception as exc:
             logger.warning(f"record_fn failed for orphan {item.id}: {exc}", exc_info=True)
-            run_logger.log_orchestrator(
-                f"record_fn error for orphan {item.id}: {exc}", level="ERROR",
-            )
-        try:
+        with contextlib.suppress(Exception):
             unassign_with_retry(item.id)
             run_logger.log_orchestrator(f"Unassigned orphan {item.id}")
-        except Exception as exc:
-            logger.warning(f"Failed to unassign orphan {item.id}: {exc}", exc_info=True)
-            run_logger.log_orchestrator(f"Unassign failed for orphan {item.id}: {exc}", level="ERROR")
         terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
-
 
 def drain_circuit_breaker(
     futures: dict[_Future, BeadsWorkItem],
@@ -169,21 +153,15 @@ def drain_circuit_breaker(
 ) -> int:
     """Drain remaining futures after circuit breaker trips. Returns updated total_requests."""
     total_requests, _any, _succ, _fail = collect_fn(
-        futures, failed_claim_ids, total_requests,
-        session_stats, run_logger, record_fn,
-    )
-    run_logger.log_orchestrator(
-        f"Circuit breaker: draining {len(futures)} remaining agent(s)")
+        futures, failed_claim_ids, total_requests, session_stats, run_logger, record_fn)
+    run_logger.log_orchestrator(f"Circuit breaker: draining {len(futures)} remaining agent(s)")
     terminal_ui.ui.update_header(
-        "PokePoke", f"{mode_name} Mode",
-        f"Draining {len(futures)} agents (circuit breaker)",
-    )
+        "PokePoke", f"{mode_name} Mode", f"Draining {len(futures)} agents (circuit breaker)")
     for _ in range(10):
         if is_shutting_down() or not futures:
             break
         time.sleep(0.5)
     return total_requests
-
 
 def dispatch_items(
     ready_items: list[BeadsWorkItem],
@@ -216,38 +194,63 @@ def dispatch_items(
     ):
         return worker_counter
 
-    selected_items = select_multiple_items(
-        ready_items, count=slots,
-        skip_ids=failed_claim_ids, claimed_ids=current_active,
-    )
-    if selected_items:
-        run_logger.log_orchestrator(f"Replenishing {len(selected_items)} of {slots} open slot(s)")
+    # Track IDs attempted this cycle so we advance past already-claimed items
+    # instead of re-selecting them on every iteration (PokePoke-pfoc).
+    attempted_this_cycle: set[str] = set()
+    dispatched = 0
+    logged_replenish = False
 
-    for item in selected_items:
-        if not is_item_claimable(item.id):
-            run_logger.log_orchestrator(f"Skipping {item.id} - already claimed by another agent")
-            continue
+    while dispatched < slots:
+        needed = slots - dispatched
+        cycle_skip = failed_claim_ids | attempted_this_cycle
 
-        worker_counter += 1
-        base_name = get_agent_name(default="pokepoke")
-        worker_name = build_worker_name_fn(base_name, item.id, worker_counter)
+        selected_items = select_multiple_items(
+            ready_items, count=needed,
+            skip_ids=cycle_skip, claimed_ids=current_active,
+        )
 
-        if not assign_and_sync_item(item.id, agent_name=worker_name):
-            run_logger.log_orchestrator(f"Claim failed {item.id} (worker: {worker_name})", level="WARNING")
-            failed_claim_ids.add(item.id)
-            continue
+        if not selected_items:
+            break
 
-        run_logger.log_orchestrator(f"Submitting item: {item.id} - {item.title} (worker: {worker_name})")
-        semaphore.acquire()
-        try:
-            fut = executor.submit(process_item_fn, item, run_logger, semaphore, worker_name)
-        except Exception as e:
-            logger.warning(f"Failed to submit work item {item.id} to executor: {e}")
-            semaphore.release()
-            with contextlib.suppress(Exception):
-                unassign_with_retry(item.id)
-            raise
-        futures[fut] = item
+        if not logged_replenish:
+            run_logger.log_orchestrator(f"Replenishing up to {slots} open slot(s)")
+            logged_replenish = True
+
+        made_progress = False
+        for item in selected_items:
+            attempted_this_cycle.add(item.id)
+
+            if not is_item_claimable(item.id):
+                run_logger.log_orchestrator(f"Skipping {item.id} - already claimed by another agent")
+                failed_claim_ids.add(item.id)
+                continue
+
+            worker_counter += 1
+            base_name = get_agent_name(default="pokepoke")
+            worker_name = build_worker_name_fn(base_name, item.id, worker_counter)
+
+            if not assign_and_sync_item(item.id, agent_name=worker_name):
+                run_logger.log_orchestrator(f"Claim failed {item.id} (worker: {worker_name})", level="WARNING")
+                failed_claim_ids.add(item.id)
+                continue
+
+            run_logger.log_orchestrator(f"Submitting item: {item.id} - {item.title} (worker: {worker_name})")
+            semaphore.acquire()
+            try:
+                fut = executor.submit(process_item_fn, item, run_logger, semaphore, worker_name)
+            except Exception as e:
+                logger.warning(f"Failed to submit work item {item.id} to executor: {e}")
+                semaphore.release()
+                with contextlib.suppress(Exception):
+                    unassign_with_retry(item.id)
+                raise
+            futures[fut] = item
+            current_active.add(item.id)
+            dispatched += 1
+            made_progress = True
+
+        if not made_progress:
+            break
 
     return worker_counter
 
@@ -321,13 +324,11 @@ def check_loop_exit(
         run_logger.log_orchestrator("Stop after current item requested - exiting")
         finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
         return "break-success"
-
     if not continuous and not futures and total_requests > 0:
         terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
         terminal_ui.ui.stop_and_capture()
         finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
         return "break-done"
-
     if not futures and not ready_items:
         run_logger.log_polling("No ready items - double-checking beads")
         try:

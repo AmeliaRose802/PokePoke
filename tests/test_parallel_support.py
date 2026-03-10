@@ -490,6 +490,76 @@ class TestDispatchItems:
             )
         mock_unassign.assert_called_once_with("ef1")
 
+    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.parallel.is_item_claimable")
+    @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    def test_advances_past_unclaimable_items(self, _name, _assign, mock_claimable, _stop):
+        """Regression for PokePoke-pfoc: dispatch must advance past already-claimed
+        items and fill remaining slots from later candidates in the ready queue."""
+        # 5 items total; first 2 are unclaimable, last 3 are claimable
+        items = [_make_item(f"adv-{i}") for i in range(5)]
+        unclaimable = {items[0].id, items[1].id}
+        mock_claimable.side_effect = lambda item_id: item_id not in unclaimable
+
+        def fake_select(ready, count, skip_ids=None, claimed_ids=None):
+            excluded = set()
+            if skip_ids:
+                excluded.update(skip_ids)
+            if claimed_ids:
+                excluded.update(claimed_ids)
+            candidates = [i for i in ready if i.id not in excluded]
+            return candidates[:count]
+
+        with patch("pokepoke.parallel.select_multiple_items", side_effect=fake_select):
+            executor = MagicMock()
+            mock_fut = MagicMock()
+            executor.submit.return_value = mock_fut
+            run_logger = MagicMock()
+            futures: dict = {}
+            failed_ids: set[str] = set()
+            sem = threading.Semaphore(3)
+
+            counter = dispatch_items(
+                items, 3, True, False, 0, 10, failed_ids, set(), futures,
+                sem, executor, run_logger, 0, Mock(return_value="w"), Mock(),
+            )
+
+        # All 3 claimable items should be dispatched
+        assert counter == 3
+        assert executor.submit.call_count == 3
+        # Unclaimable items should be added to failed_claim_ids
+        assert unclaimable.issubset(failed_ids)
+
+    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.parallel.is_item_claimable", return_value=False)
+    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    def test_unclaimable_items_added_to_failed_ids(self, _name, _claim, _stop):
+        """Regression for PokePoke-pfoc: unclaimable items must be added to
+        failed_claim_ids so they are not re-selected in subsequent iterations."""
+        items = [_make_item(f"uc-{i}") for i in range(3)]
+
+        def fake_select(ready, count, skip_ids=None, claimed_ids=None):
+            excluded = set()
+            if skip_ids:
+                excluded.update(skip_ids)
+            if claimed_ids:
+                excluded.update(claimed_ids)
+            candidates = [i for i in ready if i.id not in excluded]
+            return candidates[:count]
+
+        with patch("pokepoke.parallel.select_multiple_items", side_effect=fake_select):
+            run_logger = MagicMock()
+            failed_ids: set[str] = set()
+
+            dispatch_items(
+                items, 3, True, False, 0, 10, failed_ids, set(), {},
+                threading.Semaphore(3), MagicMock(), run_logger, 0, Mock(), Mock(),
+            )
+
+        # All items should be in failed_claim_ids
+        assert failed_ids == {"uc-0", "uc-1", "uc-2"}
+
 
 # ── run_preflight_and_repo_checks ────────────────────────────────────
 
