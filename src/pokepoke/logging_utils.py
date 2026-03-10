@@ -8,32 +8,58 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 import uuid
 
+from pokepoke.logging_filters import JsonFormatter, WorkItemFilter
+
 if TYPE_CHECKING:
     from pokepoke.types import SessionStats
+
+
+# Re-export so existing ``from pokepoke.logging_utils import …`` still works.
+__all__ = [
+    "WorkItemFilter",
+    "JsonFormatter",
+    "configure_logging",
+    "RunLogger",
+    "ItemLogger",
+]
 
 
 def configure_logging(
     log_file: Path | str,
     console_level: int = logging.WARNING,
+    json_output: bool = False,
 ) -> None:
     """Configure Python logging handlers for a PokePoke entry point.
 
-    Sets up two channels:
-    1. FileHandler on the root logger at DEBUG level → *log_file*
-    2. StreamHandler(sys.stderr) at *console_level* on the ``pokepoke`` logger
-
-    Safe to call once per process.  ``basicConfig`` only acts when the root
-    logger has no handlers, so repeated calls are benign.
+    Attaches a :class:`WorkItemFilter` to every handler so that all records
+    carry ``work_item_id``, ``repo_name``, and ``agent_type``.  When
+    *json_output* is True the file handler uses :class:`JsonFormatter`.
     """
     log_file = Path(log_file)
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
+    text_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+
     logging.basicConfig(
         level=logging.DEBUG,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        format=text_format,
         filename=str(log_file),
         filemode="w",
     )
+
+    root = logging.getLogger()
+
+    # Ensure the WorkItemFilter is attached to every root handler exactly once
+    work_item_filter = WorkItemFilter()
+    for handler in root.handlers:
+        if not any(isinstance(f, WorkItemFilter) for f in handler.filters):
+            handler.addFilter(work_item_filter)
+
+    # Apply JSON formatter to the file handler when requested
+    if json_output:
+        for handler in root.handlers:
+            if isinstance(handler, logging.FileHandler):
+                handler.setFormatter(JsonFormatter())
 
     pokepoke_logger = logging.getLogger("pokepoke")
     # Avoid duplicate console handlers on repeated calls
@@ -48,18 +74,14 @@ def configure_logging(
         console.setFormatter(
             logging.Formatter("%(levelname)s: %(name)s: %(message)s")
         )
+        if not any(isinstance(f, WorkItemFilter) for f in console.filters):
+            console.addFilter(WorkItemFilter())
         pokepoke_logger.addHandler(console)
 
 
 class RunLogger:
-    """Manages logging for a PokePoke run.
+    """Manages logging for a PokePoke run with per-item subdirectories."""
 
-    Creates a unique directory for each run and manages two types of logs:
-    1. Orchestrator log - High-level actions taken by PokePoke (no agent output)
-    2. Per-item logs - Detailed agent output for each work item processed
-    """
-
-    # Default: only log polling messages at INFO every Nth cycle
     DEFAULT_POLL_LOG_INTERVAL = 50
 
     def __init__(
@@ -68,14 +90,7 @@ class RunLogger:
         poll_log_interval: int | None = None,
         repo_name: str = "",
     ):
-        """Initialize the run logger.
-
-        Args:
-            base_dir: Base directory for all log runs (default: ".pokepoke/logs")
-            poll_log_interval: Log polling messages at INFO every N cycles (default: 50).
-                Other cycles are logged at DEBUG.
-            repo_name: Repository name for log context (optional).
-        """
+        """Initialize the run logger."""
         self.repo_name = repo_name
         self.run_id = self._generate_run_id()
         # Use absolute path to avoid issues when CWD changes during workflow
@@ -94,6 +109,9 @@ class RunLogger:
         self._poll_cycle: int = 0
         self._poll_log_interval: int = poll_log_interval if poll_log_interval is not None else self.DEFAULT_POLL_LOG_INTERVAL
         self._idle_since: float | None = None
+
+        # Python logging bridge
+        self._py_logger = logging.getLogger("pokepoke.orchestrator")
 
         # Write initial orchestrator log entry
         self._init_orchestrator_log()
@@ -117,15 +135,7 @@ class RunLogger:
             f.write("=" * 80 + "\n\n")
 
     def log_orchestrator(self, message: str, level: str = "INFO") -> None:
-        """Log a message to the orchestrator log.
-
-        Includes the repo name from thread-local context (if set) so log
-        lines from different repos are distinguishable.
-
-        Args:
-            message: Message to log
-            level: Log level (INFO, WARNING, ERROR, etc.)
-        """
+        """Log to the orchestrator file and bridge to Python logging."""
         from pokepoke.metrics_context import get_current_repo_name
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -134,6 +144,10 @@ class RunLogger:
         self.orchestrator_log_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.orchestrator_log_path, 'a', encoding='utf-8') as f:
             f.write(f"[{timestamp}] [{level}] {repo_tag}{message}\n")
+
+        # Bridge to Python logging so structured filters/formatters apply
+        py_level = getattr(logging, level.upper(), logging.INFO)
+        self._py_logger.log(py_level, "%s%s", repo_tag, message)
 
     def log_polling(self, message: str) -> None:
         """Log a polling-loop message; INFO every Nth cycle, DEBUG otherwise."""
@@ -292,6 +306,10 @@ class ItemLogger:
         self.item_title = item_title
         self.agent_name = agent_name
 
+        # Python logging bridge for structured correlation
+        safe_logger_id = item_id.replace('/', '.').replace('\\', '.')
+        self._py_logger = logging.getLogger(f"pokepoke.item.{safe_logger_id}")
+
         # Create log file with sanitized filename
         safe_id = item_id.replace('/', '_').replace('\\', '_')
         filename = safe_id
@@ -332,11 +350,16 @@ class ItemLogger:
             if result is not None:
                 f.write(f"[{timestamp}] [RESULT] {result}\n")
 
+        log_level = logging.DEBUG if success else logging.WARNING
+        self._py_logger.log(log_level, "TOOL %s %s(%s) result=%s", status, tool_name, args, result)
+
     def log_error(self, error_msg: str) -> None:
         """Log an error event from the agent session."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(self.log_path, 'a', encoding='utf-8') as f:
             f.write(f"\n[{timestamp}] [ERROR] {error_msg}\n")
+
+        self._py_logger.error("%s", error_msg)
 
     def log_summary(self, success: bool, request_count: int) -> None:
         """Log summary information for the work item."""
@@ -348,6 +371,15 @@ class ItemLogger:
             f.write(f"Status: {'SUCCESS' if success else 'FAILURE'}\n")
             f.write(f"Agent requests: {request_count}\n")
             f.write("=" * 80 + "\n")
+
+        log_level = logging.INFO if success else logging.WARNING
+        self._py_logger.log(
+            log_level,
+            "Item %s completed: status=%s requests=%d",
+            self.item_id,
+            "SUCCESS" if success else "FAILURE",
+            request_count,
+        )
 
     def close(self) -> None:
         """Close the item logger."""

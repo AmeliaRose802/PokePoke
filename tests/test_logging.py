@@ -1,10 +1,14 @@
 """Tests for logging utilities."""
 
+import json
 import logging
 from pathlib import Path
 import tempfile
 import time
-from pokepoke.logging_utils import RunLogger, ItemLogger, configure_logging
+from pokepoke.logging_utils import (
+    RunLogger, ItemLogger, configure_logging,
+    WorkItemFilter, JsonFormatter,
+)
 
 
 def test_configure_logging_creates_debug_log(tmp_path):
@@ -736,3 +740,415 @@ def test_run_logger_picks_up_thread_local_repo():
             assert "[ThreadRepo]" in content
         finally:
             set_current_repo_name(None)
+
+
+# ── WorkItemFilter tests ────────────────────────────────────────────
+
+
+def test_work_item_filter_injects_fields():
+    """WorkItemFilter should add work_item_id, repo_name, agent_type to records."""
+    from pokepoke.metrics_context import (
+        set_current_work_item_id,
+        set_current_repo_name,
+        set_current_agent_type,
+    )
+    set_current_work_item_id("PokePoke-abc1")
+    set_current_repo_name("MyRepo")
+    set_current_agent_type("work")
+
+    try:
+        filt = WorkItemFilter()
+        record = logging.LogRecord(
+            name="test", level=logging.INFO, pathname="", lineno=0,
+            msg="hello", args=(), exc_info=None,
+        )
+        result = filt.filter(record)
+
+        assert result is True
+        assert record.work_item_id == "PokePoke-abc1"  # type: ignore[attr-defined]
+        assert record.repo_name == "MyRepo"  # type: ignore[attr-defined]
+        assert record.agent_type == "work"  # type: ignore[attr-defined]
+    finally:
+        set_current_work_item_id(None)
+        set_current_repo_name(None)
+        set_current_agent_type(None)
+
+
+def test_work_item_filter_defaults_to_empty():
+    """WorkItemFilter should default to empty strings when context is unset."""
+    from pokepoke.metrics_context import (
+        set_current_work_item_id,
+        set_current_repo_name,
+        set_current_agent_type,
+    )
+    set_current_work_item_id(None)
+    set_current_repo_name(None)
+    set_current_agent_type(None)
+
+    filt = WorkItemFilter()
+    record = logging.LogRecord(
+        name="test", level=logging.INFO, pathname="", lineno=0,
+        msg="hello", args=(), exc_info=None,
+    )
+    filt.filter(record)
+
+    assert record.work_item_id == ""  # type: ignore[attr-defined]
+    assert record.repo_name == ""  # type: ignore[attr-defined]
+    assert record.agent_type == ""  # type: ignore[attr-defined]
+
+
+# ── JsonFormatter tests ─────────────────────────────────────────────
+
+
+def test_json_formatter_basic_output():
+    """JsonFormatter should produce valid JSON with required fields."""
+    formatter = JsonFormatter()
+    record = logging.LogRecord(
+        name="pokepoke.test", level=logging.WARNING, pathname="", lineno=0,
+        msg="test warning", args=(), exc_info=None,
+    )
+    output = formatter.format(record)
+    data = json.loads(output)
+
+    assert data["level"] == "WARNING"
+    assert data["logger"] == "pokepoke.test"
+    assert data["message"] == "test warning"
+    assert "timestamp" in data
+
+
+def test_json_formatter_includes_work_item_id():
+    """JsonFormatter should include work_item_id when present on record."""
+    formatter = JsonFormatter()
+    record = logging.LogRecord(
+        name="pokepoke.test", level=logging.INFO, pathname="", lineno=0,
+        msg="processing", args=(), exc_info=None,
+    )
+    record.work_item_id = "PokePoke-xyz9"  # type: ignore[attr-defined]
+    record.repo_name = ""  # type: ignore[attr-defined]
+    record.agent_type = ""  # type: ignore[attr-defined]
+
+    output = formatter.format(record)
+    data = json.loads(output)
+
+    assert data["work_item_id"] == "PokePoke-xyz9"
+    assert "repo_name" not in data
+    assert "agent_type" not in data
+
+
+def test_json_formatter_includes_all_context():
+    """JsonFormatter should include all context fields when present."""
+    formatter = JsonFormatter()
+    record = logging.LogRecord(
+        name="pokepoke.test", level=logging.INFO, pathname="", lineno=0,
+        msg="full context", args=(), exc_info=None,
+    )
+    record.work_item_id = "item-1"  # type: ignore[attr-defined]
+    record.repo_name = "PokePoke"  # type: ignore[attr-defined]
+    record.agent_type = "gate"  # type: ignore[attr-defined]
+
+    output = formatter.format(record)
+    data = json.loads(output)
+
+    assert data["work_item_id"] == "item-1"
+    assert data["repo_name"] == "PokePoke"
+    assert data["agent_type"] == "gate"
+
+
+def test_json_formatter_omits_empty_context():
+    """JsonFormatter should omit context fields when empty."""
+    formatter = JsonFormatter()
+    record = logging.LogRecord(
+        name="test", level=logging.DEBUG, pathname="", lineno=0,
+        msg="no context", args=(), exc_info=None,
+    )
+    record.work_item_id = ""  # type: ignore[attr-defined]
+    record.repo_name = ""  # type: ignore[attr-defined]
+    record.agent_type = ""  # type: ignore[attr-defined]
+
+    output = formatter.format(record)
+    data = json.loads(output)
+
+    assert "work_item_id" not in data
+    assert "repo_name" not in data
+    assert "agent_type" not in data
+
+
+def test_json_formatter_includes_exception():
+    """JsonFormatter should include exception info when present."""
+    formatter = JsonFormatter()
+    try:
+        raise ValueError("test error")
+    except ValueError:
+        import sys
+        record = logging.LogRecord(
+            name="test", level=logging.ERROR, pathname="", lineno=0,
+            msg="error occurred", args=(), exc_info=sys.exc_info(),
+        )
+
+    output = formatter.format(record)
+    data = json.loads(output)
+
+    assert "exception" in data
+    assert "ValueError" in data["exception"]
+    assert "test error" in data["exception"]
+
+
+# ── configure_logging with new features ─────────────────────────────
+
+
+def test_configure_logging_attaches_work_item_filter(tmp_path):
+    """configure_logging should attach WorkItemFilter to root handlers."""
+    log_file = tmp_path / "debug.log"
+
+    root = logging.getLogger()
+    original_handlers = root.handlers[:]
+    original_filters = root.filters[:]
+    root.handlers.clear()
+    root.filters.clear()
+
+    pokepoke_logger = logging.getLogger("pokepoke")
+    original_pp_handlers = pokepoke_logger.handlers[:]
+    pokepoke_logger.handlers.clear()
+
+    try:
+        configure_logging(log_file)
+
+        for handler in root.handlers:
+            assert any(isinstance(f, WorkItemFilter) for f in handler.filters), \
+                f"Handler {handler} should have WorkItemFilter"
+    finally:
+        root.handlers = original_handlers
+        root.filters = original_filters
+        pokepoke_logger.handlers = original_pp_handlers
+
+
+def test_configure_logging_no_duplicate_filters(tmp_path):
+    """Calling configure_logging twice should not add duplicate WorkItemFilters."""
+    log_file = tmp_path / "debug.log"
+
+    root = logging.getLogger()
+    original_handlers = root.handlers[:]
+    original_filters = root.filters[:]
+    root.handlers.clear()
+    root.filters.clear()
+
+    pokepoke_logger = logging.getLogger("pokepoke")
+    original_pp_handlers = pokepoke_logger.handlers[:]
+    pokepoke_logger.handlers.clear()
+
+    try:
+        configure_logging(log_file)
+        configure_logging(log_file)
+
+        for handler in root.handlers:
+            filter_count = sum(1 for f in handler.filters if isinstance(f, WorkItemFilter))
+            assert filter_count == 1, f"Handler {handler} should have exactly one WorkItemFilter"
+    finally:
+        root.handlers = original_handlers
+        root.filters = original_filters
+        pokepoke_logger.handlers = original_pp_handlers
+
+
+def test_configure_logging_json_output(tmp_path):
+    """configure_logging with json_output=True should use JsonFormatter."""
+    log_file = tmp_path / "debug.log"
+
+    root = logging.getLogger()
+    original_handlers = root.handlers[:]
+    original_filters = root.filters[:]
+    root.handlers.clear()
+    root.filters.clear()
+
+    pokepoke_logger = logging.getLogger("pokepoke")
+    original_pp_handlers = pokepoke_logger.handlers[:]
+    pokepoke_logger.handlers.clear()
+
+    try:
+        configure_logging(log_file, json_output=True)
+
+        file_handlers = [h for h in root.handlers if isinstance(h, logging.FileHandler)]
+        assert len(file_handlers) >= 1
+        assert isinstance(file_handlers[0].formatter, JsonFormatter), \
+            "File handler should use JsonFormatter"
+    finally:
+        root.handlers = original_handlers
+        root.filters = original_filters
+        pokepoke_logger.handlers = original_pp_handlers
+
+
+def test_configure_logging_json_output_writes_valid_json(tmp_path):
+    """JSON output mode should write valid JSON lines to the log file."""
+    from pokepoke.metrics_context import set_current_work_item_id
+    log_file = tmp_path / "debug.log"
+
+    root = logging.getLogger()
+    original_handlers = root.handlers[:]
+    original_filters = root.filters[:]
+    root.handlers.clear()
+    root.filters.clear()
+
+    pokepoke_logger = logging.getLogger("pokepoke")
+    original_pp_handlers = pokepoke_logger.handlers[:]
+    pokepoke_logger.handlers.clear()
+
+    set_current_work_item_id("json-test-item")
+    try:
+        configure_logging(log_file, json_output=True)
+
+        test_logger = logging.getLogger("pokepoke.json_test")
+        test_logger.info("json log message")
+
+        # Flush handlers
+        for h in root.handlers:
+            h.flush()
+
+        with open(log_file, encoding="utf-8") as f:
+            content = f.read().strip()
+
+        assert content, "Log file should not be empty"
+        data = json.loads(content)
+        assert data["message"] == "json log message"
+        assert data["work_item_id"] == "json-test-item"
+    finally:
+        root.handlers = original_handlers
+        root.filters = original_filters
+        pokepoke_logger.handlers = original_pp_handlers
+        set_current_work_item_id(None)
+
+
+# ── RunLogger Python logging bridge tests ───────────────────────────
+
+
+def test_run_logger_bridges_to_python_logging():
+    """RunLogger.log_orchestrator should also emit via Python logging."""
+    captured: list[logging.LogRecord] = []
+
+    class CaptureHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            captured.append(record)
+
+    py_logger = logging.getLogger("pokepoke.orchestrator")
+    handler = CaptureHandler()
+    py_logger.addHandler(handler)
+    original_level = py_logger.level
+    py_logger.setLevel(logging.DEBUG)
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_logger = RunLogger(base_dir=tmpdir)
+            run_logger.log_orchestrator("bridge test message")
+
+        assert any("bridge test message" in r.getMessage() for r in captured)
+    finally:
+        py_logger.removeHandler(handler)
+        py_logger.setLevel(original_level)
+
+
+def test_run_logger_bridge_respects_level():
+    """RunLogger bridge should map string level to Python logging level."""
+    captured: list[logging.LogRecord] = []
+
+    class CaptureHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            captured.append(record)
+
+    py_logger = logging.getLogger("pokepoke.orchestrator")
+    handler = CaptureHandler()
+    py_logger.addHandler(handler)
+    original_level = py_logger.level
+    py_logger.setLevel(logging.DEBUG)
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_logger = RunLogger(base_dir=tmpdir)
+            run_logger.log_orchestrator("warning msg", level="WARNING")
+
+        warning_records = [r for r in captured if r.levelno == logging.WARNING]
+        assert any("warning msg" in r.getMessage() for r in warning_records)
+    finally:
+        py_logger.removeHandler(handler)
+        py_logger.setLevel(original_level)
+
+
+# ── ItemLogger Python logging bridge tests ──────────────────────────
+
+
+def test_item_logger_error_bridges_to_python_logging():
+    """ItemLogger.log_error should emit via Python logging."""
+    captured: list[logging.LogRecord] = []
+
+    class CaptureHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            captured.append(record)
+
+    py_logger = logging.getLogger("pokepoke.item.test-item-42")
+    handler = CaptureHandler()
+    py_logger.addHandler(handler)
+    original_level = py_logger.level
+    py_logger.setLevel(logging.DEBUG)
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logs_dir = Path(tmpdir)
+            item_logger = ItemLogger(logs_dir, "test-item-42", "Test Item")
+            item_logger.log_error("something broke")
+
+        error_records = [r for r in captured if r.levelno == logging.ERROR]
+        assert any("something broke" in r.getMessage() for r in error_records)
+    finally:
+        py_logger.removeHandler(handler)
+        py_logger.setLevel(original_level)
+
+
+def test_item_logger_summary_bridges_to_python_logging():
+    """ItemLogger.log_summary should emit via Python logging."""
+    captured: list[logging.LogRecord] = []
+
+    class CaptureHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            captured.append(record)
+
+    py_logger = logging.getLogger("pokepoke.item.test-summary-1")
+    handler = CaptureHandler()
+    py_logger.addHandler(handler)
+    original_level = py_logger.level
+    py_logger.setLevel(logging.DEBUG)
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logs_dir = Path(tmpdir)
+            item_logger = ItemLogger(logs_dir, "test-summary-1", "Summary Test")
+            item_logger.log_summary(success=True, request_count=7)
+
+        info_records = [r for r in captured if r.levelno == logging.INFO]
+        assert any("SUCCESS" in r.getMessage() for r in info_records)
+        assert any("7" in r.getMessage() for r in info_records)
+    finally:
+        py_logger.removeHandler(handler)
+        py_logger.setLevel(original_level)
+
+
+def test_item_logger_tool_call_bridges_to_python_logging():
+    """ItemLogger.log_tool_call should emit via Python logging."""
+    captured: list[logging.LogRecord] = []
+
+    class CaptureHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            captured.append(record)
+
+    py_logger = logging.getLogger("pokepoke.item.test-tool-bridge")
+    handler = CaptureHandler()
+    py_logger.addHandler(handler)
+    original_level = py_logger.level
+    py_logger.setLevel(logging.DEBUG)
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logs_dir = Path(tmpdir)
+            item_logger = ItemLogger(logs_dir, "test-tool-bridge", "Tool Bridge")
+            item_logger.log_tool_call("grep", "pattern=TODO", result="found 3", success=True)
+
+        assert any("grep" in r.getMessage() for r in captured)
+    finally:
+        py_logger.removeHandler(handler)
+        py_logger.setLevel(original_level)

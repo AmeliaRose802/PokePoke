@@ -1,4 +1,4 @@
-"""Thread-local context for attributing metrics to an agent type and repo."""
+"""Thread-local context for attributing metrics to an agent type, repo, and work item."""
 
 from __future__ import annotations
 
@@ -35,6 +35,19 @@ def set_current_repo_name(repo_name: str | None) -> None:
     _thread_local.repo_name = repo_name
 
 
+def get_current_work_item_id(default: str = "") -> str:
+    """Return the work-item ID set on the current thread, or *default*."""
+    val = getattr(_thread_local, "work_item_id", None)
+    if isinstance(val, str) and val:
+        return val
+    return default
+
+
+def set_current_work_item_id(work_item_id: str | None) -> None:
+    """Set the work-item ID for the current thread."""
+    _thread_local.work_item_id = work_item_id
+
+
 @contextmanager
 def repo_context(repo_name: str) -> Iterator[None]:
     """Context manager that sets the current repo name for the duration."""
@@ -44,6 +57,17 @@ def repo_context(repo_name: str) -> Iterator[None]:
         yield
     finally:
         _thread_local.repo_name = prev
+
+
+@contextmanager
+def work_item_context(work_item_id: str) -> Iterator[None]:
+    """Context manager that sets the current work-item ID for the duration."""
+    prev = getattr(_thread_local, "work_item_id", None)
+    _thread_local.work_item_id = work_item_id
+    try:
+        yield
+    finally:
+        _thread_local.work_item_id = prev
 
 
 @contextmanager
