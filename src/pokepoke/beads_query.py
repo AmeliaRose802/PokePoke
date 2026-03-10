@@ -154,33 +154,46 @@ def get_issue_dependencies(issue_id: str) -> IssueWithDependencies | None:
         result = _run_bd(['show', issue_id, '--json'])
     except subprocess.CalledProcessError:
         return None
+    except subprocess.TimeoutExpired:
+        logger.warning("Timed out querying dependencies for %s", issue_id)
+        return None
+    except Exception as e:
+        logger.warning("Unexpected error querying dependencies for %s: %s", issue_id, e)
+        return None
 
     if not result.stdout:
         return None
 
-    issues_data = _parse_beads_json(result.stdout)
-    if not issues_data:
+    try:
+        issues_data = _parse_beads_json(result.stdout)
+        if not issues_data:
+            return None
+
+        if not isinstance(issues_data, list) or len(issues_data) == 0:
+            return None
+
+        issue_dict = issues_data[0]
+
+        filtered_issue = {k: v for k, v in issue_dict.items()
+                          if k in {f.name for f in dataclasses.fields(IssueWithDependencies)}}
+
+        # Convert dependencies if present
+        if 'dependencies' in filtered_issue and filtered_issue['dependencies']:
+            filtered_issue['dependencies'] = [
+                _filter_to_dataclass(Dependency, dep)
+                for dep in filtered_issue['dependencies']
+            ]
+
+        if 'dependents' in filtered_issue and filtered_issue['dependents']:
+            filtered_issue['dependents'] = [
+                _filter_to_dataclass(Dependency, dep)
+                for dep in filtered_issue['dependents']
+            ]
+
+        return IssueWithDependencies(**filtered_issue)
+    except (json.JSONDecodeError, KeyError, TypeError, IndexError) as e:
+        logger.warning("Failed to parse issue dependencies for %s: %s", issue_id, e)
         return None
-
-    issue_dict = issues_data[0]
-
-    filtered_issue = {k: v for k, v in issue_dict.items()
-                      if k in {f.name for f in dataclasses.fields(IssueWithDependencies)}}
-
-    # Convert dependencies if present
-    if 'dependencies' in filtered_issue and filtered_issue['dependencies']:
-        filtered_issue['dependencies'] = [
-            _filter_to_dataclass(Dependency, dep)
-            for dep in filtered_issue['dependencies']
-        ]
-
-    if 'dependents' in filtered_issue and filtered_issue['dependents']:
-        filtered_issue['dependents'] = [
-            _filter_to_dataclass(Dependency, dep)
-            for dep in filtered_issue['dependents']
-        ]
-
-    return IssueWithDependencies(**filtered_issue)
 
 
 def has_unmet_blocking_dependencies(item_id: str) -> bool:
