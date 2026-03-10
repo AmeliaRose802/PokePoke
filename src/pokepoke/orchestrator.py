@@ -4,6 +4,7 @@ import contextlib
 import logging
 import os
 import time
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -334,6 +335,7 @@ def run_orchestrator(
     """Main orchestrator entry point (interactive or autonomous)."""
     # UI is started by run_with_orchestrator - just update header
     terminal_ui.ui.update_header("PokePoke", f"Initializing {interactive and 'Interactive' or 'Autonomous'} Mode...")
+    ctx = None
     try:
         ctx = _setup_orchestrator(
             interactive, continuous, run_beta_first,
@@ -368,17 +370,17 @@ def run_orchestrator(
         request_shutdown()
         terminal_ui.ui.stop_and_capture()
         print("\n\n⚠️  Interrupted by user (Ctrl+C)")
-        print("📊 Collecting final statistics...")
-        print("\n👋 Exiting PokePoke.")
-        ctx.finalize()
+        print("📊 Collecting final statistics...\n👋 Exiting PokePoke.")
+        if ctx is not None:
+            ctx.finalize()
         return 0
     except Exception as e:
         terminal_ui.ui.stop_and_capture()
         print(f"\n❌ Error: {e}")
-        import traceback
         traceback.print_exc()
-        ctx.run_logger.log_orchestrator(f"Error: {e}", level="ERROR")
-        ctx.finalize()
+        if ctx is not None:
+            ctx.run_logger.log_orchestrator(f"Error: {e}", level="ERROR")
+            ctx.finalize()
         return 1
     finally:
         terminal_ui.ui.stop()
@@ -391,7 +393,6 @@ def run_orchestrator(
             logger.debug(f"Failed to shutdown merge queue during cleanup: {e}")
         with contextlib.suppress(Exception):
             unregister_shutdown_handlers()
-
 
 if __name__ == "__main__":
     import sys
