@@ -99,10 +99,14 @@ class DesktopAPI:
 
     # Stats serialization — delegated to desktop_api_stats
     (_snapshot_to_dict, _serialize_live_stats, _get_cached_leaderboard,
-     get_model_leaderboard, get_model_history, push_stats, get_repo_summary) = (
+     get_model_leaderboard, get_model_history, push_stats, get_repo_summary,
+     get_lock_contention_stats, get_merge_queue_stats, get_operation_timings,
+     get_performance_metrics) = (
         staticmethod(_stats.snapshot_to_dict), _stats.serialize_live_stats,
         _stats.get_cached_leaderboard, _stats.get_model_leaderboard,
-        _stats.get_model_history, _stats.push_stats, _stats.get_repo_summary)
+        _stats.get_model_history, _stats.push_stats, _stats.get_repo_summary,
+        _stats.get_lock_contention_stats, _stats.get_merge_queue_stats,
+        _stats.get_operation_timings, _stats.get_performance_metrics)
 
     def get_state(self) -> dict[str, Any]:
         """State snapshot + new log entries since last poll (single IPC call)."""
@@ -151,12 +155,10 @@ class DesktopAPI:
     def get_repository_name(self) -> str:
         """Get the repository name."""
         return self._repository_name
-
     def get_stats(self) -> dict[str, Any] | None:
         """Get the current session stats."""
         with self._lock:
             return self._serialize_live_stats()
-
     get_config, save_config = _ext.get_config, _ext.save_config
 
     # ─── Python → State: Called by the orchestrator ───────────────────
@@ -330,7 +332,6 @@ class DesktopAPI:
     def is_agent_paused(self, agent_id: str) -> bool:
         """Check if an agent is paused."""
         return self._agent_registry.is_paused(agent_id)
-
     def request_stop_after_current(self) -> dict[str, bool]:
         """Request orchestrator stop after the current item completes."""
         _request_stop_after_current()
