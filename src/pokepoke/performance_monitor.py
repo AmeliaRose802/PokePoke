@@ -8,11 +8,12 @@ so the orchestrator can surface persistent degradation.
 from __future__ import annotations
 
 import logging
-import os
 import threading
 import time
 from dataclasses import dataclass
 from typing import Any
+
+from pokepoke.process_utils import get_available_memory_mb
 
 logger = logging.getLogger(__name__)
 
@@ -112,22 +113,20 @@ class PerformanceMonitor:
         return None
 
     def check_memory(self) -> PerformanceAlert | None:
-        """Check whether process RSS is below the minimum threshold."""
+        """Check whether available system memory is below the minimum threshold."""
         if not self._enabled:
             return None
-        try:
-            import psutil  # type: ignore[import-untyped]
-            rss_mb = psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
-        except Exception:
-            # psutil not available or failed — skip silently
+        available_mb = get_available_memory_mb()
+        if available_mb <= 0:
             return None
-        if rss_mb < self._min_memory_mb:
+        if available_mb < self._min_memory_mb:
             alert = PerformanceAlert(
                 category="memory",
                 message=(
-                    f"Process memory {rss_mb:.0f} MB below threshold {self._min_memory_mb:.0f} MB"
+                    f"Available memory {available_mb} MB below "
+                    f"threshold {self._min_memory_mb:.0f} MB"
                 ),
-                value=rss_mb,
+                value=float(available_mb),
                 threshold=self._min_memory_mb,
                 timestamp=time.time(),
             )
@@ -198,7 +197,7 @@ class PerformanceMonitor:
             if alert:
                 alerts.append(alert)
 
-        # Memory check (best-effort, psutil may not be installed)
+        # Memory check (uses system available memory via process_utils)
         alert = self.check_memory()
         if alert:
             alerts.append(alert)

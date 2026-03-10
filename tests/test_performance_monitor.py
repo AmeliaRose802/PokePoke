@@ -92,27 +92,38 @@ class TestPerformanceMonitorIteration:
 class TestPerformanceMonitorMemory:
     """Tests for memory threshold checking."""
 
-    def test_returns_none_without_psutil(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        mon = PerformanceMonitor(min_memory_mb=99999999.0)
-        # Force import failure
-        import builtins
-        real_import = builtins.__import__
-
-        def fake_import(name: str, *args, **kwargs):  # type: ignore[no-untyped-def]
-            if name == "psutil":
-                raise ImportError("no psutil")
-            return real_import(name, *args, **kwargs)
-
-        monkeypatch.setattr(builtins, "__import__", fake_import)
+    def test_returns_none_when_memory_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        mon = PerformanceMonitor(min_memory_mb=256.0)
+        monkeypatch.setattr(
+            "pokepoke.performance_monitor.get_available_memory_mb", lambda: 0,
+        )
         assert mon.check_memory() is None
 
-    def test_no_alert_with_enough_memory(self) -> None:
-        # Use a very low threshold that any running process will exceed
-        mon = PerformanceMonitor(min_memory_mb=1.0)
-        result = mon.check_memory()
-        # Either psutil is installed and memory > 1 MB (None), or
-        # psutil is missing and check_memory returns None. Both are OK.
-        assert result is None
+    def test_no_alert_with_enough_memory(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        mon = PerformanceMonitor(min_memory_mb=256.0)
+        monkeypatch.setattr(
+            "pokepoke.performance_monitor.get_available_memory_mb", lambda: 4096,
+        )
+        assert mon.check_memory() is None
+
+    def test_alert_when_memory_low(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        mon = PerformanceMonitor(min_memory_mb=512.0)
+        monkeypatch.setattr(
+            "pokepoke.performance_monitor.get_available_memory_mb", lambda: 200,
+        )
+        alert = mon.check_memory()
+        assert alert is not None
+        assert alert.category == "memory"
+        assert alert.value == 200.0
+        assert alert.threshold == 512.0
+
+    def test_alert_at_boundary(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        mon = PerformanceMonitor(min_memory_mb=256.0)
+        monkeypatch.setattr(
+            "pokepoke.performance_monitor.get_available_memory_mb", lambda: 256,
+        )
+        # Exactly at threshold — no alert (only below fires)
+        assert mon.check_memory() is None
 
     def test_disabled_returns_none(self) -> None:
         mon = PerformanceMonitor(min_memory_mb=99999999.0, enabled=False)
