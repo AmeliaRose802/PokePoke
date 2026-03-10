@@ -4,6 +4,7 @@ import contextlib
 import logging
 import os
 import time
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -369,15 +370,13 @@ def run_orchestrator(
         request_shutdown()
         terminal_ui.ui.stop_and_capture()
         print("\n\n⚠️  Interrupted by user (Ctrl+C)")
-        print("📊 Collecting final statistics...")
-        print("\n👋 Exiting PokePoke.")
+        print("📊 Collecting final statistics...\n👋 Exiting PokePoke.")
         if ctx is not None:
             ctx.finalize()
         return 0
     except Exception as e:
         terminal_ui.ui.stop_and_capture()
         print(f"\n❌ Error: {e}")
-        import traceback
         traceback.print_exc()
         if ctx is not None:
             ctx.run_logger.log_orchestrator(f"Error: {e}", level="ERROR")
@@ -394,7 +393,6 @@ def run_orchestrator(
             logger.debug(f"Failed to shutdown merge queue during cleanup: {e}")
         with contextlib.suppress(Exception):
             unregister_shutdown_handlers()
-
 
 if __name__ == "__main__":
     import sys
