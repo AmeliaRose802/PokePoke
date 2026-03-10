@@ -23,6 +23,7 @@ import { StatsPage } from "./components/StatsPage";
 import { WorkItemHeader } from "./components/WorkItemHeader";
 import type { ModelHistoryEntry } from "./types";
 import { useBridge } from "./useBridge";
+import { useCollapsibleBanner } from "./useCollapsibleBanner";
 import { useDocumentTitle } from "./useDocumentTitle";
 import { useResizable } from "./useResizable";
 
@@ -37,6 +38,7 @@ function App() {
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [spawnAtLimit, setSpawnAtLimit] = useState(false);
   const { isDragging, containerRef, handleProps } = useResizable();
+  const { collapsed: bannerCollapsed, toggle: toggleBanner } = useCollapsibleBanner();
   const repositoryDisplayName = bridge.repositoryName.trim();
   const showRepositoryName = repositoryDisplayName.length > 0;
 
@@ -138,70 +140,122 @@ function App() {
     <div className="app">
       <SetupWizard bridge={bridge} />
 
-      {/* Title bar */}
-      <div className="app-header">
-        <div className="app-title-group">
-          <div className="app-title">
+      {/* Collapsible top banner */}
+      <div className={`top-banner${bannerCollapsed ? " top-banner--collapsed" : ""}`}>
+        {bannerCollapsed ? (
+          /* Compact single-line summary when collapsed */
+          <div className="top-banner-compact">
             <span className="app-logo">🐍</span>
-            PokePoke
-          </div>
-          {showRepositoryName && (
-            <div className="app-repo-name" title={repositoryDisplayName}>
-              <span className="app-repo-icon" aria-hidden="true">
-                📁
+            <span className="top-banner-compact-title">PokePoke</span>
+            {bridge.workItem?.item_id && (
+              <>
+                <span className="separator">│</span>
+                <span className="top-banner-compact-item">
+                  {bridge.workItem.item_id}
+                </span>
+              </>
+            )}
+            {bridge.workItem?.title && (
+              <span className="top-banner-compact-item-title">
+                {bridge.workItem.title}
               </span>
-              <span className="app-repo-text">{repositoryDisplayName}</span>
+            )}
+            <div className="top-banner-compact-controls">
+              <ConnectionIndicator status={bridge.connectionStatus} />
+              <button
+                className="prompt-editor-toggle"
+                onClick={() => setShowSettings(true)}
+                title="Settings"
+              >
+                ⚙️
+              </button>
+              <button
+                className="banner-toggle-btn"
+                onClick={toggleBanner}
+                title="Expand banner"
+                aria-label="Expand banner"
+              >
+                ▼
+              </button>
             </div>
-          )}
-        </div>
-        <div className="app-header-controls">
-          <ConnectionIndicator status={bridge.connectionStatus} />
-          <LogsLocationBox logsDir={bridge.logsDir} />
-          <button
-            className={`finish-after-current-btn${bridge.stopAfterCurrent ? " stopping" : ""}`}
-            onClick={() =>
-              bridge.stopAfterCurrent
-                ? bridge.cancelStopAfterCurrent()
-                : bridge.requestStopAfterCurrent()
-            }
-            title={
-              bridge.stopAfterCurrent
-                ? "Cancel — continue processing items"
-                : "Finish after current item completes"
-            }
-          >
-            {bridge.stopAfterCurrent ? "⏸ Stopping…" : "⏸ Finish after current"}
-          </button>
-          <button
-            className="prompt-editor-toggle"
-            onClick={() => setShowStatsPage(true)}
-            title="Open stats"
-          >
-            📊
-          </button>
-          <button
-            className="prompt-editor-toggle"
-            onClick={() => setShowPrompts(true)}
-            title="Edit prompt templates"
-          >
-            ✏️
-          </button>
-          <button
-            className="prompt-editor-toggle"
-            onClick={() => setShowSettings(true)}
-            title="Settings"
-          >
-            ⚙️
-          </button>
-        </div>
-      </div>
+          </div>
+        ) : (
+          <>
+            {/* Title bar */}
+            <div className="app-header">
+              <div className="app-title-group">
+                <div className="app-title">
+                  <span className="app-logo">🐍</span>
+                  PokePoke
+                </div>
+                {showRepositoryName && (
+                  <div className="app-repo-name" title={repositoryDisplayName}>
+                    <span className="app-repo-icon" aria-hidden="true">
+                      📁
+                    </span>
+                    <span className="app-repo-text">{repositoryDisplayName}</span>
+                  </div>
+                )}
+              </div>
+              <div className="app-header-controls">
+                <ConnectionIndicator status={bridge.connectionStatus} />
+                <LogsLocationBox logsDir={bridge.logsDir} />
+                <button
+                  className={`finish-after-current-btn${bridge.stopAfterCurrent ? " stopping" : ""}`}
+                  onClick={() =>
+                    bridge.stopAfterCurrent
+                      ? bridge.cancelStopAfterCurrent()
+                      : bridge.requestStopAfterCurrent()
+                  }
+                  title={
+                    bridge.stopAfterCurrent
+                      ? "Cancel — continue processing items"
+                      : "Finish after current item completes"
+                  }
+                >
+                  {bridge.stopAfterCurrent ? "⏸ Stopping…" : "⏸ Finish after current"}
+                </button>
+                <button
+                  className="prompt-editor-toggle"
+                  onClick={() => setShowStatsPage(true)}
+                  title="Open stats"
+                >
+                  📊
+                </button>
+                <button
+                  className="prompt-editor-toggle"
+                  onClick={() => setShowPrompts(true)}
+                  title="Edit prompt templates"
+                >
+                  ✏️
+                </button>
+                <button
+                  className="prompt-editor-toggle"
+                  onClick={() => setShowSettings(true)}
+                  title="Settings"
+                >
+                  ⚙️
+                </button>
+                <button
+                  className="banner-toggle-btn"
+                  onClick={toggleBanner}
+                  title="Collapse banner"
+                  aria-label="Collapse banner"
+                >
+                  ▲
+                </button>
+              </div>
+            </div>
 
-      {/* Work item header */}
-      <WorkItemHeader
-        workItem={bridge.workItem}
-        agentName={bridge.agentName}
-        repositoryName={bridge.repositoryName}
-      />
+            {/* Work item header */}
+            <WorkItemHeader
+              workItem={bridge.workItem}
+              agentName={bridge.agentName}
+              repositoryName={bridge.repositoryName}
+            />
+          </>
+        )}
+      </div>
 
       {/* Main content area with logs and agents panel */}
       <div
