@@ -39,7 +39,7 @@ Use these values — do NOT guess high "to be safe". Over-estimating wastes pure
 | `npm test` (vitest) | **5** |
 | `npm install` | **60** |
 | `pytest` (unit tests only) | **10** |
-| `git commit` (triggers pre-commit) | **45** |
+| `git commit` (triggers pre-commit) | **600** |
 | Any other quick shell command | **3** |
 
 ### Testing workflow — tight loop only
