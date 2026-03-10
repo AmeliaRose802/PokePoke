@@ -87,8 +87,9 @@ def is_worktree_cleaned(item_id: str, worktree_path: Path | None) -> bool:
             try:
                 if Path(path_str).resolve() == expected_path:
                     return False
-            except Exception:
-                continue
+            except OSError as exc:
+                logger.warning("Failed to resolve worktree path %s: %s", path_str, exc)
+                return False
 
     return not expected_path.exists()
 
