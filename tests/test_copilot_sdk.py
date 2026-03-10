@@ -1510,3 +1510,405 @@ class TestBuildCopilotResult:
         )
         assert result.success is True
         assert result.output == ""
+
+
+@pytest.mark.asyncio
+class TestRateLimitFallback:
+    """Tests for RateLimitError fallback to FALLBACK_MODEL."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_process_cleanup(self):
+        with patch('pokepoke.process_utils.wait_for_process_cleanup'):
+            yield
+
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_rate_limit_triggers_fallback_to_fallback_model(
+        self, mock_client_class, sample_work_item
+    ):
+        """RateLimitError on first attempt retries with FALLBACK_MODEL."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.config import FALLBACK_MODEL
+
+        mock_client = AsyncMock()
+        mock_client.start = AsyncMock()
+        mock_client.stop = AsyncMock()
+
+        attempt_count = 0
+        sessions_created = []
+        configs_captured = []
+
+        async def mock_create_session(config):
+            nonlocal attempt_count
+            attempt_count += 1
+            configs_captured.append(dict(config))
+            mock_session = AsyncMock()
+            mock_session.session_id = f"session-attempt-{attempt_count}"
+            mock_session.destroy = AsyncMock()
+            sessions_created.append(mock_session)
+
+            stored_handler = None
+            def mock_on(handler):
+                nonlocal stored_handler
+                stored_handler = handler
+            mock_session.on = mock_on
+
+            async def mock_send(message):
+                async def send_events():
+                    await asyncio.sleep(0.01)
+                    if stored_handler:
+                        if attempt_count == 1:
+                            # First attempt: rate limit error
+                            event = MagicMock()
+                            event.type.value = "session.error"
+                            event.data = MagicMock(
+                                message="rate limit exceeded"
+                            )
+                            stored_handler(event)
+                        else:
+                            # Second attempt: success
+                            event = MagicMock()
+                            event.type.value = "assistant.message_delta"
+                            event.data = MagicMock(delta_content="Fallback OK")
+                            stored_handler(event)
+                            event = MagicMock()
+                            event.type.value = "session.end"
+                            event.data = MagicMock()
+                            stored_handler(event)
+                asyncio.create_task(send_events())
+
+            mock_session.send = mock_send
+            return mock_session
+
+        mock_client.create_session = mock_create_session
+        mock_client_class.return_value = mock_client
+
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item,
+            prompt="Test prompt",
+            idle_timeout=0.01,
+        )
+
+        assert result.success
+        assert "Fallback OK" in result.output
+        assert attempt_count == 2
+        assert configs_captured[0]["model"] != FALLBACK_MODEL
+        assert configs_captured[1]["model"] == FALLBACK_MODEL
+        # First session should have been destroyed before fallback
+        sessions_created[0].destroy.assert_called()
+
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_rate_limit_fallback_model_set_in_result(
+        self, mock_client_class, sample_work_item
+    ):
+        """After fallback, result.model should be FALLBACK_MODEL."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.config import FALLBACK_MODEL
+
+        mock_client = AsyncMock()
+        mock_client.start = AsyncMock()
+        mock_client.stop = AsyncMock()
+
+        attempt_count = 0
+
+        async def mock_create_session(config):
+            nonlocal attempt_count
+            attempt_count += 1
+            mock_session = AsyncMock()
+            mock_session.session_id = f"session-{attempt_count}"
+            mock_session.destroy = AsyncMock()
+
+            stored_handler = None
+            def mock_on(handler):
+                nonlocal stored_handler
+                stored_handler = handler
+            mock_session.on = mock_on
+
+            async def mock_send(message):
+                async def send_events():
+                    await asyncio.sleep(0.01)
+                    if stored_handler:
+                        if attempt_count == 1:
+                            event = MagicMock()
+                            event.type.value = "session.error"
+                            event.data = MagicMock(
+                                message="rate limit hit"
+                            )
+                            stored_handler(event)
+                        else:
+                            event = MagicMock()
+                            event.type.value = "session.end"
+                            event.data = MagicMock()
+                            stored_handler(event)
+                asyncio.create_task(send_events())
+
+            mock_session.send = mock_send
+            return mock_session
+
+        mock_client.create_session = mock_create_session
+        mock_client_class.return_value = mock_client
+
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item,
+            prompt="Test prompt",
+            idle_timeout=0.01,
+        )
+
+        assert result.success
+        assert result.model == FALLBACK_MODEL
+
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_rate_limit_handler_reset_for_retry(
+        self, mock_client_class, sample_work_item
+    ):
+        """Handler state (output, errors) is reset between fallback attempts."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+
+        mock_client = AsyncMock()
+        mock_client.start = AsyncMock()
+        mock_client.stop = AsyncMock()
+
+        attempt_count = 0
+
+        async def mock_create_session(config):
+            nonlocal attempt_count
+            attempt_count += 1
+            mock_session = AsyncMock()
+            mock_session.session_id = f"session-{attempt_count}"
+            mock_session.destroy = AsyncMock()
+
+            stored_handler = None
+            def mock_on(handler):
+                nonlocal stored_handler
+                stored_handler = handler
+            mock_session.on = mock_on
+
+            async def mock_send(message):
+                async def send_events():
+                    await asyncio.sleep(0.01)
+                    if stored_handler:
+                        if attempt_count == 1:
+                            # Emit some output, then rate limit
+                            event = MagicMock()
+                            event.type.value = "assistant.message_delta"
+                            event.data = MagicMock(
+                                delta_content="partial before rate limit"
+                            )
+                            stored_handler(event)
+                            event = MagicMock()
+                            event.type.value = "session.error"
+                            event.data = MagicMock(
+                                message="rate limit exceeded"
+                            )
+                            stored_handler(event)
+                        else:
+                            event = MagicMock()
+                            event.type.value = "assistant.message_delta"
+                            event.data = MagicMock(
+                                delta_content="clean fallback output"
+                            )
+                            stored_handler(event)
+                            event = MagicMock()
+                            event.type.value = "session.end"
+                            event.data = MagicMock()
+                            stored_handler(event)
+                asyncio.create_task(send_events())
+
+            mock_session.send = mock_send
+            return mock_session
+
+        mock_client.create_session = mock_create_session
+        mock_client_class.return_value = mock_client
+
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item,
+            prompt="Test prompt",
+            idle_timeout=0.01,
+        )
+
+        assert result.success
+        # Output should only contain fallback attempt content (cleared on retry)
+        assert "partial before rate limit" not in result.output
+        assert "clean fallback output" in result.output
+
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_rate_limit_on_fallback_model_breaks_with_error(
+        self, mock_client_class, sample_work_item
+    ):
+        """Rate limit on FALLBACK_MODEL itself should not retry — breaks with error."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.config import FALLBACK_MODEL
+
+        mock_client = AsyncMock()
+        mock_client.start = AsyncMock()
+        mock_client.stop = AsyncMock()
+
+        attempt_count = 0
+
+        async def mock_create_session(config):
+            nonlocal attempt_count
+            attempt_count += 1
+            mock_session = AsyncMock()
+            mock_session.session_id = f"session-{attempt_count}"
+            mock_session.destroy = AsyncMock()
+
+            stored_handler = None
+            def mock_on(handler):
+                nonlocal stored_handler
+                stored_handler = handler
+            mock_session.on = mock_on
+
+            async def mock_send(message):
+                async def send_events():
+                    await asyncio.sleep(0.01)
+                    if stored_handler:
+                        event = MagicMock()
+                        event.type.value = "session.error"
+                        event.data = MagicMock(
+                            message="rate limit exceeded"
+                        )
+                        stored_handler(event)
+                asyncio.create_task(send_events())
+
+            mock_session.send = mock_send
+            return mock_session
+
+        mock_client.create_session = mock_create_session
+        mock_client_class.return_value = mock_client
+
+        # Start with FALLBACK_MODEL directly — no further fallback possible
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item,
+            prompt="Test prompt",
+            model=FALLBACK_MODEL,
+            idle_timeout=0.01,
+        )
+
+        assert not result.success
+        assert "Rate limit exceeded" in result.error
+        # Should NOT have retried — only 1 session created
+        assert attempt_count == 1
+
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_rate_limit_session_destroy_failure_still_falls_back(
+        self, mock_client_class, sample_work_item
+    ):
+        """Fallback proceeds even if session.destroy() fails during cleanup."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.config import FALLBACK_MODEL
+
+        mock_client = AsyncMock()
+        mock_client.start = AsyncMock()
+        mock_client.stop = AsyncMock()
+
+        attempt_count = 0
+
+        async def mock_create_session(config):
+            nonlocal attempt_count
+            attempt_count += 1
+            mock_session = AsyncMock()
+            mock_session.session_id = f"session-{attempt_count}"
+
+            if attempt_count == 1:
+                # First session: destroy raises
+                mock_session.destroy = AsyncMock(
+                    side_effect=RuntimeError("destroy failed")
+                )
+            else:
+                mock_session.destroy = AsyncMock()
+
+            stored_handler = None
+            def mock_on(handler):
+                nonlocal stored_handler
+                stored_handler = handler
+            mock_session.on = mock_on
+
+            async def mock_send(message):
+                async def send_events():
+                    await asyncio.sleep(0.01)
+                    if stored_handler:
+                        if attempt_count == 1:
+                            event = MagicMock()
+                            event.type.value = "session.error"
+                            event.data = MagicMock(
+                                message="rate limit exceeded"
+                            )
+                            stored_handler(event)
+                        else:
+                            event = MagicMock()
+                            event.type.value = "session.end"
+                            event.data = MagicMock()
+                            stored_handler(event)
+                asyncio.create_task(send_events())
+
+            mock_session.send = mock_send
+            return mock_session
+
+        mock_client.create_session = mock_create_session
+        mock_client_class.return_value = mock_client
+
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item,
+            prompt="Test prompt",
+            idle_timeout=0.01,
+        )
+
+        # Fallback succeeds despite destroy() failure on first session
+        assert result.success
+        assert attempt_count == 2
+        assert result.model == FALLBACK_MODEL
+
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_rate_limit_both_attempts_exhausted(
+        self, mock_client_class, sample_work_item
+    ):
+        """Rate limit on both attempts results in failure, not infinite loop."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+
+        mock_client = AsyncMock()
+        mock_client.start = AsyncMock()
+        mock_client.stop = AsyncMock()
+
+        attempt_count = 0
+
+        async def mock_create_session(config):
+            nonlocal attempt_count
+            attempt_count += 1
+            mock_session = AsyncMock()
+            mock_session.session_id = f"session-{attempt_count}"
+            mock_session.destroy = AsyncMock()
+
+            stored_handler = None
+            def mock_on(handler):
+                nonlocal stored_handler
+                stored_handler = handler
+            mock_session.on = mock_on
+
+            async def mock_send(message):
+                async def send_events():
+                    await asyncio.sleep(0.01)
+                    if stored_handler:
+                        # Both attempts hit rate limit
+                        event = MagicMock()
+                        event.type.value = "session.error"
+                        event.data = MagicMock(
+                            message="rate limit exceeded"
+                        )
+                        stored_handler(event)
+                asyncio.create_task(send_events())
+
+            mock_session.send = mock_send
+            return mock_session
+
+        mock_client.create_session = mock_create_session
+        mock_client_class.return_value = mock_client
+
+        result = await invoke_copilot_sdk(
+            work_item=sample_work_item,
+            prompt="Test prompt",
+            idle_timeout=0.01,
+        )
+
+        assert not result.success
+        assert "Rate limit exceeded" in result.error
+        # Exactly 2 attempts: original + one fallback (no infinite loop)
+        assert attempt_count == 2
