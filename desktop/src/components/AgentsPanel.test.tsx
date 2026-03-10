@@ -752,5 +752,146 @@ describe('AgentsPanel', () => {
       expect(allCards[1].classList.contains('agent-card-child')).toBe(true);
       expect(allCards[2].classList.contains('agent-card-child')).toBe(true);
     });
+
+    it('shows "Attempt N" labels for agents in a retry cycle', () => {
+      const mainAgent = mkAgent({
+        agent_id: 'work-item-789',
+        card_id: 'work-item-789::v1',
+        name: 'pokepoke',
+        iteration: 1,
+        status: 'failed',
+        work_item_id: 'PokePoke-789',
+      });
+      const retryAgent = mkAgent({
+        agent_id: 'work-item-789-retry-2',
+        card_id: 'work-item-789-retry-2::v2',
+        name: 'pokepoke',
+        iteration: 2,
+        status: 'running',
+        parent_card_id: 'work-item-789::v1',
+        work_item_id: 'PokePoke-789',
+      });
+
+      render(
+        <AgentsPanel
+          agents={[mainAgent, retryAgent]}
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText('Attempt 1')).toBeInTheDocument();
+      expect(screen.getByText('Attempt 2')).toBeInTheDocument();
+    });
+
+    it('shows retry separator between retry attempts', () => {
+      const mainAgent = mkAgent({
+        agent_id: 'work-item-sep',
+        card_id: 'work-item-sep::v1',
+        name: 'pokepoke',
+        iteration: 1,
+        status: 'failed',
+      });
+      const retryAgent = mkAgent({
+        agent_id: 'work-item-sep-retry-2',
+        card_id: 'work-item-sep-retry-2::v2',
+        name: 'pokepoke',
+        iteration: 2,
+        status: 'running',
+        parent_card_id: 'work-item-sep::v1',
+      });
+
+      const { container } = render(
+        <AgentsPanel
+          agents={[mainAgent, retryAgent]}
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+
+      const separator = container.querySelector('.agent-retry-separator');
+      expect(separator).not.toBeNull();
+      expect(separator?.textContent).toContain('Retried with feedback');
+    });
+
+    it('shows final gate outcome on root card from latest retry gate', () => {
+      const mainAgent = mkAgent({
+        agent_id: 'work-item-final',
+        card_id: 'work-item-final::v1',
+        name: 'pokepoke',
+        iteration: 1,
+        status: 'failed',
+      });
+      // Gate for main agent - failed
+      const mainGate = mkAgent({
+        agent_id: 'work-item-final-gate',
+        card_id: 'work-item-final-gate::v1',
+        name: 'Gate',
+        iteration: 1,
+        status: 'failed',
+        parent_card_id: 'work-item-final::v1',
+        started_at: 1000,
+      });
+      // Retry agent
+      const retryAgent = mkAgent({
+        agent_id: 'work-item-final-retry-2',
+        card_id: 'work-item-final-retry-2::v2',
+        name: 'pokepoke',
+        iteration: 2,
+        status: 'success',
+        parent_card_id: 'work-item-final::v1',
+        started_at: 2000,
+      });
+      // Gate for retry - passed
+      const retryGate = mkAgent({
+        agent_id: 'work-item-final-retry-2-gate',
+        card_id: 'work-item-final-retry-2-gate::v2',
+        name: 'Gate',
+        iteration: 2,
+        status: 'success',
+        parent_card_id: 'work-item-final-retry-2::v2',
+        started_at: 3000,
+      });
+
+      const { container } = render(
+        <AgentsPanel
+          agents={[mainAgent, mainGate, retryAgent, retryGate]}
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+
+      // Expand the completed section (collapsed by default)
+      fireEvent.click(screen.getByRole('button', { name: /completed/i }));
+
+      // Root card should show the FINAL gate outcome (passed, from retry)
+      const rootCard = container.querySelector('.agent-card:not(.agent-card-child)');
+      const gateChip = rootCard?.querySelector('.agent-gate-chip');
+      expect(gateChip).not.toBeNull();
+      expect(gateChip!.textContent).toContain('Gate passed');
+      expect(gateChip!.classList.contains('gate-success')).toBe(true);
+      expect(gateChip!.classList.contains('gate-final-outcome')).toBe(true);
+    });
+
+    it('keeps v{N} label for non-retry agents', () => {
+      const agent = mkAgent({
+        agent_id: 'standalone-1',
+        card_id: 'standalone-1::v3',
+        iteration: 3,
+        name: 'Janitor',
+        agent_type: 'janitor',
+      });
+
+      render(
+        <AgentsPanel
+          agents={[agent]}
+          onPauseAgent={vi.fn()}
+          onResumeAgent={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText('v3')).toBeInTheDocument();
+      expect(screen.queryByText('Attempt 3')).not.toBeInTheDocument();
+    });
   });
 });
