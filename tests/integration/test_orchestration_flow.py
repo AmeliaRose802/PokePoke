@@ -149,7 +149,6 @@ class WorkflowHarness:
         monkeypatch.setattr(workflow_helpers, "has_uncommitted_changes", self._has_uncommitted)
         monkeypatch.setattr("pokepoke.git_operations.has_commits_ahead", lambda **_kwargs: 0)
         monkeypatch.setattr(workflow_helpers, "finalize_work_item", self._finalize_work_item)
-        monkeypatch.setattr(workflow, "unassign_with_retry", self._unassign)
         monkeypatch.setattr(workflow, "add_comment", self._add_comment)
         monkeypatch.setattr(workflow, "build_prompt_from_work_item", self._build_prompt)
         monkeypatch.setattr(workflow, "select_model_for_item", lambda *_args, **_kwargs: "test-model")
