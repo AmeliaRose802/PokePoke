@@ -5,7 +5,7 @@
  * matching the main LogPanel's interactive UI.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { AgentInfo } from "../types";
 import { useBridge } from "../useBridge";
@@ -88,9 +88,9 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
   const primaryLabel = getAgentPrimaryLabel(agent);
   // Show the friendly name prominently when it differs from the primary label
   const friendlyName = agent.name !== primaryLabel ? agent.name : null;
-  const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isUserScrolledUp = useRef(false);
+  const isProgrammaticScroll = useRef(false);
 
   // Fetch detailed agent information when agent changes
   useEffect(() => {
@@ -136,6 +136,7 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
   }, [agent.status, agent.paused, agent.card_id, agent.agent_id, getAgentDetail]);
 
   const handleScroll = () => {
+    if (isProgrammaticScroll.current) return;
     const el = containerRef.current;
     if (!el) return;
     const threshold = 50;
@@ -153,10 +154,16 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
     return processLogsToRenderItems(logEntries);
   }, [logLines, agent.started_at, fallbackTimestamp]);
 
-  useEffect(() => {
-    if (!isUserScrolledUp.current) {
-      bottomRef.current?.scrollIntoView({ behavior: "auto" });
-    }
+  // Auto-scroll to bottom when new logs arrive, unless user has scrolled up.
+  // useLayoutEffect prevents visible flicker between render and scroll adjustment.
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el || isUserScrolledUp.current) return;
+    isProgrammaticScroll.current = true;
+    el.scrollTop = el.scrollHeight;
+    requestAnimationFrame(() => {
+      isProgrammaticScroll.current = false;
+    });
   }, [logLines]);
 
   return (
@@ -262,7 +269,6 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
         ) : (
           <RenderLogItems items={renderItems} />
         )}
-        <div ref={bottomRef} />
       </div>
     </div>
   );

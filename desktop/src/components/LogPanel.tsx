@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
 import type { LogEntry } from "../types";
 import { processLogsToRenderItems } from "../utils/logProcessor";
@@ -25,6 +25,7 @@ export function LogPanel({ title, icon, logs, accentColor, focused, onFocus }: P
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const isUserScrolledUp = useRef(false);
+  const isProgrammaticScroll = useRef(false);
 
   // Set accent color using CSS custom property
   useEffect(() => {
@@ -33,8 +34,9 @@ export function LogPanel({ title, icon, logs, accentColor, focused, onFocus }: P
     }
   }, [accentColor]);
 
-  // Detect if user has scrolled up
+  // Detect if user has scrolled up (ignore programmatic scrolls)
   const handleScroll = () => {
+    if (isProgrammaticScroll.current) return;
     const el = containerRef.current;
     if (!el) return;
     const threshold = 50;
@@ -42,11 +44,16 @@ export function LogPanel({ title, icon, logs, accentColor, focused, onFocus }: P
     isUserScrolledUp.current = !atBottom;
   };
 
-  // Auto-scroll to bottom when new logs arrive (unless user scrolled up)
-  useEffect(() => {
-    if (!isUserScrolledUp.current) {
-      bottomRef.current?.scrollIntoView({ behavior: "auto" });
-    }
+  // Auto-scroll to bottom when new logs arrive (unless user scrolled up).
+  // useLayoutEffect prevents visible flicker between render and scroll adjustment.
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el || isUserScrolledUp.current) return;
+    isProgrammaticScroll.current = true;
+    el.scrollTop = el.scrollHeight;
+    requestAnimationFrame(() => {
+      isProgrammaticScroll.current = false;
+    });
   }, [logs]);
 
   const renderItems = useMemo(() => processLogsToRenderItems(logs), [logs]);
