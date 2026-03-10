@@ -756,11 +756,14 @@ class TestMergeWorktree:
         with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
              patch('pokepoke.worktree_helpers.run_bd_sync_with_retry') as mock_sync, \
              patch('pokepoke.worktrees._run_git') as mock_git, \
+             patch('pokepoke.worktree_helpers._run_git') as mock_helper_git, \
              patch('pokepoke.worktree_helpers.commit_all_changes', return_value=(False, 'pre-commit hooks failed')) as mock_commit, \
              patch('pokepoke.worktrees.get_default_branch', return_value='ameliapayne/dev'), \
              patch('builtins.print') as mock_print:
 
             mock_sync.return_value = Mock(returncode=0)
+            # worktree_helpers._run_git: status shows non-beads changes
+            mock_helper_git.return_value = Mock(stdout=' M src/file.py\n', returncode=0)
             mock_git.return_value = Mock(stdout=' M src/file.py\n', returncode=0)
 
             success, unmerged_files = merge_worktree('incredible_icm-42')
@@ -776,6 +779,7 @@ class TestMergeWorktree:
         with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
              patch('pokepoke.worktree_helpers.run_bd_sync_with_retry') as mock_sync, \
              patch('pokepoke.worktrees._run_git') as mock_git, \
+             patch('pokepoke.worktree_helpers._run_git') as mock_helper_git, \
              patch('pokepoke.worktree_helpers.commit_all_changes', return_value=(True, '')) as mock_commit, \
              patch('pokepoke.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
              patch('pokepoke.worktrees.validate_post_merge', return_value=True), \
@@ -785,9 +789,10 @@ class TestMergeWorktree:
              patch('builtins.print'):
 
             mock_sync.return_value = Mock(returncode=0)
-            # First call: status shows non-beads changes; push call returns success
+            # worktree_helpers._run_git: status shows non-beads changes only
+            mock_helper_git.return_value = Mock(stdout=' M src/file.py\n', returncode=0)
+            # worktrees._run_git: push call returns success
             mock_git.side_effect = [
-                Mock(stdout=' M src/file.py\n', returncode=0),  # git status (non-beads change)
                 Mock(stdout='', stderr='', returncode=0),  # git push
             ]
 
@@ -1142,25 +1147,24 @@ class TestCleanupWorktree:
             assert result is True
             mock_force.assert_called_once()
 
-    def test_cleanup_worktree_invalid_argument_retries_with_force(self):
-        """Test that invalid argument triggers force_remove_directory fallback (Windows)."""
-        exists_state = {'present': True}
+    def test_cleanup_worktree_invalid_argument_does_not_force_remove(self):
+        """Test that 'invalid argument' no longer triggers force_remove_directory.
 
+        Previously this was treated as a Windows lock error, but 'invalid argument'
+        is too broad and could mask real bugs.  Now it falls through to the
+        standard non-lock-error handling path.
+        """
         def exists_side_effect(self: Path) -> bool:
             normalized = str(self).replace('\\', '/')
             if normalized.endswith('worktrees/task-incredible_icm-42'):
-                return exists_state['present']
-            return True
-
-        def force_side_effect(*args, **kwargs):
-            exists_state['present'] = False
+                return True
             return True
 
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
              patch('pathlib.Path.exists', new=exists_side_effect), \
-             patch('pokepoke.worktree_cleanup.force_remove_directory', side_effect=force_side_effect) as mock_force, \
-             patch('pokepoke.worktree_cleanup.remove_from_manifest') as mock_rm_manifest, \
+             patch('pokepoke.worktree_cleanup.force_remove_directory') as mock_force, \
+             patch('pokepoke.worktree_cleanup.add_uncleaned_worktree') as mock_add_uncleaned, \
              patch('builtins.print'):
 
             mock_list.return_value = [
@@ -1180,9 +1184,9 @@ class TestCleanupWorktree:
 
             result = cleanup_worktree('incredible_icm-42')
 
-            assert result is True
-            mock_force.assert_called_once()
-            mock_rm_manifest.assert_called_once_with('incredible_icm-42')
+            assert result is False
+            mock_force.assert_not_called()
+            mock_add_uncleaned.assert_called_once()
 
     def test_cleanup_worktree_being_used_by_another_process(self):
         """Test that 'being used by another process' triggers force removal."""
@@ -1383,8 +1387,8 @@ class TestWorktreeManifest:
            caplog.at_level(logging.WARNING):
             save_worktree_manifest(manifest)
 
-            # Verify warning was logged
-            assert "Failed to save worktree manifest" in caplog.text
+            # Verify warning was logged (message comes from manifest_utils)
+            assert "Failed to save manifest" in caplog.text
             assert "Permission denied" in caplog.text
             assert "worktrees/task-3" in caplog.text
             assert "may become orphaned" in caplog.text

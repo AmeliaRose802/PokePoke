@@ -1,6 +1,5 @@
 """Windows-safe directory removal utilities for worktree cleanup."""
 
-import json
 import logging
 import os
 import shutil
@@ -9,7 +8,8 @@ import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import cast
+
+from pokepoke.constants import BRANCH_PREFIX
 
 logger = logging.getLogger(__name__)
 
@@ -102,52 +102,39 @@ def _is_windows_lock_error(error_text: str) -> bool:
         "sharing violation",
         "access is denied",
         "device or resource busy",
+        # "directory not empty" on Windows often means a file inside is locked
         "directory not empty",
-        "invalid argument"  # Sometimes seen with locked files on Windows
     ]
 
     return any(indicator in error_lower for indicator in windows_lock_indicators)
 
 
+_WORKTREE_MANIFEST = "uncleaned_worktrees.json"
+
+
 def get_worktree_manifest_path() -> Path:
     """Get the path to the uncleaned worktrees manifest file."""
-    pokepoke_dir = Path(".pokepoke")
-    return pokepoke_dir / "uncleaned_worktrees.json"
+    from pokepoke.manifest_utils import get_manifest_path
+    return get_manifest_path(_WORKTREE_MANIFEST)
 
 
 def load_worktree_manifest() -> dict[str, dict[str, str]]:
     """Load the uncleaned worktrees manifest."""
-    manifest_path = get_worktree_manifest_path()
-    if not manifest_path.exists():
-        return {}
-
-    try:
-        with open(manifest_path, encoding='utf-8') as f:
-            raw = json.load(f)
-            if isinstance(raw, dict):
-                return cast(dict[str, dict[str, str]], raw)
-            return {}
-    except (json.JSONDecodeError, OSError):
-        return {}
+    from pokepoke.manifest_utils import load_manifest_from_path
+    return load_manifest_from_path(get_worktree_manifest_path())
 
 
 def save_worktree_manifest(manifest: dict[str, dict[str, str]]) -> None:
     """Save the uncleaned worktrees manifest."""
-    manifest_path = get_worktree_manifest_path()
-    try:
-        manifest_path.parent.mkdir(exist_ok=True)
-        tmp = manifest_path.with_suffix('.tmp')  # atomic write-then-rename
-        tmp.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding='utf-8')
-        tmp.replace(manifest_path)
-    except OSError as e:
-        logger.warning('Failed to save worktree manifest to %s: %s', manifest_path, e)
-        # Extract worktree paths from manifest for diagnostic context
-        worktree_paths = [entry.get('path', 'unknown') for entry in manifest.values()]
-        if worktree_paths:
-            logger.warning(
-                'Worktrees at the following paths may become orphaned (not tracked for cleanup): %s',
-                ', '.join(worktree_paths)
-            )
+    from pokepoke.manifest_utils import save_manifest_to_path
+    worktree_paths = [entry.get('path', 'unknown') for entry in manifest.values()]
+    warn_context = ""
+    if worktree_paths:
+        warn_context = (
+            "Worktrees at the following paths may become orphaned "
+            f"(not tracked for cleanup): {', '.join(worktree_paths)}"
+        )
+    save_manifest_to_path(get_worktree_manifest_path(), manifest, warn_context=warn_context)
 
 
 def add_uncleaned_worktree(worktree_id: str, worktree_path: str, reason: str) -> None:
@@ -244,7 +231,7 @@ def cleanup_worktree_and_branch(
     fails with a non-ignorable error.
     """
     if worktree_id is None:
-        if branch_name.startswith("task/"):
+        if branch_name.startswith(BRANCH_PREFIX):
             worktree_id = branch_name.split("/", 1)[1]
         elif worktree_path is not None:
             worktree_id = worktree_path.name
@@ -256,7 +243,7 @@ def cleanup_worktree_and_branch(
             if force:
                 cmd.append("--force")
 
-            _run_git(*cmd)
+            _run_git(cmd)
             if worktree_id is not None:
                 remove_from_manifest(worktree_id)
             if print_success:
@@ -273,12 +260,10 @@ def cleanup_worktree_and_branch(
     return _delete_branch(branch_name, fallback_branch_name, force, print_success, post_merge)
 
 
-def _run_git(*cmd: str) -> subprocess.CompletedProcess[str]:
-    """Run a git command with standard options."""
-    return subprocess.run(
-        list(cmd), check=True, capture_output=True,
-        text=True, encoding="utf-8", errors="replace", timeout=30,
-    )
+def _run_git(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run a git command with standard options — delegates to git_helpers.run_git."""
+    from pokepoke.git_helpers import run_git
+    return run_git(cmd)
 
 
 def _delete_branch(
@@ -292,7 +277,7 @@ def _delete_branch(
     delete_flag = "-D" if force else "-d"
 
     try:
-        _run_git("git", "branch", delete_flag, branch_name)
+        _run_git(["git", "branch", delete_flag, branch_name])
         if print_success:
             print(f"✅ Deleted branch {branch_name}")
         return True
@@ -303,7 +288,7 @@ def _delete_branch(
 
     # Try fallback branch name
     try:
-        _run_git("git", "branch", delete_flag, fallback_branch_name)
+        _run_git(["git", "branch", delete_flag, fallback_branch_name])
         if print_success:
             print(f"✅ Deleted branch {fallback_branch_name}")
         return True

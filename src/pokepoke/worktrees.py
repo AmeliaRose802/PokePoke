@@ -6,7 +6,9 @@ import subprocess
 import time
 from pathlib import Path
 
+from pokepoke.constants import BRANCH_PREFIX, WORKTREE_DIR
 from pokepoke.perf_timing import timed_block
+from pokepoke.git_helpers import run_git as _run_git
 from pokepoke.git_operations import (
     sanitize_branch_name,
     get_default_branch,
@@ -29,15 +31,6 @@ from pokepoke.coordination import with_worktree_lock
 logger = logging.getLogger(__name__)
 
 
-def _run_git(cmd: list[str], *, timeout: int = 30, check: bool = True,
-             capture_output: bool = True) -> subprocess.CompletedProcess[str]:
-    """Run a git command with standard encoding settings."""
-    return subprocess.run(
-        cmd, check=check, capture_output=capture_output,
-        text=True, encoding='utf-8', errors='replace', timeout=timeout
-    )
-
-
 def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: float = 300.0) -> Path:
     """Create a git worktree for a work item. Returns existing path if already exists.
 
@@ -48,10 +41,10 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
     sanitized_id = sanitize_branch_name(item_id)
 
     # Worktree path: ./worktrees/task-{sanitized_id}  (resolved to absolute)
-    worktree_path = (Path("worktrees") / f"task-{sanitized_id}").resolve()
+    worktree_path = (Path(WORKTREE_DIR) / f"task-{sanitized_id}").resolve()
 
     # Branch name for the worktree
-    branch_name = f"task/{sanitized_id}"
+    branch_name = f"{BRANCH_PREFIX}{sanitized_id}"
 
     # Check if worktree already exists (outside lock - no git operation needed)
     existing_worktrees = list_worktrees()
@@ -64,7 +57,7 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
             return wt_path
 
     # Create worktrees directory if it doesn't exist
-    Path("worktrees").mkdir(exist_ok=True)
+    Path(WORKTREE_DIR).mkdir(exist_ok=True)
 
     # Resolve default base branch if not provided
     if base_branch is None:
@@ -205,7 +198,7 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
 def is_worktree_merged(item_id: str, target_branch: str | None = None) -> bool:
     """Check if a worktree's branch has been merged into the target branch."""
     sanitized_id = sanitize_branch_name(item_id)
-    branch_name = f"task/{sanitized_id}"
+    branch_name = f"{BRANCH_PREFIX}{sanitized_id}"
     if target_branch is None:
         target_branch = get_default_branch()
     try:
@@ -221,8 +214,8 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
     Returns (success, unmerged_files). On success: (True, []). On failure: (False, conflicted_files).
     """
     sanitized_id = sanitize_branch_name(item_id)
-    branch_name = f"task/{sanitized_id}"
-    worktree_path = Path("worktrees") / f"task-{sanitized_id}"
+    branch_name = f"{BRANCH_PREFIX}{sanitized_id}"
+    worktree_path = Path(WORKTREE_DIR) / f"task-{sanitized_id}"
 
     if target_branch is None:
         target_branch = get_default_branch()
@@ -284,8 +277,8 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
     Returns True if cleanup succeeds or if the worktree/branch don't exist.
     """
     sanitized_id = sanitize_branch_name(item_id)
-    branch_name = f"task/{sanitized_id}"
-    expected_worktree_path = Path("worktrees") / f"task-{sanitized_id}"
+    branch_name = f"{BRANCH_PREFIX}{sanitized_id}"
+    expected_worktree_path = Path(WORKTREE_DIR) / f"task-{sanitized_id}"
 
     # Find the actual worktree for this item (might have unsanitized path if created before fix)
     actual_worktree_path: Path | None = None
@@ -304,7 +297,7 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
 
     # Also check for unsanitized path (for backwards compatibility)
     if actual_worktree_path is None:
-        unsanitized_path = Path("worktrees") / f"task-{item_id}"
+        unsanitized_path = Path(WORKTREE_DIR) / f"task-{item_id}"
         if unsanitized_path.exists():
             actual_worktree_path = unsanitized_path
 
@@ -313,7 +306,7 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
         branch_name,
         worktree_id=item_id,
         force=force,
-        fallback_branch_name=f"task/{item_id}",
+        fallback_branch_name=f"{BRANCH_PREFIX}{item_id}",
         skip_branch_delete_if_dir_exists=True,
         print_success=False,
     )

@@ -45,9 +45,9 @@ class TestIsWindowsLockError:
         """Detect 'directory not empty' error."""
         assert _is_windows_lock_error("Directory not empty") is True
 
-    def test_detects_invalid_argument(self) -> None:
-        """Detect 'invalid argument' error."""
-        assert _is_windows_lock_error("Invalid argument") is True
+    def test_does_not_match_invalid_argument(self) -> None:
+        """'invalid argument' is too broad to classify as a lock error."""
+        assert _is_windows_lock_error("Invalid argument") is False
 
     def test_case_insensitive_matching(self) -> None:
         """Matching is case-insensitive."""
