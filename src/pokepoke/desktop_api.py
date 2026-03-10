@@ -12,7 +12,6 @@ from typing import Any, TYPE_CHECKING
 
 from pokepoke.agent_registry import AgentRegistry
 from pokepoke.logging_utils import configure_logging
-from pokepoke.metrics_context import get_current_agent_type
 from pokepoke.repo_utils import get_repository_name
 
 from pokepoke.shutdown import (
@@ -21,6 +20,7 @@ from pokepoke.shutdown import (
     should_stop_after_current as _should_stop_after_current,
 )
 
+from pokepoke import desktop_api_agents as _agents
 from pokepoke import desktop_api_ext as _ext
 from pokepoke import desktop_api_stats as _stats
 from pokepoke import desktop_api_setup as _setup
@@ -245,93 +245,16 @@ class DesktopAPI:
         self._agent_detail_max_log_lines_internal = value
         self._agent_registry.set_limits(self._agent_max_log_lines_internal, value)
 
-    def push_agent_status(
-        self,
-        agent_id: str,
-        name: str,
-        iteration: int = 1,
-        status: str = "running",
-        model: str | None = None,
-        parent_agent_id: str | None = None,
-        work_item_id: str | None = None,
-        work_item_title: str | None = None,
-        agent_prompt: str | None = None,
-        modified_files: list[str] | None = None,
-        agent_type: str | None = None,
-    ) -> None:
-        """Register or update a running agent."""
-        with self._lock:
-            if self._window_disposed:  # Silently ignore after window disposal
-                return
-            session_id = self._current_session_id
-        resolved_type = agent_type or get_current_agent_type(default="")
-        normalized_agent_type: str | None = resolved_type if resolved_type else None
-
-        self._agent_registry.update_status(
-            agent_id,
-            name,
-            iteration,
-            status,
-            model=model,
-            parent_agent_id=parent_agent_id,
-            work_item_id=work_item_id,
-            work_item_title=work_item_title,
-            agent_prompt=agent_prompt,
-            session_id=session_id,
-            modified_files=modified_files,
-            agent_type=normalized_agent_type,
-        )
-
-    def push_agent_log(self, agent_id: str, line: str) -> None:
-        """Append a log line to an agent's recent log preview."""
-        with self._lock:
-            if self._window_disposed:  # Silently ignore after window disposal
-                return
-        self._agent_registry.append_log(agent_id, line)
-
-    def push_agent_tokens(
-        self,
-        agent_id: str,
-        input_tokens: int,
-        output_tokens: int,
-    ) -> None:
-        """Update live token usage for an agent."""
-        with self._lock:
-            if self._window_disposed:  # Silently ignore after window disposal
-                return
-        self._agent_registry.update_token_usage(
-            agent_id, input_tokens, output_tokens,
-        )
-
-    def remove_agent(self, agent_id: str) -> None:
-        """Remove a finished agent from the tracked set."""
-        self._agent_registry.remove(agent_id)
-
-    def get_agents(self) -> list[dict[str, Any]]:
-        """Return the list of currently tracked agents."""
-        return self._agent_registry.serialize_all()
-
-    def get_agent_detail(self, agent_id: str) -> dict[str, Any] | None:
-        """Return a deep copy of a single agent's detail state."""
-        return self._agent_registry.get_detail(agent_id)
-
-    def pause_agent(self, agent_id: str) -> dict[str, Any]:
-        """Pause an agent, preventing future scheduling."""
-        success = self._agent_registry.pause(agent_id)
-        if success:
-            self.push_log(f"⏸️  Agent {agent_id} paused", "orchestrator", "yellow")
-        return {"agent_id": agent_id, "paused": success}
-
-    def resume_agent(self, agent_id: str) -> dict[str, Any]:
-        """Resume a paused agent."""
-        success = self._agent_registry.resume(agent_id)
-        if success:
-            self.push_log(f"▶️  Agent {agent_id} resumed", "orchestrator")
-        return {"agent_id": agent_id, "resumed": success}
-
-    def is_agent_paused(self, agent_id: str) -> bool:
-        """Check if an agent is paused."""
-        return self._agent_registry.is_paused(agent_id)
+    # Agent registry methods — delegated to desktop_api_agents
+    # Lock held for full duration of registry calls to prevent TOCTOU races
+    (push_agent_status, push_agent_log, push_agent_tokens, remove_agent,
+     get_agents, get_agent_detail, pause_agent, resume_agent,
+     is_agent_paused) = (
+        _agents.push_agent_status, _agents.push_agent_log,
+        _agents.push_agent_tokens, _agents.remove_agent,
+        _agents.get_agents, _agents.get_agent_detail,
+        _agents.pause_agent, _agents.resume_agent,
+        _agents.is_agent_paused)
     def request_stop_after_current(self) -> dict[str, bool]:
         """Request orchestrator stop after the current item completes."""
         _request_stop_after_current()
