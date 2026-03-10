@@ -277,16 +277,13 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, 
     except subprocess.CalledProcessError as e:
         return False, f"Failed to checkout {target_branch}: {e.stderr or str(e)}", []
 
-    # Stash any beads daemon changes before pull to avoid "unstaged changes" error
-    # The beads daemon continuously updates .beads/issues.jsonl which can cause
-    # git pull --rebase to fail if changes happen between our commit and the pull
+    # Stash beads daemon changes to avoid "unstaged changes" error during pull
     stashed = False
     try:
         status = subprocess.run(
             ["git", "status", "--porcelain", ".beads/"],
             capture_output=True, text=True, encoding='utf-8', check=True,
-            errors='replace',
-            timeout=30
+            errors='replace', timeout=30
         ).stdout.strip()
         if status:
             subprocess.run(
@@ -303,7 +300,13 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, 
                      check=True, capture_output=True, text=True, encoding='utf-8', errors='replace',
                      timeout=120)
     except subprocess.CalledProcessError as e:
-        # Restore stash if we had one
+        # Rollback: abort the failed rebase to leave repo in a clean state
+        try:
+            subprocess.run(["git", "rebase", "--abort"], check=True,
+                         capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30)
+            logger.info("Rolled back failed rebase with git rebase --abort")
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as abort_err:
+            logger.warning("Could not abort rebase during rollback: %s", abort_err)
         if stashed:
             restore_beads_stash("git pull --rebase failure")
         return False, f"Failed to pull with rebase: {e.stderr or str(e)}", []
@@ -318,12 +321,20 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, 
                      timeout=60)
         return True, "", []
     except subprocess.CalledProcessError as e:
-        # Check if this is a merge conflict
         from .merge_conflict import get_unmerged_files, is_merge_in_progress
         unmerged = get_unmerged_files()
         is_merging = is_merge_in_progress()
 
-        if is_merging and unmerged:
+        # Rollback: abort the failed merge to leave repo in a clean state
+        if is_merging:
+            try:
+                subprocess.run(["git", "merge", "--abort"], check=True,
+                             capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30)
+                logger.info("Rolled back failed merge with git merge --abort")
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as abort_err:
+                logger.error("Failed to abort merge during rollback: %s", abort_err)
+
+        if unmerged:
             return False, f"Merge conflicts detected in {len(unmerged)} file(s)", unmerged
         else:
             return False, f"Merge failed: {e.stderr or str(e)}", unmerged

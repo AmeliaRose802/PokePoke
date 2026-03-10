@@ -455,6 +455,8 @@ class TestExecuteMergeSequence:
             if cmd[:3] == ["git", "pull", "--rebase"]:
                 assert cmd[3:] == ["origin", "main"], f"Expected origin main but got {cmd[3:]}"
                 raise subprocess.CalledProcessError(1, cmd, stderr="conflict")
+            if cmd[:2] == ["git", "rebase"] and "--abort" in cmd:
+                return Mock(returncode=0)
             raise AssertionError(f"Unexpected command: {cmd}")
 
         mock_run.side_effect = side_effect
@@ -908,3 +910,145 @@ class TestExecuteMergeSequenceAdditional:
         mock_run.side_effect = side_effect
         success, message, unmerged = execute_merge_sequence("feature", "main")
         assert success is True
+
+
+class TestExecuteMergeSequenceRollback:
+    """Tests for execute_merge_sequence rollback on failure."""
+
+    @patch('src.pokepoke.merge_conflict.is_merge_in_progress', return_value=True)
+    @patch('src.pokepoke.merge_conflict.get_unmerged_files', return_value=["conflict.py"])
+    @patch('src.pokepoke.git_operations.subprocess.run')
+    def test_merge_abort_called_on_conflict(
+        self, mock_run: Mock, mock_unmerged: Mock, mock_in_progress: Mock
+    ) -> None:
+        """git merge --abort is called when merge conflict is detected."""
+        abort_called = []
+
+        def side_effect(cmd, **kwargs):
+            if cmd[:2] == ["git", "checkout"]:
+                return Mock(returncode=0)
+            if cmd[:3] == ["git", "status", "--porcelain"]:
+                return Mock(stdout="", returncode=0)
+            if cmd[:3] == ["git", "pull", "--rebase"]:
+                return Mock(returncode=0)
+            if cmd[:3] == ["git", "merge", "--no-ff"]:
+                raise subprocess.CalledProcessError(1, cmd, stderr="CONFLICT")
+            if cmd[:3] == ["git", "merge", "--abort"]:
+                abort_called.append(True)
+                return Mock(returncode=0)
+            raise AssertionError(f"Unexpected: {cmd}")
+
+        mock_run.side_effect = side_effect
+        success, message, unmerged = execute_merge_sequence("feature", "main")
+
+        assert success is False
+        assert "conflict" in message.lower()
+        assert abort_called, "git merge --abort should have been called"
+
+    @patch('src.pokepoke.merge_conflict.is_merge_in_progress', return_value=False)
+    @patch('src.pokepoke.merge_conflict.get_unmerged_files', return_value=[])
+    @patch('src.pokepoke.git_operations.subprocess.run')
+    def test_merge_abort_not_called_when_no_merge_in_progress(
+        self, mock_run: Mock, mock_unmerged: Mock, mock_in_progress: Mock
+    ) -> None:
+        """git merge --abort is NOT called when no merge is in progress."""
+        abort_called = []
+
+        def side_effect(cmd, **kwargs):
+            if cmd[:2] == ["git", "checkout"]:
+                return Mock(returncode=0)
+            if cmd[:3] == ["git", "status", "--porcelain"]:
+                return Mock(stdout="", returncode=0)
+            if cmd[:3] == ["git", "pull", "--rebase"]:
+                return Mock(returncode=0)
+            if cmd[:3] == ["git", "merge", "--no-ff"]:
+                raise subprocess.CalledProcessError(1, cmd, stderr="error")
+            if cmd[:3] == ["git", "merge", "--abort"]:
+                abort_called.append(True)
+                return Mock(returncode=0)
+            raise AssertionError(f"Unexpected: {cmd}")
+
+        mock_run.side_effect = side_effect
+        success, message, unmerged = execute_merge_sequence("feature", "main")
+
+        assert success is False
+        assert not abort_called, "git merge --abort should NOT be called when no merge in progress"
+
+    @patch('src.pokepoke.merge_conflict.is_merge_in_progress', return_value=True)
+    @patch('src.pokepoke.merge_conflict.get_unmerged_files', return_value=["conflict.py"])
+    @patch('src.pokepoke.git_operations.subprocess.run')
+    def test_merge_abort_failure_does_not_mask_error(
+        self, mock_run: Mock, mock_unmerged: Mock, mock_in_progress: Mock
+    ) -> None:
+        """If git merge --abort fails, the original error is still returned."""
+
+        def side_effect(cmd, **kwargs):
+            if cmd[:2] == ["git", "checkout"]:
+                return Mock(returncode=0)
+            if cmd[:3] == ["git", "status", "--porcelain"]:
+                return Mock(stdout="", returncode=0)
+            if cmd[:3] == ["git", "pull", "--rebase"]:
+                return Mock(returncode=0)
+            if cmd[:3] == ["git", "merge", "--no-ff"]:
+                raise subprocess.CalledProcessError(1, cmd, stderr="CONFLICT")
+            if cmd[:3] == ["git", "merge", "--abort"]:
+                raise subprocess.CalledProcessError(1, cmd, stderr="abort failed")
+            raise AssertionError(f"Unexpected: {cmd}")
+
+        mock_run.side_effect = side_effect
+        success, message, unmerged = execute_merge_sequence("feature", "main")
+
+        assert success is False
+        assert "conflict" in message.lower()
+        assert "conflict.py" in unmerged
+
+    @patch('src.pokepoke.git_operations.restore_beads_stash')
+    @patch('src.pokepoke.git_operations.subprocess.run')
+    def test_rebase_abort_called_on_pull_failure(
+        self, mock_run: Mock, mock_restore: Mock
+    ) -> None:
+        """git rebase --abort is called when pull --rebase fails."""
+        rebase_abort_called = []
+
+        def side_effect(cmd, **kwargs):
+            if cmd[:2] == ["git", "checkout"]:
+                return Mock(returncode=0)
+            if cmd[:3] == ["git", "status", "--porcelain"]:
+                return Mock(stdout="", returncode=0)
+            if cmd[:3] == ["git", "pull", "--rebase"]:
+                raise subprocess.CalledProcessError(1, cmd, stderr="rebase conflict")
+            if cmd[:3] == ["git", "rebase", "--abort"]:
+                rebase_abort_called.append(True)
+                return Mock(returncode=0)
+            raise AssertionError(f"Unexpected: {cmd}")
+
+        mock_run.side_effect = side_effect
+        success, message, unmerged = execute_merge_sequence("feature", "main")
+
+        assert success is False
+        assert "Failed to pull with rebase" in message
+        assert rebase_abort_called, "git rebase --abort should have been called"
+
+    @patch('src.pokepoke.git_operations.restore_beads_stash')
+    @patch('src.pokepoke.git_operations.subprocess.run')
+    def test_rebase_abort_failure_does_not_mask_error(
+        self, mock_run: Mock, mock_restore: Mock
+    ) -> None:
+        """If git rebase --abort fails, the original pull error is still returned."""
+
+        def side_effect(cmd, **kwargs):
+            if cmd[:2] == ["git", "checkout"]:
+                return Mock(returncode=0)
+            if cmd[:3] == ["git", "status", "--porcelain"]:
+                return Mock(stdout="", returncode=0)
+            if cmd[:3] == ["git", "pull", "--rebase"]:
+                raise subprocess.CalledProcessError(1, cmd, stderr="rebase conflict")
+            if cmd[:3] == ["git", "rebase", "--abort"]:
+                raise subprocess.CalledProcessError(1, cmd, stderr="abort failed")
+            raise AssertionError(f"Unexpected: {cmd}")
+
+        mock_run.side_effect = side_effect
+        success, message, unmerged = execute_merge_sequence("feature", "main")
+
+        assert success is False
+        assert "Failed to pull with rebase" in message

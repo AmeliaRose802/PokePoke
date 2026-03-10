@@ -246,7 +246,24 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
 
     print(f"✅ Merged {branch_name} into {target_branch}")
 
-    if not validate_post_merge(target_branch):
+    try:
+        if not validate_post_merge(target_branch):
+            # Post-merge validation failed — rollback the merge commit
+            logger.warning("Post-merge validation failed, rolling back merge commit")
+            try:
+                _run_git(["git", "reset", "--hard", "HEAD~1"])
+                print("🔄 Rolled back merge commit due to post-merge validation failure")
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as reset_err:
+                logger.error("Failed to rollback merge commit after validation failure: %s", reset_err)
+            return False, []
+    except Exception as e:
+        # validate_post_merge uses check=True and can raise — rollback
+        logger.error("Post-merge validation raised exception: %s", e)
+        try:
+            _run_git(["git", "reset", "--hard", "HEAD~1"])
+            print("🔄 Rolled back merge commit due to post-merge validation exception")
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as reset_err:
+            logger.error("Failed to rollback merge commit after validation exception: %s", reset_err)
         return False, []
 
     print(f"✅ Post-merge validation passed: {target_branch} is clean")
@@ -256,6 +273,13 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
         print(f"✅ Pushed {target_branch} to remote")
     except subprocess.CalledProcessError as e:
         print(f"❌ Push failed: {e.stderr if e.stderr else str(e)}")
+        # Rollback: undo the local merge commit so the branch doesn't diverge from remote
+        try:
+            _run_git(["git", "reset", "--hard", "HEAD~1"])
+            logger.info("Rolled back merge commit after push failure with git reset --hard HEAD~1")
+            print("🔄 Rolled back merge commit due to push failure")
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as reset_err:
+            logger.error("Failed to rollback merge commit after push failure: %s", reset_err)
         return False, []
 
     # Verify branch is actually merged (warnings only - push already succeeded)
