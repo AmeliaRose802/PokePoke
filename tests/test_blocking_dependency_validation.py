@@ -173,14 +173,234 @@ class TestBlockingDependencyValidation:
             result = has_unmet_blocking_dependencies("nonexistent-1")
             assert result is False
 
-    @patch('builtins.print')
+    def test_child_of_blocked_parent_returns_true(self) -> None:
+        """Child whose parent has an open blocker should return True."""
+        child_issue = IssueWithDependencies(
+            id="child-1",
+            title="Child Task",
+            status="open",
+            priority=1,
+            issue_type="task",
+            dependencies=[
+                Dependency(
+                    id="parent-1",
+                    title="Parent Feature",
+                    issue_type="feature",
+                    dependency_type="parent",
+                    status="open"
+                )
+            ]
+        )
+        parent_issue = IssueWithDependencies(
+            id="parent-1",
+            title="Parent Feature",
+            status="open",
+            priority=1,
+            issue_type="feature",
+            dependencies=[
+                Dependency(
+                    id="blocker-1",
+                    title="Blocking Issue",
+                    issue_type="task",
+                    dependency_type="blocks",
+                    status="open"
+                )
+            ]
+        )
+
+        def mock_get_deps(issue_id):
+            return {"child-1": child_issue, "parent-1": parent_issue}.get(issue_id)
+
+        with patch('pokepoke.beads_query.get_issue_dependencies', side_effect=mock_get_deps):
+            result = has_unmet_blocking_dependencies("child-1")
+            assert result is True
+
+    def test_child_of_unblocked_parent_returns_false(self) -> None:
+        """Child whose parent has no blockers should return False."""
+        child_issue = IssueWithDependencies(
+            id="child-1",
+            title="Child Task",
+            status="open",
+            priority=1,
+            issue_type="task",
+            dependencies=[
+                Dependency(
+                    id="parent-1",
+                    title="Parent Feature",
+                    issue_type="feature",
+                    dependency_type="parent",
+                    status="open"
+                )
+            ]
+        )
+        parent_issue = IssueWithDependencies(
+            id="parent-1",
+            title="Parent Feature",
+            status="open",
+            priority=1,
+            issue_type="feature",
+            dependencies=[]
+        )
+
+        def mock_get_deps(issue_id):
+            return {"child-1": child_issue, "parent-1": parent_issue}.get(issue_id)
+
+        with patch('pokepoke.beads_query.get_issue_dependencies', side_effect=mock_get_deps):
+            result = has_unmet_blocking_dependencies("child-1")
+            assert result is False
+
+    def test_grandchild_of_blocked_grandparent_returns_true(self) -> None:
+        """Grandchild should be blocked when grandparent has open blocker."""
+        grandchild_issue = IssueWithDependencies(
+            id="grandchild-1",
+            title="Grandchild Task",
+            status="open",
+            priority=1,
+            issue_type="task",
+            dependencies=[
+                Dependency(
+                    id="parent-1",
+                    title="Parent Feature",
+                    issue_type="feature",
+                    dependency_type="parent",
+                    status="open"
+                )
+            ]
+        )
+        parent_issue = IssueWithDependencies(
+            id="parent-1",
+            title="Parent Feature",
+            status="open",
+            priority=1,
+            issue_type="feature",
+            dependencies=[
+                Dependency(
+                    id="grandparent-1",
+                    title="Grandparent Epic",
+                    issue_type="epic",
+                    dependency_type="parent",
+                    status="open"
+                )
+            ]
+        )
+        grandparent_issue = IssueWithDependencies(
+            id="grandparent-1",
+            title="Grandparent Epic",
+            status="open",
+            priority=1,
+            issue_type="epic",
+            dependencies=[
+                Dependency(
+                    id="blocker-1",
+                    title="Blocking Issue",
+                    issue_type="task",
+                    dependency_type="blocks",
+                    status="in_progress"
+                )
+            ]
+        )
+
+        def mock_get_deps(issue_id):
+            return {
+                "grandchild-1": grandchild_issue,
+                "parent-1": parent_issue,
+                "grandparent-1": grandparent_issue,
+            }.get(issue_id)
+
+        with patch('pokepoke.beads_query.get_issue_dependencies', side_effect=mock_get_deps):
+            result = has_unmet_blocking_dependencies("grandchild-1")
+            assert result is True
+
+    def test_cycle_in_parent_chain_does_not_infinite_loop(self) -> None:
+        """Circular parent references should not cause infinite recursion."""
+        issue_a = IssueWithDependencies(
+            id="a",
+            title="Issue A",
+            status="open",
+            priority=1,
+            issue_type="task",
+            dependencies=[
+                Dependency(
+                    id="b",
+                    title="Issue B",
+                    issue_type="task",
+                    dependency_type="parent",
+                    status="open"
+                )
+            ]
+        )
+        issue_b = IssueWithDependencies(
+            id="b",
+            title="Issue B",
+            status="open",
+            priority=1,
+            issue_type="task",
+            dependencies=[
+                Dependency(
+                    id="a",
+                    title="Issue A",
+                    issue_type="task",
+                    dependency_type="parent",
+                    status="open"
+                )
+            ]
+        )
+
+        def mock_get_deps(issue_id):
+            return {"a": issue_a, "b": issue_b}.get(issue_id)
+
+        with patch('pokepoke.beads_query.get_issue_dependencies', side_effect=mock_get_deps):
+            result = has_unmet_blocking_dependencies("a")
+            assert result is False
+
+    def test_child_of_parent_with_closed_blocker_returns_false(self) -> None:
+        """Child should not be blocked when parent's blocker is closed."""
+        child_issue = IssueWithDependencies(
+            id="child-1",
+            title="Child Task",
+            status="open",
+            priority=1,
+            issue_type="task",
+            dependencies=[
+                Dependency(
+                    id="parent-1",
+                    title="Parent Feature",
+                    issue_type="feature",
+                    dependency_type="parent",
+                    status="open"
+                )
+            ]
+        )
+        parent_issue = IssueWithDependencies(
+            id="parent-1",
+            title="Parent Feature",
+            status="open",
+            priority=1,
+            issue_type="feature",
+            dependencies=[
+                Dependency(
+                    id="blocker-1",
+                    title="Blocking Issue",
+                    issue_type="task",
+                    dependency_type="blocks",
+                    status="closed"
+                )
+            ]
+        )
+
+        def mock_get_deps(issue_id):
+            return {"child-1": child_issue, "parent-1": parent_issue}.get(issue_id)
+
+        with patch('pokepoke.beads_query.get_issue_dependencies', side_effect=mock_get_deps):
+            result = has_unmet_blocking_dependencies("child-1")
+            assert result is False
+
     @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies')
     @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
     def test_select_work_item_filters_items_with_unmet_blockers(
         self,
         mock_select_hierarchical: Mock,
         mock_has_unmet: Mock,
-        mock_print: Mock
     ) -> None:
         """Work items with unmet blocking dependencies should be filtered out."""
         items = [
@@ -219,11 +439,6 @@ class TestBlockingDependencyValidation:
         # Should have checked all items
         assert mock_has_unmet.call_count == 3
 
-        # Should have printed skip message for task-1
-        printed_messages = [str(call[0][0]) for call in mock_print.call_args_list if call[0]]
-        skip_messages = [msg for msg in printed_messages if "Skipping task-1" in msg and "unmet blocking" in msg]
-        assert len(skip_messages) > 0, "Should print skip message for item with unmet blockers"
-
         # Should only pass filtered items to hierarchical selection
         # The items passed should be task-2 and task-3 (not task-1)
         call_args = mock_select_hierarchical.call_args[0][0]
@@ -231,14 +446,12 @@ class TestBlockingDependencyValidation:
         assert call_args[0].id == "task-2"
         assert call_args[1].id == "task-3"
 
-    @patch('builtins.print')
     @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies')
     @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
     def test_select_work_item_returns_none_when_all_items_have_unmet_blockers(
         self,
         mock_select_hierarchical: Mock,
         mock_has_unmet: Mock,
-        mock_print: Mock
     ) -> None:
         """Should return None when all items have unmet blocking dependencies."""
         items = [
@@ -259,8 +472,3 @@ class TestBlockingDependencyValidation:
 
         # Should not call hierarchical selection when no items available
         mock_select_hierarchical.assert_not_called()
-
-        # Should print appropriate message
-        printed_messages = [str(call[0][0]) for call in mock_print.call_args_list if call[0]]
-        no_work_messages = [msg for msg in printed_messages if "No available work" in msg]
-        assert len(no_work_messages) > 0

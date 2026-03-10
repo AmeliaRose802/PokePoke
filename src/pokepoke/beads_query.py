@@ -197,25 +197,56 @@ def get_issue_dependencies(issue_id: str) -> IssueWithDependencies | None:
 
 
 def has_unmet_blocking_dependencies(item_id: str) -> bool:
-    """Check if an item has any unmet blocking dependencies.
+    """Check if an item or any of its ancestors has unmet blocking dependencies.
 
-    An item should not be worked on if it has dependencies with type 'blocks'
-    that are not in 'closed' status.
+    An item should not be worked on if it (or any parent in the hierarchy) has
+    dependencies with type 'blocks' that are not in 'closed' status.  This
+    prevents children of blocked parents from appearing in the ready queue.
 
     Args:
         item_id: The issue ID to check.
 
     Returns:
-        True if the item has unmet blocking dependencies, False otherwise.
+        True if the item or any ancestor has unmet blocking dependencies,
+        False otherwise.
     """
+    return _has_unmet_blocking_in_chain(item_id, _visited=set())
+
+
+def _has_unmet_blocking_in_chain(item_id: str, *, _visited: set[str]) -> bool:
+    """Walk up the parent chain checking for unmet blocking dependencies.
+
+    Args:
+        item_id: The issue ID to check.
+        _visited: Set of already-visited IDs to prevent infinite loops.
+
+    Returns:
+        True if this item or any ancestor has an unmet blocker.
+    """
+    if item_id in _visited:
+        return False
+    _visited.add(item_id)
+
     issue = get_issue_dependencies(item_id)
     if not issue or not issue.dependencies:
         return False
 
-    return any(
+    # Check this item's own blocking dependencies
+    if any(
         dep.dependency_type == 'blocks' and dep.status != 'closed'
         for dep in issue.dependencies
+    ):
+        return True
+
+    # Walk up to parent and check its chain
+    parent_dep = next(
+        (dep for dep in issue.dependencies if dep.dependency_type == 'parent'),
+        None,
     )
+    if parent_dep:
+        return _has_unmet_blocking_in_chain(parent_dep.id, _visited=_visited)
+
+    return False
 
 
 def get_beads_stats() -> BeadsStats | None:
