@@ -16,19 +16,11 @@ export function GateVerdictPreview({ verdict }: Props) {
       <div className={`gate-verdict-status gate-verdict-status-${verdict.status}`}>
         {verdict.status === "success" ? "✓ Passed" : "✗ Failed"}
       </div>
-      {verdict.reason && (
-        <div className="gate-verdict-reason">{verdict.reason}</div>
-      )}
+      {verdict.reason && <div className="gate-verdict-reason">{verdict.reason}</div>}
       {(verdict.message ?? verdict.details) && (
-        <div className="gate-verdict-detail">
-          {verdict.message ?? verdict.details}
-        </div>
+        <div className="gate-verdict-detail">{verdict.message ?? verdict.details}</div>
       )}
-      {verdict.recommendation && (
-        <div className="gate-verdict-recommendation">
-          {verdict.recommendation}
-        </div>
-      )}
+      {verdict.recommendation && <div className="gate-verdict-recommendation">{verdict.recommendation}</div>}
     </div>
   );
 }

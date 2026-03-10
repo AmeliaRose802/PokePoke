@@ -5,7 +5,7 @@
  * API duration, items completed, retries, and agent run counts.
  */
 
-import type { ModelPerformanceSummary,SessionStats } from "../types";
+import type { ModelPerformanceSummary, SessionStats } from "../types";
 import {
   formatAgentRuns,
   formatDurationShort,
@@ -34,8 +34,7 @@ export function StatsBar({ stats, modelLeaderboard, activeAgentModel, onOpenStat
   const addedCount = getAddedCount(stats);
   const netDelta = getNetDelta(stats);
   const apiDurationSeconds = stats?.agent_stats?.api_duration ?? 0;
-  const apiDurationLabel =
-    apiDurationSeconds > 0 ? formatDurationShort(apiDurationSeconds) : "\u2014";
+  const apiDurationLabel = apiDurationSeconds > 0 ? formatDurationShort(apiDurationSeconds) : "\u2014";
   const currentModel = inferCurrentModel(stats, modelLeaderboard, activeAgentModel);
   const doneTooltip =
     completedItems.length > 0
@@ -81,13 +80,9 @@ export function StatsBar({ stats, modelLeaderboard, activeAgentModel, onOpenStat
         </div>
         <div className="summary-block model-block">
           <span className="summary-label">Active model</span>
-          <span className={`summary-value ${modelStatusClass}`}>
-            {currentModel.model ?? "—"}
-          </span>
+          <span className={`summary-value ${modelStatusClass}`}>{currentModel.model ?? "—"}</span>
           {currentModel.successRate !== null && (
-            <span className="summary-subtext">
-              {formatPercent(currentModel.successRate)}
-            </span>
+            <span className="summary-subtext">{formatPercent(currentModel.successRate)}</span>
           )}
         </div>
         <div className="summary-block">

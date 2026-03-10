@@ -82,10 +82,9 @@ export function AgentsPanel({
     agent: AgentInfo,
     depth: number,
     parent: AgentInfo | undefined,
-    sessionChildrenMap: Map<string, AgentInfo[]>
+    sessionChildrenMap: Map<string, AgentInfo[]>,
   ) => {
-    const statusInfo =
-      STATUS_INDICATOR[agent.status] ?? STATUS_INDICATOR.running;
+    const statusInfo = STATUS_INDICATOR[agent.status] ?? STATUS_INDICATOR.running;
     const cardId = cardIdForAgent(agent);
     const isSelected = selectedCardId === cardId;
     const isHistory = isHistoryAgent(agent);
@@ -99,16 +98,13 @@ export function AgentsPanel({
     const baseLabel = getAgentPrimaryLabel(agent);
     const label = isGate && parentLabel ? parentLabel : baseLabel;
     const roleLabel = agent.work_item_id ? agent.name : null;
-    const { gate: gateForDisplay, isRetryCycleRoot } =
-      resolveGateForDisplay(agent, sessionChildrenMap);
-    const gateSummary = gateForDisplay
-      ? GATE_STATUS_COPY[gateForDisplay.status] ?? GATE_STATUS_COPY.running
-      : null;
+    const { gate: gateForDisplay, isRetryCycleRoot } = resolveGateForDisplay(agent, sessionChildrenMap);
+    const gateSummary = gateForDisplay ? (GATE_STATUS_COPY[gateForDisplay.status] ?? GATE_STATUS_COPY.running) : null;
     const showAttempt = shouldShowAttemptLabel(agent, sessionChildrenMap);
     const gateTargetSummary =
       isGate && parent
         ? `${parent.name}${parent.iteration ? ` · Attempt ${parent.iteration}` : ""}`
-        : agent.parent_agent_id ?? null;
+        : (agent.parent_agent_id ?? null);
     const agentType = getAgentType(agent);
     const agentIconPath = getAgentAvatar(agent);
     const fallbackEmoji = getEmojiAvatar(agent.agent_id);
@@ -134,8 +130,8 @@ export function AgentsPanel({
           {(() => {
             if (agentIconPath) {
               return (
-                <img 
-                  src={agentIconPath} 
+                <img
+                  src={agentIconPath}
                   alt={iconAlt}
                   className="agent-card-avatar agent-card-snake-icon agent-card-icon"
                   onError={(e) => {
@@ -159,13 +155,9 @@ export function AgentsPanel({
             ) : (
               <span className="agent-card-iter">v{agent.iteration}</span>
             )}
-            {roleLabel ? (
-              <span className="agent-card-subtitle">{roleLabel}</span>
-            ) : null}
+            {roleLabel ? <span className="agent-card-subtitle">{roleLabel}</span> : null}
             {isGate && gateTargetSummary ? (
-              <span className="agent-card-link-label gate-card-target">
-                {gateTargetSummary}
-              </span>
+              <span className="agent-card-link-label gate-card-target">{gateTargetSummary}</span>
             ) : null}
           </div>
           <div className="agent-card-status">
@@ -177,12 +169,13 @@ export function AgentsPanel({
                 {isRetryCycleRoot ? `Final: ${gateSummary}` : gateSummary}
               </span>
             ) : null}
-            <span
-              className={`agent-dot ${statusInfo.dot}`}
-              title={statusInfo.label}
-            />
+            <span className={`agent-dot ${statusInfo.dot}`} title={statusInfo.label} />
           </div>
-          {isPaused && <span className="agent-paused-badge" title="Paused">⏸</span>}
+          {isPaused && (
+            <span className="agent-paused-badge" title="Paused">
+              ⏸
+            </span>
+          )}
           {agent.status === "running" && !isHistory && (
             <button
               className={`agent-pause-btn${isPaused ? " paused" : ""}`}
@@ -213,20 +206,28 @@ export function AgentsPanel({
           </div>
         ) : null}
         <div className="agent-card-logs">
-          {isGate ? (() => {
-            const verdict = parseGateVerdict(agent.log_lines ?? agent.recent_logs);
-            if (verdict) return <GateVerdictPreview verdict={verdict} />;
-            return agent.recent_logs.length === 0
-              ? <span className="agent-card-no-logs">Running gate check…</span>
-              : agent.recent_logs.map((line, i) => (
-                  <div key={i} className="agent-card-log-line">{line}</div>
-                ));
-          })() : (
-            agent.recent_logs.length === 0
-              ? <span className="agent-card-no-logs">{isPaused ? "Paused" : "Waiting for output…"}</span>
-              : agent.recent_logs.map((line, i) => (
-                  <div key={i} className="agent-card-log-line">{line}</div>
+          {isGate ? (
+            (() => {
+              const verdict = parseGateVerdict(agent.log_lines ?? agent.recent_logs);
+              if (verdict) return <GateVerdictPreview verdict={verdict} />;
+              return agent.recent_logs.length === 0 ? (
+                <span className="agent-card-no-logs">Running gate check…</span>
+              ) : (
+                agent.recent_logs.map((line, i) => (
+                  <div key={i} className="agent-card-log-line">
+                    {line}
+                  </div>
                 ))
+              );
+            })()
+          ) : agent.recent_logs.length === 0 ? (
+            <span className="agent-card-no-logs">{isPaused ? "Paused" : "Waiting for output…"}</span>
+          ) : (
+            agent.recent_logs.map((line, i) => (
+              <div key={i} className="agent-card-log-line">
+                {line}
+              </div>
+            ))
           )}
         </div>
       </div>
@@ -237,12 +238,8 @@ export function AgentsPanel({
   const sessionGroups = groupBySession(agents);
   const hasMultipleSessions = sessionGroups.length > 1;
 
-  const renderSessionGroup = (
-    group: { sessionId: string; agents: AgentInfo[] },
-    isCurrent: boolean
-  ) => {
-    const isExpanded =
-      isCurrent || expandedSessions.has(group.sessionId);
+  const renderSessionGroup = (group: { sessionId: string; agents: AgentInfo[] }, isCurrent: boolean) => {
+    const isExpanded = isCurrent || expandedSessions.has(group.sessionId);
 
     // Build trees for this session's agents
     const sessionAgentIdSet = new Set<string>();
@@ -253,9 +250,7 @@ export function AgentsPanel({
     const sessionChildrenByParent = new Map<string, AgentInfo[]>();
     const sessionRootAgents: AgentInfo[] = [];
     for (const agent of group.agents) {
-      const parentId =
-        parentKeysForAgent(agent).find((key) => sessionAgentIdSet.has(key)) ??
-        null;
+      const parentId = parentKeysForAgent(agent).find((key) => sessionAgentIdSet.has(key)) ?? null;
       if (parentId) {
         const siblings = sessionChildrenByParent.get(parentId) ?? [];
         siblings.push(agent);
@@ -265,11 +260,7 @@ export function AgentsPanel({
       }
     }
 
-    const renderSessionAgentTree = (
-      agent: AgentInfo,
-      depth: number,
-      parent?: AgentInfo
-    ): ReactElement[] => {
+    const renderSessionAgentTree = (agent: AgentInfo, depth: number, parent?: AgentInfo): ReactElement[] => {
       const nodes = [renderAgentCard(agent, depth, parent, sessionChildrenByParent)];
       const allChildren = [
         ...(sessionChildrenByParent.get(cardIdForAgent(agent)) ?? sessionChildrenByParent.get(agent.agent_id) ?? []),
@@ -277,9 +268,7 @@ export function AgentsPanel({
 
       // Separate retry children (linked via parent_card_id, non-gate) from other children
       const retryKids = allChildren.filter((c) => !isGateAgent(c) && !!c.parent_card_id);
-      const otherKids = allChildren.filter(
-        (c) => isGateAgent(c) || !c.parent_card_id
-      );
+      const otherKids = allChildren.filter((c) => isGateAgent(c) || !c.parent_card_id);
 
       // Render non-retry children (gates, maintenance sub-agents) newest-first
       otherKids
@@ -299,7 +288,7 @@ export function AgentsPanel({
             >
               <span className="agent-retry-arrow">↻</span>
               <span className="agent-retry-label">Retried with feedback</span>
-            </div>
+            </div>,
           );
           nodes.push(...renderSessionAgentTree(child, depth + 1, agent));
         });
@@ -312,34 +301,22 @@ export function AgentsPanel({
     const treeHasRunning = (agent: AgentInfo): boolean => {
       if (nodeHasRunningStatus(agent)) return true;
       const children =
-        sessionChildrenByParent.get(cardIdForAgent(agent)) ??
-        sessionChildrenByParent.get(agent.agent_id) ??
-        [];
+        sessionChildrenByParent.get(cardIdForAgent(agent)) ?? sessionChildrenByParent.get(agent.agent_id) ?? [];
       return children.some(treeHasRunning);
     };
 
     const treeHasFailure = (agent: AgentInfo): boolean => {
       if (agent.status === "failed") return true;
       const children =
-        sessionChildrenByParent.get(cardIdForAgent(agent)) ??
-        sessionChildrenByParent.get(agent.agent_id) ??
-        [];
+        sessionChildrenByParent.get(cardIdForAgent(agent)) ?? sessionChildrenByParent.get(agent.agent_id) ?? [];
       return children.some(treeHasFailure);
     };
 
-    const activeRootAgents = sessionRootAgents.filter(
-      (agent) => isHistoryAgent(agent) || treeHasRunning(agent)
-    );
-    const completedRootAgents = sessionRootAgents.filter(
-      (agent) => !isHistoryAgent(agent) && !treeHasRunning(agent)
-    );
+    const activeRootAgents = sessionRootAgents.filter((agent) => isHistoryAgent(agent) || treeHasRunning(agent));
+    const completedRootAgents = sessionRootAgents.filter((agent) => !isHistoryAgent(agent) && !treeHasRunning(agent));
 
-    const renderedActiveAgents = activeRootAgents.flatMap((agent) =>
-      renderSessionAgentTree(agent, 0)
-    );
-    const renderedCompletedAgents = completedRootAgents.flatMap((agent) =>
-      renderSessionAgentTree(agent, 0)
-    );
+    const renderedActiveAgents = activeRootAgents.flatMap((agent) => renderSessionAgentTree(agent, 0));
+    const renderedCompletedAgents = completedRootAgents.flatMap((agent) => renderSessionAgentTree(agent, 0));
 
     const completedFailedCount = completedRootAgents.filter(treeHasFailure).length;
     const completedSuccessCount = completedRootAgents.length - completedFailedCount;
@@ -358,9 +335,7 @@ export function AgentsPanel({
             aria-controls={isActiveExpanded ? activeSectionId : undefined}
             type="button"
           >
-            <span className="agent-section-chevron">
-              {isActiveExpanded ? "▾" : "▸"}
-            </span>
+            <span className="agent-section-chevron">{isActiveExpanded ? "▾" : "▸"}</span>
             <span className="agent-section-label">Active agents</span>
             <span className="agent-section-count">{activeRootAgents.length}</span>
           </button>
@@ -385,9 +360,7 @@ export function AgentsPanel({
               aria-expanded={isCompletedExpanded}
               type="button"
             >
-              <span className="agent-section-chevron">
-                {isCompletedExpanded ? "▾" : "▸"}
-              </span>
+              <span className="agent-section-chevron">{isCompletedExpanded ? "▾" : "▸"}</span>
               <span className="agent-section-label">Completed</span>
               <span className="agent-section-count">{completedRootAgents.length}</span>
               <span className="agent-section-summary">
@@ -396,9 +369,7 @@ export function AgentsPanel({
                   : `${completedSuccessCount} ok`}
               </span>
             </button>
-            {isCompletedExpanded && (
-              <div className="agent-section-content">{renderedCompletedAgents}</div>
-            )}
+            {isCompletedExpanded && <div className="agent-section-content">{renderedCompletedAgents}</div>}
           </div>
         ) : null}
       </div>
@@ -408,9 +379,7 @@ export function AgentsPanel({
       return <div key={group.sessionId}>{renderedSections}</div>;
     }
 
-    const label = isCurrent
-      ? "Current session"
-      : formatSessionLabel(group.sessionId);
+    const label = isCurrent ? "Current session" : formatSessionLabel(group.sessionId);
 
     return (
       <div key={group.sessionId} className="session-group">
@@ -419,15 +388,11 @@ export function AgentsPanel({
           onClick={() => !isCurrent && toggleSession(group.sessionId)}
           aria-expanded={isExpanded}
         >
-          <span className="session-group-chevron">
-            {isExpanded ? "▾" : "▸"}
-          </span>
+          <span className="session-group-chevron">{isExpanded ? "▾" : "▸"}</span>
           <span className="session-group-label">{label}</span>
           <span className="session-group-count">{group.agents.length}</span>
         </button>
-        {isExpanded && (
-          <div className="session-group-content">{renderedSections}</div>
-        )}
+        {isExpanded && <div className="session-group-content">{renderedSections}</div>}
       </div>
     );
   };
@@ -463,7 +428,9 @@ export function AgentsPanel({
           <button
             className="agents-spawn-btn"
             onClick={onSpawnAgent}
-            title={spawnAtLimit ? "At max agent limit — increase max_parallel_agents in Settings" : "Spawn additional agent"}
+            title={
+              spawnAtLimit ? "At max agent limit — increase max_parallel_agents in Settings" : "Spawn additional agent"
+            }
             disabled={spawnAtLimit}
           >
             +
@@ -475,9 +442,8 @@ export function AgentsPanel({
           renderSessionGroup(
             group,
             group.sessionId === currentSessionId ||
-              (currentSessionId == null &&
-                group === sessionGroups[sessionGroups.length - 1])
-          )
+              (currentSessionId == null && group === sessionGroups[sessionGroups.length - 1]),
+          ),
         )}
       </div>
     </aside>

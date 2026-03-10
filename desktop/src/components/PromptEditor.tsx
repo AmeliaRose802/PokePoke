@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { PromptDetail,PromptInfo } from "../types";
+import type { PromptDetail, PromptInfo } from "../types";
 
 interface Props {
   listPrompts: () => Promise<PromptInfo[]>;
@@ -18,14 +18,7 @@ interface Props {
   initialPrompt?: string | null;
 }
 
-export function PromptEditor({
-  listPrompts,
-  getPrompt,
-  savePrompt,
-  resetPrompt,
-  onClose,
-  initialPrompt,
-}: Props) {
+export function PromptEditor({ listPrompts, getPrompt, savePrompt, resetPrompt, onClose, initialPrompt }: Props) {
   const [prompts, setPrompts] = useState<PromptInfo[]>([]);
   const [selected, setSelected] = useState<PromptDetail | null>(null);
   const [editorContent, setEditorContent] = useState("");
@@ -55,7 +48,9 @@ export function PromptEditor({
         }
       }
     });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [listPrompts, initialPrompt, getPrompt]);
 
   const reloadList = useCallback(async () => {
@@ -73,7 +68,7 @@ export function PromptEditor({
         setMessage("");
       }
     },
-    [getPrompt]
+    [getPrompt],
   );
 
   const handleSave = useCallback(async () => {
@@ -104,28 +99,31 @@ export function PromptEditor({
     }
   }, [selected, resetPrompt, reloadList, selectPrompt]);
 
-  const insertVariable = useCallback((varName: string) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
+  const insertVariable = useCallback(
+    (varName: string) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
 
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const before = editorContent.substring(0, start);
-    const after = editorContent.substring(end);
-    const variable = `{{${varName}}}`;
-    const newContent = before + variable + after;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const before = editorContent.substring(0, start);
+      const after = editorContent.substring(end);
+      const variable = `{{${varName}}}`;
+      const newContent = before + variable + after;
 
-    setEditorContent(newContent);
-    setDirty(true);
-    setMessage("");
+      setEditorContent(newContent);
+      setDirty(true);
+      setMessage("");
 
-    // Restore cursor position after the inserted variable
-    setTimeout(() => {
-      const newPosition = start + variable.length;
-      textarea.focus();
-      textarea.setSelectionRange(newPosition, newPosition);
-    }, 0);
-  }, [editorContent]);
+      // Restore cursor position after the inserted variable
+      setTimeout(() => {
+        const newPosition = start + variable.length;
+        textarea.focus();
+        textarea.setSelectionRange(newPosition, newPosition);
+      }, 0);
+    },
+    [editorContent],
+  );
 
   return (
     <div className="prompt-editor-overlay">
@@ -145,18 +143,12 @@ export function PromptEditor({
             {prompts.map((p) => (
               <div
                 key={p.name}
-                className={`prompt-list-item ${
-                  selected?.name === p.name ? "selected" : ""
-                }`}
+                className={`prompt-list-item ${selected?.name === p.name ? "selected" : ""}`}
                 onClick={() => selectPrompt(p.name)}
               >
                 <span className="prompt-name">{p.name}</span>
-                {p.is_override && (
-                  <span className="prompt-badge override">override</span>
-                )}
-                {!p.has_builtin && (
-                  <span className="prompt-badge custom">custom</span>
-                )}
+                {p.is_override && <span className="prompt-badge override">override</span>}
+                {!p.has_builtin && <span className="prompt-badge custom">custom</span>}
               </div>
             ))}
           </div>
@@ -171,23 +163,14 @@ export function PromptEditor({
                   <span className="prompt-toolbar-source">
                     {selected.source === "user" ? "📁 User" : "📦 Built-in"}
                   </span>
-                  {message && (
-                    <span className="prompt-toolbar-msg">{message}</span>
-                  )}
+                  {message && <span className="prompt-toolbar-msg">{message}</span>}
                   <div className="prompt-toolbar-actions">
                     {selected.has_builtin && selected.is_override && (
-                      <button
-                        className="prompt-btn reset"
-                        onClick={handleReset}
-                      >
+                      <button className="prompt-btn reset" onClick={handleReset}>
                         ↩ Reset
                       </button>
                     )}
-                    <button
-                      className="prompt-btn save"
-                      onClick={handleSave}
-                      disabled={!dirty || saving}
-                    >
+                    <button className="prompt-btn save" onClick={handleSave} disabled={!dirty || saving}>
                       {saving ? "…" : "💾 Save"}
                     </button>
                   </div>
@@ -225,9 +208,7 @@ export function PromptEditor({
                 />
               </>
             ) : (
-              <div className="prompt-empty">
-                Select a prompt template to edit
-              </div>
+              <div className="prompt-empty">Select a prompt template to edit</div>
             )}
           </div>
         </div>

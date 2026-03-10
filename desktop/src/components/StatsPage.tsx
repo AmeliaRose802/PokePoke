@@ -1,12 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { useCopyCompletedItems } from "../hooks/useCopyCompletedItems";
-import type {
-  AgentInfo,
-  ModelHistoryEntry,
-  ModelPerformanceSummary,
-  SessionStats,
-} from "../types";
+import type { AgentInfo, ModelHistoryEntry, ModelPerformanceSummary, SessionStats } from "../types";
 import { buildAgentActivity, normalizeAgentSegments, type NormalizedAgentSegment } from "../utils/agentActivity";
 import { getAgentType } from "../utils/agentHelpers";
 import { getInProgressItems } from "../utils/inProgressItems";
@@ -41,7 +36,11 @@ interface StatsPageProps {
 
 type SortField = "model" | "runs" | "success" | "duration" | "tokens";
 
-interface AgentTokenSegment { label: string; tokens: number; color: string; }
+interface AgentTokenSegment {
+  label: string;
+  tokens: number;
+  color: string;
+}
 
 export function StatsPage({
   stats,
@@ -68,7 +67,11 @@ export function StatsPage({
     { label: "Net", value: netDelta > 0 ? `+${netDelta}` : netDelta, icon: "📊" },
     { label: "Retries", value: agent?.retries ?? 0, icon: "🔁" },
     { label: "API Calls", value: agent?.premium_requests ?? 0, icon: "📡" },
-    { label: "API seconds", value: (agent?.api_duration ?? 0) > 0 ? formatDurationShort(agent?.api_duration) : "—", icon: "⚡" },
+    {
+      label: "API seconds",
+      value: (agent?.api_duration ?? 0) > 0 ? formatDurationShort(agent?.api_duration) : "—",
+      icon: "⚡",
+    },
     { label: "Tokens", value: formatTokens((agent?.input_tokens ?? 0) + (agent?.output_tokens ?? 0)), icon: "🧮" },
     { label: "Tool Calls", value: agent?.tool_calls ?? 0, icon: "🛠️" },
     { label: "Uptime", value: formatElapsed(stats?.elapsed_time ?? 0), icon: "⏱️" },
@@ -210,24 +213,26 @@ export function StatsPage({
 
           {(completedItems.length > 0 || inProgressItems.length > 0) && (
             <section className="stats-flex-row">
-              {inProgressItems.length > 0 && (
-                <InProgressItemsSection items={inProgressItems} />
-              )}
+              {inProgressItems.length > 0 && <InProgressItemsSection items={inProgressItems} />}
               {completedItems.length > 0 && (
                 <div className="stats-panel-card">
                   <div className="stats-panel-card-header">
-                    <h3>Completed this session <span className="stats-panel-subtitle">Gate-passed and merged</span></h3>
+                    <h3>
+                      Completed this session <span className="stats-panel-subtitle">Gate-passed and merged</span>
+                    </h3>
                     <button
                       className={`copy-button ${copyStatus}`}
                       onClick={handleCopyCompletedItems}
                       title="Copy completed items to clipboard"
                       aria-label={
-                        copyStatus === 'success' ? 'Copied to clipboard!' 
-                        : copyStatus === 'error' ? 'Failed to copy' 
-                        : 'Copy completed items to clipboard'
+                        copyStatus === "success"
+                          ? "Copied to clipboard!"
+                          : copyStatus === "error"
+                            ? "Failed to copy"
+                            : "Copy completed items to clipboard"
                       }
                     >
-                      {copyStatus === 'success' ? '✅' : copyStatus === 'error' ? '❌' : '📋'}
+                      {copyStatus === "success" ? "✅" : copyStatus === "error" ? "❌" : "📋"}
                     </button>
                   </div>
                   <ul className="completed-items-list">
@@ -248,7 +253,12 @@ export function StatsPage({
                   <span className="stats-panel-subtitle">Time spent per agent type</span>
                 </div>
                 <div className="agent-activity-bar">
-                  <svg viewBox="0 0 100 10" preserveAspectRatio="none" role="img" aria-label="Agent activity distribution">
+                  <svg
+                    viewBox="0 0 100 10"
+                    preserveAspectRatio="none"
+                    role="img"
+                    aria-label="Agent activity distribution"
+                  >
                     {normalizedSegments.map((segment) => (
                       <rect
                         key={segment.label}
@@ -298,12 +308,7 @@ export function StatsPage({
                   <h3>All-time model performance</h3>
                   <span className="stats-panel-subtitle">Sortable leaderboard with success bars</span>
                 </div>
-                <ModelTable
-                  rows={leaderboardRows}
-                  sortField={sortField}
-                  sortAsc={sortAsc}
-                  onSort={handleSort}
-                />
+                <ModelTable rows={leaderboardRows} sortField={sortField} sortAsc={sortAsc} onSort={handleSort} />
               </div>
             </section>
           )}
@@ -311,12 +316,7 @@ export function StatsPage({
           {(completionSeries.length > 0 || successSeries.length > 0) && (
             <section className="stats-flex-row">
               {completionSeries.length > 0 && (
-                <TrendChart
-                  title="Completed items per day"
-                  data={completionSeries}
-                  emptyLabel=""
-                  color="#7aa2f7"
-                />
+                <TrendChart title="Completed items per day" data={completionSeries} emptyLabel="" color="#7aa2f7" />
               )}
               {successSeries.length > 0 && (
                 <TrendChart
@@ -351,14 +351,14 @@ export function StatsPage({
 }
 
 const AGENT_TOKEN_DEFS: { key: string; label: string; color: string }[] = [
-  { key: "work",            label: "Work",      color: "#7aa2f7" },
-  { key: "gate",            label: "Gate",      color: "#f7768e" },
-  { key: "tech_debt",       label: "Tech Debt", color: "#e0af68" },
-  { key: "janitor",         label: "Janitor",   color: "#9ece6a" },
-  { key: "backlog_cleanup", label: "Backlog",   color: "#ff9e64" },
-  { key: "cleanup",         label: "Cleanup",   color: "#bb9af7" },
-  { key: "beta_tester",     label: "Beta",      color: "#2ac3de" },
-  { key: "code_review",     label: "Review",    color: "#c0caf5" },
+  { key: "work", label: "Work", color: "#7aa2f7" },
+  { key: "gate", label: "Gate", color: "#f7768e" },
+  { key: "tech_debt", label: "Tech Debt", color: "#e0af68" },
+  { key: "janitor", label: "Janitor", color: "#9ece6a" },
+  { key: "backlog_cleanup", label: "Backlog", color: "#ff9e64" },
+  { key: "cleanup", label: "Cleanup", color: "#bb9af7" },
+  { key: "beta_tester", label: "Beta", color: "#2ac3de" },
+  { key: "code_review", label: "Review", color: "#c0caf5" },
 ];
 
 const AGENT_TOKEN_KEYS = new Set(AGENT_TOKEN_DEFS.map((def) => def.key));
@@ -389,13 +389,7 @@ function normalizeAgentTypeKey(value: string | null | undefined): string | null 
 }
 
 function resolveAgentType(agent: AgentInfo): string {
-  const candidates = [
-    agent.agent_type,
-    agent.base_agent_id,
-    agent.agent_id,
-    agent.name,
-    getAgentType(agent),
-  ];
+  const candidates = [agent.agent_type, agent.base_agent_id, agent.agent_id, agent.name, getAgentType(agent)];
 
   for (const candidate of candidates) {
     const normalized = normalizeAgentTypeKey(candidate);
@@ -448,15 +442,7 @@ function TokensPerAgentChart({ segments }: { segments: AgentTokenSegment[] }) {
             <span className="tokens-per-agent-label">{segment.label}</span>
             <div className="tokens-per-agent-bar-container">
               <svg viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true">
-                <rect
-                  x={0}
-                  y={0}
-                  width={barWidth}
-                  height={10}
-                  fill={segment.color}
-                  rx={4}
-                  ry={4}
-                >
+                <rect x={0} y={0} width={barWidth} height={10} fill={segment.color} rx={4} ry={4}>
                   <title>{`${segment.label}: ${formatTokens(segment.tokens)} tokens`}</title>
                 </rect>
               </svg>
@@ -468,4 +454,3 @@ function TokensPerAgentChart({ segments }: { segments: AgentTokenSegment[] }) {
     </div>
   );
 }
-

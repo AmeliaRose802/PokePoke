@@ -1,19 +1,13 @@
 /**
  * Snake icon utilities for work and gate agent avatars.
- * 
+ *
  * Each work item gets a randomly assigned snake pair (work_agent_icon.png + gate_agent_icon.png)
  * The assignment is stable based on work_item_id hash to ensure consistency across renders.
  */
 
-export const SNAKE_TYPES = [
-  'cobra',
-  'corn', 
-  'rainbow_boa',
-  'rattlesnake',
-  'sea_snake'
-] as const;
+export const SNAKE_TYPES = ["cobra", "corn", "rainbow_boa", "rattlesnake", "sea_snake"] as const;
 
-export type SnakeType = typeof SNAKE_TYPES[number];
+export type SnakeType = (typeof SNAKE_TYPES)[number];
 
 /**
  * Hash a string to a stable number for deterministic selection
@@ -54,7 +48,5 @@ export function getGateAgentIconPath(snakeType: SnakeType): string {
  */
 export function getAgentSnakeIcon(workItemId: string, isGateAgent: boolean): string {
   const snakeType = getSnakeForWorkItem(workItemId);
-  return isGateAgent 
-    ? getGateAgentIconPath(snakeType)
-    : getWorkAgentIconPath(snakeType);
+  return isGateAgent ? getGateAgentIconPath(snakeType) : getWorkAgentIconPath(snakeType);
 }

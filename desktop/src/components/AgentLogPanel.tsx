@@ -16,10 +16,7 @@ import {
   getAgentType,
   isGateAgent,
 } from "../utils/agentHelpers";
-import {
-  processLogsToRenderItems,
-  stringsToLogEntries,
-} from "../utils/logProcessor";
+import { processLogsToRenderItems, stringsToLogEntries } from "../utils/logProcessor";
 import { RenderLogItems } from "./LogComponents";
 
 interface Props {
@@ -34,10 +31,7 @@ const STATUS_INDICATOR: Record<string, { dot: string; label: string }> = {
   failed: { dot: "agent-dot-failed", label: "Failed" },
 };
 
-const ROBOT_AVATARS = [
-  "🐍", "🦎", "🕷️", "🦇", "🦋", "🐛", "🐝", "🐞",
-  "🤖", "🔧", "⚡", "🎯", "🔮", "🎲", "🔬", "🧩",
-];
+const ROBOT_AVATARS = ["🐍", "🦎", "🕷️", "🦇", "🦋", "🐛", "🐝", "🐞", "🤖", "🔧", "⚡", "🎯", "🔮", "🎲", "🔬", "🧩"];
 
 function getAvatar(agentId: string): string {
   let hash = 0;
@@ -70,21 +64,18 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const isGate = isGateAgent(agent);
-  const linkedParent =
-    isGate
-      ? agents.find((candidate) => {
-          if (agent.parent_card_id) {
-            return (candidate.card_id ?? candidate.agent_id) === agent.parent_card_id;
-          }
-          return candidate.agent_id === agent.parent_agent_id;
-        }) ?? null
-      : null;
-  const parentLabel = linkedParent
-    ? getAgentPrimaryLabel(linkedParent)
-    : agent.parent_agent_id ?? null;
+  const linkedParent = isGate
+    ? (agents.find((candidate) => {
+        if (agent.parent_card_id) {
+          return (candidate.card_id ?? candidate.agent_id) === agent.parent_card_id;
+        }
+        return candidate.agent_id === agent.parent_agent_id;
+      }) ?? null)
+    : null;
+  const parentLabel = linkedParent ? getAgentPrimaryLabel(linkedParent) : (agent.parent_agent_id ?? null);
 
   const statusInfo = STATUS_INDICATOR[agent.status] ?? STATUS_INDICATOR.running;
-  
+
   // Prioritize live agent data for logs, but use detailed agent for metadata if available
   const agentToUse = detailedAgent || agent;
   const agentType = getAgentType(agentToUse);
@@ -94,7 +85,7 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
   const agentPrompt = agentToUse.agent_prompt;
   const hasPrompt = Boolean(agentPrompt && agentPrompt.trim().length > 0);
   const promptLineCount = hasPrompt ? agentPrompt!.split(/\r?\n/).length : 0;
-  
+
   // Memoize logLines to prevent dependency changes on every render
   const logLines = useMemo(() => {
     // Priority: 1) Live agent recent_logs, 2) Detailed agent log_lines, 3) Fallback to empty
@@ -106,7 +97,7 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
     }
     return [];
   }, [agent.recent_logs, detailedAgent?.log_lines]);
-  
+
   const primaryLabel = getAgentPrimaryLabel(agent);
   // Show the friendly name prominently when it differs from the primary label
   const friendlyName = agent.name !== primaryLabel ? agent.name : null;
@@ -124,21 +115,21 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
         const detailed = await getAgentDetail(detailKey);
         setDetailedAgent(detailed);
       } catch (error) {
-        setDetailError(error instanceof Error ? error.message : 'Failed to load detailed logs');
-        console.warn('Failed to fetch agent detail:', error);
+        setDetailError(error instanceof Error ? error.message : "Failed to load detailed logs");
+        console.warn("Failed to fetch agent detail:", error);
       } finally {
         setIsLoadingDetail(false);
       }
     }
-    
+
     fetchDetailedAgent();
   }, [agent.card_id, agent.agent_id, getAgentDetail]);
 
   // Re-poll detailed agent data periodically for running agents to keep logs fresh
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | null = null;
-    
-    const shouldRepoll = agent.status === 'running' && !agent.paused;
+
+    const shouldRepoll = agent.status === "running" && !agent.paused;
     if (shouldRepoll) {
       intervalId = setInterval(async () => {
         try {
@@ -146,7 +137,7 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
           const detailed = await getAgentDetail(detailKey);
           setDetailedAgent(detailed);
         } catch (error) {
-          console.warn('Failed to refresh agent detail:', error);
+          console.warn("Failed to refresh agent detail:", error);
           // Don't update error state for background refreshes
         }
       }, 5000); // Re-poll every 5 seconds for running agents
@@ -207,9 +198,7 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
         <div className="agent-log-panel-info">
           <span className="agent-log-panel-name">{primaryLabel}</span>
           <span className="agent-log-panel-iter">v{agent.iteration}</span>
-          {friendlyName ? (
-            <span className="agent-log-panel-friendly-name">{friendlyName}</span>
-          ) : null}
+          {friendlyName ? <span className="agent-log-panel-friendly-name">{friendlyName}</span> : null}
         </div>
         <div className="agent-log-panel-status">
           <span className={`agent-dot ${statusInfo.dot}`} title={statusInfo.label} />
@@ -257,9 +246,7 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
           <details className="log-accordion agent-log-panel-prompt">
             <summary className="log-accordion-summary">
               <span className="log-accordion-chevron">▸</span>
-              <span className="log-message">
-                Agent Prompt{promptLineCount ? ` — ${promptLineCount} lines` : ""}
-              </span>
+              <span className="log-message">Agent Prompt{promptLineCount ? ` — ${promptLineCount} lines` : ""}</span>
             </summary>
             <div className="log-accordion-details">
               <pre className="agent-log-panel-prompt-content">{agentPrompt}</pre>

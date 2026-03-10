@@ -85,7 +85,7 @@ export function ToolAccordion({ tool, keyPrefix, nested = false }: ToolAccordion
   if (tool.additionalEntries) detailsEntries.push(...tool.additionalEntries);
   if (tool.result) detailsEntries.push(tool.result);
   const nestedClass = nested ? "nested" : "";
-  
+
   // Combine toolLabel and description for accordion title (matching parseToolLabel behavior)
   const displayLabel = tool.summary.description
     ? `${tool.summary.toolLabel} - ${truncateText(tool.summary.description, 50)}`
@@ -97,9 +97,7 @@ export function ToolAccordion({ tool, keyPrefix, nested = false }: ToolAccordion
         <span className="log-accordion-chevron">▸</span>
         <span className="log-timestamp">{formatTime(tool.entry.timestamp)}</span>
         <span className="log-message">{displayLabel}</span>
-        {tool.summary.resultSummary && (
-          <span className="log-accordion-result">{tool.summary.resultSummary}</span>
-        )}
+        {tool.summary.resultSummary && <span className="log-accordion-result">{tool.summary.resultSummary}</span>}
       </summary>
       <div className="log-accordion-details">
         <ToolDescription summary={tool.summary} />
@@ -131,11 +129,7 @@ export function NarrationAccordion({ entries, startedAt, keyPrefix }: NarrationA
       </summary>
       <div className="log-accordion-details">
         {entries.map((entry, j) => (
-          <LogEntryRenderer
-            key={`${keyPrefix}-${j}`}
-            entry={entry}
-            keyPrefix={`${keyPrefix}-${j}`}
-          />
+          <LogEntryRenderer key={`${keyPrefix}-${j}`} entry={entry} keyPrefix={`${keyPrefix}-${j}`} />
         ))}
       </div>
     </details>
@@ -154,26 +148,16 @@ export function ToolBatchAccordion({ batch, keyPrefix }: ToolBatchAccordionProps
 
   // Flatten: single group with single tool → render as simple ToolAccordion
   if (batch.groups.length === 1 && batch.groups[0].items.length === 1) {
-    return (
-      <ToolAccordion
-        key={keyPrefix}
-        tool={batch.groups[0].items[0]}
-        keyPrefix={keyPrefix}
-      />
-    );
+    return <ToolAccordion key={keyPrefix} tool={batch.groups[0].items[0]} keyPrefix={keyPrefix} />;
   }
 
   return (
-    <details
-      key={keyPrefix}
-      className={`log-tool-batch ${batch.statusClass ?? ""}`.trim()}
-    >
+    <details key={keyPrefix} className={`log-tool-batch ${batch.statusClass ?? ""}`.trim()}>
       <summary className="log-accordion-summary">
         <span className="log-accordion-chevron">▸</span>
         <span className="log-timestamp">{formatTime(batch.startedAt)}</span>
         <span className="log-message">
-          🔧 Tool batch ({batch.totalCalls} call{batch.totalCalls === 1 ? "" : "s"})
-          {byTool ? ` — ${byTool}` : ""}
+          🔧 Tool batch ({batch.totalCalls} call{batch.totalCalls === 1 ? "" : "s"}){byTool ? ` — ${byTool}` : ""}
         </span>
         <span className="log-accordion-result">{progress}</span>
       </summary>
@@ -245,11 +229,7 @@ export function MarkdownBlock({ entries, startedAt, keyPrefix }: MarkdownBlockPr
   return (
     <div key={keyPrefix} className="log-entry log-markdown-block">
       <span className="log-timestamp">{formatTime(startedAt)}</span>
-      <div
-        ref={contentRef}
-        className="log-message log-markdown-content"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
+      <div ref={contentRef} className="log-message log-markdown-content" dangerouslySetInnerHTML={{ __html: html }} />
     </div>
   );
 }
@@ -262,13 +242,7 @@ interface CodeBlockAccordionProps {
   language?: string;
 }
 
-export function CodeBlockAccordion({
-  startedAt,
-  keyPrefix,
-  markdown,
-  lineCount,
-  language,
-}: CodeBlockAccordionProps) {
+export function CodeBlockAccordion({ startedAt, keyPrefix, markdown, lineCount, language }: CodeBlockAccordionProps) {
   const html = renderMarkdown(markdown);
   const lineLabel = `${lineCount} line${lineCount === 1 ? "" : "s"}`;
   const codeLabel = language ? `📄 ${language} code block` : "📄 Code block";
@@ -293,11 +267,7 @@ export function CodeBlockAccordion({
         </span>
       </summary>
       <div className="log-accordion-details">
-        <div
-          ref={contentRef}
-          className="log-message log-markdown-content"
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
+        <div ref={contentRef} className="log-message log-markdown-content" dangerouslySetInnerHTML={{ __html: html }} />
       </div>
     </details>
   );
@@ -315,13 +285,7 @@ export function RenderLogItems({ items }: RenderLogItemsProps) {
     <>
       {items.map((item, i) => {
         if (item.type === "tool") {
-          return (
-            <ToolAccordion
-              key={`tool-${i}`}
-              tool={item.tool}
-              keyPrefix={`tool-${i}`}
-            />
-          );
+          return <ToolAccordion key={`tool-${i}`} tool={item.tool} keyPrefix={`tool-${i}`} />;
         }
 
         if (item.type === "narration") {
@@ -336,23 +300,12 @@ export function RenderLogItems({ items }: RenderLogItemsProps) {
         }
 
         if (item.type === "tool-batch") {
-          return (
-            <ToolBatchAccordion
-              key={`tool-batch-${i}`}
-              batch={item.batch}
-              keyPrefix={`tool-batch-${i}`}
-            />
-          );
+          return <ToolBatchAccordion key={`tool-batch-${i}`} batch={item.batch} keyPrefix={`tool-batch-${i}`} />;
         }
 
         if (item.type === "markdown-block") {
           return (
-            <MarkdownBlock
-              key={`md-${i}`}
-              entries={item.entries}
-              startedAt={item.startedAt}
-              keyPrefix={`md-${i}`}
-            />
+            <MarkdownBlock key={`md-${i}`} entries={item.entries} startedAt={item.startedAt} keyPrefix={`md-${i}`} />
           );
         }
 
@@ -369,13 +322,7 @@ export function RenderLogItems({ items }: RenderLogItemsProps) {
           );
         }
 
-        return (
-          <LogEntryRenderer
-            key={`log-${i}`}
-            entry={item.entry}
-            keyPrefix={`log-${i}`}
-          />
-        );
+        return <LogEntryRenderer key={`log-${i}`} entry={item.entry} keyPrefix={`log-${i}`} />;
       })}
     </>
   );

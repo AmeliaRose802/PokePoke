@@ -42,10 +42,8 @@ export function SetupWizard({ bridge }: { bridge: BridgeState }) {
       }));
 
       if (next.is_git_repo && !next.beads_initialized) setStep("beads");
-      if (next.is_git_repo && next.beads_initialized && !next.config_exists)
-        setStep("config");
-      if (next.is_git_repo && next.beads_initialized && next.config_exists)
-        setStep("prompts");
+      if (next.is_git_repo && next.beads_initialized && !next.config_exists) setStep("config");
+      if (next.is_git_repo && next.beads_initialized && next.config_exists) setStep("prompts");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -156,9 +154,7 @@ export function SetupWizard({ bridge }: { bridge: BridgeState }) {
       <div className="setup-modal">
         <div className="setup-header">
           <div className="setup-title">First-time setup</div>
-          <div className="setup-subtitle">
-            This directory isn’t initialized for PokePoke yet.
-          </div>
+          <div className="setup-subtitle">This directory isn’t initialized for PokePoke yet.</div>
         </div>
 
         <div className="setup-body">
@@ -171,18 +167,12 @@ export function SetupWizard({ bridge }: { bridge: BridgeState }) {
             </div>
             <div className="setup-status-row">
               <span className="setup-status-label">Git</span>
-              <span className="setup-status-value">
-                {status?.is_git_repo ? "✅" : "❌"}
-              </span>
+              <span className="setup-status-value">{status?.is_git_repo ? "✅" : "❌"}</span>
             </div>
             <div className="setup-status-row">
               <span className="setup-status-label">Beads</span>
               <span className="setup-status-value">
-                {!status?.beads_installed
-                  ? "❌ bd not found"
-                  : status?.beads_initialized
-                    ? "✅"
-                    : "❌"}
+                {!status?.beads_installed ? "❌ bd not found" : status?.beads_initialized ? "✅" : "❌"}
               </span>
             </div>
             <div className="setup-status-row">
@@ -198,16 +188,10 @@ export function SetupWizard({ bridge }: { bridge: BridgeState }) {
           {!status?.is_git_repo && step === "git" ? (
             <div className="setup-step">
               <h3>1) Initialize git</h3>
-              <p>
-                PokePoke projects should be git repositories.
-              </p>
+              <p>PokePoke projects should be git repositories.</p>
               <label className="setup-field">
                 Default branch
-                <input
-                  value={defaultBranch}
-                  onChange={(e) => setDefaultBranch(e.target.value)}
-                  disabled={creating}
-                />
+                <input value={defaultBranch} onChange={(e) => setDefaultBranch(e.target.value)} disabled={creating} />
               </label>
               <div className="setup-actions">
                 <button onClick={handleGitInit} disabled={creating}>
@@ -222,10 +206,7 @@ export function SetupWizard({ bridge }: { bridge: BridgeState }) {
                 Beads is used for task tracking (bd). This will run <code>bd init</code>.
               </p>
               <div className="setup-actions">
-                <button
-                  onClick={handleBeadsInit}
-                  disabled={creating || !status?.beads_installed}
-                >
+                <button onClick={handleBeadsInit} disabled={creating || !status?.beads_installed}>
                   Run bd init
                 </button>
               </div>
@@ -238,9 +219,7 @@ export function SetupWizard({ bridge }: { bridge: BridgeState }) {
                 Project name
                 <input
                   value={config.project_name}
-                  onChange={(e) =>
-                    setConfig((prev) => ({ ...prev, project_name: e.target.value }))
-                  }
+                  onChange={(e) => setConfig((prev) => ({ ...prev, project_name: e.target.value }))}
                   disabled={creating}
                 />
               </label>
@@ -249,9 +228,7 @@ export function SetupWizard({ bridge }: { bridge: BridgeState }) {
                 Default model
                 <input
                   value={config.default_model}
-                  onChange={(e) =>
-                    setConfig((prev) => ({ ...prev, default_model: e.target.value }))
-                  }
+                  onChange={(e) => setConfig((prev) => ({ ...prev, default_model: e.target.value }))}
                   disabled={creating}
                 />
               </label>
@@ -274,11 +251,7 @@ export function SetupWizard({ bridge }: { bridge: BridgeState }) {
 
               <label className="setup-field">
                 Default branch
-                <input
-                  value={defaultBranch}
-                  onChange={(e) => setDefaultBranch(e.target.value)}
-                  disabled={creating}
-                />
+                <input value={defaultBranch} onChange={(e) => setDefaultBranch(e.target.value)} disabled={creating} />
               </label>
 
               <div className="setup-actions">
@@ -291,8 +264,7 @@ export function SetupWizard({ bridge }: { bridge: BridgeState }) {
             <div className="setup-step">
               <h3>4) Optional: scaffold prompt overrides</h3>
               <p>
-                This can copy built-in templates into <code>.pokepoke/prompts/</code> so
-                you can customize them.
+                This can copy built-in templates into <code>.pokepoke/prompts/</code> so you can customize them.
               </p>
               <label className="setup-checkbox">
                 <input
@@ -304,17 +276,10 @@ export function SetupWizard({ bridge }: { bridge: BridgeState }) {
                 Scaffold <code>beads-item.md</code> override
               </label>
               <div className="setup-actions">
-                <button
-                  onClick={() => setStep("summary")}
-                  disabled={creating}
-                >
+                <button onClick={() => setStep("summary")} disabled={creating}>
                   Continue
                 </button>
-                <button
-                  onClick={handleScaffoldPrompts}
-                  disabled={creating}
-                  title="Copies now and continues"
-                >
+                <button onClick={handleScaffoldPrompts} disabled={creating} title="Copies now and continues">
                   Copy now
                 </button>
               </div>
@@ -326,10 +291,18 @@ export function SetupWizard({ bridge }: { bridge: BridgeState }) {
                 <li>Git repo: {status?.is_git_repo ? "✅" : "❌"}</li>
                 <li>Beads initialized: {status?.beads_initialized ? "✅" : "❌"}</li>
                 <li>Config: {status?.config_exists ? "✅" : "❌"}</li>
-                <li>Project name: <code>{config.project_name}</code></li>
-                <li>Default model: <code>{config.default_model}</code></li>
-                <li>Max agents: <code>{config.max_parallel_agents}</code></li>
-                <li>Default branch: <code>{defaultBranch}</code></li>
+                <li>
+                  Project name: <code>{config.project_name}</code>
+                </li>
+                <li>
+                  Default model: <code>{config.default_model}</code>
+                </li>
+                <li>
+                  Max agents: <code>{config.max_parallel_agents}</code>
+                </li>
+                <li>
+                  Default branch: <code>{defaultBranch}</code>
+                </li>
                 <li>Scaffold prompts: {scaffoldPrompts ? "✅" : "❌"}</li>
               </ul>
 

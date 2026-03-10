@@ -21,27 +21,27 @@
   -moz-osx-font-smoothing: grayscale;
 
   /* Neutral dark surfaces + green accents */
-  --bg-primary: #0b0f14;      /* app background */
-  --bg-secondary: #111827;    /* header / secondary surfaces */
-  --bg-tertiary: #161b22;     /* section surfaces */
-  --bg-elevated: #1f2937;     /* cards/panels */
+  --bg-primary: #0b0f14; /* app background */
+  --bg-secondary: #111827; /* header / secondary surfaces */
+  --bg-tertiary: #161b22; /* section surfaces */
+  --bg-elevated: #1f2937; /* cards/panels */
 
-  --accent-primary: #22c55e;   /* primary green accent */
+  --accent-primary: #22c55e; /* primary green accent */
   --accent-secondary: #86efac; /* lighter green accent */
-  --accent-warning: #f59e0b;   /* amber */
-  --accent-error: #ef4444;     /* red */
-  --accent-success: #22c55e;   /* success green */
+  --accent-warning: #f59e0b; /* amber */
+  --accent-error: #ef4444; /* red */
+  --accent-success: #22c55e; /* success green */
 
-  --text-primary: #e6edf3;     /* high-contrast text */
-  --text-secondary: #c9d1d9;   /* secondary text */
-  --text-muted: #8b949e;       /* muted text */
-  --text-accent: #7ee787;      /* accent text */
+  --text-primary: #e6edf3; /* high-contrast text */
+  --text-secondary: #c9d1d9; /* secondary text */
+  --text-muted: #8b949e; /* muted text */
+  --text-accent: #7ee787; /* accent text */
 
-  --border-primary: #30363d;   /* subtle border */
+  --border-primary: #30363d; /* subtle border */
   --border-secondary: #2ea043; /* accent border */
 
-  --snake-scale-dark: rgba(255 255 255 / 0.04);  /* subtle texture dots */
-  --snake-scale-light: rgba(34 197 94 / 0.06);   /* subtle accent texture */
+  --snake-scale-dark: rgba(255 255 255 / 0.04); /* subtle texture dots */
+  --snake-scale-light: rgba(34 197 94 / 0.06); /* subtle accent texture */
 }
 
 body {

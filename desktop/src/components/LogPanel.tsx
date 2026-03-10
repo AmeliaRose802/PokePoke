@@ -20,14 +20,7 @@ interface Props {
   onFocus?: () => void;
 }
 
-export function LogPanel({
-  title,
-  icon,
-  logs,
-  accentColor,
-  focused,
-  onFocus,
-}: Props) {
+export function LogPanel({ title, icon, logs, accentColor, focused, onFocus }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -36,7 +29,7 @@ export function LogPanel({
   // Set accent color using CSS custom property
   useEffect(() => {
     if (panelRef.current) {
-      panelRef.current.style.setProperty('--accent', accentColor);
+      panelRef.current.style.setProperty("--accent", accentColor);
     }
   }, [accentColor]);
 
@@ -65,31 +58,17 @@ export function LogPanel({
   };
 
   return (
-    <div
-      ref={panelRef}
-      className={`log-panel ${focused ? "focused" : ""}`}
-      onClick={handleClick}
-    >
+    <div ref={panelRef} className={`log-panel ${focused ? "focused" : ""}`} onClick={handleClick}>
       <div className="log-panel-header">
         <span>
           {icon} {title}
         </span>
         <span className="log-count">{logs.length} lines</span>
       </div>
-      <div
-        className="log-entries"
-        ref={containerRef}
-        onScroll={handleScroll}
-      >
+      <div className="log-entries" ref={containerRef} onScroll={handleScroll}>
         {renderItems.map((item, i) => {
           if (item.type === "tool") {
-            return (
-              <ToolAccordion
-                key={`tool-${i}`}
-                tool={item.tool}
-                keyPrefix={`tool-${i}`}
-              />
-            );
+            return <ToolAccordion key={`tool-${i}`} tool={item.tool} keyPrefix={`tool-${i}`} />;
           }
 
           if (item.type === "narration") {
@@ -104,23 +83,12 @@ export function LogPanel({
           }
 
           if (item.type === "tool-batch") {
-            return (
-              <ToolBatchAccordion
-                key={`tool-batch-${i}`}
-                batch={item.batch}
-                keyPrefix={`tool-batch-${i}`}
-              />
-            );
+            return <ToolBatchAccordion key={`tool-batch-${i}`} batch={item.batch} keyPrefix={`tool-batch-${i}`} />;
           }
 
           if (item.type === "markdown-block") {
             return (
-              <MarkdownBlock
-                key={`md-${i}`}
-                entries={item.entries}
-                startedAt={item.startedAt}
-                keyPrefix={`md-${i}`}
-              />
+              <MarkdownBlock key={`md-${i}`} entries={item.entries} startedAt={item.startedAt} keyPrefix={`md-${i}`} />
             );
           }
 
@@ -137,13 +105,7 @@ export function LogPanel({
             );
           }
 
-          return (
-            <LogEntryRenderer
-              key={`log-${i}`}
-              entry={item.entry}
-              keyPrefix={`log-${i}`}
-            />
-          );
+          return <LogEntryRenderer key={`log-${i}`} entry={item.entry} keyPrefix={`log-${i}`} />;
         })}
         <div ref={bottomRef} />
       </div>

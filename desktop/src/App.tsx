@@ -44,16 +44,11 @@ function App() {
   useDocumentTitle(bridge.agentName, bridge.projectName);
 
   const hasSelectedAgent =
-    selectedCardId !== null &&
-    bridge.agents.some(
-      (agent) => (agent.card_id ?? agent.agent_id) === selectedCardId
-    );
+    selectedCardId !== null && bridge.agents.some((agent) => (agent.card_id ?? agent.agent_id) === selectedCardId);
   const displayedCardId = hasSelectedAgent ? selectedCardId : null;
   const selectedAgentDetail =
     displayedCardId !== null
-      ? bridge.agents.find(
-          (agent) => (agent.card_id ?? agent.agent_id) === displayedCardId
-        ) ?? null
+      ? (bridge.agents.find((agent) => (agent.card_id ?? agent.agent_id) === displayedCardId) ?? null)
       : null;
 
   // Auto-follow: pick the most recently started agent when none is manually selected.
@@ -61,9 +56,7 @@ function App() {
   // last_log_at / last_updated would cause the selection to jump on every poll.
   const autoFollowAgent = (() => {
     if (selectedAgentDetail) return null; // manual selection takes priority
-    const liveAgents = bridge.agents.filter(
-      (agent) => agent.is_history_entry !== true
-    );
+    const liveAgents = bridge.agents.filter((agent) => agent.is_history_entry !== true);
     if (liveAgents.length === 0) return null;
     const sorted = [...liveAgents].sort((a, b) => {
       if (a.status === "running" && b.status !== "running") return -1;
@@ -102,16 +95,12 @@ function App() {
   }, [bridge]);
 
   const fallbackAgentLogCount = bridge.agentLogs.length;
-  const shouldShowFallbackAgentPanel =
-    !selectedAgentDetail && !autoFollowAgent && fallbackAgentLogCount > 0;
+  const shouldShowFallbackAgentPanel = !selectedAgentDetail && !autoFollowAgent && fallbackAgentLogCount > 0;
 
   const hasPrimaryAgentOutput =
-    selectedAgentDetail !== null ||
-    autoFollowAgent !== null ||
-    shouldShowFallbackAgentPanel;
+    selectedAgentDetail !== null || autoFollowAgent !== null || shouldShowFallbackAgentPanel;
 
-  const shouldShowOrchestratorDrawer =
-    hasPrimaryAgentOutput && bridge.orchestratorLogs.length > 0;
+  const shouldShowOrchestratorDrawer = hasPrimaryAgentOutput && bridge.orchestratorLogs.length > 0;
 
   const loadModelHistory = useCallback(async () => {
     setHistoryLoading(true);
@@ -160,61 +149,35 @@ function App() {
           <button
             className={`finish-after-current-btn${bridge.stopAfterCurrent ? " stopping" : ""}`}
             onClick={() =>
-              bridge.stopAfterCurrent
-                ? bridge.cancelStopAfterCurrent()
-                : bridge.requestStopAfterCurrent()
+              bridge.stopAfterCurrent ? bridge.cancelStopAfterCurrent() : bridge.requestStopAfterCurrent()
             }
             title={
-              bridge.stopAfterCurrent
-                ? "Cancel — continue processing items"
-                : "Finish after current item completes"
+              bridge.stopAfterCurrent ? "Cancel — continue processing items" : "Finish after current item completes"
             }
           >
             {bridge.stopAfterCurrent ? "⏸ Stopping…" : "⏸ Finish after current"}
           </button>
-          <button
-            className="prompt-editor-toggle"
-            onClick={() => setShowStatsPage(true)}
-            title="Open stats"
-          >
+          <button className="prompt-editor-toggle" onClick={() => setShowStatsPage(true)} title="Open stats">
             📊
           </button>
-          <button
-            className="prompt-editor-toggle"
-            onClick={() => setShowPrompts(true)}
-            title="Edit prompt templates"
-          >
+          <button className="prompt-editor-toggle" onClick={() => setShowPrompts(true)} title="Edit prompt templates">
             ✏️
           </button>
-          <button
-            className="prompt-editor-toggle"
-            onClick={() => setShowSettings(true)}
-            title="Settings"
-          >
+          <button className="prompt-editor-toggle" onClick={() => setShowSettings(true)} title="Settings">
             ⚙️
           </button>
         </div>
       </div>
 
       {/* Work item header */}
-      <WorkItemHeader
-        workItem={bridge.workItem}
-        agentName={bridge.agentName}
-        repositoryName={bridge.repositoryName}
-      />
+      <WorkItemHeader workItem={bridge.workItem} agentName={bridge.agentName} repositoryName={bridge.repositoryName} />
 
       {/* Main content area with logs and agents panel */}
-      <div
-        className={`main-content${isDragging ? " main-content--resizing" : ""}`}
-        ref={containerRef}
-      >
+      <div className={`main-content${isDragging ? " main-content--resizing" : ""}`} ref={containerRef}>
         {/* Primary log output + secondary (collapsible) orchestrator log */}
         <div className="log-container">
           {selectedAgentDetail ? (
-            <AgentLogPanel
-              agent={selectedAgentDetail}
-              onClose={() => setSelectedCardId(null)}
-            />
+            <AgentLogPanel agent={selectedAgentDetail} onClose={() => setSelectedCardId(null)} />
           ) : autoFollowAgent ? (
             <AgentLogPanel
               agent={autoFollowAgent}
@@ -224,12 +187,7 @@ function App() {
               showClose={false}
             />
           ) : shouldShowFallbackAgentPanel ? (
-            <LogPanel
-              title="Agent"
-              icon="🐍"
-              logs={bridge.agentLogs}
-              accentColor="var(--accent-primary)"
-            />
+            <LogPanel title="Agent" icon="🐍" logs={bridge.agentLogs} accentColor="var(--accent-primary)" />
           ) : (
             <LogPanel
               title="Orchestrator"
@@ -242,12 +200,8 @@ function App() {
           {shouldShowOrchestratorDrawer ? (
             <details className="orchestrator-collapsible">
               <summary className="orchestrator-collapsible-summary">
-                <span className="orchestrator-collapsible-title">
-                  🎛️ Orchestrator
-                </span>
-                <span className="log-count">
-                  {bridge.orchestratorLogs.length} lines
-                </span>
+                <span className="orchestrator-collapsible-title">🎛️ Orchestrator</span>
+                <span className="log-count">{bridge.orchestratorLogs.length} lines</span>
               </summary>
               <div className="orchestrator-collapsible-content">
                 <LogPanel
@@ -268,12 +222,7 @@ function App() {
         <AgentsPanel
           agents={bridge.agents}
           currentSessionId={bridge.currentSessionId}
-          selectedCardId={
-            displayedCardId ??
-            autoFollowAgent?.card_id ??
-            autoFollowAgent?.agent_id ??
-            null
-          }
+          selectedCardId={displayedCardId ?? autoFollowAgent?.card_id ?? autoFollowAgent?.agent_id ?? null}
           onSelectAgent={handleSelectAgent}
           onPauseAgent={bridge.pauseAgent}
           onResumeAgent={bridge.resumeAgent}
@@ -298,7 +247,10 @@ function App() {
           getPrompt={bridge.getPrompt}
           savePrompt={bridge.savePrompt}
           resetPrompt={bridge.resetPrompt}
-          onClose={() => { setShowPrompts(false); setInitialPrompt(null); }}
+          onClose={() => {
+            setShowPrompts(false);
+            setInitialPrompt(null);
+          }}
           initialPrompt={initialPrompt}
         />
       )}
