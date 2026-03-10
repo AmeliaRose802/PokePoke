@@ -10,6 +10,8 @@ Covers:
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from pokepoke.merge_queue import MergeQueue, MergeStatus
 from pokepoke.stats import serialize_session_stats, _print_merge_queue_stats
 from pokepoke.types import (
@@ -423,6 +425,3 @@ class TestSerializeMergeQueueStats:
         assert mq["avg_merge_duration_s"] == 2.0
         assert mq["rebase_success_rate"] == 0.75
 
-
-# Need pytest import for approx
-import pytest
