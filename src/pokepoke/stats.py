@@ -126,32 +126,8 @@ def print_stats(items_completed: int, total_requests: int, elapsed_seconds: floa
             print(f"{emoji}{agent.display_name} agents:".ljust(28) + f"{count}")
 
     # Print agent statistics if available and has non-zero values
-    if session_stats and session_stats.agent_stats and (
-        session_stats.agent_stats.wall_duration > 0 or
-        session_stats.agent_stats.input_tokens > 0 or
-        session_stats.agent_stats.output_tokens > 0 or
-        session_stats.agent_stats.lines_added > 0 or
-        session_stats.agent_stats.lines_removed > 0 or
-        session_stats.agent_stats.premium_requests > 0
-    ):
-        print("\n" + "=" * 60)
-        print("🤖 Agent Usage Statistics")
-        print("=" * 60)
-        astats = session_stats.agent_stats
-        if astats.wall_duration > 0:
-            print(f"⏱️  Wall duration:      {astats.wall_duration:.1f}s")
-        if astats.api_duration > 0:
-            print(f"⚡ API duration:       {astats.api_duration:.1f}s")
-        if astats.input_tokens > 0:
-            print(f"📊 Input tokens:       {astats.input_tokens:,}")
-        if astats.output_tokens > 0:
-            print(f"📤 Output tokens:      {astats.output_tokens:,}")
-        if astats.lines_added > 0:
-            print(f"➕ Lines added:        {astats.lines_added:,}")
-        if astats.lines_removed > 0:
-            print(f"➖ Lines removed:      {astats.lines_removed:,}")
-        if astats.premium_requests > 0:
-            print(f"💎 Premium requests:   {astats.premium_requests}")
+    if session_stats:
+        _print_agent_usage_stats(session_stats)
     else:
         print("\n⚠️  No agent statistics available (stats parsing may have failed)")
 
@@ -175,7 +151,61 @@ def print_stats(items_completed: int, total_requests: int, elapsed_seconds: floa
     from pokepoke.model_stats_store import print_model_leaderboard
     print_model_leaderboard()
 
+    # Print performance monitor summary if any alerts were recorded
+    from pokepoke.performance_monitor import get_performance_monitor
+    _print_performance_summary(get_performance_monitor())
+
     print("=" * 60)
+
+
+def _print_agent_usage_stats(session_stats: SessionStats) -> None:
+    """Print agent usage statistics if any non-zero values exist."""
+    astats = session_stats.agent_stats
+    if not astats or not any([
+        astats.wall_duration, astats.input_tokens, astats.output_tokens,
+        astats.lines_added, astats.lines_removed, astats.premium_requests,
+    ]):
+        print("\n⚠️  No agent statistics available (stats parsing may have failed)")
+        return
+
+    print("\n" + "=" * 60)
+    print("🤖 Agent Usage Statistics")
+    print("=" * 60)
+    if astats.wall_duration > 0:
+        print(f"⏱️  Wall duration:      {astats.wall_duration:.1f}s")
+    if astats.api_duration > 0:
+        print(f"⚡ API duration:       {astats.api_duration:.1f}s")
+    if astats.input_tokens > 0:
+        print(f"📊 Input tokens:       {astats.input_tokens:,}")
+    if astats.output_tokens > 0:
+        print(f"📤 Output tokens:      {astats.output_tokens:,}")
+    if astats.lines_added > 0:
+        print(f"➕ Lines added:        {astats.lines_added:,}")
+    if astats.lines_removed > 0:
+        print(f"➖ Lines removed:      {astats.lines_removed:,}")
+    if astats.premium_requests > 0:
+        print(f"💎 Premium requests:   {astats.premium_requests}")
+
+
+def _print_performance_summary(monitor: Any) -> None:
+    """Print performance monitor alerts summary if any were recorded."""
+    snap = monitor.snapshot()
+    if snap["total_alerts"] == 0:
+        return
+
+    print("\n" + "=" * 60)
+    print("⚠️  Performance Alerts")
+    print("=" * 60)
+    print(f"Total checks:  {snap['total_checks']}")
+    print(f"Total alerts:  {snap['total_alerts']}")
+    if snap["success_rate"] is not None:
+        print(f"Success rate:  {snap['success_rate']:.0%}")
+
+    recent = snap.get("recent_alerts", [])
+    if recent:
+        print("\nRecent alerts:")
+        for alert in recent:
+            print(f"  [{alert['category']}] {alert['message']}")
 
 
 def _format_duration(seconds: float) -> str:

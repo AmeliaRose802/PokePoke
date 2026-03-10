@@ -145,6 +145,9 @@ def acquire_lock(
         raise
     wait = time.monotonic() - t0
     _contention_tracker.record_acquisition(name, wait)
+    # Alert if lock acquisition exceeded performance threshold
+    from pokepoke.performance_monitor import get_performance_monitor
+    get_performance_monitor().check_lock_wait(name, wait)
     _write_lock_metadata(lock_path)
     try:
         yield lock
