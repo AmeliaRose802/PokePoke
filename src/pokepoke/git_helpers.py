@@ -57,10 +57,12 @@ def restore_beads_stash(context: str) -> None:
         print(f"⚠️ Stash pop conflict after {context}. Attempting to force-apply .beads/ changes.")
         _print_command_output([pop_error.stdout or "", pop_error.stderr or ""])
 
-        # Reset any partially-applied pop so checkout doesn't hit conflicts
+        # Reset only .beads/ from the partially-applied pop so the
+        # checkout from stash doesn't hit conflicts.  Previously this
+        # ran `git checkout -- .` which wiped the ENTIRE working tree.
         with contextlib.suppress(subprocess.CalledProcessError):
             subprocess.run(
-                ["git", "checkout", "--", "."],
+                ["git", "checkout", "--", ".beads/"],
                 check=True, capture_output=True, text=True,
                 encoding='utf-8', errors='replace', timeout=30
             )

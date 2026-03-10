@@ -67,7 +67,7 @@ class TestRestoreBeadsStash:
         restore_beads_stash("pull failure")
 
         assert mock_run.call_count == 4
-        assert mock_run.call_args_list[1][0][0] == ["git", "checkout", "--", "."]
+        assert mock_run.call_args_list[1][0][0] == ["git", "checkout", "--", ".beads/"]
         assert mock_run.call_args_list[2][0][0] == ["git", "checkout", "stash@{0}", "--", ".beads/"]
         assert mock_run.call_args_list[3][0][0] == ["git", "stash", "drop"]
         mock_print.assert_any_call("✅ Force-applied .beads/ changes from stash.")
