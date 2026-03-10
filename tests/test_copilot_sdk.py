@@ -2030,3 +2030,66 @@ class TestAwaitCompletionAbortOSError:
 
         assert result == "timeout"
         mock_session.abort.assert_called_once()
+
+    async def test_inactivity_skipped_when_pending_tool_calls(self):
+        """Inactivity timeout must NOT fire when pending_tool_calls > 0.
+
+        Long-running tools (e.g. git commit triggering pre-commit hooks)
+        produce zero SDK events.  The inactivity detector should stay
+        quiet while tools are still executing.
+        """
+        import time
+        from pokepoke.sdk_helpers import _await_completion
+
+        mock_session = AsyncMock()
+        mock_client = MagicMock()
+        mock_client.get_state = MagicMock(return_value="connected")
+
+        done = asyncio.Event()
+        # Simulate: last event was 700s ago BUT a tool call is pending
+        stats = {
+            'last_event_time': time.monotonic() - 700,
+            'event_count': 5,
+            'last_tool_activity_time': time.monotonic() - 700,
+            'pending_tool_calls': 1,
+        }
+
+        # Use a very short max_timeout so the loop terminates via timeout
+        # rather than inactivity — proving inactivity was skipped.
+        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=False):
+            result = await _await_completion(
+                mock_session, mock_client, done,
+                max_timeout=0.0,
+                stats=stats,
+                inactivity_timeout=600.0,
+            )
+
+        # Should hit the hard timeout, NOT inactivity
+        assert result == "timeout"
+
+    async def test_inactivity_fires_when_zero_pending_tool_calls(self):
+        """Inactivity timeout fires normally when no tools are pending."""
+        import time
+        from pokepoke.sdk_helpers import _await_completion
+
+        mock_session = AsyncMock()
+        mock_client = MagicMock()
+        mock_client.get_state = MagicMock(return_value="connected")
+
+        done = asyncio.Event()
+        stats = {
+            'last_event_time': time.monotonic() - 700,
+            'event_count': 5,
+            'last_tool_activity_time': time.monotonic() - 700,
+            'pending_tool_calls': 0,
+        }
+
+        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=False):
+            result = await _await_completion(
+                mock_session, mock_client, done,
+                max_timeout=300.0,
+                stats=stats,
+                inactivity_timeout=600.0,
+            )
+
+        assert result == "inactivity"
