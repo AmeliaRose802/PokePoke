@@ -439,12 +439,16 @@ class TestUnassignItem:
     @patch("pokepoke.beads_management._run_bd")
     def test_successful_unassign(self, mock_run_bd: Mock, mock_sync: Mock) -> None:
         from pokepoke.beads_management import unassign_item
-        mock_run_bd.return_value = Mock()
+        mock_run_bd.return_value = Mock(stderr='')
         mock_sync.return_value = Mock(returncode=0)
 
         result = unassign_item("item-1")
 
         assert result is True
+        # Verify it uses 'open' status (not 'new')
+        args = mock_run_bd.call_args[0][0]
+        assert '--status' in args
+        assert args[args.index('--status') + 1] == 'open'
 
     @patch("pokepoke.beads_management.run_bd_sync_with_retry")
     @patch("pokepoke.beads_management._run_bd")
@@ -452,7 +456,7 @@ class TestUnassignItem:
         from pokepoke.beads_management import unassign_item
         mock_run_bd.side_effect = [
             subprocess.CalledProcessError(1, "bd", stderr="invalid option"),  # first try fails
-            Mock(),  # second try succeeds
+            Mock(stderr=''),  # second try succeeds
         ]
         mock_sync.return_value = Mock(returncode=0)
 
@@ -468,6 +472,22 @@ class TestUnassignItem:
         result = unassign_item("item-1")
 
         assert result is False
+
+    @patch("pokepoke.beads_management.run_bd_sync_with_retry")
+    @patch("pokepoke.beads_management._run_bd")
+    def test_detects_stderr_error_on_zero_exit(self, mock_run_bd: Mock, mock_sync: Mock) -> None:
+        """bd may return exit code 0 with validation errors in stderr."""
+        from pokepoke.beads_management import unassign_item
+        mock_run_bd.side_effect = [
+            Mock(stderr='Error updating item: validate field update: invalid status'),  # silent failure
+            Mock(stderr=''),  # fallback succeeds
+        ]
+        mock_sync.return_value = Mock(returncode=0)
+
+        result = unassign_item("item-1")
+
+        assert result is True
+        assert mock_run_bd.call_count == 2
 
 
 class TestCloseItem:

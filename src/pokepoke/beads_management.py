@@ -200,7 +200,7 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
 
 
 def unassign_item(item_id: str) -> bool:
-    """Unassign a work item and reset its status to 'new' so other agents can claim it.
+    """Unassign a work item and reset its status to 'open' so other agents can claim it.
 
     Should be called when a post-assignment step (e.g. worktree creation) fails and
     the item needs to be returned to the ready queue.
@@ -209,18 +209,24 @@ def unassign_item(item_id: str) -> bool:
         item_id: The item ID to unassign.
 
     Returns:
-        True if the item was successfully returned to 'new', False otherwise.
+        True if the item was successfully returned to 'open', False otherwise.
     """
     agent_name = get_agent_name()
     # Try resetting status and clearing the assignee in one command.
+    # NOTE: The valid beads status is 'open' (not 'new'). The bd CLI may
+    # return exit-code 0 even on validation errors, so we also check stderr.
     try:
-        _run_bd(['update', item_id, '--status', 'new', '-a', ''])
-        print(f"↩️  Unassigned {item_id} from {agent_name} and reset to 'new'")
+        result = _run_bd(['update', item_id, '--status', 'open', '-a', ''])
+        if result.stderr and 'error' in result.stderr.lower():
+            raise subprocess.CalledProcessError(1, 'bd', stderr=result.stderr)
+        print(f"↩️  Unassigned {item_id} from {agent_name} and reset to 'open'")
     except subprocess.CalledProcessError:
         # Some bd versions may not accept an empty -a; fall back to status-only reset.
         try:
-            _run_bd(['update', item_id, '--status', 'new'])
-            print(f"↩️  Reset {item_id} to 'new' (assignee field may still reference {agent_name})")
+            result = _run_bd(['update', item_id, '--status', 'open'])
+            if result.stderr and 'error' in result.stderr.lower():
+                raise subprocess.CalledProcessError(1, 'bd', stderr=result.stderr)
+            print(f"↩️  Reset {item_id} to 'open' (assignee field may still reference {agent_name})")
         except subprocess.CalledProcessError as e:
             logger.error(f"⚠️  Failed to unassign {item_id}: {e.stderr}")
             return False
