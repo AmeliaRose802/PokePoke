@@ -334,6 +334,7 @@ def run_orchestrator(
     """Main orchestrator entry point (interactive or autonomous)."""
     # UI is started by run_with_orchestrator - just update header
     terminal_ui.ui.update_header("PokePoke", f"Initializing {interactive and 'Interactive' or 'Autonomous'} Mode...")
+    ctx = None
     try:
         ctx = _setup_orchestrator(
             interactive, continuous, run_beta_first,
@@ -370,15 +371,17 @@ def run_orchestrator(
         print("\n\n⚠️  Interrupted by user (Ctrl+C)")
         print("📊 Collecting final statistics...")
         print("\n👋 Exiting PokePoke.")
-        ctx.finalize()
+        if ctx is not None:
+            ctx.finalize()
         return 0
     except Exception as e:
         terminal_ui.ui.stop_and_capture()
         print(f"\n❌ Error: {e}")
         import traceback
         traceback.print_exc()
-        ctx.run_logger.log_orchestrator(f"Error: {e}", level="ERROR")
-        ctx.finalize()
+        if ctx is not None:
+            ctx.run_logger.log_orchestrator(f"Error: {e}", level="ERROR")
+            ctx.finalize()
         return 1
     finally:
         terminal_ui.ui.stop()

@@ -2526,7 +2526,8 @@ class TestSingleAgentPanelRegistration:
             mock_output_for.return_value.__enter__ = Mock(return_value=None)
             mock_output_for.return_value.__exit__ = Mock(return_value=False)
 
-            run_orchestrator(interactive=False, continuous=False)
+            with patch('pokepoke.orchestrator.is_shutting_down', return_value=False):
+                run_orchestrator(interactive=False, continuous=False)
 
             # Should register as running then update to failed
             assert mock_push.call_count == 2
