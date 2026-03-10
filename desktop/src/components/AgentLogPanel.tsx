@@ -16,6 +16,7 @@ import {
   getAgentType,
   isGateAgent,
 } from "../utils/agentHelpers";
+import { getEmojiAvatar, STATUS_INDICATOR } from "../utils/agentsPanelHelpers";
 import { processLogsToRenderItems, stringsToLogEntries } from "../utils/logProcessor";
 import { RenderLogItems } from "./LogComponents";
 
@@ -23,22 +24,6 @@ interface Props {
   agent: AgentInfo;
   onClose: () => void;
   showClose?: boolean;
-}
-
-const STATUS_INDICATOR: Record<string, { dot: string; label: string }> = {
-  running: { dot: "agent-dot-running", label: "Running" },
-  success: { dot: "agent-dot-success", label: "Done" },
-  failed: { dot: "agent-dot-failed", label: "Failed" },
-};
-
-const ROBOT_AVATARS = ["🐍", "🦎", "🕷️", "🦇", "🦋", "🐛", "🐝", "🐞", "🤖", "🔧", "⚡", "🎯", "🔮", "🎲", "🔬", "🧩"];
-
-function getAvatar(agentId: string): string {
-  let hash = 0;
-  for (let i = 0; i < agentId.length; i++) {
-    hash = ((hash << 5) - hash + agentId.charCodeAt(i)) | 0;
-  }
-  return ROBOT_AVATARS[Math.abs(hash) % ROBOT_AVATARS.length];
 }
 
 function formatTimestamp(ts?: number | null): string {
@@ -80,7 +65,7 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
   const agentToUse = detailedAgent || agent;
   const agentType = getAgentType(agentToUse);
   const agentIconPath = getAgentAvatar(agentToUse);
-  const fallbackAvatar = getAvatar(agentToUse.base_agent_id ?? agentToUse.agent_id);
+  const fallbackAvatar = getEmojiAvatar(agentToUse.base_agent_id ?? agentToUse.agent_id);
   const iconAlt = `${agentType ?? "agent"} icon`;
   const agentPrompt = agentToUse.agent_prompt;
   const hasPrompt = Boolean(agentPrompt && agentPrompt.trim().length > 0);
