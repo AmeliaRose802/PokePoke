@@ -86,6 +86,8 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
   const hasPrompt = Boolean(agentPrompt && agentPrompt.trim().length > 0);
   const promptLineCount = hasPrompt ? agentPrompt!.split(/\r?\n/).length : 0;
 
+  const promptRef = useRef<HTMLDetailsElement>(null);
+
   // Memoize logLines to prevent dependency changes on every render
   const logLines = useMemo(() => {
     // Priority: 1) Live agent recent_logs, 2) Detailed agent log_lines, 3) Fallback to empty
@@ -243,12 +245,21 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
           </div>
         ) : null}
         {hasPrompt ? (
-          <details className="log-accordion agent-log-panel-prompt">
+          <details className="log-accordion agent-log-panel-prompt" ref={promptRef}>
             <summary className="log-accordion-summary">
               <span className="log-accordion-chevron">▸</span>
               <span className="log-message">Agent Prompt{promptLineCount ? ` — ${promptLineCount} lines` : ""}</span>
             </summary>
             <div className="log-accordion-details">
+              <button
+                className="agent-log-panel-prompt-close"
+                onClick={() => {
+                  if (promptRef.current) promptRef.current.open = false;
+                }}
+                title="Collapse prompt"
+              >
+                ✕ Close
+              </button>
               <pre className="agent-log-panel-prompt-content">{agentPrompt}</pre>
             </div>
           </details>

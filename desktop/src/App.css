@@ -1511,6 +1511,35 @@
   margin-top: 4px;
 }
 
+.agent-log-panel-prompt .log-accordion-details {
+  max-height: 40vh;
+  overflow-y: auto;
+  position: relative;
+}
+
+.agent-log-panel-prompt-close {
+  position: sticky;
+  top: 0;
+  float: right;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-primary);
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin: 0 0 4px 8px;
+  z-index: 1;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.agent-log-panel-prompt-close:hover {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
 .agent-log-panel-prompt-content {
   white-space: pre-wrap;
   word-break: break-word;
