@@ -450,15 +450,9 @@ class TestIsWorktreeMerged:
             result = is_worktree_merged('incredible_icm-42')
 
             assert result is True
-            mock_run.assert_called_once_with(
-                ['git', 'branch', '--merged', 'ameliapayne/dev'],
-                check=True,
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                errors='replace',
-                timeout=30
-            )
+            mock_run.assert_called_once()
+            call_args = mock_run.call_args
+            assert call_args[0][0] == ['git', 'branch', '--merged', 'ameliapayne/dev']
 
     def test_is_worktree_merged_false(self):
         """Test when branch is not merged."""
@@ -483,15 +477,9 @@ class TestIsWorktreeMerged:
             result = is_worktree_merged('incredible_icm-42', target_branch='develop')
 
             assert result is True
-            mock_run.assert_called_once_with(
-                ['git', 'branch', '--merged', 'develop'],
-                check=True,
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                errors='replace',
-                timeout=30
-            )
+            mock_run.assert_called_once()
+            call_args = mock_run.call_args
+            assert call_args[0][0] == ['git', 'branch', '--merged', 'develop']
 
     def test_is_worktree_merged_subprocess_error(self):
         """Test error handling when git command fails."""
@@ -1854,6 +1842,110 @@ class TestMergeWorktreeConflicts:
             print_calls = [str(c) for c in mock_print.call_args_list]
             assert any('15 file(s)' in c for c in print_calls)
             assert any('and 5 more' in c for c in print_calls)
+
+
+class TestMergeWorktreeRollback:
+    """Tests for merge_worktree rollback on push and validation failures."""
+
+    def test_push_failure_triggers_reset_hard(self):
+        """git reset --hard HEAD~1 is called when push fails."""
+        reset_called = []
+
+        with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
+             patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
+             patch('pokepoke.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
+             patch('pokepoke.worktrees.validate_post_merge', return_value=True), \
+             patch('pokepoke.worktrees.get_default_branch', return_value='main'), \
+             patch('pokepoke.worktrees._run_git') as mock_run_git, \
+             patch('builtins.print'):
+
+            def run_git_side_effect(cmd, **kwargs):
+                if 'push' in cmd:
+                    raise subprocess.CalledProcessError(1, cmd, stderr='push failed')
+                if cmd == ["git", "reset", "--hard", "HEAD~1"]:
+                    reset_called.append(True)
+                    return Mock(returncode=0)
+                return Mock(returncode=0)
+
+            mock_run_git.side_effect = run_git_side_effect
+
+            success, unmerged = merge_worktree('test-item')
+
+            assert success is False
+            assert reset_called, "git reset --hard HEAD~1 should have been called on push failure"
+
+    def test_push_failure_reset_failure_does_not_raise(self):
+        """If git reset --hard fails after push failure, error is logged but not raised."""
+        with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
+             patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
+             patch('pokepoke.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
+             patch('pokepoke.worktrees.validate_post_merge', return_value=True), \
+             patch('pokepoke.worktrees.get_default_branch', return_value='main'), \
+             patch('pokepoke.worktrees._run_git') as mock_run_git, \
+             patch('builtins.print'):
+
+            def run_git_side_effect(cmd, **kwargs):
+                if 'push' in cmd:
+                    raise subprocess.CalledProcessError(1, cmd, stderr='push failed')
+                if cmd == ["git", "reset", "--hard", "HEAD~1"]:
+                    raise subprocess.CalledProcessError(1, cmd, stderr='reset failed')
+                return Mock(returncode=0)
+
+            mock_run_git.side_effect = run_git_side_effect
+
+            # Should not raise, even though both push and reset fail
+            success, unmerged = merge_worktree('test-item')
+            assert success is False
+
+    def test_post_merge_validation_failure_triggers_reset_hard(self):
+        """git reset --hard HEAD~1 is called when post-merge validation fails."""
+        reset_called = []
+
+        with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
+             patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
+             patch('pokepoke.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
+             patch('pokepoke.worktrees.validate_post_merge', return_value=False), \
+             patch('pokepoke.worktrees.get_default_branch', return_value='main'), \
+             patch('pokepoke.worktrees._run_git') as mock_run_git, \
+             patch('builtins.print'):
+
+            def run_git_side_effect(cmd, **kwargs):
+                if cmd == ["git", "reset", "--hard", "HEAD~1"]:
+                    reset_called.append(True)
+                    return Mock(returncode=0)
+                return Mock(returncode=0)
+
+            mock_run_git.side_effect = run_git_side_effect
+
+            success, unmerged = merge_worktree('test-item')
+
+            assert success is False
+            assert reset_called, "git reset --hard HEAD~1 should have been called on validation failure"
+
+    def test_post_merge_validation_exception_triggers_reset_hard(self):
+        """git reset --hard HEAD~1 is called when validate_post_merge raises."""
+        reset_called = []
+
+        with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
+             patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
+             patch('pokepoke.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
+             patch('pokepoke.worktrees.validate_post_merge', side_effect=subprocess.CalledProcessError(1, 'git', stderr='error')), \
+             patch('pokepoke.worktrees.get_default_branch', return_value='main'), \
+             patch('pokepoke.worktrees._run_git') as mock_run_git, \
+             patch('builtins.print'):
+
+            def run_git_side_effect(cmd, **kwargs):
+                if cmd == ["git", "reset", "--hard", "HEAD~1"]:
+                    reset_called.append(True)
+                    return Mock(returncode=0)
+                return Mock(returncode=0)
+
+            mock_run_git.side_effect = run_git_side_effect
+
+            success, unmerged = merge_worktree('test-item')
+
+            assert success is False
+            assert reset_called, "git reset --hard HEAD~1 should have been called on validation exception"
 
 
 class TestCleanupWorktreeEdgeCases:

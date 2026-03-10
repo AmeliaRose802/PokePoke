@@ -133,3 +133,13 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "pokepoke.copilot_sdk"
 warn_unused_ignores = false
+
+# manifest_utils may not have py.typed marker
+[[tool.mypy.overrides]]
+module = "pokepoke.manifest_utils"
+ignore_missing_imports = true
+
+# worktree_cleanup uses manifest_utils which lacks type stubs
+[[tool.mypy.overrides]]
+module = "pokepoke.worktree_cleanup"
+warn_return_any = false

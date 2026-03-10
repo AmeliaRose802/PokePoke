@@ -55,12 +55,12 @@ class TestRunGit:
             assert mock_run.call_args[1]['timeout'] == 60
 
     def test_run_git_check_false(self) -> None:
-        """_run_git respects check=False parameter."""
+        """_run_git always passes check=True (not configurable)."""
         with patch('subprocess.run') as mock_run:
-            mock_run.return_value = Mock(returncode=1)
-            _run_git(['git', 'invalid'], check=False)
+            mock_run.return_value = Mock(returncode=0)
+            _run_git(['git', 'status'])
 
-            assert mock_run.call_args[1]['check'] is False
+            assert mock_run.call_args[1]['check'] is True
 
     def test_run_git_timeout_expired(self) -> None:
         """_run_git propagates TimeoutExpired."""
