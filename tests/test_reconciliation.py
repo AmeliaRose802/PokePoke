@@ -206,6 +206,27 @@ class TestIsWorktreeCleaned:
         # default path doesn't exist, so should be True
         assert is_worktree_cleaned("X-1", None) is True
 
+    @patch("pokepoke.reconciliation.list_worktrees")
+    @patch("pokepoke.reconciliation.sanitize_branch_name", side_effect=lambda x: x)
+    def test_returns_false_when_path_resolve_raises_oserror(
+        self, mock_sanitize, mock_list, tmp_path, monkeypatch
+    ):
+        """OSError during path resolution conservatively assumes worktree exists."""
+        wt_path = tmp_path / "worktrees" / "task-X-1"
+        bad_path_str = "Z:\\bad\\long\\path\\exceeds\\max"
+        mock_list.return_value = [
+            {"branch": "refs/heads/other-branch", "path": bad_path_str},
+        ]
+        _original = type(wt_path).resolve
+
+        def _raise_for_bad(self, strict=False):
+            if str(self) == bad_path_str:
+                raise OSError("path exceeds MAX_PATH")
+            return _original(self, strict=strict)
+
+        monkeypatch.setattr(type(wt_path), "resolve", _raise_for_bad)
+        assert is_worktree_cleaned("X-1", wt_path) is False
+
 
 # ── reconcile_completed_item ─────────────────────────────────────
 
