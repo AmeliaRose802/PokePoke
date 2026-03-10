@@ -31,41 +31,109 @@ from pokepoke.coordination import with_worktree_lock
 logger = logging.getLogger(__name__)
 
 
+def _find_existing_worktree(worktree_path: Path, branch_name: str, item_id: str) -> Path | None:
+    """Check if a worktree for this item already exists and return its path."""
+    existing_worktrees = list_worktrees()
+    for wt in existing_worktrees:
+        wt_path = Path(wt.get("path", ""))
+        if wt_path == worktree_path.resolve() or wt.get("branch", "").endswith(branch_name):
+            return wt_path
+    return None
+
+
+def _check_existing_directory(worktree_path: Path) -> Path | None:
+    """Handle a directory that exists but wasn't in list_worktrees.
+
+    Returns the path if it's a valid worktree to reuse, None if it was removed.
+    Raises RuntimeError if it can't be removed.
+    """
+    logger.warning(f"Worktree directory {worktree_path} already exists but wasn't in list_worktrees")
+
+    is_valid_worktree = False
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=worktree_path,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        if result.stdout.strip() == "true":
+            is_valid_worktree = True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+
+    if is_valid_worktree:
+        logger.info(f"Directory {worktree_path} is a valid worktree, reusing it")
+        print(f"   ♻️  Reusing existing worktree directory at {worktree_path}")
+        return worktree_path
+
+    logger.warning(f"Directory {worktree_path} is not a valid worktree, removing it")
+    print(f"   🧹  Removing stale worktree directory at {worktree_path}")
+    if not force_remove_directory(worktree_path):
+        raise RuntimeError(f"Failed to remove stale directory {worktree_path}")
+
+    with contextlib.suppress(Exception):
+        _run_git(["git", "worktree", "prune"])
+    return None
+
+
+def _handle_branch_already_exists(
+    branch_name: str, base_branch: str, worktree_path: Path, item_id: str, creation_start: float, stderr: str
+) -> Path | None:
+    """Handle 'branch already exists' or 'already checked out' errors.
+
+    Returns the worktree path on recovery, None if unrecoverable.
+    Raises RuntimeError on retry failure.
+    """
+    logger.warning(f"Branch {branch_name} already exists, attempting to find existing worktree")
+    existing_worktrees = list_worktrees()
+    for wt in existing_worktrees:
+        if wt.get("branch", "").endswith(branch_name):
+            logger.info(f"Found existing worktree for {branch_name} at {wt['path']}")
+            print(f"   ♻️  Reusing existing worktree at {wt['path']}")
+            return Path(wt["path"])
+
+    # No active worktree uses this branch — it's a stale leftover.
+    if "already exists" in stderr.lower():
+        logger.info(f"Branch {branch_name} is stale (no active worktree) — deleting and retrying")
+        print(f"   🧹 Cleaning up stale branch {branch_name}...")
+        try:
+            _run_git(["git", "branch", "-D", branch_name])
+            _run_git(["git", "worktree", "add", str(worktree_path), "-b", branch_name, base_branch])
+            creation_time = time.time() - creation_start
+            logger.info(f"Created worktree for {item_id} after stale branch cleanup in {creation_time:.2f}s")
+            _validate_worktree_integrity(worktree_path, item_id)
+            return worktree_path
+        except subprocess.CalledProcessError as retry_e:
+            retry_stderr = retry_e.stderr if retry_e.stderr else 'No stderr'
+            raise RuntimeError(f"Failed to create worktree after stale branch cleanup: {retry_stderr}") from retry_e
+
+    return None
+
+
 def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: float = 300.0) -> Path:
     """Create a git worktree for a work item. Returns existing path if already exists.
 
     Uses file-based locking to prevent race conditions when multiple agents
     attempt to create worktrees simultaneously.
     """
-    # Sanitize the item_id for use in branch names
     sanitized_id = sanitize_branch_name(item_id)
-
-    # Worktree path: ./worktrees/task-{sanitized_id}  (resolved to absolute)
     worktree_path = (Path(WORKTREE_DIR) / f"task-{sanitized_id}").resolve()
-
-    # Branch name for the worktree
     branch_name = f"{BRANCH_PREFIX}{sanitized_id}"
 
     # Check if worktree already exists (outside lock - no git operation needed)
-    existing_worktrees = list_worktrees()
-    for wt in existing_worktrees:
-        wt_path = Path(wt.get("path", ""))
-        # Check if this is our worktree (by path or branch)
-        if wt_path == worktree_path.resolve() or wt.get("branch", "").endswith(branch_name):
-            logger.debug(f"Reusing existing worktree for {item_id} at {wt_path}")
-            print(f"   ♻️  Reusing existing worktree at {wt_path}")
-            return wt_path
+    existing = _find_existing_worktree(worktree_path, branch_name, item_id)
+    if existing:
+        logger.debug(f"Reusing existing worktree for {item_id} at {existing}")
+        print(f"   ♻️  Reusing existing worktree at {existing}")
+        return existing
 
-    # Create worktrees directory if it doesn't exist
     Path(WORKTREE_DIR).mkdir(exist_ok=True)
 
-    # Resolve default base branch if not provided
     if base_branch is None:
         base_branch = get_default_branch()
 
-    # CRITICAL: Use lock to serialize worktree creation across parallel agents
-    # This prevents race conditions when multiple git worktree operations
-    # access .git/worktrees simultaneously
     lock_start = time.time()
     try:
         with with_worktree_lock(timeout=lock_timeout), timed_block("worktree.create"):
@@ -73,47 +141,17 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
             if lock_wait > 0.1:
                 logger.info(f"Waited {lock_wait:.2f}s for worktree lock (item: {item_id})")
 
-            # Double-check worktree doesn't exist (another agent may have created it while we waited)
-            existing_worktrees = list_worktrees()
-            for wt in existing_worktrees:
-                wt_path = Path(wt.get("path", ""))
-                if wt_path == worktree_path.resolve() or wt.get("branch", "").endswith(branch_name):
-                    logger.debug(f"Worktree created by another agent while waiting for lock: {wt_path}")
-                    print(f"   ♻️  Reusing worktree created by another agent at {wt_path}")
-                    return wt_path
+            # Double-check after acquiring lock
+            existing = _find_existing_worktree(worktree_path, branch_name, item_id)
+            if existing:
+                logger.debug(f"Worktree created by another agent while waiting for lock: {existing}")
+                print(f"   ♻️  Reusing worktree created by another agent at {existing}")
+                return existing
 
-            # Check if the directory already exists but wasn't in list_worktrees
             if worktree_path.exists():
-                logger.warning(f"Worktree directory {worktree_path} already exists but wasn't in list_worktrees")
-
-                # Check if it's a valid git worktree
-                is_valid_worktree = False
-                try:
-                    result = subprocess.run(
-                        ["git", "rev-parse", "--is-inside-work-tree"],
-                        cwd=worktree_path,
-                        capture_output=True,
-                        text=True,
-                        check=True
-                    )
-                    if result.stdout.strip() == "true":
-                        is_valid_worktree = True
-                except (subprocess.CalledProcessError, FileNotFoundError):
-                    pass
-
-                if is_valid_worktree:
-                    logger.info(f"Directory {worktree_path} is a valid worktree, reusing it")
-                    print(f"   ♻️  Reusing existing worktree directory at {worktree_path}")
-                    return worktree_path
-                else:
-                    logger.warning(f"Directory {worktree_path} is not a valid worktree, removing it")
-                    print(f"   🧹  Removing stale worktree directory at {worktree_path}")
-                    if not force_remove_directory(worktree_path):
-                        raise RuntimeError(f"Failed to remove stale directory {worktree_path}")
-
-                    # Also run git worktree prune just in case
-                    with contextlib.suppress(Exception):
-                        _run_git(["git", "worktree", "prune"])
+                reused = _check_existing_directory(worktree_path)
+                if reused:
+                    return reused
 
             # Create the worktree
             logger.info(f"Creating worktree for {item_id}: {worktree_path}")
@@ -126,8 +164,6 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
             except subprocess.CalledProcessError as e:
                 creation_time = time.time() - creation_start
                 stderr = e.stderr if e.stderr else 'No stderr available'
-
-                # Log detailed error information
                 logger.error(
                     f"Git worktree creation failed for {item_id} after {creation_time:.2f}s:\n"
                     f"  Command: git worktree add {worktree_path} -b {branch_name} {base_branch}\n"
@@ -136,43 +172,19 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
                 )
                 print(f"   ⚠️  Git error (exit {e.returncode}): {stderr}")
 
-                # Check if error is because branch already exists
                 if "already exists" in stderr.lower() or "already checked out" in stderr.lower():
-                    logger.warning(f"Branch {branch_name} already exists, attempting to find existing worktree")
-                    # Try to find the existing worktree
-                    existing_worktrees = list_worktrees()
-                    for wt in existing_worktrees:
-                        if wt.get("branch", "").endswith(branch_name):
-                            logger.info(f"Found existing worktree for {branch_name} at {wt['path']}")
-                            print(f"   ♻️  Reusing existing worktree at {wt['path']}")
-                            return Path(wt["path"])
+                    recovered = _handle_branch_already_exists(
+                        branch_name, base_branch, worktree_path, item_id, creation_start, stderr
+                    )
+                    if recovered:
+                        return recovered
 
-                    # No active worktree uses this branch — it's a stale leftover.
-                    # Delete the branch and retry worktree creation.
-                    if "already exists" in stderr.lower():
-                        logger.info(f"Branch {branch_name} is stale (no active worktree) — deleting and retrying")
-                        print(f"   🧹 Cleaning up stale branch {branch_name}...")
-                        try:
-                            _run_git(["git", "branch", "-D", branch_name])
-                            _run_git(["git", "worktree", "add", str(worktree_path), "-b", branch_name, base_branch])
-                            creation_time = time.time() - creation_start
-                            logger.info(f"Created worktree for {item_id} after stale branch cleanup in {creation_time:.2f}s")
-                            # Success — validate and return, skipping the fallthrough raise.
-                            _validate_worktree_integrity(worktree_path, item_id)
-                            return worktree_path
-                        except subprocess.CalledProcessError as retry_e:
-                            retry_stderr = retry_e.stderr if retry_e.stderr else 'No stderr'
-                            raise RuntimeError(f"Failed to create worktree after stale branch cleanup: {retry_stderr}") from retry_e
-
-                # Check if the base branch doesn't exist
                 if "invalid reference" in stderr.lower() or "not a valid" in stderr.lower():
-                    logger.error(f"Base branch '{base_branch}' does not exist")
                     raise RuntimeError(
                         f"Base branch '{base_branch}' does not exist. "
                         "Please create it first or specify a different base branch."
                     ) from e
 
-                # If we couldn't recover, re-raise the error with more context
                 raise RuntimeError(f"Failed to create worktree: {stderr}") from e
 
             except subprocess.TimeoutExpired as e:
@@ -181,17 +193,12 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
                 raise RuntimeError(f"Timed out creating worktree after {e.timeout}s") from e
 
     except RuntimeError:
-        # Lock timeout or git error - already logged above
         raise
     except Exception as e:
         logger.error(f"Unexpected error creating worktree for {item_id}: {e}", exc_info=True)
         raise RuntimeError(f"Unexpected error creating worktree: {e}") from e
 
-    # --- Post-creation integrity check ---
-    # Verify the worktree actually contains files.  A broken git checkout
-    # can leave an empty directory that wastes an entire agent invocation.
     _validate_worktree_integrity(worktree_path, item_id)
-
     return worktree_path
 
 
@@ -206,6 +213,16 @@ def is_worktree_merged(item_id: str, target_branch: str | None = None) -> bool:
         return any(branch_name in branch for branch in result.stdout.splitlines())
     except subprocess.CalledProcessError:
         return False
+
+
+def _rollback_merge_commit(reason: str) -> None:
+    """Attempt to rollback the last merge commit and log the outcome."""
+    try:
+        _run_git(["git", "reset", "--hard", "HEAD~1"])
+        logger.info("Rolled back merge commit: %s", reason)
+        print(f"🔄 Rolled back merge commit due to {reason}")
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as reset_err:
+        logger.error("Failed to rollback merge commit after %s: %s", reason, reset_err)
 
 
 def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool = True) -> tuple[bool, list[str]]:
@@ -248,22 +265,12 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
 
     try:
         if not validate_post_merge(target_branch):
-            # Post-merge validation failed — rollback the merge commit
             logger.warning("Post-merge validation failed, rolling back merge commit")
-            try:
-                _run_git(["git", "reset", "--hard", "HEAD~1"])
-                print("🔄 Rolled back merge commit due to post-merge validation failure")
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as reset_err:
-                logger.error("Failed to rollback merge commit after validation failure: %s", reset_err)
+            _rollback_merge_commit("post-merge validation failure")
             return False, []
     except Exception as e:
-        # validate_post_merge uses check=True and can raise — rollback
         logger.error("Post-merge validation raised exception: %s", e)
-        try:
-            _run_git(["git", "reset", "--hard", "HEAD~1"])
-            print("🔄 Rolled back merge commit due to post-merge validation exception")
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as reset_err:
-            logger.error("Failed to rollback merge commit after validation exception: %s", reset_err)
+        _rollback_merge_commit("post-merge validation exception")
         return False, []
 
     print(f"✅ Post-merge validation passed: {target_branch} is clean")
@@ -273,13 +280,7 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
         print(f"✅ Pushed {target_branch} to remote")
     except subprocess.CalledProcessError as e:
         print(f"❌ Push failed: {e.stderr if e.stderr else str(e)}")
-        # Rollback: undo the local merge commit so the branch doesn't diverge from remote
-        try:
-            _run_git(["git", "reset", "--hard", "HEAD~1"])
-            logger.info("Rolled back merge commit after push failure with git reset --hard HEAD~1")
-            print("🔄 Rolled back merge commit due to push failure")
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as reset_err:
-            logger.error("Failed to rollback merge commit after push failure: %s", reset_err)
+        _rollback_merge_commit("push failure")
         return False, []
 
     # Verify branch is actually merged (warnings only - push already succeeded)

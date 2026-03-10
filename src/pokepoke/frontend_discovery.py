@@ -46,78 +46,75 @@ def find_dev_server_url() -> str | None:
         return None
 
 
-def find_frontend_dist() -> Path | None:
-    """Locate the React frontend - prioritizing embedded assets for bundled apps."""
+def _has_index_html(directory: Path) -> bool:
+    """Check if a directory contains an index.html file."""
+    return directory.is_dir() and (directory / "index.html").exists()
 
-    # First, try to use embedded static assets from the package
+
+def _find_frozen_static() -> Path | None:
+    """Find static assets in a PyInstaller frozen bundle."""
+    meipass = Path(getattr(sys, '_MEIPASS', ''))
+    static_dir = meipass / "pokepoke" / "static"
+    return static_dir if _has_index_html(static_dir) else None
+
+
+def _find_filesystem_static() -> Path | None:
+    """Find static assets on the filesystem next to the desktop_ui module."""
+    import pokepoke.desktop_ui as desktop_ui_module
+    static_dir = Path(desktop_ui_module.__file__).resolve().parent / "static"
+    return static_dir if _has_index_html(static_dir) else None
+
+
+def _extract_package_resources() -> Path | None:
+    """Extract frontend assets from package resources to a temp directory."""
+    import importlib.resources as pkg_resources
+
+    static_ref = pkg_resources.files('pokepoke.static')
+    if not static_ref or not (static_ref / "index.html").is_file():
+        return None
+
+    temp_dir = Path(tempfile.gettempdir()) / "pokepoke_static"
+
+    # Return cached extraction if still valid
+    if _has_index_html(temp_dir):
+        return temp_dir
+
+    temp_dir.mkdir(exist_ok=True)
+    for resource in static_ref.iterdir():
+        if resource.is_file() and resource.name != "__init__.py":
+            with pkg_resources.as_file(resource) as resource_path:
+                shutil.copy2(resource_path, temp_dir / resource.name)
+        elif resource.is_dir():
+            dest_dir = temp_dir / resource.name
+            dest_dir.mkdir(exist_ok=True)
+            for subresource in resource.iterdir():
+                if subresource.is_file():
+                    with pkg_resources.as_file(subresource) as subresource_path:
+                        shutil.copy2(subresource_path, dest_dir / subresource.name)
+
+    return temp_dir if _has_index_html(temp_dir) else None
+
+
+def _get_src_root() -> Path:
+    """Get the source root directory relative to the desktop_ui module."""
+    import pokepoke.desktop_ui as desktop_ui_module
+    return Path(desktop_ui_module.__file__).resolve().parent.parent.parent
+
+
+def _find_dev_dist() -> Path | None:
+    """Find frontend dist in desktop/dist/ (development mode)."""
     try:
-        # Handle both regular Python execution and PyInstaller frozen execution
-        if getattr(sys, 'frozen', False):
-            # Running as PyInstaller bundle — data files are extracted under sys._MEIPASS
-            meipass = Path(getattr(sys, '_MEIPASS', ''))
-            static_dir = meipass / "pokepoke" / "static"
-            if static_dir.is_dir() and (static_dir / "index.html").exists():
-                return static_dir
-        else:
-            # Regular Python execution - check filesystem location first
-            # Get the directory of the desktop_ui module
-            import pokepoke.desktop_ui as desktop_ui_module
-            static_dir = Path(desktop_ui_module.__file__).resolve().parent / "static"
-            if static_dir.is_dir() and (static_dir / "index.html").exists():
-                return static_dir
-
-            # If not on filesystem, try to extract from package resources
-            try:
-                import importlib.resources as pkg_resources
-                static_ref = pkg_resources.files('pokepoke.static')
-
-                # Check if the package resources exist and have index.html
-                if static_ref and (static_ref / "index.html").is_file():
-                    # Extract resources to a temporary directory for pywebview
-                    temp_dir = Path(tempfile.gettempdir()) / "pokepoke_static"
-
-                    # Check if already extracted and current
-                    if temp_dir.is_dir() and (temp_dir / "index.html").exists():
-                        return temp_dir
-
-                    # Extract fresh copy
-                    temp_dir.mkdir(exist_ok=True)
-                    for resource in static_ref.iterdir():
-                        if resource.is_file() and resource.name != "__init__.py":
-                            with pkg_resources.as_file(resource) as resource_path:
-                                shutil.copy2(resource_path, temp_dir / resource.name)
-                        elif resource.is_dir():
-                            # Handle subdirectories like assets/
-                            dest_dir = temp_dir / resource.name
-                            dest_dir.mkdir(exist_ok=True)
-                            for subresource in resource.iterdir():
-                                if subresource.is_file():
-                                    with pkg_resources.as_file(subresource) as subresource_path:
-                                        shutil.copy2(subresource_path, dest_dir / subresource.name)
-
-                    if (temp_dir / "index.html").exists():
-                        return temp_dir
-
-            except (ImportError, AttributeError):
-                pass
-    except Exception as e:
-        # If package resources fail, fall back to filesystem search
-        print(f"Warning: Failed to load embedded frontend assets: {e}")
-
-    # Fallback 1: Look relative to desktop_ui module (development mode)
-    try:
-        import pokepoke.desktop_ui as desktop_ui_module
-        src_root = Path(desktop_ui_module.__file__).resolve().parent.parent.parent
-        dist = src_root / "desktop" / "dist"
-        if dist.is_dir() and (dist / "index.html").exists():
-            return dist
+        dist = _get_src_root() / "desktop" / "dist"
+        return dist if _has_index_html(dist) else None
     except Exception as e:
         logger.debug(f"Failed to locate dist folder relative to desktop_ui module: {e}")
+        return None
 
-    # Fallback 2: If in a git worktree, try to find the main repo
+
+def _find_worktree_dist() -> Path | None:
+    """Find frontend dist in the main repo when running from a git worktree."""
     try:
-        import pokepoke.desktop_ui as desktop_ui_module
-        src_root = Path(desktop_ui_module.__file__).resolve().parent.parent.parent
+        src_root = _get_src_root()
         result = subprocess.run(
             ["git", "worktree", "list", "--porcelain"],
             cwd=src_root,
@@ -127,15 +124,38 @@ def find_frontend_dist() -> Path | None:
             errors='replace',
             check=True,
         )
-        # First worktree in the list is the main repo
         for line in result.stdout.splitlines():
             if line.startswith("worktree "):
                 main_repo = Path(line.split(None, 1)[1])
                 dist = main_repo / "desktop" / "dist"
-                if dist.is_dir() and (dist / "index.html").exists():
-                    return dist
-                break
+                return dist if _has_index_html(dist) else None
     except Exception as e:
         logger.debug(f"Failed to locate dist folder from git worktree: {e}")
-
     return None
+
+
+def find_frontend_dist() -> Path | None:
+    """Locate the React frontend - prioritizing embedded assets for bundled apps."""
+
+    # First, try to use embedded static assets from the package
+    try:
+        if getattr(sys, 'frozen', False):
+            result = _find_frozen_static()
+            if result:
+                return result
+        else:
+            result = _find_filesystem_static()
+            if result:
+                return result
+
+            try:
+                result = _extract_package_resources()
+                if result:
+                    return result
+            except (ImportError, AttributeError):
+                pass
+    except Exception as e:
+        print(f"Warning: Failed to load embedded frontend assets: {e}")
+
+    # Fallback: development mode, then git worktree
+    return _find_dev_dist() or _find_worktree_dist()
