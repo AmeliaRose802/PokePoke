@@ -140,7 +140,7 @@ def retry_failed_unassigns() -> int:
                 recovered += 1
                 logger.info("Recovered stuck item %s", item_id)
         except Exception as e:
-            logger.debug("Still unable to unassign %s: %s", item_id, e)
+            logger.warning("Still unable to unassign %s: %s", item_id, e)
 
     if recovered:
         print(f"↩️  Recovered {recovered} previously stuck item(s)")
