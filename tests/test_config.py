@@ -12,11 +12,18 @@ from pokepoke.config import (
     MaintenanceConfig,
     MaintenanceAgentConfig,
     GitConfig,
+    QualityGateOverrides,
+    RepoConfig,
     load_config,
     reset_config,
     get_config,
     _find_repo_root,  # noqa: F401  # used via patch strings
     _load_config_file,
+)
+from pokepoke.repo_config_loader import (
+    parse_repos_cli,
+    validate_repo_config,
+    validate_repo_configs,
 )
 
 
@@ -613,3 +620,275 @@ class TestMaxCopilotFailureRetries:
         """Negative values are clamped to 0 (no retry) by __post_init__."""
         config = ProjectConfig.from_dict({"max_copilot_failure_retries": -3})
         assert config.max_copilot_failure_retries == 0
+
+
+class TestQualityGateOverrides:
+    """Tests for QualityGateOverrides dataclass."""
+
+    def test_defaults(self):
+        qg = QualityGateOverrides()
+        assert qg.coverage_threshold is None
+        assert qg.max_file_length is None
+        assert qg.allow_skipped_tests is None
+        assert qg.extra_checks == []
+
+    def test_custom_values(self):
+        qg = QualityGateOverrides(
+            coverage_threshold=90.0,
+            max_file_length=500,
+            allow_skipped_tests=True,
+            extra_checks=["mypy", "ruff"],
+        )
+        assert qg.coverage_threshold == 90.0
+        assert qg.max_file_length == 500
+        assert qg.allow_skipped_tests is True
+        assert qg.extra_checks == ["mypy", "ruff"]
+
+    def test_coverage_threshold_clamped_high(self):
+        qg = QualityGateOverrides(coverage_threshold=150.0)
+        assert qg.coverage_threshold == 100.0
+
+    def test_coverage_threshold_clamped_low(self):
+        qg = QualityGateOverrides(coverage_threshold=-10.0)
+        assert qg.coverage_threshold == 0.0
+
+    def test_max_file_length_clamped(self):
+        qg = QualityGateOverrides(max_file_length=0)
+        assert qg.max_file_length == 1
+
+    def test_none_values_not_clamped(self):
+        """None values should remain None (inherit global defaults)."""
+        qg = QualityGateOverrides()
+        assert qg.coverage_threshold is None
+        assert qg.max_file_length is None
+
+
+class TestRepoConfigExtended:
+    """Tests for extended RepoConfig fields."""
+
+    def test_new_field_defaults(self):
+        rc = RepoConfig()
+        assert rc.beads_db_path is None
+        assert rc.copilot_instructions_path is None
+        assert rc.quality_gate_overrides is None
+
+    def test_all_fields_set(self):
+        qg = QualityGateOverrides(coverage_threshold=85.0)
+        rc = RepoConfig(
+            path="/my/repo",
+            priority_weight=5,
+            max_workers=2,
+            beads_db_path="/my/repo/.beads",
+            copilot_instructions_path="instructions.md",
+            quality_gate_overrides=qg,
+        )
+        assert rc.path == "/my/repo"
+        assert rc.beads_db_path == "/my/repo/.beads"
+        assert rc.copilot_instructions_path == "instructions.md"
+        assert rc.quality_gate_overrides is not None
+        assert rc.quality_gate_overrides.coverage_threshold == 85.0
+
+    def test_from_dict_with_repos(self):
+        """RepoConfig with new fields round-trips through from_dict."""
+        data = {
+            "repos": [
+                {
+                    "path": "/repo/alpha",
+                    "priority_weight": 3,
+                    "max_workers": 2,
+                    "beads_db_path": "/repo/alpha/.beads",
+                    "copilot_instructions_path": "custom.md",
+                    "quality_gate_overrides": {
+                        "coverage_threshold": 90.0,
+                        "max_file_length": 400,
+                        "allow_skipped_tests": False,
+                        "extra_checks": ["ruff"],
+                    },
+                },
+                {
+                    "path": "/repo/beta",
+                    "enabled": False,
+                },
+            ]
+        }
+        config = ProjectConfig.from_dict(data)
+        assert len(config.repos) == 2
+
+        r0 = config.repos[0]
+        assert r0.path == "/repo/alpha"
+        assert r0.priority_weight == 3
+        assert r0.max_workers == 2
+        assert r0.beads_db_path == "/repo/alpha/.beads"
+        assert r0.copilot_instructions_path == "custom.md"
+        assert r0.quality_gate_overrides is not None
+        assert r0.quality_gate_overrides.coverage_threshold == 90.0
+        assert r0.quality_gate_overrides.max_file_length == 400
+        assert r0.quality_gate_overrides.allow_skipped_tests is False
+        assert r0.quality_gate_overrides.extra_checks == ["ruff"]
+
+        r1 = config.repos[1]
+        assert r1.path == "/repo/beta"
+        assert r1.enabled is False
+        assert r1.quality_gate_overrides is None
+
+    def test_from_dict_repos_no_quality_overrides(self):
+        """Repos without quality_gate_overrides get None."""
+        data = {"repos": [{"path": "/r"}]}
+        config = ProjectConfig.from_dict(data)
+        assert config.repos[0].quality_gate_overrides is None
+
+
+class TestValidateRepoConfig:
+    """Tests for validate_repo_config function."""
+
+    def test_empty_path_is_invalid(self):
+        result = validate_repo_config(RepoConfig(path=""))
+        assert not result.valid
+        assert any("empty" in e.lower() for e in result.errors)
+
+    def test_nonexistent_path_is_invalid(self, tmp_path):
+        bad = tmp_path / "nonexistent"
+        result = validate_repo_config(RepoConfig(path=str(bad)))
+        assert not result.valid
+        assert any("does not exist" in e for e in result.errors)
+
+    def test_valid_repo_with_beads(self, tmp_path):
+        """Repo with .beads dir should be valid with no warnings."""
+        (tmp_path / ".beads").mkdir()
+        result = validate_repo_config(RepoConfig(path=str(tmp_path)))
+        assert result.valid
+        assert result.errors == []
+        assert result.warnings == []
+
+    def test_valid_repo_without_beads_warns(self, tmp_path):
+        """Repo without .beads should warn but still be valid."""
+        result = validate_repo_config(RepoConfig(path=str(tmp_path)))
+        assert result.valid
+        assert any("beads" in w.lower() or ".beads" in w for w in result.warnings)
+
+    def test_explicit_beads_db_path_valid(self, tmp_path):
+        beads_dir = tmp_path / "custom_beads"
+        beads_dir.mkdir()
+        result = validate_repo_config(RepoConfig(
+            path=str(tmp_path),
+            beads_db_path=str(beads_dir),
+        ))
+        assert result.valid
+        assert result.warnings == []
+
+    def test_explicit_beads_db_path_invalid(self, tmp_path):
+        result = validate_repo_config(RepoConfig(
+            path=str(tmp_path),
+            beads_db_path=str(tmp_path / "doesnt_exist"),
+        ))
+        assert result.valid  # Still valid as a path, but warns
+        assert any("beads_db_path" in w for w in result.warnings)
+
+    def test_copilot_instructions_exists(self, tmp_path):
+        instr = tmp_path / "instructions.md"
+        instr.write_text("# Instructions")
+        result = validate_repo_config(RepoConfig(
+            path=str(tmp_path),
+            copilot_instructions_path=str(instr),
+        ))
+        # No warning about copilot instructions path not existing
+        assert not any("copilot instructions path does not exist" in w.lower() for w in result.warnings)
+
+    def test_copilot_instructions_missing_warns(self, tmp_path):
+        (tmp_path / ".beads").mkdir()
+        result = validate_repo_config(RepoConfig(
+            path=str(tmp_path),
+            copilot_instructions_path="nonexistent.md",
+        ))
+        assert result.valid
+        assert any("instructions" in w.lower() for w in result.warnings)
+
+    def test_copilot_instructions_relative_path(self, tmp_path):
+        """Relative path should resolve against repo path."""
+        (tmp_path / ".beads").mkdir()
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "copilot.md").write_text("# Help")
+        result = validate_repo_config(RepoConfig(
+            path=str(tmp_path),
+            copilot_instructions_path="docs/copilot.md",
+        ))
+        assert not any("instructions" in w.lower() for w in result.warnings)
+
+    def test_quality_gate_zero_coverage_warns(self, tmp_path):
+        (tmp_path / ".beads").mkdir()
+        qg = QualityGateOverrides(coverage_threshold=0.0)
+        result = validate_repo_config(RepoConfig(
+            path=str(tmp_path),
+            quality_gate_overrides=qg,
+        ))
+        assert any("coverage_threshold" in w for w in result.warnings)
+
+
+class TestValidateRepoConfigs:
+    """Tests for validate_repo_configs (batch validation)."""
+
+    def test_empty_list(self):
+        assert validate_repo_configs([]) == []
+
+    def test_disabled_repo_skipped(self):
+        results = validate_repo_configs([RepoConfig(path="", enabled=False)])
+        assert len(results) == 1
+        assert results[0].valid is True
+
+    def test_mixed_valid_invalid(self, tmp_path):
+        (tmp_path / ".beads").mkdir()
+        repos = [
+            RepoConfig(path=str(tmp_path)),
+            RepoConfig(path=str(tmp_path / "bad")),
+        ]
+        results = validate_repo_configs(repos)
+        assert results[0].valid is True
+        assert results[1].valid is False
+
+
+class TestParseReposCli:
+    """Tests for parse_repos_cli function."""
+
+    def test_plain_path(self):
+        configs = parse_repos_cli(["/repo/alpha"])
+        assert len(configs) == 1
+        assert configs[0].path == "/repo/alpha"
+        assert configs[0].priority_weight == 1
+        assert configs[0].max_workers == 0
+        assert configs[0].enabled is True
+
+    def test_path_with_weight(self):
+        configs = parse_repos_cli(["/repo/alpha:weight=5"])
+        assert configs[0].priority_weight == 5
+
+    def test_path_with_multiple_options(self):
+        configs = parse_repos_cli(["/repo/alpha:weight=3:max_workers=2"])
+        assert configs[0].priority_weight == 3
+        assert configs[0].max_workers == 2
+
+    def test_disabled_option(self):
+        configs = parse_repos_cli(["/repo/x:disabled=true"])
+        assert configs[0].enabled is False
+
+    def test_multiple_repos(self):
+        configs = parse_repos_cli(["/repo/a", "/repo/b:weight=10"])
+        assert len(configs) == 2
+        assert configs[0].path == "/repo/a"
+        assert configs[0].priority_weight == 1
+        assert configs[1].path == "/repo/b"
+        assert configs[1].priority_weight == 10
+
+    def test_empty_list(self):
+        assert parse_repos_cli([]) == []
+
+    def test_disabled_yes_variant(self):
+        configs = parse_repos_cli(["/repo/x:disabled=yes"])
+        assert configs[0].enabled is False
+
+    def test_disabled_1_variant(self):
+        configs = parse_repos_cli(["/repo/x:disabled=1"])
+        assert configs[0].enabled is False
+
+    def test_disabled_false_stays_enabled(self):
+        configs = parse_repos_cli(["/repo/x:disabled=false"])
+        assert configs[0].enabled is True

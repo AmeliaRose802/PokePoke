@@ -169,12 +169,30 @@ class AssignmentConfig:
     rules: list[AssignmentRule] = field(default_factory=list)
     fallback: str = "weighted"
 @dataclass
+class QualityGateOverrides:
+    """Repo-specific overrides for quality gate checks (None = inherit global)."""
+    coverage_threshold: float | None = None
+    max_file_length: int | None = None
+    allow_skipped_tests: bool | None = None
+    extra_checks: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.coverage_threshold is not None:
+            self.coverage_threshold = max(0.0, min(100.0, self.coverage_threshold))
+        if self.max_file_length is not None:
+            self.max_file_length = max(1, self.max_file_length)
+
+
+@dataclass
 class RepoConfig:
     """Configuration for an individual repository in multi-repo mode."""
     path: str = ""
     priority_weight: int = 1
     enabled: bool = True
     max_workers: int = 0  # Per-repo worker cap (0 = no per-repo limit, uses global pool share)
+    beads_db_path: str | None = None  # Explicit beads DB path; auto-discovered when None
+    copilot_instructions_path: str | None = None  # Custom copilot instructions file
+    quality_gate_overrides: QualityGateOverrides | None = None
 
     def __post_init__(self) -> None:
         """Clamp values to valid ranges."""
@@ -282,15 +300,8 @@ class ProjectConfig:
             ) from e
 
 
-
-
 def _find_repo_root() -> Path:
-    """Find the repository root of the target project.
-
-    Walks up from the current working directory (not from PokePoke's own
-    source tree) so that config is loaded from the project PokePoke is
-    being run *on*, not from PokePoke's own repository.
-    """
+    """Find the repository root by walking up from cwd."""
     current = Path.cwd().resolve()
     while current != current.parent:
         if (current / ".git").exists():
@@ -300,14 +311,7 @@ def _find_repo_root() -> Path:
 
 
 def _load_config_file(config_path: Path) -> dict[str, Any]:
-    """Load a config file (YAML or JSON).
-
-    Args:
-        config_path: Path to the config file.
-
-    Returns:
-        Parsed configuration dictionary.
-    """
+    """Load a config file (YAML or JSON) and return parsed dict."""
     content = config_path.read_text(encoding="utf-8")
 
     if config_path.suffix in (".yaml", ".yml"):
@@ -331,22 +335,10 @@ _cached_config: ProjectConfig | None = None
 
 
 def load_config(config_path: Path | None = None) -> ProjectConfig:
-    """Load the project configuration.
+    """Load project configuration from explicit path or auto-discovered file.
 
-    Searches for config in this order:
-    1. Explicit path (if provided)
-    2. .pokepoke/config.yaml
-    3. .pokepoke/config.yml
-    4. .pokepoke/config.json
-    5. pokepoke.config.json (repo root)
-
-    If no config file is found, returns defaults.
-
-    Args:
-        config_path: Optional explicit path to config file.
-
-    Returns:
-        Loaded ProjectConfig.
+    Search order: .pokepoke/config.yaml, .yml, .json, then pokepoke.config.json.
+    Returns defaults if no config file is found.
     """
     global _cached_config
 
