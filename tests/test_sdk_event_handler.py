@@ -274,15 +274,18 @@ def test_session_error_rate_limit_triggers_fallback(capsys) -> None:
     handler, stats = create_event_handler(done, output_lines, errors)
     handler(_make_event("session.error", message="rate limit exceeded"))
 
-    # First rate-limit error should set fallback flag and NOT set done
-    assert not done.is_set()
+    # Rate-limit error should set done and flag rate_limit_detected, without appending to errors
+    assert done.is_set()
     assert errors == []
-    assert stats['tried_fallback'] is True
+    assert handler.rate_limit_detected is True
 
-    # A second session.error should now set done
+    # A second session.error after reset should still work normally
+    done.clear()
+    handler.reset_for_retry(done, output_lines, errors)
     handler(_make_event("session.error", message="another error"))
     assert done.is_set()
     assert len(errors) == 1
+    assert handler.rate_limit_detected is False
 
 
 def test_tool_execution_start_tracks_stats() -> None:

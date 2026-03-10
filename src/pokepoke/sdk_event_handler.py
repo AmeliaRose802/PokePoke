@@ -9,10 +9,18 @@ from collections.abc import Callable
 
 from . import terminal_ui
 from .hung_command_detector import HungCommandDetector
-from .config import get_config, DEFAULT_MODEL, FALLBACK_MODEL
+from .config import get_config, FALLBACK_MODEL
 from .sdk_beads_tracker import extract_command, parse_created_items, record_items_created, is_beads_create
 
 logger = logging.getLogger(__name__)
+
+
+class RateLimitError(Exception):
+    """Raised when the SDK session hits a rate limit."""
+
+    def __init__(self, message: str = "Rate limit exceeded") -> None:
+        super().__init__(message)
+
 
 # Default hung command detection settings
 DEFAULT_MAX_READ_RETRIES = 3  # After 3 reads with no new output, consider hung
@@ -29,8 +37,6 @@ class SessionStats(TypedDict):
     total_cache_write_tokens: int
     turn_count: int
     total_tool_calls: int
-    tried_fallback: bool
-    current_model: str
     last_event_time: float
     event_count: int
     last_tool_activity_time: float
@@ -77,6 +83,28 @@ class _EventHandler:
         self._received_deltas = False
         self._stale_idle_count = 0
         self._last_idle_pending: int | None = None
+        self._rate_limit_detected = False
+
+    @property
+    def rate_limit_detected(self) -> bool:
+        """True if the session ended due to a rate limit error."""
+        return self._rate_limit_detected
+
+    def reset_for_retry(
+        self,
+        done: asyncio.Event,
+        output_lines: list[str],
+        errors: list[str],
+    ) -> None:
+        """Reset handler state for a fallback retry attempt."""
+        self._done = done
+        self._output_lines = output_lines
+        self._errors = errors
+        self._rate_limit_detected = False
+        self._received_deltas = False
+        self._stale_idle_count = 0
+        self._last_idle_pending = None
+        self._pending_tools.clear()
 
     # -- public entry point --------------------------------------------------
 
@@ -270,13 +298,12 @@ class _EventHandler:
         print(f"\n[SDK] ERROR: {error_msg}")
         if self._item_logger:
             self._item_logger.log_error(error_msg)
-        if not self._stats['tried_fallback'] and self._stats['current_model'] == DEFAULT_MODEL:
-            error_lower = error_msg.lower()
-            if 'rate' in error_lower and 'limit' in error_lower:
-                print(f"\n[SDK] Rate limit detected, will retry with {FALLBACK_MODEL}...")
-                self._stats['tried_fallback'] = True
-                self._stats['current_model'] = FALLBACK_MODEL
-                return
+        error_lower = error_msg.lower()
+        if not self._rate_limit_detected and 'rate' in error_lower and 'limit' in error_lower:
+            print(f"\n[SDK] Rate limit detected, will retry with {FALLBACK_MODEL}...")
+            self._rate_limit_detected = True
+            self._done.set()
+            return
         self._errors.append(error_msg)
         self._done.set()
 
@@ -301,7 +328,7 @@ def create_event_handler(
     idle_timeout: float = 90.0,
     hung_command_detector: HungCommandDetector | None = None,
     on_token_usage: Callable[[int, int], None] | None = None,
-) -> tuple[Callable[[Any], None], SessionStats]:
+) -> tuple['_EventHandler', SessionStats]:
     """Create an event handler for SDK session events.
 
     Args:
@@ -334,8 +361,6 @@ def create_event_handler(
         'total_cache_write_tokens': 0,
         'turn_count': 0,
         'total_tool_calls': 0,
-        'tried_fallback': False,
-        'current_model': DEFAULT_MODEL,
         'last_event_time': time.monotonic(),
         'event_count': 0,
         'last_tool_activity_time': 0.0,

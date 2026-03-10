@@ -1455,8 +1455,6 @@ class TestBuildCopilotResult:
             "total_cache_write_tokens": 0,
             "turn_count": 3,
             "total_tool_calls": 5,
-            "tried_fallback": False,
-            "current_model": "claude-sonnet-4",
         }
         defaults.update(overrides)
         return defaults
