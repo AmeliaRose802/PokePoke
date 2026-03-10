@@ -36,6 +36,7 @@ from typing import Any
 
 from pokepoke.coordination import acquire_lock
 from pokepoke.file_utils import replace_with_retry
+from pokepoke.perf_timing import timed_block
 from pokepoke.types import ModelCompletionRecord
 
 STATS_FILE = Path(".pokepoke") / "model_stats.json"
@@ -186,18 +187,19 @@ def load_model_stats(path: Path | None = None) -> dict[str, Any]:
 
     Returns an empty store if the file does not exist or is corrupt.
     """
-    stats_path = path or STATS_FILE
-    if not stats_path.exists():
-        return _empty_store()
-    try:
-        with stats_path.open(encoding="utf-8") as f:
-            data = json.load(f)
-        # Basic validation
-        if not isinstance(data, dict) or "log" not in data:
+    with timed_block("model_stats.load"):
+        stats_path = path or STATS_FILE
+        if not stats_path.exists():
             return _empty_store()
-        return data
-    except (json.JSONDecodeError, OSError):
-        return _empty_store()
+        try:
+            with stats_path.open(encoding="utf-8") as f:
+                data = json.load(f)
+            # Basic validation
+            if not isinstance(data, dict) or "log" not in data:
+                return _empty_store()
+            return data
+        except (json.JSONDecodeError, OSError):
+            return _empty_store()
 
 
 def save_model_stats(data: dict[str, Any], path: Path | None = None) -> None:
@@ -206,17 +208,18 @@ def save_model_stats(data: dict[str, Any], path: Path | None = None) -> None:
     Writes to a temporary file first then renames, to avoid corruption
     on crashes.
     """
-    stats_path = path or STATS_FILE
-    stats_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = stats_path.with_suffix(".tmp")
-    with tmp_path.open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-        f.flush()
-        with suppress(OSError):
-            os.fsync(f.fileno())
-    # Retry os.replace on Windows where the destination file may be briefly
-    # locked by a previous operation, causing PermissionError.
-    replace_with_retry(tmp_path, stats_path)
+    with timed_block("model_stats.save"):
+        stats_path = path or STATS_FILE
+        stats_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = stats_path.with_suffix(".tmp")
+        with tmp_path.open("w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+            f.flush()
+            with suppress(OSError):
+                os.fsync(f.fileno())
+        # Retry os.replace on Windows where the destination file may be briefly
+        # locked by a previous operation, causing PermissionError.
+        replace_with_retry(tmp_path, stats_path)
 
 
 def record_completion(record: ModelCompletionRecord, path: Path | None = None) -> None:

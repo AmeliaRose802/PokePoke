@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from pokepoke.git_operations import has_uncommitted_changes, categorize_git_changes, list_worktrees
+from pokepoke.perf_timing import timed_block
 from pokepoke.process_utils import is_process_running
 
 logger = logging.getLogger(__name__)
@@ -50,70 +51,71 @@ def check_git_status(
     errors: list[HealthCheckError] = []
     warnings: list[str] = []
 
-    try:
-        # Check if we're in a git repository
-        if not (repo_path / '.git').exists():
-            errors.append(HealthCheckError(
-                check_name='git_status_check',
-                message=f"Not a git repository: {repo_path}",
-                severity=ErrorSeverity.CRITICAL,
-                details={'repo_path': str(repo_path)}
-            ))
-            return errors, warnings
+    with timed_block("preflight.git_status"):
+        try:
+            # Check if we're in a git repository
+            if not (repo_path / '.git').exists():
+                errors.append(HealthCheckError(
+                    check_name='git_status_check',
+                    message=f"Not a git repository: {repo_path}",
+                    severity=ErrorSeverity.CRITICAL,
+                    details={'repo_path': str(repo_path)}
+                ))
+                return errors, warnings
 
-        # Check for uncommitted changes
-        if has_uncommitted_changes(cwd=str(repo_path)):
-            try:
-                result = subprocess.run(
-                    ['git', 'status', '--porcelain'],
-                    capture_output=True, text=True, check=True,
-                    cwd=str(repo_path), timeout=config['git_operation_timeout']
-                )
+            # Check for uncommitted changes
+            if has_uncommitted_changes(cwd=str(repo_path)):
+                try:
+                    result = subprocess.run(
+                        ['git', 'status', '--porcelain'],
+                        capture_output=True, text=True, check=True,
+                        cwd=str(repo_path), timeout=config['git_operation_timeout']
+                    )
 
-                lines = result.stdout.strip().split('\n') if result.stdout.strip() else []
-                changes = categorize_git_changes(lines)
+                    lines = result.stdout.strip().split('\n') if result.stdout.strip() else []
+                    changes = categorize_git_changes(lines)
 
-                # Classify different types of changes (including untracked files)
-                untracked_and_other = changes['other'] + changes['untracked']
-                if untracked_and_other:  # Non-beads, non-worktree changes (including untracked)
+                    # Classify different types of changes (including untracked files)
+                    untracked_and_other = changes['other'] + changes['untracked']
+                    if untracked_and_other:  # Non-beads, non-worktree changes (including untracked)
+                        errors.append(HealthCheckError(
+                            check_name='git_status_check',
+                            message=f"Repository has uncommitted changes: {len(untracked_and_other)} files",
+                            severity=ErrorSeverity.RECOVERABLE,
+                            details={
+                                'uncommitted_files': untracked_and_other[:10],  # Limit for logging
+                                'total_count': len(untracked_and_other)
+                            }
+                        ))
+
+                    if changes['beads']:
+                        warnings.append(f"Beads database changes detected ({len(changes['beads'])} files)")
+
+                    if changes['worktree']:
+                        warnings.append(f"Worktree cleanup changes detected ({len(changes['worktree'])} files)")
+
+                except subprocess.CalledProcessError as e:
                     errors.append(HealthCheckError(
                         check_name='git_status_check',
-                        message=f"Repository has uncommitted changes: {len(untracked_and_other)} files",
-                        severity=ErrorSeverity.RECOVERABLE,
-                        details={
-                            'uncommitted_files': untracked_and_other[:10],  # Limit for logging
-                            'total_count': len(untracked_and_other)
-                        }
+                        message=f"Failed to check git status: {e.stderr or str(e)}",
+                        severity=ErrorSeverity.ENVIRONMENTAL,
+                        details={'returncode': e.returncode, 'stderr': e.stderr}
+                    ))
+                except subprocess.TimeoutExpired:
+                    errors.append(HealthCheckError(
+                        check_name='git_status_check',
+                        message="Git status check timed out",
+                        severity=ErrorSeverity.ENVIRONMENTAL,
+                        details={'timeout': config['git_operation_timeout']}
                     ))
 
-                if changes['beads']:
-                    warnings.append(f"Beads database changes detected ({len(changes['beads'])} files)")
-
-                if changes['worktree']:
-                    warnings.append(f"Worktree cleanup changes detected ({len(changes['worktree'])} files)")
-
-            except subprocess.CalledProcessError as e:
-                errors.append(HealthCheckError(
-                    check_name='git_status_check',
-                    message=f"Failed to check git status: {e.stderr or str(e)}",
-                    severity=ErrorSeverity.ENVIRONMENTAL,
-                    details={'returncode': e.returncode, 'stderr': e.stderr}
-                ))
-            except subprocess.TimeoutExpired:
-                errors.append(HealthCheckError(
-                    check_name='git_status_check',
-                    message="Git status check timed out",
-                    severity=ErrorSeverity.ENVIRONMENTAL,
-                    details={'timeout': config['git_operation_timeout']}
-                ))
-
-    except Exception as e:
-        errors.append(HealthCheckError(
-            check_name='git_status_check',
-            message=f"Git status check failed: {str(e)}",
-            severity=ErrorSeverity.ENVIRONMENTAL,
-            details={'exception': str(e)}
-        ))
+        except Exception as e:
+            errors.append(HealthCheckError(
+                check_name='git_status_check',
+                message=f"Git status check failed: {str(e)}",
+                severity=ErrorSeverity.ENVIRONMENTAL,
+                details={'exception': str(e)}
+            ))
 
     return errors, warnings
 

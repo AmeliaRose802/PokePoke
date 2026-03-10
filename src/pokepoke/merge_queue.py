@@ -20,6 +20,7 @@ from pathlib import Path
 from queue import Empty, Queue
 
 from .git_operations import get_default_branch, is_worktree_clean
+from .perf_timing import timed_block
 from .shutdown import is_shutting_down
 from .types import BeadsWorkItem
 from .beads import is_high_conflict_risk
@@ -220,7 +221,8 @@ class MergeQueue:
             try:
                 from .worktree_finalization import merge_worktree_to_dev
 
-                success = merge_worktree_to_dev(item, worktree_path=worktree_path)
+                with timed_block("merge_queue.merge"):
+                    success = merge_worktree_to_dev(item, worktree_path=worktree_path)
                 if success:
                     result = MergeResult(
                         status=MergeStatus.SUCCESS,
@@ -274,11 +276,7 @@ class MergeQueue:
 
 
 def _abort_rebase(worktree_path: Path) -> None:
-    """Abort a rebase and verify worktree state.
-
-    Attempts to abort an in-progress rebase. If the abort fails,
-    verifies the worktree state and logs any inconsistencies.
-    """
+    """Abort a rebase and verify worktree state."""
     try:
         subprocess.run(
             ["git", "rebase", "--abort"],
@@ -341,26 +339,28 @@ def _rebase_worktree(worktree_path: Path, target_branch: str | None = None) -> b
         target_branch = get_default_branch()
 
     try:
-        subprocess.run(
-            ["git", "fetch", "origin", target_branch],
-            cwd=str(worktree_path),
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors='replace',
-            timeout=60,
-        )
-        subprocess.run(
-            ["git", "rebase", f"origin/{target_branch}"],
-            cwd=str(worktree_path),
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors='replace',
-            timeout=120,
-        )
+        with timed_block("git.fetch"):
+            subprocess.run(
+                ["git", "fetch", "origin", target_branch],
+                cwd=str(worktree_path),
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors='replace',
+                timeout=60,
+            )
+        with timed_block("git.rebase"):
+            subprocess.run(
+                ["git", "rebase", f"origin/{target_branch}"],
+                cwd=str(worktree_path),
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors='replace',
+                timeout=120,
+            )
         logger.info("Rebased worktree %s onto origin/%s successfully", worktree_path, target_branch)
         return True
     except subprocess.CalledProcessError as exc:

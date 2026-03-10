@@ -6,6 +6,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from pokepoke.perf_timing import timed_block
 from pokepoke.git_operations import (
     sanitize_branch_name,
     get_default_branch,
@@ -74,7 +75,7 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
     # access .git/worktrees simultaneously
     lock_start = time.time()
     try:
-        with with_worktree_lock(timeout=lock_timeout):
+        with with_worktree_lock(timeout=lock_timeout), timed_block("worktree.create"):
             lock_wait = time.time() - lock_start
             if lock_wait > 0.1:
                 logger.info(f"Waited {lock_wait:.2f}s for worktree lock (item: {item_id})")

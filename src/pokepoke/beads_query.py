@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .coordination import beads_db_lock
+from .perf_timing import timed_block
 from .types import BeadsWorkItem, IssueWithDependencies, Dependency, BeadsStats
 
 
@@ -37,16 +38,17 @@ def _run_bd(
     cmd = args[0] if args else ""
 
     def _run() -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            ['bd'] + args,
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            check=check,
-            timeout=timeout,
-            cwd=cwd,
-        )
+        with timed_block(f"bd.{cmd}" if cmd else "bd.unknown"):
+            return subprocess.run(
+                ['bd'] + args,
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                check=check,
+                timeout=timeout,
+                cwd=cwd,
+            )
 
     if cmd in _MUTATING_BD_COMMANDS:
         # Default timeout of 180s is intentionally larger than the bd subprocess
