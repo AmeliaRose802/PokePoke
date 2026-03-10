@@ -1912,3 +1912,121 @@ class TestRateLimitFallback:
         assert "Rate limit exceeded" in result.error
         # Exactly 2 attempts: original + one fallback (no infinite loop)
         assert attempt_count == 2
+
+
+@pytest.mark.asyncio
+class TestAwaitCompletionAbortOSError:
+    """Tests that _await_completion handles OSError during session.abort() gracefully."""
+
+    async def test_shutdown_abort_oserror_returns_shutdown(self):
+        """When session.abort() raises OSError on shutdown, still return 'shutdown'."""
+        from pokepoke.sdk_helpers import _await_completion
+
+        mock_session = AsyncMock()
+        mock_session.abort = AsyncMock(side_effect=OSError(22, "Invalid argument"))
+
+        mock_client = MagicMock()
+        mock_client.get_state = MagicMock(return_value="connected")
+
+        done = asyncio.Event()
+
+        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=True):
+            result = await _await_completion(
+                mock_session, mock_client, done,
+                max_timeout=300.0,
+            )
+
+        assert result == "shutdown"
+        mock_session.abort.assert_called_once()
+
+    async def test_timeout_abort_oserror_returns_timeout(self):
+        """When session.abort() raises OSError on timeout, still return 'timeout'."""
+        from pokepoke.sdk_helpers import _await_completion
+
+        mock_session = AsyncMock()
+        mock_session.abort = AsyncMock(side_effect=OSError(22, "Invalid argument"))
+
+        mock_client = MagicMock()
+        mock_client.get_state = MagicMock(return_value="connected")
+
+        done = asyncio.Event()
+
+        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=False):
+            result = await _await_completion(
+                mock_session, mock_client, done,
+                max_timeout=0.0,  # Immediate timeout
+            )
+
+        assert result == "timeout"
+        mock_session.abort.assert_called_once()
+
+    async def test_inactivity_abort_oserror_returns_inactivity(self):
+        """When session.abort() raises OSError on inactivity, still return 'inactivity'."""
+        import time
+        from pokepoke.sdk_helpers import _await_completion
+
+        mock_session = AsyncMock()
+        mock_session.abort = AsyncMock(side_effect=OSError(22, "Invalid argument"))
+
+        mock_client = MagicMock()
+        mock_client.get_state = MagicMock(return_value="connected")
+
+        done = asyncio.Event()
+        stats = {
+            'last_event_time': time.monotonic() - 700,
+            'event_count': 5,
+            'last_tool_activity_time': time.monotonic() - 700,
+        }
+
+        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=False):
+            result = await _await_completion(
+                mock_session, mock_client, done,
+                max_timeout=300.0,
+                stats=stats,
+                inactivity_timeout=600.0,
+            )
+
+        assert result == "inactivity"
+        mock_session.abort.assert_called_once()
+
+    async def test_shutdown_abort_success_returns_shutdown(self):
+        """Normal shutdown abort (no error) still returns 'shutdown'."""
+        from pokepoke.sdk_helpers import _await_completion
+
+        mock_session = AsyncMock()
+        mock_session.abort = AsyncMock()
+
+        mock_client = MagicMock()
+        mock_client.get_state = MagicMock(return_value="connected")
+
+        done = asyncio.Event()
+
+        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=True):
+            result = await _await_completion(
+                mock_session, mock_client, done,
+                max_timeout=300.0,
+            )
+
+        assert result == "shutdown"
+        mock_session.abort.assert_called_once()
+
+    async def test_timeout_abort_success_returns_timeout(self):
+        """Normal timeout abort (no error) still returns 'timeout'."""
+        from pokepoke.sdk_helpers import _await_completion
+
+        mock_session = AsyncMock()
+        mock_session.abort = AsyncMock()
+
+        mock_client = MagicMock()
+        mock_client.get_state = MagicMock(return_value="connected")
+
+        done = asyncio.Event()
+
+        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=False):
+            result = await _await_completion(
+                mock_session, mock_client, done,
+                max_timeout=0.0,  # Immediate timeout
+            )
+
+        assert result == "timeout"
+        mock_session.abort.assert_called_once()

@@ -121,7 +121,10 @@ async def _await_completion(
     while not done.is_set():
         if is_shutting_down():
             print("\n[SDK] Shutdown requested - aborting session...")
-            await session.abort()
+            try:
+                await session.abort()
+            except OSError as e:
+                logger.debug("Failed to abort session on shutdown: %s", e)
             return "shutdown"
         try:
             client_state = client.get_state()
@@ -154,7 +157,10 @@ async def _await_completion(
         remaining = deadline - asyncio.get_event_loop().time()
         if remaining <= 0:
             print(f"\n[SDK] TIMEOUT after {max_timeout}s")
-            await session.abort()
+            try:
+                await session.abort()
+            except OSError as e:
+                logger.debug("Failed to abort session on timeout: %s", e)
             return "timeout"
         try:
             await asyncio.wait_for(done.wait(), timeout=min(1.0, remaining))
