@@ -43,6 +43,10 @@ def _finalize_session(
     except KeyboardInterrupt:
         print("⚠️  Stats collection interrupted, skipping...")
         session_stats.set_ending_beads_stats(None)
+    # Capture merge queue performance metrics
+    with contextlib.suppress(Exception):
+        from pokepoke.merge_queue import get_merge_queue
+        session_stats.record_merge_queue_stats(get_merge_queue().stats)
     elapsed = end_time - start_time
     print_stats(items_completed, total_requests, elapsed, session_stats)
     run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
@@ -63,14 +67,9 @@ def _record_item_result(selected_item: BeadsWorkItem, result: WorkItemResult, se
     if result.model_completion:
         session_stats.record_model_completion(result.model_completion)
         record_completion(result.model_completion)
-        append_model_history_entry(
-            item=selected_item,
-            model_completion=result.model_completion,
-            success=result.success,
-            request_count=result.request_count,
-            gate_runs=result.gate_agent_runs,
-            item_stats=result.stats,
-        )
+        append_model_history_entry(item=selected_item, model_completion=result.model_completion,
+                                   success=result.success, request_count=result.request_count,
+                                   gate_runs=result.gate_agent_runs, item_stats=result.stats)
     items_completed = 0
     if result.success:
         items_completed = session_stats.record_completion(selected_item, agent_type="work")
@@ -381,15 +380,13 @@ def run_orchestrator(
         return 1
     finally:
         terminal_ui.ui.stop()
-        # Ensure merge queue is properly shut down
         try:
             from pokepoke.merge_queue import get_merge_queue
-            merge_queue = get_merge_queue()
-            if merge_queue.is_running:
-                merge_queue.shutdown(timeout=10.0)
+            mq = get_merge_queue()
+            if mq.is_running:
+                mq.shutdown(timeout=10.0)
         except Exception as e:
             logger.debug(f"Failed to shutdown merge queue during cleanup: {e}")
-        # Clean up signal handlers
         with contextlib.suppress(Exception):
             unregister_shutdown_handlers()
 
