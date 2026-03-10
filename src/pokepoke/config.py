@@ -183,6 +183,25 @@ class RepoConfig:
 
 
 @dataclass
+class PerformanceThresholdsConfig:
+    """Configurable thresholds for the PerformanceMonitor."""
+    enabled: bool = True
+    max_merge_queue_depth: int = 5
+    max_lock_wait_seconds: float = 30.0
+    max_iteration_seconds: float = 30.0
+    min_memory_mb: float = 256.0
+    min_success_rate: float = 0.5
+
+    def __post_init__(self) -> None:
+        """Clamp values to valid ranges."""
+        self.max_merge_queue_depth = max(1, self.max_merge_queue_depth)
+        self.max_lock_wait_seconds = max(1.0, self.max_lock_wait_seconds)
+        self.max_iteration_seconds = max(1.0, self.max_iteration_seconds)
+        self.min_memory_mb = max(32.0, self.min_memory_mb)
+        self.min_success_rate = max(0.0, min(1.0, self.min_success_rate))
+
+
+@dataclass
 class ProjectConfig:
     """Top-level project configuration."""
     project_name: str = ""
@@ -202,6 +221,9 @@ class ProjectConfig:
     idle_timeout_seconds: int = 90  # Seconds to wait before confirming a session is idle
     session_inactivity_timeout: int = 600  # Seconds with no SDK events before treating session as dead
     assignment: AssignmentConfig = field(default_factory=AssignmentConfig)
+    performance_thresholds: PerformanceThresholdsConfig = field(
+        default_factory=PerformanceThresholdsConfig,
+    )
     repos: list[RepoConfig] = field(default_factory=list)
 
     def __post_init__(self) -> None:

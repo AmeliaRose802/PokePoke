@@ -1,5 +1,4 @@
 """PokePoke Orchestrator - Main entry point for autonomous and interactive modes."""
-
 import atexit
 import contextlib
 import logging
@@ -27,6 +26,7 @@ from pokepoke.model_stats_store import record_completion
 from pokepoke.model_history import append_model_history_entry
 from pokepoke.config import load_config
 from pokepoke.signal_handlers import register_shutdown_handlers, unregister_shutdown_handlers
+from pokepoke.performance_monitor import run_iteration_checks
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +213,8 @@ def _run_preflight(ctx: _OrchestratorContext) -> int | None:
 def _run_main_loop(ctx: _OrchestratorContext) -> int:
     """Sequential work-selection and dispatch loop. Returns process exit code."""
     while not is_shutting_down():
+        iter_start = time.monotonic()
+
         exit_code = _run_preflight(ctx)
         if exit_code is not None:
             return exit_code
@@ -280,6 +282,9 @@ def _run_main_loop(ctx: _OrchestratorContext) -> int:
         _record_item_result(selected_item, wi_result, ctx.session_stats, ctx.run_logger)
         ctx.items_completed = ctx.session_stats.items_completed
         terminal_ui.ui.update_stats(ctx.session_stats, time.time() - ctx.start_time)
+
+        # Performance threshold checks
+        run_iteration_checks(time.monotonic() - iter_start, wi_result.success)
 
         if should_stop_after_current():
             cancel_stop_after_current()
