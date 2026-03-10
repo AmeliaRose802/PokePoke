@@ -98,6 +98,37 @@ def validate_repo_configs(repos: list[RepoConfig]) -> list[RepoValidationResult]
     return results
 
 
+def _split_repo_entry(entry: str) -> list[str]:
+    """Split a repo CLI entry into ``[path, option, ...]``.
+
+    Handles Windows drive-letter colons (e.g. ``C:\\repo``) by only splitting
+    on colons that separate ``key=value`` options from the path.  A colon
+    immediately after a single ASCII letter **and** followed by ``/`` or ``\\``
+    is treated as part of the path (drive letter) and not a separator.
+    """
+    # Fast path: no colon at all → plain path
+    if ":" not in entry:
+        return [entry]
+
+    # Detect Windows drive prefix (e.g. "C:\")
+    has_drive = (
+        len(entry) >= 3
+        and entry[0].isalpha()
+        and entry[1] == ":"
+        and entry[2] in ("/", "\\")
+    )
+
+    if has_drive:
+        # Preserve drive prefix; split the rest on ":"
+        rest = entry[2:]  # everything after "X:"
+        parts = rest.split(":")
+        # Re-attach the drive letter to the first segment
+        parts[0] = entry[:2] + parts[0]
+        return parts
+
+    return entry.split(":")
+
+
 def parse_repos_cli(repos_arg: list[str]) -> list[RepoConfig]:
     """Parse ``--repos`` CLI arguments into RepoConfig objects.
 
@@ -116,7 +147,7 @@ def parse_repos_cli(repos_arg: list[str]) -> list[RepoConfig]:
     """
     configs: list[RepoConfig] = []
     for entry in repos_arg:
-        parts = entry.split(":")
+        parts = _split_repo_entry(entry)
         path = parts[0].strip()
         kwargs: dict[str, str] = {}
         for part in parts[1:]:
