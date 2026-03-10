@@ -126,6 +126,37 @@ def test_beads_create_detected_from_powershell_tool(monkeypatch) -> None:
     assert created == [("PokePoke-99", "T")]
 
 
+def test_beads_create_detected_when_complete_event_lacks_arguments(monkeypatch) -> None:
+    """Completion event may omit arguments; args stored from tool start should be used."""
+    done = asyncio.Event()
+    output_lines: list[str] = []
+    errors: list[str] = []
+
+    created: list[tuple[str, str]] = []
+    monkeypatch.setattr("pokepoke.sdk_event_handler.record_items_created", lambda items: created.extend(items))
+
+    handler, _ = create_event_handler(done, output_lines, errors)
+
+    # Simulate tool start (stores arguments under tool_call_id)
+    handler(_make_event(
+        "tool.execution_start",
+        tool_name="powershell",
+        arguments={"command": "bd create something --json"},
+        tool_call_id="call-42",
+    ))
+
+    # Simulate tool complete WITHOUT arguments (only tool_call_id links back)
+    handler(_make_event(
+        "tool.execution_complete",
+        tool_name="powershell",
+        tool_call_id="call-42",
+        result=SimpleNamespace(content=json.dumps({"id": "PokePoke-200", "title": "New Item"})),
+        success=True,
+    ))
+
+    assert created == [("PokePoke-200", "New Item")]
+
+
 def test_streamed_deltas_not_duplicated_by_message(capsys) -> None:
     """Content already streamed via message_delta must not be re-logged by
     the subsequent assistant.message event."""

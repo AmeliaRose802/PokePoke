@@ -170,7 +170,7 @@ class _EventHandler:
         if self._item_logger:
             self._item_logger.log_tool_call(tool_name, '', result=result_content, success=success)
         self._check_hung_command(tool_name, tool_args, result_content)
-        self._check_beads_creation(tool_name, arguments, result_content, success)
+        self._check_beads_creation(tool_name, tool_args or arguments, result_content, success)
 
     def _check_hung_command(self, tool_name: str, tool_args: dict[str, Any], result_content: str) -> None:
         if tool_name == 'read_powershell':
