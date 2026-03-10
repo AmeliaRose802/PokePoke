@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .constants import BEADS_DIR
+
 
 _SAMPLE_CONFIG = """\
 # PokePoke Project Configuration
@@ -144,7 +146,7 @@ _SEED_BEADS_ITEMS: tuple[dict[str, object], ...] = (
 
 
 def _load_existing_beads_titles(root: Path) -> set[str]:
-    issues_path = root / ".beads" / "issues.jsonl"
+    issues_path = root / BEADS_DIR / "issues.jsonl"
     if not issues_path.exists():
         return set()
 
@@ -165,7 +167,7 @@ def _load_existing_beads_titles(root: Path) -> set[str]:
 
 
 def _seed_setup_beads_items(root: Path) -> None:
-    if not (root / ".beads").exists():
+    if not (root / BEADS_DIR).exists():
         print("ℹ️  Beads not initialized yet; skipping setup item seeding.")
         return
     if not shutil.which("bd"):

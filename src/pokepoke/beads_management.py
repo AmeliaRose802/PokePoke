@@ -8,6 +8,7 @@ import time
 from filelock import Timeout
 
 from .agent_context import get_agent_name
+from .constants import STATUS_IN_PROGRESS
 from .coordination import acquire_lock
 from .types import BeadsWorkItem
 from .beads_hierarchy import resolve_to_leaf_task, HUMAN_REQUIRED_LABEL
@@ -149,8 +150,8 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
                         # If the item is already ours and in progress, this is a
                         # no-op claim (common when the orchestrator claims in the
                         # main thread before dispatching a worker).
-                        if current_status.lower() == 'in_progress':
-                            print(f"ℹ️  {item_id} already assigned to {agent_name} and in_progress — skipping bd update")
+                        if current_status.lower() == STATUS_IN_PROGRESS:
+                            print(f"ℹ️  {item_id} already assigned to {agent_name} and {STATUS_IN_PROGRESS} — skipping bd update")
                             return True
 
             except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
@@ -159,8 +160,8 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
 
             try:
                 # Now safe to claim - we verified it's unassigned or ours
-                _run_bd(['update', item_id, '--status', 'in_progress', '-a', agent_name, '--json'])
-                print(f"✅ Assigned {item_id} to {agent_name} and marked in_progress")
+                _run_bd(['update', item_id, '--status', STATUS_IN_PROGRESS, '-a', agent_name, '--json'])
+                print(f"✅ Assigned {item_id} to {agent_name} and marked {STATUS_IN_PROGRESS}")
 
                 # Detect-and-abort: re-read and verify the assignee is actually us.
                 verify_result = _run_bd(['show', item_id, '--json'])

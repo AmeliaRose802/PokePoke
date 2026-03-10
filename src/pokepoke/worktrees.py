@@ -6,7 +6,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from pokepoke.constants import BRANCH_PREFIX, WORKTREE_DIR
+from pokepoke.constants import BRANCH_PREFIX, WORKTREE_DIR, WORKTREE_TASK_PREFIX
 from pokepoke.perf_timing import timed_block
 from pokepoke.git_helpers import run_git as _run_git
 from pokepoke.git_operations import (
@@ -119,7 +119,7 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
     attempt to create worktrees simultaneously.
     """
     sanitized_id = sanitize_branch_name(item_id)
-    worktree_path = (Path(WORKTREE_DIR) / f"task-{sanitized_id}").resolve()
+    worktree_path = (Path(WORKTREE_DIR) / f"{WORKTREE_TASK_PREFIX}{sanitized_id}").resolve()
     branch_name = f"{BRANCH_PREFIX}{sanitized_id}"
 
     # Check if worktree already exists (outside lock - no git operation needed)
@@ -232,7 +232,7 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
     """
     sanitized_id = sanitize_branch_name(item_id)
     branch_name = f"{BRANCH_PREFIX}{sanitized_id}"
-    worktree_path = Path(WORKTREE_DIR) / f"task-{sanitized_id}"
+    worktree_path = Path(WORKTREE_DIR) / f"{WORKTREE_TASK_PREFIX}{sanitized_id}"
 
     if target_branch is None:
         target_branch = get_default_branch()
@@ -303,7 +303,7 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
     """
     sanitized_id = sanitize_branch_name(item_id)
     branch_name = f"{BRANCH_PREFIX}{sanitized_id}"
-    expected_worktree_path = Path(WORKTREE_DIR) / f"task-{sanitized_id}"
+    expected_worktree_path = Path(WORKTREE_DIR) / f"{WORKTREE_TASK_PREFIX}{sanitized_id}"
 
     # Find the actual worktree for this item (might have unsanitized path if created before fix)
     actual_worktree_path: Path | None = None
@@ -322,7 +322,7 @@ def cleanup_worktree(item_id: str, force: bool = False) -> bool:
 
     # Also check for unsanitized path (for backwards compatibility)
     if actual_worktree_path is None:
-        unsanitized_path = Path(WORKTREE_DIR) / f"task-{item_id}"
+        unsanitized_path = Path(WORKTREE_DIR) / f"{WORKTREE_TASK_PREFIX}{item_id}"
         if unsanitized_path.exists():
             actual_worktree_path = unsanitized_path
 

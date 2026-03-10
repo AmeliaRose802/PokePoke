@@ -12,8 +12,16 @@ POKEPOKE_DIR = Path(".pokepoke")
 WORKTREE_DIR: str = "worktrees"
 BEADS_DIR: str = ".beads"
 
-# ── Branch naming ────────────────────────────────────────────────────────────
+# ── Branch / worktree naming ────────────────────────────────────────────────
 BRANCH_PREFIX: str = "task/"
+WORKTREE_TASK_PREFIX: str = "task-"
+
+# ── Beads status literals ───────────────────────────────────────────────────
+STATUS_IN_PROGRESS: str = "in_progress"
+COMPLETED_STATUSES: tuple[str, ...] = ("done", "closed", "resolved")
+
+# ── Human-identity keywords (for distinguishing human vs. bot authors) ──────
+HUMAN_IDENTIFIERS: tuple[str, ...] = ("amelia", "payne")
 
 # ── Subprocess defaults ──────────────────────────────────────────────────────
 DEFAULT_GIT_TIMEOUT: int = 30

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 logger = logging.getLogger(__name__)
 
 from pokepoke.config import get_config
+from pokepoke.constants import STATUS_IN_PROGRESS
 from pokepoke.types import BeadsWorkItem, AgentStats
 from pokepoke import terminal_ui
 from pokepoke.cleanup_agents import get_pokepoke_prompts_dir
@@ -79,7 +80,7 @@ def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | No
         worktree_agent_id = _generate_unique_agent_id("beta-tester")
         beta_item = BeadsWorkItem(
             id=worktree_agent_id, title="Beta Test All MCP Tools", description=beta_prompt,
-            status="in_progress", priority=2, issue_type="task",
+            status=STATUS_IN_PROGRESS, priority=2, issue_type="task",
             labels=["testing", "mcp-server", "automated"]
         )
 

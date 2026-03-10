@@ -8,6 +8,7 @@ import logging
 from pathlib import Path
 from filelock import Timeout
 
+from pokepoke.constants import WORKTREE_DIR, WORKTREE_TASK_PREFIX
 from pokepoke.types import BeadsWorkItem, AgentStats
 from pokepoke.worktrees import merge_worktree
 from pokepoke.cleanup_agents import invoke_cleanup_agent, invoke_merge_conflict_cleanup_agent
@@ -113,7 +114,7 @@ def perform_worktree_merge(  # noqa: C901
 
     if not is_ready:
         print(f"\n⚠️  Cannot merge: {error_msg}")
-        print(f"   Worktree preserved at worktrees/task-{item_id} - requires cleanup")
+        print(f"   Worktree preserved at {WORKTREE_DIR}/{WORKTREE_TASK_PREFIX}{item_id} - requires cleanup")
 
         add_uncleaned_worktree(
             item_id,
@@ -161,7 +162,7 @@ def perform_worktree_merge(  # noqa: C901
             if len(unmerged_files) > 10:
                 print(f"      ... and {len(unmerged_files) - 10} more")
 
-        print(f"   Worktree preserved at worktrees/task-{item_id} - requires conflict resolution")
+        print(f"   Worktree preserved at {WORKTREE_DIR}/{WORKTREE_TASK_PREFIX}{item_id} - requires conflict resolution")
 
         add_uncleaned_worktree(
             item_id,

@@ -13,7 +13,7 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pokepoke.constants import BRANCH_PREFIX, WORKTREE_DIR
+from pokepoke.constants import BRANCH_PREFIX, WORKTREE_DIR, WORKTREE_TASK_PREFIX
 from pokepoke.git_operations import get_default_branch, list_worktrees, sanitize_branch_name
 
 if TYPE_CHECKING:
@@ -76,7 +76,7 @@ def default_branch_has_merge_commit(item_id: str, repo_root: Path) -> bool:
 def is_worktree_cleaned(item_id: str, worktree_path: Path | None) -> bool:
     """Return True if the worktree and branch for the item are already cleaned up."""
     sanitized_id = sanitize_branch_name(item_id)
-    expected_path = (worktree_path or Path.cwd() / WORKTREE_DIR / f"task-{sanitized_id}").resolve()
+    expected_path = (worktree_path or Path.cwd() / WORKTREE_DIR / f"{WORKTREE_TASK_PREFIX}{sanitized_id}").resolve()
     active = list_worktrees()
 
     for wt in active:

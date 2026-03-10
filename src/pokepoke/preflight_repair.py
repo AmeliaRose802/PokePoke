@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from pokepoke.constants import STATUS_IN_PROGRESS
 from pokepoke.preflight_checks import HealthCheckError, is_lock_stale
 
 logger = logging.getLogger(__name__)
@@ -92,7 +93,7 @@ def _invoke_preflight_cleanup(repo_path: Path, commit_error: str) -> bool:
             f"to commit them, but the commit failed with:\n\n{commit_error}\n\n"
             "Fix the issues (test failures, lint errors, etc.) and commit the changes."
         ),
-        status="in_progress",
+        status=STATUS_IN_PROGRESS,
         priority=0,
         issue_type="task",
         labels=["preflight", "automated"],

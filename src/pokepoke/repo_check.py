@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pokepoke.constants import BEADS_DIR, STATUS_IN_PROGRESS, WORKTREE_DIR
 from pokepoke.git_operations import get_status_porcelain_and_changes
 from pokepoke.repo_state_guard import cleanup_lock
 from pokepoke.coordination import merge_lock_active
@@ -34,7 +35,7 @@ def check_beads_available() -> bool:
         print("   Then initialize: bd init", file=sys.stderr)
         return False
 
-    beads_dir = Path.cwd() / ".beads"
+    beads_dir = Path.cwd() / BEADS_DIR
     if not beads_dir.is_dir():
         print("\nError: This directory is not a beads repository.", file=sys.stderr)
         print("   Run 'bd init' to set up beads tracking.", file=sys.stderr)
@@ -322,7 +323,7 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
                     description="Auto-generated cleanup task for uncommitted changes",
                     issue_type="task",
                     priority=0,
-                    status="in_progress",
+                    status=STATUS_IN_PROGRESS,
                     labels=["cleanup", "auto-generated"]
                 )
 
@@ -372,7 +373,7 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
         # Auto-resolve worktree cleanup deletions
         if changes['worktree']:
             print("🧹 Committing worktree cleanup changes...")
-            subprocess.run(["git", "add", "worktrees/"], check=True, encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=30)
+            subprocess.run(["git", "add", f"{WORKTREE_DIR}/"], check=True, encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=30)
             subprocess.run(
                 ["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
                 check=True,

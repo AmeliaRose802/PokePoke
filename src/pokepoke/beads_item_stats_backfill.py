@@ -47,7 +47,8 @@ def _determine_agent_type(created_by: str) -> str:
     if not created_by:
         return "unknown"
     created_lower = created_by.lower()
-    if "amelia" in created_lower or "payne" in created_lower:
+    from pokepoke.constants import HUMAN_IDENTIFIERS
+    if any(kw in created_lower for kw in HUMAN_IDENTIFIERS):
         return "human"
     return "unknown"
 

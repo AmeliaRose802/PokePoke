@@ -109,7 +109,7 @@ class TestSaveWorktreeManifest:
             caplog.at_level(logging.WARNING),
         ):
             save_worktree_manifest(data)
-            assert "Failed to save worktree manifest" in caplog.text
+            assert "Failed to save manifest" in caplog.text
 
 
 class TestAddUncleanedWorktree:

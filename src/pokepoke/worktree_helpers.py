@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 from pokepoke.beads_management import run_bd_sync_with_retry
+from pokepoke.constants import BEADS_DIR, WORKTREE_DIR
 from pokepoke.git_operations import categorize_git_changes, commit_all_changes
 
 logger = logging.getLogger(__name__)
@@ -89,12 +90,12 @@ def sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
                 print("✅ Pending main-branch changes committed")
             if changes['beads']:
                 print("🔧 Committing beads database changes...")
-                _run_git(["git", "add", ".beads/"], capture_output=False)
+                _run_git(["git", "add", f"{BEADS_DIR}/"], capture_output=False)
                 _run_git(["git", "commit", "-m", f"chore: sync beads before merge of {branch_name}"], timeout=60)
                 print("✅ Beads changes committed")
             if changes['worktree']:
                 print("🧹 Committing worktree cleanup changes...")
-                _run_git(["git", "add", "worktrees/"], capture_output=False)
+                _run_git(["git", "add", f"{WORKTREE_DIR}/"], capture_output=False)
                 _run_git(["git", "commit", "-m", "chore: cleanup deleted worktree directories"], timeout=60)
                 print("✅ Worktree cleanup committed")
         return True

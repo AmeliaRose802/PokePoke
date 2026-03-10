@@ -12,6 +12,7 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
+from pokepoke.constants import STATUS_IN_PROGRESS
 from pokepoke.process_utils import is_process_running
 from pokepoke.session_journal import (
     SessionJournal,
@@ -95,7 +96,7 @@ def _should_unassign(item_id: str, agent_name: str) -> bool:
         item = items[0] if isinstance(items, list) else items
         status = (item.get("status") or "").lower()
         assignee = item.get("assignee") or ""
-        return status == "in_progress" and assignee == agent_name
+        return status == STATUS_IN_PROGRESS and assignee == agent_name
     except Exception as exc:
         logger.warning("Failed to check beads item %s: %s", item_id, exc)
         return False

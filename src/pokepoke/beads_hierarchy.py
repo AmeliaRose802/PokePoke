@@ -14,8 +14,7 @@ HUMAN_REQUIRED_LABEL = 'human-required'
 # Labels that mark items as high merge-conflict risk and should be serialized
 HIGH_CONFLICT_LABELS: tuple[str, ...] = ('high-conflict-risk', 'merge-conflict-prone')
 
-# Statuses that indicate a work item is complete
-COMPLETED_STATUSES = ('done', 'closed', 'resolved')
+from .constants import COMPLETED_STATUSES, STATUS_IN_PROGRESS
 
 
 def is_high_conflict_risk(item: BeadsWorkItem) -> bool:
@@ -100,7 +99,7 @@ def is_assigned_to_current_user(item: BeadsWorkItem) -> bool:
 
     # No assignee field - check status as fallback.
     # If status is 'in_progress', another agent likely claimed it.
-    if item.status == 'in_progress':
+    if item.status == STATUS_IN_PROGRESS:
         return False
 
     # No assignee, not in_progress - claimable

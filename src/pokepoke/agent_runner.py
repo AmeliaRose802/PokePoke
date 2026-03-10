@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 logger = logging.getLogger(__name__)
 
 from pokepoke.ai_backends import invoke_copilot
+from pokepoke.constants import STATUS_IN_PROGRESS
 from pokepoke.git_operations import get_default_branch
 from pokepoke.types import BeadsWorkItem, AgentStats
 from pokepoke.stats import parse_agent_stats
@@ -160,7 +161,7 @@ def run_maintenance_agent(
     agent_id = _generate_unique_agent_id(base_agent_type) if needs_worktree else base_agent_type
     agent_item = BeadsWorkItem(
         id=agent_id, title=f"{agent_name} Maintenance", description=agent_prompt,
-        status="in_progress", priority=0, issue_type="task",
+        status=STATUS_IN_PROGRESS, priority=0, issue_type="task",
         labels=["maintenance", agent_name.lower()]
     )
 
@@ -253,7 +254,7 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
 
         cleanup_item = BeadsWorkItem(
             id=agent_id, title="Worktree Cleanup and Merge", description=cleanup_prompt,
-            status="in_progress", priority=0, issue_type="task",
+            status=STATUS_IN_PROGRESS, priority=0, issue_type="task",
             labels=["maintenance", "worktree-cleanup"]
         )
 

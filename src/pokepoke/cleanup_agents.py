@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from pokepoke.ai_backends import invoke_copilot
+from pokepoke.constants import STATUS_IN_PROGRESS, WORKTREE_DIR, WORKTREE_TASK_PREFIX
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
 from pokepoke.git_operations import verify_main_repo_clean, commit_all_changes
 from pokepoke.coordination import merge_lock_active
@@ -288,7 +289,7 @@ def invoke_cleanup_agent(
         id=f"{item.id}-cleanup",
         title=f"Cleanup for {item.id}",
         description=cleanup_prompt,
-        status="in_progress",
+        status=STATUS_IN_PROGRESS,
         priority=0,
         issue_type="task",
         labels=["cleanup", "automated"]
@@ -348,7 +349,7 @@ def invoke_merge_conflict_cleanup_agent(
         cleanup_prompt_template, current_dir, current_branch, is_worktree,
     )
     cleanup_prompt_template = cleanup_prompt_template.replace("{merge_error}", error_msg)
-    cleanup_prompt_template = cleanup_prompt_template.replace("{worktree_path}", f"worktrees/task-{item.id}")
+    cleanup_prompt_template = cleanup_prompt_template.replace("{worktree_path}", f"{WORKTREE_DIR}/{WORKTREE_TASK_PREFIX}{item.id}")
     cleanup_prompt_template = cleanup_prompt_template.replace("{is_merge_in_progress}", str(is_merging))
     cleanup_prompt_template = cleanup_prompt_template.replace("{conflict_files}", conflict_files_section)
     cleanup_prompt_template = cleanup_prompt_template.replace("{conflict_count}", str(len(unmerged_files)))
@@ -369,7 +370,7 @@ def invoke_merge_conflict_cleanup_agent(
         id=f"{item.id}-merge-fix",
         title=f"Fix merge conflicts for {item.id}",
         description=cleanup_prompt,
-        status="in_progress",
+        status=STATUS_IN_PROGRESS,
         priority=0,
         issue_type="task",
         labels=["cleanup", "merge-conflict"]

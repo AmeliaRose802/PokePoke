@@ -7,6 +7,10 @@ from pokepoke.constants import (
     WORKTREE_DIR,
     BEADS_DIR,
     BRANCH_PREFIX,
+    WORKTREE_TASK_PREFIX,
+    STATUS_IN_PROGRESS,
+    COMPLETED_STATUSES,
+    HUMAN_IDENTIFIERS,
     DEFAULT_GIT_TIMEOUT,
     DEFAULT_ENCODING,
     DEFAULT_ENCODING_ERRORS,
@@ -29,6 +33,27 @@ def test_beads_dir() -> None:
 
 def test_branch_prefix() -> None:
     assert BRANCH_PREFIX == "task/"
+
+
+def test_worktree_task_prefix() -> None:
+    assert WORKTREE_TASK_PREFIX == "task-"
+
+
+def test_status_in_progress() -> None:
+    assert STATUS_IN_PROGRESS == "in_progress"
+
+
+def test_completed_statuses() -> None:
+    assert isinstance(COMPLETED_STATUSES, tuple)
+    assert "done" in COMPLETED_STATUSES
+    assert "closed" in COMPLETED_STATUSES
+    assert "resolved" in COMPLETED_STATUSES
+
+
+def test_human_identifiers() -> None:
+    assert isinstance(HUMAN_IDENTIFIERS, tuple)
+    assert len(HUMAN_IDENTIFIERS) > 0
+    assert all(isinstance(h, str) for h in HUMAN_IDENTIFIERS)
 
 
 def test_default_git_timeout_is_int() -> None:

@@ -9,7 +9,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from pokepoke.constants import BRANCH_PREFIX
+from pokepoke.constants import BRANCH_PREFIX, WORKTREE_DIR, WORKTREE_TASK_PREFIX
 
 logger = logging.getLogger(__name__)
 
@@ -368,7 +368,7 @@ def has_unmerged_worktrees() -> bool:
     worktrees = list_worktrees()
     task_worktrees = [
         wt for wt in worktrees
-        if "worktrees" in wt.get("path", "") and "task-" in wt.get("path", "")
+        if WORKTREE_DIR in wt.get("path", "") and WORKTREE_TASK_PREFIX in wt.get("path", "")
     ]
     if task_worktrees:
         return True

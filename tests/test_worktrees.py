@@ -701,7 +701,7 @@ class TestMergeWorktree:
             assert success is True
             assert unmerged_files == []
             assert sync_calls['count'] == 2
-            mock_sleep.assert_called_once()
+            mock_sleep.assert_any_call(0.5)
             assert any('retrying in' in str(call) for call in mock_print.call_args_list)
 
     def test_merge_worktree_with_beads_changes(self):

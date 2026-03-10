@@ -5,6 +5,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from .constants import BEADS_DIR
+
 
 def is_git_repo(path: Path) -> bool:
     """Check if a directory is (or is inside) a git repository."""
@@ -56,7 +58,7 @@ def check_beads_available(path: Path) -> bool:
     server isn't running.  Instead we check for the ``.beads/`` directory
     which is a reliable filesystem indicator that ``bd init`` has been run.
     """
-    beads_dir = path / ".beads"
+    beads_dir = path / BEADS_DIR
     if not beads_dir.is_dir():
         return False
     # Verify it has at least a config file (not just an empty directory)

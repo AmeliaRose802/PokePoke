@@ -7,11 +7,11 @@ import logging
 import subprocess
 import time
 
+from .constants import BEADS_DIR, DEFAULT_GIT_TIMEOUT
+
 logger = logging.getLogger(__name__)
 
 __all__ = ["run_git", "verify_branch_pushed", "restore_beads_stash", "_run_git_status_with_retry"]
-
-DEFAULT_GIT_TIMEOUT: int = 30
 
 
 def run_git(
@@ -83,7 +83,7 @@ def restore_beads_stash(context: str) -> None:
         # ran `git checkout -- .` which wiped the ENTIRE working tree.
         with contextlib.suppress(subprocess.CalledProcessError):
             subprocess.run(
-                ["git", "checkout", "--", ".beads/"],
+                ["git", "checkout", "--", f"{BEADS_DIR}/"],
                 check=True, capture_output=True, text=True,
                 encoding='utf-8', errors='replace', timeout=30
             )
@@ -91,7 +91,7 @@ def restore_beads_stash(context: str) -> None:
         # Force-apply .beads/ paths from the stash (theirs-wins strategy)
         try:
             subprocess.run(
-                ["git", "checkout", "stash@{0}", "--", ".beads/"],
+                ["git", "checkout", "stash@{0}", "--", f"{BEADS_DIR}/"],
                 check=True,
                 capture_output=True,
                 text=True,

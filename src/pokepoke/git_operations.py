@@ -5,6 +5,12 @@ import re
 import subprocess
 from pathlib import Path
 
+from .constants import BEADS_DIR, WORKTREE_DIR
+
+# Pre-built path prefixes for string matching in git status output
+_BEADS_PATH = f"{BEADS_DIR}/"
+_WT_PATH = f"{WORKTREE_DIR}/"
+
 logger = logging.getLogger(__name__)
 
 from .git_helpers import restore_beads_stash, _run_git_status_with_retry  # noqa: E402
@@ -20,15 +26,12 @@ __all__ = [
 def categorize_git_changes(lines: list[str]) -> dict[str, list[str]]:
     """Categorize git status --porcelain lines into beads, worktree, untracked, and other changes."""
     return {
-        'beads': [line for line in lines if line and '.beads/' in line],
-        'worktree': [line for line in lines if line and 'worktrees/' in line and not line.startswith('??')],
+        'beads': [line for line in lines if line and _BEADS_PATH in line],
+        'worktree': [line for line in lines if line and _WT_PATH in line and not line.startswith('??')],
         'untracked': [line for line in lines if line and line.startswith('??')],
         'other': [
             line for line in lines
-            if line
-            and '.beads/' not in line
-            and 'worktrees/' not in line
-            and not line.startswith('??')
+            if line and _BEADS_PATH not in line and _WT_PATH not in line and not line.startswith('??')
         ],
     }
 
@@ -102,10 +105,9 @@ def verify_main_repo_clean(cwd: str | None = None) -> tuple[bool, str, list[str]
         uncommitted = status_result.stdout.strip()
         if uncommitted:
             changes = categorize_git_changes(uncommitted.split('\n'))
-            # Exclude untracked files under .beads/ and worktrees/
             relevant_untracked = [
                 line for line in changes['untracked']
-                if '.beads/' not in line and 'worktrees/' not in line
+                if _BEADS_PATH not in line and _WT_PATH not in line
             ]
             non_beads = changes['other'] + relevant_untracked
             return len(non_beads) == 0, uncommitted, non_beads
@@ -119,7 +121,7 @@ def handle_beads_auto_commit() -> None:
     """Commit beads database changes."""
     try:
         print("🔧 Committing beads database changes in main repo...")
-        subprocess.run(["git", "add", ".beads/"], check=True, encoding='utf-8', errors='replace', timeout=10)
+        subprocess.run(["git", "add", f"{BEADS_DIR}/"], check=True, encoding='utf-8', errors='replace', timeout=10)
         subprocess.run(
             ["git", "commit", "-m", "chore: sync beads before worktree merge"],
             check=True,
@@ -281,13 +283,13 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, 
     stashed = False
     try:
         status = subprocess.run(
-            ["git", "status", "--porcelain", ".beads/"],
+            ["git", "status", "--porcelain", f"{BEADS_DIR}/"],
             capture_output=True, text=True, encoding='utf-8', check=True,
             errors='replace', timeout=30
         ).stdout.strip()
         if status:
             subprocess.run(
-                ["git", "stash", "push", "-m", "beads-daemon-changes-during-merge", "--", ".beads/"],
+                ["git", "stash", "push", "-m", "beads-daemon-changes-during-merge", "--", f"{BEADS_DIR}/"],
                 check=True, capture_output=True, text=True, encoding='utf-8', errors='replace',
                 timeout=30
             )
@@ -395,5 +397,4 @@ def list_worktrees() -> list[dict[str, str]]:
         return worktrees
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return []
-
 from .handoff_context import build_handoff_context  # noqa: E402,F401  # Re-export for backward compat

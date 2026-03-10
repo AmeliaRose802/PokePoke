@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .config import RepoConfig
+from .constants import BEADS_DIR
 
 
 @dataclass
@@ -31,10 +32,10 @@ def _check_beads_available(repo_path: Path, beads_db_path: str | None) -> tuple[
         return True, None
 
     # Auto-discover: look for .beads directory in the repo
-    beads_dir = repo_path / ".beads"
+    beads_dir = repo_path / BEADS_DIR
     if beads_dir.is_dir():
         return True, None
-    return False, f"No .beads directory found in {repo_path} (set beads_db_path explicitly or run 'bd init')"
+    return False, f"No {BEADS_DIR} directory found in {repo_path} (set beads_db_path explicitly or run 'bd init')"
 
 
 def validate_repo_config(repo: RepoConfig) -> RepoValidationResult:
