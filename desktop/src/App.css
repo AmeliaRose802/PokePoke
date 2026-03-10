@@ -149,6 +149,73 @@
   font-size: 13px;
 }
 
+/* ── Collapsible Top Banner ─────────────────────────────────────────── */
+
+.top-banner {
+  flex-shrink: 0;
+}
+
+.banner-toggle-btn {
+  background: none;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  padding: 2px 6px;
+  cursor: pointer;
+  line-height: 1;
+  -webkit-app-region: no-drag;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.banner-toggle-btn:hover {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.top-banner-compact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  -webkit-app-region: drag;
+  user-select: none;
+  min-height: 28px;
+}
+
+.top-banner-compact-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-primary);
+}
+
+.top-banner-compact-item {
+  color: var(--accent-secondary);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.top-banner-compact-item-title {
+  color: var(--text-secondary);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.top-banner-compact-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
 /* ── App Header (title bar) ────────────────────────────────────────────── */
 
 .app-header {
