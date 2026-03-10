@@ -5,6 +5,7 @@ import logging
 import subprocess
 from pathlib import Path
 
+from .constants import WORKTREE_DIR
 from .types import BeadsWorkItem
 from .worktrees import cleanup_worktree
 from .git_operations import get_default_branch
@@ -109,7 +110,7 @@ def merge_worktree_to_dev(
     effective_repo_root = repo_root if repo_root is not None else Path.cwd()
     effective_worktree_path = (
         worktree_path if worktree_path is not None
-        else effective_repo_root / "worktrees" / f"task-{item.id}"
+        else effective_repo_root / WORKTREE_DIR / f"task-{item.id}"
     )
 
     merge_success, _ = perform_worktree_merge(

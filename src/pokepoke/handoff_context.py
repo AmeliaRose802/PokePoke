@@ -5,9 +5,12 @@ diff stats, commit history, unified diff) so the gate agent can skip
 re-discovering the project structure and reviewing diffs via git commands.
 """
 
+import logging
 import subprocess
 
 from .git_operations import get_default_branch
+
+logger = logging.getLogger(__name__)
 
 # Truncate unified diff content beyond this limit to avoid token explosion.
 _MAX_DIFF_CHARS = 20_000
@@ -35,7 +38,8 @@ def build_handoff_context(cwd: str | None = None) -> str:
             errors='replace',
             timeout=15, cwd=cwd,
         )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        logger.debug("git diff --name-status failed: %s", exc)
         name_status = None
 
     changed_files: list[str] = []
@@ -56,7 +60,8 @@ def build_handoff_context(cwd: str | None = None) -> str:
             errors='replace',
             timeout=15, cwd=cwd,
         )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        logger.debug("git diff --stat failed: %s", exc)
         diff_stat = None
 
     stat_text = ""
@@ -71,7 +76,8 @@ def build_handoff_context(cwd: str | None = None) -> str:
             errors='replace',
             timeout=10, cwd=cwd,
         )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        logger.debug("git log --oneline failed: %s", exc)
         log_result = None
 
     commit_lines: list[str] = []
@@ -89,7 +95,8 @@ def build_handoff_context(cwd: str | None = None) -> str:
             errors='replace',
             timeout=30, cwd=cwd,
         )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        logger.debug("git diff failed: %s", exc)
         diff_result = None
 
     diff_content = ""

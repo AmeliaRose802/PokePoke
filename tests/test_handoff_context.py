@@ -143,3 +143,31 @@ class TestBuildHandoffContext:
         assert "### Diff Summary" not in result
         assert "### Commit History" not in result
         assert "### Diff Content" not in result
+
+    @patch('src.pokepoke.handoff_context.get_default_branch', return_value='main')
+    @patch('src.pokepoke.handoff_context.subprocess.run')
+    def test_logs_debug_on_subprocess_failures(
+        self, mock_run: Mock, mock_branch: Mock
+    ) -> None:
+        """Verify subprocess failures are logged at DEBUG level."""
+        timeout_error = subprocess.TimeoutExpired(cmd="git", timeout=15)
+
+        def side_effect(cmd: list[str], **kwargs: object) -> Mock:
+            if "--name-status" in cmd:
+                return Mock(returncode=0, stdout="M\tsrc/foo.py\n")
+            if "--stat" in cmd:
+                raise timeout_error
+            if cmd[:2] == ["git", "log"]:
+                raise FileNotFoundError("git not found")
+            return Mock(returncode=0, stdout="some diff")
+
+        mock_run.side_effect = side_effect
+
+        with patch.object(handoff_context.logger, 'debug') as mock_debug:
+            result = build_handoff_context(cwd="C:\\tmp\\worktree")
+
+        assert result != ""
+        assert mock_debug.call_count >= 2
+        debug_messages = [str(call) for call in mock_debug.call_args_list]
+        assert any("git diff --stat failed" in msg for msg in debug_messages)
+        assert any("git log --oneline failed" in msg for msg in debug_messages)

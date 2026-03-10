@@ -13,6 +13,7 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pokepoke.constants import BRANCH_PREFIX, WORKTREE_DIR
 from pokepoke.git_operations import get_default_branch, list_worktrees, sanitize_branch_name
 
 if TYPE_CHECKING:
@@ -44,7 +45,7 @@ def is_beads_item_closed(item_id: str) -> bool:
 def default_branch_has_merge_commit(item_id: str, repo_root: Path) -> bool:
     """Check whether origin/default branch contains the worktree merge commit."""
     sanitized_id = sanitize_branch_name(item_id)
-    branch_marker = f"task/{sanitized_id}"
+    branch_marker = f"{BRANCH_PREFIX}{sanitized_id}"
     default_branch = get_default_branch()
 
     # Best-effort fetch; ignore failures to keep reconciliation non-fatal.
@@ -75,13 +76,13 @@ def default_branch_has_merge_commit(item_id: str, repo_root: Path) -> bool:
 def is_worktree_cleaned(item_id: str, worktree_path: Path | None) -> bool:
     """Return True if the worktree and branch for the item are already cleaned up."""
     sanitized_id = sanitize_branch_name(item_id)
-    expected_path = (worktree_path or Path.cwd() / "worktrees" / f"task-{sanitized_id}").resolve()
+    expected_path = (worktree_path or Path.cwd() / WORKTREE_DIR / f"task-{sanitized_id}").resolve()
     active = list_worktrees()
 
     for wt in active:
         branch = wt.get("branch", "")
         path_str = wt.get("path")
-        if branch.endswith(f"task/{sanitized_id}"):
+        if branch.endswith(f"{BRANCH_PREFIX}{sanitized_id}"):
             return False
         if path_str:
             try:

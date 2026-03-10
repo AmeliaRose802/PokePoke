@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from collections.abc import Callable
 from typing import Any, Protocol
 
+from pokepoke.constants import DEFAULT_AGENT_TIMEOUT
 from pokepoke.config import get_config
 from pokepoke.copilot_sdk import build_prompt_from_work_item, invoke_copilot_sdk_sync
 from pokepoke.types import BeadsWorkItem, CopilotResult, RetryConfig
@@ -113,7 +114,7 @@ class ClaudeCodeBackend:
                 encoding='utf-8',
                 errors='replace',
                 capture_output=True,
-                timeout=timeout or 7200.0,
+                timeout=timeout or DEFAULT_AGENT_TIMEOUT,
                 cwd=cwd,
                 env=env,
             )
@@ -122,7 +123,7 @@ class ClaudeCodeBackend:
                 work_item_id=work_item.id,
                 success=False,
                 output=None,
-                error=f"Claude Code CLI timed out after {timeout or 7200.0}s",
+                error=f"Claude Code CLI timed out after {timeout or DEFAULT_AGENT_TIMEOUT}s",
                 attempt_count=1,
                 model=model,
             )
@@ -208,7 +209,7 @@ def invoke_copilot(
         work_item: The beads work item to process.
         prompt: Optional pre-built prompt (if not provided, will build one from template).
         retry_config: Retry configuration (uses defaults if not provided).
-        timeout: Maximum execution time in seconds (default: 7200 = 2 hours).
+        timeout: Maximum execution time in seconds (default: DEFAULT_AGENT_TIMEOUT).
         deny_write: If True, deny file write tools (for beads-only agents).
         item_logger: Optional item logger for file logging.
         model: Optional model name to use.

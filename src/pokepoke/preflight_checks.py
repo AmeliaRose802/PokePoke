@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pokepoke.constants import WORKTREE_DIR
 from pokepoke.git_operations import has_uncommitted_changes, categorize_git_changes, list_worktrees
 from pokepoke.perf_timing import timed_block
 from pokepoke.process_utils import is_process_running
@@ -129,12 +130,12 @@ def check_worktree_creation(
 
     # Generate a unique test worktree name
     test_id = f"health-check-{uuid.uuid4().hex[:8]}"
-    test_worktree_path = repo_path / "worktrees" / f"test-{test_id}"
+    test_worktree_path = repo_path / WORKTREE_DIR / f"test-{test_id}"
     test_branch = f"test/health-check-{test_id}"
 
     try:
         # Ensure worktrees directory exists
-        (repo_path / "worktrees").mkdir(exist_ok=True)
+        (repo_path / WORKTREE_DIR).mkdir(exist_ok=True)
 
         # Try to create a test worktree
         cmd = [

@@ -11,6 +11,7 @@ except ImportError:
     CopilotClient = None
 
 from .config import get_config, DEFAULT_MODEL, FALLBACK_MODEL
+from .constants import DEFAULT_AGENT_TIMEOUT
 from .types import BeadsWorkItem, CopilotResult, RetryConfig
 from .prompts import PromptService
 from . import terminal_ui
@@ -178,7 +179,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
 ) -> CopilotResult:
     """Invoke GitHub Copilot using the SDK. Falls back to Sonnet on rate limit."""
     final_prompt = prompt or build_prompt_from_work_item(work_item, template_name or "beads-item")
-    max_timeout = timeout or 7200.0
+    max_timeout = timeout or DEFAULT_AGENT_TIMEOUT
     if idle_timeout is None:
         idle_timeout = float(get_config().idle_timeout_seconds)
     inactivity_timeout = float(get_config().session_inactivity_timeout)
