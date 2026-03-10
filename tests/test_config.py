@@ -892,3 +892,38 @@ class TestParseReposCli:
     def test_disabled_false_stays_enabled(self):
         configs = parse_repos_cli(["/repo/x:disabled=false"])
         assert configs[0].enabled is True
+
+    def test_windows_drive_letter_plain_path(self):
+        configs = parse_repos_cli([r"C:\src\repo"])
+        assert len(configs) == 1
+        assert configs[0].path == r"C:\src\repo"
+        assert configs[0].priority_weight == 1
+
+    def test_windows_drive_letter_with_weight(self):
+        configs = parse_repos_cli([r"C:\src\repo:weight=5"])
+        assert configs[0].path == r"C:\src\repo"
+        assert configs[0].priority_weight == 5
+
+    def test_windows_drive_letter_with_multiple_options(self):
+        configs = parse_repos_cli([r"C:\src\repo:weight=3:max_workers=2"])
+        assert configs[0].path == r"C:\src\repo"
+        assert configs[0].priority_weight == 3
+        assert configs[0].max_workers == 2
+
+    def test_windows_drive_letter_disabled(self):
+        configs = parse_repos_cli([r"D:\projects\myrepo:disabled=true"])
+        assert configs[0].path == r"D:\projects\myrepo"
+        assert configs[0].enabled is False
+
+    def test_windows_forward_slash_drive_path(self):
+        configs = parse_repos_cli(["C:/src/repo:weight=7"])
+        assert configs[0].path == "C:/src/repo"
+        assert configs[0].priority_weight == 7
+
+    def test_mixed_windows_and_unix_repos(self):
+        configs = parse_repos_cli([r"C:\repo\a:weight=2", "/repo/b:weight=3"])
+        assert len(configs) == 2
+        assert configs[0].path == r"C:\repo\a"
+        assert configs[0].priority_weight == 2
+        assert configs[1].path == "/repo/b"
+        assert configs[1].priority_weight == 3
