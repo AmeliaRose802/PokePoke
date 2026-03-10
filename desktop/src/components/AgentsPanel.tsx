@@ -1,14 +1,4 @@
-/**
- * Agents panel component.
- *
- * Displays running agents as cards on the right side of the UI.
- * Each card shows: agent name, iteration, robot avatar, and
- * a live preview of recent log lines.
- * Clicking a card selects it to display full logs in the main panel.
- *
- * Agents are grouped by session. Previous sessions are collapsed
- * by default and can be expanded by clicking the session header.
- */
+/** Agents panel: displays running/completed agent cards grouped by session. */
 
 import { type ReactElement, useState } from "react";
 
@@ -28,6 +18,8 @@ import {
   groupBySession,
   isHistoryAgent,
   parentKeysForAgent,
+  resolveGateForDisplay,
+  shouldShowAttemptLabel,
   STATUS_INDICATOR,
 } from "../utils/agentsPanelHelpers";
 import { GateVerdictPreview } from "./GateVerdictPreview";
@@ -107,23 +99,15 @@ export function AgentsPanel({
     const baseLabel = getAgentPrimaryLabel(agent);
     const label = isGate && parentLabel ? parentLabel : baseLabel;
     const roleLabel = agent.work_item_id ? agent.name : null;
-    // Use the *latest* gate child so a retry that passes overrides an earlier rejection.
-    const gateChildren =
-      !isGate
-        ? (
-            sessionChildrenMap.get(cardId) ??
-            sessionChildrenMap.get(agent.agent_id) ??
-            []
-          ).filter(isGateAgent)
-        : [];
-    const gateChildForParent = gateChildren.length > 0 ? gateChildren[gateChildren.length - 1] : null;
-    const gateSummary = gateChildForParent
-      ? GATE_STATUS_COPY[gateChildForParent.status] ??
-        GATE_STATUS_COPY.running
+    const { gate: gateForDisplay, isRetryCycleRoot } =
+      resolveGateForDisplay(agent, sessionChildrenMap);
+    const gateSummary = gateForDisplay
+      ? GATE_STATUS_COPY[gateForDisplay.status] ?? GATE_STATUS_COPY.running
       : null;
+    const showAttempt = shouldShowAttemptLabel(agent, sessionChildrenMap);
     const gateTargetSummary =
       isGate && parent
-        ? `${parent.name}${parent.iteration ? ` · v${parent.iteration}` : ""}`
+        ? `${parent.name}${parent.iteration ? ` · Attempt ${parent.iteration}` : ""}`
         : agent.parent_agent_id ?? null;
     const agentType = getAgentType(agent);
     const agentIconPath = getAgentAvatar(agent);
@@ -170,7 +154,11 @@ export function AgentsPanel({
           })()}
           <div className="agent-card-info">
             <span className="agent-card-name">{label}</span>
-            <span className="agent-card-iter">v{agent.iteration}</span>
+            {showAttempt ? (
+              <span className="agent-card-iter agent-attempt-label">Attempt {agent.iteration}</span>
+            ) : (
+              <span className="agent-card-iter">v{agent.iteration}</span>
+            )}
             {roleLabel ? (
               <span className="agent-card-subtitle">{roleLabel}</span>
             ) : null}
@@ -181,12 +169,12 @@ export function AgentsPanel({
             ) : null}
           </div>
           <div className="agent-card-status">
-            {gateSummary && gateChildForParent ? (
+            {gateSummary && gateForDisplay ? (
               <span
-                className={`agent-gate-chip gate-${gateChildForParent.status}`}
-                title={gateSummary}
+                className={`agent-gate-chip gate-${gateForDisplay.status}${isRetryCycleRoot ? " gate-final-outcome" : ""}`}
+                title={isRetryCycleRoot ? `Final: ${gateSummary}` : gateSummary}
               >
-                {gateSummary}
+                {isRetryCycleRoot ? `Final: ${gateSummary}` : gateSummary}
               </span>
             ) : null}
             <span
@@ -283,10 +271,36 @@ export function AgentsPanel({
       parent?: AgentInfo
     ): ReactElement[] => {
       const nodes = [renderAgentCard(agent, depth, parent, sessionChildrenByParent)];
-      // Sort children newest-first, then render recursively
-      [...(sessionChildrenByParent.get(cardIdForAgent(agent)) ?? sessionChildrenByParent.get(agent.agent_id) ?? [])]
+      const allChildren = [
+        ...(sessionChildrenByParent.get(cardIdForAgent(agent)) ?? sessionChildrenByParent.get(agent.agent_id) ?? []),
+      ];
+
+      // Separate retry children (linked via parent_card_id, non-gate) from other children
+      const retryKids = allChildren.filter((c) => !isGateAgent(c) && !!c.parent_card_id);
+      const otherKids = allChildren.filter(
+        (c) => isGateAgent(c) || !c.parent_card_id
+      );
+
+      // Render non-retry children (gates, maintenance sub-agents) newest-first
+      otherKids
         .sort((a, b) => (b.started_at ?? 0) - (a.started_at ?? 0))
         .forEach((child) => {
+          nodes.push(...renderSessionAgentTree(child, depth + 1, agent));
+        });
+
+      // Render retry children chronologically (oldest first) with separators
+      retryKids
+        .sort((a, b) => (a.started_at ?? a.iteration) - (b.started_at ?? b.iteration))
+        .forEach((child) => {
+          nodes.push(
+            <div
+              key={`retry-sep-${child.card_id ?? child.agent_id}`}
+              className={`agent-retry-separator${depth > 0 ? " agent-retry-separator-nested" : ""}`}
+            >
+              <span className="agent-retry-arrow">↻</span>
+              <span className="agent-retry-label">Retried with feedback</span>
+            </div>
+          );
           nodes.push(...renderSessionAgentTree(child, depth + 1, agent));
         });
       return nodes;
