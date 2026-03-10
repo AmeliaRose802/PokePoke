@@ -340,6 +340,45 @@ class TestCleanupAfterMerge:
         assert call_args[0][0] == 'item-1'  # worktree_id extracted from branch name
         assert call_args[0][1] == str(Path('/repo/worktrees/task-1'))  # worktree_path as string
 
+    @patch('pokepoke.worktree_cleanup.force_remove_directory')
+    @patch('pokepoke.worktree_cleanup.add_uncleaned_worktree')
+    @patch('subprocess.run')
+    @patch('pathlib.Path.exists')
+    @patch('builtins.print')
+    def test_cleanup_after_merge_skips_branch_delete_when_dir_exists(
+        self,
+        mock_print,
+        mock_exists,
+        mock_run,
+        mock_add_uncleaned,
+        mock_force_remove,
+    ) -> None:
+        """Do not delete the branch if the worktree directory still exists.
+
+        Regression test: deleting the branch while the directory remains
+        creates a dangling worktree that requires manual ``git worktree prune``.
+        """
+        mock_exists.return_value = True
+        # Worktree removal fails with a lock error
+        mock_run.side_effect = subprocess.CalledProcessError(
+            1, 'git', stderr='Permission denied'
+        )
+        # Force removal also fails – directory still on disk
+        mock_force_remove.return_value = False
+
+        cleanup_after_merge(Path('/repo/worktrees/task-1'), 'task/item-1')
+
+        # Verify git branch -d/D was never called
+        for call in mock_run.call_args_list:
+            args = call[0][0] if call[0] else call[1].get('args', [])
+            assert not ('branch' in args and ('-d' in args or '-D' in args)), \
+                "Branch deletion must be skipped when the worktree directory still exists"
+
+        # Should warn about skipping branch deletion
+        print_calls = [str(c) for c in mock_print.call_args_list]
+        assert any('Skipping branch deletion' in c for c in print_calls), \
+            "Should print warning about skipping branch deletion"
+
 
 class TestManifestOperations:
     """Tests for manifest loading and saving edge cases."""
