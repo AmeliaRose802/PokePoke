@@ -148,6 +148,31 @@ class TestMergeQueueStatsCollection:
         snap.total_merges = 0
         assert self.queue._stats.total_merges == 42
 
+    def test_reset_stats_clears_counters(self):
+        """reset_stats should zero all counters and clear sample lists."""
+        self.queue._stats.total_merges = 5
+        self.queue._stats.successful_merges = 3
+        self.queue._stats.failed_merges = 2
+        self.queue._stats.merge_durations = [1.0, 2.0]
+        self.queue._stats.wait_times = [0.5]
+        self.queue._stats.queue_depth_samples = [1, 2, 3]
+        self.queue.reset_stats()
+        s = self.queue.stats
+        assert s.total_merges == 0
+        assert s.successful_merges == 0
+        assert s.failed_merges == 0
+        assert s.merge_durations == []
+        assert s.wait_times == []
+        assert s.queue_depth_samples == []
+
+    def test_reset_stats_does_not_affect_prior_snapshot(self):
+        """A snapshot taken before reset should retain its values."""
+        self.queue._stats.total_merges = 7
+        snap = self.queue.stats
+        self.queue.reset_stats()
+        assert snap.total_merges == 7
+        assert self.queue.stats.total_merges == 0
+
     @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
     @patch("pokepoke.merge_queue.is_high_conflict_risk", return_value=False)
     @patch("pokepoke.merge_queue.get_default_branch", return_value="main")

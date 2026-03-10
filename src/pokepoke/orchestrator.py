@@ -46,7 +46,9 @@ def _finalize_session(
     # Capture merge queue performance metrics
     with contextlib.suppress(Exception):
         from pokepoke.merge_queue import get_merge_queue
-        session_stats.record_merge_queue_stats(get_merge_queue().stats)
+        mq = get_merge_queue()
+        session_stats.record_merge_queue_stats(mq.stats)
+        mq.reset_stats()
     elapsed = end_time - start_time
     print_stats(items_completed, total_requests, elapsed, session_stats)
     run_logger.finalize(items_completed, total_requests, elapsed, session_stats)

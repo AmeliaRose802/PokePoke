@@ -164,6 +164,15 @@ class MergeQueue:
         with self._stats_lock:
             return self._stats.copy()
 
+    def reset_stats(self) -> None:
+        """Reset all performance counters to zero.
+
+        Call after snapshotting stats at session end so the next session
+        starts with fresh counters instead of seeing accumulated totals.
+        """
+        with self._stats_lock:
+            self._stats = MergeQueueStats()
+
     def _worker_loop(self) -> None:
         """Main loop for the merge worker thread."""
         logger.info("Merge queue worker started")
