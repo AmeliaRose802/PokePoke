@@ -43,8 +43,10 @@ def _save_failed_unassign_manifest(manifest: dict[str, dict[str, str]]) -> None:
     manifest_path = _get_failed_unassign_manifest_path()
     try:
         manifest_path.parent.mkdir(exist_ok=True)
-        with open(manifest_path, 'w', encoding='utf-8') as f:
-            json.dump(manifest, f, indent=2, ensure_ascii=False)
+        # Write atomically via a temp file, then rename.
+        tmp = manifest_path.with_suffix('.tmp')
+        tmp.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding='utf-8')
+        tmp.replace(manifest_path)
     except OSError as e:
         logger.warning('Failed to save unassign manifest: %s', e)
 
