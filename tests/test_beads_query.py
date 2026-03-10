@@ -182,6 +182,45 @@ def test_get_issue_dependencies_returns_none_on_empty_stdout(monkeypatch: pytest
     assert beads_query.get_issue_dependencies("A") is None
 
 
+def test_get_issue_dependencies_returns_none_on_malformed_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    mock_process = subprocess.CompletedProcess("bd", 0, stdout="not valid json {{{")
+    monkeypatch.setattr(beads_query, "_run_bd", lambda *args, **kwargs: mock_process)
+
+    assert beads_query.get_issue_dependencies("A") is None
+
+
+def test_get_issue_dependencies_returns_none_on_empty_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    mock_process = subprocess.CompletedProcess("bd", 0, stdout="[]")
+    monkeypatch.setattr(beads_query, "_run_bd", lambda *args, **kwargs: mock_process)
+
+    assert beads_query.get_issue_dependencies("A") is None
+
+
+def test_get_issue_dependencies_returns_none_on_non_list_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    mock_process = subprocess.CompletedProcess("bd", 0, stdout='{"id": "A"}')
+    monkeypatch.setattr(beads_query, "_run_bd", lambda *args, **kwargs: mock_process)
+
+    assert beads_query.get_issue_dependencies("A") is None
+
+
+def test_get_issue_dependencies_returns_none_on_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise subprocess.TimeoutExpired("bd", 30)
+
+    monkeypatch.setattr(beads_query, "_run_bd", boom)
+
+    assert beads_query.get_issue_dependencies("A") is None
+
+
+def test_get_issue_dependencies_returns_none_on_unexpected_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise OSError("unexpected")
+
+    monkeypatch.setattr(beads_query, "_run_bd", boom)
+
+    assert beads_query.get_issue_dependencies("A") is None
+
+
 def test_get_issue_dependencies_converts_dependents(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = [
         {
