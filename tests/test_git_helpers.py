@@ -51,40 +51,72 @@ class TestRestoreBeadsStash:
 
     @patch('src.pokepoke.git_helpers.print')
     @patch('src.pokepoke.git_helpers.subprocess.run')
-    def test_restore_conflict_drops_stash(
+    def test_restore_conflict_force_applies_beads(
         self,
         mock_run: Mock,
         mock_print: Mock
     ) -> None:
-        """Pop failure triggers drop to avoid accumulation."""
+        """Pop failure force-applies .beads/ from stash then drops."""
         mock_run.side_effect = [
             subprocess.CalledProcessError(1, ["git", "stash", "pop"], stderr="conflict"),
-            Mock(returncode=0)
+            Mock(returncode=0),  # git checkout -- .
+            Mock(returncode=0),  # git checkout stash@{0} -- .beads/
+            Mock(returncode=0),  # git stash drop
         ]
 
         restore_beads_stash("pull failure")
 
-        assert mock_run.call_count == 2
-        assert mock_run.call_args_list[1][0][0] == ["git", "stash", "drop"]
-        mock_print.assert_any_call("⚠️ Dropped beads stash entry to avoid accumulation.")
+        assert mock_run.call_count == 4
+        assert mock_run.call_args_list[1][0][0] == ["git", "checkout", "--", "."]
+        assert mock_run.call_args_list[2][0][0] == ["git", "checkout", "stash@{0}", "--", ".beads/"]
+        assert mock_run.call_args_list[3][0][0] == ["git", "stash", "drop"]
+        mock_print.assert_any_call("✅ Force-applied .beads/ changes from stash.")
+
+    @patch('src.pokepoke.git_helpers._get_stash_ref', return_value="stash@{0}: On main: beads-daemon-changes")
+    @patch('src.pokepoke.git_helpers.print')
+    @patch('src.pokepoke.git_helpers.subprocess.run')
+    def test_restore_checkout_failure_preserves_stash(
+        self,
+        mock_run: Mock,
+        mock_print: Mock,
+        mock_stash_ref: Mock,
+    ) -> None:
+        """When force-apply fails, stash is preserved with ref logged."""
+        mock_run.side_effect = [
+            subprocess.CalledProcessError(1, ["git", "stash", "pop"], stderr="conflict"),
+            Mock(returncode=0),  # git checkout -- .
+            subprocess.CalledProcessError(1, ["git", "checkout"], stderr="checkout failed"),
+        ]
+
+        restore_beads_stash("pull failure")
+
+        # Stash drop should NOT be called — stash is preserved
+        assert mock_run.call_count == 3
+        mock_print.assert_any_call(
+            "⚠️ Could not recover .beads/ from stash (ref: stash@{0}: On main: beads-daemon-changes). "
+            "Stash preserved — run `git stash list` to inspect."
+        )
 
     @patch('src.pokepoke.git_helpers.print')
     @patch('src.pokepoke.git_helpers.subprocess.run')
-    def test_restore_conflict_and_drop_failure(
+    def test_restore_force_apply_ok_drop_fails(
         self,
         mock_run: Mock,
-        mock_print: Mock
+        mock_print: Mock,
     ) -> None:
-        """Logs both pop and drop failures."""
+        """Force-apply succeeds but drop fails — warns user."""
         mock_run.side_effect = [
             subprocess.CalledProcessError(1, ["git", "stash", "pop"], stderr="conflict"),
+            Mock(returncode=0),  # git checkout -- .
+            Mock(returncode=0),  # git checkout stash@{0} -- .beads/
             subprocess.CalledProcessError(1, ["git", "stash", "drop"], stderr="drop failed"),
         ]
 
         restore_beads_stash("pull failure")
 
-        assert mock_run.call_count == 2
-        mock_print.assert_any_call("⚠️ Additionally failed to drop beads stash entry. Run `git stash list` to clean up manually.")
+        assert mock_run.call_count == 4
+        mock_print.assert_any_call("✅ Force-applied .beads/ changes from stash.")
+        mock_print.assert_any_call("⚠️ Could not drop stash after recovery. Run `git stash list` to clean up.")
 
 
 class TestRunGitStatusWithRetry:
