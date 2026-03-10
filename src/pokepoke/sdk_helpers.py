@@ -146,10 +146,16 @@ async def _await_completion(
                 break
         except Exception:
             pass
-        # Detect dead sessions: no SDK events for inactivity_timeout seconds
+        # Detect dead sessions: no SDK events for inactivity_timeout seconds.
+        # Skip when tools are actively running — the SDK doesn't emit
+        # streaming events while a subprocess (e.g. git commit with
+        # pre-commit hooks) executes, so silence is expected.  The
+        # per-item hard deadline (max_timeout) protects against truly
+        # stuck sessions.
         if stats is not None and inactivity_timeout > 0:
+            has_pending_tools = stats.get('pending_tool_calls', 0) > 0
             since_last_event = time.monotonic() - stats['last_event_time']
-            if since_last_event >= inactivity_timeout:
+            if since_last_event >= inactivity_timeout and not has_pending_tools:
                 print(
                     f"\n[SDK] SESSION DEAD: No events received for {since_last_event:.0f}s "
                     f"(threshold: {inactivity_timeout:.0f}s) — aborting"
