@@ -7,10 +7,12 @@ import pytest
 
 import pokepoke.process_utils as process_utils_mod
 from pokepoke.process_utils import (
+    apply_memory_backpressure,
     check_copilot_processes,
     get_available_memory_mb,
     is_memory_pressure,
     is_memory_critical,
+    is_process_running,
     kill_orphaned_copilot_processes,
     wait_for_process_cleanup,
     shutdown_copilot_client,
@@ -272,6 +274,98 @@ class TestKillOrphanedCopilotProcesses:
         mock_os.name = 'nt'
         mock_run.side_effect = subprocess.TimeoutExpired(cmd='tasklist', timeout=30)
         assert kill_orphaned_copilot_processes(expected_count=0) == 0
+
+    @patch('pokepoke.process_utils.os')
+    @patch('pokepoke.process_utils.subprocess.run')
+    def test_handles_valueerror_in_pid_parsing(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+        mock_os.name = 'nt'
+        tasklist_output = (
+            '"Image Name","PID"\n'
+            '"copilot.exe","not_a_pid"\n'
+            '"copilot.exe","200"'
+        )
+        mock_run.return_value = MagicMock(stdout=tasklist_output)
+        # Only PID 200 is valid, expected 0 → kill 1
+        killed = kill_orphaned_copilot_processes(expected_count=0)
+        assert killed == 1
+
+    @patch('pokepoke.process_utils.os')
+    @patch('pokepoke.process_utils.subprocess.run')
+    def test_handles_taskkill_exception(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+        mock_os.name = 'nt'
+        tasklist_output = (
+            '"Image Name","PID"\n'
+            '"copilot.exe","100"'
+        )
+
+        def side_effect(*args, **kwargs):
+            cmd = args[0] if args else kwargs.get('args', [])
+            if 'taskkill' in cmd:
+                raise OSError("permission denied")
+            return MagicMock(stdout=tasklist_output)
+
+        mock_run.side_effect = side_effect
+        killed = kill_orphaned_copilot_processes(expected_count=0)
+        assert killed == 0
+
+
+class TestApplyMemoryBackpressure:
+    """Tests for apply_memory_backpressure."""
+
+    @patch('pokepoke.process_utils.get_available_memory_mb')
+    def test_no_change_when_plenty_of_memory(self, mock_mem: MagicMock) -> None:
+        mock_mem.return_value = 8000
+        slots, avail = apply_memory_backpressure(4)
+        assert slots == 4
+        assert avail == 8000
+
+    @patch('pokepoke.process_utils.get_available_memory_mb')
+    def test_returns_zero_slots_when_critical(self, mock_mem: MagicMock) -> None:
+        mock_mem.return_value = 500  # Below critical threshold
+        slots, avail = apply_memory_backpressure(4)
+        assert slots == 0
+        assert avail == 500
+
+    @patch('pokepoke.process_utils.get_available_memory_mb')
+    def test_throttles_to_one_under_pressure(self, mock_mem: MagicMock) -> None:
+        mock_mem.return_value = 1500  # Under pressure but not critical
+        slots, avail = apply_memory_backpressure(4)
+        assert slots == 1
+        assert avail == 1500
+
+    @patch('pokepoke.process_utils.get_available_memory_mb')
+    def test_passthrough_when_unknown(self, mock_mem: MagicMock) -> None:
+        mock_mem.return_value = 0  # Can't determine
+        slots, avail = apply_memory_backpressure(4)
+        assert slots == 4
+        assert avail == 0
+
+
+class TestIsProcessRunning:
+    """Tests for is_process_running."""
+
+    @patch('pokepoke.process_utils.os')
+    @patch('pokepoke.process_utils.subprocess.run')
+    def test_running_process_on_windows(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+        mock_os.name = 'nt'
+        mock_run.return_value = MagicMock(
+            stdout='"Image Name","PID"\n"python.exe","1234"'
+        )
+        assert is_process_running(1234) is True
+
+    @patch('pokepoke.process_utils.os')
+    @patch('pokepoke.process_utils.subprocess.run')
+    def test_not_running_process_on_windows(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+        mock_os.name = 'nt'
+        mock_run.return_value = MagicMock(stdout='INFO: No tasks')
+        assert is_process_running(99999) is False
+
+    @patch('pokepoke.process_utils.os')
+    @patch('pokepoke.process_utils.subprocess.run')
+    def test_exception_returns_false_on_windows(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+        mock_os.name = 'nt'
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd='tasklist', timeout=10)
+        assert is_process_running(1234) is False
 
 
 class TestShutdownCopilotClient:

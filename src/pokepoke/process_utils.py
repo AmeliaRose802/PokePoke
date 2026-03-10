@@ -7,6 +7,8 @@ import subprocess
 import time
 from typing import Any
 
+from pokepoke.perf_timing import timed_block
+
 logger = logging.getLogger(__name__)
 
 # Cache *successful* tasklist results to avoid flooding the console with timeout messages
@@ -43,25 +45,26 @@ def get_available_memory_mb() -> int:
             return cached_mb
 
     try:
-        class MEMORYSTATUSEX(ctypes.Structure):
-            _fields_ = [
-                ("dwLength", ctypes.c_ulong),
-                ("dwMemoryLoad", ctypes.c_ulong),
-                ("ullTotalPhys", ctypes.c_ulonglong),
-                ("ullAvailPhys", ctypes.c_ulonglong),
-                ("ullTotalPageFile", ctypes.c_ulonglong),
-                ("ullAvailPageFile", ctypes.c_ulonglong),
-                ("ullTotalVirtual", ctypes.c_ulonglong),
-                ("ullAvailVirtual", ctypes.c_ulonglong),
-                ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
-            ]
+        with timed_block("memory.check"):
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
 
-        mem_status = MEMORYSTATUSEX()
-        mem_status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
-        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(mem_status))
-        available_mb = int(mem_status.ullAvailPhys / (1024 * 1024))
-        _memory_cache = (now, available_mb)
-        return available_mb
+            mem_status = MEMORYSTATUSEX()
+            mem_status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(mem_status))
+            available_mb = int(mem_status.ullAvailPhys / (1024 * 1024))
+            _memory_cache = (now, available_mb)
+            return available_mb
     except Exception as e:
         logger.debug(f"Failed to query available memory: {e}")
         return 0
@@ -181,10 +184,11 @@ def check_copilot_processes() -> int:
             return cached_count
 
     try:
-        result = subprocess.run([
-            'tasklist', '/FI', 'IMAGENAME eq copilot.exe', '/FO', 'CSV'
-        ], capture_output=True, text=True, timeout=30,
-           encoding='utf-8', errors='replace')
+        with timed_block("tasklist.copilot"):
+            result = subprocess.run([
+                'tasklist', '/FI', 'IMAGENAME eq copilot.exe', '/FO', 'CSV'
+            ], capture_output=True, text=True, timeout=30,
+               encoding='utf-8', errors='replace')
 
         # Count lines excluding header
         lines = result.stdout.strip().split('\n')
