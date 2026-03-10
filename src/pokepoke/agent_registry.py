@@ -116,7 +116,7 @@ class AgentRegistry:
     def __init__(
         self,
         lock: threading.RLock,
-        preview_limit: int = 20,
+        preview_limit: int = 100,
         detail_limit: int | None = None,
     ) -> None:
         self._lock = lock

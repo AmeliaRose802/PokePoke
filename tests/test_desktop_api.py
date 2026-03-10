@@ -537,7 +537,7 @@ def test_get_model_history_delegates() -> None:
     with patch("pokepoke.model_history.load_model_history_entries", return_value=raw_data) as mock_history:
         history = api.get_model_history(limit=5)
 
-    mock_history.assert_called_once_with(limit=5)
+    mock_history.assert_called_once_with(limit=5, repo_name="")
 
     # Verify normalization happened
     assert len(history) == 1

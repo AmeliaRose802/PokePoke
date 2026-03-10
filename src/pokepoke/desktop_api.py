@@ -75,7 +75,7 @@ class DesktopAPI:
         self._history_cache_time: float = 0.0
 
         # Running agents — keyed by agent_id
-        self._agent_max_log_lines_internal = 20
+        self._agent_max_log_lines_internal = 100
         self._agent_detail_max_log_lines_internal: int | None = 500
         self._agent_registry = AgentRegistry(
             self._lock,
