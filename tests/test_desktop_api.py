@@ -1633,3 +1633,72 @@ def test_push_methods_silently_ignore_after_disposal() -> None:
     assert api._current_stats == initial_current_stats
     assert len(api._log_buffer) == 0  # clear_logs was not executed
 
+
+def test_remove_agent_silently_ignored_after_disposal() -> None:
+    """remove_agent() should be a no-op after disposal."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    assert len(api.get_agents()) == 1
+
+    api.dispose()
+
+    # remove_agent should silently ignore the call
+    api.remove_agent("agent-1")
+    # Agent is still in registry (not removed) because disposal blocks mutations
+    assert len(api.get_agents()) == 1
+
+
+def test_pause_agent_returns_false_after_disposal() -> None:
+    """pause_agent() should return paused=False and not log after disposal."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    api.dispose()
+
+    result = api.pause_agent("agent-1")
+    assert result == {"agent_id": "agent-1", "paused": False}
+    # No log entry should be added (push_log is also blocked after disposal)
+    assert len(api._log_buffer) == 0
+
+
+def test_resume_agent_returns_false_after_disposal() -> None:
+    """resume_agent() should return resumed=False and not log after disposal."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    api.pause_agent("agent-1")
+    api.dispose()
+
+    result = api.resume_agent("agent-1")
+    assert result == {"agent_id": "agent-1", "resumed": False}
+
+
+def test_get_agents_still_works_after_disposal() -> None:
+    """get_agents() should still return data after disposal (read-only)."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    api.dispose()
+
+    agents = api.get_agents()
+    assert len(agents) == 1
+    assert agents[0]["agent_id"] == "agent-1"
+
+
+def test_get_agent_detail_still_works_after_disposal() -> None:
+    """get_agent_detail() should still return data after disposal (read-only)."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    api.dispose()
+
+    detail = api.get_agent_detail("agent-1")
+    assert detail is not None
+    assert detail["agent_id"] == "agent-1"
+
+
+def test_is_agent_paused_still_works_after_disposal() -> None:
+    """is_agent_paused() should still return data after disposal (read-only)."""
+    api = DesktopAPI()
+    api.push_agent_status("agent-1", "Worker", status="running")
+    api.pause_agent("agent-1")
+    api.dispose()
+
+    assert api.is_agent_paused("agent-1") is True
+
