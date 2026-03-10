@@ -138,106 +138,105 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         session = await client.create_session(session_config)  # type: ignore[arg-type]
         print(f"[SDK] Session created: {session.session_id}\n")
 
-        done = asyncio.Event()
-        output_lines: list[str] = []
-        errors: list[str] = []
+        try:
+            done = asyncio.Event()
+            output_lines: list[str] = []
+            errors: list[str] = []
 
-        # Build a token-usage callback that pushes live stats to the agent card.
-        on_token_usage = _build_token_usage_callback()
+            # Build a token-usage callback that pushes live stats to the agent card.
+            on_token_usage = _build_token_usage_callback()
 
-        handle_event, stats = create_event_handler(
-            done, output_lines, errors, item_logger, idle_timeout,
-            on_token_usage=on_token_usage,
-        )
-        stats['current_model'] = current_model
+            handle_event, stats = create_event_handler(
+                done, output_lines, errors, item_logger, idle_timeout,
+                on_token_usage=on_token_usage,
+            )
+            stats['current_model'] = current_model
 
-        session.on(handle_event)
-        timed_out = False
-        interrupted = False
-        inactivity_detected = False
-        total_wall_duration = 0.0
-        total_api_duration = 0.0
+            session.on(handle_event)
+            timed_out = False
+            interrupted = False
+            inactivity_detected = False
+            total_wall_duration = 0.0
+            total_api_duration = 0.0
 
-        async def send_with_retry() -> bool:
-            """Send message, returns True if should retry with fallback model."""
-            nonlocal session, session_config, current_model, timed_out, interrupted, inactivity_detected, total_wall_duration, total_api_duration
-            print("[SDK] Sending message...\n")
-            attempt_start = asyncio.get_event_loop().time()
-            try:
-                await session.send({"prompt": final_prompt})
-                abort_reason = await _await_completion(
-                    session, client, done, max_timeout,
-                    stats=stats, inactivity_timeout=inactivity_timeout,
-                )
-                if abort_reason == "shutdown":
+            async def send_with_retry() -> bool:
+                """Send message, returns True if should retry with fallback model."""
+                nonlocal session, session_config, current_model, timed_out, interrupted, inactivity_detected, total_wall_duration, total_api_duration
+                print("[SDK] Sending message...\n")
+                attempt_start = asyncio.get_event_loop().time()
+                try:
+                    await session.send({"prompt": final_prompt})
+                    abort_reason = await _await_completion(
+                        session, client, done, max_timeout,
+                        stats=stats, inactivity_timeout=inactivity_timeout,
+                    )
+                    if abort_reason == "shutdown":
+                        interrupted = True
+                        return False
+                    if abort_reason == "timeout":
+                        timed_out = True
+                        return False
+                    if abort_reason == "inactivity":
+                        inactivity_detected = True
+                        return False
+                except KeyboardInterrupt:
+                    print("\n\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")
+                    try:
+                        await session.abort()
+                    except Exception as e:
+                        logger.debug(f"Failed to abort session on interrupt: {e}")
                     interrupted = True
                     return False
-                if abort_reason == "timeout":
-                    timed_out = True
-                    return False
-                if abort_reason == "inactivity":
-                    inactivity_detected = True
-                    return False
-            except KeyboardInterrupt:
-                print("\n\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")
-                try:
-                    await session.abort()
-                except Exception as e:
-                    logger.debug(f"Failed to abort session on interrupt: {e}")
-                interrupted = True
+                finally:
+                    attempt_elapsed = asyncio.get_event_loop().time() - attempt_start
+                    total_wall_duration += attempt_elapsed
+                    # Copilot SDK does not emit separate API timing, so treat session time as API time.
+                    total_api_duration += attempt_elapsed
+                # Check if we need to retry with fallback model
+                if stats['tried_fallback'] and stats['current_model'] == FALLBACK_MODEL and not done.is_set():
+                    print(f"\n[SDK] Retrying with fallback model: {FALLBACK_MODEL}")
+                    try:
+                        await session.destroy()
+                    except Exception as e:
+                        logger.debug(f"Failed to destroy session for fallback retry: {e}")
+                    session_config["model"] = FALLBACK_MODEL
+                    session = await client.create_session(session_config)  # type: ignore[arg-type]
+                    print(f"[SDK] New session created with {FALLBACK_MODEL}: {session.session_id}\n")
+                    done.clear()
+                    errors.clear()
+                    output_lines.clear()
+                    session.on(handle_event)
+                    return True
                 return False
-            finally:
-                attempt_elapsed = asyncio.get_event_loop().time() - attempt_start
-                total_wall_duration += attempt_elapsed
-                # Copilot SDK does not emit separate API timing, so treat session time as API time.
-                total_api_duration += attempt_elapsed
-            # Check if we need to retry with fallback model
-            if stats['tried_fallback'] and stats['current_model'] == FALLBACK_MODEL and not done.is_set():
-                print(f"\n[SDK] Retrying with fallback model: {FALLBACK_MODEL}")
-                try:
-                    await session.destroy()
-                except Exception as e:
-                    logger.debug(f"Failed to destroy session for fallback retry: {e}")
-                session_config["model"] = FALLBACK_MODEL
-                session = await client.create_session(session_config)  # type: ignore[arg-type]
-                print(f"[SDK] New session created with {FALLBACK_MODEL}: {session.session_id}\n")
-                done.clear()
-                errors.clear()
-                output_lines.clear()
-                session.on(handle_event)
-                return True
-            return False
 
-        with terminal_ui.ui.agent_output():
-            needs_retry = await send_with_retry()
-            if needs_retry:
-                await send_with_retry()
+            with terminal_ui.ui.agent_output():
+                needs_retry = await send_with_retry()
+                if needs_retry:
+                    await send_with_retry()
 
-        # Handle timeout/interrupt cases
-        early = _check_early_exit(
-            work_item.id, timed_out, interrupted,
-            max_timeout,
-        )
-        if early is not None:
-            return early
+            # Handle timeout/interrupt/inactivity early exits
+            early = _check_early_exit(
+                work_item.id, timed_out, interrupted, max_timeout,
+            ) or _check_inactivity(
+                work_item.id, inactivity_detected, inactivity_timeout,
+            )
+            if early is not None:
+                return early
 
-        # Handle inactivity (dead session) detection
-        inactivity_early = _check_inactivity(
-            work_item.id, inactivity_detected, inactivity_timeout,
-        )
-        if inactivity_early is not None:
-            return inactivity_early
-
-        await session.destroy()
-        return _build_copilot_result(
-            work_item=work_item,
-            output_lines=output_lines,
-            errors=errors,
-            stats=stats,
-            current_model=current_model,
-            total_api_duration=total_api_duration,
-            total_wall_duration=total_wall_duration,
-        )
+            return _build_copilot_result(
+                work_item=work_item,
+                output_lines=output_lines,
+                errors=errors,
+                stats=stats,
+                current_model=current_model,
+                total_api_duration=total_api_duration,
+                total_wall_duration=total_wall_duration,
+            )
+        finally:
+            try:
+                await session.destroy()
+            except Exception as e:
+                logger.debug(f"Failed to destroy session during cleanup: {e}")
 
     except KeyboardInterrupt:
         error = "Session aborted due to application shutdown" if is_shutting_down() else "Interrupted by user"

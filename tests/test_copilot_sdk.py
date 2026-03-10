@@ -530,6 +530,40 @@ class TestInvokeCopilotSDKAsync:
         assert not result.success
         assert "timeout" in result.error.lower()
         mock_session.abort.assert_called_once()
+        # Session must be destroyed even on early exit (timeout path)
+        mock_session.destroy.assert_called_once()
+
+    @patch('pokepoke.copilot_sdk.CopilotClient')
+    async def test_invoke_copilot_sdk_inactivity_destroys_session(self, mock_client_class, sample_work_item):
+        """Test that session.destroy() is called on inactivity early exit."""
+        from pokepoke.copilot_sdk import invoke_copilot_sdk
+
+        mock_client = AsyncMock()
+        mock_session = AsyncMock()
+        mock_session.session_id = "test-session-inactivity"
+        mock_session.abort = AsyncMock()
+
+        mock_client.start = AsyncMock()
+        mock_client.create_session = AsyncMock(return_value=mock_session)
+        mock_client.stop = AsyncMock()
+
+        mock_client_class.return_value = mock_client
+
+        # _await_completion returns "inactivity" to trigger that path
+        with patch('pokepoke.copilot_sdk._await_completion', new_callable=AsyncMock, return_value="inactivity"):
+            mock_session.on = lambda handler: None
+            mock_session.send = AsyncMock()
+            mock_session.destroy = AsyncMock()
+
+            result = await invoke_copilot_sdk(
+                work_item=sample_work_item,
+                timeout=10.0,
+                idle_timeout=0.01
+            )
+
+        assert not result.success
+        assert "no sdk events" in result.error.lower() or "inactiv" in result.error.lower()
+        mock_session.destroy.assert_called_once()
 
     @patch('pokepoke.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_exception(self, mock_client_class, sample_work_item):
