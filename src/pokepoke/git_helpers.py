@@ -9,7 +9,28 @@ import time
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["verify_branch_pushed", "restore_beads_stash", "_run_git_status_with_retry"]
+__all__ = ["run_git", "verify_branch_pushed", "restore_beads_stash", "_run_git_status_with_retry"]
+
+DEFAULT_GIT_TIMEOUT: int = 30
+
+
+def run_git(
+    cmd: list[str],
+    *,
+    timeout: int = DEFAULT_GIT_TIMEOUT,
+    cwd: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run a git command with standard encoding and timeout handling."""
+    return subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
+        timeout=timeout,
+        cwd=cwd,
+    )
 
 
 def verify_branch_pushed(branch_name: str) -> bool:
