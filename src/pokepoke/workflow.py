@@ -62,6 +62,10 @@ def process_work_item(  # noqa: C901
         backend_provider = config.ai_backend.provider
         worktree_lock_timeout = max(float(config.command_timeout), 120.0 * max(1, int(config.max_parallel_agents)))
 
+        # Set work-item correlation ID for structured logging
+        from pokepoke.metrics_context import set_current_work_item_id
+        set_current_work_item_id(item.id)
+
         terminal_ui.ui.push_agent_status(base_agent_id, get_agent_name(default="pokepoke"),
             iteration=1, status="running", model=selected_model,
             work_item_id=item.id, work_item_title=item.title, agent_type="work")
@@ -266,6 +270,9 @@ def process_work_item(  # noqa: C901
         return final_result
 
     finally:
+        # Clear work-item correlation ID
+        set_current_work_item_id(None)
+
         if worktree_path is not None and not finalized_successfully:
             try:
                 cleanup_worktree(item.id, force=True)
