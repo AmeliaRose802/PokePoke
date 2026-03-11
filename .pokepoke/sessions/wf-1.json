@@ -1,9 +1,0 @@
-{
-  "item_id": "wf-1",
-  "branch": "task/wf-1",
-  "worktree_path": "C:\\Users\\ameliapayne\\PokePoke\\.pytest_tmp\\popen-gw0\\test_shutdown_before_copilot0\\worktree",
-  "agent_name": "test-agent",
-  "pid": 24392,
-  "started_at": "2026-03-11T20:57:36.656298+00:00",
-  "phase": "ABANDONED"
-}
