@@ -15,6 +15,7 @@ from pokepoke.reconciliation import (
     is_beads_item_closed,
     is_worktree_cleaned,
     reconcile_completed_item,
+    worktree_branch_has_commits,
 )
 from pokepoke.types import BeadsWorkItem
 
@@ -228,15 +229,72 @@ class TestIsWorktreeCleaned:
         assert is_worktree_cleaned("X-1", wt_path) is False
 
 
+# ── worktree_branch_has_commits ──────────────────────────────────
+
+
+class TestWorktreeBranchHasCommits:
+    @patch("pokepoke.reconciliation.get_default_branch", return_value="main")
+    @patch("pokepoke.reconciliation.sanitize_branch_name", side_effect=lambda x: x)
+    @patch("pokepoke.reconciliation.subprocess.run")
+    def test_returns_true_when_branch_has_commits(
+        self, mock_run, mock_sanitize, mock_default
+    ):
+        mock_run.return_value = MagicMock(stdout="abc123\n")
+        assert worktree_branch_has_commits("X-1", Path("/repo")) is True
+
+    @patch("pokepoke.reconciliation.get_default_branch", return_value="main")
+    @patch("pokepoke.reconciliation.sanitize_branch_name", side_effect=lambda x: x)
+    @patch("pokepoke.reconciliation.subprocess.run")
+    def test_returns_false_when_no_commits(
+        self, mock_run, mock_sanitize, mock_default
+    ):
+        empty_log = MagicMock(stdout="")
+        mock_run.side_effect = [empty_log, empty_log]
+        assert worktree_branch_has_commits("X-1", Path("/repo")) is False
+
+    @patch("pokepoke.reconciliation.get_default_branch", return_value="main")
+    @patch("pokepoke.reconciliation.sanitize_branch_name", side_effect=lambda x: x)
+    @patch("pokepoke.reconciliation.subprocess.run")
+    def test_falls_back_to_refs_heads_on_failure(
+        self, mock_run, mock_sanitize, mock_default
+    ):
+        first_fail = subprocess.CalledProcessError(1, "git")
+        second_ok = MagicMock(stdout="def456\n")
+        mock_run.side_effect = [first_fail, second_ok]
+        assert worktree_branch_has_commits("X-1", Path("/repo")) is True
+
+    @patch("pokepoke.reconciliation.get_default_branch", return_value="main")
+    @patch("pokepoke.reconciliation.sanitize_branch_name", side_effect=lambda x: x)
+    @patch("pokepoke.reconciliation.subprocess.run")
+    def test_uses_correct_range_spec(
+        self, mock_run, mock_sanitize, mock_default
+    ):
+        mock_run.return_value = MagicMock(stdout="abc\n")
+        worktree_branch_has_commits("MY-ITEM", Path("/repo"))
+        log_call_args = mock_run.call_args_list[0][0][0]
+        assert "main..task/MY-ITEM" in log_call_args
+
+    @patch("pokepoke.reconciliation.get_default_branch", return_value="main")
+    @patch("pokepoke.reconciliation.sanitize_branch_name", side_effect=lambda x: x)
+    @patch("pokepoke.reconciliation.subprocess.run")
+    def test_returns_false_when_both_refs_fail(
+        self, mock_run, mock_sanitize, mock_default
+    ):
+        fail = subprocess.CalledProcessError(1, "git")
+        mock_run.side_effect = [fail, fail]
+        assert worktree_branch_has_commits("X-1", Path("/repo")) is False
+
+
 # ── reconcile_completed_item ─────────────────────────────────────
 
 
 class TestReconcileCompletedItem:
     @patch("pokepoke.reconciliation.is_worktree_cleaned", return_value=True)
+    @patch("pokepoke.reconciliation.worktree_branch_has_commits", return_value=True)
     @patch("pokepoke.reconciliation.default_branch_has_merge_commit", return_value=True)
     @patch("pokepoke.reconciliation.is_beads_item_closed", return_value=True)
     def test_reconciled_when_all_checks_pass(
-        self, mock_closed, mock_commits, mock_wt
+        self, mock_closed, mock_commits, mock_wt_commits, mock_wt
     ):
         item = _item()
         reconciled, evidence = reconcile_completed_item(item, Path("/wt"), None)
@@ -244,37 +302,58 @@ class TestReconcileCompletedItem:
         assert evidence == {
             "beads_closed": True,
             "commits_on_default": True,
+            "commits_on_worktree_branch": True,
             "worktree_cleaned": True,
         }
 
     @patch("pokepoke.reconciliation.is_worktree_cleaned", return_value=True)
+    @patch("pokepoke.reconciliation.worktree_branch_has_commits", return_value=False)
     @patch("pokepoke.reconciliation.default_branch_has_merge_commit", return_value=False)
     @patch("pokepoke.reconciliation.is_beads_item_closed", return_value=True)
-    def test_not_reconciled_when_no_merge_commit(
-        self, mock_closed, mock_commits, mock_wt
+    def test_reconciled_when_beads_closed_but_no_merge_commit(
+        self, mock_closed, mock_commits, mock_wt_commits, mock_wt
     ):
-        """False-positive guard: worktree cleaned + beads closed but no merge commit."""
+        """beads_closed alone is sufficient for reconciliation."""
         item = _item()
         reconciled, evidence = reconcile_completed_item(item, Path("/wt"), None)
-        assert reconciled is False
+        assert reconciled is True
+        assert evidence["beads_closed"] is True
         assert evidence["commits_on_default"] is False
 
     @patch("pokepoke.reconciliation.is_worktree_cleaned", return_value=False)
+    @patch("pokepoke.reconciliation.worktree_branch_has_commits", return_value=True)
+    @patch("pokepoke.reconciliation.default_branch_has_merge_commit", return_value=False)
+    @patch("pokepoke.reconciliation.is_beads_item_closed", return_value=True)
+    def test_reconciled_when_beads_closed_and_commits_on_worktree_branch(
+        self, mock_closed, mock_commits, mock_wt_commits, mock_wt
+    ):
+        """Typical partial completion: beads closed, commits on branch, not yet merged."""
+        item = _item()
+        reconciled, evidence = reconcile_completed_item(item, Path("/wt"), None)
+        assert reconciled is True
+        assert evidence["beads_closed"] is True
+        assert evidence["commits_on_worktree_branch"] is True
+        assert evidence["commits_on_default"] is False
+        assert evidence["worktree_cleaned"] is False
+
+    @patch("pokepoke.reconciliation.is_worktree_cleaned", return_value=False)
+    @patch("pokepoke.reconciliation.worktree_branch_has_commits", return_value=True)
     @patch("pokepoke.reconciliation.default_branch_has_merge_commit", return_value=True)
     @patch("pokepoke.reconciliation.is_beads_item_closed", return_value=True)
-    def test_not_reconciled_when_worktree_not_cleaned(
-        self, mock_closed, mock_commits, mock_wt
+    def test_reconciled_when_worktree_not_cleaned(
+        self, mock_closed, mock_commits, mock_wt_commits, mock_wt
     ):
         item = _item()
         reconciled, evidence = reconcile_completed_item(item, Path("/wt"), None)
-        assert reconciled is False
+        assert reconciled is True
         assert evidence["worktree_cleaned"] is False
 
     @patch("pokepoke.reconciliation.is_worktree_cleaned", return_value=True)
+    @patch("pokepoke.reconciliation.worktree_branch_has_commits", return_value=True)
     @patch("pokepoke.reconciliation.default_branch_has_merge_commit", return_value=True)
     @patch("pokepoke.reconciliation.is_beads_item_closed", return_value=False)
     def test_not_reconciled_when_beads_not_closed(
-        self, mock_closed, mock_commits, mock_wt
+        self, mock_closed, mock_commits, mock_wt_commits, mock_wt
     ):
         item = _item()
         reconciled, evidence = reconcile_completed_item(item, Path("/wt"), None)
@@ -282,10 +361,11 @@ class TestReconcileCompletedItem:
         assert evidence["beads_closed"] is False
 
     @patch("pokepoke.reconciliation.is_worktree_cleaned", return_value=False)
+    @patch("pokepoke.reconciliation.worktree_branch_has_commits", return_value=False)
     @patch("pokepoke.reconciliation.default_branch_has_merge_commit", return_value=False)
     @patch("pokepoke.reconciliation.is_beads_item_closed", return_value=False)
     def test_not_reconciled_when_all_checks_fail(
-        self, mock_closed, mock_commits, mock_wt
+        self, mock_closed, mock_commits, mock_wt_commits, mock_wt
     ):
         item = _item()
         reconciled, evidence = reconcile_completed_item(item, Path("/wt"), None)
@@ -293,10 +373,11 @@ class TestReconcileCompletedItem:
         assert all(v is False for v in evidence.values())
 
     @patch("pokepoke.reconciliation.is_worktree_cleaned", return_value=True)
+    @patch("pokepoke.reconciliation.worktree_branch_has_commits", return_value=True)
     @patch("pokepoke.reconciliation.default_branch_has_merge_commit", return_value=True)
     @patch("pokepoke.reconciliation.is_beads_item_closed", return_value=True)
     def test_logs_warning_when_reconciled(
-        self, mock_closed, mock_commits, mock_wt
+        self, mock_closed, mock_commits, mock_wt_commits, mock_wt
     ):
         run_logger = MagicMock()
         item = _item()
@@ -306,10 +387,11 @@ class TestReconcileCompletedItem:
         assert call_kwargs[1]["level"] == "WARNING"
 
     @patch("pokepoke.reconciliation.is_worktree_cleaned", return_value=False)
+    @patch("pokepoke.reconciliation.worktree_branch_has_commits", return_value=False)
     @patch("pokepoke.reconciliation.default_branch_has_merge_commit", return_value=False)
     @patch("pokepoke.reconciliation.is_beads_item_closed", return_value=False)
     def test_logs_info_when_not_reconciled(
-        self, mock_closed, mock_commits, mock_wt
+        self, mock_closed, mock_commits, mock_wt_commits, mock_wt
     ):
         run_logger = MagicMock()
         item = _item()
@@ -319,11 +401,39 @@ class TestReconcileCompletedItem:
         assert call_kwargs[1]["level"] == "INFO"
 
     @patch("pokepoke.reconciliation.is_worktree_cleaned", return_value=True)
+    @patch("pokepoke.reconciliation.worktree_branch_has_commits", return_value=True)
     @patch("pokepoke.reconciliation.default_branch_has_merge_commit", return_value=True)
     @patch("pokepoke.reconciliation.is_beads_item_closed", return_value=True)
     def test_works_without_logger(
-        self, mock_closed, mock_commits, mock_wt
+        self, mock_closed, mock_commits, mock_wt_commits, mock_wt
     ):
         item = _item()
         reconciled, evidence = reconcile_completed_item(item, None, None)
         assert reconciled is True
+
+    @patch("pokepoke.reconciliation.is_worktree_cleaned", return_value=False)
+    @patch("pokepoke.reconciliation.worktree_branch_has_commits", return_value=False)
+    @patch("pokepoke.reconciliation.default_branch_has_merge_commit", return_value=False)
+    @patch("pokepoke.reconciliation.is_beads_item_closed", return_value=True)
+    def test_logs_warning_when_only_beads_closed(
+        self, mock_closed, mock_commits, mock_wt_commits, mock_wt
+    ):
+        """beads_closed alone triggers reconciliation and WARNING log."""
+        run_logger = MagicMock()
+        item = _item()
+        reconciled, _ = reconcile_completed_item(item, Path("/wt"), run_logger)
+        assert reconciled is True
+        call_kwargs = run_logger.log_orchestrator.call_args
+        assert call_kwargs[1]["level"] == "WARNING"
+
+    @patch("pokepoke.reconciliation.is_worktree_cleaned", return_value=True)
+    @patch("pokepoke.reconciliation.worktree_branch_has_commits", return_value=False)
+    @patch("pokepoke.reconciliation.default_branch_has_merge_commit", return_value=False)
+    @patch("pokepoke.reconciliation.is_beads_item_closed", return_value=False)
+    def test_not_reconciled_when_only_worktree_cleaned(
+        self, mock_closed, mock_commits, mock_wt_commits, mock_wt
+    ):
+        """Worktree cleaned alone is not sufficient evidence."""
+        item = _item()
+        reconciled, evidence = reconcile_completed_item(item, Path("/wt"), None)
+        assert reconciled is False
