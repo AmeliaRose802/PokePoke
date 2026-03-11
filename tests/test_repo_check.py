@@ -347,6 +347,42 @@ class TestCheckAndCommitMainRepo:
             assert any("exit code 1" in call for call in log_calls)
 
 
+    def test_cleanup_aggregate_timeout_triggers_stash(self):
+        """Test that aggregate timeout causes cleanup loop to break and attempt stash."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.repo_check.merge_lock_active', return_value=False), \
+             patch('pokepoke.repo_check.time.sleep'), \
+             patch('pokepoke.repo_check.time.monotonic') as mock_mono:
+            # monotonic: start=0, first check exceeds threshold
+            from pokepoke.constants import CLEANUP_AGGREGATE_TIMEOUT
+            mock_mono.side_effect = [0.0, CLEANUP_AGGREGATE_TIMEOUT + 1.0]
+
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout=" M src/module.py", stderr=""),  # git status
+                Mock(returncode=0),  # git add --all (auto-commit)
+                Mock(returncode=1, stdout="", stderr="hook failed"),  # git commit fails
+                Mock(returncode=0),  # git add --all (stash)
+                Mock(returncode=0, stdout="", stderr=""),  # git stash push
+            ]
+            # Cleanup should never be called because timeout triggers first
+            mock_cleanup.return_value = (False, Mock())
+
+            result = check_and_commit_main_repo(repo_path, mock_logger)
+
+            # Should still return True (stash succeeds, workers use worktrees)
+            assert result is True
+            # Cleanup was never called because aggregate timeout broke the loop
+            mock_cleanup.assert_not_called()
+            mock_logger.log_orchestrator.assert_any_call(
+                f"Cleanup aggregate timeout ({CLEANUP_AGGREGATE_TIMEOUT:.0f}s) exceeded",
+                level="WARNING",
+            )
+
+
 class TestTryAutoCommit:
     """Test _try_auto_commit function."""
 
