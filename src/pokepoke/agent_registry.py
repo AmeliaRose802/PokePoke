@@ -211,9 +211,7 @@ class AgentRegistry:
             )
 
             # Card ID: keep existing for in-place resume or same-iteration update
-            if is_retry_iteration and resume_in_place and existing:
-                card_id = existing.card_id
-            elif existing and not is_retry_iteration:
+            if (is_retry_iteration and resume_in_place and existing) or (existing and not is_retry_iteration):
                 card_id = existing.card_id
             else:
                 card_id = self._build_card_id(agent_id, iteration)
