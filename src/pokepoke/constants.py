@@ -30,3 +30,5 @@ DEFAULT_ENCODING_ERRORS: str = "replace"
 
 # ── Agent timeout defaults ───────────────────────────────────────────────────
 DEFAULT_AGENT_TIMEOUT: float = 7200.0  # 2 hours
+CLEANUP_AGENT_TIMEOUT: float = 600.0  # 10 minutes per cleanup invocation
+CLEANUP_AGGREGATE_TIMEOUT: float = 1800.0  # 30 minutes total for all cleanup retries

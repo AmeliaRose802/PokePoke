@@ -6,7 +6,13 @@ import time
 from pathlib import Path
 
 from pokepoke.ai_backends import invoke_copilot
-from pokepoke.constants import STATUS_IN_PROGRESS, WORKTREE_DIR, WORKTREE_TASK_PREFIX
+from pokepoke.constants import (
+    CLEANUP_AGENT_TIMEOUT,
+    CLEANUP_AGGREGATE_TIMEOUT,
+    STATUS_IN_PROGRESS,
+    WORKTREE_DIR,
+    WORKTREE_TASK_PREFIX,
+)
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
 from pokepoke.git_operations import verify_main_repo_clean, commit_all_changes
 from pokepoke.coordination import merge_lock_active
@@ -29,6 +35,8 @@ def run_cleanup_loop(
     """Run cleanup loop to commit changes and fix validation failures."""
     cleanup_agent_runs = 0
     cleanup_attempt = 0
+    loop_start = time.monotonic()
+    previous_errors: list[str] = []
 
     # Check for uncommitted changes, excluding beads-only changes
     try:
@@ -40,6 +48,17 @@ def run_cleanup_loop(
         return True, cleanup_agent_runs
 
     while result.success and not is_clean:
+        # Enforce aggregate timeout across all cleanup attempts
+        elapsed = time.monotonic() - loop_start
+        if elapsed >= CLEANUP_AGGREGATE_TIMEOUT:
+            logger.warning(
+                f"Cleanup aggregate timeout reached ({elapsed:.0f}s >= {CLEANUP_AGGREGATE_TIMEOUT:.0f}s)"
+            )
+            print(f"\n⏰ Cleanup aggregate timeout reached ({elapsed:.0f}s) - aborting cleanup loop")
+            result.success = False
+            result.error = f"Cleanup aggregate timeout ({CLEANUP_AGGREGATE_TIMEOUT:.0f}s) exceeded"
+            break
+
         cleanup_attempt += 1
         print(f"\n⚠️  Uncommitted non-beads changes detected (cleanup attempt {cleanup_attempt})")
         names = [f.split()[1] if len(f.split()) > 1 else f for f in non_beads_changes]
@@ -55,6 +74,16 @@ def run_cleanup_loop(
         else:
             print("\n❌ Commit failed - validation errors:")
             print(f"   {commit_error}")
+
+            # Detect recurring errors: if same error seen before, short-circuit
+            if commit_error and commit_error in previous_errors:
+                logger.warning(f"Recurring commit error detected, short-circuiting cleanup: {commit_error}")
+                print("\n🔁 Same error recurring across attempts - short-circuiting cleanup")
+                result.success = False
+                result.error = f"Recurring cleanup error (short-circuited): {commit_error}"
+                break
+            if commit_error:
+                previous_errors.append(commit_error)
 
         print("\n🧹 Invoking cleanup agent to fix validation errors...")
         cleanup_agent_runs += 1
@@ -120,68 +149,38 @@ def load_prompt_file(filename: str) -> str | None:
     return prompt_path.read_text(encoding='utf-8')
 
 
+def _git_output(args: list[str], cwd: str | None) -> str | None:
+    """Run a git command and return stripped stdout, or None on failure."""
+    try:
+        r = subprocess.run(args, capture_output=True, text=True, timeout=10,
+                           encoding='utf-8', errors='replace', cwd=cwd)
+        return r.stdout.strip() if r.returncode == 0 else None
+    except Exception:
+        return None
+
+
 def _get_current_git_context(cwd: str | None = None) -> tuple[str, str, bool]:
     """Get current git context (directory, branch, is_worktree)."""
     current_dir = cwd or str(Path.cwd())
-
-    # Get current branch
-    try:
-        branch_result = subprocess.run(
-            ["git", "branch", "--show-current"],
-            capture_output=True, text=True, timeout=10,
-            encoding='utf-8', errors='replace', cwd=cwd,
-        )
-        current_branch = branch_result.stdout.strip() if branch_result.returncode == 0 else "unknown"
-    except Exception as e:
-        logger.warning(f"Failed to get current branch: {e}")
-        current_branch = "unknown"
-
-    # Determine if we're in a worktree
-    try:
-        worktree_result = subprocess.run(
-            ["git", "rev-parse", "--is-inside-work-tree"],
-            capture_output=True, text=True, timeout=10,
-            encoding='utf-8', errors='replace', cwd=cwd,
-        )
-        is_worktree = worktree_result.returncode == 0 and worktree_result.stdout.strip() == "true"
-    except Exception as e:
-        logger.warning(f"Failed to check if inside worktree: {e}")
-        is_worktree = False
-
+    current_branch = _git_output(["git", "branch", "--show-current"], cwd) or "unknown"
+    is_worktree = _git_output(["git", "rev-parse", "--is-inside-work-tree"], cwd) == "true"
     return current_dir, current_branch, is_worktree
 
 
-def _apply_base_template_vars(
-    template: str,
-    current_dir: str,
-    current_branch: str,
-    is_worktree: bool,
-) -> str:
+def _apply_base_template_vars(template: str, current_dir: str, current_branch: str, is_worktree: bool) -> str:
     """Apply common template variable replacements."""
-    template = template.replace("{cwd}", current_dir)
-    template = template.replace("{branch}", current_branch)
-    template = template.replace("{is_worktree}", str(is_worktree))
-    return template
+    return (template.replace("{cwd}", current_dir)
+            .replace("{branch}", current_branch)
+            .replace("{is_worktree}", str(is_worktree)))
 
 
 def _build_work_item_context(item: BeadsWorkItem, heading: str, extra: str = "") -> str:
     """Build markdown context block for a work item."""
-    context = f"""
-# {heading}
-
-**ID:** {item.id}
-**Title:** {item.title}
-**Type:** {item.issue_type}
-**Priority:** {item.priority}
-**Status:** {item.status}
-
-**Description:**
-{item.description}
-{extra}"""
-
+    context = (f"\n# {heading}\n\n**ID:** {item.id}\n**Title:** {item.title}\n"
+               f"**Type:** {item.issue_type}\n**Priority:** {item.priority}\n"
+               f"**Status:** {item.status}\n\n**Description:**\n{item.description}\n{extra}")
     if item.labels:
         context += f"\n**Labels:** {', '.join(item.labels)}\n"
-
     return context
 
 
@@ -196,6 +195,7 @@ def _run_agent_with_ui(
     work_item_id: str | None = None,
     work_item_title: str | None = None,
     modified_files: list[str] | None = None,
+    timeout: float | None = None,
 ) -> tuple[bool, AgentStats | None]:
     """Invoke copilot with UI status tracking and metrics context."""
     try:
@@ -210,7 +210,7 @@ def _run_agent_with_ui(
                 agent_type=agent_type_key,
                 agent_prompt=cleanup_prompt,
             )
-            copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd)
+            copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd, timeout=timeout)
 
         status = "success" if copilot_result.success else "failed"
         terminal_ui.ui.push_agent_status(
@@ -234,15 +234,12 @@ def _wait_for_merge_completion(agent_label: str, item_id: str) -> None:
     """Wait for an active merge operation to complete (polls every 30s, up to 10 min)."""
     print(f"   ⏳ Merge operation in progress, waiting for completion before {agent_label}...")
     logger.info(f"{agent_label} agent for {item_id} waiting for merge completion")
+    max_wait, interval, waited = 600, 30, 0
 
-    max_wait_time = 600  # 10 minutes
-    wait_interval = 30
-    waited_time = 0
-
-    while merge_lock_active() and waited_time < max_wait_time:
-        time.sleep(wait_interval)
-        waited_time += wait_interval
-        print(f"   ⏳ Still waiting for merge completion ({waited_time}s/{max_wait_time}s)...")
+    while merge_lock_active() and waited < max_wait:
+        time.sleep(interval)
+        waited += interval
+        print(f"   ⏳ Still waiting for merge completion ({waited}s/{max_wait}s)...")
 
     if merge_lock_active():
         print("   ⚠️  Merge operation still active after 10 minutes, proceeding with caution")
@@ -302,6 +299,7 @@ def invoke_cleanup_agent(
         cleanup_item, cleanup_prompt, cwd, parent_agent_id,
         work_item_id=item.id, work_item_title=item.title,
         modified_files=modified_files,
+        timeout=CLEANUP_AGENT_TIMEOUT,
     )
 
 
@@ -389,4 +387,5 @@ def invoke_merge_conflict_cleanup_agent(
         cleanup_item, cleanup_prompt, cwd, parent_agent_id,
         work_item_id=item.id, work_item_title=item.title,
         modified_files=unmerged_files,
+        timeout=CLEANUP_AGENT_TIMEOUT,
     )

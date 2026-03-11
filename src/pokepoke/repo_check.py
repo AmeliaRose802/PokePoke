@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pokepoke.constants import BEADS_DIR, STATUS_IN_PROGRESS, WORKTREE_DIR
+from pokepoke.constants import BEADS_DIR, CLEANUP_AGGREGATE_TIMEOUT, STATUS_IN_PROGRESS, WORKTREE_DIR
 from pokepoke.git_operations import get_status_porcelain_and_changes
 from pokepoke.repo_state_guard import cleanup_lock
 from pokepoke.coordination import merge_lock_active
@@ -194,53 +194,26 @@ def _try_auto_commit(repo_path: Path, run_logger: 'RunLogger') -> bool:
 
 
 def _stash_uncommitted_changes(repo_path: Path, run_logger: 'RunLogger') -> bool:
-    """Attempt to stash uncommitted changes as a fallback.
-
-    Args:
-        repo_path: Path to the repository
-        run_logger: Run logger instance
-
-    Returns:
-        True if stash succeeded, False otherwise
-    """
+    """Attempt to stash uncommitted changes as a fallback."""
     try:
-        # First, add all changes so untracked files can be stashed
         subprocess.run(
-            ["git", "add", "--all"],
-            check=True,
-            capture_output=True,
-            encoding='utf-8',
-            errors='replace',
-            cwd=str(repo_path),
-            timeout=30
+            ["git", "add", "--all"], check=True, capture_output=True,
+            encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=30
         )
-
-        # Create a descriptive stash message
         import datetime
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         stash_msg = f"pokepoke-auto-stash-{timestamp}: cleanup agent failed"
-
-        # Stash all staged changes
         result = subprocess.run(
-            ["git", "stash", "push", "-m", stash_msg],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            cwd=str(repo_path),
-            timeout=60
+            ["git", "stash", "push", "-m", stash_msg], capture_output=True,
+            text=True, encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=60
         )
-
         if result.returncode == 0:
             run_logger.log_orchestrator(f"Stashed changes: {stash_msg}")
             return True
-
-        # Stash failed
         error_msg = result.stderr.strip() if result.stderr else "unknown error"
         print(f"⚠️  git stash failed: {error_msg}")
         run_logger.log_orchestrator(f"git stash failed: {error_msg}", level="WARNING")
         return False
-
     except subprocess.TimeoutExpired:
         print("⚠️  git stash timed out")
         run_logger.log_orchestrator("git stash timed out", level="WARNING")
@@ -254,6 +227,58 @@ def _stash_uncommitted_changes(repo_path: Path, run_logger: 'RunLogger') -> bool
         print(f"⚠️  Stash failed with unexpected error: {e}")
         run_logger.log_orchestrator(f"Stash failed: {e}", level="WARNING")
         return False
+
+
+def _run_cleanup_retries(
+    repo_path: Path,
+    run_logger: 'RunLogger',
+) -> bool:
+    """Run cleanup agent retries with aggregate timeout.
+
+    Returns True if cleanup succeeded, False if all retries exhausted or timed out.
+    """
+    from pokepoke.cleanup_agents import invoke_cleanup_agent
+    from pokepoke.types import BeadsWorkItem
+
+    cleanup_loop_start = time.monotonic()
+    for attempt in range(1, MAX_CLEANUP_RETRIES + 1):
+        # Enforce aggregate timeout across all cleanup retries
+        elapsed = time.monotonic() - cleanup_loop_start
+        if elapsed >= CLEANUP_AGGREGATE_TIMEOUT:
+            print(f"\n⏰ Cleanup aggregate timeout reached ({elapsed:.0f}s) - stopping retries")
+            run_logger.log_orchestrator(
+                f"Cleanup aggregate timeout ({CLEANUP_AGGREGATE_TIMEOUT:.0f}s) exceeded",
+                level="WARNING",
+            )
+            return False
+
+        cleanup_item = BeadsWorkItem(
+            id=f"cleanup-main-repo-{attempt}",
+            title="Clean up uncommitted changes in main repository",
+            description="Auto-generated cleanup task for uncommitted changes",
+            issue_type="task",
+            priority=0,
+            status=STATUS_IN_PROGRESS,
+            labels=["cleanup", "auto-generated"]
+        )
+
+        with cleanup_lock():
+            cleanup_success, cleanup_stats = invoke_cleanup_agent(
+                cleanup_item, wait_for_merge=False
+            )
+
+        if cleanup_success:
+            print("✅ Cleanup agent successfully resolved uncommitted changes")
+            run_logger.log_orchestrator("Cleanup agent successfully resolved uncommitted changes")
+            return True
+
+        if attempt < MAX_CLEANUP_RETRIES:
+            wait_time = 2 ** attempt  # Exponential backoff: 2, 4, 8 seconds
+            print(f"⚠️  Cleanup attempt {attempt}/{MAX_CLEANUP_RETRIES} failed, retrying in {wait_time}s...")
+            run_logger.log_orchestrator(f"Cleanup attempt {attempt} failed, retrying", level="WARNING")
+            time.sleep(wait_time)
+
+    return False
 
 
 def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool:
@@ -311,38 +336,8 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
                 run_logger.log_orchestrator("Deferring cleanup due to active merge operation")
                 return True  # Continue processing - merge has priority
 
-            from pokepoke.cleanup_agents import invoke_cleanup_agent
-            from pokepoke.types import BeadsWorkItem
-
-            cleanup_success = False
-            for attempt in range(1, MAX_CLEANUP_RETRIES + 1):
-                # Create a temporary work item for the cleanup agent
-                cleanup_item = BeadsWorkItem(
-                    id=f"cleanup-main-repo-{attempt}",
-                    title="Clean up uncommitted changes in main repository",
-                    description="Auto-generated cleanup task for uncommitted changes",
-                    issue_type="task",
-                    priority=0,
-                    status=STATUS_IN_PROGRESS,
-                    labels=["cleanup", "auto-generated"]
-                )
-
-                with cleanup_lock():
-                    # Use wait_for_merge=False since we already checked above
-                    cleanup_success, cleanup_stats = invoke_cleanup_agent(
-                        cleanup_item, wait_for_merge=False
-                    )
-
-                if cleanup_success:
-                    print("✅ Cleanup agent successfully resolved uncommitted changes")
-                    run_logger.log_orchestrator("Cleanup agent successfully resolved uncommitted changes")
-                    return True  # Continue processing
-
-                if attempt < MAX_CLEANUP_RETRIES:
-                    wait_time = 2 ** attempt  # Exponential backoff: 2, 4, 8 seconds
-                    print(f"⚠️  Cleanup attempt {attempt}/{MAX_CLEANUP_RETRIES} failed, retrying in {wait_time}s...")
-                    run_logger.log_orchestrator(f"Cleanup attempt {attempt} failed, retrying", level="WARNING")
-                    time.sleep(wait_time)
+            if _run_cleanup_retries(repo_path, run_logger):
+                return True
 
             # All cleanup retries failed - try stashing as last resort
             print(f"\n⚠️  All {MAX_CLEANUP_RETRIES} cleanup attempts failed")

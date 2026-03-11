@@ -686,6 +686,143 @@ class TestMergeWaitLogic:
         assert success is True
 
 
+class TestCleanupAgentTimeout:
+    """Test per-invocation timeout and aggregate timeout behavior."""
+
+    @patch('pokepoke.cleanup_agents.merge_lock_active', return_value=False)
+    @patch('pokepoke.cleanup_agents.get_pokepoke_prompts_dir')
+    @patch('pokepoke.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.cleanup_agents.invoke_copilot')
+    def test_cleanup_agent_passes_timeout(self, mock_invoke, mock_context, mock_get_dir, mock_merge_active):
+        """Test that invoke_cleanup_agent passes CLEANUP_AGENT_TIMEOUT to invoke_copilot."""
+        from pokepoke.constants import CLEANUP_AGENT_TIMEOUT
+
+        mock_dir = MagicMock()
+        mock_file = Mock()
+        mock_file.exists.return_value = True
+        mock_file.read_text.return_value = "Instructions {cwd} {branch} {is_worktree}"
+        mock_dir.__truediv__.return_value = mock_file
+        mock_get_dir.return_value = mock_dir
+        mock_context.return_value = ("/cur/dir", "feature", True)
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="task-1", success=True, output="Done", attempt_count=1
+        )
+
+        item = BeadsWorkItem(
+            id="123", title="Test", description="Desc",
+            issue_type="task", priority=1, status="in_progress", labels=["test"]
+        )
+
+        success, stats = invoke_cleanup_agent(item)
+
+        assert success is True
+        mock_invoke.assert_called_once()
+        call_kwargs = mock_invoke.call_args[1]
+        assert call_kwargs['timeout'] == CLEANUP_AGENT_TIMEOUT
+
+    @patch('pokepoke.cleanup_agents.merge_lock_active', return_value=False)
+    @patch('pokepoke.cleanup_agents.load_prompt_file')
+    @patch('pokepoke.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.cleanup_agents.terminal_ui')
+    @patch('pokepoke.merge_conflict.is_merge_in_progress', return_value=False)
+    @patch('pokepoke.merge_conflict.get_unmerged_files', return_value=[])
+    def test_merge_conflict_agent_passes_timeout(
+        self, mock_get_unmerged, mock_is_merging,
+        mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
+    ):
+        """Test that invoke_merge_conflict_cleanup_agent passes CLEANUP_AGENT_TIMEOUT."""
+        from pokepoke.constants import CLEANUP_AGENT_TIMEOUT
+
+        mock_load_prompt.return_value = "Fix {merge_error} {cwd} {branch} {is_worktree} {worktree_path} {is_merge_in_progress} {conflict_files} {conflict_count}"
+        mock_context.return_value = ("/dir", "main", False)
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="t-1", success=True, output="Fixed", attempt_count=1
+        )
+
+        item = BeadsWorkItem(
+            id="t-1", title="T", description="D",
+            status="in_progress", priority=1, issue_type="task"
+        )
+
+        success, stats = invoke_merge_conflict_cleanup_agent(
+            item, "Merge error", wait_for_merge=False
+        )
+
+        assert success is True
+        mock_invoke.assert_called_once()
+        call_kwargs = mock_invoke.call_args[1]
+        assert call_kwargs['timeout'] == CLEANUP_AGENT_TIMEOUT
+
+    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent')
+    @patch('pokepoke.cleanup_agents.commit_all_changes')
+    @patch('pokepoke.cleanup_agents.verify_main_repo_clean')
+    @patch('pokepoke.cleanup_agents.time.monotonic')
+    def test_aggregate_timeout_aborts_cleanup_loop(
+        self, mock_monotonic, mock_verify, mock_commit, mock_invoke
+    ):
+        """Test that run_cleanup_loop aborts when aggregate timeout is exceeded."""
+        from pokepoke.constants import CLEANUP_AGGREGATE_TIMEOUT
+
+        # First call returns 0 (start), second call returns beyond timeout
+        mock_monotonic.side_effect = [0.0, CLEANUP_AGGREGATE_TIMEOUT + 1.0]
+
+        mock_verify.return_value = (False, " M file.py\n", [" M file.py"])
+
+        item = BeadsWorkItem(
+            id="task-1", title="Test", description="",
+            status="in_progress", priority=1, issue_type="task"
+        )
+        result = CopilotResult(
+            work_item_id="task-1", success=True, output="", attempt_count=1
+        )
+
+        success, cleanup_runs = run_cleanup_loop(item, result)
+
+        assert success is False
+        assert "aggregate timeout" in result.error.lower()
+        # Should NOT have called commit or cleanup agent
+        mock_commit.assert_not_called()
+        mock_invoke.assert_not_called()
+
+    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent')
+    @patch('pokepoke.cleanup_agents.commit_all_changes')
+    @patch('pokepoke.cleanup_agents.verify_main_repo_clean')
+    @patch('pokepoke.cleanup_agents.time.monotonic')
+    def test_recurring_error_short_circuits_cleanup_loop(
+        self, mock_monotonic, mock_verify, mock_commit, mock_invoke
+    ):
+        """Test that run_cleanup_loop short-circuits on recurring commit errors."""
+        # Ensure monotonic never hits aggregate timeout
+        mock_monotonic.return_value = 0.0
+
+        same_error = "Permission denied: .beads/daemon.lock"
+        # First: dirty, Second: still dirty after cleanup
+        mock_verify.side_effect = [
+            (False, " M file.py\n", [" M file.py"]),
+            (False, " M file.py\n", [" M file.py"]),
+        ]
+        # Commit always fails with the same error
+        mock_commit.return_value = (False, same_error)
+        # Cleanup agent succeeds (but can't fix the underlying issue)
+        mock_invoke.return_value = (True, None)
+
+        item = BeadsWorkItem(
+            id="task-1", title="Test", description="",
+            status="in_progress", priority=1, issue_type="task"
+        )
+        result = CopilotResult(
+            work_item_id="task-1", success=True, output="", attempt_count=1
+        )
+
+        success, cleanup_runs = run_cleanup_loop(item, result)
+
+        assert success is False
+        assert "recurring" in result.error.lower()
+        # Should have run cleanup once (first error triggers cleanup, second triggers short-circuit)
+        assert cleanup_runs == 1
+
+
 class TestWorktreeCleanupPromptSafety:
     """Tests to verify the worktree cleanup prompt prohibits process killing."""
 
