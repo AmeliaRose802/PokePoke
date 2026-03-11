@@ -38,16 +38,30 @@ class TestIsWindowsLockError:
         assert _is_windows_lock_error("Access is denied") is True
 
     def test_detects_device_or_resource_busy(self) -> None:
-        """Detect 'device or resource busy' error."""
-        assert _is_windows_lock_error("Device or resource busy") is True
+        """'device or resource busy' is a Unix error, not a Windows lock indicator."""
+        assert _is_windows_lock_error("Device or resource busy") is False
 
     def test_detects_directory_not_empty(self) -> None:
-        """Detect 'directory not empty' error."""
-        assert _is_windows_lock_error("Directory not empty") is True
+        """'directory not empty' is too broad to classify as a lock error."""
+        assert _is_windows_lock_error("Directory not empty") is False
 
     def test_does_not_match_invalid_argument(self) -> None:
         """'invalid argument' is too broad to classify as a lock error."""
         assert _is_windows_lock_error("Invalid argument") is False
+
+    def test_detects_winerror_32(self) -> None:
+        """Detect WinError 32 (ERROR_SHARING_VIOLATION) in exception strings."""
+        msg = "[WinError 32] The process cannot access the file because it is being used by another process: 'C:\\path'"
+        assert _is_windows_lock_error(msg) is True
+
+    def test_detects_winerror_33(self) -> None:
+        """Detect WinError 33 (ERROR_LOCK_VIOLATION) in exception strings."""
+        msg = "[WinError 33] The process cannot access the file because another process has locked a portion of the file"
+        assert _is_windows_lock_error(msg) is True
+
+    def test_detects_locked_a_portion_of_the_file(self) -> None:
+        """Detect 'locked a portion of the file' message."""
+        assert _is_windows_lock_error("another process has locked a portion of the file") is True
 
     def test_case_insensitive_matching(self) -> None:
         """Matching is case-insensitive."""
@@ -227,15 +241,15 @@ class TestForceRemoveDirectory:
         def run_side_effect(cmd, **kwargs):
             call_count[0] += 1
             if 'worktree' in cmd and 'remove' in cmd and call_count[0] <= 2:
-                raise subprocess.CalledProcessError(1, 'git', stderr='Device busy')
+                raise subprocess.CalledProcessError(1, 'git', stderr='Access is denied')
             return Mock(returncode=0, stdout='', stderr='')
 
         mock_run.side_effect = run_side_effect
 
         # Shutil fails on first two attempts, succeeds on third
         mock_rmtree.side_effect = [
-            PermissionError('Device or resource busy'),
-            PermissionError('Device or resource busy'),
+            PermissionError('[WinError 32] The process cannot access the file'),
+            PermissionError('[WinError 32] The process cannot access the file'),
             None,  # Success on third attempt
         ]
 
