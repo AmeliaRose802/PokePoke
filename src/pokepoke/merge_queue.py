@@ -85,7 +85,7 @@ class MergeQueue:
             self._shutdown_event.clear()
             self._worker = threading.Thread(
                 target=self._worker_loop,
-                daemon=False,
+                daemon=True,
                 name="merge-queue-worker",
             )
             self._worker.start()
