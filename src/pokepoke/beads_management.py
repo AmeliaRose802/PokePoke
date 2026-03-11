@@ -120,6 +120,7 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
     safe_id = ''.join(c if c.isalnum() or c in ('-', '_') else '_' for c in item_id)
     lock_name = f"beads-claim-{safe_id}"
 
+    claimed = False
     try:
         # Serialize check+claim across parallel agents to eliminate TOCTOU.
         with acquire_lock(lock_name, timeout=0):
@@ -179,16 +180,7 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
                     )
                     return False
 
-                # Sync to push assignment to other agents
-                sync_result = run_bd_sync_with_retry()
-
-                if sync_result.returncode == 0:
-                    print(f"✅ Synced assignment - other agents will see {item_id} is claimed")
-                else:
-                    logger.warning(f"⚠️  bd sync returned non-zero: {sync_result.returncode}")
-                    logger.warning("   Assignment may not be immediately visible to other agents")
-
-                return True
+                claimed = True
 
             except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
                 stderr = e.stderr if isinstance(e, subprocess.CalledProcessError) else str(e)
@@ -198,6 +190,19 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
     except Timeout:
         logger.warning(f"⚠️  Claim lock busy ('{lock_name}') — another agent is claiming this item")
         return False
+
+    # Best-effort sync OUTSIDE the lock so the agent slot is freed immediately.
+    # The claim is already verified; sync only pushes visibility to other agents.
+    if claimed:
+        sync_result = run_bd_sync_with_retry()
+
+        if sync_result.returncode == 0:
+            print(f"✅ Synced assignment - other agents will see {item_id} is claimed")
+        else:
+            logger.warning(f"⚠️  bd sync returned non-zero: {sync_result.returncode}")
+            logger.warning("   Assignment may not be immediately visible to other agents")
+
+    return claimed
 
 
 def unassign_item(item_id: str) -> bool:
