@@ -471,7 +471,8 @@ class TestRunCleanupWithTimeout:
         # First check: has changes, second check: past timeout
         # The while loop enters, then checks timeout AFTER cleanup_attempt++
         # So cleanup_loop will be called once before timeout check
-        mock_time.side_effect = [0, 7300]  # first check within timeout, second check past timeout
+        # Extra values needed because print() calls through desktop_ui may call time.time()
+        mock_time.side_effect = [0, 7300] + [7300] * 10
         mock_uncommitted.return_value = True  # Always has changes
         mock_cleanup.return_value = (True, 1)  # Cleanup succeeds
 
