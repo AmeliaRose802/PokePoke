@@ -1544,10 +1544,10 @@ class TestIsWindowsLockError:
         assert _is_windows_lock_error("") is False
 
     def test_permission_denied(self) -> None:
-        assert _is_windows_lock_error("Permission denied") is True
+        assert _is_windows_lock_error("Permission denied") is False
 
     def test_access_is_denied(self) -> None:
-        assert _is_windows_lock_error("Access is denied") is True
+        assert _is_windows_lock_error("Access is denied") is False
 
     def test_unrelated_error_returns_false(self) -> None:
         assert _is_windows_lock_error("File not found") is False

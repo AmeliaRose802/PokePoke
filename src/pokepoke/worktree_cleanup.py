@@ -108,12 +108,6 @@ def _is_windows_lock_error(error_text: str) -> bool:
         "locked a portion of the file",
         # Windows sharing-violation phrasing
         "sharing violation",
-        # WinError 5 – ERROR_ACCESS_DENIED (common with locked files)
-        "access is denied",
-        # Python PermissionError text wrapping WinError 5/32
-        "permission denied",
-        # Part of the full WinError 32 message
-        "cannot access the file",
         # Explicit Windows error codes in Python exception strings
         "[winerror 32]",
         "[winerror 33]",

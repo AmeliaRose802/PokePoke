@@ -17,25 +17,25 @@ from pokepoke.worktree_cleanup import (
 class TestIsWindowsLockError:
     """Tests for _is_windows_lock_error detection function."""
 
-    def test_detects_permission_denied(self) -> None:
-        """Detect 'Permission denied' error."""
-        assert _is_windows_lock_error("Permission denied") is True
+    def test_rejects_bare_permission_denied(self) -> None:
+        """Bare 'Permission denied' is too broad to classify as a lock error."""
+        assert _is_windows_lock_error("Permission denied") is False
 
     def test_detects_being_used_by_another_process(self) -> None:
         """Detect 'being used by another process' error."""
         assert _is_windows_lock_error("The file is being used by another process") is True
 
-    def test_detects_cannot_access_file(self) -> None:
-        """Detect 'cannot access the file' error."""
-        assert _is_windows_lock_error("Cannot access the file") is True
+    def test_rejects_bare_cannot_access_file(self) -> None:
+        """Bare 'cannot access the file' is too broad without a WinError code."""
+        assert _is_windows_lock_error("Cannot access the file") is False
 
     def test_detects_sharing_violation(self) -> None:
         """Detect 'sharing violation' error."""
         assert _is_windows_lock_error("Sharing violation") is True
 
-    def test_detects_access_denied(self) -> None:
-        """Detect 'access is denied' error."""
-        assert _is_windows_lock_error("Access is denied") is True
+    def test_rejects_bare_access_denied(self) -> None:
+        """Bare 'access is denied' is too broad to classify as a lock error."""
+        assert _is_windows_lock_error("Access is denied") is False
 
     def test_detects_device_or_resource_busy(self) -> None:
         """'device or resource busy' is a Unix error, not a Windows lock indicator."""
@@ -65,7 +65,7 @@ class TestIsWindowsLockError:
 
     def test_case_insensitive_matching(self) -> None:
         """Matching is case-insensitive."""
-        assert _is_windows_lock_error("PERMISSION DENIED") is True
+        assert _is_windows_lock_error("SHARING VIOLATION") is True
         assert _is_windows_lock_error("Being Used By Another Process") is True
 
     def test_returns_false_for_unrelated_error(self) -> None:
@@ -160,12 +160,12 @@ class TestForceRemoveDirectory:
         def run_side_effect(cmd, **kwargs):
             call_count[0] += 1
             if 'worktree' in cmd and 'remove' in cmd and call_count[0] == 1:
-                raise subprocess.CalledProcessError(1, 'git', stderr='Permission denied')
+                raise subprocess.CalledProcessError(1, 'git', stderr='[WinError 32] The process cannot access the file because it is being used by another process')
             return Mock(returncode=0, stdout='', stderr='')
 
         mock_run.side_effect = run_side_effect
         # Shutil always fails to simulate the need for retry
-        mock_rmtree.side_effect = PermissionError('Permission denied')
+        mock_rmtree.side_effect = PermissionError('[WinError 32] being used by another process')
 
         result = force_remove_directory(Path('/repo/worktrees/task-1'))
 
@@ -191,11 +191,11 @@ class TestForceRemoveDirectory:
         mock_wait,
     ) -> None:
         """Return False when all retry attempts fail."""
-        # All attempts fail with permission errors
+        # All attempts fail with lock errors
         mock_run.side_effect = subprocess.CalledProcessError(
-            1, 'git', stderr='Permission denied'
+            1, 'git', stderr='[WinError 32] being used by another process'
         )
-        mock_rmtree.side_effect = PermissionError('Access denied')
+        mock_rmtree.side_effect = PermissionError('[WinError 32] being used by another process')
 
         result = force_remove_directory(Path('/repo/worktrees/task-1'))
 
@@ -241,7 +241,7 @@ class TestForceRemoveDirectory:
         def run_side_effect(cmd, **kwargs):
             call_count[0] += 1
             if 'worktree' in cmd and 'remove' in cmd and call_count[0] <= 2:
-                raise subprocess.CalledProcessError(1, 'git', stderr='Access is denied')
+                raise subprocess.CalledProcessError(1, 'git', stderr='[WinError 32] being used by another process')
             return Mock(returncode=0, stdout='', stderr='')
 
         mock_run.side_effect = run_side_effect
@@ -315,7 +315,7 @@ class TestCleanupAfterMerge:
         mock_exists.return_value = True
         # First call (git worktree remove) fails with lock error
         mock_run.side_effect = subprocess.CalledProcessError(
-            1, 'git', stderr='Permission denied'
+            1, 'git', stderr='[WinError 32] being used by another process'
         )
         mock_force_remove.return_value = True
 
@@ -341,7 +341,7 @@ class TestCleanupAfterMerge:
         mock_exists.return_value = True
         # First call (git worktree remove) fails with lock error
         mock_run.side_effect = subprocess.CalledProcessError(
-            1, 'git', stderr='Permission denied'
+            1, 'git', stderr='[WinError 32] being used by another process'
         )
         # Force remove also fails
         mock_force_remove.return_value = False
@@ -375,7 +375,7 @@ class TestCleanupAfterMerge:
         mock_exists.return_value = True
         # Worktree removal fails with a lock error
         mock_run.side_effect = subprocess.CalledProcessError(
-            1, 'git', stderr='Permission denied'
+            1, 'git', stderr='[WinError 32] being used by another process'
         )
         # Force removal also fails – directory still on disk
         mock_force_remove.return_value = False
