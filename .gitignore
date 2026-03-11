@@ -22,9 +22,19 @@ worktrees/
 .pokepoke/logs/
 logs/
 
-# Beads daemon logs
+# Beads runtime files
 .beads/daemon-*.log.gz
 .beads/bd.sock.startlock
+.beads/bd.sock
+.beads/*.lock
+.beads/daemon.lock
+.beads/daemon.pid
+.beads/beads.db-shm
+.beads/beads.db-wal
+.beads/sync-state.json
+
+# PokePoke sessions
+.pokepoke/sessions/
 
 # Work artifacts (configurable via work_artifacts_dir in .pokepoke/config.yaml)
 ai_incident_reports/
