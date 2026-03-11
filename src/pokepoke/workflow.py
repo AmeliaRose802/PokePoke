@@ -43,8 +43,21 @@ def process_work_item(  # noqa: C901
     run_logger: 'RunLogger | None' = None,
     max_timeout_restarts: int = 3,
     agent_id: str | None = None,
+    repo_path: str | None = None,
 ) -> WorkItemResult:
-    """Process a single work item with timeout protection."""
+    """Process a single work item with timeout protection.
+
+    Args:
+        item: Work item to process.
+        interactive: Whether to prompt user for confirmation.
+        timeout_hours: Maximum hours before timeout.
+        run_beta_test: Whether to run beta tester after completion.
+        run_logger: Optional run logger for file logging.
+        max_timeout_restarts: Maximum timeout restarts allowed.
+        agent_id: Optional agent identifier.
+        repo_path: Target repo root. When provided, worktrees are created
+            under this repo and git operations use it as CWD.
+    """
     # Register this agent for shutdown coordination
     register_agent()
     _session: WorkItemSession | None = None
@@ -102,6 +115,7 @@ def process_work_item(  # noqa: C901
         worktree_path = _setup_worktree(
             item, lock_timeout=worktree_lock_timeout,
             run_logger=run_logger, item_logger=item_logger,
+            repo_path=repo_path,
         )
 
         if worktree_path is None:
@@ -114,7 +128,7 @@ def process_work_item(  # noqa: C901
         _session._worktree_created = True
         _session._branch_created = True
 
-        pokepoke_root = Path.cwd()
+        pokepoke_root = Path(repo_path) if repo_path else Path.cwd()
         worktree_cwd = str(worktree_path)
         print(f"   Working directory: {worktree_cwd}\n")
         last_feedback = ""
@@ -323,6 +337,7 @@ def process_work_item(  # noqa: C901
             result, item, worktree_path, selected_model, start_time,
             request_count, accumulated_stats, cleanup_agent_runs, gate_agent_runs,
             gate_success, run_logger, item_logger, base_agent_id, run_beta_test,
+            repo_path=repo_path,
         )
         if finalized:
             _session = None  # Finalization succeeded — skip cleanup
@@ -341,11 +356,12 @@ def process_work_item(  # noqa: C901
 def _setup_worktree(
     item: BeadsWorkItem, lock_timeout: float = 300.0,
     run_logger: 'RunLogger | None' = None, item_logger: 'ItemLogger | None' = None,
+    repo_path: str | None = None,
 ) -> Path | None:
     """Create worktree, logging errors to both file logs and UI."""
     print(f"\n🌳 Creating worktree for {item.id}...")
     try:
-        worktree_path = create_worktree(item.id, lock_timeout=lock_timeout)
+        worktree_path = create_worktree(item.id, lock_timeout=lock_timeout, repo_path=repo_path)
         print(f"   Created at: {worktree_path}")
         return worktree_path
     except Exception as e:

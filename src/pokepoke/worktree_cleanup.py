@@ -228,6 +228,7 @@ def cleanup_worktree_and_branch(
     skip_branch_delete_if_dir_exists: bool = True,
     post_merge: bool = False,
     print_success: bool = False,
+    cwd: str | None = None,
 ) -> bool:
     """Remove a worktree directory and delete its branch.
 
@@ -251,7 +252,7 @@ def cleanup_worktree_and_branch(
             if force:
                 cmd.append("--force")
 
-            _run_git(cmd)
+            _run_git(cmd, cwd=cwd)
             if worktree_id is not None:
                 remove_from_manifest(worktree_id)
             if print_success:
@@ -265,13 +266,13 @@ def cleanup_worktree_and_branch(
         print(f"⚠️  Skipping branch deletion because worktree directory still exists: {worktree_path}")
         return False
 
-    return _delete_branch(branch_name, fallback_branch_name, force, print_success, post_merge)
+    return _delete_branch(branch_name, fallback_branch_name, force, print_success, post_merge, cwd=cwd)
 
 
-def _run_git(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+def _run_git(cmd: list[str], cwd: str | None = None) -> subprocess.CompletedProcess[str]:
     """Run a git command with standard options — delegates to git_helpers.run_git."""
     from pokepoke.git_helpers import run_git
-    return run_git(cmd)
+    return run_git(cmd, cwd=cwd)
 
 
 def _delete_branch(
@@ -280,12 +281,13 @@ def _delete_branch(
     force: bool,
     print_success: bool,
     post_merge: bool,
+    cwd: str | None = None,
 ) -> bool:
     """Delete a git branch, optionally trying a fallback name."""
     delete_flag = "-D" if force else "-d"
 
     try:
-        _run_git(["git", "branch", delete_flag, branch_name])
+        _run_git(["git", "branch", delete_flag, branch_name], cwd=cwd)
         if print_success:
             print(f"✅ Deleted branch {branch_name}")
         return True
@@ -296,7 +298,7 @@ def _delete_branch(
 
     # Try fallback branch name
     try:
-        _run_git(["git", "branch", delete_flag, fallback_branch_name])
+        _run_git(["git", "branch", delete_flag, fallback_branch_name], cwd=cwd)
         if print_success:
             print(f"✅ Deleted branch {fallback_branch_name}")
         return True
@@ -308,7 +310,7 @@ def _delete_branch(
         return False
 
 
-def cleanup_after_merge(worktree_path: Path, branch_name: str) -> None:
+def cleanup_after_merge(worktree_path: Path, branch_name: str, cwd: str | None = None) -> None:
     """Cleanup worktree and branch after successful merge."""
     cleanup_worktree_and_branch(
         worktree_path,
@@ -316,6 +318,7 @@ def cleanup_after_merge(worktree_path: Path, branch_name: str) -> None:
         skip_branch_delete_if_dir_exists=True,
         post_merge=True,
         print_success=True,
+        cwd=cwd,
     )
 
 

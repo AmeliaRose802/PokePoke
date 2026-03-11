@@ -26,7 +26,8 @@ def handle_worktree_merge(
     worktree_path: Path,
     repo_root: Path,
     agent_stats: AgentStats | None,
-    parent_agent_id: str | None = None
+    parent_agent_id: str | None = None,
+    repo_path: str | None = None,
 ) -> tuple[bool, bool]:
     """Handle worktree merge with conflict resolution.
 
@@ -41,6 +42,7 @@ def handle_worktree_merge(
         repo_root: Repository root path
         agent_stats: Agent statistics (unused, kept for API compatibility)
         parent_agent_id: Optional parent agent ID for UI nesting of sub-agents
+        repo_path: Target repo root for git operations.
 
     Returns:
         Tuple of (merge_success, worktree_cleaned)
@@ -56,6 +58,7 @@ def handle_worktree_merge(
             return perform_worktree_merge(
                 agent_id, agent_item, worktree_path, repo_root,
                 parent_agent_id=cleanup_parent_id,
+                repo_path=repo_path,
             )
     except Timeout as e:
         logger.warning("Merge lock timeout for agent %s: %s", agent_id, e)
@@ -83,6 +86,7 @@ def perform_worktree_merge(  # noqa: C901
     worktree_path: Path,
     repo_root: Path,
     parent_agent_id: str | None = None,
+    repo_path: str | None = None,
 ) -> tuple[bool, bool]:
     """Core merge-attempt-cleanup-retry logic (single source of truth).
 
@@ -94,6 +98,7 @@ def perform_worktree_merge(  # noqa: C901
         worktree_path: Absolute path to the worktree directory.
         repo_root: Repository root path passed to cleanup agents.
         parent_agent_id: Optional parent agent ID for UI nesting of sub-agents.
+        repo_path: Target repo root for git operations.
 
     Returns:
         Tuple of (merge_success, worktree_cleaned).
@@ -108,9 +113,11 @@ def perform_worktree_merge(  # noqa: C901
     )
     from pokepoke.worktree_cleanup import add_uncleaned_worktree, remove_from_manifest
 
+    repo_cwd = repo_path
+
     # --- pre-merge readiness check ---
     print("\n🔍 Checking if main repo is ready for merge...")
-    is_ready, error_msg = check_main_repo_ready_for_merge()
+    is_ready, error_msg = check_main_repo_ready_for_merge(cwd=repo_cwd)
 
     if not is_ready:
         print(f"\n⚠️  Cannot merge: {error_msg}")
@@ -133,7 +140,7 @@ def perform_worktree_merge(  # noqa: C901
 
         if cleanup_success:
             print("   Cleanup successful, retrying merge check...")
-            is_ready, error_msg = check_main_repo_ready_for_merge()
+            is_ready, error_msg = check_main_repo_ready_for_merge(cwd=repo_cwd)
             if not is_ready:
                 print(f"   Still failing after cleanup: {error_msg}")
                 return False, False
@@ -145,15 +152,16 @@ def perform_worktree_merge(  # noqa: C901
 
     # --- attempt merge ---
     print(f"\n🔀 Merging worktree for {item_id}...")
-    merge_success, unmerged_files = merge_worktree(item_id, cleanup=True)
+    merge_success, unmerged_files = merge_worktree(item_id, cleanup=True, repo_path=repo_cwd)
 
     if not merge_success:
-        if is_merge_in_progress():
+        repo_root_path = Path(repo_cwd) if repo_cwd else None
+        if is_merge_in_progress(repo_path=repo_root_path):
             print("\n❌ Worktree merge has conflicts!")
         else:
             print("\n❌ Worktree merge failed!")
             if not unmerged_files:
-                unmerged_files = get_unmerged_files()
+                unmerged_files = get_unmerged_files(repo_path=repo_root_path)
 
         if unmerged_files:
             print(f"   Conflicted files ({len(unmerged_files)}):")
@@ -190,15 +198,15 @@ def perform_worktree_merge(  # noqa: C901
 
         if success:
             print("   Cleanup successful, retrying merge...")
-            if is_merge_in_progress():
+            if is_merge_in_progress(repo_path=repo_root_path):
                 print("   ⚠️  Merge still in progress after cleanup - aborting to reset state")
-                abort_success, abort_error = abort_merge()
+                abort_success, abort_error = abort_merge(repo_path=repo_root_path)
                 if not abort_success:
                     print(f"   ❌ Failed to abort merge: {abort_error}")
                     return False, False
                 print("   ✅ Merge aborted, will retry")
 
-            merge_success, _ = merge_worktree(item_id, cleanup=True)
+            merge_success, _ = merge_worktree(item_id, cleanup=True, repo_path=repo_cwd)
             if merge_success:
                 remove_from_manifest(item_id)
                 worktree_cleaned = not worktree_path.exists()
@@ -209,8 +217,8 @@ def perform_worktree_merge(  # noqa: C901
                 return True, worktree_cleaned
             else:
                 print("   Merge failed again after cleanup.")
-                if is_merge_in_progress():
-                    abort_success, abort_error = abort_merge()
+                if is_merge_in_progress(repo_path=repo_root_path):
+                    abort_success, abort_error = abort_merge(repo_path=repo_root_path)
                     if not abort_success:
                         logger.error("Failed to abort merge after retry failure for %s: %s", item_id, abort_error)
                         print(f"   ❌ Failed to abort merge: {abort_error}")
@@ -218,9 +226,9 @@ def perform_worktree_merge(  # noqa: C901
                 return False, False
         else:
             print("   Cleanup failed.")
-            if is_merge_in_progress():
+            if is_merge_in_progress(repo_path=repo_root_path):
                 print("   Aborting merge to reset state...")
-                abort_success, abort_error = abort_merge()
+                abort_success, abort_error = abort_merge(repo_path=repo_root_path)
                 if not abort_success:
                     logger.error("Failed to abort merge after cleanup failure for %s: %s", item_id, abort_error)
                     print(f"   ❌ Failed to abort merge: {abort_error}")

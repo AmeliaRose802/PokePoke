@@ -62,8 +62,13 @@ def validate_worktree_integrity(worktree_path: Path, item_id: str) -> None:
     logger.debug(f"Worktree integrity OK for {item_id}: {file_count} entries at {worktree_path}")
 
 
-def sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
-    """Sync beads and ensure main repo is clean before merge."""
+def sync_and_ensure_clean_main_repo(branch_name: str, cwd: str | None = None) -> bool:
+    """Sync beads and ensure main repo is clean before merge.
+
+    Args:
+        branch_name: The branch about to be merged.
+        cwd: Working directory for git commands (target repo root).
+    """
     print("🔄 Syncing beads database before merge...")
     try:
         bd_sync_result = run_bd_sync_with_retry(timeout=30)
@@ -74,7 +79,12 @@ def sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
     except subprocess.TimeoutExpired:
         print("⚠️  bd sync timed out")
     try:
-        main_status = _run_git(["git", "status", "--porcelain"]).stdout.strip()
+        git_cmd = ["git", "status", "--porcelain"]
+        main_status = subprocess.run(
+            git_cmd, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=30, check=True,
+            cwd=cwd,
+        ).stdout.strip()
         if main_status:
             lines = main_status.split('\n')
             changes = categorize_git_changes(lines)
@@ -83,20 +93,40 @@ def sync_and_ensure_clean_main_repo(branch_name: str) -> bool:
                     print(f"   ⚠️  pending: {line}")
                 if len(changes['other']) > 10:
                     print(f"   ... and {len(changes['other']) - 10} more")
-                ok, err = commit_all_changes(f"chore: commit pending changes before merge of {branch_name}")
+                ok, err = commit_all_changes(f"chore: commit pending changes before merge of {branch_name}", cwd=cwd)
                 if not ok:
                     print(f"❌ Cannot merge: failed to commit pending changes: {err}")
                     return False
                 print("✅ Pending main-branch changes committed")
             if changes['beads']:
                 print("🔧 Committing beads database changes...")
-                _run_git(["git", "add", f"{BEADS_DIR}/"], capture_output=False)
-                _run_git(["git", "commit", "-m", f"chore: sync beads before merge of {branch_name}"], timeout=60)
+                subprocess.run(
+                    ["git", "add", f"{BEADS_DIR}/"],
+                    capture_output=False, text=True,
+                    encoding="utf-8", errors="replace", timeout=30, check=True,
+                    cwd=cwd,
+                )
+                subprocess.run(
+                    ["git", "commit", "-m", f"chore: sync beads before merge of {branch_name}"],
+                    capture_output=True, text=True,
+                    encoding="utf-8", errors="replace", timeout=60, check=True,
+                    cwd=cwd,
+                )
                 print("✅ Beads changes committed")
             if changes['worktree']:
                 print("🧹 Committing worktree cleanup changes...")
-                _run_git(["git", "add", f"{WORKTREE_DIR}/"], capture_output=False)
-                _run_git(["git", "commit", "-m", "chore: cleanup deleted worktree directories"], timeout=60)
+                subprocess.run(
+                    ["git", "add", f"{WORKTREE_DIR}/"],
+                    capture_output=False, text=True,
+                    encoding="utf-8", errors="replace", timeout=30, check=True,
+                    cwd=cwd,
+                )
+                subprocess.run(
+                    ["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
+                    capture_output=True, text=True,
+                    encoding="utf-8", errors="replace", timeout=60, check=True,
+                    cwd=cwd,
+                )
                 print("✅ Worktree cleanup committed")
         return True
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:

@@ -1483,7 +1483,8 @@ class TestListWorktrees:
                 text=True,
                 encoding='utf-8',
                 errors='replace',
-                timeout=30
+                timeout=30,
+                cwd=None,
             )
 
     def test_list_worktrees_empty(self):
@@ -2087,10 +2088,10 @@ class TestSyncAndEnsureCleanMainRepo:
         from pokepoke.worktrees import _sync_and_ensure_clean_main_repo
 
         with patch('pokepoke.worktree_helpers.run_bd_sync_with_retry', side_effect=subprocess.TimeoutExpired('bd', 30)), \
-             patch('pokepoke.worktree_helpers._run_git') as mock_git, \
+             patch('pokepoke.worktree_helpers.subprocess.run') as mock_run, \
              patch('builtins.print') as mock_print:
 
-            mock_git.return_value = Mock(stdout='', returncode=0)
+            mock_run.return_value = Mock(stdout='', returncode=0)
 
             result = _sync_and_ensure_clean_main_repo('task/test-branch')
 
@@ -2104,12 +2105,12 @@ class TestSyncAndEnsureCleanMainRepo:
         lines = '\n'.join(f' M src/file{i}.py' for i in range(15))
 
         with patch('pokepoke.worktree_helpers.run_bd_sync_with_retry') as mock_sync, \
-             patch('pokepoke.worktree_helpers._run_git') as mock_git, \
+             patch('pokepoke.worktree_helpers.subprocess.run') as mock_run, \
              patch('pokepoke.worktree_helpers.commit_all_changes', return_value=(False, 'hooks failed')) as mock_commit, \
              patch('builtins.print') as mock_print:
 
             mock_sync.return_value = Mock(returncode=0)
-            mock_git.return_value = Mock(stdout=lines, returncode=0)
+            mock_run.return_value = Mock(stdout=lines, returncode=0)
 
             result = _sync_and_ensure_clean_main_repo('task/test-branch')
 
@@ -2123,11 +2124,11 @@ class TestSyncAndEnsureCleanMainRepo:
         from pokepoke.worktrees import _sync_and_ensure_clean_main_repo
 
         with patch('pokepoke.worktree_helpers.run_bd_sync_with_retry') as mock_sync, \
-             patch('pokepoke.worktree_helpers._run_git') as mock_git, \
+             patch('pokepoke.worktree_helpers.subprocess.run') as mock_run, \
              patch('builtins.print') as mock_print:
 
             mock_sync.return_value = Mock(returncode=0)
-            mock_git.side_effect = [
+            mock_run.side_effect = [
                 Mock(stdout=' D worktrees/task-old/.git\n', returncode=0),  # status
                 Mock(stdout='', returncode=0),  # git add worktrees/
                 Mock(stdout='', returncode=0),  # git commit
@@ -2144,7 +2145,7 @@ class TestSyncAndEnsureCleanMainRepo:
         from pokepoke.worktrees import _sync_and_ensure_clean_main_repo
 
         with patch('pokepoke.worktree_helpers.run_bd_sync_with_retry') as mock_sync, \
-             patch('pokepoke.worktree_helpers._run_git', side_effect=subprocess.CalledProcessError(1, ['git'])), \
+             patch('pokepoke.worktree_helpers.subprocess.run', side_effect=subprocess.CalledProcessError(1, ['git'])), \
              patch('builtins.print') as mock_print:
 
             mock_sync.return_value = Mock(returncode=0)

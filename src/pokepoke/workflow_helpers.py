@@ -77,11 +77,12 @@ def _build_completion_record(
 def _setup_worktree(
     item: BeadsWorkItem, lock_timeout: float = 300.0,
     run_logger: "RunLogger | None" = None, item_logger: "ItemLogger | None" = None,
+    repo_path: str | None = None,
 ) -> Path | None:
     """Create worktree, logging errors to both file logs and UI."""
     print(f"\n\U0001f333 Creating worktree for {item.id}...")
     try:
-        worktree_path = create_worktree(item.id, lock_timeout=lock_timeout)
+        worktree_path = create_worktree(item.id, lock_timeout=lock_timeout, repo_path=repo_path)
         print(f"   Created at: {worktree_path}")
         return worktree_path
     except Exception as e:
@@ -300,12 +301,13 @@ def _finalize_item_result(  # noqa: C901 – inherently complex; see workflow.py
     item_logger: "ItemLogger | None",
     base_agent_id: str,
     run_beta_test: bool,
+    repo_path: str | None = None,
 ) -> tuple[WorkItemResult, bool]:
     """Handle post-loop outcome. Returns (WorkItemResult, finalized_successfully)."""
     if result.success:
         set_terminal_banner(format_work_item_banner(item.id, item.title, "Finalizing"))
         assert worktree_path is not None, "worktree_path must be set when result is successful"
-        success = finalize_work_item(item, worktree_path, parent_agent_id=base_agent_id)
+        success = finalize_work_item(item, worktree_path, parent_agent_id=base_agent_id, repo_path=repo_path)
         item_stats = accumulated_stats
         set_terminal_banner(format_work_item_banner(item.id, item.title, "Completed" if success else "Failed"))
         if success and run_beta_test:
@@ -364,7 +366,7 @@ def _finalize_item_result(  # noqa: C901 – inherently complex; see workflow.py
     set_terminal_banner(format_work_item_banner(item.id, item.title, "Failed"))
     print(f"\n❌ Failed to complete work item: {result.error}")
     print("\n🧹 Cleaning up worktree...")
-    cleanup_worktree(item.id, force=True)
+    cleanup_worktree(item.id, force=True, repo_path=repo_path)
     _log_failure(run_logger, item_logger, request_count)
     terminal_ui.ui.set_current_agent(None)
     dur = time.time() - start_time

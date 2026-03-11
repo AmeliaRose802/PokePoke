@@ -132,7 +132,7 @@ class TestCheckAndMergeWorktree:
     def test_no_commits(self, mock_sub: Mock, mock_branch: Mock, mock_cleanup: Mock) -> None:
         mock_sub.run.return_value = Mock(stdout="0\n")
         assert check_and_merge_worktree(_make_test_item(), Path("/wt")) is True
-        mock_cleanup.assert_called_once_with("task-1", force=True)
+        mock_cleanup.assert_called_once_with("task-1", force=True, repo_path=None)
 
     @patch("pokepoke.worktree_finalization.merge_worktree_to_dev")
     @patch("pokepoke.worktree_finalization.get_default_branch")

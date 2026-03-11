@@ -94,6 +94,7 @@ def _build_worker_name(base_agent_name: str, item_id: str, counter: int) -> str:
 def _parallel_process_item(
     item: BeadsWorkItem, run_logger: RunLogger,
     semaphore: threading.Semaphore, worker_agent_name: str | None = None,
+    repo_path: str | None = None,
 ) -> WorkItemResult:
     """Thread-pool wrapper for process_work_item."""
     agent_id = f"{item.id}:{worker_agent_name}" if worker_agent_name else item.id
@@ -111,7 +112,7 @@ def _parallel_process_item(
 
     try:
         with terminal_ui.ui.agent_output_for(agent_id):
-            result = process_work_item(item, interactive=False, run_logger=run_logger, agent_id=agent_id)
+            result = process_work_item(item, interactive=False, run_logger=run_logger, agent_id=agent_id, repo_path=repo_path)
         success = result.success
         _push("success" if success else "failed")
         emoji = "\u2705" if success else "\u274c"

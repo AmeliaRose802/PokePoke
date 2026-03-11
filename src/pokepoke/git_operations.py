@@ -101,7 +101,6 @@ def verify_main_repo_clean(cwd: str | None = None) -> tuple[bool, str, list[str]
             ["git", "status", "--porcelain"],
             cwd=cwd,
         )
-
         uncommitted = status_result.stdout.strip()
         if uncommitted:
             changes = categorize_git_changes(uncommitted.split('\n'))
@@ -117,17 +116,18 @@ def verify_main_repo_clean(cwd: str | None = None) -> tuple[bool, str, list[str]
         raise RuntimeError(f"Error checking git status: {e}") from e
 
 
-def handle_beads_auto_commit() -> None:
+def handle_beads_auto_commit(cwd: str | None = None) -> None:
     """Commit beads database changes."""
     try:
         print("🔧 Committing beads database changes in main repo...")
-        subprocess.run(["git", "add", f"{BEADS_DIR}/"], check=True, encoding='utf-8', errors='replace', timeout=10)
+        subprocess.run(["git", "add", f"{BEADS_DIR}/"], check=True, encoding='utf-8', errors='replace', timeout=10, cwd=cwd)
         subprocess.run(
             ["git", "commit", "-m", "chore: sync beads before worktree merge"],
             check=True,
             capture_output=True,
             encoding='utf-8', errors='replace',
-            timeout=300
+            timeout=300,
+            cwd=cwd
         )
         print("✅ Beads changes committed")
     except subprocess.TimeoutExpired as e:
@@ -136,17 +136,17 @@ def handle_beads_auto_commit() -> None:
         raise RuntimeError(f"Failed to commit beads changes: {e}") from e
 
 
-def check_main_repo_ready_for_merge() -> tuple[bool, str]:
+def check_main_repo_ready_for_merge(cwd: str | None = None) -> tuple[bool, str]:
     """Return (is_ready, error_message) for merging into the main repo."""
     try:
-        is_clean, uncommitted, non_beads_changes = verify_main_repo_clean()
+        is_clean, uncommitted, non_beads_changes = verify_main_repo_clean(cwd=cwd)
 
         if not is_clean:
             return False, f"Main repo has uncommitted non-beads changes:\n{chr(10).join(non_beads_changes)}"
 
         # If we have uncommitted changes, they must be beads-only
         if uncommitted:
-            handle_beads_auto_commit()
+            handle_beads_auto_commit(cwd=cwd)
 
         return True, ""
     except Exception as e:
@@ -159,22 +159,27 @@ def sanitize_branch_name(name: str) -> str:
     return re.sub(r'-+', '-', re.sub(r'\.\.+', '.', s)).strip('-.')
 
 
-def branch_exists(branch_name: str) -> bool:
+def branch_exists(branch_name: str, cwd: str | None = None) -> bool:
     """Check if a local branch exists."""
     try:
         result = subprocess.run(
             ["git", "show-ref", "--verify", f"refs/heads/{branch_name}"],
             capture_output=True, text=True, encoding='utf-8', errors='replace',
-            timeout=30)
+            timeout=30, cwd=cwd)
         return result.returncode == 0
     except subprocess.CalledProcessError:
         return False
 
-def get_default_branch(preferred: str | None = None, fallback: str | None = None) -> str:
+def get_default_branch(preferred: str | None = None, fallback: str | None = None, cwd: str | None = None) -> str:
     """Resolve the default branch name for the repo.
 
     Uses project config to determine preferred branch. Falls back to origin/HEAD
     or current branch if preferred not available.
+
+    Args:
+        preferred: Preferred branch name override.
+        fallback: Fallback branch name override.
+        cwd: Working directory for git commands (defaults to process CWD).
     """
     from .config import get_config
     config = get_config()
@@ -185,7 +190,7 @@ def get_default_branch(preferred: str | None = None, fallback: str | None = None
         fallback = config.git.fallback_branch
     if preferred:
         # Check local
-        if branch_exists(preferred):
+        if branch_exists(preferred, cwd=cwd):
             return preferred
 
         # Check remote
@@ -195,7 +200,8 @@ def get_default_branch(preferred: str | None = None, fallback: str | None = None
                 capture_output=True,
                 encoding='utf-8', errors='replace',
                 check=True,
-                timeout=30
+                timeout=30,
+                cwd=cwd
             )
             # Found on remote, create local tracking branch
             print(f"   ✨ Creating local tracking branch for {preferred}...")
@@ -204,7 +210,8 @@ def get_default_branch(preferred: str | None = None, fallback: str | None = None
                 capture_output=True,
                 encoding='utf-8', errors='replace',
                 check=True,
-                timeout=30
+                timeout=30,
+                cwd=cwd
             )
             return preferred
         except subprocess.CalledProcessError:
@@ -217,7 +224,8 @@ def get_default_branch(preferred: str | None = None, fallback: str | None = None
             text=True,
             encoding='utf-8', errors='replace',
             check=True,
-            timeout=30
+            timeout=30,
+            cwd=cwd
         )
         ref = result.stdout.strip()
         if ref.startswith("origin/"):
@@ -232,7 +240,8 @@ def get_default_branch(preferred: str | None = None, fallback: str | None = None
             text=True,
             encoding='utf-8', errors='replace',
             check=True,
-            timeout=30
+            timeout=30,
+            cwd=cwd
         )
         branch = result.stdout.strip()
         if branch:
@@ -264,8 +273,17 @@ def is_worktree_clean(worktree_path: Path) -> bool:
     except subprocess.CalledProcessError:
         return False
 
-def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, str, list[str]]:
+def execute_merge_sequence(
+    branch_name: str,
+    target_branch: str,
+    cwd: str | None = None,
+) -> tuple[bool, str, list[str]]:
     """Execute the checkout, pull, and merge sequence.
+
+    Args:
+        branch_name: Branch to merge from.
+        target_branch: Branch to merge into.
+        cwd: Working directory for git commands (defaults to process CWD).
 
     Returns:
         Tuple of (success, error_message, unmerged_files)
@@ -275,7 +293,7 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, 
     try:
         subprocess.run(["git", "checkout", target_branch],
                      check=True, capture_output=True, text=True, encoding='utf-8', errors='replace',
-                     timeout=30)
+                     timeout=30, cwd=cwd)
     except subprocess.CalledProcessError as e:
         return False, f"Failed to checkout {target_branch}: {e.stderr or str(e)}", []
 
@@ -285,13 +303,13 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, 
         status = subprocess.run(
             ["git", "status", "--porcelain", f"{BEADS_DIR}/"],
             capture_output=True, text=True, encoding='utf-8', check=True,
-            errors='replace', timeout=30
+            errors='replace', timeout=30, cwd=cwd
         ).stdout.strip()
         if status:
             subprocess.run(
                 ["git", "stash", "push", "-m", "beads-daemon-changes-during-merge", "--", f"{BEADS_DIR}/"],
                 check=True, capture_output=True, text=True, encoding='utf-8', errors='replace',
-                timeout=30
+                timeout=30, cwd=cwd
             )
             stashed = True
     except subprocess.CalledProcessError:
@@ -300,12 +318,13 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, 
     try:
         subprocess.run(["git", "pull", "--rebase", "origin", target_branch],
                      check=True, capture_output=True, text=True, encoding='utf-8', errors='replace',
-                     timeout=120)
+                     timeout=120, cwd=cwd)
     except subprocess.CalledProcessError as e:
         # Rollback: abort the failed rebase to leave repo in a clean state
         try:
             subprocess.run(["git", "rebase", "--abort"], check=True,
-                         capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30)
+                         capture_output=True, text=True, encoding='utf-8', errors='replace',
+                         timeout=30, cwd=cwd)
             logger.info("Rolled back failed rebase with git rebase --abort")
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as abort_err:
             logger.warning("Could not abort rebase during rollback: %s", abort_err)
@@ -320,18 +339,20 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, 
     try:
         subprocess.run(["git", "merge", "--no-ff", branch_name, "-m", f"Merge {branch_name}"],
                      check=True, capture_output=True, text=True, encoding='utf-8', errors='replace',
-                     timeout=60)
+                     timeout=60, cwd=cwd)
         return True, "", []
     except subprocess.CalledProcessError as e:
         from .merge_conflict import get_unmerged_files, is_merge_in_progress
-        unmerged = get_unmerged_files()
-        is_merging = is_merge_in_progress()
+        repo_path_obj = Path(cwd) if cwd else None
+        unmerged = get_unmerged_files(repo_path=repo_path_obj)
+        is_merging = is_merge_in_progress(repo_path=repo_path_obj)
 
         # Rollback: abort the failed merge to leave repo in a clean state
         if is_merging:
             try:
                 subprocess.run(["git", "merge", "--abort"], check=True,
-                             capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30)
+                             capture_output=True, text=True, encoding='utf-8', errors='replace',
+                             timeout=30, cwd=cwd)
                 logger.info("Rolled back failed merge with git merge --abort")
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as abort_err:
                 logger.error("Failed to abort merge during rollback: %s", abort_err)
@@ -341,19 +362,19 @@ def execute_merge_sequence(branch_name: str, target_branch: str) -> tuple[bool, 
         else:
             return False, f"Merge failed: {e.stderr or str(e)}", unmerged
 
-def validate_post_merge(target_branch: str) -> bool:
+def validate_post_merge(target_branch: str, cwd: str | None = None) -> bool:
     """Validate repository state after merge."""
     current_branch = subprocess.run(
         ["git", "branch", "--show-current"],
         capture_output=True, text=True, encoding='utf-8', errors='replace',
-        check=True, timeout=30).stdout.strip()
+        check=True, timeout=30, cwd=cwd).stdout.strip()
     if current_branch != target_branch:
         print(f"❌ Post-merge validation failed: Not on {target_branch} (on {current_branch})")
         return False
     status = subprocess.run(
         ["git", "status", "--porcelain"],
         capture_output=True, text=True, encoding='utf-8', errors='replace',
-        check=True, timeout=30).stdout.strip()
+        check=True, timeout=30, cwd=cwd).stdout.strip()
     if status:
         print(f"❌ Post-merge validation failed: {target_branch} has uncommitted changes")
         return False
@@ -374,13 +395,17 @@ def has_commits_ahead(target_branch: str | None = None, cwd: str | None = None) 
         pass
     return 0
 
-def list_worktrees() -> list[dict[str, str]]:
-    """List all active worktrees."""
+def list_worktrees(cwd: str | None = None) -> list[dict[str, str]]:
+    """List all active worktrees.
+
+    Args:
+        cwd: Working directory for the git command (defaults to process CWD).
+    """
     try:
         result = subprocess.run(
             ["git", "worktree", "list", "--porcelain"],
             capture_output=True, text=True, encoding='utf-8', errors='replace',
-            timeout=30, check=True)
+            timeout=30, check=True, cwd=cwd)
         worktrees: list[dict[str, str]] = []
         current: dict[str, str] = {}
         for line in result.stdout.splitlines():

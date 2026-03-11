@@ -55,6 +55,7 @@ class _MergeRequest:
     item: BeadsWorkItem
     future: Future[MergeResult]
     submit_time: float = 0.0
+    repo_path: str | None = None
 
 
 class MergeQueue:
@@ -91,12 +92,13 @@ class MergeQueue:
             self._worker.start()
             self._started = True
 
-    def submit(self, worktree_path: Path, item: BeadsWorkItem) -> "Future[MergeResult]":
+    def submit(self, worktree_path: Path, item: BeadsWorkItem, repo_path: str | None = None) -> "Future[MergeResult]":
         """Submit a merge request to the queue.
 
         Args:
             worktree_path: Path to the worktree to merge.
             item: The beads work item being merged.
+            repo_path: Target repo root for git operations.
 
         Returns:
             A Future that resolves to a MergeResult when the merge completes.
@@ -110,6 +112,7 @@ class MergeQueue:
             item=item,
             future=future,
             submit_time=time.monotonic(),
+            repo_path=repo_path,
         )
         self._queue.put(request)
         depth = self._queue.qsize()
@@ -223,7 +226,7 @@ class MergeQueue:
             if high_conflict:
                 logger.info("Applying cautious merge strategy for high-conflict item %s", item.id)
 
-            target_branch = get_default_branch()
+            target_branch = get_default_branch(cwd=request.repo_path)
             rebase_ok = _rebase_worktree(worktree_path, target_branch=target_branch)
             self._record_rebase(rebase_ok)
 
@@ -254,7 +257,7 @@ class MergeQueue:
             try:
                 from .worktree_finalization import merge_worktree_to_dev
                 with timed_block("merge_queue.merge"):
-                    success = merge_worktree_to_dev(item, worktree_path=worktree_path)
+                    success = merge_worktree_to_dev(item, worktree_path=worktree_path, repo_path=request.repo_path)
                 status = MergeStatus.SUCCESS if success else MergeStatus.FAILED
                 msg = "Merge completed successfully" if success else "merge_worktree_to_dev returned False"
                 result = MergeResult(status=status, item_id=item.id, message=msg)

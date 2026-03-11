@@ -19,9 +19,16 @@ logger = logging.getLogger(__name__)
 def finalize_work_item(
     item: BeadsWorkItem,
     worktree_path: Path,
-    parent_agent_id: str | None = None
+    parent_agent_id: str | None = None,
+    repo_path: str | None = None,
 ) -> bool:
     """Finalize work item by merging worktree and closing issue.
+
+    Args:
+        item: Work item to finalize.
+        worktree_path: Path to the worktree.
+        parent_agent_id: Optional parent agent ID for UI nesting.
+        repo_path: Target repo root for git operations.
 
     Returns:
         True if successful, False otherwise
@@ -29,7 +36,7 @@ def finalize_work_item(
     print("\n✅ Successfully completed work item!")
     print("   All changes committed and validated")
 
-    if not check_and_merge_worktree(item, worktree_path, parent_agent_id=parent_agent_id):
+    if not check_and_merge_worktree(item, worktree_path, parent_agent_id=parent_agent_id, repo_path=repo_path):
         return False
 
     close_work_item_and_parents(item)
@@ -40,7 +47,8 @@ def finalize_work_item(
 def check_and_merge_worktree(
     item: BeadsWorkItem,
     worktree_path: Path,
-    parent_agent_id: str | None = None
+    parent_agent_id: str | None = None,
+    repo_path: str | None = None,
 ) -> bool:
     """Check if worktree has commits and merge if needed.
 
@@ -50,7 +58,7 @@ def check_and_merge_worktree(
     """
     try:
         # Use the actual target branch from config (not hardcoded)
-        target_branch = get_default_branch()
+        target_branch = get_default_branch(cwd=repo_path)
         check_result = subprocess.run(
             ["git", "rev-list", "--count", "HEAD", f"^{target_branch}"],
             capture_output=True,
@@ -66,7 +74,7 @@ def check_and_merge_worktree(
         if commit_count == 0:
             print("\n⏭️  No commits in worktree - nothing to merge")
             print("   Cleaning up worktree without merge...")
-            cleanup_worktree(item.id, force=True)
+            cleanup_worktree(item.id, force=True, repo_path=repo_path)
             return True
 
     except subprocess.TimeoutExpired:
@@ -85,7 +93,7 @@ def check_and_merge_worktree(
     logger.info("Waiting for merge lock for item %s", item.id)
     with merge_lock():
         logger.info("Acquired merge lock for item %s", item.id)
-        return merge_worktree_to_dev(item, parent_agent_id=parent_agent_id, worktree_path=worktree_path)
+        return merge_worktree_to_dev(item, parent_agent_id=parent_agent_id, worktree_path=worktree_path, repo_path=repo_path)
 
 
 def merge_worktree_to_dev(
@@ -93,6 +101,7 @@ def merge_worktree_to_dev(
     parent_agent_id: str | None = None,
     repo_root: Path | None = None,
     worktree_path: Path | None = None,
+    repo_path: str | None = None,
 ) -> bool:
     """Merge worktree to the default development branch.
 
@@ -102,12 +111,13 @@ def merge_worktree_to_dev(
     Args:
         item: Work item being merged.
         parent_agent_id: Optional parent agent ID for UI nesting.
-        repo_root: Repository root (defaults to cwd if not provided).
+        repo_root: Repository root (defaults to repo_path or cwd if not provided).
         worktree_path: Worktree directory (defaults to worktrees/task-{id}).
+        repo_path: Target repo root for git operations.
     """
     from .worktree_merge_handler import perform_worktree_merge
 
-    effective_repo_root = repo_root if repo_root is not None else Path.cwd()
+    effective_repo_root = repo_root if repo_root is not None else (Path(repo_path) if repo_path else Path.cwd())
     effective_worktree_path = (
         worktree_path if worktree_path is not None
         else effective_repo_root / WORKTREE_DIR / f"{WORKTREE_TASK_PREFIX}{item.id}"
@@ -119,6 +129,7 @@ def merge_worktree_to_dev(
         effective_worktree_path,
         effective_repo_root,
         parent_agent_id=parent_agent_id,
+        repo_path=repo_path,
     )
     return merge_success
 
