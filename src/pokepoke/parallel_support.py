@@ -12,60 +12,11 @@ from pokepoke.types import BeadsWorkItem, SessionStats, WorkItemResult
 from pokepoke.logging_utils import RunLogger
 from pokepoke import terminal_ui
 from pokepoke.shutdown import is_shutting_down
+from pokepoke.preflight_log_utils import handle_preflight_checks  # noqa: F401 – re-exported
 
 logger = logging.getLogger(__name__)
 
 _Future = concurrent.futures.Future[WorkItemResult]
-
-
-def handle_preflight_checks(
-    main_repo_path: Any, run_logger: RunLogger, cfg: Any = None,
-) -> tuple[bool, bool]:
-    """Run preflight health checks. Returns (should_continue, is_critical_failure)."""
-    from pokepoke.preflight_health import run_preflight_checks
-    if cfg is None:
-        from pokepoke.config import get_config
-        cfg = get_config()
-    if not cfg.preflight_health.enabled:
-        print("⏭️  Pre-flight health checks disabled via config")
-        run_logger.log_orchestrator("Pre-flight health checks disabled via config")
-        return True, False
-
-    health_config = {k: getattr(cfg.preflight_health, k) for k in (
-        'min_disk_space_gb', 'lock_timeout_seconds', 'worktree_test_timeout',
-        'max_orphan_worktrees', 'git_operation_timeout', 'enable_self_repair',
-        'max_repair_attempts',
-    )}
-    health_result = run_preflight_checks(repo_path=main_repo_path, config=health_config)
-
-    if health_result.passed:
-        print("✅ Pre-flight health checks passed")
-        run_logger.log_orchestrator("Pre-flight health checks passed")
-        for w in health_result.warnings:
-            print(f"   ℹ️  {w}")
-        return True, False
-
-    print(f"\n❌ Pre-flight health checks failed ({len(health_result.errors)} error(s))")
-    for e in health_result.errors:
-        print(f"   • {e.check_name}: {e.message}")
-    if health_result.self_repair_attempted:
-        status = "completed successfully" if health_result.self_repair_successful else "failed"
-        print(f"{'✅' if health_result.self_repair_successful else '❌'} Self-repair {status}")
-    ph = cfg.preflight_health
-    if health_result.has_critical_errors() and ph.fail_on_critical_errors:
-        print("\n🚨 Critical health check failures detected - shutting down gracefully")
-        run_logger.log_orchestrator("Critical health check failures - shutting down", level="ERROR")
-        return False, True
-    if health_result.has_environmental_errors() and ph.fail_on_environmental_errors:
-        print("\n⚠️  Environmental health check failures detected - shutting down gracefully")
-        run_logger.log_orchestrator("Environmental health check failures - shutting down", level="ERROR")
-        if ph.graceful_shutdown_on_failure:
-            return False, True
-    for w in health_result.warnings:
-        print(f"   ⚠️  Warning: {w}")
-    run_logger.log_orchestrator(
-        f"Pre-flight checks failed but continuing (errors: {len(health_result.errors)})", level="WARNING")
-    return True, False
 
 
 def finalize_workers(

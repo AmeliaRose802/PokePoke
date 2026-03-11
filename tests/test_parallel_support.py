@@ -17,6 +17,11 @@ from pokepoke.parallel_support import (
     update_circuit_breaker,
     compute_slots,
 )
+from pokepoke.preflight_log_utils import (
+    format_preflight_errors,
+    should_log_preflight_warning,
+    reset_preflight_rate_limit,
+)
 from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats, WorkItemResult
 
 
@@ -178,7 +183,181 @@ class TestHandlePreflightChecks:
         assert is_critical is False
 
 
-# ── finalize_workers ──────────────────────────────────────────────────
+# ── preflight error formatting and rate-limiting ─────────────────────
+
+
+class TestFormatPreflightErrors:
+    """Tests for format_preflight_errors."""
+
+    def test_single_error(self):
+        err = MagicMock()
+        err.check_name = "disk_space"
+        err.message = "Low disk space"
+        assert format_preflight_errors([err]) == "disk_space: Low disk space"
+
+    def test_multiple_errors(self):
+        e1 = MagicMock(check_name="disk_space", message="Low disk")
+        e2 = MagicMock(check_name="git_locks", message="Stale lock")
+        result = format_preflight_errors([e1, e2])
+        assert result == "disk_space: Low disk; git_locks: Stale lock"
+
+    def test_empty_errors(self):
+        assert format_preflight_errors([]) == ""
+
+
+class TestPreflightRateLimiting:
+    """Tests for should_log_preflight_warning and rate-limiting."""
+
+    def setup_method(self):
+        reset_preflight_rate_limit()
+
+    def teardown_method(self):
+        reset_preflight_rate_limit()
+
+    def test_first_occurrence_always_logged(self):
+        assert should_log_preflight_warning("disk_space: Low disk") is True
+
+    def test_second_occurrence_suppressed(self):
+        should_log_preflight_warning("disk_space: Low disk")
+        assert should_log_preflight_warning("disk_space: Low disk") is False
+
+    def test_different_signature_resets(self):
+        should_log_preflight_warning("disk_space: Low disk")
+        assert should_log_preflight_warning("git_locks: Stale lock") is True
+
+    def test_50th_occurrence_logged(self):
+        sig = "disk_space: Low disk"
+        should_log_preflight_warning(sig)  # count=1 -> True
+        for _ in range(48):
+            should_log_preflight_warning(sig)  # counts 2-49 -> False
+        assert should_log_preflight_warning(sig) is True  # count=50 -> True
+
+    def test_reset_clears_state(self):
+        should_log_preflight_warning("disk_space: Low disk")
+        should_log_preflight_warning("disk_space: Low disk")
+        reset_preflight_rate_limit()
+        assert should_log_preflight_warning("disk_space: Low disk") is True
+
+    @patch("pokepoke.preflight_health.run_preflight_checks")
+    @patch("pokepoke.config.get_config")
+    def test_passing_checks_reset_rate_limit(self, mock_get_config, mock_run):
+        """When checks pass, the rate-limit counter resets."""
+        cfg = MagicMock()
+        cfg.preflight_health.enabled = True
+        cfg.preflight_health.fail_on_critical_errors = True
+        cfg.preflight_health.fail_on_environmental_errors = True
+        cfg.preflight_health.graceful_shutdown_on_failure = True
+        cfg.preflight_health.min_disk_space_gb = 5
+        cfg.preflight_health.lock_timeout_seconds = 30
+        cfg.preflight_health.worktree_test_timeout = 60
+        cfg.preflight_health.max_orphan_worktrees = 10
+        cfg.preflight_health.git_operation_timeout = 60
+        cfg.preflight_health.enable_self_repair = False
+        cfg.preflight_health.max_repair_attempts = 3
+        mock_get_config.return_value = cfg
+
+        # Set up some rate-limit state
+        should_log_preflight_warning("some error")
+        should_log_preflight_warning("some error")
+
+        # Now a passing check should reset
+        result = MagicMock()
+        result.passed = True
+        result.warnings = []
+        mock_run.return_value = result
+
+        handle_preflight_checks("/repo", MagicMock())
+
+        # After reset, first new failure should be logged
+        assert should_log_preflight_warning("some error") is True
+
+    @patch("pokepoke.preflight_health.run_preflight_checks")
+    @patch("pokepoke.config.get_config")
+    def test_warning_includes_error_details(self, mock_get_config, mock_run):
+        """The log message includes specific error details, not just counts."""
+        cfg = MagicMock()
+        cfg.preflight_health.enabled = True
+        cfg.preflight_health.fail_on_critical_errors = True
+        cfg.preflight_health.fail_on_environmental_errors = True
+        cfg.preflight_health.graceful_shutdown_on_failure = True
+        cfg.preflight_health.min_disk_space_gb = 5
+        cfg.preflight_health.lock_timeout_seconds = 30
+        cfg.preflight_health.worktree_test_timeout = 60
+        cfg.preflight_health.max_orphan_worktrees = 10
+        cfg.preflight_health.git_operation_timeout = 60
+        cfg.preflight_health.enable_self_repair = False
+        cfg.preflight_health.max_repair_attempts = 3
+        mock_get_config.return_value = cfg
+
+        err = MagicMock()
+        err.check_name = "disk_space"
+        err.message = "Only 500MB free"
+        result = MagicMock()
+        result.passed = False
+        result.errors = [err]
+        result.warnings = []
+        result.self_repair_attempted = False
+        result.has_critical_errors.return_value = False
+        result.has_environmental_errors.return_value = False
+        mock_run.return_value = result
+
+        run_logger = MagicMock()
+        handle_preflight_checks("/repo", run_logger)
+
+        # Verify the log message contains the actual error details
+        logged_msg = run_logger.log_orchestrator.call_args_list[-1]
+        assert "disk_space: Only 500MB free" in logged_msg[0][0]
+        assert logged_msg[1]["level"] == "WARNING"
+
+    @patch("pokepoke.preflight_health.run_preflight_checks")
+    @patch("pokepoke.config.get_config")
+    def test_repeated_warnings_suppressed(self, mock_get_config, mock_run):
+        """Repeated identical failures should be rate-limited."""
+        cfg = MagicMock()
+        cfg.preflight_health.enabled = True
+        cfg.preflight_health.fail_on_critical_errors = True
+        cfg.preflight_health.fail_on_environmental_errors = True
+        cfg.preflight_health.graceful_shutdown_on_failure = True
+        cfg.preflight_health.min_disk_space_gb = 5
+        cfg.preflight_health.lock_timeout_seconds = 30
+        cfg.preflight_health.worktree_test_timeout = 60
+        cfg.preflight_health.max_orphan_worktrees = 10
+        cfg.preflight_health.git_operation_timeout = 60
+        cfg.preflight_health.enable_self_repair = False
+        cfg.preflight_health.max_repair_attempts = 3
+        mock_get_config.return_value = cfg
+
+        err = MagicMock()
+        err.check_name = "disk_space"
+        err.message = "Only 500MB free"
+        result = MagicMock()
+        result.passed = False
+        result.errors = [err]
+        result.warnings = []
+        result.self_repair_attempted = False
+        result.has_critical_errors.return_value = False
+        result.has_environmental_errors.return_value = False
+        mock_run.return_value = result
+
+        run_logger = MagicMock()
+
+        # First call: should log
+        handle_preflight_checks("/repo", run_logger)
+        first_warning_count = sum(
+            1 for c in run_logger.log_orchestrator.call_args_list
+            if c[1].get("level") == "WARNING"
+        )
+        assert first_warning_count == 1
+
+        run_logger.reset_mock()
+
+        # Second call: should NOT log (suppressed)
+        handle_preflight_checks("/repo", run_logger)
+        second_warning_count = sum(
+            1 for c in run_logger.log_orchestrator.call_args_list
+            if c[1].get("level") == "WARNING"
+        )
+        assert second_warning_count == 0
 
 
 class TestFinalizeWorkers:
