@@ -589,12 +589,13 @@ class TestDispatchItems:
         )
         assert result == 0
 
+    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
     @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
     @patch("pokepoke.parallel.select_multiple_items")
     @patch("pokepoke.parallel.is_item_claimable", return_value=True)
     @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
     @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
-    def test_submits_item_to_executor(self, _name, _assign, _claim, mock_select, _stop):
+    def test_submits_item_to_executor(self, _name, _assign, _claim, mock_select, _stop, _closed):
         item = _make_item("d1")
         mock_select.return_value = [item]
         run_logger = MagicMock()
@@ -612,11 +613,12 @@ class TestDispatchItems:
         assert counter == 1
         assert mock_fut in futures
 
+    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
     @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
     @patch("pokepoke.parallel.select_multiple_items")
     @patch("pokepoke.parallel.is_item_claimable", return_value=False)
     @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
-    def test_skips_unclaimed_item(self, _name, _claim, mock_select, _stop):
+    def test_skips_unclaimed_item(self, _name, _claim, mock_select, _stop, _closed):
         item = _make_item("skip1")
         mock_select.return_value = [item]
         run_logger = MagicMock()
@@ -630,12 +632,13 @@ class TestDispatchItems:
         assert counter == 0
         executor.submit.assert_not_called()
 
+    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
     @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
     @patch("pokepoke.parallel.select_multiple_items")
     @patch("pokepoke.parallel.is_item_claimable", return_value=True)
     @patch("pokepoke.parallel.assign_and_sync_item", return_value=False)
     @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
-    def test_failed_assign_adds_to_failed_ids(self, _name, _assign, _claim, mock_select, _stop):
+    def test_failed_assign_adds_to_failed_ids(self, _name, _assign, _claim, mock_select, _stop, _closed):
         item = _make_item("fa1")
         mock_select.return_value = [item]
         run_logger = MagicMock()
@@ -647,13 +650,14 @@ class TestDispatchItems:
         )
         assert "fa1" in failed_ids
 
+    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
     @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
     @patch("pokepoke.parallel.select_multiple_items")
     @patch("pokepoke.parallel.is_item_claimable", return_value=True)
     @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
     @patch("pokepoke.parallel.unassign_with_retry")
     @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
-    def test_executor_submit_failure_unassigns(self, _name, mock_unassign, _assign, _claim, mock_select, _stop):
+    def test_executor_submit_failure_unassigns(self, _name, mock_unassign, _assign, _claim, mock_select, _stop, _closed):
         item = _make_item("ef1")
         mock_select.return_value = [item]
         executor = MagicMock()
@@ -669,11 +673,12 @@ class TestDispatchItems:
             )
         mock_unassign.assert_called_once_with("ef1")
 
+    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
     @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
     @patch("pokepoke.parallel.is_item_claimable")
     @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
     @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
-    def test_advances_past_unclaimable_items(self, _name, _assign, mock_claimable, _stop):
+    def test_advances_past_unclaimable_items(self, _name, _assign, mock_claimable, _stop, _closed):
         """Regression for PokePoke-pfoc: dispatch must advance past already-claimed
         items and fill remaining slots from later candidates in the ready queue."""
         # 5 items total; first 2 are unclaimable, last 3 are claimable
@@ -710,10 +715,11 @@ class TestDispatchItems:
         # Unclaimable items should be added to failed_claim_ids
         assert unclaimable.issubset(failed_ids)
 
+    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
     @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
     @patch("pokepoke.parallel.is_item_claimable", return_value=False)
     @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
-    def test_unclaimable_items_added_to_failed_ids(self, _name, _claim, _stop):
+    def test_unclaimable_items_added_to_failed_ids(self, _name, _claim, _stop, _closed):
         """Regression for PokePoke-pfoc: unclaimable items must be added to
         failed_claim_ids so they are not re-selected in subsequent iterations."""
         items = [_make_item(f"uc-{i}") for i in range(3)]
@@ -738,6 +744,50 @@ class TestDispatchItems:
 
         # All items should be in failed_claim_ids
         assert failed_ids == {"uc-0", "uc-1", "uc-2"}
+
+    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    @patch("pokepoke.beads_query.is_beads_item_closed")
+    def test_closed_item_skipped_and_added_to_failed_ids(
+        self, mock_closed, _name, _assign, _claim, _stop,
+    ):
+        """Items already closed in beads should be skipped and added to the
+        skip set so they are not re-selected in subsequent replenish cycles."""
+        item_closed = _make_item("closed-1")
+        item_open = _make_item("open-1")
+        mock_closed.side_effect = lambda item_id: item_id == "closed-1"
+
+        def fake_select(ready, count, skip_ids=None, claimed_ids=None):
+            excluded = set()
+            if skip_ids:
+                excluded.update(skip_ids)
+            if claimed_ids:
+                excluded.update(claimed_ids)
+            candidates = [i for i in ready if i.id not in excluded]
+            return candidates[:count]
+
+        with patch("pokepoke.parallel.select_multiple_items", side_effect=fake_select):
+            executor = MagicMock()
+            mock_fut = MagicMock()
+            executor.submit.return_value = mock_fut
+            run_logger = MagicMock()
+            futures: dict = {}
+            failed_ids: set[str] = set()
+            sem = threading.Semaphore(2)
+
+            counter = dispatch_items(
+                [item_closed, item_open], 2, True, False, 0, 10,
+                failed_ids, set(), futures,
+                sem, executor, run_logger, 0, Mock(return_value="w"), Mock(),
+            )
+
+        # Only the open item should be dispatched
+        assert counter == 1
+        assert executor.submit.call_count == 1
+        # Closed item should be in the skip set
+        assert "closed-1" in failed_ids
 
 
 # ── run_preflight_and_repo_checks ────────────────────────────────────

@@ -242,3 +242,71 @@ def test_get_issue_dependencies_converts_dependents(monkeypatch: pytest.MonkeyPa
     assert issue is not None
     assert issue.dependents is not None
     assert issue.dependents[0].dependency_type == "parent"
+
+
+# ── is_beads_item_closed ────────────────────────────────────────────
+
+
+def test_is_beads_item_closed_returns_true_for_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = [{"id": "x", "status": "closed", "title": "Done"}]
+    mock_process = subprocess.CompletedProcess("bd", 0, stdout=json.dumps(payload))
+    monkeypatch.setattr(beads_query, "_run_bd", lambda *args, **kwargs: mock_process)
+
+    assert beads_query.is_beads_item_closed("x") is True
+
+
+def test_is_beads_item_closed_returns_false_for_open(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = [{"id": "x", "status": "open", "title": "Active"}]
+    mock_process = subprocess.CompletedProcess("bd", 0, stdout=json.dumps(payload))
+    monkeypatch.setattr(beads_query, "_run_bd", lambda *args, **kwargs: mock_process)
+
+    assert beads_query.is_beads_item_closed("x") is False
+
+
+def test_is_beads_item_closed_returns_false_for_in_progress(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = [{"id": "x", "status": "in_progress", "title": "Working"}]
+    mock_process = subprocess.CompletedProcess("bd", 0, stdout=json.dumps(payload))
+    monkeypatch.setattr(beads_query, "_run_bd", lambda *args, **kwargs: mock_process)
+
+    assert beads_query.is_beads_item_closed("x") is False
+
+
+def test_is_beads_item_closed_returns_false_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise subprocess.CalledProcessError(1, "bd")
+
+    monkeypatch.setattr(beads_query, "_run_bd", boom)
+
+    assert beads_query.is_beads_item_closed("x") is False
+
+
+def test_is_beads_item_closed_returns_false_on_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise subprocess.TimeoutExpired("bd", 30)
+
+    monkeypatch.setattr(beads_query, "_run_bd", boom)
+
+    assert beads_query.is_beads_item_closed("x") is False
+
+
+def test_is_beads_item_closed_returns_false_on_empty_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    mock_process = subprocess.CompletedProcess("bd", 0, stdout="")
+    monkeypatch.setattr(beads_query, "_run_bd", lambda *args, **kwargs: mock_process)
+
+    assert beads_query.is_beads_item_closed("x") is False
+
+
+def test_is_beads_item_closed_handles_non_list_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = {"id": "x", "status": "closed", "title": "Done"}
+    mock_process = subprocess.CompletedProcess("bd", 0, stdout=json.dumps(payload))
+    monkeypatch.setattr(beads_query, "_run_bd", lambda *args, **kwargs: mock_process)
+
+    assert beads_query.is_beads_item_closed("x") is True
+
+
+def test_is_beads_item_closed_case_insensitive(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = [{"id": "x", "status": "Closed", "title": "Done"}]
+    mock_process = subprocess.CompletedProcess("bd", 0, stdout=json.dumps(payload))
+    monkeypatch.setattr(beads_query, "_run_bd", lambda *args, **kwargs: mock_process)
+
+    assert beads_query.is_beads_item_closed("x") is True

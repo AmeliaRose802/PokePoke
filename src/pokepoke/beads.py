@@ -12,7 +12,8 @@ from .beads_query import (
     get_ready_work_items,
     get_issue_dependencies,
     get_beads_stats,
-    has_unmet_blocking_dependencies
+    has_unmet_blocking_dependencies,
+    is_beads_item_closed,
 )
 
 from .beads_hierarchy import (
@@ -55,6 +56,7 @@ __all__ = [
     'get_issue_dependencies',
     'get_beads_stats',
     'has_unmet_blocking_dependencies',
+    'is_beads_item_closed',
 
     # Hierarchy operations
     'get_children',

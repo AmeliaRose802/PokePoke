@@ -249,6 +249,34 @@ def _has_unmet_blocking_in_chain(item_id: str, *, _visited: set[str]) -> bool:
     return False
 
 
+def is_beads_item_closed(item_id: str) -> bool:
+    """Check if a beads item is already closed by querying its current status.
+
+    Performs a live ``bd show`` to get the freshest status, preventing the
+    orchestrator from re-processing items that were closed between the last
+    ``bd ready`` fetch and the current assignment attempt.
+
+    Args:
+        item_id: The issue ID to check.
+
+    Returns:
+        True if the item's status is 'closed', False otherwise (including
+        on errors, so the caller can fall through to normal processing).
+    """
+    try:
+        result = _run_bd(['show', item_id, '--json'])
+        data = _parse_beads_json(result.stdout)
+        if data is None:
+            return False
+
+        current_item = data[0] if isinstance(data, list) else data
+        status = str(current_item.get('status', '')).lower()
+        return status == 'closed'
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            json.JSONDecodeError, Exception):
+        return False
+
+
 def get_beads_stats() -> BeadsStats | None:
     """Get current beads database statistics.
 

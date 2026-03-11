@@ -136,6 +136,7 @@ def dispatch_items(
     from pokepoke.parallel import is_item_claimable, assign_and_sync_item, unassign_with_retry
     from pokepoke.parallel import select_multiple_items, should_stop_after_current
     from pokepoke.agent_context import get_agent_name
+    from pokepoke.beads_query import is_beads_item_closed
 
     if (
         slots <= 0
@@ -170,6 +171,13 @@ def dispatch_items(
         made_progress = False
         for item in selected_items:
             attempted_this_cycle.add(item.id)
+
+            # Live check: skip items already closed in beads to prevent
+            # re-processing items that were closed between bd ready and now.
+            if is_beads_item_closed(item.id):
+                run_logger.log_orchestrator(f"Skipping {item.id} - already closed in beads")
+                failed_claim_ids.add(item.id)
+                continue
 
             if not is_item_claimable(item.id):
                 run_logger.log_orchestrator(f"Skipping {item.id} - already claimed by another agent")

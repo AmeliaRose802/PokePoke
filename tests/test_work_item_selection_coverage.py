@@ -10,6 +10,7 @@ from unittest.mock import patch
 from pokepoke.types import BeadsWorkItem
 from pokepoke.work_item_selection import (
     _is_human_required,
+    _is_closed,
     select_work_item,
     interactive_selection,
     autonomous_selection,
@@ -42,6 +43,29 @@ class TestIsHumanRequired:
 
     def test_mixed_labels(self):
         assert _is_human_required(_item("a", labels=["bug", "human-required"])) is True
+
+
+# ── _is_closed ──────────────────────────────────────────────────────
+
+class TestIsClosed:
+    def test_closed_status(self):
+        item = BeadsWorkItem(id="a", title="A", status="closed", priority=1, issue_type="task")
+        assert _is_closed(item) is True
+
+    def test_open_status(self):
+        assert _is_closed(_item("a")) is False
+
+    def test_in_progress_status(self):
+        item = BeadsWorkItem(id="a", title="A", status="in_progress", priority=1, issue_type="task")
+        assert _is_closed(item) is False
+
+    def test_closed_case_insensitive(self):
+        item = BeadsWorkItem(id="a", title="A", status="Closed", priority=1, issue_type="task")
+        assert _is_closed(item) is True
+
+    def test_empty_status(self):
+        item = BeadsWorkItem(id="a", title="A", status="", priority=1, issue_type="task")
+        assert _is_closed(item) is False
 
 
 # ── select_work_item ────────────────────────────────────────────────
@@ -128,6 +152,30 @@ class TestSelectWorkItem:
     def test_all_human_required_returns_none(self, mock_assigned, mock_deps):
         items = [_item("a", labels=["human-required"])]
         result = select_work_item(items, interactive=False)
+        assert result is None
+
+    @patch("pokepoke.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
+    @patch("pokepoke.work_item_selection.is_assigned_to_current_user", return_value=True)
+    @patch("pokepoke.work_item_selection.select_next_hierarchical_item")
+    def test_filters_closed_items(self, mock_hier, mock_assigned, mock_deps):
+        closed = BeadsWorkItem(
+            id="c", title="Closed", status="closed", priority=1,
+            issue_type="task",
+        )
+        open_item = _item("b")
+        mock_hier.return_value = open_item
+        result = select_work_item([closed, open_item], interactive=False)
+        assert result is not None
+        assert result.id == "b"
+
+    @patch("pokepoke.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
+    @patch("pokepoke.work_item_selection.is_assigned_to_current_user", return_value=True)
+    def test_all_closed_returns_none(self, mock_assigned, mock_deps):
+        closed = BeadsWorkItem(
+            id="c", title="Closed", status="closed", priority=1,
+            issue_type="task",
+        )
+        result = select_work_item([closed], interactive=False)
         assert result is None
 
 
@@ -249,3 +297,17 @@ class TestSelectMultipleItems:
     def test_hier_returns_none(self, mock_hier, mock_assigned, mock_deps):
         result = select_multiple_items([_item("a")], count=2)
         assert result == []
+
+    @patch("pokepoke.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
+    @patch("pokepoke.work_item_selection.is_assigned_to_current_user", return_value=True)
+    @patch("pokepoke.work_item_selection.select_next_hierarchical_item")
+    def test_filters_closed_items(self, mock_hier, mock_assigned, mock_deps):
+        closed = BeadsWorkItem(
+            id="c", title="Closed", status="closed", priority=1,
+            issue_type="task",
+        )
+        open_item = _item("b")
+        mock_hier.return_value = open_item
+        result = select_multiple_items([closed, open_item], count=2)
+        assert len(result) == 1
+        assert result[0].id == "b"

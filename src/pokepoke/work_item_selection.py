@@ -27,6 +27,18 @@ def _is_human_required(item: BeadsWorkItem) -> bool:
     return HUMAN_REQUIRED_LABEL in item.labels
 
 
+def _is_closed(item: BeadsWorkItem) -> bool:
+    """Check if an item is already closed based on its status field.
+
+    Args:
+        item: Work item to check.
+
+    Returns:
+        True if the item's status indicates it is closed.
+    """
+    return item.status.lower() == 'closed' if item.status else False
+
+
 def _filter_skip_ids(ready_items: list[BeadsWorkItem], skip_ids: set[str] | None) -> list[BeadsWorkItem]:
     """Remove items that previously failed claiming this session."""
     if not skip_ids:
@@ -38,7 +50,7 @@ def _filter_skip_ids(ready_items: list[BeadsWorkItem], skip_ids: set[str] | None
 
 
 def _filter_available(ready_items: list[BeadsWorkItem]) -> list[BeadsWorkItem]:
-    """Filter out items assigned to other agents, human-required, or with unmet deps."""
+    """Filter out items assigned to other agents, human-required, closed, or with unmet deps."""
     available = [item for item in ready_items if is_assigned_to_current_user(item)]
 
     filtered_count = len(ready_items) - len(available)
@@ -50,6 +62,13 @@ def _filter_available(ready_items: list[BeadsWorkItem]) -> list[BeadsWorkItem]:
         for item in human_required:
             logger.info("Skipping %s - labeled '%s' (needs human)", item.id, HUMAN_REQUIRED_LABEL)
         available = [item for item in available if not _is_human_required(item)]
+
+    # Filter out items that are already closed in beads (status field from bd ready)
+    closed_items = [item for item in available if _is_closed(item)]
+    if closed_items:
+        for item in closed_items:
+            logger.info("Skipping %s - already closed in beads", item.id)
+        available = [item for item in available if not _is_closed(item)]
 
     items_with_unmet_deps = []
     for item in available:
@@ -172,6 +191,7 @@ def select_multiple_items(
     filtered = [item for item in ready_items if item.id not in excluded]
     filtered = [item for item in filtered if is_assigned_to_current_user(item)]
     filtered = [item for item in filtered if not _is_human_required(item)]
+    filtered = [item for item in filtered if not _is_closed(item)]
     filtered = [
         item for item in filtered
         if not has_unmet_blocking_dependencies(item.id)
