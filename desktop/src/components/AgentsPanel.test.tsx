@@ -726,6 +726,27 @@ describe("AgentsPanel", () => {
       expect(separator?.textContent).toContain("Retried with feedback");
     });
 
+    it("does not show retry separator for timeout-resumed agents", () => {
+      // Timeout-resumed agent: iteration > 1 but no parent_card_id (same card reused)
+      const resumedAgent = mkAgent({
+        agent_id: "work-item-timeout",
+        card_id: "work-item-timeout::v1",
+        name: "pokepoke",
+        iteration: 2,
+        status: "running",
+        // No parent_card_id — in-place resume, not a gate retry
+      });
+
+      const { container } = render(
+        <AgentsPanel agents={[resumedAgent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />,
+      );
+
+      const separator = container.querySelector(".agent-retry-separator");
+      expect(separator).toBeNull();
+      // Should show "Attempt 2" label since iteration > 1
+      expect(screen.getByText("Attempt 2")).toBeInTheDocument();
+    });
+
     it("shows final gate outcome on root card from latest retry gate", () => {
       const mainAgent = mkAgent({
         agent_id: "work-item-final",

@@ -126,6 +126,8 @@ export function shouldShowAttemptLabel(agent: AgentInfo, childrenMap: Map<string
   if (isGateAgent(agent)) return false;
   // Agent is a retry child (has parent_card_id and is not a gate)
   if (agent.parent_card_id) return true;
+  // Agent was resumed in-place (e.g. timeout retry): iteration > 1 without parent link
+  if (agent.iteration > 1) return true;
   // Agent is the root of a retry cycle (has non-gate children linked via parent_card_id)
   return getRetryChildren(agent, childrenMap).length > 0;
 }

@@ -124,6 +124,10 @@ def process_work_item(  # noqa: C901
         timeout_restart_count = 0
         work_agent_iteration = 1
         copilot_failure_count = 0
+        # Track whether the pending retry is from a gate rejection (new card)
+        # or a non-gate failure like timeout (resume existing card in-place).
+        last_retry_was_gate_feedback = False
+        current_work_agent_id = base_agent_id
         # Session resume state: track session_id and output from timed-out sessions
         resume_session_id: str | None = None
         resume_output_summary: str | None = None
@@ -154,7 +158,10 @@ def process_work_item(  # noqa: C901
 
             # Append feedback if retrying
             if last_feedback:
-                print("\n🔄 Restarting Work Agent with feedback...")
+                if last_retry_was_gate_feedback:
+                    print("\n🔄 Restarting Work Agent with feedback...")
+                else:
+                    print("\n⏱️  Resuming Work Agent after timeout...")
                 accumulated_feedback, work_agent_iteration = _apply_gate_feedback(
                     last_feedback, accumulated_feedback, work_agent_iteration)
 
@@ -174,12 +181,22 @@ def process_work_item(  # noqa: C901
                     retry_feedback=accumulated_feedback or None)
             with agent_type_context("work"):
                 is_retry = work_agent_iteration > 1
-                agent_id = f"{base_agent_id}-retry-{work_agent_iteration}" if is_retry else base_agent_id
+                if is_retry and not last_retry_was_gate_feedback:
+                    # Timeout/crash retry: reuse the existing agent card
+                    agent_id = current_work_agent_id
+                    resume_in_place = True
+                    parent_for_status = None
+                else:
+                    # First attempt or gate rejection retry: new card
+                    agent_id = f"{base_agent_id}-retry-{work_agent_iteration}" if is_retry else base_agent_id
+                    current_work_agent_id = agent_id
+                    resume_in_place = False
+                    parent_for_status = base_agent_id if is_retry else None
                 terminal_ui.ui.push_agent_status(agent_id, get_agent_name(default="pokepoke"),
                     iteration=work_agent_iteration, status="running", model=selected_model,
-                    parent_agent_id=base_agent_id if is_retry else None,
+                    parent_agent_id=parent_for_status,
                     work_item_id=item.id, work_item_title=item.title, agent_type="work",
-                    agent_prompt=work_prompt)
+                    agent_prompt=work_prompt, resume_in_place=resume_in_place)
                 with terminal_ui.ui.agent_output_for(agent_id):
                     result = invoke_copilot(
                         item, prompt=work_prompt, timeout=remaining_timeout,
@@ -210,6 +227,7 @@ def process_work_item(  # noqa: C901
                     result, copilot_failure_count, config.max_copilot_failure_retries, run_logger, item.id)
                 if retry:
                     last_feedback = feedback
+                    last_retry_was_gate_feedback = False  # Not a gate rejection
                     continue
                 break
 
@@ -295,6 +313,7 @@ def process_work_item(  # noqa: C901
                 print(f"\n❌ Gate Agent rejected: {gate_reason}")
                 add_comment(item.id, f"Gate Agent Rejection:\n{gate_reason}")
                 last_feedback = gate_reason
+                last_retry_was_gate_feedback = True  # Gate rejection → new card
                 # Outer loop continues with work agent retry...
             else:
                 # All gate crash retries exhausted — fail the item

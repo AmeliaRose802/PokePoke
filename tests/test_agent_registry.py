@@ -386,6 +386,87 @@ class TestRegistryArchiveAttempt:
         assert history[0].status == "success"
 
 
+class TestRegistryResumeInPlace:
+    """resume_in_place=True should keep logs, card_id, and started_at."""
+
+    def test_preserves_logs_on_resume(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("a1", "W", iteration=1, status="running")
+        reg.append_log("a1", "line-1")
+        reg.append_log("a1", "line-2")
+        reg.update_status("a1", "W", iteration=2, status="running", resume_in_place=True)
+        agent = reg._agents["a1"]
+        assert "line-1" in agent.recent_logs
+        assert "line-2" in agent.recent_logs
+        assert "line-1" in agent.log_lines
+        assert "line-2" in agent.log_lines
+
+    def test_preserves_card_id_on_resume(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("a1", "W", iteration=1, status="running")
+        original_card_id = reg._agents["a1"].card_id
+        reg.update_status("a1", "W", iteration=2, status="running", resume_in_place=True)
+        assert reg._agents["a1"].card_id == original_card_id
+
+    def test_preserves_started_at_on_resume(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("a1", "W", iteration=1, status="running")
+        original_started = reg._agents["a1"].started_at
+        reg.update_status("a1", "W", iteration=2, status="running", resume_in_place=True)
+        assert reg._agents["a1"].started_at == original_started
+
+    def test_does_not_archive_on_resume(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("a1", "W", iteration=1, status="running")
+        reg.update_status("a1", "W", iteration=2, status="running", resume_in_place=True)
+        assert "a1" not in reg._agent_history
+
+    def test_updates_iteration_on_resume(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("a1", "W", iteration=1, status="running")
+        reg.update_status("a1", "W", iteration=2, status="running", resume_in_place=True)
+        assert reg._agents["a1"].iteration == 2
+
+    def test_standard_retry_still_archives(self) -> None:
+        """Without resume_in_place, normal retry behavior is preserved."""
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("a1", "W", iteration=1, status="running")
+        reg.append_log("a1", "old-log")
+        reg.update_status("a1", "W", iteration=2, status="running")
+        assert "a1" in reg._agent_history
+        assert len(reg._agent_history["a1"]) == 1
+        # Logs are cleared for standard retry
+        assert reg._agents["a1"].recent_logs == []
+        assert reg._agents["a1"].log_lines == []
+
+    def test_preserves_parent_card_id_on_resume(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("a1", "W", iteration=1, status="running")
+        # Agent has no parent, so parent_card_id should stay None
+        reg.update_status("a1", "W", iteration=2, status="running", resume_in_place=True)
+        assert reg._agents["a1"].parent_card_id is None
+
+    def test_preserves_last_log_at_on_resume(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("a1", "W", iteration=1, status="running")
+        reg.append_log("a1", "log-line")
+        original_log_at = reg._agents["a1"].last_log_at
+        assert original_log_at is not None
+        reg.update_status("a1", "W", iteration=2, status="running", resume_in_place=True)
+        assert reg._agents["a1"].last_log_at == original_log_at
+
+    def test_serialize_shows_single_card_after_resume(self) -> None:
+        """In-place resume should produce one card, not a history entry + live entry."""
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("a1", "W", iteration=1, status="running")
+        reg.append_log("a1", "log-line")
+        reg.update_status("a1", "W", iteration=2, status="running", resume_in_place=True)
+        agents = reg.serialize_all()
+        assert len(agents) == 1
+        assert agents[0]["iteration"] == 2
+        assert agents[0]["is_history_entry"] is False
+
+
 class TestRegistryNormalizeAgentType:
     def test_normalizes_mixed_case_and_spaces(self) -> None:
         assert AgentRegistry._normalize_agent_type("Gate Agent") == "gate_agent"

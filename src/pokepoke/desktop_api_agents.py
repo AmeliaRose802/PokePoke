@@ -27,6 +27,7 @@ def push_agent_status(
     agent_prompt: str | None = None,
     modified_files: list[str] | None = None,
     agent_type: str | None = None,
+    resume_in_place: bool = False,
 ) -> None:
     """Register or update a running agent."""
     resolved_type = agent_type or get_current_agent_type(default="")
@@ -47,6 +48,7 @@ def push_agent_status(
             session_id=self._current_session_id,
             modified_files=modified_files,
             agent_type=normalized_agent_type,
+            resume_in_place=resume_in_place,
         )
 
 

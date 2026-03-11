@@ -145,6 +145,7 @@ class AgentRegistry:
         session_id: str | None = None,
         modified_files: list[str] | None = None,
         agent_type: str | None = None,
+        resume_in_place: bool = False,
     ) -> None:
         now = time.time()
         with self._lock:
@@ -153,17 +154,25 @@ class AgentRegistry:
                 existing is not None
                 and iteration > existing.iteration
             )
-            recent_logs: list[str] = list(existing.recent_logs) if existing else []
-            log_lines: list[str] = (
-                list(existing.log_lines or recent_logs) if existing else []
-            )
-            if is_retry_iteration:
+
+            # Determine how to handle logs, card_id, and started_at
+            if is_retry_iteration and resume_in_place:
+                # In-place resume (e.g. timeout retry): keep logs, card, start time
+                assert existing is not None
+                recent_logs = list(existing.recent_logs)
+                log_lines = list(existing.log_lines or recent_logs)
+                existing_started_at = existing.started_at or now
+            elif is_retry_iteration:
                 assert existing is not None
                 self._archive_attempt(agent_id, existing)
                 recent_logs = []
                 log_lines = []
                 existing_started_at = now
             else:
+                recent_logs = list(existing.recent_logs) if existing else []
+                log_lines = (
+                    list(existing.log_lines or recent_logs) if existing else []
+                )
                 existing_started_at = (existing.started_at or now) if existing else now
 
             current_model = model if model is not None else (existing.model if existing else None)
@@ -200,20 +209,36 @@ class AgentRegistry:
             current_agent_type = self._normalize_agent_type(agent_type) or (
                 self._normalize_agent_type(existing.agent_type) if existing else None
             )
-            card_id = (
-                existing.card_id
-                if existing and not is_retry_iteration
-                else self._build_card_id(agent_id, iteration)
-            )
-            parent_card_id: str | None = None
-            if current_parent:
-                parent_entry = self._agents.get(current_parent)
-                if parent_entry:
-                    parent_card_id = parent_entry.card_id
-                else:
-                    history = self._agent_history.get(current_parent) or []
-                    if history:
-                        parent_card_id = history[-1].card_id
+
+            # Card ID: keep existing for in-place resume or same-iteration update
+            if is_retry_iteration and resume_in_place and existing:
+                card_id = existing.card_id
+            elif existing and not is_retry_iteration:
+                card_id = existing.card_id
+            else:
+                card_id = self._build_card_id(agent_id, iteration)
+
+            # Parent card ID: preserve existing for in-place resume
+            if resume_in_place and existing:
+                parent_card_id = existing.parent_card_id
+            else:
+                parent_card_id = None
+                if current_parent:
+                    parent_entry = self._agents.get(current_parent)
+                    if parent_entry:
+                        parent_card_id = parent_entry.card_id
+                    else:
+                        history = self._agent_history.get(current_parent) or []
+                        if history:
+                            parent_card_id = history[-1].card_id
+
+            # Preserve last_log_at for in-place resume
+            if is_retry_iteration and resume_in_place:
+                last_log_at = existing.last_log_at if existing else None
+            elif is_retry_iteration:
+                last_log_at = None
+            else:
+                last_log_at = existing.last_log_at if existing else None
 
             self._agents[agent_id] = AgentRecord(
                 agent_id=agent_id,
@@ -235,7 +260,7 @@ class AgentRegistry:
                 log_lines=log_lines,
                 started_at=existing_started_at,
                 last_updated=now,
-                last_log_at=None if is_retry_iteration else (existing.last_log_at if existing else None),
+                last_log_at=last_log_at,
             )
 
     def update_token_usage(

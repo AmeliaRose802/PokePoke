@@ -149,6 +149,16 @@ describe("agentsPanelHelpers retry cycle utilities", () => {
       expect(shouldShowAttemptLabel(parent, childrenMap)).toBe(true);
     });
 
+    it("returns true for in-place resumed agents (iteration > 1, no parent_card_id)", () => {
+      const resumed = mkAgent({
+        agent_id: "work-1",
+        iteration: 2,
+        // No parent_card_id — timeout retry resumed in-place
+      });
+      const childrenMap = new Map<string, AgentInfo[]>();
+      expect(shouldShowAttemptLabel(resumed, childrenMap)).toBe(true);
+    });
+
     it("returns false for standalone agents without retry cycle", () => {
       const agent = mkAgent({ agent_id: "standalone-1" });
       const childrenMap = new Map<string, AgentInfo[]>();

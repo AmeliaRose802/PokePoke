@@ -374,11 +374,13 @@ class DesktopUI:
                           work_item_title: str | None = None,
                           agent_prompt: str | None = None,
                           modified_files: list[str] | None = None,
-                          agent_type: str | None = None) -> None:
+                          agent_type: str | None = None,
+                          resume_in_place: bool = False) -> None:
         """Register or update a running agent card."""
         self._api.push_agent_status(
             agent_id, name, iteration, status, model, parent_agent_id,
             work_item_id, work_item_title, agent_prompt, modified_files, agent_type,
+            resume_in_place=resume_in_place,
         )
 
     def push_agent_log(self, agent_id: str, line: str) -> None:
