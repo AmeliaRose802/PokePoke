@@ -51,13 +51,19 @@ def _get_staged_files() -> list[str]:
 
 
 def get_staged_python_files() -> list[str]:
-    """Get staged Python source files under src/pokepoke/ (excludes tests)."""
+    """Get staged Python source files under src/pokepoke/ (excludes tests).
+
+    Uses precise exclusions so that legitimate source files whose names
+    contain 'test' (e.g. beta_tester.py) are not accidentally skipped.
+    Works with both the flat layout and future subdirectory layout.
+    """
     return [
         f
         for f in _get_staged_files()
         if f.endswith(".py")
         and f.startswith("src/pokepoke/")
-        and "test" not in f
+        and "/tests/" not in f
+        and not os.path.basename(f).startswith("test_")
         and "__pycache__" not in f
     ]
 
