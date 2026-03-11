@@ -292,42 +292,42 @@ class TestMergeQueueShutdown:
     """Tests for merge queue shutdown coordination in request_shutdown."""
 
     @patch("pokepoke.shutdown.threading.Thread")
-    def test_shutdown_calls_merge_queue_shutdown(self, mock_thread_cls):
-        """request_shutdown synchronously shuts down the merge queue if running."""
+    def test_shutdown_signals_merge_queue_stop(self, mock_thread_cls):
+        """request_shutdown non-blockingly signals the merge queue to stop."""
         mock_thread_cls.return_value.start = lambda: None
 
-        shutdown_calls: list[float] = []
+        signal_stop_calls: list[bool] = []
         mock_mq = type(
             "FakeMQ",
             (),
             {
                 "is_running": True,
-                "shutdown": lambda self, timeout=30.0: shutdown_calls.append(timeout),
+                "signal_stop": lambda self: signal_stop_calls.append(True),
             },
         )()
 
         with patch("pokepoke.merge_queue.get_merge_queue", return_value=mock_mq):
             request_shutdown()
-            assert shutdown_calls == [180.0]
+            assert signal_stop_calls == [True]
 
     @patch("pokepoke.shutdown.threading.Thread")
     def test_shutdown_skips_merge_queue_if_not_running(self, mock_thread_cls):
-        """request_shutdown does not shut down merge queue if queue not running."""
+        """request_shutdown does not signal merge queue if queue not running."""
         mock_thread_cls.return_value.start = lambda: None
 
-        shutdown_calls: list[float] = []
+        signal_stop_calls: list[bool] = []
         mock_mq = type(
             "FakeMQ",
             (),
             {
                 "is_running": False,
-                "shutdown": lambda self, timeout=30.0: shutdown_calls.append(timeout),
+                "signal_stop": lambda self: signal_stop_calls.append(True),
             },
         )()
 
         with patch("pokepoke.merge_queue.get_merge_queue", return_value=mock_mq):
             request_shutdown()
-            assert shutdown_calls == []
+            assert signal_stop_calls == []
 
     @patch("pokepoke.shutdown.threading.Thread")
     def test_shutdown_handles_merge_queue_exception(self, mock_thread_cls):

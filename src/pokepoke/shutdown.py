@@ -68,17 +68,18 @@ def request_shutdown() -> None:
     if _executor is not None:
         _executor.shutdown(wait=False, cancel_futures=True)
 
-    # Shutdown merge queue to drain pending merges.
-    # This is intentionally synchronous so we don't lose pending merges due to
-    # daemon thread teardown during interpreter shutdown.
+    # Signal the merge queue worker to stop and drain remaining items.
+    # This is intentionally non-blocking so signal handlers return quickly.
+    # The orchestrator's finally block calls mq.shutdown(timeout=10.0) to
+    # wait for the worker to actually finish.
     try:
         from pokepoke.merge_queue import get_merge_queue
 
         merge_queue = get_merge_queue()
         if merge_queue.is_running:
-            merge_queue.shutdown(timeout=180.0)
+            merge_queue.signal_stop()
     except Exception as e:
-        logger.debug(f"Failed to shutdown merge queue: {e}")
+        logger.debug(f"Failed to signal merge queue shutdown: {e}")
 
     # Calculate watchdog timeout based on active agents
     with _agent_count_lock:

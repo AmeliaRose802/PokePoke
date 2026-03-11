@@ -118,6 +118,21 @@ class MergeQueue:
         logger.info("Queued merge for %s (queue size: %d)", item.id, depth)
         return future
 
+    def signal_stop(self) -> None:
+        """Signal the worker to stop without waiting for it to finish.
+
+        This is safe to call from signal handlers or any context where
+        blocking is undesirable. The worker thread will drain remaining
+        items and exit on its own. Use :meth:`shutdown` when you need to
+        wait for the worker to actually finish.
+        """
+        with self._lock:
+            if not self._started:
+                return
+            self._shutdown_event.set()
+            # Send sentinel to unblock worker if waiting on queue.get()
+            self._queue.put(None)
+
     def shutdown(self, timeout: float = 30.0) -> None:
         """Signal the worker to stop and wait for it to finish.
 
@@ -126,12 +141,10 @@ class MergeQueue:
         Args:
             timeout: Maximum seconds to wait for the worker thread to finish.
         """
+        self.signal_stop()
         with self._lock:
             if not self._started:
                 return
-            self._shutdown_event.set()
-            # Send sentinel to unblock worker if waiting on queue.get()
-            self._queue.put(None)
 
         worker = self._worker
         if worker is not None:
