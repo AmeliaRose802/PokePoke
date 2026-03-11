@@ -124,14 +124,15 @@ class TestHandleBeadsAutoCommit:
         handle_beads_auto_commit()
 
         assert mock_run.call_count == 2
-        mock_run.assert_any_call(["git", "add", ".beads/"], check=True, encoding='utf-8', errors='replace', timeout=10)
+        mock_run.assert_any_call(["git", "add", ".beads/"], check=True, encoding='utf-8', errors='replace', timeout=10, cwd=None)
         mock_run.assert_any_call(
             ["git", "commit", "-m", "chore: sync beads before worktree merge"],
             check=True,
             capture_output=True,
             encoding='utf-8',
             errors='replace',
-            timeout=300
+            timeout=300,
+            cwd=None
         )
 
     @patch('src.pokepoke.git_operations.subprocess.run')

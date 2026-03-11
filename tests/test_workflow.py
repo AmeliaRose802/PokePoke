@@ -325,7 +325,7 @@ class TestSetupWorktree:
 
         assert result is not None
         assert result == Path("/fake/worktree")
-        mock_create.assert_called_once_with("task-1", lock_timeout=300.0)
+        mock_create.assert_called_once_with("task-1", lock_timeout=300.0, repo_path=None)
 
     @patch('pokepoke.workflow_helpers.create_worktree')
     def test_successful_setup_with_custom_timeout(self, mock_create: Mock) -> None:
@@ -340,11 +340,11 @@ class TestSetupWorktree:
         )
         mock_create.return_value = Path("/fake/worktree")
 
-        result = _setup_worktree(item, lock_timeout=600.0)
+        result = _setup_worktree(item, lock_timeout=600.0, repo_path=None)
 
         assert result is not None
         assert result == Path("/fake/worktree")
-        mock_create.assert_called_once_with("task-1", lock_timeout=600.0)
+        mock_create.assert_called_once_with("task-1", lock_timeout=600.0, repo_path=None)
 
     @patch('pokepoke.workflow_helpers.create_worktree')
     def test_creation_failure(self, mock_create: Mock) -> None:
@@ -570,7 +570,7 @@ class TestCheckAndMergeWorktree:
         result = check_and_merge_worktree(item, worktree_path)
 
         assert result is True
-        mock_cleanup.assert_called_once_with("task-1", force=True)
+        mock_cleanup.assert_called_once_with("task-1", force=True, repo_path=None)
         mock_merge.assert_not_called()
         # Verify cwd is passed to subprocess instead of os.chdir
         cwd_calls = [c for c in mock_run.call_args_list if c.kwargs.get('cwd')]
@@ -603,7 +603,7 @@ class TestCheckAndMergeWorktree:
         result = check_and_merge_worktree(item, worktree_path)
 
         assert result is True
-        mock_merge.assert_called_once_with(item, parent_agent_id=None, worktree_path=worktree_path)
+        mock_merge.assert_called_once_with(item, parent_agent_id=None, worktree_path=worktree_path, repo_path=None)
 
     @patch('pokepoke.worktree_finalization.merge_lock')
     @patch('pokepoke.worktree_finalization.merge_worktree_to_dev')
@@ -632,7 +632,7 @@ class TestCheckAndMergeWorktree:
 
         # Should attempt merge anyway
         assert result is True
-        mock_merge.assert_called_once_with(item, parent_agent_id=None, worktree_path=worktree_path)
+        mock_merge.assert_called_once_with(item, parent_agent_id=None, worktree_path=worktree_path, repo_path=None)
 
 
 class TestMergeWorktreeToDev:

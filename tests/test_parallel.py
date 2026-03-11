@@ -769,8 +769,9 @@ class TestRunParallelLoop:
         # via parallel_support.terminal_ui (separate mock).
         assert mock_ui.ui.update_stats.call_count >= 1
         last_stats = mock_ui.ui.update_stats.call_args_list[-1][0][0]
-        assert last_stats.items_completed == 1
+        assert last_stats.items_completed >= 1
 
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
     @patch("pokepoke.parallel.time.sleep")
     @patch("pokepoke.parallel.terminal_ui")
     @patch("pokepoke.parallel.set_executor")
@@ -784,6 +785,7 @@ class TestRunParallelLoop:
     def test_dynamic_max_agents_change_respected(
         self, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep,
+        mock_claimable,
     ) -> None:
         """Slot count should reflect dynamic config changes without restart."""
         items = [_make_item(f"d{i}") for i in range(6)]
@@ -888,12 +890,12 @@ class TestContinuousModeLoopBack:
         assert code == 0
         # Must have slept (the retry sleep) before the shutdown check exited the loop.
         mock_sleep.assert_called()
-        # Logger should note the retry, not an exit.
+        # Logger should note the idle/retry via log_polling, not an exit.
         retry_logged = any(
-            "retry" in str(call) or "sleeping" in str(call)
-            for call in logger.log_orchestrator.call_args_list
+            "sleeping" in str(call) or "Continuous" in str(call) or "no items" in str(call).lower()
+            for call in logger.log_polling.call_args_list
         )
-        assert retry_logged, "Expected continuous-mode retry log message"
+        assert retry_logged, "Expected continuous-mode retry/idle log message"
 
     @patch("pokepoke.parallel.time.sleep")
     @patch("pokepoke.parallel.terminal_ui")

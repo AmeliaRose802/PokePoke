@@ -238,7 +238,7 @@ class TestMergeWorktreeIntegration:
         assert conflicts == []
         mock_is_clean.assert_called_once()
         mock_sync.assert_called_once()
-        mock_execute.assert_called_once_with('task/test-123', 'dev')
+        mock_execute.assert_called_once_with('task/test-123', 'dev', cwd=None)
         mock_validate.assert_called_once()
         mock_cleanup.assert_called_once()
 

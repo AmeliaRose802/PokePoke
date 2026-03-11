@@ -59,7 +59,7 @@ class TestPerformWorktreeMergeIntegration:
         assert success is True
         assert cleaned is True
         mock_check_ready.assert_called_once()
-        mock_merge.assert_called_once_with(agent_item.id, cleanup=True)
+        mock_merge.assert_called_once_with(agent_item.id, cleanup=True, repo_path=None)
 
     @patch('pokepoke.worktree_merge_handler.cleanup_lock')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
@@ -234,7 +234,7 @@ class TestPerformWorktreeMergeIntegration:
 
         assert success is True
         assert cleaned is True
-        mock_merge.assert_called_once_with(agent_item.id, cleanup=True)
+        mock_merge.assert_called_once_with(agent_item.id, cleanup=True, repo_path=None)
 
 
 class TestHandleWorktreeMergeIntegration:

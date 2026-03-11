@@ -81,6 +81,8 @@ class TestFindDevServerUrl:
 
 
 class TestFindFrontendDist:
+
+
     """Test the find_frontend_dist function."""
 
     def test_frozen_execution_mode(self, monkeypatch, tmp_path) -> None:
@@ -170,6 +172,7 @@ class TestFindFrontendDist:
 
     def test_package_resources_not_available(self, monkeypatch, tmp_path, mock_desktop_ui) -> None:
         """Test fallback when package resources are not available."""
+        monkeypatch.setattr(frontend_discovery_module, "_find_filesystem_static", lambda: None)
         monkeypatch.setattr("sys.frozen", False, raising=False)
 
         mock_desktop_ui()
@@ -192,6 +195,8 @@ class TestFindFrontendDist:
     def test_git_worktree_fallback(self, monkeypatch, tmp_path, mock_desktop_ui) -> None:
         """Test fallback to git worktree main repository."""
         monkeypatch.setattr("sys.frozen", False, raising=False)
+        monkeypatch.setattr(frontend_discovery_module, "_find_filesystem_static", lambda: None)
+        monkeypatch.setattr(frontend_discovery_module, "_find_dev_dist", lambda: None)
 
         mock_desktop_ui("worktree/src/pokepoke/desktop_ui.py")
 
@@ -254,6 +259,7 @@ class TestFindFrontendDist:
 
     def test_exception_handling_in_package_resources(self, monkeypatch, tmp_path, mock_desktop_ui) -> None:
         """Test that exceptions in package resource handling are caught."""
+        monkeypatch.setattr(frontend_discovery_module, "_find_filesystem_static", lambda: None)
         monkeypatch.setattr("sys.frozen", False, raising=False)
 
         mock_desktop_ui()
@@ -275,6 +281,7 @@ class TestFindFrontendDist:
 
     def test_pkg_resources_simple_fallback(self, monkeypatch, tmp_path, mock_desktop_ui) -> None:
         """Test simple scenario that exercises pkg_resources code path."""
+        monkeypatch.setattr(frontend_discovery_module, "_find_filesystem_static", lambda: None)
         monkeypatch.setattr("sys.frozen", False, raising=False)
 
         mock_desktop_ui()

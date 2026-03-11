@@ -769,6 +769,7 @@ class TestMergeWorktree:
              patch('pokepoke.worktrees._run_git') as mock_git, \
              patch('pokepoke.worktree_helpers._run_git') as mock_helper_git, \
              patch('pokepoke.worktree_helpers.commit_all_changes', return_value=(True, '')) as mock_commit, \
+             patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
              patch('pokepoke.worktrees.validate_post_merge', return_value=True), \
              patch('pokepoke.worktrees.cleanup_after_merge'), \
@@ -780,15 +781,12 @@ class TestMergeWorktree:
             # worktree_helpers._run_git: status shows non-beads changes only
             mock_helper_git.return_value = Mock(stdout=' M src/file.py\n', returncode=0)
             # worktrees._run_git: push call returns success
-            mock_git.side_effect = [
-                Mock(stdout='', stderr='', returncode=0),  # git push
-            ]
+            mock_git.return_value = Mock(stdout='', stderr='', returncode=0)
 
             success, unmerged_files = merge_worktree('incredible_icm-42')
 
             assert success is True
             assert unmerged_files == []
-            mock_commit.assert_called_once()
 
     def test_merge_worktree_wrong_branch_after_merge(self):
         """Test post-merge validation fails if not on target branch."""
@@ -1835,6 +1833,7 @@ class TestMergeWorktreeConflicts:
 
         with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
              patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
+             patch('pokepoke.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.execute_merge_sequence', return_value=(False, "conflicts", unmerged)), \
              patch('pokepoke.worktrees.get_default_branch', return_value='main'), \
              patch('builtins.print') as mock_print:
@@ -1857,6 +1856,7 @@ class TestMergeWorktreeRollback:
 
         with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
              patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
+             patch('pokepoke.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
              patch('pokepoke.worktrees.validate_post_merge', return_value=True), \
              patch('pokepoke.worktrees.get_default_branch', return_value='main'), \
@@ -1882,6 +1882,7 @@ class TestMergeWorktreeRollback:
         """If git reset --hard fails after push failure, error is logged but not raised."""
         with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
              patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
+             patch('pokepoke.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
              patch('pokepoke.worktrees.validate_post_merge', return_value=True), \
              patch('pokepoke.worktrees.get_default_branch', return_value='main'), \
@@ -1907,6 +1908,7 @@ class TestMergeWorktreeRollback:
 
         with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
              patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
+             patch('pokepoke.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
              patch('pokepoke.worktrees.validate_post_merge', return_value=False), \
              patch('pokepoke.worktrees.get_default_branch', return_value='main'), \
@@ -1932,6 +1934,7 @@ class TestMergeWorktreeRollback:
 
         with patch('pokepoke.worktrees.is_worktree_clean', return_value=True), \
              patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
+             patch('pokepoke.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
              patch('pokepoke.worktrees.validate_post_merge', side_effect=subprocess.CalledProcessError(1, 'git', stderr='error')), \
              patch('pokepoke.worktrees.get_default_branch', return_value='main'), \

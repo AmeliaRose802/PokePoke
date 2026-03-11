@@ -839,32 +839,25 @@ class TestUnassignItem:
     """Test unassign_item function."""
 
     @patch('src.pokepoke.beads_management.run_bd_sync_with_retry')
-    @patch('src.pokepoke.beads_management.subprocess.run')
+    @patch('src.pokepoke.beads_management._run_bd')
     def test_unassign_success(self, mock_run: Mock, mock_sync: Mock) -> None:
         """Test successful unassign resets item to new and syncs."""
         from src.pokepoke.beads import unassign_item
 
-        mock_run.return_value = Mock(returncode=0)
+        mock_run.return_value = Mock(returncode=0, stderr='')
         mock_sync.return_value = Mock(returncode=0)
 
         result = unassign_item("task-1")
 
         assert result is True
-        # First call should try status new + clear assignee
+        # First call should try status open + clear assignee
         mock_run.assert_called_once_with(
-            ['bd', 'update', 'task-1', '--status', 'new', '-a', ''],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            check=True,
-            timeout=30,
-            cwd=None,
+            ['update', 'task-1', '--status', 'open', '-a', '']
         )
         mock_sync.assert_called_once()
 
     @patch('src.pokepoke.beads_management.run_bd_sync_with_retry')
-    @patch('src.pokepoke.beads_management.subprocess.run')
+    @patch('src.pokepoke.beads_management._run_bd')
     def test_unassign_falls_back_when_empty_assignee_unsupported(
         self, mock_run: Mock, mock_sync: Mock
     ) -> None:
@@ -874,7 +867,7 @@ class TestUnassignItem:
         # First call (with -a '') raises; second call (without -a) succeeds.
         mock_run.side_effect = [
             subprocess.CalledProcessError(1, 'bd', stderr="invalid option"),
-            Mock(returncode=0),
+            Mock(returncode=0, stderr=''),
         ]
         mock_sync.return_value = Mock(returncode=0)
 
@@ -884,19 +877,12 @@ class TestUnassignItem:
         assert mock_run.call_count == 2
         # Second call should omit the -a argument
         mock_run.assert_called_with(
-            ['bd', 'update', 'task-1', '--status', 'new'],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            check=True,
-            timeout=30,
-            cwd=None,
+            ['update', 'task-1', '--status', 'open']
         )
         mock_sync.assert_called_once()
 
     @patch('src.pokepoke.beads_management.run_bd_sync_with_retry')
-    @patch('src.pokepoke.beads_management.subprocess.run')
+    @patch('src.pokepoke.beads_management._run_bd')
     def test_unassign_returns_false_when_both_commands_fail(
         self, mock_run: Mock, mock_sync: Mock
     ) -> None:
@@ -912,14 +898,14 @@ class TestUnassignItem:
         mock_sync.assert_not_called()
 
     @patch('src.pokepoke.beads_management.run_bd_sync_with_retry')
-    @patch('src.pokepoke.beads_management.subprocess.run')
+    @patch('src.pokepoke.beads_management._run_bd')
     def test_unassign_returns_true_even_when_sync_fails(
         self, mock_run: Mock, mock_sync: Mock
     ) -> None:
         """Test unassign_item returns True (best-effort) even when sync fails."""
         from src.pokepoke.beads import unassign_item
 
-        mock_run.return_value = Mock(returncode=0)
+        mock_run.return_value = Mock(returncode=0, stderr='')
         mock_sync.return_value = Mock(returncode=1, stdout='', stderr='sync error')
 
         result = unassign_item("task-1")

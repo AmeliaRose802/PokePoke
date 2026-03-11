@@ -216,7 +216,7 @@ class TestMergeQueueThroughput:
         processing_order: list[str] = []
         order_lock = threading.Lock()
 
-        def mock_merge(item, worktree_path=None):
+        def mock_merge(item, worktree_path=None, **kwargs):
             with order_lock:
                 processing_order.append(item.id)
             time.sleep(0.005)
@@ -239,7 +239,7 @@ class TestMergeQueueThroughput:
     @patch("pokepoke.merge_queue._rebase_worktree", return_value=True)
     def test_concurrent_submitters(self, mock_rebase, mock_shutdown) -> None:
         """Multiple threads submit to the queue simultaneously."""
-        def mock_merge(item, worktree_path=None):
+        def mock_merge(item, worktree_path=None, **kwargs):
             time.sleep(0.005)
             return True
 

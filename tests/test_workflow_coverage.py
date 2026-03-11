@@ -810,7 +810,7 @@ class TestFinalizeItemResult:
         )
         assert success is False
         assert wir.success is False
-        mock_cleanup.assert_called_once_with("wf-1", force=True)
+        mock_cleanup.assert_called_once_with("wf-1", force=True, repo_path=None)
 
     # ── False-positive guard: partial evidence ≠ reconciled ──────
 

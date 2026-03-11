@@ -100,22 +100,25 @@ class TestSelectWorkItemHumanRequired:
         assert result is None
         mock_hierarchical.assert_not_called()
 
-    @patch("builtins.print")
+    @patch("pokepoke.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
+    @patch("pokepoke.work_item_selection.is_assigned_to_current_user", return_value=True)
     @patch("src.pokepoke.work_item_selection.select_next_hierarchical_item")
     def test_human_required_skip_message_printed(
-        self, mock_hierarchical: Mock, mock_print: Mock
+        self, mock_hierarchical: Mock, mock_assigned: Mock,
+        mock_deps: Mock,
     ) -> None:
-        """A skip message should be printed for each human-required item."""
+        """Human-required items are filtered out; only non-HR items reach selection."""
         items = [
             _make_item(id="hr-1", labels=["human-required"]),
             _make_item(id="task-1"),
         ]
         mock_hierarchical.return_value = items[1]
 
-        select_work_item(items, interactive=False)
+        result = select_work_item(items, interactive=False)
 
-        printed = [str(c) for c in mock_print.call_args_list]
-        assert any("hr-1" in msg and "human-required" in msg for msg in printed)
+        assert result == items[1]
+        called_items = mock_hierarchical.call_args[0][0]
+        assert all(i.id != "hr-1" for i in called_items)
 
     @patch("builtins.input", return_value="1")
     @patch("builtins.print")

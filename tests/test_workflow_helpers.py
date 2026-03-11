@@ -297,7 +297,7 @@ class TestSetupWorktree:
         mock_create.return_value = Path("/worktrees/item-42")
         result = _setup_worktree(sample_item)
         assert result == Path("/worktrees/item-42")
-        mock_create.assert_called_once_with("item-42", lock_timeout=300.0)
+        mock_create.assert_called_once_with("item-42", lock_timeout=300.0, repo_path=None)
         output = " ".join(str(a) for c in mock_print.call_args_list for a in c.args)
         assert "Creating worktree" in output
 
@@ -585,7 +585,7 @@ class TestFinalizeItemResult:
         )
         assert wr.success is False
         assert ok is False
-        mock_cleanup.assert_called_once_with("item-42", force=True)
+        mock_cleanup.assert_called_once_with("item-42", force=True, repo_path=None)
 
     @patch("pokepoke.workflow_helpers.terminal_ui")
     @patch("pokepoke.workflow_helpers.set_terminal_banner")

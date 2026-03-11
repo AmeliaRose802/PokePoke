@@ -370,7 +370,7 @@ class TestProcessWorkItem:
 
     @patch('pokepoke.workflow.run_gate_agent')
     @patch('subprocess.run')
-    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('pokepoke.worktrees.cleanup_worktree')
     @patch('pokepoke.workflow.invoke_copilot')
     @patch('pokepoke.workflow.assign_and_sync_item', return_value=True)
     @patch('pokepoke.workflow.create_worktree')
