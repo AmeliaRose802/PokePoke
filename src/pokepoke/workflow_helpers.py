@@ -366,8 +366,14 @@ def _finalize_item_result(  # noqa: C901 – inherently complex; see workflow.py
 
     set_terminal_banner(format_work_item_banner(item.id, item.title, "Failed"))
     print(f"\n❌ Failed to complete work item: {result.error}")
-    print("\n🧹 Cleaning up worktree...")
-    cleanup_worktree(item.id, force=True, repo_path=repo_path)
+
+    # Preserve worktree on shutdown so work can be resumed later
+    from pokepoke.shutdown import is_shutting_down
+    if is_shutting_down():
+        print(f"\n⚠️  Shutting down — preserving worktree for {item.id}")
+    else:
+        print("\n🧹 Cleaning up worktree...")
+        cleanup_worktree(item.id, force=True, repo_path=repo_path)
     _log_failure(run_logger, item_logger, request_count)
     terminal_ui.ui.set_current_agent(None)
     dur = time.time() - start_time

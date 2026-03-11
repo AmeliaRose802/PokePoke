@@ -347,8 +347,9 @@ def process_work_item(  # noqa: C901
         # Clear work-item correlation ID
         set_current_work_item_id(None)
 
-        # Deterministic cleanup via WorkItemSession if finalization did not succeed
-        if _session is not None:
+        # Deterministic cleanup via WorkItemSession if finalization did not succeed.
+        # On shutdown, preserve worktrees so work can be resumed later.
+        if _session is not None and not is_shutting_down():
             _session.cleanup_on_failure()
         unregister_agent()
 
