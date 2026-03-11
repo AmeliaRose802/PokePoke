@@ -241,7 +241,7 @@ class TestDesktopUIOutputRouting:
 
         ui._api.push_agent_log = MagicMock(side_effect=capture_push_agent_log)
 
-        barrier = threading.Barrier(2)
+        barrier = threading.Barrier(2, timeout=5)
 
         def worker(agent_id: str, msg: str) -> None:
             with ui.agent_output_for(agent_id):

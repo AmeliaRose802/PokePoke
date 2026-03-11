@@ -458,11 +458,11 @@ class TestWorktreeIsolationPerRepo:
     def test_repo_context_isolates_concurrent_threads(self) -> None:
         """Concurrent threads see their own repo context."""
         results: dict[str, str] = {}
-        barrier = threading.Barrier(3)
+        barrier = threading.Barrier(3, timeout=5)
 
         def worker(name: str) -> None:
             with repo_context(name):
-                barrier.wait()
+                barrier.wait(timeout=5)
                 time.sleep(0.01)  # Brief overlap
                 results[name] = get_current_repo_name()
 
@@ -623,11 +623,11 @@ class TestMetricsSegmentation:
     def test_multiple_threads_independent_metrics(self) -> None:
         """Each thread's repo name is independent for metrics attribution."""
         results: dict[int, str] = {}
-        barrier = threading.Barrier(5)
+        barrier = threading.Barrier(5, timeout=5)
 
         def worker(idx: int) -> None:
             with repo_context(f"repo-{idx}"):
-                barrier.wait()
+                barrier.wait(timeout=5)
                 results[idx] = get_current_repo_name()
 
         threads = [threading.Thread(target=worker, args=(i,)) for i in range(5)]

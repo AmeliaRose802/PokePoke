@@ -1136,11 +1136,12 @@ class TestCleanupWorktree:
             mock_force.assert_called_once()
 
     def test_cleanup_worktree_invalid_argument_does_not_force_remove(self):
-        """Test that 'invalid argument' no longer triggers force_remove_directory.
+        """Test that 'invalid argument' still triggers force_remove_directory.
 
-        Previously this was treated as a Windows lock error, but 'invalid argument'
-        is too broad and could mask real bugs.  Now it falls through to the
-        standard non-lock-error handling path.
+        Even non-lock errors now attempt force removal so that transient
+        failures (e.g. directory-not-empty from a locked inner file) aren't
+        silently skipped.  The error is NOT classified as a lock error, but
+        the retry still fires.
         """
         def exists_side_effect(self: Path) -> bool:
             normalized = str(self).replace('\\', '/')
@@ -1151,7 +1152,7 @@ class TestCleanupWorktree:
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
              patch('pathlib.Path.exists', new=exists_side_effect), \
-             patch('pokepoke.worktree_cleanup.force_remove_directory') as mock_force, \
+             patch('pokepoke.worktree_cleanup.force_remove_directory', return_value=False) as mock_force, \
              patch('pokepoke.worktree_cleanup.add_uncleaned_worktree') as mock_add_uncleaned, \
              patch('builtins.print'):
 
@@ -1173,7 +1174,7 @@ class TestCleanupWorktree:
             result = cleanup_worktree('incredible_icm-42')
 
             assert result is False
-            mock_force.assert_not_called()
+            mock_force.assert_called_once()
             mock_add_uncleaned.assert_called_once()
 
     def test_cleanup_worktree_being_used_by_another_process(self):
@@ -1674,11 +1675,12 @@ class TestCleanupAfterMergeNonLockError:
     """Test cleanup_after_merge with non-lock errors."""
 
     def test_non_lock_error_adds_to_manifest(self) -> None:
-        """Non-lock CalledProcessError should add to manifest without force retry."""
+        """Non-lock CalledProcessError should attempt force removal, then add to manifest on failure."""
         from pokepoke.worktree_cleanup import cleanup_after_merge
 
         with patch('subprocess.run') as mock_run, \
              patch('pathlib.Path.exists', return_value=True), \
+             patch('pokepoke.worktree_cleanup.force_remove_directory', return_value=False) as mock_force, \
              patch('pokepoke.worktree_cleanup.add_uncleaned_worktree') as mock_add:
 
             def run_side_effect(*args, **kwargs):
@@ -1691,6 +1693,7 @@ class TestCleanupAfterMergeNonLockError:
 
             cleanup_after_merge(Path("worktrees/task-x"), "task/x-branch")
 
+            mock_force.assert_called_once()
             mock_add.assert_called_once()
             call_args = mock_add.call_args
             assert call_args[0][0] == "x-branch"
@@ -2051,10 +2054,11 @@ class TestCleanupWorktreeEdgeCases:
             assert result is True
 
     def test_cleanup_worktree_other_removal_error_with_existing_dir(self):
-        """Test other removal error adds to manifest when dir still exists (lines 289-291)."""
+        """Test other removal error triggers force removal and adds to manifest when dir still exists."""
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.worktrees.list_worktrees') as mock_list, \
              patch('pathlib.Path.exists', return_value=True), \
+             patch('pokepoke.worktree_cleanup.force_remove_directory', return_value=False) as mock_force, \
              patch('pokepoke.worktree_cleanup.add_uncleaned_worktree') as mock_add, \
              patch('builtins.print'):
 
@@ -2070,6 +2074,7 @@ class TestCleanupWorktreeEdgeCases:
 
             # Should return False because dir still exists after error
             assert result is False
+            mock_force.assert_called_once()
             mock_add.assert_called_once()
             assert 'test-item' in mock_add.call_args[0][0]
 

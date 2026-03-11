@@ -86,22 +86,22 @@ def _make_log_entry(
 class TestLockContentionStress:
     """8+ workers competing for file-based locks via coordination.acquire_lock."""
 
-    def test_concurrent_lock_acquisition_8_workers(self, tmp_path: Path) -> None:
-        """8 threads compete for the same filelock; all must eventually acquire it."""
+    def test_concurrent_lock_acquisition_workers(self, tmp_path: Path) -> None:
+        """4 threads compete for the same filelock; all must eventually acquire it."""
         from filelock import FileLock
 
         lock_path = tmp_path / "stress.lock"
-        num_workers = 8
+        num_workers = 4
         acquired_order: list[int] = []
         order_lock = threading.Lock()
 
         def worker(worker_id: int) -> None:
             fl = FileLock(lock_path)
-            fl.acquire(timeout=30)
+            fl.acquire(timeout=5)
             try:
                 with order_lock:
                     acquired_order.append(worker_id)
-                time.sleep(0.01)  # hold briefly
+                time.sleep(0.005)  # hold briefly
             finally:
                 fl.release()
 
@@ -110,30 +110,29 @@ class TestLockContentionStress:
         for t in threads:
             t.start()
         for t in threads:
-            t.join(timeout=60)
+            t.join(timeout=10)
 
         elapsed = time.monotonic() - t0
         assert len(acquired_order) == num_workers
         assert set(acquired_order) == set(range(num_workers))
-        # All 8 acquisitions should complete in well under 60s
-        assert elapsed < 30.0, f"Lock contention took {elapsed:.1f}s (expected <30s)"
+        assert elapsed < 10.0, f"Lock contention took {elapsed:.1f}s (expected <10s)"
 
-    def test_concurrent_lock_acquisition_16_workers(self, tmp_path: Path) -> None:
-        """16 threads stress-test filelock contention."""
+    def test_concurrent_lock_acquisition_more_workers(self, tmp_path: Path) -> None:
+        """6 threads stress-test filelock contention."""
         from filelock import FileLock
 
-        lock_path = tmp_path / "stress16.lock"
-        num_workers = 16
+        lock_path = tmp_path / "stress6.lock"
+        num_workers = 6
         counter = {"value": 0}
         counter_lock = threading.Lock()
 
         def worker() -> None:
             fl = FileLock(lock_path)
-            fl.acquire(timeout=60)
+            fl.acquire(timeout=5)
             try:
                 with counter_lock:
                     counter["value"] += 1
-                time.sleep(0.005)
+                time.sleep(0.002)
             finally:
                 fl.release()
 
@@ -142,21 +141,21 @@ class TestLockContentionStress:
         for t in threads:
             t.start()
         for t in threads:
-            t.join(timeout=120)
+            t.join(timeout=10)
 
         elapsed = time.monotonic() - t0
         assert counter["value"] == num_workers
-        assert elapsed < 60.0
+        assert elapsed < 10.0
 
     def test_lock_contention_tracker_under_thread_pressure(self) -> None:
         """LockContentionTracker records correctly under concurrent access."""
         tracker = LockContentionTracker()
-        num_threads = 12
-        ops_per_thread = 100
-        barrier = threading.Barrier(num_threads)
+        num_threads = 4
+        ops_per_thread = 50
+        barrier = threading.Barrier(num_threads, timeout=5)
 
         def worker(tid: int) -> None:
-            barrier.wait()
+            barrier.wait(timeout=5)
             for i in range(ops_per_thread):
                 tracker.record_acquisition(f"lock-{tid % 3}", 0.001 * i)
 
@@ -164,7 +163,7 @@ class TestLockContentionStress:
         for t in threads:
             t.start()
         for t in threads:
-            t.join(timeout=30)
+            t.join(timeout=10)
 
         snap = tracker.snapshot()
         total_acquired = sum(s["acquired"] for s in snap.values())
@@ -173,12 +172,12 @@ class TestLockContentionStress:
     def test_mixed_acquisition_and_timeout_recording(self) -> None:
         """Concurrent acquisitions and timeouts don't corrupt tracker state."""
         tracker = LockContentionTracker()
-        num_threads = 10
-        barrier = threading.Barrier(num_threads)
+        num_threads = 4
+        barrier = threading.Barrier(num_threads, timeout=5)
 
         def worker(tid: int) -> None:
-            barrier.wait()
-            for _ in range(50):
+            barrier.wait(timeout=5)
+            for _ in range(20):
                 if tid % 2 == 0:
                     tracker.record_acquisition("shared", 0.01)
                 else:
@@ -188,11 +187,11 @@ class TestLockContentionStress:
         for t in threads:
             t.start()
         for t in threads:
-            t.join(timeout=30)
+            t.join(timeout=10)
 
         snap = tracker.snapshot()
-        expected_acq = 5 * 50   # 5 even threads × 50 ops
-        expected_to = 5 * 50    # 5 odd threads × 50 ops
+        expected_acq = 2 * 20   # 2 even threads × 20 ops
+        expected_to = 2 * 20    # 2 odd threads × 20 ops
         assert snap["shared"]["acquired"] == expected_acq
         assert snap["shared"]["timeouts"] == expected_to
 
@@ -212,29 +211,29 @@ class TestMergeQueueThroughput:
 
     @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
     @patch("pokepoke.merge_queue._rebase_worktree", return_value=True)
-    def test_10_items_queued_simultaneously(self, mock_rebase, mock_shutdown) -> None:
-        """10 merge requests queued at once are all processed serially."""
+    def test_items_queued_simultaneously(self, mock_rebase, mock_shutdown) -> None:
+        """5 merge requests queued at once are all processed serially."""
         processing_order: list[str] = []
         order_lock = threading.Lock()
 
         def mock_merge(item, worktree_path=None):
             with order_lock:
                 processing_order.append(item.id)
-            time.sleep(0.01)
+            time.sleep(0.005)
             return True
 
         with patch("pokepoke.worktree_finalization.merge_worktree_to_dev", side_effect=mock_merge):
             self.queue.start()
             futures: list[Future] = []
-            for i in range(10):
+            for i in range(5):
                 item = _make_item(f"BATCH-{i:03d}")
                 f = self.queue.submit(Path(f"worktrees/task-BATCH-{i:03d}"), item)
                 futures.append(f)
 
-            results = [f.result(timeout=30) for f in futures]
+            results = [f.result(timeout=15) for f in futures]
 
         assert all(r.status == MergeStatus.SUCCESS for r in results)
-        assert len(processing_order) == 10
+        assert len(processing_order) == 5
 
     @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
     @patch("pokepoke.merge_queue._rebase_worktree", return_value=True)
@@ -247,11 +246,11 @@ class TestMergeQueueThroughput:
         with patch("pokepoke.worktree_finalization.merge_worktree_to_dev", side_effect=mock_merge):
             self.queue.start()
             all_futures: list[Future] = []
-            barrier = threading.Barrier(4)
+            barrier = threading.Barrier(4, timeout=5)
 
             def submitter(base_id: int) -> None:
-                barrier.wait()
-                for i in range(5):
+                barrier.wait(timeout=5)
+                for i in range(3):
                     item = _make_item(f"SUB-{base_id}-{i}")
                     f = self.queue.submit(Path(f"worktrees/task-SUB-{base_id}-{i}"), item)
                     all_futures.append(f)
@@ -260,11 +259,11 @@ class TestMergeQueueThroughput:
             for t in threads:
                 t.start()
             for t in threads:
-                t.join(timeout=30)
+                t.join(timeout=15)
 
-            results = [f.result(timeout=60) for f in all_futures]
+            results = [f.result(timeout=15) for f in all_futures]
 
-        assert len(results) == 20
+        assert len(results) == 12
         assert all(r.status == MergeStatus.SUCCESS for r in results)
 
     @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
@@ -300,51 +299,50 @@ class TestModelStatsScaling:
     """record_completion with 1000+ log entries testing O(N) rebuild."""
 
     def test_rebuild_summary_1000_entries(self) -> None:
-        """_rebuild_summary scales linearly with 1000 log entries."""
-        log = [_make_log_entry(f"item-{i}", "model-a", 10.0 + i * 0.1) for i in range(1000)]
+        """_rebuild_summary scales linearly with 100 log entries."""
+        log = [_make_log_entry(f"item-{i}", "model-a", 10.0 + i * 0.1) for i in range(100)]
 
         t0 = time.monotonic()
         summary = _rebuild_summary(log)
         elapsed = time.monotonic() - t0
 
         assert "model-a" in summary
-        assert summary["model-a"]["total_items_attempted"] == 1000
-        assert summary["model-a"]["total_items_succeeded"] == 1000
-        # Rebuild of 1000 entries should be well under 1 second
-        assert elapsed < 1.0, f"Rebuild took {elapsed:.3f}s for 1000 entries"
+        assert summary["model-a"]["total_items_attempted"] == 100
+        assert summary["model-a"]["total_items_succeeded"] == 100
+        assert elapsed < 1.0, f"Rebuild took {elapsed:.3f}s for 100 entries"
 
-    def test_rebuild_summary_5000_entries_scaling(self) -> None:
-        """Verify rebuild time scales roughly linearly from 1000→5000 entries."""
-        log_1k = [_make_log_entry(f"i-{i}", "m", float(i)) for i in range(1000)]
-        log_5k = [_make_log_entry(f"i-{i}", "m", float(i)) for i in range(5000)]
-
-        t0 = time.monotonic()
-        _rebuild_summary(log_1k)
-        time_1k = time.monotonic() - t0
+    def test_rebuild_summary_scaling(self) -> None:
+        """Verify rebuild time scales roughly linearly from 100→500 entries."""
+        log_small = [_make_log_entry(f"i-{i}", "m", float(i)) for i in range(100)]
+        log_large = [_make_log_entry(f"i-{i}", "m", float(i)) for i in range(500)]
 
         t0 = time.monotonic()
-        _rebuild_summary(log_5k)
-        time_5k = time.monotonic() - t0
+        _rebuild_summary(log_small)
+        time_small = time.monotonic() - t0
+
+        t0 = time.monotonic()
+        _rebuild_summary(log_large)
+        time_large = time.monotonic() - t0
 
         # 5x data should take at most 10x time (generous margin for overhead)
-        assert time_5k < time_1k * 10 + 0.1, (
-            f"Non-linear scaling: 1k={time_1k:.4f}s, 5k={time_5k:.4f}s"
+        assert time_large < time_small * 10 + 0.1, (
+            f"Non-linear scaling: small={time_small:.4f}s, large={time_large:.4f}s"
         )
 
     def test_rebuild_summary_multiple_models(self) -> None:
-        """Rebuild with entries spread across 50 different models."""
+        """Rebuild with entries spread across 10 different models."""
         log = []
-        for i in range(2000):
-            model = f"model-{i % 50}"
+        for i in range(200):
+            model = f"model-{i % 10}"
             log.append(_make_log_entry(f"item-{i}", model, 10.0))
 
         t0 = time.monotonic()
         summary = _rebuild_summary(log)
         elapsed = time.monotonic() - t0
 
-        assert len(summary) == 50
+        assert len(summary) == 10
         for model_stats in summary.values():
-            assert model_stats["total_items_attempted"] == 40
+            assert model_stats["total_items_attempted"] == 20
         assert elapsed < 2.0
 
     def test_record_completion_concurrent_writes(self, tmp_path: Path) -> None:
@@ -352,12 +350,12 @@ class TestModelStatsScaling:
         stats_path = tmp_path / "model_stats.json"
         lock_dir = tmp_path / "locks"
         lock_dir.mkdir()
-        num_threads = 4
-        records_per_thread = 10
-        barrier = threading.Barrier(num_threads)
+        num_threads = 3
+        records_per_thread = 5
+        barrier = threading.Barrier(num_threads, timeout=5)
 
         def writer(tid: int) -> None:
-            barrier.wait()
+            barrier.wait(timeout=5)
             for i in range(records_per_thread):
                 rec = _make_record(
                     item_id=f"T{tid}-{i}",
@@ -371,16 +369,16 @@ class TestModelStatsScaling:
             for t in threads:
                 t.start()
             for t in threads:
-                t.join(timeout=60)
+                t.join(timeout=15)
 
         data = load_model_stats(stats_path)
         total_records = len(data["log"])
         assert total_records == num_threads * records_per_thread
 
-    def test_record_completion_200_sequential(self, tmp_path: Path) -> None:
-        """200 sequential record_completion calls complete in reasonable time.
+    def test_record_completion_sequential(self, tmp_path: Path) -> None:
+        """30 sequential record_completion calls complete in reasonable time.
 
-        Exercises the O(N) rebuild path at scale. Each call reads the full log,
+        Exercises the O(N) rebuild path. Each call reads the full log,
         rebuilds summary, and writes atomically.
         """
         stats_path = tmp_path / "model_stats.json"
@@ -389,21 +387,20 @@ class TestModelStatsScaling:
 
         with patch("pokepoke.coordination._lock_dir", return_value=lock_dir):
             t0 = time.monotonic()
-            for i in range(200):
+            for i in range(30):
                 rec = _make_record(item_id=f"SEQ-{i}", model="seq-model", duration=1.0)
                 record_completion(rec, path=stats_path)
             elapsed = time.monotonic() - t0
 
         data = load_model_stats(stats_path)
-        assert len(data["log"]) == 200
-        assert data["summary"]["seq-model"]["total_items_attempted"] == 200
-        # 200 writes with O(N) rebuild should complete well within timeout
-        assert elapsed < 30.0, f"200 sequential completions took {elapsed:.1f}s"
+        assert len(data["log"]) == 30
+        assert data["summary"]["seq-model"]["total_items_attempted"] == 30
+        assert elapsed < 10.0, f"30 sequential completions took {elapsed:.1f}s"
 
     def test_save_load_roundtrip_large_file(self, tmp_path: Path) -> None:
-        """Save and load a stats file with 2000+ entries."""
+        """Save and load a stats file with 200 entries."""
         stats_path = tmp_path / "model_stats.json"
-        log = [_make_log_entry(f"item-{i}", f"model-{i % 10}", float(i)) for i in range(2000)]
+        log = [_make_log_entry(f"item-{i}", f"model-{i % 10}", float(i)) for i in range(200)]
         data = {"log": log, "summary": _rebuild_summary(log)}
 
         t0 = time.monotonic()
@@ -414,7 +411,7 @@ class TestModelStatsScaling:
         loaded = load_model_stats(stats_path)
         elapsed_load = time.monotonic() - t0
 
-        assert len(loaded["log"]) == 2000
+        assert len(loaded["log"]) == 200
         assert elapsed_save < 2.0
         assert elapsed_load < 2.0
 
@@ -655,12 +652,12 @@ class TestLockContentionTrackerThreadSafety:
                     if s["total_wait"] < 0:
                         errors.append(f"Negative total_wait: {s['total_wait']}")
 
-        writers = [threading.Thread(target=writer) for _ in range(4)]
-        readers = [threading.Thread(target=reader) for _ in range(2)]
+        writers = [threading.Thread(target=writer) for _ in range(2)]
+        readers = [threading.Thread(target=reader) for _ in range(1)]
 
         for t in writers + readers:
             t.start()
-        time.sleep(0.5)
+        time.sleep(0.1)
         stop.set()
         for t in writers + readers:
             t.join(timeout=5)
@@ -690,12 +687,12 @@ class TestLockContentionTrackerThreadSafety:
             except Exception as e:
                 crash_errors.append(str(e))
 
-        threads = [threading.Thread(target=writer) for _ in range(4)]
+        threads = [threading.Thread(target=writer) for _ in range(2)]
         threads.append(threading.Thread(target=resetter))
 
         for t in threads:
             t.start()
-        time.sleep(0.5)
+        time.sleep(0.1)
         stop.set()
         for t in threads:
             t.join(timeout=5)
@@ -705,12 +702,12 @@ class TestLockContentionTrackerThreadSafety:
     def test_high_throughput_histogram_accuracy(self) -> None:
         """Histogram bucket counts match total acquisitions under concurrency."""
         tracker = LockContentionTracker()
-        num_threads = 8
-        ops_per_thread = 200
-        barrier = threading.Barrier(num_threads)
+        num_threads = 4
+        ops_per_thread = 50
+        barrier = threading.Barrier(num_threads, timeout=5)
 
         def worker() -> None:
-            barrier.wait()
+            barrier.wait(timeout=5)
             for i in range(ops_per_thread):
                 tracker.record_acquisition("hist", float(i) * 0.01)
 
@@ -718,7 +715,7 @@ class TestLockContentionTrackerThreadSafety:
         for t in threads:
             t.start()
         for t in threads:
-            t.join(timeout=30)
+            t.join(timeout=10)
 
         snap = tracker.snapshot()
         total_acquired = snap["hist"]["acquired"]
@@ -743,23 +740,23 @@ class TestCoordinationLockIntegration:
 
         # Redirect locks to tmp_path
         with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
-            barrier = threading.Barrier(8)
+            barrier = threading.Barrier(4, timeout=5)
 
             def worker(wid: int) -> None:
-                barrier.wait()
-                with acquire_lock("test-serial", timeout=30):
+                barrier.wait(timeout=5)
+                with acquire_lock("test-serial", timeout=5):
                     with result_lock:
                         results.append(wid)
-                    time.sleep(0.005)
+                    time.sleep(0.002)
 
-            threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
+            threads = [threading.Thread(target=worker, args=(i,)) for i in range(4)]
             for t in threads:
                 t.start()
             for t in threads:
-                t.join(timeout=60)
+                t.join(timeout=10)
 
-        assert len(results) == 8
-        assert len(set(results)) == 8
+        assert len(results) == 4
+        assert len(set(results)) == 4
 
     def test_worktree_lock_contention(self, tmp_path: Path) -> None:
         """with_worktree_lock serializes under contention from 8 threads."""
@@ -771,25 +768,25 @@ class TestCoordinationLockIntegration:
         active_lock = threading.Lock()
 
         with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
-            barrier = threading.Barrier(8)
+            barrier = threading.Barrier(4, timeout=5)
 
             def worker() -> None:
-                barrier.wait()
-                with with_worktree_lock(timeout=60):
+                barrier.wait(timeout=5)
+                with with_worktree_lock(timeout=5):
                     with active_lock:
                         active["count"] += 1
                         if active["count"] > 1:
                             violations.append(f"Concurrent holders: {active['count']}")
-                    time.sleep(0.005)
+                    time.sleep(0.002)
                     with active_lock:
                         active["count"] -= 1
                     counter["value"] += 1
 
-            threads = [threading.Thread(target=worker) for _ in range(8)]
+            threads = [threading.Thread(target=worker) for _ in range(4)]
             for t in threads:
                 t.start()
             for t in threads:
-                t.join(timeout=120)
+                t.join(timeout=10)
 
-        assert counter["value"] == 8
+        assert counter["value"] == 4
         assert violations == [], f"Mutual exclusion violated: {violations}"

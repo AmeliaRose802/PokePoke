@@ -288,14 +288,14 @@ class TestGetAllAllocations:
 class TestThreadSafety:
     def test_concurrent_start_done(self) -> None:
         pool = RepoWorkerPool(total_workers=100, repos=[_repo("/a")])
-        barrier = threading.Barrier(20)
+        barrier = threading.Barrier(4, timeout=5)
 
         def worker() -> None:
-            barrier.wait()
+            barrier.wait(timeout=5)
             pool.record_worker_start("/a")
             pool.record_worker_done("/a")
 
-        threads = [threading.Thread(target=worker) for _ in range(20)]
+        threads = [threading.Thread(target=worker) for _ in range(4)]
         for t in threads:
             t.start()
         for t in threads:

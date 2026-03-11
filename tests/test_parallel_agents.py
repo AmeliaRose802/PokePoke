@@ -54,7 +54,7 @@ class TestConcurrentAgentsNoInterference:
     def test_two_agents_process_independently(self) -> None:
         """Submit two items to _parallel_process_item, verify both complete."""
         results: dict[str, tuple[bool, str]] = {}
-        barrier = threading.Barrier(2)
+        barrier = threading.Barrier(2, timeout=5)
 
         def fake_process(item: BeadsWorkItem, **kwargs):
             agent = get_agent_name()

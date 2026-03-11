@@ -90,20 +90,33 @@ def force_remove_directory(dir_path: Path) -> bool:
 
 
 def _is_windows_lock_error(error_text: str) -> bool:
-    """Detect Windows file locking related errors."""
+    """Detect Windows file locking related errors.
+
+    Only matches errors that are strong indicators of Windows file locking,
+    not generic filesystem errors that could have other causes.  Patterns
+    like 'directory not empty' and 'device or resource busy' are intentionally
+    excluded because they can originate from non-locking scenarios.
+    """
     if not error_text:
         return False
 
     error_lower = error_text.lower()
     windows_lock_indicators = [
-        "permission denied",
+        # WinError 32 – ERROR_SHARING_VIOLATION
         "being used by another process",
-        "cannot access the file",
+        # WinError 33 – ERROR_LOCK_VIOLATION
+        "locked a portion of the file",
+        # Windows sharing-violation phrasing
         "sharing violation",
+        # WinError 5 – ERROR_ACCESS_DENIED (common with locked files)
         "access is denied",
-        "device or resource busy",
-        # "directory not empty" on Windows often means a file inside is locked
-        "directory not empty",
+        # Python PermissionError text wrapping WinError 5/32
+        "permission denied",
+        # Part of the full WinError 32 message
+        "cannot access the file",
+        # Explicit Windows error codes in Python exception strings
+        "[winerror 32]",
+        "[winerror 33]",
     ]
 
     return any(indicator in error_lower for indicator in windows_lock_indicators)
@@ -184,26 +197,27 @@ def _handle_worktree_removal_error(
     if "not a working tree" in stderr_lower or "no such file" in stderr_lower:
         return
 
+    # Always attempt force removal regardless of error type.  Use lock
+    # detection only for log differentiation so that transient failures
+    # (e.g. "directory not empty" caused by a locked file inside) still
+    # get a retry without being misclassified as a lock error.
     if _is_windows_lock_error(stderr):
         print("⚠️  Worktree removal failed (likely locked). Retrying with enhanced force removal...")
-        if force_remove_directory(worktree_path):
-            if worktree_id is not None:
-                remove_from_manifest(worktree_id)
-            if print_success:
-                print(f"✅ Force-removed worktree at {worktree_path}")
-            return
-
-        if post_merge:
-            print(f"⚠️ Could not remove worktree after retries: {worktree_path}")
-            print("✅ Merge successful, but cleanup had issues. You may need to manually remove this worktree later.")
-        else:
-            print(f"⚠️  Could not remove worktree directory after retries: {worktree_path}")
     else:
-        if post_merge:
-            print(f"⚠️ Could not remove worktree: {stderr}")
-            print("✅ Merge successful, but cleanup had issues. You may need to manually remove this worktree later.")
-        else:
-            print(f"⚠️  Worktree removal warning: {stderr}")
+        print(f"⚠️  Worktree removal failed: {stderr.strip()}. Attempting force removal...")
+
+    if force_remove_directory(worktree_path):
+        if worktree_id is not None:
+            remove_from_manifest(worktree_id)
+        if print_success:
+            print(f"✅ Force-removed worktree at {worktree_path}")
+        return
+
+    if post_merge:
+        print(f"⚠️ Could not remove worktree after retries: {worktree_path}")
+        print("✅ Merge successful, but cleanup had issues. You may need to manually remove this worktree later.")
+    else:
+        print(f"⚠️  Could not remove worktree directory after retries: {worktree_path}")
 
     if worktree_id is not None and worktree_path.exists():
         reason_prefix = "Post-merge cleanup" if post_merge else "Worktree removal"
