@@ -73,6 +73,28 @@ def default_branch_has_merge_commit(item_id: str, repo_root: Path) -> bool:
     return False
 
 
+def worktree_branch_has_commits(item_id: str, repo_root: Path) -> bool:
+    """Check whether the worktree branch for *item_id* has commits beyond the default branch."""
+    sanitized_id = sanitize_branch_name(item_id)
+    branch_name = f"{BRANCH_PREFIX}{sanitized_id}"
+    default_branch = get_default_branch()
+
+    for ref in (branch_name, f"refs/heads/{branch_name}"):
+        try:
+            result = subprocess.run(
+                ["git", "log", f"{default_branch}..{ref}", "--max-count", "1",
+                 "--pretty=format:%H"],
+                capture_output=True, text=True,
+                encoding="utf-8", errors="replace",
+                check=True, timeout=20, cwd=str(repo_root),
+            )
+            if result.stdout.strip():
+                return True
+        except subprocess.CalledProcessError:
+            continue
+    return False
+
+
 def is_worktree_cleaned(item_id: str, worktree_path: Path | None) -> bool:
     """Return True if the worktree and branch for the item are already cleaned up."""
     sanitized_id = sanitize_branch_name(item_id)
@@ -100,18 +122,29 @@ def reconcile_completed_item(
     worktree_path: Path | None,
     run_logger: RunLogger | None,
 ) -> tuple[bool, dict[str, bool]]:
-    """Detect whether work already landed even if the Copilot session failed."""
+    """Detect whether work already landed even if the Copilot session failed.
+
+    Reconciliation is considered successful when any of these hold:
+    - All three original checks pass (fully merged and cleaned up).
+    - ``beads_closed`` is True — the beads item was explicitly closed by an
+      agent, which is strong evidence the work completed.  Commits may still
+      live on the worktree branch (not yet merged) and the worktree may not
+      have been cleaned up.
+    """
     repo_root = Path.cwd()
     evidence: dict[str, bool] = {
         "beads_closed": is_beads_item_closed(item.id),
         "commits_on_default": default_branch_has_merge_commit(item.id, repo_root),
+        "commits_on_worktree_branch": worktree_branch_has_commits(item.id, repo_root),
         "worktree_cleaned": is_worktree_cleaned(item.id, worktree_path),
     }
+
+    reconciled = evidence["beads_closed"]
 
     if run_logger:
         run_logger.log_orchestrator(
             f"Post-session reconciliation for {item.id}: {evidence}",
-            level="WARNING" if all(evidence.values()) else "INFO",
+            level="WARNING" if reconciled else "INFO",
         )
 
-    return all(evidence.values()), evidence
+    return reconciled, evidence

@@ -343,9 +343,10 @@ def _finalize_item_result(  # noqa: C901 – inherently complex; see workflow.py
         ev = evidence
         print(
             f"\n⚠️  Copilot session reported FAILURE but state shows work already completed."
-            f"\n   Evidence: beads_closed={ev['beads_closed']}, "
-            f"commits_on_default={ev['commits_on_default']}, "
-            f"worktree_cleaned={ev['worktree_cleaned']}"
+            f"\n   Evidence: beads_closed={ev.get('beads_closed')}, "
+            f"commits_on_default={ev.get('commits_on_default')}, "
+            f"commits_on_worktree_branch={ev.get('commits_on_worktree_branch')}, "
+            f"worktree_cleaned={ev.get('worktree_cleaned')}"
         )
         if run_logger and item_logger:
             item_logger.log_summary(True, request_count)
