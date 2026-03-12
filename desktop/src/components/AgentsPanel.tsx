@@ -1,6 +1,6 @@
 /** Agents panel: displays running/completed agent cards grouped by session. */
 
-import { type ReactElement, useState } from "react";
+import { type Dispatch, type ReactElement, type SetStateAction, useState } from "react";
 
 import type { AgentInfo } from "../types";
 import {
@@ -14,17 +14,21 @@ import {
 } from "../utils/agentHelpers";
 import {
   cardIdForAgent,
+  countTreeNodes,
   formatSessionLabel,
   GATE_STATUS_COPY,
   getEmojiAvatar,
   groupBySession,
+  groupByWorkItem,
   isHistoryAgent,
   parentKeysForAgent,
   resolveGateForDisplay,
   shouldShowAttemptLabel,
   STATUS_INDICATOR,
+  UNGROUPED_WORK_ITEM,
 } from "../utils/agentsPanelHelpers";
 import { GateVerdictPreview } from "./GateVerdictPreview";
+import { WorkItemGroupSection } from "./WorkItemGroupSection";
 
 interface Props {
   agents: AgentInfo[];
@@ -52,30 +56,13 @@ export function AgentsPanel({
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
   const [expandedCompletedSections, setExpandedCompletedSections] = useState<Set<string>>(new Set());
   const [collapsedActiveSections, setCollapsedActiveSections] = useState<Set<string>>(new Set());
+  const [collapsedWorkItems, setCollapsedWorkItems] = useState<Set<string>>(new Set());
 
-  const toggleSession = (sessionId: string) => {
-    setExpandedSessions((prev) => {
+  const toggleInSet = (setter: Dispatch<SetStateAction<Set<string>>>, key: string) => {
+    setter((prev) => {
       const next = new Set(prev);
-      if (next.has(sessionId)) next.delete(sessionId);
-      else next.add(sessionId);
-      return next;
-    });
-  };
-
-  const toggleCompletedSection = (sessionId: string) => {
-    setExpandedCompletedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(sessionId)) next.delete(sessionId);
-      else next.add(sessionId);
-      return next;
-    });
-  };
-
-  const toggleActiveSection = (sessionId: string) => {
-    setCollapsedActiveSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(sessionId)) next.delete(sessionId);
-      else next.add(sessionId);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -329,8 +316,49 @@ export function AgentsPanel({
     const activeRootAgents = sessionRootAgents.filter((agent) => isHistoryAgent(agent) || treeHasRunning(agent));
     const completedRootAgents = sessionRootAgents.filter((agent) => !isHistoryAgent(agent) && !treeHasRunning(agent));
 
-    const renderedActiveAgents = activeRootAgents.flatMap((agent) => renderSessionAgentTree(agent, 0));
-    const renderedCompletedAgents = completedRootAgents.flatMap((agent) => renderSessionAgentTree(agent, 0));
+    const renderGroupedAgentSection = (rootAgents: AgentInfo[]): ReactElement[] => {
+      const workItemGroups = groupByWorkItem(rootAgents);
+      const elements: ReactElement[] = [];
+
+      for (const wiGroup of workItemGroups) {
+        if (wiGroup.workItemId === UNGROUPED_WORK_ITEM || wiGroup.agents.length < 2) {
+          elements.push(...wiGroup.agents.flatMap((a) => renderSessionAgentTree(a, 0)));
+          continue;
+        }
+
+        const isCollapsed = collapsedWorkItems.has(wiGroup.workItemId);
+        const totalCards = wiGroup.agents.reduce(
+          (sum, a) => sum + countTreeNodes(a, sessionChildrenByParent), 0,
+        );
+        const runningCount = wiGroup.agents.filter((a) => treeHasRunning(a)).length;
+        const failCount = wiGroup.agents.filter((a) => !treeHasRunning(a) && treeHasFailure(a)).length;
+        const okCount = wiGroup.agents.length - runningCount - failCount;
+
+        const summaryParts: string[] = [];
+        if (runningCount > 0) summaryParts.push(`${runningCount} running`);
+        if (okCount > 0) summaryParts.push(`${okCount} ok`);
+        if (failCount > 0) summaryParts.push(`${failCount} failed`);
+
+        elements.push(
+          <WorkItemGroupSection
+            key={`wi-${wiGroup.workItemId}`}
+            workItemId={wiGroup.workItemId}
+            workItemTitle={wiGroup.workItemTitle}
+            totalCards={totalCards}
+            isCollapsed={isCollapsed}
+            summaryParts={summaryParts}
+            onToggle={() => toggleInSet(setCollapsedWorkItems, wiGroup.workItemId)}
+          >
+            {wiGroup.agents.flatMap((a) => renderSessionAgentTree(a, 0))}
+          </WorkItemGroupSection>,
+        );
+      }
+
+      return elements;
+    };
+
+    const renderedActiveAgents = renderGroupedAgentSection(activeRootAgents);
+    const renderedCompletedAgents = renderGroupedAgentSection(completedRootAgents);
 
     const completedFailedCount = completedRootAgents.filter(treeHasFailure).length;
     const completedSuccessCount = completedRootAgents.length - completedFailedCount;
@@ -344,7 +372,7 @@ export function AgentsPanel({
         <div className="agent-section agent-section-active">
           <button
             className="agent-section-header"
-            onClick={() => toggleActiveSection(group.sessionId)}
+            onClick={() => toggleInSet(setCollapsedActiveSections, group.sessionId)}
             aria-expanded={isActiveExpanded}
             aria-controls={isActiveExpanded ? activeSectionId : undefined}
             type="button"
@@ -370,7 +398,7 @@ export function AgentsPanel({
           <div className="agent-section agent-section-completed">
             <button
               className="agent-section-header"
-              onClick={() => toggleCompletedSection(group.sessionId)}
+              onClick={() => toggleInSet(setExpandedCompletedSections, group.sessionId)}
               aria-expanded={isCompletedExpanded}
               type="button"
             >
@@ -399,7 +427,7 @@ export function AgentsPanel({
       <div key={group.sessionId} className="session-group">
         <button
           className={`session-group-header${isCurrent ? " session-group-current" : ""}`}
-          onClick={() => !isCurrent && toggleSession(group.sessionId)}
+          onClick={() => !isCurrent && toggleInSet(setExpandedSessions, group.sessionId)}
           aria-expanded={isExpanded}
         >
           <span className="session-group-chevron">{isExpanded ? "▾" : "▸"}</span>

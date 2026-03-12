@@ -57,6 +57,12 @@ export function groupBySession(agents: AgentInfo[]): { sessionId: string; agents
 
 export const cardIdForAgent = (agent: AgentInfo): string => agent.card_id ?? agent.agent_id;
 
+/** Count total agent nodes in a tree (the agent itself plus all descendants). */
+export function countTreeNodes(agent: AgentInfo, childrenMap: Map<string, AgentInfo[]>): number {
+  const children = childrenMap.get(cardIdForAgent(agent)) ?? childrenMap.get(agent.agent_id) ?? [];
+  return 1 + children.reduce((sum, child) => sum + countTreeNodes(child, childrenMap), 0);
+}
+
 export const parentKeysForAgent = (agent: AgentInfo): string[] => {
   const keys: string[] = [];
   if (agent.parent_card_id) {
@@ -135,6 +141,45 @@ export function resolveGateForDisplay(
       : null;
   return { gate: latest ?? directGate, isRetryCycleRoot: true };
 }
+export const UNGROUPED_WORK_ITEM = "__no_work_item__";
+
+export interface WorkItemGroup {
+  workItemId: string;
+  workItemTitle: string;
+  agents: AgentInfo[];
+}
+
+/**
+ * Group agents by work_item_id.
+ * Agents without a work_item_id are placed in a group with id UNGROUPED_WORK_ITEM.
+ * Preserves input order within each group.
+ */
+export function groupByWorkItem(agents: AgentInfo[]): WorkItemGroup[] {
+  const map = new Map<string, { title: string; agents: AgentInfo[] }>();
+
+  for (const agent of agents) {
+    const key = agent.work_item_id ?? UNGROUPED_WORK_ITEM;
+    const existing = map.get(key);
+    if (existing) {
+      existing.agents.push(agent);
+      if (!existing.title && agent.work_item_title) {
+        existing.title = agent.work_item_title;
+      }
+    } else {
+      map.set(key, {
+        title: agent.work_item_title ?? "",
+        agents: [agent],
+      });
+    }
+  }
+
+  return Array.from(map.entries()).map(([workItemId, { title, agents: groupAgents }]) => ({
+    workItemId,
+    workItemTitle: title,
+    agents: groupAgents,
+  }));
+}
+
 export function shouldShowAttemptLabel(agent: AgentInfo, childrenMap: Map<string, AgentInfo[]>): boolean {
   if (isGateAgent(agent)) return false;
   // Cleanup agents are a distinct phase, not retry attempts

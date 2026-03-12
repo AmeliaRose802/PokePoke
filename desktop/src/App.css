@@ -816,6 +816,69 @@
   padding-top: 4px;
 }
 
+/* Work item group headers for collapsible agent card groups */
+.work-item-group {
+  margin-bottom: 2px;
+}
+
+.work-item-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.work-item-group-header:hover {
+  background: var(--bg-elevated);
+}
+
+.work-item-group-chevron {
+  font-size: 10px;
+  width: 12px;
+  flex-shrink: 0;
+}
+
+.work-item-group-label {
+  flex: 1;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.work-item-group-count {
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.work-item-group-summary {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.work-item-group-content {
+  padding-top: 4px;
+  padding-left: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 /* Active/Completed sections inside a session */
 .agent-sections {
   display: flex;

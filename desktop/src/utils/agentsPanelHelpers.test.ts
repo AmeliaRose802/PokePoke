@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AgentInfo } from "../types";
-import { collectAllGateDescendants, getCleanupChildren, getRetryChildren, shouldShowAttemptLabel } from "./agentsPanelHelpers";
+import { collectAllGateDescendants, getCleanupChildren, getRetryChildren, groupByWorkItem, shouldShowAttemptLabel, UNGROUPED_WORK_ITEM } from "./agentsPanelHelpers";
 
 function mkAgent(overrides: Partial<AgentInfo> = {}): AgentInfo {
   const iteration = overrides.iteration ?? 1;
@@ -254,6 +254,59 @@ describe("agentsPanelHelpers retry cycle utilities", () => {
       });
       const childrenMap = new Map<string, AgentInfo[]>();
       expect(shouldShowAttemptLabel(cleanup, childrenMap)).toBe(false);
+    });
+  });
+
+  describe("groupByWorkItem", () => {
+    it("groups agents with the same work_item_id", () => {
+      const agent1 = mkAgent({ agent_id: "a1", work_item_id: "WI-1", work_item_title: "Item 1" });
+      const agent2 = mkAgent({ agent_id: "a2", work_item_id: "WI-1", work_item_title: "Item 1" });
+      const result = groupByWorkItem([agent1, agent2]);
+      expect(result).toHaveLength(1);
+      expect(result[0].workItemId).toBe("WI-1");
+      expect(result[0].agents).toHaveLength(2);
+    });
+
+    it("separates agents with different work_item_ids", () => {
+      const agent1 = mkAgent({ agent_id: "a1", work_item_id: "WI-1", work_item_title: "Item 1" });
+      const agent2 = mkAgent({ agent_id: "a2", work_item_id: "WI-2", work_item_title: "Item 2" });
+      const result = groupByWorkItem([agent1, agent2]);
+      expect(result).toHaveLength(2);
+      expect(result[0].workItemId).toBe("WI-1");
+      expect(result[1].workItemId).toBe("WI-2");
+    });
+
+    it("groups agents without work_item_id under UNGROUPED_WORK_ITEM", () => {
+      const agent1 = mkAgent({ agent_id: "a1" });
+      const agent2 = mkAgent({ agent_id: "a2" });
+      const result = groupByWorkItem([agent1, agent2]);
+      expect(result).toHaveLength(1);
+      expect(result[0].workItemId).toBe(UNGROUPED_WORK_ITEM);
+    });
+
+    it("preserves order within groups", () => {
+      const agent1 = mkAgent({ agent_id: "a1", work_item_id: "WI-1" });
+      const agent2 = mkAgent({ agent_id: "a2", work_item_id: "WI-1" });
+      const result = groupByWorkItem([agent1, agent2]);
+      expect(result[0].agents.map((a) => a.agent_id)).toEqual(["a1", "a2"]);
+    });
+
+    it("uses work_item_title from first agent with title", () => {
+      const agent1 = mkAgent({ agent_id: "a1", work_item_id: "WI-1", work_item_title: "My Title" });
+      const agent2 = mkAgent({ agent_id: "a2", work_item_id: "WI-1" });
+      const result = groupByWorkItem([agent1, agent2]);
+      expect(result[0].workItemTitle).toBe("My Title");
+    });
+
+    it("returns empty array for empty input", () => {
+      expect(groupByWorkItem([])).toEqual([]);
+    });
+
+    it("uses title from later agent when first has no title", () => {
+      const agent1 = mkAgent({ agent_id: "a1", work_item_id: "WI-1" });
+      const agent2 = mkAgent({ agent_id: "a2", work_item_id: "WI-1", work_item_title: "Late Title" });
+      const result = groupByWorkItem([agent1, agent2]);
+      expect(result[0].workItemTitle).toBe("Late Title");
     });
   });
 });
