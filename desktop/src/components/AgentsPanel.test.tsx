@@ -880,4 +880,236 @@ describe("AgentsPanel", () => {
       expect(screen.queryByText("Attempt 3")).not.toBeInTheDocument();
     });
   });
+
+  describe("work item grouping", () => {
+    it("groups agents with the same work_item_id under a collapsible header", () => {
+      const agent1 = mkAgent({
+        agent_id: "work-1",
+        card_id: "work-1::v1",
+        name: "Worker 1",
+        work_item_id: "ITEM-100",
+        work_item_title: "Fix the bug",
+        status: "running",
+      });
+      const agent2 = mkAgent({
+        agent_id: "work-2",
+        card_id: "work-2::v1",
+        name: "Worker 2",
+        work_item_id: "ITEM-100",
+        work_item_title: "Fix the bug",
+        status: "running",
+      });
+
+      const { container } = render(
+        <AgentsPanel agents={[agent1, agent2]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />,
+      );
+
+      const groupHeader = container.querySelector(".work-item-group-header");
+      expect(groupHeader).not.toBeNull();
+      const groupLabel = container.querySelector(".work-item-group-label");
+      expect(groupLabel?.textContent).toContain("Fix the bug");
+    });
+
+    it("does not show work item group header for single agent per work item", () => {
+      const agent = mkAgent({
+        agent_id: "work-1",
+        work_item_id: "ITEM-200",
+        work_item_title: "Single item",
+      });
+
+      const { container } = render(
+        <AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />,
+      );
+
+      expect(container.querySelector(".work-item-group-header")).toBeNull();
+    });
+
+    it("collapses work item group when header is clicked", () => {
+      const agent1 = mkAgent({
+        agent_id: "work-1",
+        card_id: "work-1::v1",
+        name: "Worker 1",
+        work_item_id: "ITEM-300",
+        work_item_title: "Collapse me",
+        status: "running",
+      });
+      const agent2 = mkAgent({
+        agent_id: "work-2",
+        card_id: "work-2::v1",
+        name: "Worker 2",
+        work_item_id: "ITEM-300",
+        work_item_title: "Collapse me",
+        status: "running",
+      });
+
+      const { container } = render(
+        <AgentsPanel agents={[agent1, agent2]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />,
+      );
+
+      expect(screen.getByText("Worker 1")).toBeInTheDocument();
+      expect(screen.getByText("Worker 2")).toBeInTheDocument();
+
+      fireEvent.click(container.querySelector(".work-item-group-header")!);
+
+      expect(screen.queryByText("Worker 1")).not.toBeInTheDocument();
+      expect(screen.queryByText("Worker 2")).not.toBeInTheDocument();
+    });
+
+    it("expands work item group when collapsed header is clicked again", () => {
+      const agent1 = mkAgent({
+        agent_id: "work-1",
+        card_id: "work-1::v1",
+        name: "Worker 1",
+        work_item_id: "ITEM-400",
+        work_item_title: "Toggle me",
+        status: "running",
+      });
+      const agent2 = mkAgent({
+        agent_id: "work-2",
+        card_id: "work-2::v1",
+        name: "Worker 2",
+        work_item_id: "ITEM-400",
+        work_item_title: "Toggle me",
+        status: "running",
+      });
+
+      const { container } = render(
+        <AgentsPanel agents={[agent1, agent2]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />,
+      );
+
+      const groupHeader = container.querySelector(".work-item-group-header")!;
+      fireEvent.click(groupHeader);
+      expect(screen.queryByText("Worker 1")).not.toBeInTheDocument();
+
+      fireEvent.click(groupHeader);
+      expect(screen.getByText("Worker 1")).toBeInTheDocument();
+      expect(screen.getByText("Worker 2")).toBeInTheDocument();
+    });
+
+    it("shows card count in work item group header", () => {
+      const agent1 = mkAgent({
+        agent_id: "work-1",
+        card_id: "work-1::v1",
+        work_item_id: "ITEM-500",
+        work_item_title: "Count test",
+        status: "running",
+      });
+      const agent2 = mkAgent({
+        agent_id: "work-2",
+        card_id: "work-2::v1",
+        work_item_id: "ITEM-500",
+        work_item_title: "Count test",
+        status: "running",
+      });
+
+      render(
+        <AgentsPanel agents={[agent1, agent2]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />,
+      );
+
+      expect(screen.getByText("2 cards")).toBeInTheDocument();
+    });
+
+    it("shows summary when work item group is collapsed", () => {
+      const agent1 = mkAgent({
+        agent_id: "work-1",
+        card_id: "work-1::v1",
+        work_item_id: "ITEM-600",
+        work_item_title: "Summary test",
+        status: "running",
+      });
+      const agent2 = mkAgent({
+        agent_id: "work-2",
+        card_id: "work-2::v1",
+        work_item_id: "ITEM-600",
+        work_item_title: "Summary test",
+        status: "running",
+      });
+
+      const { container } = render(
+        <AgentsPanel agents={[agent1, agent2]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />,
+      );
+
+      expect(container.querySelector(".work-item-group-summary")).toBeNull();
+
+      fireEvent.click(container.querySelector(".work-item-group-header")!);
+
+      const summary = container.querySelector(".work-item-group-summary");
+      expect(summary).not.toBeNull();
+      expect(summary!.textContent).toContain("running");
+    });
+
+    it("does not group agents without work_item_id", () => {
+      const agent1 = mkAgent({ agent_id: "maint-1", name: "Janitor 1" });
+      const agent2 = mkAgent({ agent_id: "maint-2", name: "Janitor 2" });
+
+      const { container } = render(
+        <AgentsPanel agents={[agent1, agent2]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />,
+      );
+
+      expect(container.querySelector(".work-item-group-header")).toBeNull();
+    });
+
+    it("uses work_item_id as label when title is missing", () => {
+      const agent1 = mkAgent({
+        agent_id: "work-1",
+        card_id: "work-1::v1",
+        work_item_id: "ITEM-700",
+        status: "running",
+      });
+      const agent2 = mkAgent({
+        agent_id: "work-2",
+        card_id: "work-2::v1",
+        work_item_id: "ITEM-700",
+        status: "running",
+      });
+
+      const { container } = render(
+        <AgentsPanel agents={[agent1, agent2]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />,
+      );
+
+      const groupLabel = container.querySelector(".work-item-group-label");
+      expect(groupLabel?.textContent).toContain("ITEM-700");
+    });
+
+    it("shows separate groups for different work items", () => {
+      const agent1 = mkAgent({
+        agent_id: "work-1",
+        card_id: "work-1::v1",
+        work_item_id: "ITEM-A",
+        work_item_title: "First item",
+        status: "running",
+      });
+      const agent2 = mkAgent({
+        agent_id: "work-2",
+        card_id: "work-2::v1",
+        work_item_id: "ITEM-A",
+        work_item_title: "First item",
+        status: "running",
+      });
+      const agent3 = mkAgent({
+        agent_id: "work-3",
+        card_id: "work-3::v1",
+        work_item_id: "ITEM-B",
+        work_item_title: "Second item",
+        status: "running",
+      });
+      const agent4 = mkAgent({
+        agent_id: "work-4",
+        card_id: "work-4::v1",
+        work_item_id: "ITEM-B",
+        work_item_title: "Second item",
+        status: "running",
+      });
+
+      const { container } = render(
+        <AgentsPanel agents={[agent1, agent2, agent3, agent4]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />,
+      );
+
+      const groupHeaders = container.querySelectorAll(".work-item-group-header");
+      expect(groupHeaders).toHaveLength(2);
+      const groupLabels = container.querySelectorAll(".work-item-group-label");
+      expect(groupLabels[0]?.textContent).toContain("First item");
+      expect(groupLabels[1]?.textContent).toContain("Second item");
+    });
+  });
 });

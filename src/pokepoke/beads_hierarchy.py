@@ -4,7 +4,7 @@ import logging
 from subprocess import CalledProcessError
 
 from .types import BeadsWorkItem
-from .beads_query import get_issue_dependencies, _run_bd
+from .beads_query import get_issue_dependencies, has_unmet_blocking_dependencies, _run_bd
 
 logger = logging.getLogger(__name__)
 
@@ -144,8 +144,14 @@ def get_next_child_task(parent_id: str) -> BeadsWorkItem | None:
         if not (child.labels and HUMAN_REQUIRED_LABEL in child.labels)
     ]
 
+    # Filter out items with unmet blocking dependencies
+    available_children = [
+        child for child in available_children
+        if not has_unmet_blocking_dependencies(child.id)
+    ]
+
     if not available_children:
-        # All children are assigned to other agents
+        # All children are assigned to other agents or blocked
         return None
 
     # Return highest priority (lowest number)
@@ -173,11 +179,12 @@ def _get_available_children(parent_id: str) -> tuple[list[BeadsWorkItem], list[B
     if not open_children:
         return [], children
 
-    # Filter out items assigned to other agents and human-required
+    # Filter out items assigned to other agents, human-required, or with unmet blockers
     available = [
         child for child in open_children
         if is_assigned_to_current_user(child)
         and not (child.labels and HUMAN_REQUIRED_LABEL in child.labels)
+        and not has_unmet_blocking_dependencies(child.id)
     ]
 
     # Sort by priority (lowest number = highest priority)
