@@ -1,0 +1,20 @@
+[
+  {
+    "id": "PokePoke-0tod",
+    "title": "Post-session reconciliation too strict - requires all 3 conditions, misses partial completions",
+    "description": "reconciliation.py reconcile_completed_item() uses all(evidence.values()) requiring beads_closed AND commits_on_default AND worktree_cleaned. When agents successfully commit on worktree branches and close beads items, commits aren't on the default branch yet (not merged), and worktrees aren't cleaned. So reconciliation returns False and items are re-processed despite being complete. This was observed in run 20260310_172108: PokePoke-h1qv was committed, beads-closed by worker-4, then re-assigned to worker-12. Fix: treat beads_closed alone (or beads_closed + commits exist on worktree branch) as sufficient evidence. Also consider checking the worktree branch for commits, not just the default branch.",
+    "notes": "Fix already implemented in commit 5b844021: reconcile_completed_item() now treats beads_closed alone as sufficient evidence, and also checks worktree branch for commits via worktree_branch_has_commits().",
+    "status": "closed",
+    "priority": 1,
+    "issue_type": "bug",
+    "assignee": "pokepoke_curious_gengar_612c-sea_snake-worker-2",
+    "owner": "test@example.com",
+    "created_at": "2026-03-11T11:44:07.6310006-07:00",
+    "created_by": "Test User",
+    "updated_at": "2026-03-11T16:50:02.9741313-07:00",
+    "closed_at": "2026-03-11T16:50:02.9741313-07:00",
+    "labels": [
+      "orchestrator"
+    ]
+  }
+]

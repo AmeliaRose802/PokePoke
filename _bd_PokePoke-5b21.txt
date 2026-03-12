@@ -1,0 +1,36 @@
+[
+  {
+    "id": "PokePoke-5b21",
+    "title": "browse_for_project uses magic number dialog_type=20 instead of webview.FOLDER_DIALOG",
+    "description": "In desktop_api_ext.py, browse_for_project passes dialog_type=20 with a comment referencing webview.FOLDER_DIALOG. Replace the magic number with the actual webview.FOLDER_DIALOG constant for readability and to avoid breakage if the constant value changes in a future pywebview version.",
+    "status": "closed",
+    "priority": 3,
+    "issue_type": "chore",
+    "assignee": "pokepoke_curious_gengar_612c-sea_snake-worker-5",
+    "owner": "test@example.com",
+    "created_at": "2026-03-10T16:24:51.8532217-07:00",
+    "created_by": "Test User",
+    "updated_at": "2026-03-11T16:50:36.0830842-07:00",
+    "closed_at": "2026-03-11T16:50:36.0830842-07:00",
+    "close_reason": "Already fixed: browse_for_project uses webview.FOLDER_DIALOG constant (not magic number 20)",
+    "dependencies": [
+      {
+        "id": "PokePoke-iusu",
+        "title": "Fix minor fragility issues across codebase",
+        "description": "Collection of lower-severity fragility issues: (1) terminal_ui.py eagerly creates global DesktopUI at import time - should be lazy-initialized (2) _is_windows_lock_error in worktree_cleanup.py matches overly broad error strings like directory not empty and invalid argument (3) shutdown.py request_shutdown() blocks signal handler for up to 180 seconds waiting for merge queue drain (4) handoff_context.py swallows all subprocess failures silently with no log (5) MergeQueue worker thread is non-daemon so process hangs on ungraceful shutdown (6) browse_for_project uses magic number dialog_type=20 instead of webview.FOLDER_DIALOG (7) AgentRegistry uses untyped dict - should use dataclass",
+        "status": "closed",
+        "priority": 3,
+        "issue_type": "chore",
+        "owner": "ameliapayne@microsoft.com",
+        "created_at": "2026-02-25T17:37:27.897548-08:00",
+        "created_by": "Amelia Payne",
+        "updated_at": "2026-03-10T16:36:14.0891643-07:00",
+        "closed_at": "2026-03-10T16:36:14.0891643-07:00",
+        "labels": [
+          "tech-debt"
+        ],
+        "dependency_type": "discovered-from"
+      }
+    ]
+  }
+]
