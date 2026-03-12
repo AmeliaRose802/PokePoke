@@ -54,6 +54,10 @@ wheels/
 # Type checking
 .mypy_cache/
 
+# Scratch/temp files
+_*.txt
+_*.json
+
 # Testing / Coverage
 .pytest_cache/
 .pytest_tmp/
