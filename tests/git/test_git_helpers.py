@@ -7,6 +7,8 @@ from src.pokepoke.git_helpers import (
     restore_beads_stash,
     verify_branch_pushed,
     _run_git_status_with_retry,
+    validate_post_merge,
+    list_worktrees,
 )
 
 
@@ -193,3 +195,65 @@ class TestRunGitStatusWithRetry:
         )
         delays = [c.args[0] for c in mock_sleep.call_args_list]
         assert delays == [1.0, 2.0]
+
+
+class TestValidatePostMerge:
+    """Tests for validate_post_merge helper."""
+
+    @patch('src.pokepoke.git_helpers.subprocess.run')
+    def test_valid_merge(self, mock_run: Mock) -> None:
+        """Returns True when on correct branch with clean status."""
+        mock_run.side_effect = [
+            Mock(stdout="main\n"),   # git branch --show-current
+            Mock(stdout=""),         # git status --porcelain
+        ]
+        assert validate_post_merge("main") is True
+
+    @patch('src.pokepoke.git_helpers.subprocess.run')
+    def test_wrong_branch(self, mock_run: Mock) -> None:
+        """Returns False when on wrong branch."""
+        mock_run.return_value = Mock(stdout="feature\n")
+        assert validate_post_merge("main") is False
+
+    @patch('src.pokepoke.git_helpers.subprocess.run')
+    def test_dirty_working_tree(self, mock_run: Mock) -> None:
+        """Returns False when working tree has uncommitted changes."""
+        mock_run.side_effect = [
+            Mock(stdout="main\n"),         # correct branch
+            Mock(stdout="M file.py\n"),    # dirty status
+        ]
+        assert validate_post_merge("main") is False
+
+
+class TestListWorktrees:
+    """Tests for list_worktrees helper."""
+
+    @patch('src.pokepoke.git_helpers.subprocess.run')
+    def test_parses_porcelain_output(self, mock_run: Mock) -> None:
+        """Parses git worktree list --porcelain output."""
+        mock_run.return_value = Mock(stdout=(
+            "worktree /repo\n"
+            "HEAD abc123\n"
+            "branch refs/heads/main\n"
+            "\n"
+            "worktree /repo/worktrees/task-1\n"
+            "HEAD def456\n"
+            "branch refs/heads/task-1\n"
+        ))
+        result = list_worktrees()
+        assert len(result) == 2
+        assert result[0]["path"] == "/repo"
+        assert result[0]["branch"] == "refs/heads/main"
+        assert result[1]["path"] == "/repo/worktrees/task-1"
+
+    @patch('src.pokepoke.git_helpers.subprocess.run')
+    def test_returns_empty_on_error(self, mock_run: Mock) -> None:
+        """Returns empty list on CalledProcessError."""
+        mock_run.side_effect = subprocess.CalledProcessError(1, "git")
+        assert list_worktrees() == []
+
+    @patch('src.pokepoke.git_helpers.subprocess.run')
+    def test_returns_empty_on_timeout(self, mock_run: Mock) -> None:
+        """Returns empty list on TimeoutExpired."""
+        mock_run.side_effect = subprocess.TimeoutExpired("git", 30)
+        assert list_worktrees() == []

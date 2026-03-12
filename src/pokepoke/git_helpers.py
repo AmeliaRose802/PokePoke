@@ -11,7 +11,10 @@ from .constants import BEADS_DIR, DEFAULT_GIT_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["run_git", "verify_branch_pushed", "restore_beads_stash", "_run_git_status_with_retry"]
+__all__ = [
+    "run_git", "verify_branch_pushed", "restore_beads_stash",
+    "_run_git_status_with_retry", "validate_post_merge", "list_worktrees",
+]
 
 
 def run_git(
@@ -158,3 +161,51 @@ def _run_git_status_with_retry(
             time.sleep(delay)
     assert last_exc is not None
     raise last_exc
+
+
+def validate_post_merge(target_branch: str, cwd: str | None = None) -> bool:
+    """Validate repository state after merge."""
+    current_branch = subprocess.run(
+        ["git", "branch", "--show-current"],
+        capture_output=True, text=True, encoding='utf-8', errors='replace',
+        check=True, timeout=30, cwd=cwd).stdout.strip()
+    if current_branch != target_branch:
+        print(f"❌ Post-merge validation failed: Not on {target_branch} (on {current_branch})")
+        return False
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        capture_output=True, text=True, encoding='utf-8', errors='replace',
+        check=True, timeout=30, cwd=cwd).stdout.strip()
+    if status:
+        print(f"❌ Post-merge validation failed: {target_branch} has uncommitted changes")
+        return False
+    return True
+
+
+def list_worktrees(cwd: str | None = None) -> list[dict[str, str]]:
+    """List all active worktrees.
+
+    Args:
+        cwd: Working directory for the git command (defaults to process CWD).
+    """
+    try:
+        result = subprocess.run(
+            ["git", "worktree", "list", "--porcelain"],
+            capture_output=True, text=True, encoding='utf-8', errors='replace',
+            timeout=30, check=True, cwd=cwd)
+        worktrees: list[dict[str, str]] = []
+        current: dict[str, str] = {}
+        for line in result.stdout.splitlines():
+            if line.startswith("worktree "):
+                if current:
+                    worktrees.append(current)
+                current = {"path": line.split(" ", 1)[1]}
+            elif line.startswith("branch "):
+                current["branch"] = line.split(" ", 1)[1]
+            elif line.startswith("HEAD "):
+                current["commit"] = line.split(" ", 1)[1]
+        if current:
+            worktrees.append(current)
+        return worktrees
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return []

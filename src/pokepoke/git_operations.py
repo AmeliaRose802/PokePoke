@@ -13,13 +13,13 @@ _WT_PATH = f"{WORKTREE_DIR}/"
 
 logger = logging.getLogger(__name__)
 
-from .git_helpers import restore_beads_stash, _run_git_status_with_retry  # noqa: E402
+from .git_helpers import restore_beads_stash, _run_git_status_with_retry, validate_post_merge, list_worktrees  # noqa: E402,F401
 
 __all__ = [
     'has_uncommitted_changes',
     'execute_merge_sequence', 'check_main_repo_ready_for_merge',
     'categorize_git_changes', 'get_status_porcelain_and_changes',
-    'build_handoff_context',
+    'build_handoff_context', 'list_worktrees',
 ]
 
 
@@ -296,6 +296,8 @@ def execute_merge_sequence(
                      timeout=30, cwd=cwd)
     except subprocess.CalledProcessError as e:
         return False, f"Failed to checkout {target_branch}: {e.stderr or str(e)}", []
+    except subprocess.TimeoutExpired:
+        return False, f"Checkout of {target_branch} timed out after 30s", []
 
     # Stash beads daemon changes to avoid "unstaged changes" error during pull
     stashed = False
@@ -319,7 +321,7 @@ def execute_merge_sequence(
         subprocess.run(["git", "pull", "--rebase", "origin", target_branch],
                      check=True, capture_output=True, text=True, encoding='utf-8', errors='replace',
                      timeout=120, cwd=cwd)
-    except subprocess.CalledProcessError as e:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         # Rollback: abort the failed rebase to leave repo in a clean state
         try:
             subprocess.run(["git", "rebase", "--abort"], check=True,
@@ -330,6 +332,8 @@ def execute_merge_sequence(
             logger.warning("Could not abort rebase during rollback: %s", abort_err)
         if stashed:
             restore_beads_stash("git pull --rebase failure")
+        if isinstance(e, subprocess.TimeoutExpired):
+            return False, "Pull --rebase timed out after 120s", []
         return False, f"Failed to pull with rebase: {e.stderr or str(e)}", []
 
     # Restore stashed beads changes after successful pull
@@ -341,7 +345,7 @@ def execute_merge_sequence(
                      check=True, capture_output=True, text=True, encoding='utf-8', errors='replace',
                      timeout=60, cwd=cwd)
         return True, "", []
-    except subprocess.CalledProcessError as e:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         from .merge_conflict import get_unmerged_files, is_merge_in_progress
         repo_path_obj = Path(cwd) if cwd else None
         unmerged = get_unmerged_files(repo_path=repo_path_obj)
@@ -357,28 +361,12 @@ def execute_merge_sequence(
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as abort_err:
                 logger.error("Failed to abort merge during rollback: %s", abort_err)
 
+        if isinstance(e, subprocess.TimeoutExpired):
+            return False, "Merge timed out after 60s", unmerged
         if unmerged:
             return False, f"Merge conflicts detected in {len(unmerged)} file(s)", unmerged
         else:
             return False, f"Merge failed: {e.stderr or str(e)}", unmerged
-
-def validate_post_merge(target_branch: str, cwd: str | None = None) -> bool:
-    """Validate repository state after merge."""
-    current_branch = subprocess.run(
-        ["git", "branch", "--show-current"],
-        capture_output=True, text=True, encoding='utf-8', errors='replace',
-        check=True, timeout=30, cwd=cwd).stdout.strip()
-    if current_branch != target_branch:
-        print(f"❌ Post-merge validation failed: Not on {target_branch} (on {current_branch})")
-        return False
-    status = subprocess.run(
-        ["git", "status", "--porcelain"],
-        capture_output=True, text=True, encoding='utf-8', errors='replace',
-        check=True, timeout=30, cwd=cwd).stdout.strip()
-    if status:
-        print(f"❌ Post-merge validation failed: {target_branch} has uncommitted changes")
-        return False
-    return True
 
 def has_commits_ahead(target_branch: str | None = None, cwd: str | None = None) -> int:
     """Count commits in current branch ahead of the target branch."""
@@ -395,31 +383,4 @@ def has_commits_ahead(target_branch: str | None = None, cwd: str | None = None) 
         pass
     return 0
 
-def list_worktrees(cwd: str | None = None) -> list[dict[str, str]]:
-    """List all active worktrees.
-
-    Args:
-        cwd: Working directory for the git command (defaults to process CWD).
-    """
-    try:
-        result = subprocess.run(
-            ["git", "worktree", "list", "--porcelain"],
-            capture_output=True, text=True, encoding='utf-8', errors='replace',
-            timeout=30, check=True, cwd=cwd)
-        worktrees: list[dict[str, str]] = []
-        current: dict[str, str] = {}
-        for line in result.stdout.splitlines():
-            if line.startswith("worktree "):
-                if current:
-                    worktrees.append(current)
-                current = {"path": line.split(" ", 1)[1]}
-            elif line.startswith("branch "):
-                current["branch"] = line.split(" ", 1)[1]
-            elif line.startswith("HEAD "):
-                current["commit"] = line.split(" ", 1)[1]
-        if current:
-            worktrees.append(current)
-        return worktrees
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        return []
 from .handoff_context import build_handoff_context  # noqa: E402,F401  # Re-export for backward compat
