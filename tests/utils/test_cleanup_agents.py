@@ -1,5 +1,6 @@
 """Tests for cleanup agents."""
 
+import unittest.mock
 from pathlib import Path
 from unittest.mock import Mock, MagicMock, patch
 
@@ -328,6 +329,11 @@ class TestRunCleanupLoop:
         assert success is True
         assert cleanup_runs == 0
         mock_commit.assert_called_once()
+        # Verify tracked_only=True is passed for main repo safety
+        call_kwargs = mock_commit.call_args
+        assert call_kwargs == unittest.mock.call(
+            "Work on task-1", cwd=None, tracked_only=True
+        )
         mock_invoke.assert_not_called()
 
     @patch('pokepoke.cleanup_agents.invoke_cleanup_agent')
@@ -826,28 +832,27 @@ class TestCleanupAgentTimeout:
 class TestWorktreeCleanupPromptSafety:
     """Tests to verify the worktree cleanup prompt prohibits process killing."""
 
+    def _prompt_path(self) -> Path:
+        return Path(__file__).resolve().parent.parent.parent / "src" / "pokepoke" / "builtin_prompts" / "worktree-cleanup.md"
+
     def test_prompt_prohibits_stop_process(self):
         """The worktree-cleanup prompt must explicitly forbid Stop-Process."""
-        prompt_path = Path(__file__).parent.parent / "src" / "pokepoke" / "builtin_prompts" / "worktree-cleanup.md"
-        content = prompt_path.read_text(encoding='utf-8')
+        content = self._prompt_path().read_text(encoding='utf-8')
         assert "Stop-Process" in content, "Prompt must explicitly mention Stop-Process as forbidden"
 
     def test_prompt_prohibits_kill(self):
         """The worktree-cleanup prompt must explicitly forbid kill commands."""
-        prompt_path = Path(__file__).parent.parent / "src" / "pokepoke" / "builtin_prompts" / "worktree-cleanup.md"
-        content = prompt_path.read_text(encoding='utf-8')
+        content = self._prompt_path().read_text(encoding='utf-8')
         assert "taskkill" in content, "Prompt must explicitly mention taskkill as forbidden"
 
     def test_prompt_prohibits_process_killing_section(self):
         """The worktree-cleanup prompt must have a NEVER kill processes section."""
-        prompt_path = Path(__file__).parent.parent / "src" / "pokepoke" / "builtin_prompts" / "worktree-cleanup.md"
-        content = prompt_path.read_text(encoding='utf-8')
+        content = self._prompt_path().read_text(encoding='utf-8')
         assert "NEVER Kill or Stop Any Running Processes" in content
 
     def test_prompt_forbids_stale_process_cleanup(self):
         """The worktree-cleanup prompt must forbid killing 'stale' processes."""
-        prompt_path = Path(__file__).parent.parent / "src" / "pokepoke" / "builtin_prompts" / "worktree-cleanup.md"
-        content = prompt_path.read_text(encoding='utf-8')
+        content = self._prompt_path().read_text(encoding='utf-8')
         # Must mention stale processes as forbidden
         assert "stale" in content.lower()
         assert "zombie" in content.lower() or "orphan" in content.lower()

@@ -93,7 +93,7 @@ def sync_and_ensure_clean_main_repo(branch_name: str, cwd: str | None = None) ->
                     print(f"   ⚠️  pending: {line}")
                 if len(changes['other']) > 10:
                     print(f"   ... and {len(changes['other']) - 10} more")
-                ok, err = commit_all_changes(f"chore: commit pending changes before merge of {branch_name}", cwd=cwd)
+                ok, err = commit_all_changes(f"chore: commit pending changes before merge of {branch_name}", cwd=cwd, tracked_only=True)
                 if not ok:
                     print(f"❌ Cannot merge: failed to commit pending changes: {err}")
                     return False

@@ -66,7 +66,7 @@ def run_cleanup_loop(
         suffix = "..." if len(names) > 5 else ""
         print(f"   Files: {preview}{suffix}")
 
-        commit_success, commit_error = commit_all_changes(f"Work on {item.id}", cwd=cwd)
+        commit_success, commit_error = commit_all_changes(f"Work on {item.id}", cwd=cwd, tracked_only=True)
 
         if commit_success:
             print("✅ Changes committed successfully (validation passed)")

@@ -434,6 +434,46 @@ class TestCommitAllChanges:
         assert len(error_lines) <= 6  # 5 errors + potential join artifacts
 
 
+    @patch('src.pokepoke.git_operations.subprocess.run')
+    def test_tracked_only_uses_git_add_u(self, mock_run: Mock) -> None:
+        """Test that tracked_only=True uses git add -u instead of -A."""
+        mock_run.return_value = Mock(returncode=0, stderr="")
+
+        success, error_msg = commit_all_changes("Test commit", tracked_only=True)
+
+        assert success is True
+        assert error_msg == ""
+        mock_run.assert_any_call(
+            ["git", "add", "-u"],
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            timeout=240,
+            cwd=None
+        )
+
+    @patch('src.pokepoke.git_operations.subprocess.run')
+    def test_default_uses_git_add_all(self, mock_run: Mock) -> None:
+        """Test that default (tracked_only=False) uses git add -A."""
+        mock_run.return_value = Mock(returncode=0, stderr="")
+
+        success, error_msg = commit_all_changes("Test commit")
+
+        assert success is True
+        mock_run.assert_any_call(
+            ["git", "add", "-A"],
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            timeout=240,
+            cwd=None
+        )
+
+
 class TestExecuteMergeSequence:
     """Tests for execute_merge_sequence stash handling."""
 
