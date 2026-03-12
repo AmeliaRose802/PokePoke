@@ -37,8 +37,7 @@ norecursedirs = [
     "*.egg",
     "venv",
     ".venv",
-    "__pycache__",
-    "worktrees"
+    "__pycache__"
 ]
 timeout = 10
 filterwarnings = [
@@ -82,7 +81,7 @@ exclude = [
     "venv",
     ".venv",
     "__pycache__",
-    "worktrees",
+    "/worktrees",
 ]
 
 [tool.ruff.lint]
