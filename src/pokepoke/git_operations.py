@@ -19,7 +19,7 @@ __all__ = [
     'has_uncommitted_changes',
     'execute_merge_sequence', 'check_main_repo_ready_for_merge',
     'categorize_git_changes', 'get_status_porcelain_and_changes',
-    'build_handoff_context', 'list_worktrees',
+    'build_handoff_context', 'list_worktrees', 'validate_post_merge',
 ]
 
 
@@ -62,11 +62,25 @@ def has_uncommitted_changes(cwd: str | None = None) -> bool:
         return True  # Assume dirty to prevent data loss
 
 
-def commit_all_changes(message: str = "Auto-commit by PokePoke", cwd: str | None = None) -> tuple[bool, str]:
-    """Commit all changes, triggering pre-commit hooks for validation."""
+def commit_all_changes(
+    message: str = "Auto-commit by PokePoke",
+    cwd: str | None = None,
+    tracked_only: bool = False,
+) -> tuple[bool, str]:
+    """Commit changes, triggering pre-commit hooks for validation.
+
+    Args:
+        message: Commit message.
+        cwd: Working directory for git commands.
+        tracked_only: If True, use ``git add -u`` (tracked files only) instead
+            of ``git add -A``.  Callers operating in the **main repo** should
+            pass ``True`` to avoid staging untracked files (e.g. .env, temp
+            files).  Worktree callers may leave this ``False``.
+    """
+    add_flag = "-u" if tracked_only else "-A"
     try:
         subprocess.run(
-            ["git", "add", "-A"], check=True, capture_output=True,
+            ["git", "add", add_flag], check=True, capture_output=True,
             text=True, encoding='utf-8', errors='replace',
             timeout=240, cwd=cwd
         )

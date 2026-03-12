@@ -1,6 +1,7 @@
 """Tests for git worktree management."""
 import json
 import subprocess
+import unittest.mock
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -2119,6 +2120,11 @@ class TestSyncAndEnsureCleanMainRepo:
 
             assert result is False
             mock_commit.assert_called_once()
+            # Verify tracked_only=True is passed for main repo safety
+            assert mock_commit.call_args == unittest.mock.call(
+                'chore: commit pending changes before merge of task/test-branch',
+                cwd=None, tracked_only=True,
+            )
             print_calls = [str(c) for c in mock_print.call_args_list]
             assert any('and 5 more' in c for c in print_calls)
 
