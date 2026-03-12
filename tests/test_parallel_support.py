@@ -790,7 +790,200 @@ class TestDispatchItems:
         assert "closed-1" in failed_ids
 
 
-# ── run_preflight_and_repo_checks ────────────────────────────────────
+# ── dispatch_items high-conflict scheduling ─────────────────────────
+
+
+def _make_high_conflict_item(item_id: str = "hc1") -> BeadsWorkItem:
+    return BeadsWorkItem(
+        id=item_id, title=f"HighConflict-{item_id}", status="open",
+        priority=1, issue_type="task", labels=["high-conflict-risk"],
+    )
+
+
+class TestDispatchHighConflictItems:
+    """Tests that high-conflict items run solo (PokePoke-sz6k)."""
+
+    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    def test_high_conflict_blocks_new_dispatch(
+        self, _name, _assign, _claim, _stop, _closed,
+    ):
+        """When a high-conflict item is already running, nothing new is dispatched."""
+        hc_item = _make_high_conflict_item("hc-active")
+        normal_item = _make_item("normal-1")
+
+        # Simulate a high-conflict item already in the futures dict
+        mock_fut = MagicMock()
+        futures: dict = {mock_fut: hc_item}
+
+        def fake_select(ready, count, skip_ids=None, claimed_ids=None):
+            excluded = set()
+            if skip_ids:
+                excluded.update(skip_ids)
+            if claimed_ids:
+                excluded.update(claimed_ids)
+            return [i for i in ready if i.id not in excluded][:count]
+
+        with patch("pokepoke.parallel.select_multiple_items", side_effect=fake_select):
+            executor = MagicMock()
+            run_logger = MagicMock()
+
+            counter = dispatch_items(
+                [normal_item], 2, True, False, 0, 10, set(), {"hc-active"}, futures,
+                threading.Semaphore(2), executor, run_logger, 0, Mock(return_value="w"), Mock(),
+            )
+
+        assert counter == 0
+        executor.submit.assert_not_called()
+
+    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    def test_high_conflict_deferred_when_others_active(
+        self, _name, _assign, _claim, _stop, _closed,
+    ):
+        """A high-conflict item is deferred when non-conflict items are running."""
+        hc_item = _make_high_conflict_item("hc-defer")
+        running_item = _make_item("running-1")
+
+        mock_fut = MagicMock()
+        futures: dict = {mock_fut: running_item}
+
+        def fake_select(ready, count, skip_ids=None, claimed_ids=None):
+            excluded = set()
+            if skip_ids:
+                excluded.update(skip_ids)
+            if claimed_ids:
+                excluded.update(claimed_ids)
+            return [i for i in ready if i.id not in excluded][:count]
+
+        with patch("pokepoke.parallel.select_multiple_items", side_effect=fake_select):
+            executor = MagicMock()
+            run_logger = MagicMock()
+
+            counter = dispatch_items(
+                [hc_item], 2, True, False, 0, 10, set(), {"running-1"}, futures,
+                threading.Semaphore(2), executor, run_logger, 0, Mock(return_value="w"), Mock(),
+            )
+
+        # High-conflict item should NOT be dispatched
+        assert counter == 0
+        executor.submit.assert_not_called()
+
+    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    def test_high_conflict_dispatched_when_idle(
+        self, _name, _assign, _claim, _stop, _closed,
+    ):
+        """A high-conflict item IS dispatched when no other items are active."""
+        hc_item = _make_high_conflict_item("hc-solo")
+
+        def fake_select(ready, count, skip_ids=None, claimed_ids=None):
+            excluded = set()
+            if skip_ids:
+                excluded.update(skip_ids)
+            if claimed_ids:
+                excluded.update(claimed_ids)
+            return [i for i in ready if i.id not in excluded][:count]
+
+        with patch("pokepoke.parallel.select_multiple_items", side_effect=fake_select):
+            executor = MagicMock()
+            mock_fut = MagicMock()
+            executor.submit.return_value = mock_fut
+            run_logger = MagicMock()
+            futures: dict = {}
+
+            counter = dispatch_items(
+                [hc_item], 2, True, False, 0, 10, set(), set(), futures,
+                threading.Semaphore(2), executor, run_logger, 0, Mock(return_value="w"), Mock(),
+            )
+
+        assert counter == 1
+        assert executor.submit.call_count == 1
+
+    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    def test_high_conflict_prevents_additional_dispatch(
+        self, _name, _assign, _claim, _stop, _closed,
+    ):
+        """After dispatching a high-conflict item, no more items are dispatched."""
+        hc_item = _make_high_conflict_item("hc-only")
+        normal_item = _make_item("extra-1")
+
+        def fake_select(ready, count, skip_ids=None, claimed_ids=None):
+            excluded = set()
+            if skip_ids:
+                excluded.update(skip_ids)
+            if claimed_ids:
+                excluded.update(claimed_ids)
+            return [i for i in ready if i.id not in excluded][:count]
+
+        with patch("pokepoke.parallel.select_multiple_items", side_effect=fake_select):
+            executor = MagicMock()
+            mock_fut = MagicMock()
+            executor.submit.return_value = mock_fut
+            run_logger = MagicMock()
+            futures: dict = {}
+
+            counter = dispatch_items(
+                [hc_item, normal_item], 3, True, False, 0, 10, set(), set(), futures,
+                threading.Semaphore(3), executor, run_logger, 0, Mock(return_value="w"), Mock(),
+            )
+
+        # Only the high-conflict item should be dispatched, not the normal one
+        assert counter == 1
+        assert executor.submit.call_count == 1
+
+    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    def test_normal_dispatched_before_high_conflict_deferred(
+        self, _name, _assign, _claim, _stop, _closed,
+    ):
+        """Normal items before the high-conflict item dispatch; the high-conflict is deferred."""
+        normal_item = _make_item("norm-1")
+        hc_item = _make_high_conflict_item("hc-after")
+
+        call_count = [0]
+
+        def fake_select(ready, count, skip_ids=None, claimed_ids=None):
+            excluded = set()
+            if skip_ids:
+                excluded.update(skip_ids)
+            if claimed_ids:
+                excluded.update(claimed_ids)
+            candidates = [i for i in ready if i.id not in excluded][:count]
+            call_count[0] += 1
+            return candidates
+
+        with patch("pokepoke.parallel.select_multiple_items", side_effect=fake_select):
+            executor = MagicMock()
+            mock_fut = MagicMock()
+            executor.submit.return_value = mock_fut
+            run_logger = MagicMock()
+            futures: dict = {}
+
+            counter = dispatch_items(
+                [normal_item, hc_item], 3, True, False, 0, 10, set(), set(), futures,
+                threading.Semaphore(3), executor, run_logger, 0, Mock(return_value="w"), Mock(),
+            )
+
+        # Normal item dispatched; high-conflict deferred because dispatched > 0
+        assert counter >= 1
+        assert executor.submit.call_count >= 1
 
 
 class TestRunPreflightAndRepoChecks:
