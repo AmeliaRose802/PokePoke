@@ -1,5 +1,5 @@
 import type { AgentInfo } from "../types";
-import { isGateAgent } from "./agentHelpers";
+import { isCleanupAgent, isGateAgent } from "./agentHelpers";
 
 const ROBOT_AVATARS = ["🐍", "🦎", "🕷️", "🦇", "🦋", "🐛", "🐝", "🐞", "🤖", "🔧", "⚡", "🎯", "🔮", "🎲", "🔬", "🧩"];
 
@@ -90,11 +90,24 @@ export function collectAllGateDescendants(agent: AgentInfo, childrenMap: Map<str
 /**
  * Get non-gate children that are retry agents (linked via parent_card_id).
  * Maintenance sub-agents use parent_agent_id, so they are excluded.
+ * Cleanup/maintenance agent types are also excluded — they are a distinct
+ * workflow phase, not a retry of the work agent.
  */
 export function getRetryChildren(agent: AgentInfo, childrenMap: Map<string, AgentInfo[]>): AgentInfo[] {
   const key = cardIdForAgent(agent);
   const children = childrenMap.get(key) ?? childrenMap.get(agent.agent_id) ?? [];
-  return children.filter((c) => !isGateAgent(c) && !!c.parent_card_id);
+  return children.filter((c) => !isGateAgent(c) && !isCleanupAgent(c) && !!c.parent_card_id);
+}
+
+/**
+ * Get non-gate, non-retry children that represent cleanup/maintenance phases.
+ * These agents have a distinct agent_type (e.g. cleanup, code_conflict) and
+ * are linked via parent_card_id.
+ */
+export function getCleanupChildren(agent: AgentInfo, childrenMap: Map<string, AgentInfo[]>): AgentInfo[] {
+  const key = cardIdForAgent(agent);
+  const children = childrenMap.get(key) ?? childrenMap.get(agent.agent_id) ?? [];
+  return children.filter((c) => !isGateAgent(c) && isCleanupAgent(c) && !!c.parent_card_id);
 }
 
 /**
@@ -124,6 +137,8 @@ export function resolveGateForDisplay(
 }
 export function shouldShowAttemptLabel(agent: AgentInfo, childrenMap: Map<string, AgentInfo[]>): boolean {
   if (isGateAgent(agent)) return false;
+  // Cleanup agents are a distinct phase, not retry attempts
+  if (isCleanupAgent(agent)) return false;
   // Agent is a retry child (has parent_card_id and is not a gate)
   if (agent.parent_card_id) return true;
   // Agent was resumed in-place (e.g. timeout retry): iteration > 1 without parent link

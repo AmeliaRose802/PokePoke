@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AgentInfo } from "../types";
-import { formatModelName, getAgentAvatar, getAgentType } from "./agentHelpers";
+import { formatModelName, getAgentAvatar, getAgentType, getCleanupDisplayLabel, isCleanupAgent } from "./agentHelpers";
 import { getAgentSnakeIcon } from "./snakeIcons";
 
 function mkAgent(overrides: Partial<AgentInfo> = {}): AgentInfo {
@@ -35,6 +35,58 @@ describe("agentHelpers", () => {
   it("returns mapped icon when agent type matches", () => {
     const agent = mkAgent({ agent_type: "beta_test" });
     expect(getAgentAvatar(agent)).toBe("/agent_icons/beta_test_agent_icon.png");
+  });
+
+  describe("isCleanupAgent", () => {
+    it("returns true for cleanup agent type", () => {
+      expect(isCleanupAgent(mkAgent({ agent_type: "cleanup" }))).toBe(true);
+    });
+
+    it("returns true for code_conflict (merge conflict cleanup)", () => {
+      expect(isCleanupAgent(mkAgent({ agent_type: "merge_conflict_cleanup" }))).toBe(true);
+    });
+
+    it("returns true for janitor agent type", () => {
+      expect(isCleanupAgent(mkAgent({ agent_type: "janitor" }))).toBe(true);
+    });
+
+    it("returns true for tech_debt agent type", () => {
+      expect(isCleanupAgent(mkAgent({ agent_type: "tech_debt" }))).toBe(true);
+    });
+
+    it("returns false for gate agents", () => {
+      expect(isCleanupAgent(mkAgent({ agent_id: "work-1-gate", name: "Gate" }))).toBe(false);
+    });
+
+    it("returns false for work agents (no recognized type)", () => {
+      expect(isCleanupAgent(mkAgent({ agent_type: "work" }))).toBe(false);
+    });
+
+    it("returns false for agents with no type", () => {
+      expect(isCleanupAgent(mkAgent())).toBe(false);
+    });
+  });
+
+  describe("getCleanupDisplayLabel", () => {
+    it("returns 'Merge Conflict Cleanup' for code_conflict type", () => {
+      const agent = mkAgent({ agent_type: "merge_conflict_cleanup" });
+      expect(getCleanupDisplayLabel(agent)).toBe("Merge Conflict Cleanup");
+    });
+
+    it("returns 'Cleanup' for cleanup type", () => {
+      const agent = mkAgent({ agent_type: "cleanup" });
+      expect(getCleanupDisplayLabel(agent)).toBe("Cleanup");
+    });
+
+    it("returns 'Janitor' for janitor type", () => {
+      const agent = mkAgent({ agent_type: "janitor" });
+      expect(getCleanupDisplayLabel(agent)).toBe("Janitor");
+    });
+
+    it("falls back to agent name for unknown type", () => {
+      const agent = mkAgent({ name: "Custom Cleanup", agent_type: undefined });
+      expect(getCleanupDisplayLabel(agent)).toBe("Custom Cleanup");
+    });
   });
 
   it("falls back to snake icon for work item agents without type", () => {

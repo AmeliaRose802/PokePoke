@@ -7,6 +7,8 @@ import {
   getAgentAvatar,
   getAgentPrimaryLabel,
   getAgentType,
+  getCleanupDisplayLabel,
+  isCleanupAgent,
   isGateAgent,
   parseGateVerdict,
 } from "../utils/agentHelpers";
@@ -262,13 +264,30 @@ export function AgentsPanel({
       ];
 
       // Separate retry children (linked via parent_card_id, non-gate) from other children
-      const retryKids = allChildren.filter((c) => !isGateAgent(c) && !!c.parent_card_id);
+      const retryKids = allChildren.filter((c) => !isGateAgent(c) && !isCleanupAgent(c) && !!c.parent_card_id);
+      const cleanupKids = allChildren.filter((c) => !isGateAgent(c) && isCleanupAgent(c) && !!c.parent_card_id);
       const otherKids = allChildren.filter((c) => isGateAgent(c) || !c.parent_card_id);
 
       // Render non-retry children (gates, maintenance sub-agents) newest-first
       otherKids
         .sort((a, b) => (b.started_at ?? 0) - (a.started_at ?? 0))
         .forEach((child) => {
+          nodes.push(...renderSessionAgentTree(child, depth + 1, agent));
+        });
+
+      // Render cleanup children with their own separator (distinct workflow phase)
+      cleanupKids
+        .sort((a, b) => (a.started_at ?? a.iteration) - (b.started_at ?? b.iteration))
+        .forEach((child) => {
+          nodes.push(
+            <div
+              key={`cleanup-sep-${child.card_id ?? child.agent_id}`}
+              className={`agent-cleanup-separator${depth > 0 ? " agent-cleanup-separator-nested" : ""}`}
+            >
+              <span className="agent-cleanup-icon">🧹</span>
+              <span className="agent-cleanup-label">{getCleanupDisplayLabel(child)}</span>
+            </div>,
+          );
           nodes.push(...renderSessionAgentTree(child, depth + 1, agent));
         });
 

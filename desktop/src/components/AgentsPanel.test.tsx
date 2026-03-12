@@ -55,7 +55,8 @@ describe("AgentsPanel", () => {
       const cards = container.querySelectorAll(".agent-card");
       expect(cards.length).toBe(2);
       expect(screen.getByText("v1")).toBeInTheDocument();
-      expect(screen.getByText("v2")).toBeInTheDocument();
+      // Second attempt (iteration > 1) shows "Attempt 2" label
+      expect(screen.getByText("Attempt 2")).toBeInTheDocument();
     });
 
     it("omits pause/resume controls for historical attempts", () => {
@@ -745,6 +746,64 @@ describe("AgentsPanel", () => {
       expect(separator).toBeNull();
       // Should show "Attempt 2" label since iteration > 1
       expect(screen.getByText("Attempt 2")).toBeInTheDocument();
+    });
+
+    it("shows cleanup separator instead of retry separator for cleanup agents", () => {
+      const mainAgent = mkAgent({
+        agent_id: "work-item-cleanup",
+        card_id: "work-item-cleanup::v1",
+        name: "pokepoke",
+        iteration: 1,
+        status: "failed",
+      });
+      const cleanupAgent = mkAgent({
+        agent_id: "cleanup-mc-1",
+        card_id: "cleanup-mc-1::v1",
+        name: "Merge Conflict Cleanup",
+        agent_type: "merge_conflict_cleanup",
+        iteration: 1,
+        status: "running",
+        parent_card_id: "work-item-cleanup::v1",
+      });
+
+      const { container } = render(
+        <AgentsPanel agents={[mainAgent, cleanupAgent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />,
+      );
+
+      // Should NOT show retry separator
+      const retrySep = container.querySelector(".agent-retry-separator");
+      expect(retrySep).toBeNull();
+
+      // Should show cleanup separator with correct label
+      const cleanupSep = container.querySelector(".agent-cleanup-separator");
+      expect(cleanupSep).not.toBeNull();
+      expect(cleanupSep?.textContent).toContain("Merge Conflict Cleanup");
+    });
+
+    it("does not show attempt label for cleanup agents with parent_card_id", () => {
+      const mainAgent = mkAgent({
+        agent_id: "work-item-cl2",
+        card_id: "work-item-cl2::v1",
+        name: "pokepoke",
+        iteration: 1,
+        status: "failed",
+      });
+      const cleanupAgent = mkAgent({
+        agent_id: "cleanup-1",
+        card_id: "cleanup-1::v1",
+        name: "Cleanup",
+        agent_type: "cleanup",
+        iteration: 1,
+        status: "running",
+        parent_card_id: "work-item-cl2::v1",
+      });
+
+      render(
+        <AgentsPanel agents={[mainAgent, cleanupAgent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />,
+      );
+
+      // Cleanup agent should show v1, not Attempt 1
+      expect(screen.queryByText("Attempt 1")).not.toBeInTheDocument();
     });
 
     it("shows final gate outcome on root card from latest retry gate", () => {
