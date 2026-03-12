@@ -278,6 +278,59 @@ class TestForceRemoveDirectory:
         # Should not wait before first attempt
         mock_wait.assert_not_called()
 
+    @patch('pokepoke.process_utils.wait_for_process_cleanup')
+    @patch('pokepoke.worktree_cleanup.time.sleep')
+    @patch('subprocess.run')
+    @patch('shutil.rmtree')
+    @patch('builtins.print')
+    def test_max_attempts_one_no_retry(
+        self,
+        mock_print,
+        mock_rmtree,
+        mock_run,
+        mock_sleep,
+        mock_wait,
+    ) -> None:
+        """With max_attempts=1, only try once — no retry, no sleep."""
+        mock_run.side_effect = subprocess.CalledProcessError(
+            1, 'git', stderr='[WinError 32] being used by another process'
+        )
+        mock_rmtree.side_effect = PermissionError('[WinError 32] being used')
+
+        result = force_remove_directory(Path('/repo/worktrees/task-1'), max_attempts=1)
+
+        assert result is False
+        mock_sleep.assert_not_called()
+        mock_wait.assert_not_called()
+
+    @patch('pokepoke.process_utils.wait_for_process_cleanup')
+    @patch('pokepoke.worktree_cleanup.time.sleep')
+    @patch('subprocess.run')
+    @patch('builtins.print')
+    def test_max_attempts_limits_retries(
+        self,
+        mock_print,
+        mock_run,
+        mock_sleep,
+        mock_wait,
+    ) -> None:
+        """max_attempts=2 should try exactly twice."""
+        call_count = [0]
+
+        def run_side_effect(cmd, **kwargs):
+            call_count[0] += 1
+            if 'worktree' in cmd and 'remove' in cmd and call_count[0] <= 1:
+                raise subprocess.CalledProcessError(1, 'git', stderr='error')
+            return Mock(returncode=0, stdout='', stderr='')
+
+        mock_run.side_effect = run_side_effect
+
+        result = force_remove_directory(Path('/repo/worktrees/task-1'), max_attempts=2)
+
+        assert result is True
+        # Sleep called once (before second attempt)
+        assert mock_sleep.call_count == 1
+
 
 class TestCleanupAfterMerge:
     """Tests for cleanup_after_merge function."""
@@ -321,8 +374,8 @@ class TestCleanupAfterMerge:
 
         cleanup_after_merge(Path('/repo/worktrees/task-1'), 'task/item-1')
 
-        # Should call force_remove_directory
-        mock_force_remove.assert_called_once_with(Path('/repo/worktrees/task-1'))
+        # Should call force_remove_directory with max_attempts=1 (fire-and-forget)
+        mock_force_remove.assert_called_once_with(Path('/repo/worktrees/task-1'), max_attempts=1)
 
     @patch('pokepoke.worktree_cleanup.force_remove_directory')
     @patch('pokepoke.worktree_cleanup.add_uncleaned_worktree')

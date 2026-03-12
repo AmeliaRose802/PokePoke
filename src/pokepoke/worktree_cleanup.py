@@ -25,25 +25,33 @@ def _handle_remove_readonly(func: object, path: str, exc_info: object) -> None:
     func(path)  # type: ignore[operator]
 
 
-def force_remove_directory(dir_path: Path) -> bool:
+def force_remove_directory(dir_path: Path, *, max_attempts: int | None = None) -> bool:
     """Force-remove a directory, handling Windows permission issues.
 
     Enhanced retry logic with better error detection and backoff for Windows file locking.
     Returns True if the directory was removed.
+
+    Args:
+        dir_path: Directory to remove.
+        max_attempts: Maximum removal attempts. Defaults to ``_CLEANUP_MAX_RETRIES``.
+            Pass ``1`` for a single non-blocking attempt (fire-and-forget cleanup).
     """
     # Import here to avoid circular dependency
     from pokepoke.process_utils import wait_for_process_cleanup
 
+    if max_attempts is None:
+        max_attempts = _CLEANUP_MAX_RETRIES
+
     print(f"🔄 Attempting force removal of worktree: {dir_path}")
 
-    for attempt in range(_CLEANUP_MAX_RETRIES):
+    for attempt in range(max_attempts):
         if attempt > 0:
             # Wait for processes to clean up before retry
             wait_for_process_cleanup(max_wait=3.0)
 
             # Calculate delay with capped exponential backoff
             delay = min(_CLEANUP_RETRY_DELAY_SECONDS * (2 ** (attempt - 1)), _CLEANUP_MAX_DELAY_SECONDS)
-            print(f"   ⏳ Retry {attempt + 1}/{_CLEANUP_MAX_RETRIES} after {delay:.1f}s...")
+            print(f"   ⏳ Retry {attempt + 1}/{max_attempts} after {delay:.1f}s...")
             time.sleep(delay)
 
         # First try git worktree remove --force
@@ -85,7 +93,7 @@ def force_remove_directory(dir_path: Path) -> bool:
             else:
                 print(f"   ❌ Direct removal failed (attempt {attempt + 1}): {e}")
 
-    print(f"   ❌ All {_CLEANUP_MAX_RETRIES} removal attempts failed")
+    print(f"   ❌ All {max_attempts} removal attempts failed")
     return False
 
 
@@ -200,7 +208,11 @@ def _handle_worktree_removal_error(
     else:
         print(f"⚠️  Worktree removal failed: {stderr.strip()}. Attempting force removal...")
 
-    if force_remove_directory(worktree_path):
+    # Use a single attempt (fire-and-forget) to avoid blocking the worker
+    # thread for up to 78s.  If this quick attempt fails the worktree is
+    # added to the uncleaned manifest and the maintenance cleanup agent
+    # will retry asynchronously.
+    if force_remove_directory(worktree_path, max_attempts=1):
         if worktree_id is not None:
             remove_from_manifest(worktree_id)
         if print_success:
