@@ -1013,7 +1013,7 @@
 }
 
 .agent-dot-success {
-  background: var(--accent-primary);
+  background: var(--text-muted);
 }
 
 .agent-dot-failed {
