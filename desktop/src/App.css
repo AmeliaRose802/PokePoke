@@ -1325,6 +1325,30 @@
   margin-left: 12px;
 }
 
+.agent-cleanup-separator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  margin: 2px 0;
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.agent-cleanup-icon {
+  font-size: 13px;
+}
+
+.agent-cleanup-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.agent-cleanup-separator-nested {
+  margin-left: 12px;
+}
+
 .gate-final-outcome {
   font-weight: 700;
   font-size: 11px;
