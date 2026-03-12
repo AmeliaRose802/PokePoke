@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AgentInfo } from "../types";
-import { collectAllGateDescendants, getRetryChildren, shouldShowAttemptLabel } from "./agentsPanelHelpers";
+import { collectAllGateDescendants, getCleanupChildren, getRetryChildren, shouldShowAttemptLabel } from "./agentsPanelHelpers";
 
 function mkAgent(overrides: Partial<AgentInfo> = {}): AgentInfo {
   const iteration = overrides.iteration ?? 1;
@@ -121,6 +121,74 @@ describe("agentsPanelHelpers retry cycle utilities", () => {
       expect(result).toHaveLength(1);
       expect(result[0].agent_id).toBe("work-1-retry-2");
     });
+
+    it("excludes cleanup agents (distinct workflow phase)", () => {
+      const parent = mkAgent({ agent_id: "work-1", card_id: "work-1::v1" });
+      const cleanup = mkAgent({
+        agent_id: "cleanup-1",
+        name: "Merge Conflict Cleanup",
+        agent_type: "merge_conflict_cleanup",
+        parent_card_id: "work-1::v1",
+      });
+      const childrenMap = new Map<string, AgentInfo[]>([["work-1::v1", [cleanup]]]);
+      expect(getRetryChildren(parent, childrenMap)).toEqual([]);
+    });
+  });
+
+  describe("getCleanupChildren", () => {
+    it("returns empty when no children", () => {
+      const agent = mkAgent();
+      const childrenMap = new Map<string, AgentInfo[]>();
+      expect(getCleanupChildren(agent, childrenMap)).toEqual([]);
+    });
+
+    it("returns cleanup agents with parent_card_id", () => {
+      const parent = mkAgent({ agent_id: "work-1", card_id: "work-1::v1" });
+      const cleanup = mkAgent({
+        agent_id: "cleanup-1",
+        name: "Merge Conflict Cleanup",
+        agent_type: "merge_conflict_cleanup",
+        parent_card_id: "work-1::v1",
+      });
+      const childrenMap = new Map<string, AgentInfo[]>([["work-1::v1", [cleanup]]]);
+      const result = getCleanupChildren(parent, childrenMap);
+      expect(result).toHaveLength(1);
+      expect(result[0].agent_id).toBe("cleanup-1");
+    });
+
+    it("excludes gate agents", () => {
+      const parent = mkAgent({ agent_id: "work-1", card_id: "work-1::v1" });
+      const gate = mkAgent({
+        agent_id: "work-1-gate",
+        name: "Gate",
+        parent_card_id: "work-1::v1",
+      });
+      const childrenMap = new Map<string, AgentInfo[]>([["work-1::v1", [gate]]]);
+      expect(getCleanupChildren(parent, childrenMap)).toEqual([]);
+    });
+
+    it("excludes work retry agents", () => {
+      const parent = mkAgent({ agent_id: "work-1", card_id: "work-1::v1" });
+      const retry = mkAgent({
+        agent_id: "work-1-retry-2",
+        iteration: 2,
+        parent_card_id: "work-1::v1",
+      });
+      const childrenMap = new Map<string, AgentInfo[]>([["work-1::v1", [retry]]]);
+      expect(getCleanupChildren(parent, childrenMap)).toEqual([]);
+    });
+
+    it("excludes cleanup agents without parent_card_id", () => {
+      const parent = mkAgent({ agent_id: "janitor-1", card_id: "janitor-1::v1" });
+      const sub = mkAgent({
+        agent_id: "cleanup-1",
+        name: "Merge Conflict Cleanup",
+        agent_type: "merge_conflict_cleanup",
+        parent_agent_id: "janitor-1",
+      });
+      const childrenMap = new Map<string, AgentInfo[]>([["janitor-1", [sub]]]);
+      expect(getCleanupChildren(parent, childrenMap)).toEqual([]);
+    });
   });
 
   describe("shouldShowAttemptLabel", () => {
@@ -174,6 +242,18 @@ describe("agentsPanelHelpers retry cycle utilities", () => {
       });
       const childrenMap = new Map<string, AgentInfo[]>([["janitor-1", [sub]]]);
       expect(shouldShowAttemptLabel(janitor, childrenMap)).toBe(false);
+    });
+
+    it("returns false for cleanup agents even with parent_card_id", () => {
+      const cleanup = mkAgent({
+        agent_id: "cleanup-1",
+        agent_type: "merge_conflict_cleanup",
+        name: "Merge Conflict Cleanup",
+        parent_card_id: "work-1::v1",
+        iteration: 1,
+      });
+      const childrenMap = new Map<string, AgentInfo[]>();
+      expect(shouldShowAttemptLabel(cleanup, childrenMap)).toBe(false);
     });
   });
 });

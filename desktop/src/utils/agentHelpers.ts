@@ -112,6 +112,35 @@ export function isGateAgent(agent: AgentInfo): boolean {
   return normalizedId.endsWith(GATE_SUFFIX) || normalizedName.includes("gate");
 }
 
+/**
+ * Returns true when an agent represents a cleanup or maintenance phase
+ * (not a work-agent retry and not a gate agent).
+ */
+export function isCleanupAgent(agent: AgentInfo): boolean {
+  if (isGateAgent(agent)) return false;
+  const agentType = getAgentType(agent);
+  return agentType !== null && agentType !== "gate";
+}
+
+const CLEANUP_DISPLAY_LABELS: Record<string, string> = {
+  code_conflict: "Merge Conflict Cleanup",
+  cleanup: "Cleanup",
+  worktree_cleanup: "Worktree Cleanup",
+  janitor: "Janitor",
+  tech_debt: "Tech Debt",
+  beta_test: "Beta Test",
+  code_review: "Code Review",
+};
+
+/** Human-readable label for a cleanup agent's separator. */
+export function getCleanupDisplayLabel(agent: AgentInfo): string {
+  const agentType = getAgentType(agent);
+  if (agentType && CLEANUP_DISPLAY_LABELS[agentType]) {
+    return CLEANUP_DISPLAY_LABELS[agentType];
+  }
+  return agent.name || "Cleanup";
+}
+
 export function getAgentPrimaryLabel(agent: AgentInfo): string {
   if (agent.work_item_id) {
     return agent.work_item_title ? `${agent.work_item_id}: ${agent.work_item_title}` : agent.work_item_id;
