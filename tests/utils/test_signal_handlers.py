@@ -46,18 +46,14 @@ class TestSignalHandlers:
         # Should be able to register again without issues
         register_shutdown_handlers(mock_logger)
 
-    @patch('pokepoke.shutdown.request_shutdown')
-    def test_sigterm_handler_logs_and_exits(self, mock_request_shutdown):
-        """Test that SIGTERM handler logs appropriately and requests shutdown."""
+    @patch('pokepoke.signal_handlers.request_shutdown_from_signal')
+    def test_sigterm_handler_logs_and_exits(self, mock_request_shutdown_from_signal):
+        """Test that SIGTERM handler logs and calls signal-safe shutdown."""
         mock_logger = Mock()
         register_shutdown_handlers(mock_logger)
 
-        # Send SIGTERM to current process
-        # We need to use a different approach since we can't actually kill ourselves
-        # Instead, we'll manually call the handler
         from pokepoke.signal_handlers import _signal_handler
 
-        # Call the handler directly
         _signal_handler(signal.SIGTERM, None)
 
         # Verify logging was called
@@ -69,34 +65,29 @@ class TestSignalHandlers:
             "PokePoke orchestrator shutdown due to signal"
         )
 
-        mock_request_shutdown.assert_called_once()
+        # Signal handler must use the signal-safe variant, not request_shutdown()
+        mock_request_shutdown_from_signal.assert_called_once()
 
-        # sys.exit() must NOT be called; the main loop handles shutdown cleanly
-
-    @patch('pokepoke.shutdown.request_shutdown')
-    def test_sigint_handler_logs_and_exits(self, mock_request_shutdown):
-        """Test that SIGINT handler logs appropriately and requests shutdown."""
+    @patch('pokepoke.signal_handlers.request_shutdown_from_signal')
+    def test_sigint_handler_logs_and_exits(self, mock_request_shutdown_from_signal):
+        """Test that SIGINT handler logs and calls signal-safe shutdown."""
         mock_logger = Mock()
         register_shutdown_handlers(mock_logger)
 
         from pokepoke.signal_handlers import _signal_handler
 
-        # Call the handler directly
         _signal_handler(signal.SIGINT, None)
 
-        # Verify logging was called
         mock_logger.log_orchestrator.assert_any_call(
             "Process terminated by signal SIGINT (2)",
             level="WARNING"
         )
 
-        mock_request_shutdown.assert_called_once()
+        mock_request_shutdown_from_signal.assert_called_once()
 
-        # sys.exit() must NOT be called; the main loop handles shutdown cleanly
-
-    @patch('pokepoke.shutdown.request_shutdown')
+    @patch('pokepoke.signal_handlers.request_shutdown_from_signal')
     @patch('pokepoke.signal_handlers.print')
-    def test_signal_handler_fallback_when_no_logger(self, mock_print, mock_request_shutdown):
+    def test_signal_handler_fallback_when_no_logger(self, mock_print, mock_request_shutdown_from_signal):
         """Test that signal handler falls back to stderr when no logger available."""
         # Don't register a logger
         from pokepoke.signal_handlers import _signal_handler
@@ -112,13 +103,11 @@ class TestSignalHandlers:
                          if any("signal SIGTERM" in str(arg) for arg in call[0])]
         assert len(signal_messages) > 0
 
-        mock_request_shutdown.assert_called_once()
-        # sys.exit() must NOT be called; the main loop handles shutdown cleanly
+        mock_request_shutdown_from_signal.assert_called_once()
 
-    @patch('pokepoke.shutdown.request_shutdown')
-    def test_signal_handler_handles_logger_exception(self, mock_request_shutdown):
+    @patch('pokepoke.signal_handlers.request_shutdown_from_signal')
+    def test_signal_handler_handles_logger_exception(self, mock_request_shutdown_from_signal):
         """Test that signal handler handles logging exceptions gracefully."""
-        # Create a mock logger that raises an exception
         mock_logger = Mock()
         mock_logger.log_orchestrator.side_effect = Exception("Logging failed")
 
@@ -129,13 +118,11 @@ class TestSignalHandlers:
         # Call handler - should not raise exception
         _signal_handler(signal.SIGTERM, None)
 
-        mock_request_shutdown.assert_called_once()
-
-        # sys.exit() must NOT be called; shutdown watchdog handles force-exit
+        mock_request_shutdown_from_signal.assert_called_once()
 
     @patch('pokepoke.signal_handlers.print')
     def test_signal_handler_catches_request_shutdown_exception(self, mock_print):
-        """Covers lines 96-98: exception when request_shutdown itself fails."""
+        """Covers exception path when request_shutdown_from_signal fails."""
         mock_logger = Mock()
         mock_logger.log_orchestrator.side_effect = Exception("Logging failed")
 
@@ -143,8 +130,8 @@ class TestSignalHandlers:
 
         from pokepoke.signal_handlers import _signal_handler
 
-        with patch('pokepoke.shutdown.request_shutdown', side_effect=RuntimeError("shutdown broke")):
-            # Should not raise even though request_shutdown throws
+        with patch('pokepoke.signal_handlers.request_shutdown_from_signal', side_effect=RuntimeError("shutdown broke")):
+            # Should not raise even though request_shutdown_from_signal throws
             _signal_handler(signal.SIGTERM, None)
 
         # Should have printed error about failed shutdown
@@ -177,8 +164,11 @@ class TestSignalHandlers:
             # and that we can access the orchestrator log file
             assert run_logger.orchestrator_log_path.exists()
 
-            # Clean up
+            # Clean up signal handlers first, then close log file handles
+            # so the temp directory can be removed on Windows.
             unregister_shutdown_handlers()
+            run_logger._orch_handler.close()
+            run_logger._py_logger.removeHandler(run_logger._orch_handler)
 
     def test_register_skips_signal_on_non_main_thread(self):
         """Test that register_shutdown_handlers skips signal registration on non-main thread."""

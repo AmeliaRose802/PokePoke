@@ -8,6 +8,9 @@ import pytest
 
 from pokepoke.shutdown import (
     request_shutdown,
+    request_shutdown_from_signal,
+    start_shutdown_monitor,
+    _coordinate_shutdown,
     is_shutting_down,
     wait_for_shutdown,
     reset,
@@ -71,8 +74,64 @@ class TestRequestShutdown:
         mock_thread_cls.return_value.start = lambda: None
         request_shutdown()
         request_shutdown()
-        # Only one Thread created
+        # Only one Thread created (coordination runs once)
         assert mock_thread_cls.call_count == 1
+
+
+class TestRequestShutdownFromSignal:
+    """Tests for request_shutdown_from_signal() — signal-safe variant."""
+
+    def test_sets_event(self):
+        request_shutdown_from_signal()
+        assert _shutdown_event.is_set()
+
+    def test_does_not_acquire_agent_lock(self):
+        """Signal-safe path must not touch _agent_count_lock."""
+        import pokepoke.shutdown as mod
+
+        # Hold the lock in this thread to prove the signal-safe path
+        # does not try to acquire it (which would deadlock).
+        with mod._agent_count_lock:
+            request_shutdown_from_signal()
+        assert _shutdown_event.is_set()
+
+    def test_does_not_create_threads(self):
+        """Signal-safe path must not create threads."""
+        with patch("pokepoke.shutdown.threading.Thread") as mock_thread_cls:
+            request_shutdown_from_signal()
+            mock_thread_cls.assert_not_called()
+
+
+class TestCoordinateShutdown:
+    """Tests for _coordinate_shutdown() — idempotent coordination."""
+
+    @patch("pokepoke.shutdown.threading.Thread")
+    def test_runs_once(self, mock_thread_cls):
+        mock_thread_cls.return_value.start = lambda: None
+        _coordinate_shutdown()
+        _coordinate_shutdown()
+        assert mock_thread_cls.call_count == 1
+
+    @patch("pokepoke.shutdown.threading.Thread")
+    def test_starts_watchdog(self, mock_thread_cls):
+        mock_thread_cls.return_value.start = lambda: None
+        _coordinate_shutdown()
+        call_kwargs = mock_thread_cls.call_args
+        assert call_kwargs.kwargs["name"] == "shutdown-watchdog"
+
+
+class TestStartShutdownMonitor:
+    """Tests for start_shutdown_monitor() — daemon monitor thread."""
+
+    def test_monitor_calls_coordinate_on_event(self):
+        """Monitor thread should call _coordinate_shutdown when event fires."""
+        with patch("pokepoke.shutdown._coordinate_shutdown") as mock_coord:
+            start_shutdown_monitor()
+            # Signal shutdown
+            _shutdown_event.set()
+            # Give monitor time to wake and run
+            time.sleep(0.2)
+            mock_coord.assert_called_once()
 
 
 class TestWaitForShutdown:

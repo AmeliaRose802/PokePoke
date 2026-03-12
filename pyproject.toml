@@ -143,3 +143,8 @@ follow_imports = "skip"
 [[tool.mypy.overrides]]
 module = "pokepoke.worktree_cleanup"
 warn_return_any = false
+
+# git_operations re-exports symbols from git_helpers for convenience
+[[tool.mypy.overrides]]
+module = "pokepoke.git_operations"
+implicit_reexport = true

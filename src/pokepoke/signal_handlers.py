@@ -2,6 +2,13 @@
 
 Provides graceful shutdown logging when the process receives termination signals
 like SIGTERM (system kill) or SIGINT (Ctrl+C).
+
+Signal safety:
+- The signal handler only calls ``request_shutdown_from_signal()`` which sets a
+  threading.Event — no locks, dynamic imports, or thread creation happen inside
+  the signal handler.
+- A daemon *shutdown-monitor* thread (started by ``start_shutdown_monitor()``)
+  handles the heavier coordination work from a normal thread context.
 """
 
 import signal
@@ -13,6 +20,7 @@ from typing import Any
 from datetime import datetime
 
 from pokepoke.logging_utils import RunLogger
+from pokepoke.shutdown import request_shutdown_from_signal, start_shutdown_monitor
 
 
 # Global reference to the current RunLogger
@@ -52,6 +60,11 @@ def register_shutdown_handlers(run_logger: RunLogger) -> None:
     _original_handlers[signal.SIGTERM] = original_sigterm if callable(original_sigterm) else None
     _original_handlers[signal.SIGINT] = original_sigint if callable(original_sigint) else None
 
+    # Start the shutdown-monitor daemon so that a signal-safe
+    # request_shutdown_from_signal() is followed by full coordination
+    # (watchdog, merge queue, executor) from a non-signal thread context.
+    start_shutdown_monitor()
+
 
 def _signal_handler(signum: int, frame: FrameType | None) -> None:
     """Handle termination signals by logging and then exiting.
@@ -89,10 +102,10 @@ def _signal_handler(signum: int, frame: FrameType | None) -> None:
 
     # Signal the global shutdown coordinator before exiting so other threads
     # (agents, merge queue, executors) can stop cleanly.
+    # Only set the event here — full coordination (watchdog, merge queue,
+    # lock-protected reads) runs on the shutdown-monitor daemon thread.
     try:
-        from pokepoke.shutdown import request_shutdown
-
-        request_shutdown()
+        request_shutdown_from_signal()
     except Exception as e:
         # Signal handlers must never fail; best-effort log to stderr.
         print(f"[{timestamp}] [ERROR] Failed to request graceful shutdown: {e}", file=sys.stderr)
