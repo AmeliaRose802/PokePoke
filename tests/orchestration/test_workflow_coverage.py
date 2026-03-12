@@ -11,6 +11,7 @@ from unittest.mock import patch, MagicMock
 
 from pokepoke.types import (
     BeadsWorkItem, AgentStats, CopilotResult, ModelCompletionRecord,
+    GateAgentResult,
 )
 from pokepoke.workflow_helpers import (
     _fail_result,
@@ -363,7 +364,7 @@ class TestProcessWorkItem:
         mock_copilot.return_value = CopilotResult(
             work_item_id="wf-1", success=True, attempt_count=1,
         )
-        mock_gate.return_value = (True, "looks good", None, False)
+        mock_gate.return_value = GateAgentResult(success=True, reason="looks good")
         with patch("pokepoke.git_operations.build_handoff_context", return_value="ctx"):
             result = process_work_item(_item(), interactive=False)
         assert result.success is True
@@ -411,8 +412,8 @@ class TestProcessWorkItem:
             CopilotResult(work_item_id="wf-1", success=True, attempt_count=1),
         ]
         mock_gate.side_effect = [
-            (False, "needs fix", None, False),
-            (True, "ok", None, False),
+            GateAgentResult(success=False, reason="needs fix"),
+            GateAgentResult(success=True, reason="ok"),
         ]
         with patch("pokepoke.git_operations.build_handoff_context", return_value="ctx"):
             result = process_work_item(_item(), interactive=False)
@@ -522,8 +523,8 @@ class TestProcessWorkItem:
             CopilotResult(work_item_id="wf-1", success=True, attempt_count=1),
         ]
         mock_gate.side_effect = [
-            (False, "needs fix", None, False),
-            (True, "ok", None, False),
+            GateAgentResult(success=False, reason="needs fix"),
+            GateAgentResult(success=True, reason="ok"),
         ]
         with patch("pokepoke.git_operations.build_handoff_context", return_value="ctx"):
             result = process_work_item(_item(), interactive=False)
@@ -589,7 +590,7 @@ class TestRunGateCheck:
     """Direct unit tests for _run_gate_check."""
 
     @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.run_gate_agent", return_value=(True, "all good", None, False))
+    @patch("pokepoke.workflow_helpers.run_gate_agent", return_value=GateAgentResult(success=True, reason="all good"))
     @patch("pokepoke.git_operations.build_handoff_context", return_value="ctx")
     def test_success_path(self, mock_ctx, mock_gate, mock_tui):
         success, reason, runs, crashed = _run_gate_check(

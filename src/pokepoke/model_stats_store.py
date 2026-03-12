@@ -67,6 +67,7 @@ def _record_to_dict(record: ModelCompletionRecord) -> dict[str, Any]:
         "output_tokens": record.output_tokens,
         "agent_turns": record.agent_turns,
         "cost": record.cost,
+        "gate_model": record.gate_model,
         "repo_name": get_current_repo_name(),
         "timestamp": datetime.now(UTC).isoformat(),
     }

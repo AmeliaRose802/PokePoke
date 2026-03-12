@@ -118,16 +118,64 @@ def _check_inactivity(
     return None
 
 
+def _check_tool_timeout(
+    work_item_id: str,
+    tool_timed_out: bool,
+    tool_call_timeout: float,
+    last_output_summary: str | None = None,
+) -> CopilotResult | None:
+    """Return a failure result if a tool call exceeded the watchdog, else None."""
+    if tool_timed_out:
+        return _fail_result(
+            work_item_id,
+            f"Tool call stuck: exceeded {tool_call_timeout:.0f}s watchdog timeout",
+            last_output_summary=last_output_summary,
+        )
+    return None
+
+
+async def _check_tool_watchdog(
+    session: Any, stats: SessionStats | None, tool_call_timeout: float,
+) -> str | None:
+    """Check if any tool call exceeds the watchdog timeout. Returns 'tool_timeout' or None."""
+    if stats is None or tool_call_timeout <= 0:
+        return None
+    tool_times = stats.get('tool_start_times', {})
+    if not tool_times:
+        return None
+    now = time.monotonic()
+    for tool_id, start_time in tool_times.items():
+        elapsed = now - start_time
+        if elapsed >= tool_call_timeout:
+            print(
+                f"\n[SDK] TOOL TIMEOUT: tool call {tool_id} "
+                f"running for {elapsed:.0f}s "
+                f"(limit: {tool_call_timeout:.0f}s) \u2014 aborting"
+            )
+            logger.error(
+                "Tool call watchdog triggered: tool_id=%s elapsed=%.0fs limit=%.0fs",
+                tool_id, elapsed, tool_call_timeout,
+            )
+            try:
+                await session.abort()
+            except Exception as e:
+                logger.debug("Failed to abort session on tool timeout: %s", e)
+            return "tool_timeout"
+    return None
+
+
 async def _await_completion(
     session: Any, client: Any, done: asyncio.Event,
     max_timeout: float,
     stats: SessionStats | None = None,
     inactivity_timeout: float = 600.0,
+    tool_call_timeout: float = 600.0,
 ) -> str | None:
     """Poll until the session finishes or an abort condition is met.
 
     Returns ``None`` on normal completion, or a reason string
-    (``"shutdown"``, ``"timeout"``, ``"inactivity"``) on abort.
+    (``"shutdown"``, ``"timeout"``, ``"inactivity"``, ``"tool_timeout"``)
+    on abort.
     """
     deadline = asyncio.get_event_loop().time() + max_timeout
     while not done.is_set():
@@ -172,6 +220,10 @@ async def _await_completion(
                 except Exception as e:
                     logger.debug("Failed to abort dead session: %s", e)
                 return "inactivity"
+        # Per-tool-call watchdog
+        result = await _check_tool_watchdog(session, stats, tool_call_timeout)
+        if result is not None:
+            return result
         remaining = deadline - asyncio.get_event_loop().time()
         if remaining <= 0:
             print(f"\n[SDK] TIMEOUT after {max_timeout}s")
@@ -209,6 +261,44 @@ def _summarize_output(
     if len(text) <= max_length:
         return text
     return "...(earlier output truncated)...\n" + text[-max_length:]
+
+
+
+def build_gate_resume_prompt(
+    work_item: BeadsWorkItem,
+    handoff_context: str | None = None,
+    previous_output_summary: str | None = None,
+    default_branch: str = "master",
+) -> str:
+    """Build a prompt for resuming a timed-out gate agent session."""
+    lines = [
+        f"## Gate Agent Session Resume \u2014 {work_item.id}: {work_item.title}",
+        "",
+        "Your previous **gate verification session timed out** before",
+        "reaching a verdict.  You are being resumed in the same SDK session",
+        "so your earlier tool results and reasoning should still be available.",
+        "",
+        "**Continue your verification from where you left off.**",
+        "",
+        f"**Item:** {work_item.id} \u2014 {work_item.title}",
+        f"**Type:** {work_item.issue_type} | **Priority:** {work_item.priority}",
+    ]
+    if work_item.description:
+        lines.extend(["", "**Description:**", work_item.description])
+    if handoff_context:
+        lines.extend(["", "### Handoff Context", "", handoff_context])
+    if previous_output_summary:
+        lines.extend(["", "### Previous Progress", "", "Here is the tail of your previous gate session output:", "", "```", previous_output_summary, "```"])
+    lines.extend([
+        "", "### Your Task", "",
+        "You are the **Gate Agent** \u2014 a read-only verification agent.",
+        f"Review the changes on this branch compared to `{default_branch}`.",
+        "Run tests, check code quality, and verify the implementation.",
+        "", "Respond with a JSON verdict:",
+        '```json', '{{"status": "success", "message": "...", "reason": "..."}}', '```',
+        "or", '```json', '{{"status": "failure", "reason": "...", "details": "..."}}', '```',
+    ])
+    return "\n".join(lines)
 
 
 def build_resume_prompt(

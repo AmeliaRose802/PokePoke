@@ -18,7 +18,7 @@ from pokepoke.shutdown import is_shutting_down, register_agent, unregister_agent
 from pokepoke.model_selection import select_model_for_item, get_assignment_for_item
 from pokepoke.agent_context import get_agent_name
 from pokepoke.config import get_config
-from pokepoke.metrics_context import set_current_work_item_id
+from pokepoke.metrics_context import set_current_work_item_id, set_current_repo_name
 from pokepoke.work_item_session import WorkItemSession
 from pokepoke.workflow_helpers import (
     _apply_gate_feedback, _extract_agent_stats, _fail_result,
@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _MAX_GATE_CRASH_RETRIES = 3  # Retry gate agent up to 3 times on infra crashes
+_MAX_GATE_TIMEOUT_RETRIES = 3  # Retry gate agent up to 3 times on session timeouts
 
 
 def process_work_item(  # noqa: C901
@@ -45,23 +46,10 @@ def process_work_item(  # noqa: C901
     agent_id: str | None = None,
     repo_path: str | None = None,
 ) -> WorkItemResult:
-    """Process a single work item with timeout protection.
-
-    Args:
-        item: Work item to process.
-        interactive: Whether to prompt user for confirmation.
-        timeout_hours: Maximum hours before timeout.
-        run_beta_test: Whether to run beta tester after completion.
-        run_logger: Optional run logger for file logging.
-        max_timeout_restarts: Maximum timeout restarts allowed.
-        agent_id: Optional agent identifier.
-        repo_path: Target repo root. When provided, worktrees are created
-            under this repo and git operations use it as CWD.
-    """
+    """Process a single work item with timeout protection."""
     # Register this agent for shutdown coordination
     register_agent()
     _session: WorkItemSession | None = None
-
     try:
         start_time = time.time()
         timeout_seconds = timeout_hours * 3600
@@ -75,8 +63,10 @@ def process_work_item(  # noqa: C901
         backend_provider = config.ai_backend.provider
         worktree_lock_timeout = max(float(config.command_timeout), 120.0 * max(1, int(config.max_parallel_agents)))
 
-        # Set work-item correlation ID for structured logging
+        # Set work-item and repo correlation IDs for structured logging
         set_current_work_item_id(item.id)
+        repo_name = Path(repo_path).name if repo_path else Path.cwd().name
+        set_current_repo_name(repo_name)
 
         terminal_ui.ui.push_agent_status(base_agent_id, get_agent_name(default="pokepoke"),
             iteration=1, status="running", model=selected_model,
@@ -96,22 +86,16 @@ def process_work_item(  # noqa: C901
                 _log_failure(run_logger, item_logger)
                 return _fail_result()
 
-        # Assign and sync BEFORE creating worktree to prevent parallel conflicts
-        print("\n🔒 Claiming work item...")
-        # assign_and_sync_item has its own per-item lock (beads-claim-{item_id})
+        print("\n\U0001f512 Claiming work item...")
         if not assign_and_sync_item(item.id):
             print(f"❌ Failed to assign work item {item.id}")
             _log_failure(run_logger, item_logger)
             return _fail_result()
-
-        # Track assigned state via WorkItemSession for deterministic cleanup
         _session = WorkItemSession(
             item_id=item.id,
             agent_name=get_agent_name(default="pokepoke"),
         )
         _session._assigned = True
-
-        # create_worktree has its own lock (worktree-setup.lock) via with_worktree_lock
         worktree_path = _setup_worktree(
             item, lock_timeout=worktree_lock_timeout,
             run_logger=run_logger, item_logger=item_logger,
@@ -122,7 +106,6 @@ def process_work_item(  # noqa: C901
             print(f"↩️  Returning {item.id} to queue (unassigning due to worktree failure)...")
             _log_failure(run_logger, item_logger)
             return _fail_result()
-
         # Update session with acquired worktree resources
         _session.worktree_path = str(worktree_path)
         _session._worktree_created = True
@@ -138,15 +121,11 @@ def process_work_item(  # noqa: C901
         timeout_restart_count = 0
         work_agent_iteration = 1
         copilot_failure_count = 0
-        # Track whether the pending retry is from a gate rejection (new card)
-        # or a non-gate failure like timeout (resume existing card in-place).
         last_retry_was_gate_feedback = False
         current_work_agent_id = base_agent_id
         # Session resume state: track session_id and output from timed-out sessions
         resume_session_id: str | None = None
         resume_output_summary: str | None = None
-
-        # Default result for shutdown before first loop iteration.
         result = CopilotResult(work_item_id=item.id, success=False,
             error="Session aborted due to application shutdown", attempt_count=0)
 
@@ -156,15 +135,13 @@ def process_work_item(  # noqa: C901
             if elapsed >= timeout_seconds:
                 timeout_restart_count += 1
                 if timeout_restart_count > max_timeout_restarts:
-                    print(f"\n⏱️  TIMEOUT: Exceeded max restarts ({max_timeout_restarts})")
-                    print(f"   Failing item {item.id} after {timeout_restart_count - 1} timeout restart(s).\n")
+                    print(f"\n\u23f1\ufe0f  TIMEOUT: Exceeded max restarts ({max_timeout_restarts}), failing {item.id}")
                     _log_failure(run_logger, item_logger, request_count)
                     cleanup_worktree(item.id, force=True)
                     terminal_ui.ui.set_current_agent(None)
                     return _fail_result(request_count=request_count, stats=accumulated_stats,
                                         cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs)
-                print(f"\n⏱️  TIMEOUT: Execution exceeded {timeout_hours} hours")
-                print(f"   Restarting item {item.id} (attempt {timeout_restart_count}/{max_timeout_restarts})...\n")
+                print(f"\n\u23f1\ufe0f  TIMEOUT: Restarting {item.id} (attempt {timeout_restart_count}/{max_timeout_restarts})")
                 start_time = time.time()
                 elapsed = 0
 
@@ -178,7 +155,6 @@ def process_work_item(  # noqa: C901
                     print("\n⏱️  Resuming Work Agent after timeout...")
                 accumulated_feedback, work_agent_iteration = _apply_gate_feedback(
                     last_feedback, accumulated_feedback, work_agent_iteration)
-
             terminal_ui.ui.set_current_agent("Work Agent")
             from pokepoke.metrics_context import agent_type_context
             prompt_template = selected_prompt_template or "beads-item"
@@ -276,23 +252,43 @@ def process_work_item(  # noqa: C901
                 gate_success = True
                 break
 
-            # Run gate agent with crash retry loop
+            # Run gate agent with crash and timeout retry loops
             gate_crash_attempts = 0
+            gate_timeout_attempts = 0
+            gate_resume_session_id: str | None = None
+            _gate_resume_output: str | None = None
             while gate_crash_attempts < _MAX_GATE_CRASH_RETRIES:
                 from pokepoke.git_operations import build_handoff_context
                 handoff_ctx = build_handoff_context(cwd=worktree_cwd)
                 gate_iteration = gate_agent_runs + 1
                 gate_agent_id = f"{base_agent_id}-gate-{gate_iteration}"
+                gate_is_resume = gate_resume_session_id is not None
+                resume_in_place = gate_is_resume
                 gate_crashed = False
+                gate_timed_out = False
                 try:
                     with terminal_ui.ui.agent_output_for(gate_agent_id):
-                        gate_success, gate_reason, gate_stats, gate_crashed = run_gate_agent(
+                        if resume_in_place:
+                            terminal_ui.ui.push_agent_status(
+                                gate_agent_id, "Gate Agent",
+                                iteration=gate_iteration, status="running",
+                                parent_agent_id=base_agent_id,
+                                work_item_id=item.id, work_item_title=item.title,
+                                agent_type="gate", resume_in_place=True,
+                            )
+                        gate_result = run_gate_agent(
                             item, cwd=worktree_cwd, work_model=selected_model,
                             handoff_context=handoff_ctx,
                             agent_id=gate_agent_id, agent_iteration=gate_iteration,
                             parent_agent_id=base_agent_id,
                             item_logger=item_logger,
+                            session_id=gate_resume_session_id,
+                            is_resume=gate_is_resume,
                         )
+                    gate_success = gate_result.success
+                    gate_reason = gate_result.reason
+                    gate_crashed = gate_result.crashed
+                    gate_timed_out = gate_result.is_timeout
                 except Exception as e:
                     logger.warning(f"Gate agent raised exception: {e}", exc_info=True)
                     gate_agent_runs += 1
@@ -302,8 +298,9 @@ def process_work_item(  # noqa: C901
                         parent_agent_id=base_agent_id, work_item_id=item.id, work_item_title=item.title,
                         agent_type="gate")
                     if gate_crash_attempts < _MAX_GATE_CRASH_RETRIES:
-                        print(f"\n⚠️  Gate Agent crashed (attempt {gate_crash_attempts}/{_MAX_GATE_CRASH_RETRIES}): {e}")
-                        print("   Retrying gate agent...")
+                        print(f"\n\u26a0\ufe0f  Gate crashed ({gate_crash_attempts}/{_MAX_GATE_CRASH_RETRIES}): {e}, retrying...")
+                        gate_resume_session_id = None
+                        _gate_resume_output = None
                         continue
                     print(f"\n❌ Gate Agent crashed {gate_crash_attempts} times — giving up")
                     raise
@@ -314,31 +311,40 @@ def process_work_item(  # noqa: C901
                     parent_agent_id=base_agent_id, work_item_id=item.id, work_item_title=item.title,
                     agent_type="gate")
 
+                if gate_timed_out:
+                    gate_timeout_attempts += 1
+                    if gate_timeout_attempts < _MAX_GATE_TIMEOUT_RETRIES:
+                        gate_resume_session_id = gate_result.session_id
+                        _gate_resume_output = gate_result.last_output_summary
+                        print(f"\n\u23f1\ufe0f  Gate timed out ({gate_timeout_attempts}/{_MAX_GATE_TIMEOUT_RETRIES}), {'resuming' if gate_resume_session_id else 'retrying'}...")
+                        continue
+                    print(f"\n❌ Gate Agent timed out {gate_timeout_attempts} times — giving up")
+                    add_comment(item.id, f"Gate Agent timed out {gate_timeout_attempts} times:\n{gate_reason}")
+                    break
+
                 if gate_crashed:
                     gate_crash_attempts += 1
+                    gate_resume_session_id = None
+                    _gate_resume_output = None
                     if gate_crash_attempts < _MAX_GATE_CRASH_RETRIES:
-                        print(f"\n⚠️  Gate Agent crashed (attempt {gate_crash_attempts}/{_MAX_GATE_CRASH_RETRIES}): {gate_reason}")
-                        print("   Retrying gate agent...")
+                        print(f"\n\u26a0\ufe0f  Gate crashed ({gate_crash_attempts}/{_MAX_GATE_CRASH_RETRIES}): {gate_reason}, retrying...")
                         continue
                     print(f"\n❌ Gate Agent crashed {gate_crash_attempts} times — giving up")
                     add_comment(item.id, f"Gate Agent crashed {gate_crash_attempts} times:\n{gate_reason}")
-                break  # Not a crash — exit the gate retry loop
+                break  # Not a crash/timeout — exit the gate retry loop
 
             if gate_success:
                 print("\n✅ Gate Agent signed off!")
                 break
-            elif not gate_crashed:
+            elif not gate_crashed and not gate_timed_out:
                 # Genuine code rejection — restart work agent with feedback
-                # Clear resume state: gate rejection means a fresh approach is needed
                 resume_session_id = None
                 resume_output_summary = None
                 print(f"\n❌ Gate Agent rejected: {gate_reason}")
                 add_comment(item.id, f"Gate Agent Rejection:\n{gate_reason}")
                 last_feedback = gate_reason
                 last_retry_was_gate_feedback = True  # Gate rejection → new card
-                # Outer loop continues with work agent retry...
             else:
-                # All gate crash retries exhausted — fail the item
                 break
 
         final_result, finalized = _finalize_item_result(
@@ -352,11 +358,9 @@ def process_work_item(  # noqa: C901
         return final_result
 
     finally:
-        # Clear work-item correlation ID
         set_current_work_item_id(None)
-
-        # Deterministic cleanup via WorkItemSession if finalization did not succeed.
-        # On shutdown, preserve worktrees so work can be resumed later.
+        set_current_repo_name(None)
+        # Cleanup via WorkItemSession if finalization did not succeed
         if _session is not None and not is_shutting_down():
             _session.cleanup_on_failure()
         unregister_agent()

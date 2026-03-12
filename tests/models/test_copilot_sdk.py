@@ -2093,3 +2093,95 @@ class TestAwaitCompletionAbortOSError:
             )
 
         assert result == "inactivity"
+
+    async def test_tool_timeout_fires_when_tool_exceeds_limit(self):
+        """Tool call watchdog fires when a single tool exceeds the timeout."""
+        import time
+        from pokepoke.sdk_helpers import _await_completion
+
+        mock_session = AsyncMock()
+        mock_client = MagicMock()
+        mock_client.get_state = MagicMock(return_value="connected")
+
+        done = asyncio.Event()
+        stats = {
+            'last_event_time': time.monotonic(),
+            'event_count': 5,
+            'last_tool_activity_time': time.monotonic(),
+            'pending_tool_calls': 1,
+            'tool_start_times': {'tool-abc': time.monotonic() - 700},
+        }
+
+        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=False):
+            result = await _await_completion(
+                mock_session, mock_client, done,
+                max_timeout=300.0,
+                stats=stats,
+                inactivity_timeout=600.0,
+                tool_call_timeout=600.0,
+            )
+
+        assert result == "tool_timeout"
+        mock_session.abort.assert_called_once()
+
+    async def test_tool_timeout_does_not_fire_when_within_limit(self):
+        """Tool call watchdog does not fire when tools are within the timeout."""
+        import time
+        from pokepoke.sdk_helpers import _await_completion
+
+        mock_session = AsyncMock()
+        mock_client = MagicMock()
+        mock_client.get_state = MagicMock(return_value="connected")
+
+        done = asyncio.Event()
+        stats = {
+            'last_event_time': time.monotonic(),
+            'event_count': 5,
+            'last_tool_activity_time': time.monotonic(),
+            'pending_tool_calls': 1,
+            'tool_start_times': {'tool-abc': time.monotonic() - 10},
+        }
+
+        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=False):
+            result = await _await_completion(
+                mock_session, mock_client, done,
+                max_timeout=0.0,
+                stats=stats,
+                inactivity_timeout=600.0,
+                tool_call_timeout=600.0,
+            )
+
+        # Should hit the hard timeout, NOT tool_timeout
+        assert result == "timeout"
+
+    async def test_tool_timeout_abort_oserror_returns_tool_timeout(self):
+        """When session.abort() raises OSError on tool timeout, still return 'tool_timeout'."""
+        import time
+        from pokepoke.sdk_helpers import _await_completion
+
+        mock_session = AsyncMock()
+        mock_session.abort = AsyncMock(side_effect=OSError(22, "Invalid argument"))
+
+        mock_client = MagicMock()
+        mock_client.get_state = MagicMock(return_value="connected")
+
+        done = asyncio.Event()
+        stats = {
+            'last_event_time': time.monotonic(),
+            'event_count': 5,
+            'last_tool_activity_time': time.monotonic(),
+            'pending_tool_calls': 1,
+            'tool_start_times': {'tool-xyz': time.monotonic() - 700},
+        }
+
+        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=False):
+            result = await _await_completion(
+                mock_session, mock_client, done,
+                max_timeout=300.0,
+                stats=stats,
+                inactivity_timeout=600.0,
+                tool_call_timeout=600.0,
+            )
+
+        assert result == "tool_timeout"
+        mock_session.abort.assert_called_once()

@@ -144,6 +144,19 @@ class TestRecordToDict:
         d = _record_to_dict(rec)
         assert d["gate_passed"] is None
 
+    def test_gate_model_included(self):
+        rec = ModelCompletionRecord(
+            item_id="PP-9", model="gpt-4o", duration_seconds=30.0,
+            gate_passed=False, gate_model="claude-sonnet-4.5",
+        )
+        d = _record_to_dict(rec)
+        assert d["gate_model"] == "claude-sonnet-4.5"
+
+    def test_gate_model_none_by_default(self):
+        rec = _make_record()
+        d = _record_to_dict(rec)
+        assert d["gate_model"] is None
+
 
 # ── _rebuild_summary ─────────────────────────────────────────────────
 

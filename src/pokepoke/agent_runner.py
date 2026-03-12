@@ -23,6 +23,7 @@ from pokepoke.worktree_cleanup import has_unmerged_worktrees
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import ItemLogger
+    from pokepoke.types import GateAgentResult
 __all__ = ['invoke_cleanup_agent', 'invoke_merge_conflict_cleanup_agent', 'aggregate_cleanup_stats', 'run_cleanup_loop', 'run_maintenance_agent', 'run_beta_tester', 'run_gate_agent', 'run_worktree_cleanup']
 
 def _generate_unique_agent_id(agent_type: str) -> str:
@@ -30,12 +31,8 @@ def _generate_unique_agent_id(agent_type: str) -> str:
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     return f"{agent_type}-{timestamp}"
 
-
 def _print_preserved_worktree_debug(agent_id: str, worktree_path: Path, repo_root: Path) -> None:
-    """Log consistent guidance when a worktree is preserved for debugging."""
-    logger.info("Worktree preserved for debugging at: %s", worktree_path)
-    logger.info("Logs: %s/.pokepoke/logs/", repo_root)
-    logger.info("Cleanup: cleanup_worktree('%s', force=True)", agent_id)
+    logger.info("Worktree preserved at %s — logs: %s/.pokepoke/logs/ — cleanup: cleanup_worktree('%s', force=True)", worktree_path, repo_root, agent_id)
 
 def run_gate_agent(
     item: BeadsWorkItem,
@@ -46,15 +43,11 @@ def run_gate_agent(
     agent_iteration: int = 1,
     parent_agent_id: str | None = None,
     item_logger: 'ItemLogger | None' = None,
-) -> tuple[bool, str, AgentStats | None, bool]:
-    """Run the Gate Agent to verify a fixed work item.
-
-    Returns:
-        Tuple of (success, reason, stats, crashed).
-        ``crashed`` is True when the gate agent failed due to an infrastructure
-        error (SDK exception, network failure, etc.) rather than a deliberate
-        code-quality rejection.
-    """
+    session_id: str | None = None,
+    is_resume: bool = False,
+) -> 'GateAgentResult':
+    """Run the Gate Agent to verify a fixed work item."""
+    from pokepoke.types import GateAgentResult
     terminal_ui.ui.set_current_agent("Gate Agent")
     print(f"\n{'='*60}\n🕵️ Running Gate Agent on {item.id}\n{'='*60}")
 
@@ -62,19 +55,30 @@ def run_gate_agent(
     if work_model:
         from pokepoke.model_selection import select_gate_model
         gate_model = select_gate_model(work_model, item.id)
-
-    service = PromptService()
-    try:
-        final_prompt = service.load_and_render("gate-agent", {
-            "item_id": item.id,
-            "title": item.title,
-            "description": item.description or "",
-            "handoff_context": handoff_context or "",
-            "default_branch": get_default_branch(),
-        })
-    except Exception as e:
-        return False, f"Failed to render prompt: {e}", None, True
-
+    # Build prompt: use resume prompt if continuing a timed-out session
+    if is_resume and session_id:
+        from pokepoke.sdk_helpers import build_gate_resume_prompt
+        final_prompt = build_gate_resume_prompt(
+            item,
+            handoff_context=handoff_context,
+            previous_output_summary=None,
+            default_branch=get_default_branch(),
+        )
+    else:
+        service = PromptService()
+        try:
+            final_prompt = service.load_and_render("gate-agent", {
+                "item_id": item.id,
+                "title": item.title,
+                "description": item.description or "",
+                "handoff_context": handoff_context or "",
+                "default_branch": get_default_branch(),
+            })
+        except Exception as e:
+            return GateAgentResult(
+                success=False, reason=f"Failed to render prompt: {e}",
+                crashed=True,
+            )
     from pokepoke.metrics_context import agent_type_context
     with agent_type_context("gate"):
         if agent_id:
@@ -84,22 +88,37 @@ def run_gate_agent(
                 agent_type="gate",
                 agent_prompt=final_prompt,
             )
-        result = invoke_copilot(item, prompt=final_prompt, deny_write=True, cwd=cwd, model=gate_model, item_logger=item_logger)
+        result = invoke_copilot(
+            item, prompt=final_prompt, deny_write=True, cwd=cwd,
+            model=gate_model, item_logger=item_logger,
+            session_id=session_id, is_resume=is_resume,
+        )
 
     stats = parse_agent_stats(result.output) if result.output else None
-
     # Determine gate outcome and record for rejection rate tracking
-    def _finish(success: bool, reason: str, crashed: bool) -> tuple[bool, str, AgentStats | None, bool]:
+    def _finish(success: bool, reason: str, crashed: bool,
+                is_timeout: bool = False) -> 'GateAgentResult':
         if gate_model and not crashed:
             from pokepoke.gate_rejection_tracker import record_gate_check
             record_gate_check(gate_model, item.id, success)
-        return success, reason, stats, crashed
-
+        return GateAgentResult(
+            success=success, reason=reason, stats=stats, crashed=crashed,
+            is_timeout=is_timeout,
+            session_id=result.session_id,
+            last_output_summary=result.last_output_summary,
+        )
     if not result.success:
-        return _finish(False, f"Gate Agent execution failed: {result.error}", crashed=True)
-
+        # Distinguish timeout from generic crash
+        is_timeout = bool(
+            result.error
+            and ("timeout" in result.error.lower()
+                 or "inactivity" in result.error.lower())
+        )
+        return _finish(
+            False, f"Gate Agent execution failed: {result.error}",
+            crashed=not is_timeout, is_timeout=is_timeout,
+        )
     output = result.output or ""
-
     json_match = re.search(r'```json\s*(\{.*\})\s*```', output, re.DOTALL)
     if json_match:
         try:
@@ -125,12 +144,9 @@ def run_gate_agent(
                 return _finish(False, full_reason, crashed=False)
         except json.JSONDecodeError:
             pass
-
     if "VERIFICATION SUCCESSFUL" in output or "NEW_WORK_VERIFIED" in output:
         return _finish(True, "Verification successful (text match)", crashed=False)
-
     return _finish(False, "Gate Agent did not explicitly approve the fix. Check logs.", crashed=False)
-
 
 def run_maintenance_agent(
     agent_name: str, prompt_file: str, repo_root: Path | None = None,
@@ -149,7 +165,6 @@ def run_maintenance_agent(
         logger.error("%s Agent failed to start: %s", agent_name, e)
         logger.error("The prompts directory is missing. Ensure .pokepoke/prompts/ exists in the PokePoke installation.")
         return None
-
     if not prompt_path.exists():
         logger.error(
             "%s Agent failed to start: prompt file '%s' not found (expected: %s, available: %s)",
@@ -157,9 +172,7 @@ def run_maintenance_agent(
             ", ".join(p.name for p in prompts_dir.glob("*.md")),
         )
         return None
-
     agent_prompt = prompt_path.read_text(encoding='utf-8')
-
     # Use unique ID with timestamp to avoid worktree conflicts
     base_agent_type = f"maintenance-{agent_name.lower().replace(' ', '-')}"
     agent_id = _generate_unique_agent_id(base_agent_type) if needs_worktree else base_agent_type
@@ -168,7 +181,6 @@ def run_maintenance_agent(
         status=STATUS_IN_PROGRESS, priority=0, issue_type="task",
         labels=["maintenance", agent_name.lower()]
     )
-
     if not needs_worktree:
         return _run_beads_only_agent(agent_name, agent_item, agent_prompt, model=model, item_logger=item_logger)
 
@@ -180,7 +192,6 @@ def run_maintenance_agent(
         merge_changes=merge_changes, model=model, item_logger=item_logger,
         parent_agent_id=parent_agent_id
     )
-
 
 def _run_simple_agent(
     agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, deny_write: bool = True,
@@ -206,13 +217,11 @@ def _run_main_repo_agent(agent_name: str, agent_item: BeadsWorkItem, agent_promp
     """Run a maintenance agent in the main repo WITH write access."""
     return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=False, model=model, cwd=cwd, item_logger=item_logger)
 
-
 def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger | None' = None, parent_agent_id: str | None = None) -> AgentStats | None:
     """Run worktree cleanup agent to merge/delete stale worktrees."""
     terminal_ui.ui.set_current_agent("Worktree Cleanup")
 
     from pokepoke.worktree_cleanup import retry_failed_cleanups, get_uncleaned_worktree_count
-
     if not has_unmerged_worktrees():
         logger.info("No unmerged worktrees detected — skipping Worktree Cleanup Agent")
         return None
@@ -274,7 +283,6 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
         terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed", parent_agent_id=parent_agent_id, agent_type="worktree_cleanup")
         return None
 
-
 def _run_worktree_agent(
     agent_name: str, agent_id: str, agent_item: BeadsWorkItem, agent_prompt: str, repo_root: Path,
     merge_changes: bool = True, model: str | None = None, item_logger: 'ItemLogger | None' = None,
@@ -293,12 +301,9 @@ def _run_worktree_agent(
     logger.debug("Working directory: %s", worktree_cwd)
     if model:
         logger.debug("Model: %s", model)
-
     worktree_cleaned = False
     preserve_for_debugging = True
-
     cleanup_parent_id = parent_agent_id if parent_agent_id else agent_id
-
     try:
         try:
             from pokepoke.metrics_context import agent_type_context
@@ -330,7 +335,6 @@ def _run_worktree_agent(
 
         if result.success:
             logger.info("%s agent completed successfully!", agent_name)
-
             if not merge_changes:
                 logger.info("Discarding worktree (merge_changes=False)")
                 try:
@@ -348,9 +352,7 @@ def _run_worktree_agent(
                     )
                     return None
             logger.info("All changes committed and validated")
-
             agent_stats = parse_agent_stats(result.output) if result.output else None
-
             from pokepoke.worktree_merge_handler import handle_worktree_merge
             merge_success, worktree_cleaned = handle_worktree_merge(
                 agent_id, agent_item, agent_name, worktree_path, repo_root, agent_stats,
@@ -360,7 +362,6 @@ def _run_worktree_agent(
             if not merge_success:
                 _print_preserved_worktree_debug(agent_id, worktree_path, repo_root)
                 return None
-
             preserve_for_debugging = not worktree_cleaned
             logger.info("Merged and cleaned up worktree")
             return agent_stats
@@ -380,8 +381,7 @@ def _run_worktree_agent(
 
     finally:
         if preserve_for_debugging:
-            logger.info(f"Worktree preserved for debugging: {worktree_path}")
-            logger.info("Worktree preserved at: %s — manual cleanup required when investigation complete", worktree_path)
+            logger.info("Worktree preserved at %s — manual cleanup required", worktree_path)
         elif not worktree_cleaned:
             logger.info("Final cleanup: removing worktree %s...", agent_id)
             try:
@@ -392,7 +392,6 @@ def _run_worktree_agent(
                 logger.warning("Final cleanup failed: %s", cleanup_error)
                 from pokepoke.worktree_cleanup import add_uncleaned_worktree
                 add_uncleaned_worktree(agent_id, str(worktree_path), f"Failed final cleanup: {cleanup_error}")
-
 
 # Re-export beta tester for backward compatibility
 from pokepoke.beta_tester import run_beta_tester  # noqa: E402,F401

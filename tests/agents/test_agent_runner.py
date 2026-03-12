@@ -13,7 +13,7 @@ from pokepoke.agent_runner import (
     _run_worktree_agent
 )
 from pokepoke.git_operations import has_uncommitted_changes, commit_all_changes
-from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
+from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, GateAgentResult
 
 
 class TestHasUncommittedChanges:
@@ -145,7 +145,7 @@ class TestRunGateAgent:
         assert "All tests pass" in reason
         assert stats is not None
         assert crashed is False
-        mock_invoke.assert_called_once_with(work_item, prompt="Gate prompt", deny_write=True, cwd=None, model=None, item_logger=None)
+        mock_invoke.assert_called_once_with(work_item, prompt="Gate prompt", deny_write=True, cwd=None, model=None, item_logger=None, session_id=None, is_resume=False)
 
     @patch('pokepoke.agent_runner.parse_agent_stats')
     @patch('pokepoke.agent_runner.invoke_copilot')
@@ -304,6 +304,98 @@ class TestRunGateAgent:
         assert "execution failed" in reason
         assert crashed is True
 
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.PromptService')
+    def test_timeout_detected_as_timeout_not_crash(
+        self,
+        mock_service_cls: Mock,
+        mock_invoke: Mock,
+        work_item: BeadsWorkItem
+    ) -> None:
+        """Timeout errors should set is_timeout=True and crashed=False."""
+        mock_service = Mock()
+        mock_service.load_and_render.return_value = "Gate prompt"
+        mock_service_cls.return_value = mock_service
+
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="test-123",
+            success=False,
+            output="",
+            error="SESSION DEAD / inactivity timeout",
+            attempt_count=1,
+            session_id="sess-abc",
+            last_output_summary="Running tests...",
+        )
+
+        result = run_gate_agent(work_item)
+
+        assert isinstance(result, GateAgentResult)
+        assert result.success is False
+        assert result.is_timeout is True
+        assert result.crashed is False
+        assert result.session_id == "sess-abc"
+        assert result.last_output_summary == "Running tests..."
+        # Backward-compatible unpacking still works
+        success, reason, stats, crashed = result
+        assert success is False
+        assert crashed is False
+
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.PromptService')
+    def test_non_timeout_failure_is_crash(
+        self,
+        mock_service_cls: Mock,
+        mock_invoke: Mock,
+        work_item: BeadsWorkItem
+    ) -> None:
+        """Non-timeout errors should set crashed=True and is_timeout=False."""
+        mock_service = Mock()
+        mock_service.load_and_render.return_value = "Gate prompt"
+        mock_service_cls.return_value = mock_service
+
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="test-123",
+            success=False,
+            output="",
+            error="SDK process crashed unexpectedly",
+            attempt_count=1,
+        )
+
+        result = run_gate_agent(work_item)
+
+        assert isinstance(result, GateAgentResult)
+        assert result.success is False
+        assert result.is_timeout is False
+        assert result.crashed is True
+
+    @patch('pokepoke.agent_runner.invoke_copilot')
+    @patch('pokepoke.agent_runner.PromptService')
+    def test_resume_uses_gate_resume_prompt(
+        self,
+        mock_service_cls: Mock,
+        mock_invoke: Mock,
+        work_item: BeadsWorkItem
+    ) -> None:
+        """When session_id and is_resume are set, use gate resume prompt."""
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="test-123",
+            success=True,
+            output='```json\n{"status": "success", "message": "All tests pass"}\n```',
+            attempt_count=1,
+        )
+
+        result = run_gate_agent(
+            work_item, session_id="sess-abc", is_resume=True,
+        )
+
+        assert result.success is True
+        # Should NOT have called PromptService since we're resuming
+        mock_service_cls.return_value.load_and_render.assert_not_called()
+        # invoke_copilot should have been called with session_id and is_resume
+        call_kwargs = mock_invoke.call_args
+        assert call_kwargs[1].get('session_id') == "sess-abc"
+        assert call_kwargs[1].get('is_resume') is True
+
     @patch('pokepoke.agent_runner.PromptService')
     def test_prompt_render_failure(
         self,
@@ -420,7 +512,9 @@ class TestRunGateAgent:
             deny_write=True,
             cwd=None,
             model="gpt-5.1-codex",
-            item_logger=None
+            item_logger=None,
+            session_id=None,
+            is_resume=False,
         )
 
     @patch('pokepoke.agent_runner.parse_agent_stats')

@@ -23,7 +23,7 @@ def _make_event(event_type: str, **data_fields: object) -> SimpleNamespace:
     )
 
 
-def test_tool_output_streams_are_logged_incrementally(capsys) -> None:
+def test_tool_output_streams_are_logged_incrementally() -> None:
     loop = asyncio.new_event_loop()
     try:
         asyncio.set_event_loop(loop)
@@ -43,9 +43,6 @@ def test_tool_output_streams_are_logged_incrementally(capsys) -> None:
         handler(_make_event("tool.output", stdout="line one\n"))
         handler(_make_event("tool.output", stderr="line two"))
 
-        captured = capsys.readouterr()
-        assert "line one" in captured.out
-        assert "line two" in captured.out
         assert output_lines == ["line one\n", "line two"]
         assert logger.chunks == ["line one\n", "line two"]
         assert errors == []
@@ -397,7 +394,7 @@ def test_on_token_usage_callback_invoked_on_usage_event() -> None:
     assert stats['total_output_tokens'] == 150
 
 
-def test_stale_idle_forces_completion_after_threshold(capsys) -> None:
+def test_stale_idle_forces_completion_after_threshold() -> None:
     """When session.idle fires repeatedly with unchanged pending_tool_calls,
     the handler should force-set done after _MAX_STALE_IDLES (2) consecutive
     stale idles — preventing a 2-hour hang when Copilot exits mid-tool."""
@@ -426,10 +423,6 @@ def test_stale_idle_forces_completion_after_threshold(capsys) -> None:
         handler(_make_event("session.idle"))
         assert done.is_set()
         assert stats['pending_tool_calls'] == 0
-
-        captured = capsys.readouterr()
-        assert "stale pending tool" in captured.out
-        assert "forcing completion" in captured.out
     finally:
         asyncio.set_event_loop(None)
         loop.close()
@@ -548,7 +541,7 @@ def test_session_end_sets_done_immediately() -> None:
     assert done.is_set()
 
 
-def test_session_end_after_tool_activity_sets_done(capsys) -> None:
+def test_session_end_after_tool_activity_sets_done() -> None:
     """session.end should set done even after recent tool activity."""
     done = asyncio.Event()
     output_lines: list[str] = []
@@ -567,9 +560,6 @@ def test_session_end_after_tool_activity_sets_done(capsys) -> None:
     assert not done.is_set()
     handler(_make_event("session.end"))
     assert done.is_set()
-
-    captured = capsys.readouterr()
-    assert "session complete" in captured.out.lower()
 
 
 def test_tool_activity_time_tracked_on_start_and_complete() -> None:
@@ -592,3 +582,54 @@ def test_tool_activity_time_tracked_on_start_and_complete() -> None:
                         arguments={}, result=SimpleNamespace(content="ok"),
                         success=True, tool_call_id="t1"))
     assert stats['last_tool_activity_time'] >= start_time
+
+
+def test_tool_start_times_populated_on_start() -> None:
+    """tool_start_times should record a monotonic timestamp for each tool call."""
+    done = asyncio.Event()
+    output_lines: list[str] = []
+    errors: list[str] = []
+
+    handler, stats = create_event_handler(done, output_lines, errors)
+
+    assert stats['tool_start_times'] == {}
+
+    handler(_make_event("tool.execution_start", tool_name="run_cmd",
+                        arguments={}, tool_call_id="t1"))
+    assert "t1" in stats['tool_start_times']
+    assert stats['tool_start_times']['t1'] > 0
+
+
+def test_tool_start_times_cleared_on_complete() -> None:
+    """tool_start_times entry should be removed when tool completes."""
+    done = asyncio.Event()
+    output_lines: list[str] = []
+    errors: list[str] = []
+
+    handler, stats = create_event_handler(done, output_lines, errors)
+
+    handler(_make_event("tool.execution_start", tool_name="run_cmd",
+                        arguments={}, tool_call_id="t1"))
+    assert "t1" in stats['tool_start_times']
+
+    handler(_make_event("tool.execution_complete", tool_name="run_cmd",
+                        arguments={}, result=SimpleNamespace(content="ok"),
+                        success=True, tool_call_id="t1"))
+    assert "t1" not in stats['tool_start_times']
+
+
+def test_tool_start_times_cleared_on_reset() -> None:
+    """reset_for_retry should clear tool_start_times."""
+    done = asyncio.Event()
+    output_lines: list[str] = []
+    errors: list[str] = []
+
+    handler, stats = create_event_handler(done, output_lines, errors)
+
+    handler(_make_event("tool.execution_start", tool_name="run_cmd",
+                        arguments={}, tool_call_id="t1"))
+    assert len(stats['tool_start_times']) == 1
+
+    new_done = asyncio.Event()
+    handler.reset_for_retry(new_done, [], [])
+    assert stats['tool_start_times'] == {}

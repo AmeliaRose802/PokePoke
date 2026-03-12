@@ -40,6 +40,7 @@ class SessionStats(TypedDict):
     last_event_time: float
     event_count: int
     last_tool_activity_time: float
+    tool_start_times: dict[str, float]
 
 
 def _iter_streaming_chunks(event_obj: Any) -> list[tuple[str, str]]:
@@ -105,6 +106,7 @@ class _EventHandler:
         self._stale_idle_count = 0
         self._last_idle_pending = None
         self._pending_tools.clear()
+        self._stats['tool_start_times'].clear()
 
     # -- public entry point --------------------------------------------------
 
@@ -169,6 +171,7 @@ class _EventHandler:
             self._item_logger.log_tool_call(tool_name, args_str)
         tool_id = getattr(event.data, 'tool_call_id', None) or id(event)
         self._pending_tools[str(tool_id)] = {'name': tool_name, 'args': tool_args}
+        self._stats['tool_start_times'][str(tool_id)] = time.monotonic()
         if tool_name == 'powershell':
             shell_id = tool_args.get('shellId')
             if shell_id:
@@ -188,6 +191,7 @@ class _EventHandler:
         success = getattr(event.data, 'success', True)
         tool_id = getattr(event.data, 'tool_call_id', None)
         tool_info = self._pending_tools.pop(str(tool_id), {}) if tool_id else {}
+        self._stats['tool_start_times'].pop(str(tool_id), None)
         tool_args = tool_info.get('args', {})
         if not result:
             return
@@ -364,6 +368,7 @@ def create_event_handler(
         'last_event_time': time.monotonic(),
         'event_count': 0,
         'last_tool_activity_time': 0.0,
+        'tool_start_times': {},
     }
 
     handler = _EventHandler(

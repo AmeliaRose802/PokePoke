@@ -469,6 +469,38 @@ class TestCommandTimeout:
         assert config.command_timeout == 30
 
 
+class TestToolCallTimeout:
+    """Tests for tool_call_timeout configuration."""
+
+    def test_default_value(self):
+        """Test that tool_call_timeout defaults to 600."""
+        config = ProjectConfig()
+        assert config.tool_call_timeout == 600
+
+    def test_from_dict_default(self):
+        """Test that tool_call_timeout defaults to 600 when not specified."""
+        config = ProjectConfig.from_dict({})
+        assert config.tool_call_timeout == 600
+
+    def test_from_dict_custom_value(self):
+        """Test that tool_call_timeout can be set via config dict."""
+        data = {"tool_call_timeout": 900}
+        config = ProjectConfig.from_dict(data)
+        assert config.tool_call_timeout == 900
+
+    def test_from_dict_minimum_enforcement(self):
+        """Test that tool_call_timeout enforces minimum of 60 seconds."""
+        data = {"tool_call_timeout": 10}
+        config = ProjectConfig.from_dict(data)
+        assert config.tool_call_timeout == 60
+
+    def test_from_dict_zero_clamped(self):
+        """Test that zero tool_call_timeout is clamped to minimum."""
+        data = {"tool_call_timeout": 0}
+        config = ProjectConfig.from_dict(data)
+        assert config.tool_call_timeout == 60
+
+
 class TestAssignmentConfig:
     """Tests for AssignmentConfig and AssignmentRule parsing."""
 

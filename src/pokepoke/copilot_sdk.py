@@ -2,7 +2,9 @@
 import asyncio
 import logging
 import os
+import shutil
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 try:
@@ -21,7 +23,8 @@ from .sdk_event_handler import create_event_handler, RateLimitError, SessionStat
 from .sdk_helpers import (
     _fail_result, _build_token_usage_callback, _build_copilot_result,
     _build_session_config, _check_early_exit, _check_inactivity,
-    _await_completion, _summarize_output, build_resume_prompt,
+    _check_tool_timeout, _await_completion, _summarize_output,
+    build_resume_prompt,
 )
 
 logger = logging.getLogger(__name__)
@@ -78,14 +81,12 @@ def _build_worker_env(cwd: str | None) -> dict[str, str]:
     """Build environment variables for a worker session."""
     env = {**os.environ, "PYTHONIOENCODING": "utf-8:replace"}
     if cwd:
-        from pathlib import Path
         env["GIT_CEILING_DIRECTORIES"] = str(Path(cwd).parent)
     return env
 
 
 def _create_sdk_client(cwd: str | None) -> Any:
     """Create and configure a CopilotClient instance."""
-    import shutil
     proj_config = get_config()
     cli_path = proj_config.ai_backend.copilot_cli_path
     # Resolve relative CLI names (e.g. "copilot.cmd") to absolute paths via PATH
@@ -107,7 +108,8 @@ def _create_sdk_client(cwd: str | None) -> Any:
         )
     return CopilotClient(client_opts)  # type: ignore[arg-type]
 
-
+
+
 @dataclass
 class _AttemptResult:
     """Result of a single SDK session attempt."""
@@ -120,6 +122,7 @@ async def _send_and_wait(
     session: Any, client: Any, handler: Any,
     final_prompt: str, done: asyncio.Event,
     max_timeout: float, stats: Any, inactivity_timeout: float,
+    tool_call_timeout: float = 600.0,
 ) -> str | None:
     """Send the prompt and wait for completion. Returns abort reason or None.
 
@@ -132,6 +135,7 @@ async def _send_and_wait(
         abort_reason = await _await_completion(
             session, client, done, max_timeout,
             stats=stats, inactivity_timeout=inactivity_timeout,
+            tool_call_timeout=tool_call_timeout,
         )
         if handler.rate_limit_detected:
             raise RateLimitError()
@@ -142,6 +146,7 @@ async def _run_attempt(
     session: Any, client: Any, handler: Any,
     final_prompt: str, done: asyncio.Event,
     max_timeout: float, stats: Any, inactivity_timeout: float,
+    tool_call_timeout: float = 600.0,
 ) -> _AttemptResult:
     """Execute one send-and-wait attempt, handling interrupts and timing."""
     result = _AttemptResult()
@@ -150,11 +155,14 @@ async def _run_attempt(
         abort_reason = await _send_and_wait(
             session, client, handler, final_prompt, done,
             max_timeout, stats, inactivity_timeout,
+            tool_call_timeout=tool_call_timeout,
         )
         result.abort_reason = abort_reason
-        result.interrupted = abort_reason in ("shutdown", "timeout", "inactivity")
+        result.interrupted = abort_reason in (
+            "shutdown", "timeout", "inactivity", "tool_timeout",
+        )
     except KeyboardInterrupt:
-        print("\n\n[SDK] ⚠️  Interrupted by user (Ctrl+C)")
+        print("\n\n[SDK] ΓÜá∩╕Å  Interrupted by user (Ctrl+C)")
         try:
             await session.abort()
         except Exception as e:
@@ -214,6 +222,8 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
     if idle_timeout is None:
         idle_timeout = float(get_config().idle_timeout_seconds)
     inactivity_timeout = float(get_config().session_inactivity_timeout)
+    tool_call_timeout = float(get_config().tool_call_timeout)
+    tool_call_timeout = float(get_config().tool_call_timeout)
 
     client = _create_sdk_client(cwd)
 
@@ -266,6 +276,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                 attempt_result = await _run_attempt(
                     session, client, handler, final_prompt, done,
                     max_timeout, stats, inactivity_timeout,
+                    tool_call_timeout=tool_call_timeout,
                 )
                 total_wall_duration += attempt_result.elapsed
                 total_api_duration += attempt_result.elapsed
@@ -294,18 +305,28 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                         logger.debug(f"Failed to destroy session during cleanup: {e}")
                     session = None
 
-        # Handle timeout/interrupt/inactivity early exits
+        # Handle timeout/interrupt/inactivity/tool_timeout early exits
         timed_out = abort_reason == "timeout"
         interrupted = abort_reason == "shutdown" or (
             attempt_result.interrupted and abort_reason is None
         )
         inactivity_detected = abort_reason == "inactivity"
+        tool_timed_out = abort_reason == "tool_timeout"
         # Capture output summary for potential resume on next retry
-        output_summary = _summarize_output(output_lines) if (timed_out or inactivity_detected) else None
-        early = _check_early_exit(
-            work_item.id, timed_out, interrupted, max_timeout,
-        ) or _check_inactivity(
-            work_item.id, inactivity_detected, inactivity_timeout,
+        output_summary = _summarize_output(output_lines) if (
+            timed_out or inactivity_detected or tool_timed_out
+        ) else None
+        early = (
+            _check_early_exit(
+                work_item.id, timed_out, interrupted, max_timeout,
+            )
+            or _check_inactivity(
+                work_item.id, inactivity_detected, inactivity_timeout,
+            )
+            or _check_tool_timeout(
+                work_item.id, tool_timed_out, tool_call_timeout,
+                last_output_summary=output_summary,
+            )
         )
         if early is not None:
             early.session_id = session_id
@@ -326,7 +347,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
 
     except KeyboardInterrupt:
         error = "Session aborted due to application shutdown" if is_shutting_down() else "Interrupted by user"
-        print(f"\n[SDK] ⚠️  {error}")
+        print(f"\n[SDK] ΓÜá∩╕Å  {error}")
         return _fail_result(work_item.id, error, session_id=session_id)
     except Exception as e:
         print(f"\n[SDK] Exception: {e}")

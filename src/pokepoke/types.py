@@ -2,13 +2,13 @@
 
 import threading
 from dataclasses import dataclass, field, replace, is_dataclass
+from collections.abc import Iterator
 from typing import Any
 
 from pokepoke.agent_types import (
     AGENT_TYPES, _empty_agent_run_counts, _normalize_agent_key, resolve_agent_type,
 )
 from pokepoke.merge_queue_stats import MergeQueueStats as MergeQueueStats  # re-export
-
 
 @dataclass
 class BeadsWorkItem:
@@ -26,14 +26,12 @@ class BeadsWorkItem:
     updated_at: str | None = None
     labels: list[str] | None = None
 
-
 @dataclass(frozen=True)
 class BeadsCreatedItem:
     """A beads item created by an agent during the session."""
     id: str
     title: str = ""
     agent_type: str = "unknown"
-
 
 @dataclass
 class Dependency:
@@ -51,7 +49,6 @@ class Dependency:
     updated_at: str | None = None
     labels: list[str] | None = None
     notes: str | None = None
-
 
 @dataclass
 class IssueWithDependencies:
@@ -72,7 +69,6 @@ class IssueWithDependencies:
     labels: list[str] | None = None
     notes: str | None = None
 
-
 @dataclass
 class RetryConfig:
     """Configuration for retry logic with exponential backoff."""
@@ -81,7 +77,6 @@ class RetryConfig:
     max_delay: float = 60.0  # seconds
     backoff_factor: float = 2.0
     jitter: bool = True  # Add random jitter to prevent thundering herd
-
 
 @dataclass
 class AgentStats:
@@ -108,7 +103,6 @@ class AgentStats:
         self.retries += other.retries
         self.tool_calls += other.tool_calls
 
-
 @dataclass
 class BeadsStats:
     """Statistics from beads database."""
@@ -117,7 +111,6 @@ class BeadsStats:
     in_progress_issues: int = 0
     closed_issues: int = 0
     ready_issues: int = 0
-
 
 @dataclass
 class ModelCompletionRecord:
@@ -136,7 +129,6 @@ class ModelCompletionRecord:
     lines_removed: int | None = None
     gate_model: str | None = None  # Model used by the gate agent
 
-
 @dataclass
 class WorkItemResult:
     """Result of processing a single work item."""
@@ -146,7 +138,6 @@ class WorkItemResult:
     cleanup_agent_runs: int = 0
     gate_agent_runs: int = 0
     model_completion: ModelCompletionRecord | None = None
-
 
 @dataclass(frozen=True)
 class SessionStatsSnapshot:
@@ -180,7 +171,6 @@ class SessionStatsSnapshot:
             if key in AGENT_TYPES:
                 return self.agent_run_counts.get(key, 0)
         raise AttributeError(f"{self.__class__.__name__!s} object has no attribute {name!r}")
-
 
 @dataclass
 class SessionStats:
@@ -363,9 +353,7 @@ class SessionStats:
                 return self.agent_run_counts.get(key, 0)
         raise AttributeError(f"{self.__class__.__name__!s} object has no attribute {name!r}")
 
-
 _SESSION_STATS_INIT = SessionStats.__init__
-
 
 def _session_stats_init(self: SessionStats, *args: Any, **kwargs: Any) -> None:
     """Backwards-compatible __init__ supporting legacy *_agent_runs kwargs."""
@@ -378,9 +366,7 @@ def _session_stats_init(self: SessionStats, *args: Any, **kwargs: Any) -> None:
             raise ValueError(f"Unknown agent type: {slug}")
         self.agent_run_counts[slug] = count
 
-
 SessionStats.__init__ = _session_stats_init  # type: ignore[method-assign]
-
 
 @dataclass
 class CopilotResult:
@@ -396,3 +382,18 @@ class CopilotResult:
     model: str | None = None  # Model used for this invocation
     session_id: str | None = None  # SDK session ID, reusable for resume on timeout
     last_output_summary: str | None = None  # Truncated output summary for retry context
+
+@dataclass
+class GateAgentResult:
+    """Result from running the gate agent."""
+    success: bool
+    reason: str
+    stats: AgentStats | None = None
+    crashed: bool = False
+    is_timeout: bool = False
+    session_id: str | None = None
+    last_output_summary: str | None = None
+    def __iter__(self) -> 'Iterator[bool | str | AgentStats | None]':
+        return iter((self.success, self.reason, self.stats, self.crashed))
+    def __len__(self) -> int:
+        return 4

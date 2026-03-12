@@ -11,6 +11,7 @@ from pokepoke.types import (
     BeadsStats,
     BeadsWorkItem,
     CopilotResult,
+    GateAgentResult,
     SessionStats,
     WorkItemResult,
 )
@@ -185,14 +186,14 @@ class WorkflowHarness:
         self,
         item,
         **_kwargs,
-    ) -> tuple[bool, str, AgentStats | None, bool]:
+    ) -> 'GateAgentResult':
         if self.gate_results:
             result = self.gate_results.pop(0)
             # Support both 3-tuple and 4-tuple in test data
             if len(result) == 3:
-                return (*result, False)
-            return result
-        return True, "ok", None, False
+                return GateAgentResult(success=result[0], reason=result[1], stats=result[2])
+            return GateAgentResult(success=result[0], reason=result[1], stats=result[2], crashed=result[3])
+        return GateAgentResult(success=True, reason="ok")
 
     def _run_cleanup_loop(self, *_args, **_kwargs) -> tuple[bool, int]:
         if self.cleanup_sequences:

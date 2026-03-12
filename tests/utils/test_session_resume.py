@@ -82,6 +82,89 @@ class TestSummarizeOutput:
         assert "END_MARKER" in result
 
 
+# ── build_gate_resume_prompt tests ───────────────────────────────────────────
+
+
+class TestBuildGateResumePrompt:
+    """Tests for build_gate_resume_prompt function."""
+
+    def test_basic_gate_resume(self, sample_work_item):
+        from pokepoke.sdk_helpers import build_gate_resume_prompt
+        result = build_gate_resume_prompt(sample_work_item)
+        assert "Gate Agent Session Resume" in result
+        assert sample_work_item.id in result
+        assert sample_work_item.title in result
+        assert "timed out" in result
+        assert "Gate Agent" in result
+
+    def test_includes_handoff_context(self, sample_work_item):
+        from pokepoke.sdk_helpers import build_gate_resume_prompt
+        result = build_gate_resume_prompt(
+            sample_work_item, handoff_context="diff --stat output"
+        )
+        assert "Handoff Context" in result
+        assert "diff --stat output" in result
+
+    def test_includes_previous_output(self, sample_work_item):
+        from pokepoke.sdk_helpers import build_gate_resume_prompt
+        result = build_gate_resume_prompt(
+            sample_work_item, previous_output_summary="Running pytest..."
+        )
+        assert "Previous Progress" in result
+        assert "Running pytest..." in result
+
+    def test_no_previous_output(self, sample_work_item):
+        from pokepoke.sdk_helpers import build_gate_resume_prompt
+        result = build_gate_resume_prompt(sample_work_item, previous_output_summary=None)
+        assert "Previous Progress" not in result
+
+    def test_custom_default_branch(self, sample_work_item):
+        from pokepoke.sdk_helpers import build_gate_resume_prompt
+        result = build_gate_resume_prompt(sample_work_item, default_branch="main")
+        assert "`main`" in result
+
+    def test_no_description(self, work_item_no_desc):
+        from pokepoke.sdk_helpers import build_gate_resume_prompt
+        result = build_gate_resume_prompt(work_item_no_desc)
+        assert "Gate Agent Session Resume" in result
+        assert "Description" not in result
+
+
+# ── GateAgentResult tests ────────────────────────────────────────────────────
+
+
+class TestGateAgentResult:
+    """Tests for GateAgentResult dataclass."""
+
+    def test_tuple_unpacking(self):
+        from pokepoke.types import GateAgentResult
+        result = GateAgentResult(success=True, reason="ok")
+        success, reason, stats, crashed = result
+        assert success is True
+        assert reason == "ok"
+        assert stats is None
+        assert crashed is False
+
+    def test_timeout_fields(self):
+        from pokepoke.types import GateAgentResult
+        result = GateAgentResult(
+            success=False, reason="timed out", is_timeout=True,
+            session_id="sess-123", last_output_summary="test output",
+        )
+        assert result.is_timeout is True
+        assert result.session_id == "sess-123"
+        assert result.last_output_summary == "test output"
+        # Tuple unpacking ignores timeout fields
+        success, reason, stats, crashed = result
+        assert success is False
+        assert crashed is False
+
+    def test_len(self):
+        from pokepoke.types import GateAgentResult
+        result = GateAgentResult(success=True, reason="ok")
+        assert len(result) == 4
+
+
 # ── build_resume_prompt tests ────────────────────────────────────────────────
 
 
