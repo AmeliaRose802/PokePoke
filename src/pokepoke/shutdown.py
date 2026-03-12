@@ -10,6 +10,14 @@ Multi-agent shutdown coordination:
 - Tracks active agents to scale watchdog timeout
 - Coordinates with merge queue to finish merges
 - Future: Will coordinate with ThreadPoolExecutor
+
+Signal safety:
+- ``request_shutdown_from_signal()`` is safe to call from a signal handler
+  (it only sets a threading.Event — no locks, imports, or thread creation).
+- A daemon *shutdown-monitor* thread (started by ``start_shutdown_monitor()``)
+  watches for the event and runs full coordination from a normal thread context.
+- ``request_shutdown()`` is the non-signal-context entry point used by the UI
+  and ``except KeyboardInterrupt`` blocks.
 """
 
 from __future__ import annotations
@@ -42,6 +50,10 @@ _WATCHDOG_PER_AGENT_SECONDS = 3.0
 _active_agent_count = 0
 _agent_count_lock = threading.Lock()
 
+# Ensures _coordinate_shutdown() body runs at most once.
+_coordination_once = threading.Lock()
+_coordination_done = False
+
 # Future: ThreadPoolExecutor for parallel agents (set by orchestrator)
 _executor: concurrent.futures.ThreadPoolExecutor | None = None
 
@@ -49,27 +61,48 @@ _executor: concurrent.futures.ThreadPoolExecutor | None = None
 def request_shutdown() -> None:
     """Signal all components to shut down.
 
-    Call this from the UI quit action or any Ctrl+C handler.
-    Starts a watchdog that will force-kill the process if graceful
-    shutdown doesn't complete within the grace period.
+    Call this from the UI quit action or ``except KeyboardInterrupt`` blocks.
+    **Not safe to call from a signal handler** — use
+    :func:`request_shutdown_from_signal` instead.
 
     Shutdown coordination:
     1. Signals all agent threads via Event
-    2. Shuts down ThreadPoolExecutor (if present)
-    3. Shuts down merge queue to finish pending merges
-    4. Starts watchdog with timeout scaled to active agent count
+    2. Runs full coordination (executor, merge queue, watchdog)
     """
-    if _shutdown_event.is_set():
-        return  # Already shutting down
-
     _shutdown_event.set()
+    _coordinate_shutdown()
+
+
+def request_shutdown_from_signal() -> None:
+    """Signal-safe shutdown request for use inside signal handlers.
+
+    Only sets the global ``_shutdown_event``.  All complex coordination
+    (lock acquisition, dynamic imports, thread creation) is deferred to the
+    *shutdown-monitor* daemon thread started by :func:`start_shutdown_monitor`.
+    """
+    _shutdown_event.set()
+
+
+def _coordinate_shutdown() -> None:
+    """Run shutdown coordination (executor, merge queue, watchdog).
+
+    Idempotent — only the first caller executes; subsequent calls return
+    immediately.  **Not signal-safe** (acquires locks, imports modules,
+    creates threads).
+    """
+    global _coordination_done
+
+    with _coordination_once:
+        if _coordination_done:
+            return
+        _coordination_done = True
 
     # Shutdown ThreadPoolExecutor (future: when parallel agents are implemented)
     if _executor is not None:
         _executor.shutdown(wait=False, cancel_futures=True)
 
     # Signal the merge queue worker to stop and drain remaining items.
-    # This is intentionally non-blocking so signal handlers return quickly.
+    # This is intentionally non-blocking so callers return quickly.
     # The orchestrator's finally block calls mq.shutdown(timeout=10.0) to
     # wait for the worker to actually finish.
     try:
@@ -98,6 +131,22 @@ def request_shutdown() -> None:
     watchdog.start()
 
 
+def start_shutdown_monitor() -> None:
+    """Start a daemon thread that coordinates shutdown when signalled.
+
+    The monitor blocks on ``_shutdown_event`` and, once it fires, runs
+    :func:`_coordinate_shutdown` from a normal (non-signal) thread context.
+    Call this once during process initialisation (e.g. from
+    :func:`pokepoke.signal_handlers.register_shutdown_handlers`).
+    """
+    def _monitor() -> None:
+        _shutdown_event.wait()
+        _coordinate_shutdown()
+
+    t = threading.Thread(target=_monitor, daemon=True, name="shutdown-monitor")
+    t.start()
+
+
 def is_shutting_down() -> bool:
     """Check if shutdown has been requested.
 
@@ -118,8 +167,10 @@ def wait_for_shutdown(timeout: float | None = None) -> bool:
 
 def reset() -> None:
     """Reset the shutdown state. Only for tests."""
+    global _coordination_done
     _shutdown_event.clear()
     _stop_after_current_event.clear()
+    _coordination_done = False
 
 
 def register_agent() -> None:
