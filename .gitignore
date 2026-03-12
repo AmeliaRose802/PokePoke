@@ -5,7 +5,7 @@ coverage/
 .DS_Store
 .env
 .vscode/settings.json
-worktrees/
+/worktrees/
 
 # PokePoke runtime state
 .pokepoke/maintenance_state.json
