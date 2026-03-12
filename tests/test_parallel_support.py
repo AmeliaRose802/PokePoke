@@ -985,6 +985,53 @@ class TestDispatchHighConflictItems:
         assert counter >= 1
         assert executor.submit.call_count >= 1
 
+    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    def test_deferred_high_conflict_does_not_starve_normal_items(
+        self, _name, _assign, _claim, _stop, _closed,
+    ):
+        """Normal items dispatch even when a high-conflict item is first in the queue.
+
+        Regression test for PokePoke-mdaf: when slots=1 and a high-conflict
+        item sits at the front of ready_items with an active future, the
+        dispatcher must skip past the deferred item and dispatch the normal
+        one rather than breaking out of the loop with no progress.
+        """
+        hc_item = _make_high_conflict_item("hc-front")
+        normal_item = _make_item("norm-behind")
+
+        running_item = _make_item("running-1")
+        mock_running_fut = MagicMock()
+        futures: dict = {mock_running_fut: running_item}
+
+        def fake_select(ready, count, skip_ids=None, claimed_ids=None):
+            excluded = set()
+            if skip_ids:
+                excluded.update(skip_ids)
+            if claimed_ids:
+                excluded.update(claimed_ids)
+            return [i for i in ready if i.id not in excluded][:count]
+
+        with patch("pokepoke.parallel.select_multiple_items", side_effect=fake_select):
+            executor = MagicMock()
+            mock_fut = MagicMock()
+            executor.submit.return_value = mock_fut
+            run_logger = MagicMock()
+
+            counter = dispatch_items(
+                [hc_item, normal_item], 1, True, False, 0, 10,
+                set(), {"running-1"}, futures,
+                threading.Semaphore(2), executor, run_logger, 0,
+                Mock(return_value="w"), Mock(),
+            )
+
+        # The normal item behind the deferred high-conflict item MUST dispatch
+        assert counter == 1
+        assert executor.submit.call_count == 1
+
 
 class TestRunPreflightAndRepoChecks:
     """Tests for run_preflight_and_repo_checks."""
