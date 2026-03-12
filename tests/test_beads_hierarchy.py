@@ -125,11 +125,13 @@ def test_is_assigned_to_current_user(
     assert is_assigned_to_current_user(item) is expected
 
 
+@patch("pokepoke.beads_hierarchy.has_unmet_blocking_dependencies")
 @patch("pokepoke.beads_hierarchy.get_children")
 @patch("pokepoke.beads_hierarchy.is_assigned_to_current_user")
 def test_get_next_child_task_filters_and_picks_priority(
     mock_is_assigned: Mock,
     mock_get_children: Mock,
+    mock_has_blockers: Mock,
 ) -> None:
     mock_get_children.return_value = [
         _wi(id="done", status="done", priority=1),
@@ -143,6 +145,7 @@ def test_get_next_child_task_filters_and_picks_priority(
         return item.id != "other"
 
     mock_is_assigned.side_effect = _assigned_side_effect
+    mock_has_blockers.return_value = False
 
     picked = get_next_child_task("epic-1")
 
@@ -150,13 +153,16 @@ def test_get_next_child_task_filters_and_picks_priority(
     assert picked.id == "ok1"
 
 
+@patch("pokepoke.beads_hierarchy.has_unmet_blocking_dependencies")
 @patch("pokepoke.beads_hierarchy.get_children")
 @patch("pokepoke.beads_hierarchy.is_assigned_to_current_user")
 def test_get_available_children_sorts_and_returns_all(
     mock_is_assigned: Mock,
     mock_get_children: Mock,
+    mock_has_blockers: Mock,
 ) -> None:
     mock_is_assigned.side_effect = lambda item: item.id != "blocked"
+    mock_has_blockers.return_value = False
     mock_get_children.return_value = [
         _wi(id="done", status="done", priority=1),
         _wi(id="blocked", status="open", priority=1),
@@ -307,3 +313,90 @@ def test_has_feature_parent_handles_exception(mock_get_issue: Mock, mock_logger:
     mock_get_issue.side_effect = RuntimeError("boom")
     assert has_feature_parent("c") is False
     assert mock_logger.warning.called
+
+
+@patch("pokepoke.beads_hierarchy.has_unmet_blocking_dependencies")
+@patch("pokepoke.beads_hierarchy.get_children")
+@patch("pokepoke.beads_hierarchy.is_assigned_to_current_user")
+def test_get_next_child_task_skips_blocked_children(
+    mock_is_assigned: Mock,
+    mock_get_children: Mock,
+    mock_has_blockers: Mock,
+) -> None:
+    """Items with unmet blocking deps should be skipped by get_next_child_task."""
+    mock_get_children.return_value = [
+        _wi(id="blocked-child", status="open", priority=1),
+        _wi(id="ok-child", status="open", priority=2),
+    ]
+    mock_is_assigned.return_value = True
+    mock_has_blockers.side_effect = lambda item_id: item_id == "blocked-child"
+
+    picked = get_next_child_task("epic-1")
+
+    assert picked is not None
+    assert picked.id == "ok-child"
+
+
+@patch("pokepoke.beads_hierarchy.has_unmet_blocking_dependencies")
+@patch("pokepoke.beads_hierarchy.get_children")
+@patch("pokepoke.beads_hierarchy.is_assigned_to_current_user")
+def test_get_next_child_task_returns_none_when_all_blocked(
+    mock_is_assigned: Mock,
+    mock_get_children: Mock,
+    mock_has_blockers: Mock,
+) -> None:
+    """Returns None when all children have unmet blocking deps."""
+    mock_get_children.return_value = [
+        _wi(id="blocked-1", status="open", priority=1),
+        _wi(id="blocked-2", status="open", priority=2),
+    ]
+    mock_is_assigned.return_value = True
+    mock_has_blockers.return_value = True
+
+    assert get_next_child_task("epic-1") is None
+
+
+@patch("pokepoke.beads_hierarchy.has_unmet_blocking_dependencies")
+@patch("pokepoke.beads_hierarchy.get_children")
+@patch("pokepoke.beads_hierarchy.is_assigned_to_current_user")
+def test_get_available_children_excludes_blocked_items(
+    mock_is_assigned: Mock,
+    mock_get_children: Mock,
+    mock_has_blockers: Mock,
+) -> None:
+    """_get_available_children should exclude children with unmet blocking deps."""
+    mock_is_assigned.return_value = True
+    mock_has_blockers.side_effect = lambda item_id: item_id == "blocked-task"
+    mock_get_children.return_value = [
+        _wi(id="blocked-task", status="open", priority=1),
+        _wi(id="ok-task", status="open", priority=2),
+    ]
+
+    available, all_children = _get_available_children("epic-1")
+
+    assert len(all_children) == 2
+    assert [c.id for c in available] == ["ok-task"]
+
+
+@patch("pokepoke.beads_hierarchy.has_unmet_blocking_dependencies")
+@patch("pokepoke.beads_hierarchy._get_available_children")
+def test_resolve_to_leaf_task_skips_blocked_children(
+    mock_available: Mock,
+    mock_has_blockers: Mock,
+) -> None:
+    """resolve_to_leaf_task should not return children with unmet blocking deps.
+
+    When _get_available_children properly filters blocked items, resolve_to_leaf_task
+    should fall through to the next available child.
+    """
+    epic = _wi(id="epic", issue_type="epic")
+    ok_leaf = _wi(id="ok-leaf", issue_type="task", priority=2)
+
+    # _get_available_children already filters out blocked items,
+    # so only ok-leaf is returned as available
+    mock_available.return_value = ([ok_leaf], [ok_leaf])
+
+    resolved = resolve_to_leaf_task(epic)
+
+    assert resolved is not None
+    assert resolved.id == "ok-leaf"
