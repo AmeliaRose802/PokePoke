@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch, ANY, call
 
 from pokepoke.orchestrator import run_orchestrator
 from pokepoke.workflow import select_work_item, process_work_item
-from pokepoke.types import AgentStats, BeadsWorkItem, BeadsStats, CopilotResult, WorkItemResult
+from pokepoke.types import AgentStats, BeadsWorkItem, BeadsStats, CopilotResult, GateAgentResult, WorkItemResult
 from pokepoke import terminal_ui
 
 
@@ -180,7 +180,7 @@ class TestProcessWorkItem:
         mock_uncommitted.return_value = False
         mock_perform.return_value = (True, True)
         mock_close.return_value = True
-        mock_gate_agent.return_value = (True, "Gate passed", None, False)  # Gate agent passes
+        mock_gate_agent.return_value = GateAgentResult(success=True, reason="Gate passed")  # Gate agent passes
         mock_invoke.return_value = CopilotResult(
             work_item_id="task-1",
             success=True,
@@ -255,7 +255,7 @@ class TestProcessWorkItem:
         mock_getcwd.return_value = '/original'
         mock_perform.return_value = (True, True)
         mock_close.return_value = True
-        mock_gate_agent.return_value = (True, "Gate passed", None, False)  # Gate agent passes
+        mock_gate_agent.return_value = GateAgentResult(success=True, reason="Gate passed")  # Gate agent passes
         mock_invoke.return_value = CopilotResult(
             work_item_id="task-1",
             success=True,
@@ -328,7 +328,7 @@ class TestProcessWorkItem:
         mock_getcwd.return_value = '/original'
         mock_uncommitted.return_value = False
         mock_perform.return_value = (True, True)
-        mock_gate_agent.return_value = (True, "Gate passed", None, False)  # Gate agent passes
+        mock_gate_agent.return_value = GateAgentResult(success=True, reason="Gate passed")  # Gate agent passes
 
         # Copilot fails
         mock_invoke.return_value = CopilotResult(
@@ -971,18 +971,21 @@ class TestOrchestratorHelperFunctions:
             run_logger = RunLogger(base_dir=tmpdir)
             repo_path = Path.cwd()
 
-            result = check_and_commit_main_repo(repo_path, run_logger)
+            try:
+                result = check_and_commit_main_repo(repo_path, run_logger)
 
-            assert result is True  # Should return True after successful cleanup
-            # Should call subprocess for git status + auto-commit attempt
-            assert mock_subprocess.call_count >= 3
-            mock_cleanup.assert_called_once()
+                assert result is True  # Should return True after successful cleanup
+                # Should call subprocess for git status + auto-commit attempt
+                assert mock_subprocess.call_count >= 3
+                mock_cleanup.assert_called_once()
 
-            # Verify cleanup agent was called with correct work item
-            call_args = mock_cleanup.call_args
-            work_item = call_args[0][0]  # First positional argument
-            assert work_item.id == "cleanup-main-repo-1"  # First attempt
-            assert "uncommitted changes" in work_item.title.lower()
+                # Verify cleanup agent was called with correct work item
+                call_args = mock_cleanup.call_args
+                work_item = call_args[0][0]  # First positional argument
+                assert work_item.id == "cleanup-main-repo-1"  # First attempt
+                assert "uncommitted changes" in work_item.title.lower()
+            finally:
+                run_logger.close()
 
     def test_aggregate_stats(self) -> None:
         """Test aggregate_stats function."""
@@ -1290,7 +1293,10 @@ class TestFinalizeSession:
         session = SessionStats(agent_stats=AgentStats())
         with tempfile.TemporaryDirectory() as tmpdir:
             logger = RunLogger(base_dir=tmpdir)
-            _finalize_session(session, 90.0, 3, 5, logger)
+            try:
+                _finalize_session(session, 90.0, 3, 5, logger)
+            finally:
+                logger.close()
 
         assert session.ending_beads_stats == {"items": 5}
         mock_print.assert_called_once()
@@ -1316,7 +1322,10 @@ class TestFinalizeSession:
         session = SessionStats(agent_stats=AgentStats())
         with tempfile.TemporaryDirectory() as tmpdir:
             logger = RunLogger(base_dir=tmpdir)
-            _finalize_session(session, 90.0, 0, 0, logger)
+            try:
+                _finalize_session(session, 90.0, 0, 0, logger)
+            finally:
+                logger.close()
 
         assert session.ending_beads_stats is None
         mock_print.assert_called_once()
@@ -1344,7 +1353,10 @@ class TestFinalizeSession:
         session = SessionStats(agent_stats=AgentStats())
         with tempfile.TemporaryDirectory() as tmpdir:
             logger = RunLogger(base_dir=tmpdir)
-            _finalize_session(session, 90.0, 0, 0, logger)
+            try:
+                _finalize_session(session, 90.0, 0, 0, logger)
+            finally:
+                logger.close()
 
         assert session.ending_beads_stats is None
         mock_stats.assert_not_called()
