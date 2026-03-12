@@ -134,6 +134,7 @@ class ModelCompletionRecord:
     api_duration: float | None = None
     lines_added: int | None = None
     lines_removed: int | None = None
+    gate_model: str | None = None  # Model used by the gate agent
 
 
 @dataclass

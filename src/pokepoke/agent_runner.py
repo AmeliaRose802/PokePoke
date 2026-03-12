@@ -23,10 +23,7 @@ from pokepoke.worktree_cleanup import has_unmerged_worktrees
 
 if TYPE_CHECKING:
     from pokepoke.logging_utils import ItemLogger
-
-# Re-export cleanup agent functions for backward compatibility
 __all__ = ['invoke_cleanup_agent', 'invoke_merge_conflict_cleanup_agent', 'aggregate_cleanup_stats', 'run_cleanup_loop', 'run_maintenance_agent', 'run_beta_tester', 'run_gate_agent', 'run_worktree_cleanup']
-
 
 def _generate_unique_agent_id(agent_type: str) -> str:
     """Generate a unique agent ID with timestamp to avoid worktree conflicts."""
@@ -91,8 +88,15 @@ def run_gate_agent(
 
     stats = parse_agent_stats(result.output) if result.output else None
 
+    # Determine gate outcome and record for rejection rate tracking
+    def _finish(success: bool, reason: str, crashed: bool) -> tuple[bool, str, AgentStats | None, bool]:
+        if gate_model and not crashed:
+            from pokepoke.gate_rejection_tracker import record_gate_check
+            record_gate_check(gate_model, item.id, success)
+        return success, reason, stats, crashed
+
     if not result.success:
-        return False, f"Gate Agent execution failed: {result.error}", stats, True
+        return _finish(False, f"Gate Agent execution failed: {result.error}", crashed=True)
 
     output = result.output or ""
 
@@ -113,19 +117,19 @@ def run_gate_agent(
                 if recommendation:
                     full_message += f"\nRecommendation: {recommendation}"
 
-                return True, full_message, stats, False
+                return _finish(True, full_message, crashed=False)
             else:
                 reason = data.get("reason", "Verification failed")
                 details = data.get("details", "")
                 full_reason = f"{reason}\nDetails: {details}"
-                return False, full_reason, stats, False
+                return _finish(False, full_reason, crashed=False)
         except json.JSONDecodeError:
             pass
 
     if "VERIFICATION SUCCESSFUL" in output or "NEW_WORK_VERIFIED" in output:
-        return True, "Verification successful (text match)", stats, False
+        return _finish(True, "Verification successful (text match)", crashed=False)
 
-    return False, "Gate Agent did not explicitly approve the fix. Check logs.", stats, False
+    return _finish(False, "Gate Agent did not explicitly approve the fix. Check logs.", crashed=False)
 
 
 def run_maintenance_agent(
