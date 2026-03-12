@@ -11,6 +11,7 @@ coverage/
 .pokepoke/maintenance_state.json
 .pokepoke/model_stats.json
 .pokepoke/model_history.jsonl
+.pokepoke/gate_rejection_stats.json
 .pokepoke/uncleaned_worktrees.json
 .pokepoke/beads_item_stats.json
 .pokepoke/beads_item_stats.gw*.json
