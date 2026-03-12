@@ -247,6 +247,14 @@ def process_work_item(  # noqa: C901
 
             _log_commit_status(worktree_cwd)
 
+            # Check if the agent already closed the beads item (self-merge).
+            # If so, skip cleanup and gate agents — the work is done.
+            from pokepoke.reconciliation import is_beads_item_closed
+            if is_beads_item_closed(item.id):
+                print("\n✅ Agent already closed beads item — skipping cleanup and gate checks")
+                gate_success = True
+                break
+
             # Run cleanup loop with timeout checking
             cleanup_success, cleanup_runs = run_cleanup_with_timeout(
                 item, result, pokepoke_root, start_time, timeout_seconds, timeout_hours, worktree_cwd,
