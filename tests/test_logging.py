@@ -123,6 +123,7 @@ def test_run_logger_initialization():
         assert len(parts[0]) == 8  # YYYYMMDD
         assert len(parts[1]) == 6  # HHMMSS
         assert len(parts[2]) == 8  # short UUID
+        logger.close()
 
 
 def test_run_logger_orchestrator_logging():
@@ -146,6 +147,7 @@ def test_run_logger_orchestrator_logging():
         assert "[INFO]" in content
         assert "[WARNING]" in content
         assert "[ERROR]" in content
+        logger.close()
 
 
 def test_run_logger_item_logging():
@@ -181,6 +183,7 @@ def test_run_logger_item_logging():
         assert "Test agent output" in content
         assert "SUCCESS" in content
         assert "Agent requests: 5" in content
+        logger.close()
 
 
 def test_run_logger_finalize():
@@ -200,6 +203,7 @@ def test_run_logger_finalize():
         assert "Items completed: 3" in content
         assert "Total agent requests: 15" in content
         assert "Total time: 2.0 minutes" in content
+        logger.close()
 
 
 def test_run_logger_maintenance_logging():
@@ -220,6 +224,7 @@ def test_run_logger_maintenance_logging():
         assert "Starting Tech Debt Agent" in content
         assert "[MAINTENANCE:janitor]" in content
         assert "Janitor Agent completed successfully" in content
+        logger.close()
 
 
 def test_run_logger_creates_maintenance_dir():
@@ -227,6 +232,7 @@ def test_run_logger_creates_maintenance_dir():
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = RunLogger(base_dir=tmpdir)
         assert (logger.get_run_dir() / "maintenance").exists()
+        logger.close()
 
 
 def test_start_maintenance_log_creates_log_file():
@@ -245,6 +251,7 @@ def test_start_maintenance_log_creates_log_file():
         with open(expected_path, encoding='utf-8') as f:
             content = f.read()
         assert "Janitor Maintenance Agent" in content
+        logger.close()
 
 
 def test_maintenance_log_captures_output():
@@ -267,6 +274,7 @@ def test_maintenance_log_captures_output():
         assert "Rate limit hit" in content
         assert "SUCCESS" in content
         assert "Agent requests: 2" in content
+        logger.close()
 
 
 def test_item_logger_sanitizes_filenames():
@@ -341,6 +349,7 @@ def test_multiple_item_logs():
             content2 = f.read()
         assert "Second item output" in content2
         assert "FAILURE" in content2
+        logger.close()
 
 
 def test_item_logger_log_copilot_output():
@@ -410,6 +419,7 @@ def test_get_item_dir_creates_subdirectory():
         assert item_dir.exists()
         assert item_dir.parent == logger.item_logs_dir
         assert item_dir.name == "my-item-42"
+        logger.close()
 
 
 def test_get_item_dir_sanitizes_slashes():
@@ -420,6 +430,7 @@ def test_get_item_dir_sanitizes_slashes():
         item_dir = logger._get_item_dir("task/with/slashes")
         assert item_dir.name == "task_with_slashes"
         assert item_dir.exists()
+        logger.close()
 
 
 def test_start_item_phase_log_creates_log_in_item_dir():
@@ -441,6 +452,7 @@ def test_start_item_phase_log_creates_log_in_item_dir():
         assert "work" in item_logger.log_path.name
         assert "attempt_1" in item_logger.log_path.name
         assert "test_agent" in item_logger.log_path.name
+        logger.close()
 
 
 def test_start_item_phase_log_multiple_phases():
@@ -457,6 +469,7 @@ def test_start_item_phase_log_multiple_phases():
 
         assert work_logger.log_path != gate_logger.log_path
         assert work_logger.log_path.parent == gate_logger.log_path.parent
+        logger.close()
 
 
 def test_start_item_phase_log_retry_attempt():
@@ -474,6 +487,7 @@ def test_start_item_phase_log_retry_attempt():
         assert attempt1.log_path != attempt2.log_path
         assert "attempt_1" in attempt1.log_path.name
         assert "attempt_2" in attempt2.log_path.name
+        logger.close()
 
 
 def test_start_item_phase_log_clamps_attempt():
@@ -485,6 +499,7 @@ def test_start_item_phase_log_clamps_attempt():
             "item-1", "Test", phase="work", attempt=0, agent_name="agent"
         )
         assert "attempt_1" in item_logger.log_path.name
+        logger.close()
 
 
 def test_start_item_phase_log_writes_header():
@@ -501,6 +516,7 @@ def test_start_item_phase_log_writes_header():
 
         assert "My Feature" in content
         assert "Agent: bot" in content
+        logger.close()
 
 
 def test_item_logger_full_agent_session():
@@ -547,6 +563,7 @@ def test_log_polling_first_cycle_is_debug():
         assert "[DEBUG]" in content
         assert "[poll #1]" in content
         assert "Checking status" in content
+        logger.close()
 
 
 def test_log_polling_nth_cycle_is_info():
@@ -567,6 +584,7 @@ def test_log_polling_nth_cycle_is_info():
         assert "[DEBUG]" in lines[1]
         assert "[INFO]" in lines[2]
         assert "[poll #3]" in lines[2]
+        logger.close()
 
 
 def test_log_polling_suppresses_most_cycles():
@@ -586,6 +604,7 @@ def test_log_polling_suppresses_most_cycles():
         assert len(poll_lines) == 50
         assert len(info_lines) == 1
         assert len(debug_lines) == 49
+        logger.close()
 
 
 def test_enter_idle_logs_once():
@@ -601,6 +620,7 @@ def test_enter_idle_logs_once():
 
         idle_lines = [ln for ln in content.splitlines() if "Entering idle state" in ln]
         assert len(idle_lines) == 1
+        logger.close()
 
 
 def test_exit_idle_logs_duration():
@@ -621,6 +641,7 @@ def test_exit_idle_logs_duration():
         assert "42 poll cycles" in content
         assert logger._idle_since is None
         assert logger._poll_cycle == 0
+        logger.close()
 
 
 def test_exit_idle_noop_when_not_idle():
@@ -634,6 +655,7 @@ def test_exit_idle_noop_when_not_idle():
             content = f.read()
 
         assert "Exiting idle state" not in content
+        logger.close()
 
 
 def test_exit_idle_resets_poll_cycle():
@@ -662,6 +684,7 @@ def test_exit_idle_resets_poll_cycle():
         active_lines = [ln for ln in content.splitlines() if "active poll" in ln]
         assert "[INFO]" in active_lines[2]
         assert "[poll #3]" in active_lines[2]
+        logger.close()
 
 
 def test_idle_duration_hours_format():
@@ -678,9 +701,10 @@ def test_idle_duration_hours_format():
             content = f.read()
 
         assert "1h 1m 1s" in content
+        logger.close()
 
 
-# ── Repo-context logging tests ───────────────────────────────────────
+# ── Repo-context logging tests───────────────────────────────────────
 
 
 def test_run_logger_repo_name_in_header():
@@ -692,6 +716,7 @@ def test_run_logger_repo_name_in_header():
             content = f.read()
 
         assert "Repository: PokePoke" in content
+        logger.close()
 
 
 def test_run_logger_repo_name_in_log_lines():
@@ -705,6 +730,7 @@ def test_run_logger_repo_name_in_log_lines():
 
         assert "[MyRepo]" in content
         assert "something happened" in content
+        logger.close()
 
 
 def test_run_logger_no_repo_name_omits_tag():
@@ -722,6 +748,7 @@ def test_run_logger_no_repo_name_omits_tag():
         lines = [ln for ln in content.splitlines() if "plain message" in ln]
         assert len(lines) == 1
         assert "[]" not in lines[0]
+        logger.close()
 
 
 def test_run_logger_picks_up_thread_local_repo():
@@ -738,6 +765,7 @@ def test_run_logger_picks_up_thread_local_repo():
                 content = f.read()
 
             assert "[ThreadRepo]" in content
+            logger.close()
         finally:
             set_current_repo_name(None)
 
@@ -1037,8 +1065,9 @@ def test_run_logger_bridges_to_python_logging():
         with tempfile.TemporaryDirectory() as tmpdir:
             run_logger = RunLogger(base_dir=tmpdir)
             run_logger.log_orchestrator("bridge test message")
+            run_logger.close()
 
-        assert any("bridge test message" in r.getMessage() for r in captured)
+        assert any("bridge test message"in r.getMessage() for r in captured)
     finally:
         py_logger.removeHandler(handler)
         py_logger.setLevel(original_level)
@@ -1062,8 +1091,9 @@ def test_run_logger_bridge_respects_level():
         with tempfile.TemporaryDirectory() as tmpdir:
             run_logger = RunLogger(base_dir=tmpdir)
             run_logger.log_orchestrator("warning msg", level="WARNING")
+            run_logger.close()
 
-        warning_records = [r for r in captured if r.levelno == logging.WARNING]
+        warning_records= [r for r in captured if r.levelno == logging.WARNING]
         assert any("warning msg" in r.getMessage() for r in warning_records)
     finally:
         py_logger.removeHandler(handler)
