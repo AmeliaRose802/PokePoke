@@ -10,6 +10,7 @@ from typing import Any
 from pokepoke.process_utils import apply_memory_backpressure, kill_orphaned_copilot_processes
 from pokepoke.types import BeadsWorkItem, SessionStats, WorkItemResult
 from pokepoke.logging_utils import RunLogger
+from pokepoke.beads_hierarchy import is_high_conflict_risk
 from pokepoke import terminal_ui
 from pokepoke.shutdown import is_shutting_down
 from pokepoke.preflight_log_utils import handle_preflight_checks  # noqa: F401 – re-exported
@@ -114,6 +115,36 @@ def drain_circuit_breaker(
         time.sleep(0.5)
     return total_requests
 
+def _should_skip_item(
+    item: BeadsWorkItem,
+    futures: dict[_Future, BeadsWorkItem],
+    dispatched: int,
+    failed_claim_ids: set[str],
+    run_logger: RunLogger,
+) -> bool:
+    """Return True if this item should be skipped during dispatch."""
+    from pokepoke.parallel import is_item_claimable
+    from pokepoke.beads_query import is_beads_item_closed
+
+    if is_beads_item_closed(item.id):
+        run_logger.log_orchestrator(f"Skipping {item.id} - already closed in beads")
+        failed_claim_ids.add(item.id)
+        return True
+
+    if not is_item_claimable(item.id):
+        run_logger.log_orchestrator(f"Skipping {item.id} - already claimed by another agent")
+        failed_claim_ids.add(item.id)
+        return True
+
+    # High-conflict items must run solo — only dispatch when nothing else is active
+    if is_high_conflict_risk(item) and (len(futures) > 0 or dispatched > 0):
+        run_logger.log_orchestrator(
+            f"Deferring high-conflict {item.id} — other items active")
+        return True
+
+    return False
+
+
 def dispatch_items(
     ready_items: list[BeadsWorkItem],
     slots: int,
@@ -133,10 +164,9 @@ def dispatch_items(
 ) -> int:
     """Select, claim, and submit work items. Returns updated worker_counter."""
     # Late import from pokepoke.parallel so test monkey-patches work correctly
-    from pokepoke.parallel import is_item_claimable, assign_and_sync_item, unassign_with_retry
+    from pokepoke.parallel import assign_and_sync_item, unassign_with_retry
     from pokepoke.parallel import select_multiple_items, should_stop_after_current
     from pokepoke.agent_context import get_agent_name
-    from pokepoke.beads_query import is_beads_item_closed
 
     if (
         slots <= 0
@@ -144,6 +174,11 @@ def dispatch_items(
         or (not continuous and has_success)
         or consecutive_failures >= max_consecutive_failures
     ):
+        return worker_counter
+
+    # High-conflict items must run solo — don't dispatch anything while one is active
+    if any(is_high_conflict_risk(item) for item in futures.values()):
+        run_logger.log_orchestrator("High-conflict item active — deferring new dispatches")
         return worker_counter
 
     # Track IDs attempted this cycle so we advance past already-claimed items
@@ -169,19 +204,13 @@ def dispatch_items(
             logged_replenish = True
 
         made_progress = False
+        high_conflict_dispatched = False
         for item in selected_items:
+            if high_conflict_dispatched:
+                break
             attempted_this_cycle.add(item.id)
 
-            # Live check: skip items already closed in beads to prevent
-            # re-processing items that were closed between bd ready and now.
-            if is_beads_item_closed(item.id):
-                run_logger.log_orchestrator(f"Skipping {item.id} - already closed in beads")
-                failed_claim_ids.add(item.id)
-                continue
-
-            if not is_item_claimable(item.id):
-                run_logger.log_orchestrator(f"Skipping {item.id} - already claimed by another agent")
-                failed_claim_ids.add(item.id)
+            if _should_skip_item(item, futures, dispatched, failed_claim_ids, run_logger):
                 continue
 
             worker_counter += 1
@@ -207,8 +236,12 @@ def dispatch_items(
             current_active.add(item.id)
             dispatched += 1
             made_progress = True
+            if is_high_conflict_risk(item):
+                high_conflict_dispatched = True
 
         if not made_progress:
+            break
+        if high_conflict_dispatched:
             break
 
     return worker_counter
