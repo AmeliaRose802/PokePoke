@@ -80,7 +80,11 @@ def configure_logging(
 
 
 class RunLogger:
-    """Manages logging for a PokePoke run with per-item subdirectories."""
+    """Manages logging for a PokePoke run with per-item subdirectories.
+
+    Orchestrator events are emitted via :mod:`logging` so callers can adjust
+    verbosity, attach handlers, or filter by module name.
+    """
 
     DEFAULT_POLL_LOG_INTERVAL = 50
 
@@ -93,27 +97,37 @@ class RunLogger:
         """Initialize the run logger."""
         self.repo_name = repo_name
         self.run_id = self._generate_run_id()
-        # Use absolute path to avoid issues when CWD changes during workflow
         self.base_dir = Path(base_dir).resolve()
         self.run_dir = self.base_dir / self.run_id
         self.run_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create log files
         self.orchestrator_log_path = self.run_dir / "orchestrator.log"
         self.item_logs_dir = self.run_dir / "items"
         self.item_logs_dir.mkdir(exist_ok=True)
         self.maintenance_logs_dir = self.run_dir / "maintenance"
         self.maintenance_logs_dir.mkdir(exist_ok=True)
 
-        # Idle polling state
         self._poll_cycle: int = 0
         self._poll_log_interval: int = poll_log_interval if poll_log_interval is not None else self.DEFAULT_POLL_LOG_INTERVAL
         self._idle_since: float | None = None
 
-        # Python logging bridge
-        self._py_logger = logging.getLogger("pokepoke.orchestrator")
+        # Run-scoped logger; messages propagate to pokepoke.orchestrator / root.
+        self._py_logger = logging.getLogger(
+            f"pokepoke.orchestrator.run_{self.run_id}"
+        )
+        self._py_logger.setLevel(logging.DEBUG)
 
-        # Write initial orchestrator log entry
+        self._orch_handler = logging.FileHandler(
+            self.orchestrator_log_path, mode="w", encoding="utf-8"
+        )
+        self._orch_handler.setLevel(logging.DEBUG)
+        self._orch_handler.setFormatter(logging.Formatter(
+            "[%(asctime)s] [%(levelname)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        ))
+        self._orch_handler.addFilter(WorkItemFilter())
+        self._py_logger.addHandler(self._orch_handler)
+
         self._init_orchestrator_log()
 
     def _generate_run_id(self) -> str:
@@ -123,29 +137,23 @@ class RunLogger:
         return f"{timestamp}_{short_uuid}"
 
     def _init_orchestrator_log(self) -> None:
-        """Write initial header to orchestrator log."""
-        with open(self.orchestrator_log_path, 'w', encoding='utf-8') as f:
-            f.write("=" * 80 + "\n")
-            f.write("PokePoke Orchestrator Log\n")
-            f.write("=" * 80 + "\n")
-            f.write(f"Run ID: {self.run_id}\n")
-            if self.repo_name:
-                f.write(f"Repository: {self.repo_name}\n")
-            f.write(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write("=" * 80 + "\n\n")
+        """Write decorative header directly to the handler's stream."""
+        repo_line = f"Repository: {self.repo_name}\n" if self.repo_name else ""
+        self._orch_handler.stream.write(
+            f"{'=' * 80}\nPokePoke Orchestrator Log\n{'=' * 80}\n"
+            f"Run ID: {self.run_id}\n{repo_line}"
+            f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"{'=' * 80}\n\n"
+        )
+        self._orch_handler.stream.flush()
 
     def log_orchestrator(self, message: str, level: str = "INFO") -> None:
-        """Log to the orchestrator file and bridge to Python logging."""
+        """Log an orchestrator event through Python's standard logging."""
         from pokepoke.metrics_context import get_current_repo_name
 
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         repo = self.repo_name or get_current_repo_name()
         repo_tag = f"[{repo}] " if repo else ""
-        self.orchestrator_log_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.orchestrator_log_path, 'a', encoding='utf-8') as f:
-            f.write(f"[{timestamp}] [{level}] {repo_tag}{message}\n")
 
-        # Bridge to Python logging so structured filters/formatters apply
         py_level = getattr(logging, level.upper(), logging.INFO)
         self._py_logger.log(py_level, "%s%s", repo_tag, message)
 
@@ -259,17 +267,14 @@ class RunLogger:
     def finalize(self, items_completed: int, total_requests: int, elapsed: float,
                  session_stats: 'SessionStats | None' = None) -> None:
         """Write final summary to orchestrator log and persist stats to disk."""
-        with open(self.orchestrator_log_path, 'a', encoding='utf-8') as f:
-            f.write("\n" + "=" * 80 + "\n")
-            f.write("Run Summary\n")
-            f.write("=" * 80 + "\n")
-            f.write(f"Completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write(f"Items completed: {items_completed}\n")
-            f.write(f"Total agent requests: {total_requests}\n")
-            f.write(f"Total time: {elapsed / 60:.1f} minutes\n")
-            f.write("=" * 80 + "\n")
+        sep = "=" * 60
+        for line in (sep, "Run Summary", sep,
+                     f"Completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                     f"Items completed: {items_completed}",
+                     f"Total agent requests: {total_requests}",
+                     f"Total time: {elapsed / 60:.1f} minutes", sep):
+            self.log_orchestrator(line)
 
-        # Persist session stats to stats.json
         if session_stats is not None:
             try:
                 from pokepoke.stats import save_session_stats_to_disk
@@ -283,12 +288,25 @@ class RunLogger:
         self.log_orchestrator("PokePoke run completed")
 
     def get_run_id(self) -> str:
-        """Get the run ID for this logger."""
         return self.run_id
 
     def get_run_dir(self) -> Path:
-        """Get the run directory path."""
         return self.run_dir
+
+    # -- resource management ------------------------------------------------
+
+    def close(self) -> None:
+        """Remove and close the orchestrator file handler.  Safe to call multiple times."""
+        handler = getattr(self, "_orch_handler", None)
+        if handler is not None and handler in self._py_logger.handlers:
+            self._py_logger.removeHandler(handler)
+            handler.close()
+
+    def __enter__(self) -> 'RunLogger':
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
 
 
 class ItemLogger:
@@ -301,34 +319,27 @@ class ItemLogger:
         item_title: str,
         agent_name: str | None = None,
     ):
-        """Initialize the item logger."""
         self.item_id = item_id
         self.item_title = item_title
         self.agent_name = agent_name
 
-        # Python logging bridge for structured correlation
         safe_logger_id = item_id.replace('/', '.').replace('\\', '.')
         self._py_logger = logging.getLogger(f"pokepoke.item.{safe_logger_id}")
 
-        # Create log file with sanitized filename
         safe_id = item_id.replace('/', '_').replace('\\', '_')
         filename = safe_id
         if agent_name:
-            safe_agent = self._sanitize_agent_component(agent_name)
-            filename = f"{filename}_{safe_agent}"
+            filename = f"{filename}_{self._sanitize_agent_component(agent_name)}"
         self.log_path = logs_dir / f"{filename}.log"
 
-        # Initialize log file
+        agent_hdr = f"Agent: {agent_name}\n{'=' * 80}\n" if agent_name else ""
         with open(self.log_path, 'w', encoding='utf-8') as f:
-            f.write("=" * 80 + "\n")
-            f.write(f"Work Item: {item_id}\n")
-            f.write(f"Title: {item_title}\n")
-            f.write("=" * 80 + "\n")
-            if agent_name:
-                f.write(f"Agent: {agent_name}\n")
-                f.write("=" * 80 + "\n")
-            f.write(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write("=" * 80 + "\n\n")
+            f.write(
+                f"{'=' * 80}\nWork Item: {item_id}\nTitle: {item_title}\n"
+                f"{'=' * 80}\n{agent_hdr}"
+                f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"{'=' * 80}\n\n"
+            )
 
     def log(self, message: str) -> None:
         """Log a message to the item log."""
@@ -363,36 +374,26 @@ class ItemLogger:
 
     def log_summary(self, success: bool, request_count: int) -> None:
         """Log summary information for the work item."""
+        status = "SUCCESS" if success else "FAILURE"
         with open(self.log_path, 'a', encoding='utf-8') as f:
-            f.write("\n" + "=" * 80 + "\n")
-            f.write("Summary\n")
-            f.write("=" * 80 + "\n")
-            f.write(f"Completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write(f"Status: {'SUCCESS' if success else 'FAILURE'}\n")
-            f.write(f"Agent requests: {request_count}\n")
-            f.write("=" * 80 + "\n")
-
-        log_level = logging.INFO if success else logging.WARNING
-        self._py_logger.log(
-            log_level,
-            "Item %s completed: status=%s requests=%d",
-            self.item_id,
-            "SUCCESS" if success else "FAILURE",
-            request_count,
-        )
+            f.write(
+                f"\n{'=' * 80}\nSummary\n{'=' * 80}\n"
+                f"Completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"Status: {status}\nAgent requests: {request_count}\n"
+                f"{'=' * 80}\n"
+            )
+        py_level = logging.INFO if success else logging.WARNING
+        self._py_logger.log(py_level, "Item %s completed: status=%s requests=%d",
+                            self.item_id, status, request_count)
 
     def close(self) -> None:
-        """Close the item logger."""
-        # Nothing to do - we use context managers for writes
+        pass
 
     @staticmethod
     def _sanitize_agent_component(agent_name: str) -> str:
         """Sanitize agent name for safe filename usage."""
-        sanitized_chars: list[str] = []
-        for ch in agent_name.lower():
-            if ch.isalnum() or ch in {'-', '_'}:
-                sanitized_chars.append(ch)
-            else:
-                sanitized_chars.append('_')
-        sanitized = ''.join(sanitized_chars).strip('_')
+        sanitized = ''.join(
+            ch if ch.isalnum() or ch in {'-', '_'} else '_'
+            for ch in agent_name.lower()
+        ).strip('_')
         return sanitized or "agent"
