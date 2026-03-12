@@ -997,7 +997,8 @@ class TestProcessWorkItem:
         assert result.gate_agent_runs == 0
         assert result.model_completion is not None
         mock_invoke.assert_not_called()
-        mock_session_cleanup.assert_called()
+        # Worktree should be preserved on shutdown — cleanup_on_failure must NOT run
+        mock_session_cleanup.assert_not_called()
 
     @patch('pokepoke.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.workflow.run_gate_agent')  # Mock gate agent

@@ -665,3 +665,33 @@ class TestFinalizeItemResult:
         mock_item_logger.log_summary.assert_called_once_with(True, 3)
         mock_run_logger.log_orchestrator.assert_called_once()
         assert wr.model_completion.gate_passed is True
+
+    @patch("pokepoke.workflow_helpers.terminal_ui")
+    @patch("pokepoke.workflow_helpers.set_terminal_banner")
+    @patch("pokepoke.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.workflow_helpers.cleanup_worktree")
+    @patch("pokepoke.workflow_helpers.reconcile_completed_item", return_value=(False, {}))
+    @patch("pokepoke.shutdown.is_shutting_down", return_value=True)
+    def test_failure_path_skips_cleanup_during_shutdown(
+        self, mock_shutting_down, mock_recon, mock_cleanup, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats,
+    ):
+        """Worktree should be preserved when the app is shutting down."""
+        wr, ok = _finalize_item_result(
+            result=CopilotResult(work_item_id="item-42", success=False, error="shutdown abort"),
+            item=sample_item,
+            worktree_path=Path("/wt"),
+            selected_model="m",
+            start_time=time.time() - 10,
+            request_count=2,
+            accumulated_stats=sample_stats,
+            cleanup_agent_runs=0,
+            gate_agent_runs=0,
+            gate_success=False,
+            run_logger=None,
+            item_logger=None,
+            base_agent_id="agent-1",
+            run_beta_test=False,
+        )
+        assert wr.success is False
+        assert ok is False
+        mock_cleanup.assert_not_called()
