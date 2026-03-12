@@ -13,7 +13,7 @@ signing:
   certificate_source: Auto
   
   # Description and URL for signed files
-  description: "PokePoke - Autonomous Beads + Copilot CLI Orchestrator"
+  description: "PokePoke - Autonomous Beads + Copilot SDK Orchestrator"
   url: "https://github.com/AmeliaRose802/PokePoke"
   
   # Timestamp server for time-stamping signatures

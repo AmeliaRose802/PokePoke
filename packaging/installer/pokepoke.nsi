@@ -9,7 +9,7 @@
 !define PRODUCT_NAME "PokePoke"
 !define PRODUCT_VERSION "0.1.0"
 !define PRODUCT_PUBLISHER "Amelia Payne"
-!define PRODUCT_DESCRIPTION "Autonomous Beads + Copilot CLI Orchestrator"
+!define PRODUCT_DESCRIPTION "Autonomous Beads + Copilot SDK Orchestrator"
 !define PRODUCT_ICON "..\..\desktop\public\pokepoke.ico"
 !define PRODUCT_EXE "PokePoke.exe"
 !define DIST_DIR "..\..\dist\PokePoke"

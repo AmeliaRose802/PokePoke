@@ -1,6 +1,6 @@
 # PokePoke
 
-Autonomous workflow orchestrator that integrates the Beads issue tracker with GitHub Copilot CLI for automated development.
+Autonomous workflow orchestrator that integrates the Beads issue tracker with the GitHub Copilot SDK for automated development.
 
 ## Installation
 

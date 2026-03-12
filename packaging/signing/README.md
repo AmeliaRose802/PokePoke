@@ -96,7 +96,7 @@ Create `signing-config.yml` in the project root to customize signing behavior:
 ```yaml
 signing:
   certificate_source: Auto
-  description: "PokePoke - Autonomous Beads + Copilot CLI Orchestrator"
+  description: "PokePoke - Autonomous Beads + Copilot SDK Orchestrator"
   
 environments:
   development:

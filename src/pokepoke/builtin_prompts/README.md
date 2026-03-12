@@ -1,6 +1,6 @@
 # Prompt Template System
 
-This directory contains prompt templates used by PokePoke for Copilot CLI invocations.
+This directory contains prompt templates used by PokePoke for Copilot SDK invocations.
 
 ## Overview
 

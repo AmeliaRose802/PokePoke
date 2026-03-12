@@ -123,7 +123,7 @@ function Get-DefaultSigningConfiguration {
         signing = @{
             enabled = $true
             certificate_source = 'Auto'
-            description = 'PokePoke - Autonomous Beads + Copilot CLI Orchestrator'
+            description = 'PokePoke - Autonomous Beads + Copilot SDK Orchestrator'
             url = 'https://github.com/AmeliaRose802/PokePoke'
             timestamp_server = 'http://timestamp.sectigo.com'
             timestamp_servers_fallback = @(

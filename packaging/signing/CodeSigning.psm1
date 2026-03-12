@@ -354,7 +354,7 @@ function Invoke-CodeSigning {
         [Parameter(Mandatory)]
         [hashtable]$CertificateInfo,
         
-        [string]$Description = "PokePoke - Autonomous Beads + Copilot CLI Orchestrator",
+        [string]$Description = "PokePoke - Autonomous Beads + Copilot SDK Orchestrator",
         
         [string]$Url = "https://github.com/AmeliaRose802/PokePoke",
         
