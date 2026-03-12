@@ -203,6 +203,7 @@ def dispatch_items(
             run_logger.log_orchestrator(f"Replenishing up to {slots} open slot(s)")
             logged_replenish = True
 
+        pre_attempt_size = len(attempted_this_cycle)
         made_progress = False
         high_conflict_dispatched = False
         for item in selected_items:
@@ -240,6 +241,12 @@ def dispatch_items(
                 high_conflict_dispatched = True
 
         if not made_progress:
+            # Only keep searching if new candidates were evaluated this
+            # iteration; otherwise we'd re-select the same items forever.
+            # This lets the loop skip past deferred high-conflict items and
+            # reach lower-priority non-conflict work (PokePoke-mdaf).
+            if len(attempted_this_cycle) > pre_attempt_size:
+                continue
             break
         if high_conflict_dispatched:
             break
