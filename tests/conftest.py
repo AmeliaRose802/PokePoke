@@ -145,18 +145,77 @@ def _fast_repo_guard(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_lock_dir(tmp_path, monkeypatch):
+    """Redirect file locks to a per-test temp directory.
+
+    All file locks flow through coordination._lock_dir() which defaults to
+    .pokepoke/locks/ relative to the CWD.  This directory is shared across
+    all git worktrees, so concurrent test runs contend on the same lock
+    files and hang indefinitely.
+
+    By redirecting to tmp_path we get complete per-test (and per-xdist-worker)
+    isolation with zero cross-worktree contention.
+    """
+    lock_dir = tmp_path / ".pokepoke" / "locks"
+
+    def _isolated_lock_dir():
+        os.makedirs(lock_dir, exist_ok=True)
+        return lock_dir
+
+    monkeypatch.setattr("pokepoke.coordination._lock_dir", _isolated_lock_dir)
+
+
+@pytest.fixture(autouse=True)
 def _mock_cleanup_lock_global(monkeypatch):
     """Prevent file locks from hitting the filesystem during tests.
 
     The real locks use filelock which hangs when orchestrator processes
     hold the lock or when xdist workers contend.  Replace with no-op
     context managers globally.
+
+    This covers every module that imports a lock helper at the top level.
+    Dynamic imports (e.g. worktree_cleanup importing manifest_lock inside
+    a function body) are handled by _isolate_lock_dir which redirects the
+    underlying lock directory to an isolated tmp path.
     """
     from contextlib import nullcontext
 
+    def _null_lock(**_kw):
+        return nullcontext()
+
+    # --- context-manager locks ---
     monkeypatch.setattr("pokepoke.repo_state_guard.cleanup_lock", lambda: nullcontext())
     monkeypatch.setattr("pokepoke.repo_check.cleanup_lock", lambda: nullcontext())
     monkeypatch.setattr("pokepoke.worktree_finalization.merge_lock", lambda: nullcontext())
+    monkeypatch.setattr(
+        "pokepoke.worktree_merge_handler.cleanup_lock",
+        lambda timeout=600.0: nullcontext(), raising=False,
+    )
+    monkeypatch.setattr(
+        "pokepoke.worktree_merge_handler.merge_lock",
+        lambda timeout=600.0: nullcontext(), raising=False,
+    )
+    monkeypatch.setattr(
+        "pokepoke.worktrees.with_worktree_lock",
+        lambda timeout=300.0: nullcontext(), raising=False,
+    )
+
+    # --- lock-active polling helpers (return False = not locked) ---
+    monkeypatch.setattr(
+        "pokepoke.repo_check.merge_lock_active", lambda: False, raising=False,
+    )
+    monkeypatch.setattr(
+        "pokepoke.cleanup_agents.merge_lock_active", lambda: False, raising=False,
+    )
+    monkeypatch.setattr(
+        "pokepoke.shutdown.merge_lock_active", lambda: False, raising=False,
+    )
+    monkeypatch.setattr(
+        "pokepoke.repo_state_guard.cleanup_lock_active", lambda: False, raising=False,
+    )
+    monkeypatch.setattr(
+        "pokepoke.repo_state_guard.merge_lock_active", lambda: False, raising=False,
+    )
 
 
 @pytest.fixture(autouse=True)
