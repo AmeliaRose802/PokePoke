@@ -71,6 +71,7 @@ if ($LASTEXITCODE -ne 0 -or -not $repoRoot) {
 
 $repoRoot = Normalize-Path $repoRoot
 $mainRepoRoot = Normalize-Path (Get-MainRepoRoot $repoRoot)
+$isWorktree = $repoRoot -ne $mainRepoRoot
 
 $comparison = if ($IsWindows) {
     [System.StringComparison]::OrdinalIgnoreCase
@@ -168,6 +169,13 @@ if (-not $result.module_file -or -not $result.project_root) {
 
 $moduleFile = Normalize-Path $result.module_file
 $moduleProjectRoot = Normalize-Path $result.project_root
+
+# In a worktree, the shared venv's editable install can only point to one location
+# at a time — skip the location check and just verify importability.
+if ($isWorktree) {
+    Write-Host "✅ pokepoke import succeeded in worktree (module: $moduleFile)" -ForegroundColor Green
+    exit 0
+}
 
 if (-not $moduleFile.StartsWith($mainRepoRoot, $comparison)) {
     Write-Host "❌ pokepoke import resolved to $moduleFile" -ForegroundColor Red

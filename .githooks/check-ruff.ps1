@@ -37,9 +37,9 @@ python -m ruff check $stagedFiles --output-format=concise --cache-dir /dev/null
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host ""
-    Write-Host "❌ RUFF LINT ERRORS FOUND" -ForegroundColor Red
+    Write-Host "❌ RUFF LINT ERRORS FOUND (MANDATORY - NO EXCEPTIONS)" -ForegroundColor Red
     Write-Host ""
-    Write-Host "Fix linting errors before committing." -ForegroundColor Yellow
+    Write-Host "ALL ruff violations must be fixed before committing." -ForegroundColor Yellow
     Write-Host "Tips:" -ForegroundColor Cyan
     Write-Host "  • Run 'python -m ruff check src/ tests/' locally to see all errors" -ForegroundColor Cyan
     Write-Host "  • Run 'python -m ruff check src/ tests/ --fix' to auto-fix many errors" -ForegroundColor Cyan
