@@ -1,4 +1,4 @@
-import type { CompletedItem, CreatedItem, ModelHistoryEntry, ModelPerformanceSummary, SessionStats } from "../types";
+import type { AgentInfo, CompletedItem, CreatedItem, ModelHistoryEntry, ModelPerformanceSummary, SessionStats } from "../types";
 
 export function formatTokens(count: number | undefined): string {
   if (!Number.isFinite(count ?? 0)) return "0";
@@ -208,6 +208,38 @@ export function getAgentRunCounts(stats: SessionStats | null): AgentRunCounts {
     (stats.code_review_agent_runs ?? 0);
 
   return { work, cleanup, other };
+}
+
+const CLEANUP_AGENT_TYPES = new Set(["cleanup", "janitor", "backlog_cleanup", "worktree_cleanup"]);
+const OTHER_AGENT_TYPES = new Set(["gate", "tech_debt", "beta_tester", "code_review", "model_sync"]);
+
+/**
+ * Count currently-running agents by category so the Runs display
+ * reflects in-progress work, not just completed runs.
+ */
+export function getActiveRunCounts(agents: AgentInfo[]): AgentRunCounts {
+  const result: AgentRunCounts = { work: 0, cleanup: 0, other: 0 };
+  for (const agent of agents) {
+    if (agent.status !== "running") continue;
+    const agentType = agent.agent_type?.toLowerCase() ?? "";
+    if (agentType === "work" || agentType === "") {
+      result.work++;
+    } else if (CLEANUP_AGENT_TYPES.has(agentType)) {
+      result.cleanup++;
+    } else if (OTHER_AGENT_TYPES.has(agentType)) {
+      result.other++;
+    }
+  }
+  return result;
+}
+
+/** Merge two AgentRunCounts by summing each category. */
+export function combineRunCounts(a: AgentRunCounts, b: AgentRunCounts): AgentRunCounts {
+  return {
+    work: a.work + b.work,
+    cleanup: a.cleanup + b.cleanup,
+    other: a.other + b.other,
+  };
 }
 
 export function formatAgentRuns(counts: AgentRunCounts): string {

@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import type { ModelHistoryEntry, ModelPerformanceSummary, SessionStats } from "../types";
+import type { AgentInfo, ModelHistoryEntry, ModelPerformanceSummary, SessionStats } from "../types";
 import {
   aggregateHistory,
   buildCompletionSeries,
   buildSuccessRateSeries,
+  combineRunCounts,
+  formatAgentRuns,
   formatDurationShort,
   formatDurationWithSpread,
+  getActiveRunCounts,
+  getAgentRunCounts,
   getCompletedItems,
   getDoneCount,
   inferCurrentModel,
@@ -304,6 +308,135 @@ describe("stats helpers", () => {
 
     it("returns empty array for empty history", () => {
       expect(buildSuccessRateSeries([])).toHaveLength(0);
+    });
+  });
+
+  describe("getAgentRunCounts", () => {
+    it("returns zeros for null stats", () => {
+      expect(getAgentRunCounts(null)).toEqual({ work: 0, cleanup: 0, other: 0 });
+    });
+
+    it("counts work runs from stats", () => {
+      const stats = { work_agent_runs: 5 } as SessionStats;
+      expect(getAgentRunCounts(stats)).toEqual({ work: 5, cleanup: 0, other: 0 });
+    });
+
+    it("counts cleanup runs from stats", () => {
+      const stats = {
+        cleanup_agent_runs: 2,
+        janitor_agent_runs: 1,
+        backlog_cleanup_agent_runs: 3,
+        worktree_cleanup_agent_runs: 1,
+      } as SessionStats;
+      expect(getAgentRunCounts(stats)).toEqual({ work: 0, cleanup: 7, other: 0 });
+    });
+
+    it("counts other runs from stats", () => {
+      const stats = {
+        gate_agent_runs: 4,
+        tech_debt_agent_runs: 1,
+        beta_tester_agent_runs: 2,
+        code_review_agent_runs: 1,
+      } as SessionStats;
+      expect(getAgentRunCounts(stats)).toEqual({ work: 0, cleanup: 0, other: 8 });
+    });
+  });
+
+  describe("getActiveRunCounts", () => {
+    function makeAgent(overrides: Partial<AgentInfo>): AgentInfo {
+      return {
+        agent_id: "test",
+        name: "test",
+        iteration: 1,
+        status: "running",
+        recent_logs: [],
+        ...overrides,
+      };
+    }
+
+    it("returns zeros for empty agents array", () => {
+      expect(getActiveRunCounts([])).toEqual({ work: 0, cleanup: 0, other: 0 });
+    });
+
+    it("counts only running agents", () => {
+      const agents = [
+        makeAgent({ agent_id: "a1", agent_type: "work", status: "running" }),
+        makeAgent({ agent_id: "a2", agent_type: "work", status: "success" }),
+        makeAgent({ agent_id: "a3", agent_type: "work", status: "failed" }),
+      ];
+      expect(getActiveRunCounts(agents)).toEqual({ work: 1, cleanup: 0, other: 0 });
+    });
+
+    it("categorizes running agents by type", () => {
+      const agents = [
+        makeAgent({ agent_id: "w1", agent_type: "work", status: "running" }),
+        makeAgent({ agent_id: "c1", agent_type: "cleanup", status: "running" }),
+        makeAgent({ agent_id: "j1", agent_type: "janitor", status: "running" }),
+        makeAgent({ agent_id: "g1", agent_type: "gate", status: "running" }),
+        makeAgent({ agent_id: "t1", agent_type: "tech_debt", status: "running" }),
+      ];
+      expect(getActiveRunCounts(agents)).toEqual({ work: 1, cleanup: 2, other: 2 });
+    });
+
+    it("treats agents with no agent_type as work", () => {
+      const agents = [
+        makeAgent({ agent_id: "w1", agent_type: null, status: "running" }),
+        makeAgent({ agent_id: "w2", agent_type: undefined, status: "running" }),
+      ];
+      expect(getActiveRunCounts(agents)).toEqual({ work: 2, cleanup: 0, other: 0 });
+    });
+
+    it("categorizes all cleanup types correctly", () => {
+      const agents = [
+        makeAgent({ agent_id: "c1", agent_type: "cleanup", status: "running" }),
+        makeAgent({ agent_id: "c2", agent_type: "janitor", status: "running" }),
+        makeAgent({ agent_id: "c3", agent_type: "backlog_cleanup", status: "running" }),
+        makeAgent({ agent_id: "c4", agent_type: "worktree_cleanup", status: "running" }),
+      ];
+      expect(getActiveRunCounts(agents)).toEqual({ work: 0, cleanup: 4, other: 0 });
+    });
+
+    it("categorizes all other types correctly", () => {
+      const agents = [
+        makeAgent({ agent_id: "o1", agent_type: "gate", status: "running" }),
+        makeAgent({ agent_id: "o2", agent_type: "tech_debt", status: "running" }),
+        makeAgent({ agent_id: "o3", agent_type: "beta_tester", status: "running" }),
+        makeAgent({ agent_id: "o4", agent_type: "code_review", status: "running" }),
+        makeAgent({ agent_id: "o5", agent_type: "model_sync", status: "running" }),
+      ];
+      expect(getActiveRunCounts(agents)).toEqual({ work: 0, cleanup: 0, other: 5 });
+    });
+  });
+
+  describe("combineRunCounts", () => {
+    it("sums counts from both inputs", () => {
+      const a = { work: 3, cleanup: 1, other: 2 };
+      const b = { work: 1, cleanup: 2, other: 0 };
+      expect(combineRunCounts(a, b)).toEqual({ work: 4, cleanup: 3, other: 2 });
+    });
+
+    it("handles zeros", () => {
+      const a = { work: 0, cleanup: 0, other: 0 };
+      const b = { work: 0, cleanup: 0, other: 0 };
+      expect(combineRunCounts(a, b)).toEqual({ work: 0, cleanup: 0, other: 0 });
+    });
+  });
+
+  describe("formatAgentRuns", () => {
+    it("returns em dash when all counts are zero", () => {
+      expect(formatAgentRuns({ work: 0, cleanup: 0, other: 0 })).toBe("—");
+    });
+
+    it("formats single category", () => {
+      expect(formatAgentRuns({ work: 3, cleanup: 0, other: 0 })).toBe("Work 3");
+    });
+
+    it("formats multiple categories with separator", () => {
+      expect(formatAgentRuns({ work: 2, cleanup: 1, other: 3 })).toBe("Work 2 · Cleanup 1 · Other 3");
+    });
+
+    it("skips zero categories", () => {
+      expect(formatAgentRuns({ work: 0, cleanup: 2, other: 0 })).toBe("Cleanup 2");
     });
   });
 });
