@@ -174,13 +174,34 @@ class TestSelectModelForItem:
 
     @patch('pokepoke.model_selection.get_model_weights')
     @patch('pokepoke.model_selection.get_config')
-    def test_returns_default_when_no_candidates(
+    def test_synthesizes_candidates_when_none_configured(
         self, mock_get_config: Mock, mock_get_weights: Mock
     ) -> None:
-        """Test that default model is returned when no candidates configured."""
+        """When candidate_models is empty, synthesize from default + fallback."""
         mock_config = ProjectConfig()
         mock_config.models = ModelConfig(
             default="claude-opus-4.6",
+            fallback="claude-sonnet-4.5",
+            candidate_models=[]
+        )
+        mock_get_config.return_value = mock_config
+        mock_get_weights.return_value = {}
+
+        model = select_model_for_item(_make_item("test-123"))
+
+        assert model in ["claude-opus-4.6", "claude-sonnet-4.5"]
+        mock_get_weights.assert_called_once()
+
+    @patch('pokepoke.model_selection.get_model_weights')
+    @patch('pokepoke.model_selection.get_config')
+    def test_synthesized_candidates_deduped_when_default_equals_fallback(
+        self, mock_get_config: Mock, mock_get_weights: Mock
+    ) -> None:
+        """When default == fallback, synthesized list has one entry."""
+        mock_config = ProjectConfig()
+        mock_config.models = ModelConfig(
+            default="claude-opus-4.6",
+            fallback="claude-opus-4.6",
             candidate_models=[]
         )
         mock_get_config.return_value = mock_config
@@ -189,6 +210,7 @@ class TestSelectModelForItem:
         model = select_model_for_item(_make_item("test-123"))
 
         assert model == "claude-opus-4.6"
+        mock_get_weights.assert_called_once()
 
     @patch('pokepoke.model_selection.get_model_weights')
     @patch('pokepoke.model_selection.get_config')
