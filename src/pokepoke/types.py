@@ -393,7 +393,7 @@ class GateAgentResult:
     is_timeout: bool = False
     session_id: str | None = None
     last_output_summary: str | None = None
-    def __iter__(self) -> 'Iterator[bool | str | AgentStats | None]':
+    def __iter__(self) -> 'Iterator[Any]':
         return iter((self.success, self.reason, self.stats, self.crashed))
     def __len__(self) -> int:
         return 4

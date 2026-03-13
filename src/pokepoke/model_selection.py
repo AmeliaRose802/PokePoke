@@ -84,7 +84,10 @@ def select_model_for_item(item: BeadsWorkItem) -> str:
     candidates = config.models.candidate_models
 
     if not candidates:
-        return config.models.default
+        # Synthesize from default + fallback so weighted selection still runs
+        candidates = list(dict.fromkeys(
+            [config.models.default, config.models.fallback]
+        ))
 
     # Build weights for each candidate model
     historical = get_model_weights()
@@ -116,6 +119,12 @@ def select_gate_model(work_model: str, item_id: str) -> str:
     """
     config = get_config()
     candidates = config.models.candidate_models
+
+    if not candidates:
+        # Synthesize from default + fallback so weighted selection still runs
+        candidates = list(dict.fromkeys(
+            [config.models.default, config.models.fallback]
+        ))
 
     # Filter out the work model from candidates
     available = [m for m in candidates if m != work_model]
