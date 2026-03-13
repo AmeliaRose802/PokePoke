@@ -68,3 +68,5 @@ coverage.json
 htmlcov/
 .tox/
 .nox/
+# bd worktree
+task-PokePoke-uuc2/
