@@ -12,11 +12,12 @@ from __future__ import annotations
 import logging
 import os
 import sys
-import subprocess
 import tempfile
 import shutil
 import urllib.request
 from pathlib import Path
+
+from .git_helpers import run_git
 
 logger = logging.getLogger(__name__)
 
@@ -115,14 +116,9 @@ def _find_worktree_dist() -> Path | None:
     """Find frontend dist in the main repo when running from a git worktree."""
     try:
         src_root = _get_src_root()
-        result = subprocess.run(
+        result = run_git(
             ["git", "worktree", "list", "--porcelain"],
-            cwd=src_root,
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            check=True,
+            cwd=str(src_root),
         )
         for line in result.stdout.splitlines():
             if line.startswith("worktree "):

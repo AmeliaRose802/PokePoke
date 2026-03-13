@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pokepoke.constants import BRANCH_PREFIX, WORKTREE_DIR, WORKTREE_TASK_PREFIX
+from pokepoke.git_helpers import run_git
 from pokepoke.git_operations import get_default_branch, list_worktrees, sanitize_branch_name
 
 if TYPE_CHECKING:
@@ -50,21 +51,17 @@ def default_branch_has_merge_commit(item_id: str, repo_root: Path) -> bool:
 
     # Best-effort fetch; ignore failures to keep reconciliation non-fatal.
     with contextlib.suppress(Exception):
-        subprocess.run(
+        run_git(
             ["git", "fetch", "origin", default_branch],
-            capture_output=True, text=True,
-            encoding="utf-8", errors="replace",
             timeout=30, cwd=str(repo_root), check=False,
         )
 
     for ref in (f"origin/{default_branch}", default_branch):
         try:
-            result = subprocess.run(
+            result = run_git(
                 ["git", "log", ref, "--max-count", "50",
                  "--grep", branch_marker, "--pretty=format:%H"],
-                capture_output=True, text=True,
-                encoding="utf-8", errors="replace",
-                check=True, timeout=20, cwd=str(repo_root),
+                timeout=20, cwd=str(repo_root),
             )
             if result.stdout.strip():
                 return True
@@ -81,12 +78,10 @@ def worktree_branch_has_commits(item_id: str, repo_root: Path) -> bool:
 
     for ref in (branch_name, f"refs/heads/{branch_name}"):
         try:
-            result = subprocess.run(
+            result = run_git(
                 ["git", "log", f"{default_branch}..{ref}", "--max-count", "1",
                  "--pretty=format:%H"],
-                capture_output=True, text=True,
-                encoding="utf-8", errors="replace",
-                check=True, timeout=20, cwd=str(repo_root),
+                timeout=20, cwd=str(repo_root),
             )
             if result.stdout.strip():
                 return True

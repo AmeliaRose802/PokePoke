@@ -8,6 +8,7 @@ re-discovering the project structure and reviewing diffs via git commands.
 import logging
 import subprocess
 
+from .git_helpers import run_git
 from .git_operations import get_default_branch
 
 logger = logging.getLogger(__name__)
@@ -32,11 +33,9 @@ def build_handoff_context(cwd: str | None = None) -> str:
 
     # 1. Changed files with status (A/M/D/R)
     try:
-        name_status = subprocess.run(
+        name_status = run_git(
             ["git", "diff", "--name-status", f"{target_branch}...HEAD"],
-            capture_output=True, text=True, encoding="utf-8",
-            errors='replace',
-            timeout=15, cwd=cwd,
+            timeout=15, cwd=cwd, check=False,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
         logger.debug("git diff --name-status failed: %s", exc)
@@ -54,11 +53,9 @@ def build_handoff_context(cwd: str | None = None) -> str:
 
     # 2. Diff stat (compact size summary)
     try:
-        diff_stat = subprocess.run(
+        diff_stat = run_git(
             ["git", "diff", "--stat", f"{target_branch}...HEAD"],
-            capture_output=True, text=True, encoding="utf-8",
-            errors='replace',
-            timeout=15, cwd=cwd,
+            timeout=15, cwd=cwd, check=False,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
         logger.debug("git diff --stat failed: %s", exc)
@@ -70,11 +67,9 @@ def build_handoff_context(cwd: str | None = None) -> str:
 
     # 3. Recent commit messages (one-line summaries)
     try:
-        log_result = subprocess.run(
+        log_result = run_git(
             ["git", "log", "--oneline", f"{target_branch}..HEAD"],
-            capture_output=True, text=True, encoding="utf-8",
-            errors='replace',
-            timeout=10, cwd=cwd,
+            timeout=10, cwd=cwd, check=False,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
         logger.debug("git log --oneline failed: %s", exc)
@@ -89,11 +84,9 @@ def build_handoff_context(cwd: str | None = None) -> str:
 
     # 4. Unified diff content (actual code changes)
     try:
-        diff_result = subprocess.run(
+        diff_result = run_git(
             ["git", "diff", f"{target_branch}...HEAD"],
-            capture_output=True, text=True, encoding="utf-8",
-            errors='replace',
-            timeout=30, cwd=cwd,
+            timeout=30, cwd=cwd, check=False,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
         logger.debug("git diff failed: %s", exc)

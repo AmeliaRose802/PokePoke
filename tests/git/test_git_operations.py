@@ -116,23 +116,19 @@ class TestVerifyMainRepoClean:
 class TestHandleBeadsAutoCommit:
     """Test handle_beads_auto_commit function."""
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
-    def test_successful_commit(self, mock_run: Mock) -> None:
+    @patch('src.pokepoke.git_operations.run_git')
+    def test_successful_commit(self, mock_run_git: Mock) -> None:
         """Test successful beads auto-commit."""
-        mock_run.return_value = Mock(returncode=0)
+        mock_run_git.return_value = Mock(returncode=0)
 
         handle_beads_auto_commit()
 
-        assert mock_run.call_count == 2
-        mock_run.assert_any_call(["git", "add", ".beads/"], check=True, encoding='utf-8', errors='replace', timeout=10, cwd=None)
-        mock_run.assert_any_call(
+        assert mock_run_git.call_count == 2
+        mock_run_git.assert_any_call(["git", "add", ".beads/"], timeout=10, cwd=None)
+        mock_run_git.assert_any_call(
             ["git", "commit", "-m", "chore: sync beads before worktree merge"],
-            check=True,
-            capture_output=True,
-            encoding='utf-8',
-            errors='replace',
             timeout=300,
-            cwd=None
+            cwd=None,
         )
 
     @patch('src.pokepoke.git_operations.subprocess.run')
@@ -315,34 +311,26 @@ class TestHasUncommittedChanges:
 class TestCommitAllChanges:
     """Test commit_all_changes function."""
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
-    def test_successful_commit(self, mock_run: Mock) -> None:
+    @patch('src.pokepoke.git_operations.run_git')
+    def test_successful_commit(self, mock_run_git: Mock) -> None:
         """Test successful commit with all changes."""
-        mock_run.return_value = Mock(returncode=0, stderr="")
+        mock_run_git.return_value = Mock(returncode=0, stderr="")
 
         success, error_msg = commit_all_changes("Test commit")
 
         assert success is True
         assert error_msg == ""
-        assert mock_run.call_count == 2
-        mock_run.assert_any_call(
+        assert mock_run_git.call_count == 2
+        mock_run_git.assert_any_call(
             ["git", "add", "-A"],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
             timeout=240,
-            cwd=None
+            cwd=None,
         )
-        mock_run.assert_any_call(
+        mock_run_git.assert_any_call(
             ["git", "commit", "-m", "Test commit"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
             timeout=300,
-            cwd=None
+            cwd=None,
+            check=False,
         )
 
     @patch('src.pokepoke.git_operations.subprocess.run')

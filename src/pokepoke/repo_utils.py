@@ -5,6 +5,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from .git_helpers import run_git
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,13 +38,10 @@ def get_repository_name() -> str:
 def _get_repo_name_from_git() -> str | None:
     """Extract repository name from git remote origin URL."""
     try:
-        result = subprocess.run(
+        result = run_git(
             ["git", "config", "--get", "remote.origin.url"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            timeout=5
+            timeout=5,
+            check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
             url = result.stdout.strip()

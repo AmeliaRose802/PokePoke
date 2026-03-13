@@ -97,8 +97,9 @@ def _find_test_files_for_staged(
             test_files.append(f)
 
     # Map source files to their test files using naming convention:
-    #   src/pokepoke/foo.py  →  tests/test_foo.py
-    #   Also match tests/test_foo_*.py (e.g. beads.py → test_beads_*.py)
+    #   src/pokepoke/foo.py  →  tests/**/test_foo.py
+    #   Also match tests/**/test_foo_*.py (e.g. beads.py → test_beads_*.py)
+    #   Searches subdirectories (tests/utils/, tests/git/, tests/desktop/, etc.)
 
     # Manual overrides for modules whose tests don't follow naming convention
     test_file_overrides: dict[str, list[str]] = {
@@ -115,14 +116,20 @@ def _find_test_files_for_staged(
                 if (repo_root / override_file).exists() and override_file not in test_files:
                     test_files.append(override_file)
 
-        # Direct match: tests/test_foo.py
+        # Direct match: tests/test_foo.py (top-level)
         direct = f"tests/test_{module_name}.py"
         if (repo_root / direct).exists() and direct not in test_files:
             test_files.append(direct)
 
-        # Glob match: tests/test_foo_*.py (for split test files)
-        for match in tests_dir.glob(f"test_{module_name}_*.py"):
-            rel = f"tests/{match.name}"
+        # Recursive match: tests/**/test_foo.py and tests/**/test_foo_*.py
+        # Tests may live in subdirectories (tests/utils/, tests/git/, etc.)
+        for match in tests_dir.rglob(f"test_{module_name}.py"):
+            rel = str(match.relative_to(repo_root)).replace("\\", "/")
+            if rel not in test_files:
+                test_files.append(rel)
+
+        for match in tests_dir.rglob(f"test_{module_name}_*.py"):
+            rel = str(match.relative_to(repo_root)).replace("\\", "/")
             if rel not in test_files:
                 test_files.append(rel)
 

@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from pokepoke.constants import STATUS_IN_PROGRESS
+from pokepoke.git_helpers import run_git
 from pokepoke.process_utils import is_process_running
 from pokepoke.session_journal import (
     SessionJournal,
@@ -70,10 +71,8 @@ def _delete_branch(branch_name: str) -> bool:
     if not branch_exists(branch_name):
         return True
     try:
-        subprocess.run(
+        run_git(
             ["git", "branch", "-D", branch_name],
-            check=True, capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=30,
         )
         return True
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:

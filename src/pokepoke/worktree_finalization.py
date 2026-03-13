@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 from .constants import WORKTREE_DIR, WORKTREE_TASK_PREFIX
+from .git_helpers import run_git
 from .types import BeadsWorkItem
 from .worktrees import cleanup_worktree
 from .git_operations import get_default_branch
@@ -59,15 +60,9 @@ def check_and_merge_worktree(
     try:
         # Use the actual target branch from config (not hardcoded)
         target_branch = get_default_branch(cwd=repo_path)
-        check_result = subprocess.run(
+        check_result = run_git(
             ["git", "rev-list", "--count", "HEAD", f"^{target_branch}"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            check=True,
             cwd=str(worktree_path),
-            timeout=30
         )
         commit_count = int(check_result.stdout.strip())
 

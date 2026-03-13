@@ -6,18 +6,10 @@ from pathlib import Path
 
 from pokepoke.beads_management import run_bd_sync_with_retry
 from pokepoke.constants import BEADS_DIR, WORKTREE_DIR
+from pokepoke.git_helpers import run_git
 from pokepoke.git_operations import categorize_git_changes, commit_all_changes
 
 logger = logging.getLogger(__name__)
-
-
-def _run_git(cmd: list[str], *, timeout: int = 30, check: bool = True,
-             capture_output: bool = True) -> subprocess.CompletedProcess[str]:
-    """Thin wrapper kept in sync with worktrees._run_git."""
-    return subprocess.run(
-        cmd, capture_output=capture_output, text=True,
-        encoding="utf-8", errors="replace", timeout=timeout, check=check,
-    )
 
 
 def validate_worktree_integrity(worktree_path: Path, item_id: str) -> None:
@@ -44,12 +36,11 @@ def validate_worktree_integrity(worktree_path: Path, item_id: str) -> None:
         )
 
     try:
-        result = subprocess.run(
+        result = run_git(
             ["git", "rev-parse", "--is-inside-work-tree"],
             cwd=str(worktree_path),
-            capture_output=True, text=True,
-            encoding="utf-8", errors="replace",
             timeout=10,
+            check=False,
         )
         if result.returncode != 0 or result.stdout.strip() != "true":
             raise RuntimeError(
@@ -79,11 +70,8 @@ def sync_and_ensure_clean_main_repo(branch_name: str, cwd: str | None = None) ->
     except subprocess.TimeoutExpired:
         print("⚠️  bd sync timed out")
     try:
-        git_cmd = ["git", "status", "--porcelain"]
-        main_status = subprocess.run(
-            git_cmd, capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=30, check=True,
-            cwd=cwd,
+        main_status = run_git(
+            ["git", "status", "--porcelain"], timeout=30, cwd=cwd,
         ).stdout.strip()
         if main_status:
             lines = main_status.split('\n')
@@ -100,32 +88,18 @@ def sync_and_ensure_clean_main_repo(branch_name: str, cwd: str | None = None) ->
                 print("✅ Pending main-branch changes committed")
             if changes['beads']:
                 print("🔧 Committing beads database changes...")
-                subprocess.run(
-                    ["git", "add", f"{BEADS_DIR}/"],
-                    capture_output=False, text=True,
-                    encoding="utf-8", errors="replace", timeout=30, check=True,
-                    cwd=cwd,
-                )
-                subprocess.run(
+                run_git(["git", "add", f"{BEADS_DIR}/"], cwd=cwd)
+                run_git(
                     ["git", "commit", "-m", f"chore: sync beads before merge of {branch_name}"],
-                    capture_output=True, text=True,
-                    encoding="utf-8", errors="replace", timeout=60, check=True,
-                    cwd=cwd,
+                    timeout=60, cwd=cwd,
                 )
                 print("✅ Beads changes committed")
             if changes['worktree']:
                 print("🧹 Committing worktree cleanup changes...")
-                subprocess.run(
-                    ["git", "add", f"{WORKTREE_DIR}/"],
-                    capture_output=False, text=True,
-                    encoding="utf-8", errors="replace", timeout=30, check=True,
-                    cwd=cwd,
-                )
-                subprocess.run(
+                run_git(["git", "add", f"{WORKTREE_DIR}/"], cwd=cwd)
+                run_git(
                     ["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
-                    capture_output=True, text=True,
-                    encoding="utf-8", errors="replace", timeout=60, check=True,
-                    cwd=cwd,
+                    timeout=60, cwd=cwd,
                 )
                 print("✅ Worktree cleanup committed")
         return True

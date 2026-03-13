@@ -1,11 +1,11 @@
 """Cleanup agent invocation utilities."""
 
 import logging
-import subprocess
 import time
 from pathlib import Path
 
 from pokepoke.ai_backends import invoke_copilot
+from pokepoke.git_helpers import run_git
 from pokepoke.constants import (
     CLEANUP_AGENT_TIMEOUT,
     CLEANUP_AGGREGATE_TIMEOUT,
@@ -152,8 +152,7 @@ def load_prompt_file(filename: str) -> str | None:
 def _git_output(args: list[str], cwd: str | None) -> str | None:
     """Run a git command and return stripped stdout, or None on failure."""
     try:
-        r = subprocess.run(args, capture_output=True, text=True, timeout=10,
-                           encoding='utf-8', errors='replace', cwd=cwd)
+        r = run_git(args, timeout=10, cwd=cwd, check=False)
         return r.stdout.strip() if r.returncode == 0 else None
     except Exception:
         return None

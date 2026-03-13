@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from pokepoke.constants import BRANCH_PREFIX, WORKTREE_DIR, WORKTREE_TASK_PREFIX
+from pokepoke.git_helpers import run_git
 
 logger = logging.getLogger(__name__)
 
@@ -56,11 +57,8 @@ def force_remove_directory(dir_path: Path, *, max_attempts: int | None = None) -
 
         # First try git worktree remove --force
         try:
-            subprocess.run(
+            run_git(
                 ["git", "worktree", "remove", "--force", str(dir_path)],
-                check=True, capture_output=True, text=True, encoding='utf-8',
-                errors='replace',
-                timeout=30
             )
             print("   ✅ Git worktree remove successful")
             return True
@@ -79,11 +77,9 @@ def force_remove_directory(dir_path: Path, *, max_attempts: int | None = None) -
             shutil.rmtree(str(dir_path), onerror=_handle_remove_readonly)
 
             # Clean up git worktree bookkeeping after manual removal
-            subprocess.run(
+            run_git(
                 ["git", "worktree", "prune"],
-                check=False, capture_output=True, text=True, encoding='utf-8',
-                errors='replace',
-                timeout=30
+                check=False,
             )
             print("   ✅ Direct removal and git prune successful")
             return True

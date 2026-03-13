@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from pokepoke.constants import STATUS_IN_PROGRESS
+from pokepoke.git_helpers import run_git
 from pokepoke.preflight_checks import HealthCheckError, is_lock_stale
 
 logger = logging.getLogger(__name__)
@@ -35,16 +36,14 @@ def repair_git_status(error: HealthCheckError, repo_path: Path) -> bool:
         )
 
         # Stage only tracked-file changes (not untracked files / temp files)
-        subprocess.run(
+        run_git(
             ['git', 'add', '-u'],
-            capture_output=True, text=True, check=True,
-            cwd=str(repo_path), timeout=30,
+            cwd=str(repo_path),
         )
 
-        result = subprocess.run(
+        result = run_git(
             ['git', 'commit', '-m', 'chore: auto-commit for pre-flight health check'],
-            capture_output=True, text=True,
-            cwd=str(repo_path), timeout=60,
+            cwd=str(repo_path), timeout=60, check=False,
         )
 
         if result.returncode == 0:

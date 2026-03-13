@@ -108,19 +108,19 @@ class TestCheckAndMergeWorktree:
 
     @patch("pokepoke.worktree_finalization.merge_worktree_to_dev")
     @patch("pokepoke.worktree_finalization.get_default_branch", return_value="main")
-    @patch("pokepoke.worktree_finalization.subprocess")
-    def test_has_commits(self, mock_sub: Mock, mock_branch: Mock, mock_merge: Mock) -> None:
-        mock_sub.run.return_value = Mock(stdout="3\n")
+    @patch("pokepoke.worktree_finalization.run_git")
+    def test_has_commits(self, mock_run_git: Mock, mock_branch: Mock, mock_merge: Mock) -> None:
+        mock_run_git.return_value = Mock(stdout="3\n")
         mock_merge.return_value = True
         assert check_and_merge_worktree(_make_test_item(), Path("/wt")) is True
         mock_merge.assert_called_once()
 
     @patch("pokepoke.worktree_finalization.merge_worktree_to_dev")
     @patch("pokepoke.worktree_finalization.get_default_branch", return_value="main")
-    @patch("pokepoke.worktree_finalization.subprocess")
-    def test_has_commits_passes_worktree_path(self, mock_sub: Mock, mock_branch: Mock, mock_merge: Mock) -> None:
+    @patch("pokepoke.worktree_finalization.run_git")
+    def test_has_commits_passes_worktree_path(self, mock_run_git: Mock, mock_branch: Mock, mock_merge: Mock) -> None:
         """Verify worktree_path is forwarded to merge_worktree_to_dev."""
-        mock_sub.run.return_value = Mock(stdout="3\n")
+        mock_run_git.return_value = Mock(stdout="3\n")
         mock_merge.return_value = True
         wt = Path("/my/worktree")
         check_and_merge_worktree(_make_test_item(), wt)
@@ -128,45 +128,39 @@ class TestCheckAndMergeWorktree:
 
     @patch("pokepoke.worktree_finalization.cleanup_worktree")
     @patch("pokepoke.worktree_finalization.get_default_branch", return_value="main")
-    @patch("pokepoke.worktree_finalization.subprocess")
-    def test_no_commits(self, mock_sub: Mock, mock_branch: Mock, mock_cleanup: Mock) -> None:
-        mock_sub.run.return_value = Mock(stdout="0\n")
+    @patch("pokepoke.worktree_finalization.run_git")
+    def test_no_commits(self, mock_run_git: Mock, mock_branch: Mock, mock_cleanup: Mock) -> None:
+        mock_run_git.return_value = Mock(stdout="0\n")
         assert check_and_merge_worktree(_make_test_item(), Path("/wt")) is True
         mock_cleanup.assert_called_once_with("task-1", force=True, repo_path=None)
 
     @patch("pokepoke.worktree_finalization.merge_worktree_to_dev")
     @patch("pokepoke.worktree_finalization.get_default_branch")
-    @patch("pokepoke.worktree_finalization.subprocess")
-    def test_called_process_error_merges_anyway(self, mock_sub: Mock, mock_branch: Mock, mock_merge: Mock) -> None:
+    @patch("pokepoke.worktree_finalization.run_git")
+    def test_called_process_error_merges_anyway(self, mock_run_git: Mock, mock_branch: Mock, mock_merge: Mock) -> None:
         """CalledProcessError (e.g., branch not found) is recoverable — proceed with merge."""
         import subprocess as real_subprocess
-        mock_sub.run.side_effect = real_subprocess.CalledProcessError(1, "git")
-        mock_sub.CalledProcessError = real_subprocess.CalledProcessError
-        mock_sub.TimeoutExpired = real_subprocess.TimeoutExpired
+        mock_run_git.side_effect = real_subprocess.CalledProcessError(1, "git")
         mock_merge.return_value = True
         assert check_and_merge_worktree(_make_test_item(), Path("/wt")) is True
         mock_merge.assert_called_once()
 
     @patch("pokepoke.worktree_finalization.merge_worktree_to_dev")
     @patch("pokepoke.worktree_finalization.get_default_branch")
-    @patch("pokepoke.worktree_finalization.subprocess")
-    def test_timeout_aborts_merge(self, mock_sub: Mock, mock_branch: Mock, mock_merge: Mock) -> None:
+    @patch("pokepoke.worktree_finalization.run_git")
+    def test_timeout_aborts_merge(self, mock_run_git: Mock, mock_branch: Mock, mock_merge: Mock) -> None:
         """TimeoutExpired means git is unresponsive — abort merge."""
         import subprocess as real_subprocess
-        mock_sub.run.side_effect = real_subprocess.TimeoutExpired("git", 30)
-        mock_sub.TimeoutExpired = real_subprocess.TimeoutExpired
+        mock_run_git.side_effect = real_subprocess.TimeoutExpired("git", 30)
         assert check_and_merge_worktree(_make_test_item(), Path("/wt")) is False
         mock_merge.assert_not_called()
 
     @patch("pokepoke.worktree_finalization.merge_worktree_to_dev")
     @patch("pokepoke.worktree_finalization.get_default_branch")
-    @patch("pokepoke.worktree_finalization.subprocess")
-    def test_unexpected_exception_aborts_merge(self, mock_sub: Mock, mock_branch: Mock, mock_merge: Mock) -> None:
+    @patch("pokepoke.worktree_finalization.run_git")
+    def test_unexpected_exception_aborts_merge(self, mock_run_git: Mock, mock_branch: Mock, mock_merge: Mock) -> None:
         """Unexpected exceptions (OS/resource) abort merge to prevent corruption."""
-        mock_sub.run.side_effect = OSError("disk full")
-        import subprocess as real_subprocess
-        mock_sub.TimeoutExpired = real_subprocess.TimeoutExpired
-        mock_sub.CalledProcessError = real_subprocess.CalledProcessError
+        mock_run_git.side_effect = OSError("disk full")
         assert check_and_merge_worktree(_make_test_item(), Path("/wt")) is False
         mock_merge.assert_not_called()
 

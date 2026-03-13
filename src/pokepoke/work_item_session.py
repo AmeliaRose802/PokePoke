@@ -9,12 +9,12 @@ can clean up after crashes.
 from __future__ import annotations
 
 import logging
-import subprocess
 from pathlib import Path
 from typing import Literal
 from types import TracebackType
 
 from pokepoke.constants import BRANCH_PREFIX
+from pokepoke.git_helpers import run_git
 from pokepoke.merge_conflict import is_merge_in_progress
 from pokepoke.session_journal import (
     SessionPhase,
@@ -255,14 +255,8 @@ class WorkItemSession:
             return
         if not is_merge_in_progress(wt):
             return
-        subprocess.run(
+        run_git(
             ["git", "-C", str(wt), "merge", "--abort"],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=30,
         )
         logger.info("Aborted in-progress merge in %s", wt)
 
@@ -281,14 +275,8 @@ class WorkItemSession:
 
         if not branch_exists(self.branch):
             return
-        subprocess.run(
+        run_git(
             ["git", "branch", "-D", self.branch],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=30,
         )
 
     def _unassign_beads_item(self) -> None:

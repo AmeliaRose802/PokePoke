@@ -13,7 +13,7 @@ _WT_PATH = f"{WORKTREE_DIR}/"
 
 logger = logging.getLogger(__name__)
 
-from .git_helpers import restore_beads_stash, _run_git_status_with_retry, validate_post_merge, list_worktrees  # noqa: E402,F401
+from .git_helpers import run_git, restore_beads_stash, _run_git_status_with_retry, validate_post_merge, list_worktrees  # noqa: E402,F401
 
 __all__ = [
     'has_uncommitted_changes',
@@ -79,19 +79,16 @@ def commit_all_changes(
     """
     add_flag = "-u" if tracked_only else "-A"
     try:
-        subprocess.run(
-            ["git", "add", add_flag], check=True, capture_output=True,
-            text=True, encoding='utf-8', errors='replace',
+        run_git(
+            ["git", "add", add_flag],
             timeout=240, cwd=cwd
         )
 
-        result = subprocess.run(
+        result = run_git(
             ["git", "commit", "-m", message],
-            capture_output=True,
-            text=True,
-            encoding='utf-8', errors='replace',
-            timeout=300,  # 5 minutes for pre-commit hooks
-            cwd=cwd
+            timeout=300,
+            cwd=cwd,
+            check=False,
         )
 
         if result.returncode == 0:
@@ -134,14 +131,11 @@ def handle_beads_auto_commit(cwd: str | None = None) -> None:
     """Commit beads database changes."""
     try:
         print("🔧 Committing beads database changes in main repo...")
-        subprocess.run(["git", "add", f"{BEADS_DIR}/"], check=True, encoding='utf-8', errors='replace', timeout=10, cwd=cwd)
-        subprocess.run(
+        run_git(["git", "add", f"{BEADS_DIR}/"], timeout=10, cwd=cwd)
+        run_git(
             ["git", "commit", "-m", "chore: sync beads before worktree merge"],
-            check=True,
-            capture_output=True,
-            encoding='utf-8', errors='replace',
             timeout=300,
-            cwd=cwd
+            cwd=cwd,
         )
         print("✅ Beads changes committed")
     except subprocess.TimeoutExpired as e:
@@ -176,10 +170,9 @@ def sanitize_branch_name(name: str) -> str:
 def branch_exists(branch_name: str, cwd: str | None = None) -> bool:
     """Check if a local branch exists."""
     try:
-        result = subprocess.run(
+        result = run_git(
             ["git", "show-ref", "--verify", f"refs/heads/{branch_name}"],
-            capture_output=True, text=True, encoding='utf-8', errors='replace',
-            timeout=30, cwd=cwd)
+            timeout=30, cwd=cwd, check=False)
         return result.returncode == 0
     except subprocess.CalledProcessError:
         return False
@@ -209,37 +202,27 @@ def get_default_branch(preferred: str | None = None, fallback: str | None = None
 
         # Check remote
         try:
-            subprocess.run(
+            run_git(
                 ["git", "show-ref", "--verify", f"refs/remotes/origin/{preferred}"],
-                capture_output=True,
-                encoding='utf-8', errors='replace',
-                check=True,
                 timeout=30,
-                cwd=cwd
+                cwd=cwd,
             )
             # Found on remote, create local tracking branch
             print(f"   ✨ Creating local tracking branch for {preferred}...")
-            subprocess.run(
+            run_git(
                 ["git", "branch", "--track", preferred, f"origin/{preferred}"],
-                capture_output=True,
-                encoding='utf-8', errors='replace',
-                check=True,
                 timeout=30,
-                cwd=cwd
+                cwd=cwd,
             )
             return preferred
         except subprocess.CalledProcessError:
             pass
 
     try:
-        result = subprocess.run(
+        result = run_git(
             ["git", "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8', errors='replace',
-            check=True,
             timeout=30,
-            cwd=cwd
+            cwd=cwd,
         )
         ref = result.stdout.strip()
         if ref.startswith("origin/"):
@@ -248,14 +231,10 @@ def get_default_branch(preferred: str | None = None, fallback: str | None = None
         pass
 
     try:
-        result = subprocess.run(
+        result = run_git(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8', errors='replace',
-            check=True,
             timeout=30,
-            cwd=cwd
+            cwd=cwd,
         )
         branch = result.stdout.strip()
         if branch:
@@ -268,10 +247,8 @@ def get_default_branch(preferred: str | None = None, fallback: str | None = None
 def get_main_repo_root() -> Path:
     """Get the main repository root directory (not a worktree)."""
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--git-common-dir"],
-            capture_output=True, text=True, encoding='utf-8', errors='replace',
-            check=True, timeout=30)
+        result = run_git(
+            ["git", "rev-parse", "--git-common-dir"])
         return Path(result.stdout.strip()).parent
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Not in a git repository: {e}") from e
@@ -279,10 +256,8 @@ def get_main_repo_root() -> Path:
 def is_worktree_clean(worktree_path: Path) -> bool:
     """Check if a worktree has no uncommitted changes."""
     try:
-        result = subprocess.run(
-            ["git", "-C", str(worktree_path), "status", "--porcelain"],
-            capture_output=True, text=True, encoding='utf-8', errors='replace',
-            check=True, timeout=30)
+        result = run_git(
+            ["git", "-C", str(worktree_path), "status", "--porcelain"])
         return not bool(result.stdout.strip())
     except subprocess.CalledProcessError:
         return False
@@ -305,8 +280,7 @@ def execute_merge_sequence(
         - If failed: (False, error_message, list_of_unmerged_files)
     """
     try:
-        subprocess.run(["git", "checkout", target_branch],
-                     check=True, capture_output=True, text=True, encoding='utf-8', errors='replace',
+        run_git(["git", "checkout", target_branch],
                      timeout=30, cwd=cwd)
     except subprocess.CalledProcessError as e:
         return False, f"Failed to checkout {target_branch}: {e.stderr or str(e)}", []
@@ -316,31 +290,26 @@ def execute_merge_sequence(
     # Stash beads daemon changes to avoid "unstaged changes" error during pull
     stashed = False
     try:
-        status = subprocess.run(
+        status = run_git(
             ["git", "status", "--porcelain", f"{BEADS_DIR}/"],
-            capture_output=True, text=True, encoding='utf-8', check=True,
-            errors='replace', timeout=30, cwd=cwd
+            timeout=30, cwd=cwd,
         ).stdout.strip()
         if status:
-            subprocess.run(
+            run_git(
                 ["git", "stash", "push", "-m", "beads-daemon-changes-during-merge", "--", f"{BEADS_DIR}/"],
-                check=True, capture_output=True, text=True, encoding='utf-8', errors='replace',
-                timeout=30, cwd=cwd
+                timeout=30, cwd=cwd,
             )
             stashed = True
     except subprocess.CalledProcessError:
         pass  # Stash failed, will try pull anyway
 
     try:
-        subprocess.run(["git", "pull", "--rebase", "origin", target_branch],
-                     check=True, capture_output=True, text=True, encoding='utf-8', errors='replace',
+        run_git(["git", "pull", "--rebase", "origin", target_branch],
                      timeout=120, cwd=cwd)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         # Rollback: abort the failed rebase to leave repo in a clean state
         try:
-            subprocess.run(["git", "rebase", "--abort"], check=True,
-                         capture_output=True, text=True, encoding='utf-8', errors='replace',
-                         timeout=30, cwd=cwd)
+            run_git(["git", "rebase", "--abort"], timeout=30, cwd=cwd)
             logger.info("Rolled back failed rebase with git rebase --abort")
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as abort_err:
             logger.warning("Could not abort rebase during rollback: %s", abort_err)
@@ -355,8 +324,7 @@ def execute_merge_sequence(
         restore_beads_stash("git pull --rebase")
 
     try:
-        subprocess.run(["git", "merge", "--no-ff", branch_name, "-m", f"Merge {branch_name}"],
-                     check=True, capture_output=True, text=True, encoding='utf-8', errors='replace',
+        run_git(["git", "merge", "--no-ff", branch_name, "-m", f"Merge {branch_name}"],
                      timeout=60, cwd=cwd)
         return True, "", []
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
@@ -368,9 +336,7 @@ def execute_merge_sequence(
         # Rollback: abort the failed merge to leave repo in a clean state
         if is_merging:
             try:
-                subprocess.run(["git", "merge", "--abort"], check=True,
-                             capture_output=True, text=True, encoding='utf-8', errors='replace',
-                             timeout=30, cwd=cwd)
+                run_git(["git", "merge", "--abort"], timeout=30, cwd=cwd)
                 logger.info("Rolled back failed merge with git merge --abort")
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as abort_err:
                 logger.error("Failed to abort merge during rollback: %s", abort_err)
@@ -387,10 +353,9 @@ def has_commits_ahead(target_branch: str | None = None, cwd: str | None = None) 
     if target_branch is None:
         target_branch = get_default_branch()
     try:
-        result = subprocess.run(
+        result = run_git(
             ["git", "rev-list", "--count", f"{target_branch}..HEAD"],
-            capture_output=True, text=True, encoding='utf-8', errors='replace',
-            timeout=10, cwd=cwd)
+            timeout=10, cwd=cwd, check=False)
         if result.returncode == 0:
             return int(result.stdout.strip())
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError):

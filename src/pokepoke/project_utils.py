@@ -6,17 +6,17 @@ import subprocess
 from pathlib import Path
 
 from .constants import BEADS_DIR
+from .git_helpers import run_git
 
 
 def is_git_repo(path: Path) -> bool:
     """Check if a directory is (or is inside) a git repository."""
     try:
-        result = subprocess.run(
+        result = run_git(
             ["git", "rev-parse", "--git-dir"],
-            capture_output=True,
-            text=True,
             cwd=str(path),
             timeout=10,
+            check=False,
         )
         return result.returncode == 0
     except (subprocess.TimeoutExpired, OSError):
@@ -26,12 +26,11 @@ def is_git_repo(path: Path) -> bool:
 def resolve_git_toplevel(path: Path) -> Path | None:
     """Resolve the git repository root for the given path."""
     try:
-        result = subprocess.run(
+        result = run_git(
             ["git", "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
             cwd=str(path),
             timeout=10,
+            check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
             return Path(result.stdout.strip()).resolve()

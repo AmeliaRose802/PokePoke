@@ -51,12 +51,11 @@ def _check_existing_directory(worktree_path: Path, repo_path: str | None = None)
 
     is_valid_worktree = False
     try:
-        result = subprocess.run(
+        result = _run_git(
             ["git", "rev-parse", "--is-inside-work-tree"],
-            cwd=worktree_path,
-            capture_output=True,
-            text=True,
-            check=True
+            cwd=str(worktree_path),
+            timeout=10,
+            check=False,
         )
         if result.stdout.strip() == "true":
             is_valid_worktree = True

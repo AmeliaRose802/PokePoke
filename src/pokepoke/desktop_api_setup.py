@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 from contextlib import suppress
 
 from pokepoke.desktop_api_utils import HAS_YAML, coerce_process_output
+from pokepoke.git_helpers import run_git
 
 with suppress(ImportError):
     import yaml  # type: ignore[import-untyped]
@@ -60,14 +61,9 @@ def git_init(self: DesktopAPI, default_branch: str | None = None) -> dict[str, A
         command.extend(["-b", default_branch])
 
     try:
-        result = subprocess.run(
+        result = run_git(
             command,
             cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            timeout=30,
-            check=True,
         )
     except subprocess.TimeoutExpired as exc:
         return {

@@ -22,6 +22,7 @@ def run_git(
     *,
     timeout: int = DEFAULT_GIT_TIMEOUT,
     cwd: str | None = None,
+    check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """Run a git command with standard encoding and timeout handling."""
     return subprocess.run(
@@ -30,7 +31,7 @@ def run_git(
         text=True,
         encoding="utf-8",
         errors="replace",
-        check=True,
+        check=check,
         timeout=timeout,
         cwd=cwd,
     )
@@ -39,14 +40,9 @@ def run_git(
 def verify_branch_pushed(branch_name: str) -> bool:
     """Return True when the given branch exists on origin."""
     try:
-        result = subprocess.run(
+        result = run_git(
             ["git", "ls-remote", "--heads", "origin", branch_name],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            check=True,
-            timeout=120
+            timeout=120,
         )
         return bool(result.stdout.strip())
     except subprocess.CalledProcessError:
@@ -68,15 +64,7 @@ def restore_beads_stash(context: str) -> None:
     If recovery also fails the stash is preserved for manual inspection.
     """
     try:
-        subprocess.run(
-            ["git", "stash", "pop", "--index"],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            timeout=30
-        )
+        run_git(["git", "stash", "pop", "--index"])
     except subprocess.CalledProcessError as pop_error:
         print(f"⚠️ Stash pop conflict after {context}. Attempting to force-apply .beads/ changes.")
         _print_command_output([pop_error.stdout or "", pop_error.stderr or ""])
@@ -85,31 +73,15 @@ def restore_beads_stash(context: str) -> None:
         # checkout from stash doesn't hit conflicts.  Previously this
         # ran `git checkout -- .` which wiped the ENTIRE working tree.
         with contextlib.suppress(subprocess.CalledProcessError):
-            subprocess.run(
-                ["git", "checkout", "--", f"{BEADS_DIR}/"],
-                check=True, capture_output=True, text=True,
-                encoding='utf-8', errors='replace', timeout=30
-            )
+            run_git(["git", "checkout", "--", f"{BEADS_DIR}/"])
 
         # Force-apply .beads/ paths from the stash (theirs-wins strategy)
         try:
-            subprocess.run(
-                ["git", "checkout", "stash@{0}", "--", f"{BEADS_DIR}/"],
-                check=True,
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                errors='replace',
-                timeout=30
-            )
+            run_git(["git", "checkout", "stash@{0}", "--", f"{BEADS_DIR}/"])
             print("✅ Force-applied .beads/ changes from stash.")
             # Only drop the stash after successful recovery
             try:
-                subprocess.run(
-                    ["git", "stash", "drop"],
-                    check=True, capture_output=True, text=True,
-                    encoding='utf-8', errors='replace', timeout=30
-                )
+                run_git(["git", "stash", "drop"])
             except subprocess.CalledProcessError:
                 print("⚠️ Could not drop stash after recovery. Run `git stash list` to clean up.")
         except subprocess.CalledProcessError as checkout_error:
@@ -126,12 +98,7 @@ def restore_beads_stash(context: str) -> None:
 def _get_stash_ref() -> str:
     """Return the first stash entry label, or empty string on failure."""
     try:
-        result = subprocess.run(
-            ["git", "stash", "list", "-1"],
-            capture_output=True, text=True,
-            encoding='utf-8', errors='replace',
-            timeout=10
-        )
+        result = run_git(["git", "stash", "list", "-1"], timeout=10, check=False)
         return result.stdout.strip()
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return ""
@@ -145,10 +112,7 @@ def _run_git_status_with_retry(
     last_exc: Exception | None = None
     for attempt in range(max_retries):
         try:
-            return subprocess.run(
-                args, capture_output=True, text=True, encoding='utf-8',
-                errors='replace', check=True, timeout=timeout, cwd=cwd,
-            )
+            return run_git(args, cwd=cwd, timeout=timeout)
         except subprocess.TimeoutExpired as exc:
             last_exc = exc
         except subprocess.CalledProcessError as exc:
@@ -165,17 +129,13 @@ def _run_git_status_with_retry(
 
 def validate_post_merge(target_branch: str, cwd: str | None = None) -> bool:
     """Validate repository state after merge."""
-    current_branch = subprocess.run(
-        ["git", "branch", "--show-current"],
-        capture_output=True, text=True, encoding='utf-8', errors='replace',
-        check=True, timeout=30, cwd=cwd).stdout.strip()
+    current_branch = run_git(
+        ["git", "branch", "--show-current"], cwd=cwd).stdout.strip()
     if current_branch != target_branch:
         print(f"❌ Post-merge validation failed: Not on {target_branch} (on {current_branch})")
         return False
-    status = subprocess.run(
-        ["git", "status", "--porcelain"],
-        capture_output=True, text=True, encoding='utf-8', errors='replace',
-        check=True, timeout=30, cwd=cwd).stdout.strip()
+    status = run_git(
+        ["git", "status", "--porcelain"], cwd=cwd).stdout.strip()
     if status:
         print(f"❌ Post-merge validation failed: {target_branch} has uncommitted changes")
         return False
@@ -189,10 +149,8 @@ def list_worktrees(cwd: str | None = None) -> list[dict[str, str]]:
         cwd: Working directory for the git command (defaults to process CWD).
     """
     try:
-        result = subprocess.run(
-            ["git", "worktree", "list", "--porcelain"],
-            capture_output=True, text=True, encoding='utf-8', errors='replace',
-            timeout=30, check=True, cwd=cwd)
+        result = run_git(
+            ["git", "worktree", "list", "--porcelain"], cwd=cwd)
         worktrees: list[dict[str, str]] = []
         current: dict[str, str] = {}
         for line in result.stdout.splitlines():

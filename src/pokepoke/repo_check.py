@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pokepoke.constants import BEADS_DIR, CLEANUP_AGGREGATE_TIMEOUT, STATUS_IN_PROGRESS, WORKTREE_DIR
+from pokepoke.git_helpers import run_git
 from pokepoke.git_operations import get_status_porcelain_and_changes
 from pokepoke.repo_state_guard import cleanup_lock
 from pokepoke.coordination import merge_lock_active
@@ -368,15 +369,11 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
         # Auto-resolve worktree cleanup deletions
         if changes['worktree']:
             print("🧹 Committing worktree cleanup changes...")
-            subprocess.run(["git", "add", f"{WORKTREE_DIR}/"], check=True, encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=30)
-            subprocess.run(
+            run_git(["git", "add", f"{WORKTREE_DIR}/"], cwd=str(repo_path))
+            run_git(
                 ["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
-                check=True,
-                capture_output=True,
-                encoding='utf-8',
-                errors='replace',
                 cwd=str(repo_path),
-                timeout=60
+                timeout=60,
             )
             print("✅ Worktree cleanup committed")
 

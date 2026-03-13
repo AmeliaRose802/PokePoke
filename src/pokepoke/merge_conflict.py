@@ -4,6 +4,8 @@ import logging
 import subprocess
 from pathlib import Path
 
+from .git_helpers import run_git
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,14 +19,7 @@ def is_merge_in_progress(repo_path: Path | None = None) -> bool:
         cmd = ["git", "rev-parse", "--verify", "MERGE_HEAD"]
         if repo_path:
             cmd = ["git", "-C", str(repo_path), "rev-parse", "--verify", "MERGE_HEAD"]
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            timeout=10
-        )
+        result = run_git(cmd, timeout=10, check=False)
         return result.returncode == 0
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return False
@@ -47,15 +42,7 @@ def get_unmerged_files(repo_path: Path | None = None) -> list[str]:
         cmd = ["git", "status", "--porcelain"]
         if repo_path:
             cmd = ["git", "-C", str(repo_path), "status", "--porcelain"]
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            check=True,
-            timeout=10
-        )
+        result = run_git(cmd, timeout=10)
 
         unmerged = []
         # Unmerged file indicators in git status --porcelain
@@ -86,14 +73,7 @@ def abort_merge(repo_path: Path | None = None) -> tuple[bool, str]:
         cmd = ["git", "merge", "--abort"]
         if repo_path:
             cmd = ["git", "-C", str(repo_path), "merge", "--abort"]
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            timeout=30
-        )
+        result = run_git(cmd, timeout=30, check=False)
         if result.returncode == 0:
             return True, ""
         else:
@@ -122,14 +102,7 @@ def get_merge_conflict_details(repo_path: Path | None = None) -> dict[str, objec
             cmd = ["git", "rev-parse", "--short", "MERGE_HEAD"]
             if repo_path:
                 cmd = ["git", "-C", str(repo_path), "rev-parse", "--short", "MERGE_HEAD"]
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                errors='replace',
-                timeout=10
-            )
+            result = run_git(cmd, timeout=10, check=False)
             if result.returncode == 0:
                 merge_head = result.stdout.strip()
         except Exception as e:

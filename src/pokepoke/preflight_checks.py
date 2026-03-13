@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from pokepoke.constants import WORKTREE_DIR
+from pokepoke.git_helpers import run_git
 from pokepoke.git_operations import has_uncommitted_changes, categorize_git_changes, list_worktrees
 from pokepoke.perf_timing import timed_block
 from pokepoke.process_utils import is_process_running
@@ -67,9 +68,8 @@ def check_git_status(
             # Check for uncommitted changes
             if has_uncommitted_changes(cwd=str(repo_path)):
                 try:
-                    result = subprocess.run(
+                    result = run_git(
                         ['git', 'status', '--porcelain'],
-                        capture_output=True, text=True, check=True,
                         cwd=str(repo_path), timeout=config['git_operation_timeout']
                     )
 
@@ -143,8 +143,8 @@ def check_worktree_creation(
             '-b', test_branch, 'HEAD'
         ]
 
-        subprocess.run(
-            cmd, capture_output=True, text=True, check=True,
+        run_git(
+            cmd,
             cwd=str(repo_path), timeout=config['worktree_test_timeout']
         )
 
@@ -176,14 +176,14 @@ def check_worktree_creation(
         # Clean up test worktree
         try:
             if test_worktree_path.exists():
-                subprocess.run(
+                run_git(
                     ['git', 'worktree', 'remove', '--force', str(test_worktree_path)],
-                    capture_output=True, cwd=str(repo_path), timeout=30
+                    cwd=str(repo_path), check=False,
                 )
             # Clean up test branch
-            subprocess.run(
+            run_git(
                 ['git', 'branch', '-D', test_branch],
-                capture_output=True, cwd=str(repo_path), timeout=30
+                cwd=str(repo_path), check=False,
             )
         except Exception as cleanup_error:
             warnings.append(f"Failed to clean up test worktree: {cleanup_error}")

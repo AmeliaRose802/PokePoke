@@ -66,7 +66,7 @@ def _patch_all_helpers():
             mocks["is_merge"] = p.start()
             patches["is_merge"] = p
 
-            p = patch("pokepoke.work_item_session.subprocess.run")
+            p = patch("pokepoke.work_item_session.run_git")
             mocks["subprocess_run"] = p.start()
             patches["subprocess_run"] = p
 
@@ -381,7 +381,7 @@ class TestCleanupEdgeCases:
             session = _make_session()
             session.cleanup_on_failure()
 
-            # subprocess should not be called for branch deletion
+            # run_git should not be called for branch deletion
             # (no merge abort either since is_merge returns False)
             m["subprocess_run"].assert_not_called()
 
