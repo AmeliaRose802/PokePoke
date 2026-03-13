@@ -100,7 +100,7 @@ class TestRecordItemResult:
         run_logger = MagicMock()
         item = _item()
 
-        with patch("pokepoke.beads_item_stats_store.record_item_completed",
+        with patch("pokepoke.orchestrator.record_item_completed",
                     return_value={"total_created": 10, "total_completed": 5}):
             success, completed = _record_item_result(
                 item, _success_result(), stats, run_logger,
@@ -123,7 +123,7 @@ class TestRecordItemResult:
                                     duration_seconds=60.0)
         result = _success_result(model_completion=mc)
 
-        with patch("pokepoke.beads_item_stats_store.record_item_completed",
+        with patch("pokepoke.orchestrator.record_item_completed",
                     return_value={"total_created": 0, "total_completed": 0}):
             _record_item_result(item, result, stats, run_logger)
 
@@ -159,7 +159,7 @@ class TestRecordItemResult:
         agent_stats = AgentStats(input_tokens=500, output_tokens=200)
 
         with (
-            patch("pokepoke.beads_item_stats_store.record_item_completed",
+            patch("pokepoke.orchestrator.record_item_completed",
                   return_value={"total_created": 0, "total_completed": 0}),
             patch("pokepoke.orchestrator.increment_items_completed", return_value=1),
             patch("pokepoke.orchestrator.run_periodic_maintenance"),
@@ -198,7 +198,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestrator.get_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestrator.load_config")
     @patch("pokepoke.orchestrator.get_beads_stats", return_value=BeadsStats())
-    @patch("pokepoke.beads.get_failed_unassign_count", return_value=0)
+    @patch("pokepoke.orchestrator.get_failed_unassign_count", return_value=0)
     @patch("pokepoke.orchestrator.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.orchestrator.get_ready_work_items", return_value=[])
     @patch("pokepoke.orchestrator.select_work_item", return_value=None)
@@ -212,8 +212,8 @@ class TestRunOrchestrator:
         mock_register, mock_unregister,
     ):
         mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
-        with patch("pokepoke.beads_item_stats_backfill.backfill_from_beads_db",
-                    return_value={"backfilled": 0}), patch("pokepoke.beads_item_stats_store.get_summary",
+        with patch("pokepoke.orchestrator.backfill_from_beads_db",
+                    return_value={"backfilled": 0}), patch("pokepoke.orchestrator._get_beads_summary",
                     return_value={"total_created": 0, "total_completed": 0}):
             exit_code = run_orchestrator(interactive=False, continuous=False)
         assert exit_code == 0
@@ -228,7 +228,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestrator.get_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestrator.load_config")
     @patch("pokepoke.orchestrator.get_beads_stats", return_value=BeadsStats())
-    @patch("pokepoke.beads.get_failed_unassign_count", return_value=0)
+    @patch("pokepoke.orchestrator.get_failed_unassign_count", return_value=0)
     @patch("pokepoke.orchestrator.check_and_commit_main_repo", return_value=False)
     @patch("pokepoke.orchestrator.is_shutting_down", return_value=False)
     @patch("pokepoke.orchestrator.print_stats")
@@ -240,8 +240,8 @@ class TestRunOrchestrator:
         mock_register, mock_unregister,
     ):
         mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
-        with patch("pokepoke.beads_item_stats_backfill.backfill_from_beads_db",
-                    return_value={"backfilled": 0}), patch("pokepoke.beads_item_stats_store.get_summary",
+        with patch("pokepoke.orchestrator.backfill_from_beads_db",
+                    return_value={"backfilled": 0}), patch("pokepoke.orchestrator._get_beads_summary",
                     return_value={"total_created": 0, "total_completed": 0}):
             exit_code = run_orchestrator(interactive=False, continuous=False)
         assert exit_code == 1
@@ -256,7 +256,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestrator.get_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestrator.load_config")
     @patch("pokepoke.orchestrator.get_beads_stats", return_value=BeadsStats())
-    @patch("pokepoke.beads.get_failed_unassign_count", return_value=0)
+    @patch("pokepoke.orchestrator.get_failed_unassign_count", return_value=0)
     @patch("pokepoke.orchestrator.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.orchestrator.get_ready_work_items")
     @patch("pokepoke.orchestrator.select_work_item")
@@ -281,11 +281,11 @@ class TestRunOrchestrator:
         mock_process.return_value = _success_result()
 
         with (
-            patch("pokepoke.beads_item_stats_backfill.backfill_from_beads_db",
+            patch("pokepoke.orchestrator.backfill_from_beads_db",
                   return_value={"backfilled": 0}),
-            patch("pokepoke.beads_item_stats_store.get_summary",
+            patch("pokepoke.orchestrator._get_beads_summary",
                   return_value={"total_created": 0, "total_completed": 0}),
-            patch("pokepoke.beads_item_stats_store.record_item_completed",
+            patch("pokepoke.orchestrator.record_item_completed",
                   return_value={"total_created": 0, "total_completed": 1}),
         ):
             exit_code = run_orchestrator(interactive=False, continuous=False)
@@ -301,7 +301,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestrator.get_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestrator.load_config")
     @patch("pokepoke.orchestrator.get_beads_stats", return_value=BeadsStats())
-    @patch("pokepoke.beads.get_failed_unassign_count", return_value=0)
+    @patch("pokepoke.orchestrator.get_failed_unassign_count", return_value=0)
     @patch("pokepoke.orchestrator.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.orchestrator.get_ready_work_items")
     @patch("pokepoke.orchestrator.select_work_item")
@@ -323,8 +323,8 @@ class TestRunOrchestrator:
         mock_select.return_value = item
         mock_process.return_value = _fail_result()
 
-        with patch("pokepoke.beads_item_stats_backfill.backfill_from_beads_db",
-                    return_value={"backfilled": 0}), patch("pokepoke.beads_item_stats_store.get_summary",
+        with patch("pokepoke.orchestrator.backfill_from_beads_db",
+                    return_value={"backfilled": 0}), patch("pokepoke.orchestrator._get_beads_summary",
                     return_value={"total_created": 0, "total_completed": 0}):
             exit_code = run_orchestrator(interactive=False, continuous=False)
         assert exit_code == 1
@@ -339,7 +339,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestrator.get_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestrator.load_config")
     @patch("pokepoke.orchestrator.get_beads_stats", return_value=BeadsStats())
-    @patch("pokepoke.beads.get_failed_unassign_count", return_value=0)
+    @patch("pokepoke.orchestrator.get_failed_unassign_count", return_value=0)
     @patch("pokepoke.orchestrator.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.orchestrator.get_ready_work_items")
     @patch("pokepoke.orchestrator.select_work_item")
@@ -362,8 +362,8 @@ class TestRunOrchestrator:
         # request_count=0 means claim failure
         mock_process.return_value = WorkItemResult(success=False, request_count=0)
 
-        with patch("pokepoke.beads_item_stats_backfill.backfill_from_beads_db",
-                    return_value={"backfilled": 0}), patch("pokepoke.beads_item_stats_store.get_summary",
+        with patch("pokepoke.orchestrator.backfill_from_beads_db",
+                    return_value={"backfilled": 0}), patch("pokepoke.orchestrator._get_beads_summary",
                     return_value={"total_created": 0, "total_completed": 0}):
             exit_code = run_orchestrator(interactive=False, continuous=False)
         # Single-shot, failure -> exit 1
@@ -379,8 +379,8 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestrator.get_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestrator.load_config")
     @patch("pokepoke.orchestrator.get_beads_stats", return_value=BeadsStats())
-    @patch("pokepoke.beads.get_failed_unassign_count", return_value=2)
-    @patch("pokepoke.beads.retry_failed_unassigns", return_value=2)
+    @patch("pokepoke.orchestrator.get_failed_unassign_count", return_value=2)
+    @patch("pokepoke.orchestrator.retry_failed_unassigns", return_value=2)
     @patch("pokepoke.orchestrator.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.orchestrator.get_ready_work_items", return_value=[])
     @patch("pokepoke.orchestrator.select_work_item", return_value=None)
@@ -394,8 +394,8 @@ class TestRunOrchestrator:
         mock_register, mock_unregister,
     ):
         mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
-        with patch("pokepoke.beads_item_stats_backfill.backfill_from_beads_db",
-                    return_value={"backfilled": 0}), patch("pokepoke.beads_item_stats_store.get_summary",
+        with patch("pokepoke.orchestrator.backfill_from_beads_db",
+                    return_value={"backfilled": 0}), patch("pokepoke.orchestrator._get_beads_summary",
                     return_value={"total_created": 0, "total_completed": 0}):
             exit_code = run_orchestrator(interactive=False, continuous=False)
         assert exit_code == 0
@@ -412,16 +412,16 @@ class TestSetupOrchestrator:
     @patch("pokepoke.orchestrator.initialize_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestrator.load_config")
     @patch("pokepoke.orchestrator.get_beads_stats", return_value=BeadsStats())
-    @patch("pokepoke.beads.get_failed_unassign_count", return_value=0)
+    @patch("pokepoke.orchestrator.get_failed_unassign_count", return_value=0)
     def test_returns_context(
         self, mock_unassign_count, mock_beads_stats, mock_config,
         mock_init, mock_banner, mock_ui, mock_register,
     ):
         mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
         with (
-            patch("pokepoke.beads_item_stats_backfill.backfill_from_beads_db",
+            patch("pokepoke.orchestrator.backfill_from_beads_db",
                   return_value={"backfilled": 0}),
-            patch("pokepoke.beads_item_stats_store.get_summary",
+            patch("pokepoke.orchestrator._get_beads_summary",
                   return_value={"total_created": 0, "total_completed": 0}),
         ):
             ctx = _setup_orchestrator(
@@ -444,16 +444,16 @@ class TestSetupOrchestrator:
     @patch("pokepoke.orchestrator.initialize_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestrator.load_config")
     @patch("pokepoke.orchestrator.get_beads_stats", return_value=BeadsStats())
-    @patch("pokepoke.beads.get_failed_unassign_count", return_value=0)
+    @patch("pokepoke.orchestrator.get_failed_unassign_count", return_value=0)
     def test_interactive_mode_name(
         self, mock_unassign_count, mock_beads_stats, mock_config,
         mock_init, mock_banner, mock_ui, mock_register,
     ):
         mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
         with (
-            patch("pokepoke.beads_item_stats_backfill.backfill_from_beads_db",
+            patch("pokepoke.orchestrator.backfill_from_beads_db",
                   return_value={"backfilled": 0}),
-            patch("pokepoke.beads_item_stats_store.get_summary",
+            patch("pokepoke.orchestrator._get_beads_summary",
                   return_value={"total_created": 0, "total_completed": 0}),
         ):
             ctx = _setup_orchestrator(
@@ -470,16 +470,16 @@ class TestSetupOrchestrator:
     @patch("pokepoke.orchestrator.initialize_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestrator.load_config")
     @patch("pokepoke.orchestrator.get_beads_stats", return_value=BeadsStats())
-    @patch("pokepoke.beads.get_failed_unassign_count", return_value=0)
+    @patch("pokepoke.orchestrator.get_failed_unassign_count", return_value=0)
     def test_parallel_forced_to_one_in_interactive(
         self, mock_unassign_count, mock_beads_stats, mock_config,
         mock_init, mock_banner, mock_ui, mock_register,
     ):
         mock_config.return_value = MagicMock(max_parallel_agents=4, preflight_health=MagicMock(enabled=False))
         with (
-            patch("pokepoke.beads_item_stats_backfill.backfill_from_beads_db",
+            patch("pokepoke.orchestrator.backfill_from_beads_db",
                   return_value={"backfilled": 0}),
-            patch("pokepoke.beads_item_stats_store.get_summary",
+            patch("pokepoke.orchestrator._get_beads_summary",
                   return_value={"total_created": 0, "total_completed": 0}),
         ):
             ctx = _setup_orchestrator(
@@ -505,7 +505,7 @@ class TestRunPreflight:
         )
 
     @patch("pokepoke.orchestrator.terminal_ui")
-    @patch("pokepoke.parallel_support.handle_preflight_checks", return_value=(True, False))
+    @patch("pokepoke.orchestrator.handle_preflight_checks", return_value=(True, False))
     def test_continues_when_checks_pass(self, mock_preflight, mock_ui):
         ctx = self._make_ctx()
         result = _run_preflight(ctx)
@@ -516,7 +516,7 @@ class TestRunPreflight:
     @patch("pokepoke.orchestrator.clear_terminal_banner")
     @patch("pokepoke.orchestrator.get_beads_stats", return_value=BeadsStats())
     @patch("pokepoke.orchestrator.is_shutting_down", return_value=False)
-    @patch("pokepoke.parallel_support.handle_preflight_checks", return_value=(False, True))
+    @patch("pokepoke.orchestrator.handle_preflight_checks", return_value=(False, True))
     def test_returns_exit_code_on_critical_failure(
         self, mock_preflight, mock_shutdown, mock_beads, mock_clear, mock_print, mock_ui,
     ):
@@ -549,7 +549,7 @@ class TestRunMainLoop:
     @patch("pokepoke.orchestrator.select_work_item", return_value=None)
     @patch("pokepoke.orchestrator.get_ready_work_items", return_value=[])
     @patch("pokepoke.orchestrator.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel_support.handle_preflight_checks", return_value=(True, False))
+    @patch("pokepoke.orchestrator.handle_preflight_checks", return_value=(True, False))
     def test_no_items_returns_zero(
         self, mock_preflight, mock_repo, mock_ready, mock_select,
         mock_shutdown, mock_beads, mock_clear, mock_print, mock_ui,
@@ -560,7 +560,7 @@ class TestRunMainLoop:
     @patch("pokepoke.orchestrator.terminal_ui")
     @patch("pokepoke.orchestrator.is_shutting_down", return_value=False)
     @patch("pokepoke.orchestrator.check_and_commit_main_repo", return_value=False)
-    @patch("pokepoke.parallel_support.handle_preflight_checks", return_value=(True, False))
+    @patch("pokepoke.orchestrator.handle_preflight_checks", return_value=(True, False))
     def test_repo_check_failure(self, mock_preflight, mock_repo, mock_shutdown, mock_ui):
         ctx = self._make_ctx()
         assert _run_main_loop(ctx) == 1

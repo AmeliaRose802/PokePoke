@@ -9,14 +9,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pokepoke.beads import get_ready_work_items, get_beads_stats
+from pokepoke.beads import get_ready_work_items, get_beads_stats, retry_failed_unassigns, get_failed_unassign_count
 from pokepoke.types import AgentStats, SessionStats, BeadsWorkItem, WorkItemResult
 from pokepoke.stats import print_stats
 from pokepoke.workflow import process_work_item
 from pokepoke.work_item_selection import select_work_item
 from pokepoke.logging_utils import RunLogger, configure_logging
 from pokepoke.agent_names import initialize_agent_name
-from pokepoke.agent_context import get_agent_name
+from pokepoke.agent_context import get_agent_name, set_agent_name
 from pokepoke.terminal_ui import set_terminal_banner, format_work_item_banner, clear_terminal_banner
 from pokepoke import terminal_ui
 from pokepoke.maintenance_state import increment_items_completed
@@ -28,6 +28,13 @@ from pokepoke.model_history import append_model_history_entry
 from pokepoke.config import load_config
 from pokepoke.signal_handlers import register_shutdown_handlers, unregister_shutdown_handlers
 from pokepoke.performance_monitor import run_iteration_checks
+from pokepoke.merge_queue import get_merge_queue
+from pokepoke.session_stats_registry import set_current_session_stats
+from pokepoke.beads_item_stats_backfill import backfill_from_beads_db
+from pokepoke.beads_item_stats_store import get_summary as _get_beads_summary, record_item_completed
+from pokepoke.agent_runner import run_beta_tester
+from pokepoke.preflight_log_utils import handle_preflight_checks
+from pokepoke.parallel import run_parallel_loop
 
 logger = logging.getLogger(__name__)
 
@@ -46,14 +53,12 @@ def _finalize_session(
         session_stats.set_ending_beads_stats(None)
     # Capture merge queue performance metrics
     with contextlib.suppress(Exception):
-        from pokepoke.merge_queue import get_merge_queue
         mq = get_merge_queue()
         session_stats.record_merge_queue_stats(mq.stats)
         mq.reset_stats()
     elapsed = end_time - start_time
     print_stats(items_completed, total_requests, elapsed, session_stats)
     run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
-    from pokepoke.session_stats_registry import set_current_session_stats
     set_current_session_stats(None)
     clear_terminal_banner()
 
@@ -76,7 +81,6 @@ def _record_item_result(selected_item: BeadsWorkItem, result: WorkItemResult, se
     items_completed = 0
     if result.success:
         items_completed = session_stats.record_completion(selected_item, agent_type="work")
-        from pokepoke.beads_item_stats_store import record_item_completed
         beads_summary = record_item_completed(selected_item.id, agent_type="work")
         session_stats.set_lifetime_beads_item_totals(created=int(beads_summary.get("total_created", 0)), completed=int(beads_summary.get("total_completed", 0)))
         total_persistent_count = increment_items_completed(repo_id=str(Path.cwd()))
@@ -119,7 +123,6 @@ def _setup_orchestrator(
     """Initialize agent identity, logging, signal handlers, beads recovery, and config."""
     agent_name = initialize_agent_name(custom_name=agent_name_override)
     os.environ['AGENT_NAME'] = agent_name
-    from pokepoke.agent_context import set_agent_name
     set_agent_name(agent_name)
     mode_name = "Interactive" if interactive else "Autonomous"
     print(f"🎯 PokePoke {mode_name} Mode | 🤖 Agent: {agent_name}")
@@ -140,25 +143,21 @@ def _setup_orchestrator(
     run_logger.log_orchestrator(f"Repository: {main_repo_path}")
     start_time = time.time()
     session_stats = SessionStats(agent_stats=AgentStats())
-    from pokepoke.session_stats_registry import set_current_session_stats
     set_current_session_stats(session_stats)
 
     # Backfill missing beads item creation events for Desktop UI accuracy
-    from pokepoke.beads_item_stats_backfill import backfill_from_beads_db
     try:
         backfill_result = backfill_from_beads_db(silent=True)
         if backfill_result["backfilled"] > 0:
             print(f"✅ Backfilled {backfill_result['backfilled']} beads item creation events")
     except Exception as e:
         logger.warning(f"Failed to backfill beads item stats: {e}")
-    from pokepoke.beads_item_stats_store import get_summary as _get_beads_summary
     s = _get_beads_summary()
     session_stats.set_lifetime_beads_item_totals(
         created=int(s.get("total_created", 0)),
         completed=int(s.get("total_completed", 0)),
     )
     # Recover any items that failed to unassign in previous runs
-    from pokepoke.beads import retry_failed_unassigns, get_failed_unassign_count
     stuck_count = get_failed_unassign_count()
     if stuck_count > 0:
         print(f"🔧 Recovering {stuck_count} item(s) stuck from failed unassigns...")
@@ -172,7 +171,6 @@ def _setup_orchestrator(
     if run_beta_first:
         print("\n🧪 Running Beta Tester at startup...")
         run_logger.log_orchestrator("Running Beta Tester at startup")
-        from pokepoke.agent_runner import run_beta_tester
         beta_stats = run_beta_tester(repo_root=main_repo_path)
         if beta_stats:
             session_stats.record_agent_stats(beta_stats)
@@ -201,7 +199,6 @@ def _run_preflight(ctx: _OrchestratorContext) -> int | None:
     print("\n🔍 Running pre-flight health checks...")
     ctx.run_logger.log_polling("Running pre-flight health checks")
 
-    from pokepoke.parallel_support import handle_preflight_checks
     should_continue, _is_critical = handle_preflight_checks(
         ctx.main_repo_path, ctx.run_logger, cfg=ctx.cfg,
     )
@@ -342,7 +339,6 @@ def run_orchestrator(
             agent_name_override, max_parallel_agents,
         )
         if ctx.effective_parallel > 1:
-            from pokepoke.parallel import run_parallel_loop
             exit_code = run_parallel_loop(
                 effective_parallel=ctx.effective_parallel,
                 mode_name=ctx.mode_name,
@@ -385,7 +381,6 @@ def run_orchestrator(
     finally:
         terminal_ui.ui.stop()
         try:
-            from pokepoke.merge_queue import get_merge_queue
             mq = get_merge_queue()
             if mq.is_running:
                 mq.shutdown(timeout=10.0)

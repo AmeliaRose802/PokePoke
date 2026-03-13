@@ -11,6 +11,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import cast
 
+from .coordination import manifest_lock
+from .beads_management import unassign_item as _unassign
+
 logger = logging.getLogger(__name__)
 
 # Retry settings for unassign operations
@@ -53,8 +56,6 @@ def _save_failed_unassign_manifest(manifest: dict[str, dict[str, str]]) -> None:
 
 def _add_failed_unassign(item_id: str, reason: str) -> None:
     """Track an item whose unassign failed for later recovery."""
-    from .coordination import manifest_lock
-
     with manifest_lock():
         manifest = _load_failed_unassign_manifest()
         manifest[item_id] = {
@@ -66,8 +67,6 @@ def _add_failed_unassign(item_id: str, reason: str) -> None:
 
 def _remove_failed_unassign(item_id: str) -> None:
     """Remove an item from the failed-unassign manifest after recovery."""
-    from .coordination import manifest_lock
-
     with manifest_lock():
         manifest = _load_failed_unassign_manifest()
         if item_id in manifest:
@@ -88,8 +87,6 @@ def unassign_with_retry(item_id: str) -> bool:
     Returns:
         True if the item was successfully unassigned, False otherwise.
     """
-    from .beads_management import unassign_item as _unassign
-
     last_error: Exception | None = None
     for attempt in range(1, _UNASSIGN_MAX_RETRIES + 1):
         try:
@@ -126,8 +123,6 @@ def retry_failed_unassigns() -> int:
     Returns:
         The number of items successfully recovered.
     """
-    from .beads_management import unassign_item as _unassign
-
     manifest = _load_failed_unassign_manifest()
     if not manifest:
         return 0

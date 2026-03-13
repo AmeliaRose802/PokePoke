@@ -112,7 +112,7 @@ def test_get_children_filters_parent_dependents(mock_get_issue: Mock) -> None:
         (None, "agent", "open", True),
     ],
 )
-@patch("pokepoke.agent_context.get_agent_name")
+@patch("pokepoke.beads_hierarchy._get_agent_name")
 def test_is_assigned_to_current_user(
     mock_get_agent_name: Mock,
     assignee: str | None,

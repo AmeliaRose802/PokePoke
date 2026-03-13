@@ -471,7 +471,7 @@ class TestRunGateAgent:
         assert "Fix already exists on main" in reason
         assert "Close as already-resolved" in reason
 
-    @patch('pokepoke.model_selection.select_gate_model')
+    @patch('pokepoke.agent_runner.select_gate_model')
     @patch('pokepoke.agent_runner.parse_agent_stats')
     @patch('pokepoke.agent_runner.invoke_copilot')
     @patch('pokepoke.agent_runner.PromptService')
@@ -844,7 +844,7 @@ class TestRunBeadsOnlyAgent:
 class TestRunWorktreeAgent:
     """Test _run_worktree_agent function."""
 
-    @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')  # Mock the extracted function
+    @patch('pokepoke.agent_runner.handle_worktree_merge')  # Mock the extracted function
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')  # Patch at module level
     @patch('pokepoke.agent_runner.cleanup_worktree')
     @patch('pokepoke.agent_runner.parse_agent_stats')
@@ -1008,7 +1008,7 @@ class TestRunWorktreeAgent:
         assert stats is None
         mock_cleanup.assert_not_called()
 
-    @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
+    @patch('pokepoke.agent_runner.handle_worktree_merge')
     @patch('pokepoke.agent_runner.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.agent_runner.cleanup_worktree')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
@@ -1066,7 +1066,7 @@ class TestRunWorktreeAgent:
         assert stats is None
         mock_cleanup.assert_not_called()
 
-    @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
+    @patch('pokepoke.agent_runner.handle_worktree_merge')
     @patch('pokepoke.merge_conflict.is_merge_in_progress')
     @patch('pokepoke.agent_runner.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.agent_runner.cleanup_worktree')
@@ -1127,7 +1127,7 @@ class TestRunWorktreeAgent:
 
         assert stats is not None
 
-    @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
+    @patch('pokepoke.agent_runner.handle_worktree_merge')
     @patch('pokepoke.merge_conflict.abort_merge')
     @patch('pokepoke.merge_conflict.is_merge_in_progress')
     @patch('pokepoke.agent_runner.invoke_merge_conflict_cleanup_agent')
@@ -1190,7 +1190,7 @@ class TestRunWorktreeAgent:
 
         assert stats is not None
 
-    @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
+    @patch('pokepoke.agent_runner.handle_worktree_merge')
     @patch('pokepoke.agent_runner.invoke_cleanup_agent')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
     @patch('os.chdir')
@@ -1241,7 +1241,7 @@ class TestRunWorktreeAgent:
 
         assert stats is None
 
-    @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
+    @patch('pokepoke.agent_runner.handle_worktree_merge')
     @patch('pokepoke.agent_runner.invoke_cleanup_agent')
     @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
     @patch('pokepoke.agent_runner.parse_agent_stats')
@@ -1666,7 +1666,7 @@ class TestRunMainRepoAgent:
 class TestRunWorktreeCleanup:
     """Test run_worktree_cleanup function."""
 
-    @patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=0)
+    @patch('pokepoke.agent_runner.get_uncleaned_worktree_count', return_value=0)
     @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
@@ -1705,7 +1705,7 @@ class TestRunWorktreeCleanup:
         args, _ = mock_main_repo_agent.call_args
         assert args[0] == "Worktree Cleanup"
 
-    @patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=0)
+    @patch('pokepoke.agent_runner.get_uncleaned_worktree_count', return_value=0)
     @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
@@ -1730,7 +1730,7 @@ class TestRunWorktreeCleanup:
         stats = run_worktree_cleanup()
         assert stats is None
 
-    @patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=0)
+    @patch('pokepoke.agent_runner.get_uncleaned_worktree_count', return_value=0)
     @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
     def test_worktree_cleanup_prompt_missing(
@@ -1750,7 +1750,7 @@ class TestRunWorktreeCleanup:
         stats = run_worktree_cleanup()
         assert stats is None
 
-    @patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=0)
+    @patch('pokepoke.agent_runner.get_uncleaned_worktree_count', return_value=0)
     @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
     def test_worktree_cleanup_prompts_dir_not_found(
@@ -1766,7 +1766,7 @@ class TestRunWorktreeCleanup:
         stats = run_worktree_cleanup()
         assert stats is None
 
-    @patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=0)
+    @patch('pokepoke.agent_runner.get_uncleaned_worktree_count', return_value=0)
     @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
@@ -1795,7 +1795,7 @@ class TestRunWorktreeCleanup:
         _, kwargs = mock_main_repo_agent.call_args
         assert kwargs.get("cwd") == str(Path("/main/repo"))
 
-    @patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=0)
+    @patch('pokepoke.agent_runner.get_uncleaned_worktree_count', return_value=0)
     @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
@@ -1827,7 +1827,7 @@ class TestRunWorktreeCleanup:
         # Must NOT raise; must return None so the orchestrator keeps running.
         assert result is None
 
-    @patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=0)
+    @patch('pokepoke.agent_runner.get_uncleaned_worktree_count', return_value=0)
     @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
@@ -1853,7 +1853,7 @@ class TestRunWorktreeCleanup:
             run_worktree_cleanup()  # No repo_root
             mock_chdir.assert_not_called()
 
-    @patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=0)
+    @patch('pokepoke.agent_runner.get_uncleaned_worktree_count', return_value=0)
     @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
@@ -2043,7 +2043,7 @@ class TestWorktreeAgentMergeChangeFalse:
 class TestWorktreeAgentFinallyCleanupException:
     """Test _run_worktree_agent finally block cleanup exception (lines 317-321)."""
 
-    @patch('pokepoke.worktree_cleanup.add_uncleaned_worktree')
+    @patch('pokepoke.agent_runner.add_uncleaned_worktree')
     @patch('pokepoke.agent_runner.cleanup_worktree')
     @patch('pokepoke.agent_runner.parse_agent_stats')
     @patch('pokepoke.agent_runner.run_cleanup_loop')
@@ -2117,8 +2117,8 @@ class TestGateAgentWithAgentId:
 class TestWorktreeCleanupPreCleanupRetry:
     """Test run_worktree_cleanup pre-cleanup retry logic (lines 234-236)."""
 
-    @patch('pokepoke.worktree_cleanup.retry_failed_cleanups', return_value=2)
-    @patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=3)
+    @patch('pokepoke.agent_runner.retry_failed_cleanups', return_value=2)
+    @patch('pokepoke.agent_runner.get_uncleaned_worktree_count', return_value=3)
     @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
     @patch('pokepoke.agent_runner._run_main_repo_agent')
     @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
@@ -2146,7 +2146,7 @@ class TestWorktreeCleanupPreCleanupRetry:
 class TestWorktreeAgentCleanupFailureSetsResultFalse:
     """Test that cleanup failure sets result.success=False (line 344)."""
 
-    @patch('pokepoke.worktree_merge_handler.handle_worktree_merge')
+    @patch('pokepoke.agent_runner.handle_worktree_merge')
     @patch('pokepoke.agent_runner.cleanup_worktree')
     @patch('pokepoke.agent_runner.parse_agent_stats')
     @patch('pokepoke.agent_runner.run_cleanup_loop')

@@ -422,7 +422,7 @@ class TestRunOrchestrator:
 
     @patch('subprocess.run')  # Mock git status check
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.initialize_agent_name')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
@@ -464,7 +464,7 @@ class TestRunOrchestrator:
 
     @patch('subprocess.run')  # Mock git status check
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.initialize_agent_name')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
@@ -503,7 +503,7 @@ class TestRunOrchestrator:
 
     @patch('subprocess.run')  # Mock git status check
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
     @patch('pokepoke.orchestrator.get_ready_work_items')
@@ -531,7 +531,7 @@ class TestRunOrchestrator:
 
     @patch('subprocess.run')  # Mock git status check
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.run_periodic_maintenance')  # Mock maintenance
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
@@ -573,7 +573,7 @@ class TestRunOrchestrator:
 
     @patch('subprocess.run')  # Mock git status check
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
     @patch('pokepoke.orchestrator.get_ready_work_items')
@@ -610,7 +610,7 @@ class TestRunOrchestrator:
     @patch('subprocess.run')  # Mock git status check
     @patch('builtins.input')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.run_periodic_maintenance')  # Mock maintenance
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
@@ -654,7 +654,7 @@ class TestRunOrchestrator:
 
     @patch('subprocess.run')  # Mock git status check
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
     @patch('pokepoke.orchestrator.get_ready_work_items')
@@ -680,7 +680,7 @@ class TestRunOrchestrator:
 
     @patch('subprocess.run')  # Mock git status check
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
     @patch('pokepoke.orchestrator.get_ready_work_items')
@@ -768,7 +768,7 @@ class TestRunOrchestratorContinuousMode:
     """Test continuous mode scenarios."""
 
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.run_periodic_maintenance')
     @patch('time.sleep')
     @patch('pokepoke.orchestrator.get_beads_stats')
@@ -826,7 +826,7 @@ class TestRunOrchestratorContinuousMode:
 
     @patch('time.sleep')  # Mock sleep to avoid delays
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.run_periodic_maintenance')  # Mock maintenance
     @patch('pokepoke.orchestrator.get_beads_stats')
     @patch('pokepoke.orchestrator.process_work_item')
@@ -873,7 +873,7 @@ class TestRunOrchestratorContinuousMode:
         assert mock_maintenance.call_count == 10  # Called once per item
 
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.run_periodic_maintenance')
     @patch('builtins.input')
     @patch('pokepoke.orchestrator.get_beads_stats')
@@ -1369,7 +1369,7 @@ class TestRunOrchestratorBetaFirst:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
     @patch('pokepoke.orchestrator.get_ready_work_items')
@@ -1397,7 +1397,7 @@ class TestRunOrchestratorBetaFirst:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
     @patch('pokepoke.orchestrator.get_ready_work_items')
@@ -1422,7 +1422,7 @@ class TestRunOrchestratorFailedClaims:
 
     @patch('time.sleep')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.run_periodic_maintenance')
     @patch('pokepoke.orchestrator.get_beads_stats')
     @patch('pokepoke.orchestrator.process_work_item')
@@ -1462,7 +1462,7 @@ class TestRunOrchestratorFailedClaims:
 
     @patch('time.sleep')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.run_periodic_maintenance')
     @patch('pokepoke.orchestrator.get_beads_stats')
     @patch('pokepoke.orchestrator.process_work_item')
@@ -1509,7 +1509,7 @@ class TestRunOrchestratorModelCompletion:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.run_periodic_maintenance')
     @patch('pokepoke.orchestrator.record_completion')
     @patch('pokepoke.orchestrator.process_work_item')
@@ -1555,7 +1555,7 @@ class TestRunOrchestratorRepoCheckFailure:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.check_and_commit_main_repo')
     @patch('pokepoke.orchestrator.get_ready_work_items')
     def test_repo_check_failure_returns_1(
@@ -1578,7 +1578,7 @@ class TestRunOrchestratorContinuousAutonomousSleep:
 
     @patch('time.sleep')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.run_periodic_maintenance')
     @patch('pokepoke.orchestrator.get_beads_stats')
     @patch('pokepoke.orchestrator.process_work_item')
@@ -1619,7 +1619,7 @@ class TestRunOrchestratorRetries:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.run_periodic_maintenance')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
@@ -1653,7 +1653,7 @@ class TestRunOrchestratorKeyboardInterrupt:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.get_ready_work_items')
     @patch('pokepoke.orchestrator.check_and_commit_main_repo')
     def test_keyboard_interrupt_during_loop(
@@ -1685,7 +1685,7 @@ class TestRunOrchestratorWorktreeCoverage:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('src.pokepoke.orchestrator.run_beta_tester')
     @patch('src.pokepoke.orchestrator.process_work_item')
     @patch('src.pokepoke.orchestrator.select_work_item')
     @patch('src.pokepoke.orchestrator.get_ready_work_items')
@@ -1707,7 +1707,7 @@ class TestRunOrchestratorWorktreeCoverage:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('src.pokepoke.orchestrator.run_beta_tester')
     @patch('src.pokepoke.orchestrator.run_periodic_maintenance')
     @patch('src.pokepoke.orchestrator.process_work_item')
     @patch('src.pokepoke.orchestrator.select_work_item')
@@ -1737,7 +1737,7 @@ class TestRunOrchestratorWorktreeCoverage:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('src.pokepoke.orchestrator.run_beta_tester')
     @patch('src.pokepoke.orchestrator.process_work_item')
     @patch('src.pokepoke.orchestrator.select_work_item')
     @patch('src.pokepoke.orchestrator.get_ready_work_items')
@@ -1765,7 +1765,7 @@ class TestRunOrchestratorWorktreeCoverage:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('src.pokepoke.orchestrator.run_beta_tester')
     @patch('src.pokepoke.orchestrator.run_periodic_maintenance')
     @patch('src.pokepoke.orchestrator.record_completion')
     @patch('src.pokepoke.orchestrator.process_work_item')
@@ -1807,7 +1807,7 @@ class TestRunOrchestratorWorktreeCoverage:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('src.pokepoke.orchestrator.run_beta_tester')
     @patch('src.pokepoke.orchestrator.run_periodic_maintenance')
     @patch('src.pokepoke.orchestrator.process_work_item')
     @patch('src.pokepoke.orchestrator.select_work_item')
@@ -1837,7 +1837,7 @@ class TestRunOrchestratorWorktreeCoverage:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('src.pokepoke.orchestrator.run_beta_tester')
     @patch('src.pokepoke.orchestrator.get_ready_work_items')
     @patch('src.pokepoke.orchestrator.check_and_commit_main_repo')
     def test_exception_returns_one(
@@ -1857,7 +1857,7 @@ class TestRunOrchestratorWorktreeCoverage:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('src.pokepoke.orchestrator.run_beta_tester')
     @patch('src.pokepoke.orchestrator.get_ready_work_items')
     @patch('src.pokepoke.orchestrator.check_and_commit_main_repo')
     def test_keyboard_interrupt_returns_zero(
@@ -1877,7 +1877,7 @@ class TestRunOrchestratorWorktreeCoverage:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('src.pokepoke.orchestrator.run_beta_tester')
     @patch('src.pokepoke.orchestrator.check_and_commit_main_repo')
     @patch('src.pokepoke.orchestrator.get_ready_work_items')
     def test_repo_check_failure(
@@ -1896,7 +1896,7 @@ class TestRunOrchestratorWorktreeCoverage:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('src.pokepoke.orchestrator.run_beta_tester')
     @patch('src.pokepoke.orchestrator.process_work_item')
     @patch('src.pokepoke.orchestrator.select_work_item')
     @patch('src.pokepoke.orchestrator.get_ready_work_items')
@@ -1923,7 +1923,7 @@ class TestRunOrchestratorWorktreeCoverage:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('src.pokepoke.orchestrator.run_beta_tester')
     @patch('src.pokepoke.orchestrator.process_work_item')
     @patch('src.pokepoke.orchestrator.select_work_item')
     @patch('src.pokepoke.orchestrator.get_ready_work_items')
@@ -1945,7 +1945,7 @@ class TestRunOrchestratorWorktreeCoverage:
 
     @patch('time.sleep')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('src.pokepoke.orchestrator.run_beta_tester')
     @patch('src.pokepoke.orchestrator.run_periodic_maintenance')
     @patch('src.pokepoke.orchestrator.get_beads_stats')
     @patch('src.pokepoke.orchestrator.process_work_item')
@@ -1988,7 +1988,7 @@ class TestRunOrchestratorWorktreeCoverage:
 
     @patch('time.sleep')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('src.pokepoke.orchestrator.run_beta_tester')
     @patch('src.pokepoke.orchestrator.run_periodic_maintenance')
     @patch('src.pokepoke.orchestrator.get_beads_stats')
     @patch('src.pokepoke.orchestrator.process_work_item')
@@ -2022,7 +2022,7 @@ class TestRunOrchestratorWorktreeCoverage:
         assert result == 0
 
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('src.pokepoke.orchestrator.run_beta_tester')
     @patch('src.pokepoke.orchestrator.run_periodic_maintenance')
     @patch('builtins.input')
     @patch('src.pokepoke.orchestrator.get_beads_stats')
@@ -2060,7 +2060,7 @@ class TestRunOrchestratorWorktreeCoverage:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('src.pokepoke.orchestrator.run_beta_tester')
     @patch('src.pokepoke.orchestrator.is_shutting_down', return_value=True)
     def test_shutdown_during_loop(
         self, mock_shutdown: Mock,
@@ -2435,7 +2435,7 @@ class TestSingleAgentPanelRegistration:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.run_periodic_maintenance')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
@@ -2501,7 +2501,7 @@ class TestSingleAgentPanelRegistration:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.run_periodic_maintenance')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
@@ -2568,7 +2568,7 @@ class TestOrchestratorBackfillException:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
     @patch('pokepoke.orchestrator.get_ready_work_items')
@@ -2587,7 +2587,7 @@ class TestOrchestratorBackfillException:
         mock_get_items.return_value = []
         mock_select.return_value = None
 
-        with patch('pokepoke.beads_item_stats_backfill.backfill_from_beads_db',
+        with patch('pokepoke.orchestrator.backfill_from_beads_db',
                    side_effect=RuntimeError("backfill failed")):
             result = run_orchestrator(interactive=False, continuous=False)
 
@@ -2599,7 +2599,7 @@ class TestOrchestratorParallelModeForced:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
     @patch('pokepoke.orchestrator.get_ready_work_items')
@@ -2630,7 +2630,7 @@ class TestOrchestratorStopAfterCurrent:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.run_periodic_maintenance')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
@@ -2674,7 +2674,7 @@ class TestOrchestratorMergeQueueCleanup:
 
     @patch('subprocess.run')
     @patch('pokepoke.agent_runner.run_worktree_cleanup')
-    @patch('pokepoke.agent_runner.run_beta_tester')
+    @patch('pokepoke.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestrator.process_work_item')
     @patch('pokepoke.orchestrator.select_work_item')
     @patch('pokepoke.orchestrator.get_ready_work_items')
@@ -2697,7 +2697,7 @@ class TestOrchestratorMergeQueueCleanup:
         mock_mq.is_running = True
         mock_mq.shutdown.side_effect = RuntimeError("shutdown failed")
 
-        with patch('pokepoke.merge_queue.get_merge_queue', return_value=mock_mq):
+        with patch('pokepoke.orchestrator.get_merge_queue', return_value=mock_mq):
             result = run_orchestrator(interactive=False, continuous=False)
 
         assert result == 0  # Should still complete

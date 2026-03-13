@@ -5,6 +5,7 @@ from subprocess import CalledProcessError
 
 from .types import BeadsWorkItem
 from .beads_query import get_issue_dependencies, has_unmet_blocking_dependencies, _run_bd
+from .agent_context import get_agent_name as _get_agent_name
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +88,6 @@ def is_assigned_to_current_user(item: BeadsWorkItem) -> bool:
         True if item is unassigned or assigned to THIS agent, False otherwise.
     """
     assignee = getattr(item, 'assignee', None) or ''
-    from pokepoke.agent_context import get_agent_name as _get_agent_name
     agent_name = _get_agent_name(default='')
 
     if assignee:
