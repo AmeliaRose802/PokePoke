@@ -1256,7 +1256,8 @@ class TestForceRemoveDirectory:
         """Test retry logic when both git and shutil fail."""
         with patch('subprocess.run') as mock_run, \
              patch('shutil.rmtree') as mock_rmtree, \
-             patch('time.sleep') as mock_sleep:
+             patch('time.sleep') as mock_sleep, \
+             patch('pokepoke.process_utils.wait_for_process_cleanup'):
 
             def run_side_effect(*args, **kwargs):
                 cmd = args[0]

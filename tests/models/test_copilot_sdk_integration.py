@@ -546,6 +546,7 @@ class TestInvokeCopilotSDKInactivity:
             cfg = Mock()
             cfg.idle_timeout_seconds = 1
             cfg.session_inactivity_timeout = 0.1  # 100ms
+            cfg.tool_call_timeout = 60.0
             cfg.ai_backend.copilot_cli_path = "copilot.cmd"
             cfg.ai_backend.provider = "copilot-sdk"
             cfg.mcp_server.enabled = False

@@ -367,6 +367,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.parallel.is_item_claimable", return_value=True)
     @patch("pokepoke.parallel.time.sleep")
     @patch("pokepoke.parallel.terminal_ui")
+    @patch("pokepoke.process_utils.apply_memory_backpressure", side_effect=lambda s: (s, 0))
     @patch("pokepoke.parallel.set_executor")
     @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
     @patch("pokepoke.parallel.is_shutting_down")
@@ -378,7 +379,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=3)
     def test_refills_all_slots_after_completions(
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
-        mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
+        mock_repo, mock_shut, mock_stop, mock_set_exec, mock_mem, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
         """Regression (PokePoke-qagy): all empty slots refilled after batch completes."""
         items = [_make_item(f"r{i}") for i in range(6)]
@@ -397,7 +398,7 @@ class TestRunParallelLoop:
             return (total, False, 0, 0)
 
         mock_collect.side_effect = collect_side
-        mock_sel.side_effect = [items[:3], items[3:6]]
+        mock_sel.side_effect = [items[:3], [], items[3:6], []]
 
         # Enough False for 2 full iterations (1 while + 10 sleep each) + shutdown
         mock_shut.side_effect = [False] * 22 + [True] * 5
@@ -413,8 +414,9 @@ class TestRunParallelLoop:
 
         # Both calls to select_multiple_items should request count=3
         assert mock_sel.call_count >= 2
-        for call in mock_sel.call_args_list[:2]:
-            assert call.kwargs['count'] == 3
+        # Find actual dispatch calls (with items, not empty terminators)
+        dispatch_calls = [c for c in mock_sel.call_args_list if c.kwargs.get('count') == 3]
+        assert len(dispatch_calls) >= 2
 
     @patch("pokepoke.parallel.is_item_claimable", return_value=True)
     @patch("pokepoke.parallel.time.sleep")
@@ -771,6 +773,7 @@ class TestRunParallelLoop:
         last_stats = mock_ui.ui.update_stats.call_args_list[-1][0][0]
         assert last_stats.items_completed >= 1
 
+    @patch("pokepoke.process_utils.apply_memory_backpressure", side_effect=lambda s: (s, 0))
     @patch("pokepoke.parallel.is_item_claimable", return_value=True)
     @patch("pokepoke.parallel.time.sleep")
     @patch("pokepoke.parallel.terminal_ui")
@@ -785,7 +788,7 @@ class TestRunParallelLoop:
     def test_dynamic_max_agents_change_respected(
         self, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep,
-        mock_claimable,
+        mock_claimable, mock_mem,
     ) -> None:
         """Slot count should reflect dynamic config changes without restart."""
         items = [_make_item(f"d{i}") for i in range(6)]
@@ -805,7 +808,7 @@ class TestRunParallelLoop:
 
         # First iteration returns 2, second returns 4 (simulates UI change)
         dynamic_values = iter([2, 4])
-        mock_sel.side_effect = [items[:2], items[2:6]]
+        mock_sel.side_effect = [items[:2], [], items[2:6], []]
 
         mock_shut.side_effect = [False] * 22 + [True] * 5
 
@@ -819,10 +822,12 @@ class TestRunParallelLoop:
                 record_fn=Mock(), finalize_fn=Mock(),
             )
 
-        # First call: count=2 (dynamic max=2, 0 active)
+        # First dispatch call: count=2 (dynamic max=2, 0 active)
         assert mock_sel.call_args_list[0].kwargs['count'] == 2
-        # Second call: count=4 (dynamic max=4, 0 active after clear)
-        assert mock_sel.call_args_list[1].kwargs['count'] == 4
+        # After clear, second dispatch call: count=4 (dynamic max=4, 0 active)
+        # Find the call with count=4 (skipping empty-list terminator calls)
+        count_4_calls = [c for c in mock_sel.call_args_list if c.kwargs.get('count') == 4]
+        assert len(count_4_calls) >= 1
 
 
 class TestContinuousModeLoopBack:

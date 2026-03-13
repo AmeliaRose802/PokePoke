@@ -339,6 +339,8 @@ class TestCustomAgentSchedulerRegistration:
         import pokepoke.maintenance_scheduler as ms
         ms._scheduler = None
 
+    @patch("pokepoke.maintenance_scheduler.get_active_agent_count", return_value=0)
+    @patch("pokepoke.shutdown.should_stop_after_current", return_value=False)
     @patch("pokepoke.maintenance_scheduler.try_lock")
     @patch("pokepoke.maintenance_scheduler.get_config")
     @patch("pokepoke.maintenance_scheduler.run_maintenance_agent")
@@ -346,7 +348,8 @@ class TestCustomAgentSchedulerRegistration:
     @patch("pokepoke.maintenance_scheduler.set_terminal_banner")
     @patch("pokepoke.terminal_ui.ui")
     def test_custom_agent_runs_at_frequency(
-        self, mock_ui, mock_banner, mock_special, mock_run, mock_config, mock_lock
+        self, mock_ui, mock_banner, mock_special, mock_run, mock_config, mock_lock,
+        mock_stop, mock_active,
     ):
         """A custom agent runs when items_completed hits its frequency."""
         config = ProjectConfig()
@@ -406,6 +409,8 @@ class TestCustomAgentSchedulerRegistration:
         mock_run.assert_not_called()
         mock_special.assert_not_called()
 
+    @patch("pokepoke.maintenance_scheduler.get_active_agent_count", return_value=0)
+    @patch("pokepoke.shutdown.should_stop_after_current", return_value=False)
     @patch("pokepoke.maintenance_scheduler.try_lock")
     @patch("pokepoke.maintenance_scheduler.get_config")
     @patch("pokepoke.maintenance_scheduler.run_maintenance_agent")
@@ -413,7 +418,8 @@ class TestCustomAgentSchedulerRegistration:
     @patch("pokepoke.maintenance_scheduler.set_terminal_banner")
     @patch("pokepoke.terminal_ui.ui")
     def test_custom_agent_model_override_passed(
-        self, mock_ui, mock_banner, mock_special, mock_run, mock_config, mock_lock
+        self, mock_ui, mock_banner, mock_special, mock_run, mock_config, mock_lock,
+        mock_stop, mock_active,
     ):
         """Custom agent's model override is forwarded to run_maintenance_agent."""
         config = ProjectConfig()
