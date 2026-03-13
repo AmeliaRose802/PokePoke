@@ -86,19 +86,25 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "B", "UP", "SIM", "C90"]
+select = ["E", "F", "W", "B", "UP", "SIM", "C90", "PLR"]
 ignore = [
     "E402",   # Module-level import not at top - intentional logger-before-imports pattern
     "E501",   # Line too long
     "SIM103", # Return condition directly - sometimes less readable
     "SIM108", # Ternary operator - sometimes less readable
+    "PLR0912", # Too many branches (consider enabling later)
+    "PLR0913", # Too many arguments (consider enabling later)
+    "PLR0914", # Too many variables (requires --preview, consider enabling later)
 ]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 15
 
+[tool.ruff.lint.pylint]
+max-statements = 50
+
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*" = ["C901"]
+"tests/**/*" = ["C901", "PLR0915"]
 
 # Mypy type checking configuration
 [tool.mypy]
