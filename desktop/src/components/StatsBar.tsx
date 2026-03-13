@@ -5,13 +5,15 @@
  * API duration, items completed, retries, and agent run counts.
  */
 
-import type { ModelPerformanceSummary, SessionStats } from "../types";
+import type { AgentInfo, ModelPerformanceSummary, SessionStats } from "../types";
 import {
+  combineRunCounts,
   formatAgentRuns,
   formatDurationShort,
   formatElapsed,
   formatPercent,
   formatTotalTokens,
+  getActiveRunCounts,
   getAddedCount,
   getAgentRunCounts,
   getCompletedItems,
@@ -22,12 +24,13 @@ import {
 
 interface Props {
   stats: SessionStats | null;
+  agents: AgentInfo[];
   modelLeaderboard: Record<string, ModelPerformanceSummary>;
   activeAgentModel?: string | null;
   onOpenStats: () => void;
 }
 
-export function StatsBar({ stats, modelLeaderboard, activeAgentModel, onOpenStats }: Props) {
+export function StatsBar({ stats, agents, modelLeaderboard, activeAgentModel, onOpenStats }: Props) {
   const elapsed = stats?.elapsed_time ?? 0;
   const completedItems = getCompletedItems(stats);
   const doneCount = getDoneCount(stats);
@@ -48,9 +51,11 @@ export function StatsBar({ stats, modelLeaderboard, activeAgentModel, onOpenStat
         ? "model-fail"
         : "model-neutral";
 
-  // New token and agent run metrics
+  // Combine completed run counts (from stats) with currently-running agents
   const totalTokens = formatTotalTokens(stats);
-  const agentRunCounts = getAgentRunCounts(stats);
+  const completedRuns = getAgentRunCounts(stats);
+  const activeRuns = getActiveRunCounts(agents);
+  const agentRunCounts = combineRunCounts(completedRuns, activeRuns);
   const agentRunsDisplay = formatAgentRuns(agentRunCounts);
 
   return (

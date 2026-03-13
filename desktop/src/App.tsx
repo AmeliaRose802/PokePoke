@@ -289,6 +289,7 @@ function App() {
       {/* Stats footer */}
       <StatsBar
         stats={bridge.stats}
+        agents={bridge.agents}
         modelLeaderboard={bridge.modelLeaderboard}
         activeAgentModel={(selectedAgentDetail ?? autoFollowAgent)?.model ?? null}
         onOpenStats={() => setShowStatsPage(true)}
