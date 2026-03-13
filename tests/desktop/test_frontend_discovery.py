@@ -85,6 +85,22 @@ class TestFindFrontendDist:
 
     """Test the find_frontend_dist function."""
 
+    @pytest.fixture(autouse=True)
+    def _isolate_from_real_project(self, monkeypatch, tmp_path):
+        """Isolate tests from the real project tree.
+
+        Under xdist workers the real src/pokepoke/static and desktop/dist
+        directories exist on disk, causing _find_filesystem_static and
+        _find_dev_dist to short-circuit before reaching the code path under
+        test.  Neutralise both and point _get_src_root at tmp_path.
+        """
+        monkeypatch.setattr(
+            frontend_discovery_module, "_get_src_root", lambda: tmp_path
+        )
+        monkeypatch.setattr(
+            frontend_discovery_module, "_find_filesystem_static", lambda: None
+        )
+
     def test_frozen_execution_mode(self, monkeypatch, tmp_path) -> None:
         """Test behavior when running as frozen executable (PyInstaller)."""
         # Mock sys.frozen and sys._MEIPASS for PyInstaller bundle
@@ -317,6 +333,12 @@ class TestFindFrontendDist:
         static_dir = fake_src / "static"
         static_dir.mkdir()
         (static_dir / "index.html").write_text("<html>filesystem</html>", encoding="utf-8")
+
+        # Re-enable _find_filesystem_static pointing at the mock path
+        monkeypatch.setattr(
+            frontend_discovery_module, "_find_filesystem_static",
+            lambda: static_dir if frontend_discovery_module._has_index_html(static_dir) else None,
+        )
 
         result = frontend_discovery_module.find_frontend_dist()
         assert result == static_dir

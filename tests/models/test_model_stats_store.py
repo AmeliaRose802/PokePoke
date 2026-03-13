@@ -348,33 +348,45 @@ class TestGetModelWeights:
 # ── print_model_leaderboard ──────────────────────────────────────────
 
 class TestPrintModelLeaderboard:
-    def test_no_data(self, tmp_path: Path, capsys):
-        print_model_leaderboard(tmp_path / "nope.json")
-        captured = capsys.readouterr()
-        assert "No model performance data" in captured.out
+    def _capture(self, fn, *args, **kwargs):
+        import builtins
+        import io
+        from unittest.mock import patch
+        buf = io.StringIO()
+        real_print = builtins.print
 
-    def test_with_data(self, tmp_path: Path, capsys):
+        def _print_to_buf(*a, **kw):
+            kw["file"] = buf
+            real_print(*a, **kw)
+
+        with patch("builtins.print", side_effect=_print_to_buf):
+            fn(*args, **kwargs)
+        return buf.getvalue()
+
+    def test_no_data(self, tmp_path: Path):
+        output = self._capture(print_model_leaderboard, tmp_path / "nope.json")
+        assert "No model performance data" in output
+
+    def test_with_data(self, tmp_path: Path):
         path = _tmp_stats_path(tmp_path)
         record_completion(_make_record(model="m1", gate_passed=True), path)
         record_completion(_make_record(model="m2", gate_passed=False), path)
 
-        print_model_leaderboard(path)
-        captured = capsys.readouterr()
-        assert "Leaderboard" in captured.out
-        assert "m1" in captured.out
-        assert "m2" in captured.out
-        assert "Median" in captured.out
+        output = self._capture(print_model_leaderboard, path)
+        assert "Leaderboard" in output
+        assert "m1" in output
+        assert "m2" in output
+        assert "Median" in output
 
-    def test_sorted_by_success_rate(self, tmp_path: Path, capsys):
+    def test_sorted_by_success_rate(self, tmp_path: Path):
         path = _tmp_stats_path(tmp_path)
         # m1 = 100% success, m2 = 0%
         record_completion(_make_record(model="m1", gate_passed=True), path)
         record_completion(_make_record(model="m2", gate_passed=False), path)
 
-        print_model_leaderboard(path)
-        captured = capsys.readouterr()
+        output = self._capture(print_model_leaderboard, path)
         # m1 should appear before m2 in output
-        assert captured.out.index("m1") < captured.out.index("m2")
+        assert output.index("m1") < output.index("m2")
 
 
 # ── Cross-process locking ────────────────────────────────────────────

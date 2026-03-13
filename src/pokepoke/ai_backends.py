@@ -42,7 +42,7 @@ class AIBackend(Protocol):
 
 @dataclass
 class CopilotBackend:
-    """Default backend using the Copilot SDK/CLI."""
+    """Default backend using the Copilot SDK."""
 
     name: str = "copilot"
 

@@ -37,7 +37,7 @@ def build_model_history_record(
         item: The beads work item being processed.
         model_completion: Per-model completion summary from the workflow.
         success: Overall success/failure outcome for the work item.
-        request_count: Total Copilot CLI requests (including retries).
+        request_count: Total Copilot requests (including retries).
         gate_runs: Number of gate agent runs for this item.
         item_stats: Aggregated AgentStats for this item, if available.
         timestamp: Optional explicit timestamp for testing; defaults to now() UTC.

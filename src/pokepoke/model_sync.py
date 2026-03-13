@@ -147,7 +147,7 @@ def _build_issue_description(model: CopilotModelSnapshot, discovered_at: str) ->
     lines.extend([
         "",
         "## Beta Testing",
-        "- Validate model availability in Copilot CLI",
+        "- Validate model availability in Copilot",
         "- Exercise core workflows and report regressions",
         "- Update notes with findings",
     ])
@@ -221,10 +221,10 @@ def _should_skip_sync(sync_cfg: Any, registry: dict[str, Any], item_logger: Any 
 def _fetch_and_normalize_models(
     cli_path: str, timeout: int, item_logger: Any | None
 ) -> list[CopilotModelSnapshot] | None:
-    """Fetch models from Copilot CLI and normalize them. Returns None on failure."""
+    """Fetch models from Copilot and normalize them. Returns None on failure."""
     raw_models = _run_copilot_models(cli_path, timeout=timeout)
     if not raw_models:
-        _log(item_logger, "⚠️  No models returned from Copilot CLI.")
+        _log(item_logger, "⚠️  No models returned from Copilot.")
         return None
 
     normalized = [normalize_model_entry(m) for m in raw_models]

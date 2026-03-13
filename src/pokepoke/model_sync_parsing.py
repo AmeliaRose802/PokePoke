@@ -54,7 +54,7 @@ def _parse_models_from_text(output: str) -> list[dict[str, Any]]:
 
 
 def parse_copilot_models_output(output: str) -> list[dict[str, Any]]:
-    """Parse Copilot CLI output into a list of model dicts."""
+    """Parse Copilot output into a list of model dicts."""
     payload = _extract_json_payload(output)
     if isinstance(payload, list):
         return [p for p in payload if isinstance(p, dict)]

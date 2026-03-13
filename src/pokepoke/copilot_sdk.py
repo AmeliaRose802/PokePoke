@@ -223,7 +223,6 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         idle_timeout = float(get_config().idle_timeout_seconds)
     inactivity_timeout = float(get_config().session_inactivity_timeout)
     tool_call_timeout = float(get_config().tool_call_timeout)
-    tool_call_timeout = float(get_config().tool_call_timeout)
 
     client = _create_sdk_client(cwd)
 

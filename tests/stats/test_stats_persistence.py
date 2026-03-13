@@ -218,6 +218,13 @@ class TestSaveSessionStatsToDisk:
 class TestRunLoggerFinalizePersistsStats:
     """Verify that RunLogger.finalize writes stats.json when session_stats is provided."""
 
+    @staticmethod
+    def _close_logger(logger):
+        """Close file handlers so temp dir cleanup doesn't hit WinError 32."""
+        for h in logger._py_logger.handlers[:]:
+            h.close()
+            logger._py_logger.removeHandler(h)
+
     def test_finalize_with_stats_creates_json(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             logger = RunLogger(base_dir=tmpdir)
@@ -234,6 +241,7 @@ class TestRunLoggerFinalizePersistsStats:
             assert data["items_completed"] == 2
             assert data["total_requests"] == 5
             assert len(data["model_completions"]) == 2
+            self._close_logger(logger)
 
     def test_finalize_without_stats_no_json(self):
         """When session_stats is None (backward compat), no stats.json is created."""
@@ -244,6 +252,7 @@ class TestRunLoggerFinalizePersistsStats:
 
             stats_path = logger.get_run_dir() / "stats.json"
             assert not stats_path.exists()
+            self._close_logger(logger)
 
     def test_finalize_logs_stats_path(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -251,6 +260,8 @@ class TestRunLoggerFinalizePersistsStats:
             stats = _make_session_stats()
 
             logger.finalize(items_completed=1, total_requests=2, elapsed=60.0, session_stats=stats)
+
+            self._close_logger(logger)
 
             with open(logger.orchestrator_log_path, encoding="utf-8") as f:
                 content = f.read()

@@ -364,10 +364,8 @@ def browse_for_project(self: DesktopAPI) -> dict[str, Any]:
         return {"success": False, "error": "No window available"}
 
     try:
-        import webview
-
         result = window.create_file_dialog(
-            dialog_type=webview.FOLDER_DIALOG,
+            dialog_type=20,  # webview.FOLDER_DIALOG
             directory="",
             allow_multiple=False,
         )

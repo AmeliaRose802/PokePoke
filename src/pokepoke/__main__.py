@@ -21,7 +21,7 @@ def main() -> int:
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
     parser = argparse.ArgumentParser(
-        description="PokePoke - Autonomous Beads + Copilot CLI Orchestrator"
+        description="PokePoke - Autonomous Beads + Copilot SDK Orchestrator"
     )
     parser.add_argument("--interactive", action="store_true", default=True,
                         help="Interactive mode: prompt for user input (default)")

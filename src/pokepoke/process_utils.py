@@ -87,7 +87,7 @@ def is_memory_critical() -> bool:
 
 
 def kill_orphaned_copilot_processes(expected_count: int = 0) -> int:
-    """Kill Copilot CLI processes that exceed the expected active count.
+    """Kill Copilot processes that exceed the expected active count.
 
     Args:
         expected_count: Number of Copilot processes that should be alive
@@ -138,7 +138,7 @@ def kill_orphaned_copilot_processes(expected_count: int = 0) -> int:
                 logger.warning(f"Failed to kill copilot PID {pid}: {e}")
 
         if killed > 0:
-            logger.info(f"Killed {killed} orphaned Copilot CLI process(es)")
+            logger.info(f"Killed {killed} orphaned Copilot process(es)")
             # Invalidate cache after killing processes
             global _copilot_process_cache
             _copilot_process_cache = None

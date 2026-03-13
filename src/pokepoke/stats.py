@@ -17,10 +17,10 @@ from pokepoke.types import AgentStats, MergeQueueStats, SessionStats, ModelCompl
 
 
 def parse_agent_stats(output: str) -> AgentStats | None:
-    """Parse agent statistics from copilot CLI output.
+    """Parse agent statistics from Copilot SDK output.
 
     Args:
-        output: The output text from copilot CLI
+        output: The output text from Copilot SDK
 
     Returns:
         AgentStats object with parsed values, or None if no stats found
@@ -83,7 +83,7 @@ def print_stats(items_completed: int, total_requests: int, elapsed_seconds: floa
 
     Args:
         items_completed: Number of work items completed
-        total_requests: Total number of Copilot CLI requests (including retries)
+        total_requests: Total number of Copilot requests (including retries)
         elapsed_seconds: Total elapsed time in seconds
         session_stats: Session statistics including agent stats, run counts, and beads stats
     """
@@ -301,7 +301,7 @@ def serialize_session_stats(
         session_stats: The session statistics to serialize.
         elapsed_seconds: Total elapsed wall-clock time for the session.
         items_completed: Number of items completed in this session.
-        total_requests: Total number of Copilot CLI requests.
+        total_requests: Total number of Copilot requests.
 
     Returns:
         A plain dict suitable for ``json.dumps``.
@@ -375,7 +375,7 @@ def save_session_stats_to_disk(
         session_stats: The session statistics to persist.
         elapsed_seconds: Total elapsed wall-clock time for the session.
         items_completed: Number of items completed in this session.
-        total_requests: Total number of Copilot CLI requests.
+        total_requests: Total number of Copilot requests.
 
     Returns:
         Path to the written ``stats.json`` file.

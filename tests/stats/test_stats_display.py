@@ -1,7 +1,25 @@
 """Tests for orchestrator statistics display functions."""
 
+import builtins
+import io
+from unittest.mock import patch
+
 from pokepoke.stats import print_stats
 from pokepoke.types import AgentStats, SessionStats
+
+
+def _capture_stdout(fn, *args, **kwargs):
+    """Capture print() output robustly, even when builtins.print is mocked."""
+    buf = io.StringIO()
+    real_print = builtins.print  # snapshot before any mock can replace it
+
+    def _print_to_buf(*a, **kw):
+        kw["file"] = buf
+        real_print(*a, **kw)
+
+    with patch("builtins.print", side_effect=_print_to_buf):
+        fn(*args, **kwargs)
+    return buf.getvalue()
 
 
 def _find_agent_line(output: str, label: str) -> str | None:
@@ -17,7 +35,7 @@ def _assert_agent_line(output: str, label: str, expected: int) -> None:
     assert line.rstrip().endswith(str(expected)), f"{label} should end with {expected}, got: {line!r}"
 
 
-def test_print_stats_with_full_stats(capsys):
+def test_print_stats_with_full_stats():
     """Test print_stats displays all statistics when available."""
     stats = SessionStats(
         agent_stats=AgentStats(
@@ -31,10 +49,7 @@ def test_print_stats_with_full_stats(capsys):
         )
     )
 
-    print_stats(items_completed=2, total_requests=5, elapsed_seconds=125.0, session_stats=stats)
-
-    captured = capsys.readouterr()
-    output = captured.out
+    output = _capture_stdout(print_stats, items_completed=2, total_requests=5, elapsed_seconds=125.0, session_stats=stats)
 
     # Check session statistics
     assert "📊 Session Statistics" in output
@@ -53,7 +68,7 @@ def test_print_stats_with_full_stats(capsys):
     assert "Premium requests:   3" in output
 
 
-def test_print_stats_with_partial_stats(capsys):
+def test_print_stats_with_partial_stats():
     """Test print_stats only displays non-zero statistics."""
     stats = SessionStats(
         agent_stats=AgentStats(
@@ -64,10 +79,7 @@ def test_print_stats_with_partial_stats(capsys):
         )
     )
 
-    print_stats(items_completed=1, total_requests=2, elapsed_seconds=65.0, session_stats=stats)
-
-    captured = capsys.readouterr()
-    output = captured.out
+    output = _capture_stdout(print_stats, items_completed=1, total_requests=2, elapsed_seconds=65.0, session_stats=stats)
 
     # Check that non-zero stats are shown
     assert "Wall duration:      60.0s" in output
@@ -80,14 +92,11 @@ def test_print_stats_with_partial_stats(capsys):
     assert "Premium requests:" not in output
 
 
-def test_print_stats_with_no_stats(capsys):
+def test_print_stats_with_no_stats():
     """Test print_stats shows warning when no stats available."""
     stats = SessionStats(agent_stats=AgentStats())  # All zeros
 
-    print_stats(items_completed=1, total_requests=1, elapsed_seconds=30.0, session_stats=stats)
-
-    captured = capsys.readouterr()
-    output = captured.out
+    output = _capture_stdout(print_stats, items_completed=1, total_requests=1, elapsed_seconds=30.0, session_stats=stats)
 
     # Should show session stats
     assert "📊 Session Statistics" in output
@@ -97,12 +106,9 @@ def test_print_stats_with_no_stats(capsys):
     assert "No agent statistics available" in output
 
 
-def test_print_stats_with_none_stats(capsys):
+def test_print_stats_with_none_stats():
     """Test print_stats handles None stats gracefully."""
-    print_stats(items_completed=1, total_requests=1, elapsed_seconds=30.0, session_stats=None)
-
-    captured = capsys.readouterr()
-    output = captured.out
+    output = _capture_stdout(print_stats, items_completed=1, total_requests=1, elapsed_seconds=30.0, session_stats=None)
 
     # Should still show session stats
     assert "📊 Session Statistics" in output
@@ -112,51 +118,42 @@ def test_print_stats_with_none_stats(capsys):
     assert "No agent statistics available" in output
 
 
-def test_print_stats_time_formatting(capsys):
+def test_print_stats_time_formatting():
     """Test that time is formatted correctly for different durations."""
     # Test hours, minutes, seconds
-    print_stats(items_completed=1, total_requests=1, elapsed_seconds=3661.0, session_stats=None)
-    captured = capsys.readouterr()
-    assert "1h 1m 1s" in captured.out
+    output = _capture_stdout(print_stats, items_completed=1, total_requests=1, elapsed_seconds=3661.0, session_stats=None)
+    assert "1h 1m 1s" in output
 
     # Test minutes and seconds only
-    print_stats(items_completed=1, total_requests=1, elapsed_seconds=125.0, session_stats=None)
-    captured = capsys.readouterr()
-    assert "2m 5s" in captured.out
+    output = _capture_stdout(print_stats, items_completed=1, total_requests=1, elapsed_seconds=125.0, session_stats=None)
+    assert "2m 5s" in output
 
     # Test seconds only
-    print_stats(items_completed=1, total_requests=1, elapsed_seconds=45.0, session_stats=None)
-    captured = capsys.readouterr()
-    assert "45s" in captured.out
+    output = _capture_stdout(print_stats, items_completed=1, total_requests=1, elapsed_seconds=45.0, session_stats=None)
+    assert "45s" in output
 
 
-def test_print_stats_average_time(capsys):
+def test_print_stats_average_time():
     """Test that average time per item is calculated and displayed."""
     stats = SessionStats(agent_stats=AgentStats(wall_duration=100.0))
 
-    print_stats(items_completed=4, total_requests=8, elapsed_seconds=240.0, session_stats=stats)
-
-    captured = capsys.readouterr()
-    output = captured.out
+    output = _capture_stdout(print_stats, items_completed=4, total_requests=8, elapsed_seconds=240.0, session_stats=stats)
 
     assert "Avg time per item:" in output
     assert "1m 0s" in output  # 240s / 4 items = 60s
 
 
-def test_print_stats_zero_items_no_average(capsys):
+def test_print_stats_zero_items_no_average():
     """Test that average is not shown when zero items completed."""
     stats = SessionStats(agent_stats=AgentStats(wall_duration=10.0))
 
-    print_stats(items_completed=0, total_requests=0, elapsed_seconds=10.0, session_stats=stats)
-
-    captured = capsys.readouterr()
-    output = captured.out
+    output = _capture_stdout(print_stats, items_completed=0, total_requests=0, elapsed_seconds=10.0, session_stats=stats)
 
     # Should not show average
     assert "Avg time per item:" not in output
 
 
-def test_print_stats_with_large_numbers(capsys):
+def test_print_stats_with_large_numbers():
     """Test that large numbers are formatted with commas."""
     stats = SessionStats(
         agent_stats=AgentStats(
@@ -167,10 +164,7 @@ def test_print_stats_with_large_numbers(capsys):
         )
     )
 
-    print_stats(items_completed=1, total_requests=1, elapsed_seconds=60.0, session_stats=stats)
-
-    captured = capsys.readouterr()
-    output = captured.out
+    output = _capture_stdout(print_stats, items_completed=1, total_requests=1, elapsed_seconds=60.0, session_stats=stats)
 
     # Check comma formatting
     assert "1,234,567" in output  # input tokens
@@ -179,7 +173,7 @@ def test_print_stats_with_large_numbers(capsys):
     assert "1,234" in output      # lines removed
 
 
-def test_print_stats_with_beads_statistics(capsys):
+def test_print_stats_with_beads_statistics():
     """Test beads statistics display."""
     from pokepoke.types import BeadsStats
 
@@ -201,10 +195,7 @@ def test_print_stats_with_beads_statistics(capsys):
         )
     )
 
-    print_stats(items_completed=2, total_requests=3, elapsed_seconds=120.0, session_stats=stats)
-
-    captured = capsys.readouterr()
-    output = captured.out
+    output = _capture_stdout(print_stats, items_completed=2, total_requests=3, elapsed_seconds=120.0, session_stats=stats)
 
     # Check beads statistics section
     assert "📋 Beads Database Statistics" in output
@@ -216,7 +207,7 @@ def test_print_stats_with_beads_statistics(capsys):
     assert "20 →    18 (-2)" in output   # ready issues
 
 
-def test_print_stats_with_agent_run_counts(capsys):
+def test_print_stats_with_agent_run_counts():
     """Test display of different agent run counts."""
     stats = SessionStats(
         agent_stats=AgentStats(wall_duration=10.0),
@@ -227,10 +218,7 @@ def test_print_stats_with_agent_run_counts(capsys):
         backlog_cleanup_agent_runs=1
     )
 
-    print_stats(items_completed=5, total_requests=10, elapsed_seconds=300.0, session_stats=stats)
-
-    captured = capsys.readouterr()
-    output = captured.out
+    output = _capture_stdout(print_stats, items_completed=5, total_requests=10, elapsed_seconds=300.0, session_stats=stats)
 
     # Check agent run counts section
     assert "🤖 Agent Run Counts" in output
@@ -241,7 +229,7 @@ def test_print_stats_with_agent_run_counts(capsys):
     _assert_agent_line(output, "🗑️ Backlog Cleanup agents:", 1)
 
 
-def test_print_stats_with_only_work_agent_runs(capsys):
+def test_print_stats_with_only_work_agent_runs():
     """Test that only work agent runs are shown when other counts are zero."""
     stats = SessionStats(
         agent_stats=AgentStats(wall_duration=10.0),
@@ -252,10 +240,7 @@ def test_print_stats_with_only_work_agent_runs(capsys):
         backlog_cleanup_agent_runs=0
     )
 
-    print_stats(items_completed=3, total_requests=5, elapsed_seconds=180.0, session_stats=stats)
-
-    captured = capsys.readouterr()
-    output = captured.out
+    output = _capture_stdout(print_stats, items_completed=3, total_requests=5, elapsed_seconds=180.0, session_stats=stats)
 
     # Check work agents shown
     _assert_agent_line(output, "📋 Work agents:", 3)
@@ -268,7 +253,7 @@ def test_print_stats_with_only_work_agent_runs(capsys):
     assert "🗑️ Backlog Cleanup agents:" not in output
 
 
-def test_print_stats_gate_agent_runs_shown(capsys):
+def test_print_stats_gate_agent_runs_shown():
     """Test that gate agent runs are displayed when non-zero."""
     stats = SessionStats(
         agent_stats=AgentStats(wall_duration=60.0),
@@ -276,16 +261,13 @@ def test_print_stats_gate_agent_runs_shown(capsys):
         gate_agent_runs=3
     )
 
-    print_stats(items_completed=2, total_requests=4, elapsed_seconds=120.0, session_stats=stats)
-
-    captured = capsys.readouterr()
-    output = captured.out
+    output = _capture_stdout(print_stats, items_completed=2, total_requests=4, elapsed_seconds=120.0, session_stats=stats)
 
     _assert_agent_line(output, "📋 Work agents:", 2)
     _assert_agent_line(output, "🚪 Gate agents:", 3)
 
 
-def test_print_stats_gate_agent_runs_hidden_when_zero(capsys):
+def test_print_stats_gate_agent_runs_hidden_when_zero():
     """Test that gate agent runs are hidden when zero."""
     stats = SessionStats(
         agent_stats=AgentStats(wall_duration=60.0),
@@ -293,10 +275,7 @@ def test_print_stats_gate_agent_runs_hidden_when_zero(capsys):
         gate_agent_runs=0
     )
 
-    print_stats(items_completed=1, total_requests=1, elapsed_seconds=60.0, session_stats=stats)
-
-    captured = capsys.readouterr()
-    output = captured.out
+    output = _capture_stdout(print_stats, items_completed=1, total_requests=1, elapsed_seconds=60.0, session_stats=stats)
 
     _assert_agent_line(output, "📋 Work agents:", 1)
     assert "🚪 Gate agents:" not in output

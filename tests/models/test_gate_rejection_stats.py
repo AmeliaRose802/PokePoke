@@ -301,24 +301,37 @@ class TestGetGateRejectionStats:
 
 class TestPrintGateRejectionLeaderboard:
 
-    def test_no_data_no_output(self, tmp_path, capsys):
-        print_gate_rejection_leaderboard(tmp_path / "nope.json")
-        captured = capsys.readouterr()
-        assert captured.out == ""
+    def _capture(self, fn, *args, **kwargs):
+        import builtins
+        import io
+        from unittest.mock import patch
+        buf = io.StringIO()
+        real_print = builtins.print
 
-    def test_prints_report(self, tmp_path, capsys, monkeypatch):
+        def _print_to_buf(*a, **kw):
+            kw["file"] = buf
+            real_print(*a, **kw)
+
+        with patch("builtins.print", side_effect=_print_to_buf):
+            fn(*args, **kwargs)
+        return buf.getvalue()
+
+    def test_no_data_no_output(self, tmp_path):
+        output = self._capture(print_gate_rejection_leaderboard, tmp_path / "nope.json")
+        assert output == ""
+
+    def test_prints_report(self, tmp_path, monkeypatch):
         monkeypatch.setattr("pokepoke.metrics_context.get_current_repo_name", lambda: "test-repo")
         p = _tmp_gate_path(tmp_path)
         record_gate_check("model-alpha", "PP-1", True, path=p)
         record_gate_check("model-alpha", "PP-2", False, path=p)
         record_gate_check("model-beta", "PP-3", True, path=p)
-        print_gate_rejection_leaderboard(p)
-        captured = capsys.readouterr()
-        assert "Gate Agent Rejection Rates" in captured.out
-        assert "model-alpha" in captured.out
-        assert "model-beta" in captured.out
-        assert "50%" in captured.out  # model-alpha rejection rate
-        assert "0%" in captured.out   # model-beta rejection rate
+        output = self._capture(print_gate_rejection_leaderboard, p)
+        assert "Gate Agent Rejection Rates" in output
+        assert "model-alpha" in output
+        assert "model-beta" in output
+        assert "50%" in output  # model-alpha rejection rate
+        assert "0%" in output   # model-beta rejection rate
 
 
 # ── _format_trend ────────────────────────────────────────────────────

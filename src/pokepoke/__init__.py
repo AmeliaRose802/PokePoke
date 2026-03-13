@@ -1,1 +1,1 @@
-# PokePoke - Autonomous Beads + Copilot CLI Orchestrator
+# PokePoke - Autonomous Beads + Copilot SDK Orchestrator
