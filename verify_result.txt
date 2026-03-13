@@ -1,0 +1,42 @@
+Error fetching PokePoke-158j: Command '['bd', 'show', 'PokePoke-158j', '--json']' timed out after 10 seconds
+
+====================================================================================================
+VERIFICATION SUMMARY - HIGH-CONFLICT-RISK TAG CHANGES
+====================================================================================================
+
+ITEMS THAT SHOULD HAVE TAG REMOVED:
+----------------------------------------------------------------------------------------------------
+Item ID         Tag Present     Labels                                            
+----------------------------------------------------------------------------------------------------
+PokePoke-3xrb   False           tests                                              PASS
+PokePoke-4pyu   False           tests                                              PASS
+PokePoke-lbwe   False           (none)                                             PASS
+PokePoke-k3zi   False           refactoring                                        PASS
+PokePoke-tl03   False           refactoring                                        PASS
+PokePoke-ooc0   False           (none)                                             PASS
+
+====================================================================================================
+ITEMS THAT SHOULD KEEP TAG (WITH DEPENDENCIES):
+----------------------------------------------------------------------------------------------------
+
+PokePoke-od1h
+  Has high-conflict-risk: True PASS
+  Labels: high-conflict-risk, tests
+  Blocked by: (none)
+  Blocks: PokePoke-3xrb, PokePoke-4pyu, PokePoke-k3zi, PokePoke-sxf2, PokePoke-158j, PokePoke-1zm0, PokePoke-feuw, PokePoke-lbwe, PokePoke-mpa3, PokePoke-3xrb, PokePoke-j6eb, PokePoke-x4tf, PokePoke-3v2n, PokePoke-bn5j, PokePoke-crxk, PokePoke-spye, PokePoke-sx4a, PokePoke-y32k
+
+PokePoke-158j: ERROR - failed to fetch
+
+PokePoke-feuw
+  Has high-conflict-risk: True PASS
+  Labels: high-conflict-risk
+  Blocked by: (none)
+  Blocks: PokePoke-lbwe
+
+====================================================================================================
+SUMMARY
+====================================================================================================
+[OK] Tags Removed Correctly: 6/6
+[OK] Tags Kept Correctly: 2/3
+
+[FAIL] SOME CHECKS FAILED
