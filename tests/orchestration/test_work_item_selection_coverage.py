@@ -73,10 +73,9 @@ class TestIsClosed:
 class TestSelectWorkItem:
     """Tests that exercise the filtering logic in select_work_item."""
 
-    @patch("pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
     @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
     @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
-    def test_autonomous_selects_item(self, mock_hier, mock_assigned, mock_deps):
+    def test_autonomous_selects_item(self, mock_hier, mock_assigned):
         items = [_item("a"), _item("b")]
         mock_hier.return_value = items[0]
         result = select_work_item(items, interactive=False)
@@ -88,10 +87,9 @@ class TestSelectWorkItem:
         result = select_work_item([], interactive=False)
         assert result is None
 
-    @patch("pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
     @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
     @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
-    def test_skip_ids_filters(self, mock_hier, mock_assigned, mock_deps):
+    def test_skip_ids_filters(self, mock_hier, mock_assigned):
         items = [_item("a"), _item("b")]
         mock_hier.return_value = items[1]
         result = select_work_item(items, interactive=False, skip_ids={"a"})
@@ -99,65 +97,48 @@ class TestSelectWorkItem:
         assert result is not None
         assert result.id == "b"
 
-    @patch("pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
     @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
     @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item", return_value=None)
-    def test_all_skipped_returns_none(self, mock_hier, mock_assigned, mock_deps):
+    def test_all_skipped_returns_none(self, mock_hier, mock_assigned):
         items = [_item("a")]
         result = select_work_item(items, interactive=False, skip_ids={"a"})
         assert result is None
 
-    @patch("pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
     @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
     @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
-    def test_filters_human_required(self, mock_hier, mock_assigned, mock_deps):
+    def test_filters_human_required(self, mock_hier, mock_assigned):
         items = [_item("a", labels=["human-required"]), _item("b")]
         mock_hier.return_value = _item("b")
         result = select_work_item(items, interactive=False)
         assert result is not None
         assert result.id == "b"
 
-    @patch("pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies")
-    @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
-    @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
-    def test_filters_blocked_dependencies(self, mock_hier, mock_assigned, mock_deps):
-        mock_deps.side_effect = lambda item_id: item_id == "a"
-        items = [_item("a"), _item("b")]
-        mock_hier.return_value = _item("b")
-        result = select_work_item(items, interactive=False)
-        assert result is not None
-        assert result.id == "b"
-
-    @patch("pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
     @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user")
     @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item", return_value=None)
-    def test_filters_other_agent_assigned(self, mock_hier, mock_assigned, mock_deps):
+    def test_filters_other_agent_assigned(self, mock_hier, mock_assigned):
         mock_assigned.side_effect = lambda item: item.id != "a"
         items = [_item("a", assignee="other-agent"), _item("b")]
         result = select_work_item(items, interactive=False)
         # "a" is filtered, but "b" passes; mock returns None for autonomous
         assert result is None
 
-    @patch("pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
     @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
     @patch("builtins.input", return_value="1")
-    def test_interactive_selects_by_number(self, mock_input, mock_assigned, mock_deps):
+    def test_interactive_selects_by_number(self, mock_input, mock_assigned):
         items = [_item("a"), _item("b")]
         result = select_work_item(items, interactive=True)
         assert result is not None
         assert result.id == "a"
 
-    @patch("pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
     @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
-    def test_all_human_required_returns_none(self, mock_assigned, mock_deps):
+    def test_all_human_required_returns_none(self, mock_assigned):
         items = [_item("a", labels=["human-required"])]
         result = select_work_item(items, interactive=False)
         assert result is None
 
-    @patch("pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
     @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
     @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
-    def test_filters_closed_items(self, mock_hier, mock_assigned, mock_deps):
+    def test_filters_closed_items(self, mock_hier, mock_assigned):
         closed = BeadsWorkItem(
             id="c", title="Closed", status="closed", priority=1,
             issue_type="task",
@@ -168,9 +149,8 @@ class TestSelectWorkItem:
         assert result is not None
         assert result.id == "b"
 
-    @patch("pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
     @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
-    def test_all_closed_returns_none(self, mock_assigned, mock_deps):
+    def test_all_closed_returns_none(self, mock_assigned):
         closed = BeadsWorkItem(
             id="c", title="Closed", status="closed", priority=1,
             issue_type="task",
@@ -244,10 +224,9 @@ class TestAutonomousSelection:
 # ── select_multiple_items ───────────────────────────────────────────
 
 class TestSelectMultipleItems:
-    @patch("pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
     @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
     @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
-    def test_selects_up_to_count(self, mock_hier, mock_assigned, mock_deps):
+    def test_selects_up_to_count(self, mock_hier, mock_assigned):
         items = [_item("a"), _item("b"), _item("c")]
         mock_hier.side_effect = [items[0], items[1]]
         result = select_multiple_items(items, count=2)
@@ -261,47 +240,42 @@ class TestSelectMultipleItems:
     def test_zero_count(self):
         assert select_multiple_items([_item("a")], count=0) == []
 
-    @patch("pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
     @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
     @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
-    def test_skips_excluded_ids(self, mock_hier, mock_assigned, mock_deps):
+    def test_skips_excluded_ids(self, mock_hier, mock_assigned):
         items = [_item("a"), _item("b")]
         mock_hier.return_value = _item("b")
         result = select_multiple_items(items, count=2, skip_ids={"a"})
         assert len(result) == 1
         assert result[0].id == "b"
 
-    @patch("pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
     @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
     @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
-    def test_skips_claimed_ids(self, mock_hier, mock_assigned, mock_deps):
+    def test_skips_claimed_ids(self, mock_hier, mock_assigned):
         items = [_item("a"), _item("b")]
         mock_hier.return_value = _item("b")
         result = select_multiple_items(items, count=2, claimed_ids={"a"})
         assert len(result) == 1
         assert result[0].id == "b"
 
-    @patch("pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
     @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
     @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
-    def test_filters_human_required(self, mock_hier, mock_assigned, mock_deps):
+    def test_filters_human_required(self, mock_hier, mock_assigned):
         items = [_item("a", labels=["human-required"]), _item("b")]
         mock_hier.return_value = _item("b")
         result = select_multiple_items(items, count=2)
         assert len(result) == 1
         assert result[0].id == "b"
 
-    @patch("pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
     @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
     @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item", return_value=None)
-    def test_hier_returns_none(self, mock_hier, mock_assigned, mock_deps):
+    def test_hier_returns_none(self, mock_hier, mock_assigned):
         result = select_multiple_items([_item("a")], count=2)
         assert result == []
 
-    @patch("pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
     @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
     @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
-    def test_filters_closed_items(self, mock_hier, mock_assigned, mock_deps):
+    def test_filters_closed_items(self, mock_hier, mock_assigned):
         closed = BeadsWorkItem(
             id="c", title="Closed", status="closed", priority=1,
             issue_type="task",

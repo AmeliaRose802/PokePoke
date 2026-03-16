@@ -3,7 +3,7 @@
 import logging
 
 from pokepoke.types import BeadsWorkItem
-from pokepoke.beads.beads import select_next_hierarchical_item, has_unmet_blocking_dependencies
+from pokepoke.beads.beads import select_next_hierarchical_item
 from pokepoke.beads.beads_hierarchy import HUMAN_REQUIRED_LABEL, is_assigned_to_current_user
 from pokepoke.utils.shutdown import is_shutting_down
 
@@ -70,12 +70,9 @@ def _filter_available(ready_items: list[BeadsWorkItem]) -> list[BeadsWorkItem]:
             logger.info("Skipping %s - already closed in beads", item.id)
         available = [item for item in available if not _is_closed(item)]
 
-    items_with_unmet_deps = []
-    for item in available:
-        if has_unmet_blocking_dependencies(item.id):
-            items_with_unmet_deps.append(item)
-            logger.info("Skipping %s - has unmet blocking dependencies", item.id)
-    available = [item for item in available if item not in items_with_unmet_deps]
+    # Note: has_unmet_blocking_dependencies is NOT called here because
+    # bd ready already performs blocker-aware filtering ("open issues with
+    # no blockers").  Calling bd show per-item was adding ~5-10s per item.
 
     return available
 
@@ -192,10 +189,9 @@ def select_multiple_items(
     filtered = [item for item in filtered if is_assigned_to_current_user(item)]
     filtered = [item for item in filtered if not _is_human_required(item)]
     filtered = [item for item in filtered if not _is_closed(item)]
-    filtered = [
-        item for item in filtered
-        if not has_unmet_blocking_dependencies(item.id)
-    ]
+    # Note: has_unmet_blocking_dependencies check removed — bd ready already
+    # applies blocker-aware filtering.  The per-item bd show calls were
+    # adding ~5-10s each, causing multi-minute dispatch delays.
 
     if not filtered:
         return []

@@ -76,10 +76,9 @@ class TestSelectWorkItem:
         assert "Skipped" in caplog.text
 
     @patch('builtins.print')
-    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
     @patch('pokepoke.orchestration.work_item_selection.is_assigned_to_current_user', return_value=True)
     @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
-    def test_filters_human_required_items(self, mock_select: Mock, _m1: Mock, _m2: Mock, mock_print: Mock, caplog):
+    def test_filters_human_required_items(self, mock_select: Mock, _m1: Mock, mock_print: Mock, caplog):
         human = _make_item(id="h", labels=["human-required"])
         normal = _make_item(id="n")
         mock_select.return_value = normal
@@ -89,20 +88,9 @@ class TestSelectWorkItem:
         assert "human-required" in caplog.text
 
     @patch('builtins.print')
-    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=True)
-    @patch('pokepoke.orchestration.work_item_selection.is_assigned_to_current_user', return_value=True)
-    def test_filters_items_with_unmet_dependencies(self, _m1: Mock, _m2: Mock, mock_print: Mock, caplog):
-        items = [_make_item(id="a")]
-        with caplog.at_level(logging.DEBUG, logger="pokepoke.orchestration.work_item_selection"):
-            result = select_work_item(items, interactive=False)
-        assert result is None
-        assert "blocking dependencies" in caplog.text
-
-    @patch('builtins.print')
     @patch('builtins.input')
-    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
     @patch('pokepoke.orchestration.work_item_selection.is_assigned_to_current_user', return_value=True)
-    def test_interactive_long_description_truncated(self, _m1: Mock, _m2: Mock, mock_input: Mock, mock_print: Mock):
+    def test_interactive_long_description_truncated(self, _m1: Mock, mock_input: Mock, mock_print: Mock):
         """Items with descriptions > 80 chars get truncated with '...'."""
         long_desc = "A" * 100
         items = [_make_item(id="a", description=long_desc)]
@@ -160,19 +148,17 @@ class TestSelectMultipleItems:
     def test_zero_count_returns_empty(self):
         assert select_multiple_items([_make_item()], 0) == []
 
-    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
     @patch('pokepoke.orchestration.work_item_selection.is_assigned_to_current_user', return_value=True)
     @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
-    def test_selects_up_to_count(self, mock_select: Mock, _m1: Mock, _m2: Mock):
+    def test_selects_up_to_count(self, mock_select: Mock, _m1: Mock):
         a, b = _make_item(id="a"), _make_item(id="b")
         mock_select.side_effect = [a, b]
         result = select_multiple_items([a, b], 2)
         assert len(result) == 2
 
-    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
     @patch('pokepoke.orchestration.work_item_selection.is_assigned_to_current_user', return_value=True)
     @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
-    def test_skips_claimed_ids(self, mock_select: Mock, _m1: Mock, _m2: Mock):
+    def test_skips_claimed_ids(self, mock_select: Mock, _m1: Mock):
         a, b = _make_item(id="a"), _make_item(id="b")
         mock_select.return_value = b
         select_multiple_items([a, b], 2, claimed_ids={"a"})
@@ -180,17 +166,10 @@ class TestSelectMultipleItems:
         call_args = mock_select.call_args[0][0]
         assert all(i.id != "a" for i in call_args)
 
-    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
     @patch('pokepoke.orchestration.work_item_selection.is_assigned_to_current_user', return_value=True)
     @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item', return_value=None)
-    def test_returns_empty_when_hierarchical_returns_none(self, _m1: Mock, _m2: Mock, _m3: Mock):
+    def test_returns_empty_when_hierarchical_returns_none(self, _m1: Mock, _m2: Mock):
         assert select_multiple_items([_make_item()], 3) == []
-
-    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=True)
-    @patch('pokepoke.orchestration.work_item_selection.is_assigned_to_current_user', return_value=True)
-    def test_filters_items_with_blocking_deps(self, _m1: Mock, _m2: Mock):
-        result = select_multiple_items([_make_item()], 1)
-        assert result == []
 
 
 class TestWorkItemSelectionOutput:

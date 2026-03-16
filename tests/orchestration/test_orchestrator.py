@@ -2241,9 +2241,8 @@ class TestOrchestratorCleanupDetection:
 class TestSelectMultipleItems:
     """Tests for select_multiple_items helper."""
 
-    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
     @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
-    def test_returns_up_to_count_items(self, mock_hier, mock_deps):
+    def test_returns_up_to_count_items(self, mock_hier):
         from pokepoke.orchestration.work_item_selection import select_multiple_items
 
         items = [
@@ -2270,9 +2269,8 @@ class TestSelectMultipleItems:
         items = [BeadsWorkItem(id="t1", title="T1", status="open", priority=1, issue_type="task")]
         assert select_multiple_items(items, count=0) == []
 
-    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
     @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
-    def test_skips_claimed_ids(self, mock_hier, mock_deps):
+    def test_skips_claimed_ids(self, mock_hier):
         from pokepoke.orchestration.work_item_selection import select_multiple_items
 
         items = [
@@ -2285,9 +2283,8 @@ class TestSelectMultipleItems:
         assert len(result) == 1
         assert result[0].id == "t2"
 
-    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
     @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
-    def test_skips_failed_ids(self, mock_hier, mock_deps):
+    def test_skips_failed_ids(self, mock_hier):
         from pokepoke.orchestration.work_item_selection import select_multiple_items
 
         items = [

@@ -123,24 +123,18 @@ def _should_skip_item(
     run_logger: RunLogger,
 ) -> bool:
     """Return True if this item should be skipped during dispatch."""
-    from pokepoke.agents.parallel import is_item_claimable
-    from pokepoke.beads.beads_query import is_beads_item_closed
-
-    if is_beads_item_closed(item.id):
-        run_logger.log_orchestrator(f"Skipping {item.id} - already closed in beads")
-        failed_claim_ids.add(item.id)
-        return True
-
-    if not is_item_claimable(item.id):
-        run_logger.log_orchestrator(f"Skipping {item.id} - already claimed by another agent")
-        failed_claim_ids.add(item.id)
-        return True
 
     # High-conflict items must run solo — only dispatch when nothing else is active
     if is_high_conflict_risk(item) and (len(futures) > 0 or dispatched > 0):
         run_logger.log_orchestrator(
             f"Deferring high-conflict {item.id} — other items active")
         return True
+
+    # Note: is_beads_item_closed and is_item_claimable checks removed.
+    # Items come from bd ready (already open & unblocked) and
+    # assign_and_sync_item performs an atomic check-and-claim with
+    # proper locking.  The per-item bd show calls were adding ~5-10s
+    # each, causing multi-minute dispatch delays.
 
     return False
 
