@@ -6,7 +6,7 @@ import subprocess
 from unittest.mock import patch
 
 from pokepoke.config import ProjectConfig, ModelSyncConfig
-from pokepoke.model_sync import (
+from pokepoke.models.model_sync import (
     parse_copilot_models_output,
     normalize_model_entry,
     is_beta_model,
@@ -75,9 +75,9 @@ def test_sync_skips_recent_run():
     config = ProjectConfig()
     config.model_sync = ModelSyncConfig(interval_minutes=60)
     recent = datetime.now(UTC).isoformat()
-    with patch("pokepoke.model_sync.get_config", return_value=config), \
-            patch("pokepoke.model_sync.load_registry", return_value={"last_sync": recent, "models": {}}), \
-            patch("pokepoke.model_sync._run_copilot_models") as mock_models:
+    with patch("pokepoke.models.model_sync.get_config", return_value=config), \
+            patch("pokepoke.models.model_sync.load_registry", return_value={"last_sync": recent, "models": {}}), \
+            patch("pokepoke.models.model_sync._run_copilot_models") as mock_models:
         result = sync_copilot_models()
         assert result is not None
         mock_models.assert_not_called()
@@ -86,9 +86,9 @@ def test_sync_skips_recent_run():
 def test_sync_no_models_returns_none():
     config = ProjectConfig()
     config.model_sync = ModelSyncConfig()
-    with patch("pokepoke.model_sync.get_config", return_value=config), \
-            patch("pokepoke.model_sync.load_registry", return_value={"last_sync": None, "models": {}}), \
-            patch("pokepoke.model_sync._run_copilot_models", return_value=[]):
+    with patch("pokepoke.models.model_sync.get_config", return_value=config), \
+            patch("pokepoke.models.model_sync.load_registry", return_value={"last_sync": None, "models": {}}), \
+            patch("pokepoke.models.model_sync._run_copilot_models", return_value=[]):
         assert sync_copilot_models() is None
 
 
@@ -109,7 +109,7 @@ def test_save_registry_round_trip(tmp_path):
 def test_run_copilot_models_parses_output():
     output = '[{"name":"gpt-5.2","status":"beta"}]'
     result = subprocess.CompletedProcess(["copilot", "models", "list", "--json"], 0, output, "")
-    with patch("pokepoke.model_sync.subprocess.run", return_value=result):
+    with patch("pokepoke.models.model_sync.subprocess.run", return_value=result):
         models = _run_copilot_models("copilot")
         assert models[0]["name"] == "gpt-5.2"
 
@@ -127,15 +127,15 @@ def test_sync_creates_and_updates_beads(tmp_path):
             return subprocess.CompletedProcess(args, 0, json.dumps(existing_items), "")
         return subprocess.CompletedProcess(args, 0, "{}", "")
 
-    with patch("pokepoke.model_sync.get_config", return_value=config), \
-            patch("pokepoke.model_sync._run_copilot_models", return_value=[
+    with patch("pokepoke.models.model_sync.get_config", return_value=config), \
+            patch("pokepoke.models.model_sync._run_copilot_models", return_value=[
                 {"name": "gpt-5.2", "status": "beta"},
                 {"name": "claude-opus-4.6", "status": "ga"},
             ]), \
-            patch("pokepoke.model_sync._run_bd", side_effect=fake_run_bd) as mock_bd, \
-            patch("pokepoke.model_sync._get_main_repo_root", return_value=tmp_path), \
-            patch("pokepoke.model_sync.REGISTRY_PATH", tmp_path / "model_registry.json"), \
-            patch("pokepoke.model_sync.run_bd_sync_with_retry") as mock_sync:
+            patch("pokepoke.models.model_sync._run_bd", side_effect=fake_run_bd) as mock_bd, \
+            patch("pokepoke.models.model_sync._get_main_repo_root", return_value=tmp_path), \
+            patch("pokepoke.models.model_sync.REGISTRY_PATH", tmp_path / "model_registry.json"), \
+            patch("pokepoke.models.model_sync.run_bd_sync_with_retry") as mock_sync:
         result = sync_copilot_models()
         assert result is not None
         assert any(call.args[0][0] == "create" for call in mock_bd.call_args_list)
@@ -162,13 +162,13 @@ def test_sync_prunes_unavailable(tmp_path):
         "models": {"gpt-5.2": {"available": True, "first_seen": "2026-02-25T00:00:00+00:00"}},
     }))
 
-    with patch("pokepoke.model_sync.get_config", return_value=config), \
-            patch("pokepoke.model_sync._run_copilot_models", return_value=[
+    with patch("pokepoke.models.model_sync.get_config", return_value=config), \
+            patch("pokepoke.models.model_sync._run_copilot_models", return_value=[
                 {"name": "claude-opus-4.6", "status": "ga"}
             ]), \
-            patch("pokepoke.model_sync._run_bd", side_effect=fake_run_bd) as mock_bd, \
-            patch("pokepoke.model_sync._get_main_repo_root", return_value=tmp_path), \
-            patch("pokepoke.model_sync.REGISTRY_PATH", registry_path):
+            patch("pokepoke.models.model_sync._run_bd", side_effect=fake_run_bd) as mock_bd, \
+            patch("pokepoke.models.model_sync._get_main_repo_root", return_value=tmp_path), \
+            patch("pokepoke.models.model_sync.REGISTRY_PATH", registry_path):
         result = sync_copilot_models()
         assert result is not None
         assert any(call.args[0][0] == "close" for call in mock_bd.call_args_list)

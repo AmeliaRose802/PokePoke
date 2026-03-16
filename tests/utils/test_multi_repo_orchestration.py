@@ -17,19 +17,19 @@ from pokepoke.config import (
     ProjectConfig,
     RepoConfig,
 )
-from pokepoke.multi_repo_aggregator import (
+from pokepoke.git.multi_repo_aggregator import (
     AggregatedWorkItem,
     _query_all_repos,
     aggregate_ready_work_items,
     get_aggregated_stats,
 )
-from pokepoke.repo_worker_pool import RepoWorkerPool
-from pokepoke.metrics_context import (
+from pokepoke.git.repo_worker_pool import RepoWorkerPool
+from pokepoke.stats.metrics_context import (
     get_current_repo_name,
     repo_context,
     set_current_repo_name,
 )
-from pokepoke.maintenance_state import (
+from pokepoke.maintenance.maintenance_state import (
     MaintenanceState,
     RepoMaintenanceState,
     get_repo_state,
@@ -186,7 +186,7 @@ class TestAggregationEdgeCases:
             {"id": "t1", "title": "T", "status": "open", "priority": 1, "issue_type": "task"},
         ]
         monkeypatch.setattr(
-            "pokepoke.multi_repo_aggregator._run_bd",
+            "pokepoke.git.multi_repo_aggregator._run_bd",
             lambda *a, **kw: _bd_stdout(payload),
         )
         repos = [_make_repo(path=str(tmp_path))]
@@ -212,7 +212,7 @@ class TestAggregationEdgeCases:
         def mock_bd(*args, **kwargs):
             return _bd_stdout(call_map.get(kwargs.get("cwd", ""), []))
 
-        monkeypatch.setattr("pokepoke.multi_repo_aggregator._run_bd", mock_bd)
+        monkeypatch.setattr("pokepoke.git.multi_repo_aggregator._run_bd", mock_bd)
         repos = [_make_repo(path=str(d), priority_weight=1) for d in repo_dirs]
         items = aggregate_ready_work_items(repos, max_workers=4)
         assert len(items) == 6
@@ -226,7 +226,7 @@ class TestAggregationEdgeCases:
         repo_a.mkdir()
 
         monkeypatch.setattr(
-            "pokepoke.multi_repo_aggregator._run_bd",
+            "pokepoke.git.multi_repo_aggregator._run_bd",
             lambda *a, **kw: _bd_stdout([
                 {"id": "e1", "title": "E", "status": "open", "priority": 1, "issue_type": "task"}
             ]),
@@ -261,7 +261,7 @@ class TestAggregationEdgeCases:
         def mock_bd(*args, **kwargs):
             return _bd_stdout(call_map.get(kwargs.get("cwd", ""), []))
 
-        monkeypatch.setattr("pokepoke.multi_repo_aggregator._run_bd", mock_bd)
+        monkeypatch.setattr("pokepoke.git.multi_repo_aggregator._run_bd", mock_bd)
         repos = [
             _make_repo(path=str(repo_a), priority_weight=1),
             _make_repo(path=str(repo_b), priority_weight=1),
@@ -294,7 +294,7 @@ class TestAggregationEdgeCases:
                 {"id": "ok", "title": "OK", "status": "open", "priority": 1, "issue_type": "task"}
             ])
 
-        monkeypatch.setattr("pokepoke.multi_repo_aggregator._run_bd", mock_bd)
+        monkeypatch.setattr("pokepoke.git.multi_repo_aggregator._run_bd", mock_bd)
         repos = [_make_repo(path=str(repo_a)), _make_repo(path=str(repo_b))]
         items = aggregate_ready_work_items(repos)
         assert len(items) == 1
@@ -318,7 +318,7 @@ class TestAggregationEdgeCases:
                 {"id": "g2", "title": "G2", "status": "open", "priority": 2, "issue_type": "task"},
             ])
 
-        monkeypatch.setattr("pokepoke.multi_repo_aggregator._run_bd", mock_bd)
+        monkeypatch.setattr("pokepoke.git.multi_repo_aggregator._run_bd", mock_bd)
         repos = [_make_repo(path=str(good)), _make_repo(path=str(bad))]
         stats = get_aggregated_stats(repos)
         assert stats[str(good)] == 2
@@ -540,7 +540,7 @@ class TestMaintenanceIndependence:
     def test_maintenance_state_per_repo_isolation(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Each repo's maintenance state is independent."""
         state_file = tmp_path / "maintenance_state.json"
-        monkeypatch.setattr("pokepoke.maintenance_state.STATE_FILE", state_file)
+        monkeypatch.setattr("pokepoke.maintenance.maintenance_state.STATE_FILE", state_file)
 
         count_a = increment_items_completed(repo_id="repo-a")
         count_b = increment_items_completed(repo_id="repo-b")
@@ -550,7 +550,7 @@ class TestMaintenanceIndependence:
         count_a2 = increment_items_completed(repo_id="repo-a")
         assert count_a2 == 2
         # repo-b still at 1
-        from pokepoke.maintenance_state import get_items_completed_for_repo
+        from pokepoke.maintenance.maintenance_state import get_items_completed_for_repo
         assert get_items_completed_for_repo("repo-b") == 1
 
     def test_maintenance_state_serialization(self) -> None:
@@ -596,12 +596,12 @@ class TestMaintenanceIndependence:
     ) -> None:
         """Global counter is bumped even when repo_id is provided."""
         state_file = tmp_path / "maintenance_state.json"
-        monkeypatch.setattr("pokepoke.maintenance_state.STATE_FILE", state_file)
+        monkeypatch.setattr("pokepoke.maintenance.maintenance_state.STATE_FILE", state_file)
 
         increment_items_completed(repo_id="repo-a")
         increment_items_completed(repo_id="repo-b")
 
-        from pokepoke.maintenance_state import load_state
+        from pokepoke.maintenance.maintenance_state import load_state
         state = load_state()
         assert state.total_items_completed == 2
 
@@ -695,7 +695,7 @@ class TestMultiRepoIntegration:
         def mock_bd(*args, **kwargs):
             return _bd_stdout(repos_data.get(kwargs.get("cwd", ""), []))
 
-        monkeypatch.setattr("pokepoke.multi_repo_aggregator._run_bd", mock_bd)
+        monkeypatch.setattr("pokepoke.git.multi_repo_aggregator._run_bd", mock_bd)
 
         # Aggregate
         items = aggregate_ready_work_items(repo_configs)
@@ -753,7 +753,7 @@ class TestMultiRepoIntegration:
         def mock_bd(*args, **kwargs):
             return _bd_stdout(call_map.get(kwargs.get("cwd", ""), []))
 
-        monkeypatch.setattr("pokepoke.multi_repo_aggregator._run_bd", mock_bd)
+        monkeypatch.setattr("pokepoke.git.multi_repo_aggregator._run_bd", mock_bd)
 
         repos = [_make_repo(path=str(repo_a)), _make_repo(path=str(repo_b))]
         items = aggregate_ready_work_items(repos)
@@ -789,7 +789,7 @@ class TestMultiRepoIntegration:
     ) -> None:
         """Maintenance state works with real directory-based repo IDs."""
         state_file = tmp_path / "state.json"
-        monkeypatch.setattr("pokepoke.maintenance_state.STATE_FILE", state_file)
+        monkeypatch.setattr("pokepoke.maintenance.maintenance_state.STATE_FILE", state_file)
 
         repo_a = str(tmp_path / "repo-a")
         repo_b = str(tmp_path / "repo-b")
@@ -798,7 +798,7 @@ class TestMultiRepoIntegration:
         increment_items_completed(repo_id=repo_a)
         increment_items_completed(repo_id=repo_b)
 
-        from pokepoke.maintenance_state import get_items_completed_for_repo
+        from pokepoke.maintenance.maintenance_state import get_items_completed_for_repo
         assert get_items_completed_for_repo(repo_a) == 2
         assert get_items_completed_for_repo(repo_b) == 1
 
@@ -833,7 +833,7 @@ class TestMultiRepoIntegration:
         def mock_bd(*args, **kwargs):
             return _bd_stdout(call_map.get(kwargs.get("cwd", ""), []))
 
-        monkeypatch.setattr("pokepoke.multi_repo_aggregator._run_bd", mock_bd)
+        monkeypatch.setattr("pokepoke.git.multi_repo_aggregator._run_bd", mock_bd)
         items = aggregate_ready_work_items(config.repos)
         assert len(items) == 3
 

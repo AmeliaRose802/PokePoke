@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from pokepoke.model_selection import select_model_for_item
+from pokepoke.models.model_selection import select_model_for_item
 from pokepoke.types import (
     BeadsWorkItem,
     ModelCompletionRecord,
@@ -20,7 +20,7 @@ from pokepoke.types import (
     CopilotResult,
 )
 from pokepoke.config import ModelConfig, ProjectConfig, reset_config
-from pokepoke.stats import _print_model_comparison, _format_duration
+from pokepoke.stats.stats import _print_model_comparison, _format_duration
 
 
 @pytest.fixture(autouse=True)
@@ -77,15 +77,15 @@ class TestModelConfigCandidates:
 class TestSelectModelForItem:
     """Tests for random model selection from candidates."""
 
-    @patch("pokepoke.model_selection.get_config")
+    @patch("pokepoke.models.model_selection.get_config")
     def test_returns_default_when_no_candidates(self, mock_config):
         mock_config.return_value = ProjectConfig(
-            models=ModelConfig(default="claude-opus-4.6", candidate_models=[])
+            models=ModelConfig(default="claude-opus-4.6", fallback="claude-opus-4.6", candidate_models=[])
         )
         model = select_model_for_item(_make_item("item-1"))
         assert model == "claude-opus-4.6"
 
-    @patch("pokepoke.model_selection.get_config")
+    @patch("pokepoke.models.model_selection.get_config")
     def test_returns_candidate_when_configured(self, mock_config):
         candidates = ["gpt-4o", "claude-opus-4.6"]
         mock_config.return_value = ProjectConfig(
@@ -94,8 +94,8 @@ class TestSelectModelForItem:
         model = select_model_for_item(_make_item("item-2"))
         assert model in candidates
 
-    @patch("pokepoke.model_selection.get_config")
-    @patch("pokepoke.model_selection.random.choices")
+    @patch("pokepoke.models.model_selection.get_config")
+    @patch("pokepoke.models.model_selection.random.choices")
     def test_uses_random_choices(self, mock_choices, mock_config):
         candidates = ["modelA", "modelB", "modelC"]
         mock_config.return_value = ProjectConfig(
@@ -106,7 +106,7 @@ class TestSelectModelForItem:
         assert model == "modelB"
         mock_choices.assert_called_once()
 
-    @patch("pokepoke.model_selection.get_config")
+    @patch("pokepoke.models.model_selection.get_config")
     def test_single_candidate(self, mock_config):
         mock_config.return_value = ProjectConfig(
             models=ModelConfig(candidate_models=["only-model"])

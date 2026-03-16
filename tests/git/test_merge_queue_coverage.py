@@ -11,7 +11,7 @@ from unittest.mock import patch, MagicMock
 
 
 from pokepoke.types import BeadsWorkItem
-from pokepoke.merge_queue import (
+from pokepoke.git.merge_queue import (
     MergeQueue,
     MergeStatus,
     MergeResult,
@@ -56,7 +56,7 @@ class TestMergeQueueLifecycle:
         assert not self.queue.is_running
         assert self.queue.pending_count == 0
 
-    @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
+    @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
     def test_start_creates_worker(self, mock_shutdown):
         self.queue.start()
         assert self.queue.is_running
@@ -64,25 +64,25 @@ class TestMergeQueueLifecycle:
         self.queue.shutdown(timeout=5.0)
         assert not self.queue.is_running
 
-    @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
+    @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
     def test_double_start_is_idempotent(self, mock_shutdown):
         self.queue.start()
         self.queue.start()  # Should not raise
         assert self.queue.is_running
 
-    @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
+    @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
     def test_shutdown_without_start(self, mock_shutdown):
         self.queue.shutdown(timeout=1.0)  # Should not raise
 
-    @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
-    @patch("pokepoke.merge_queue.is_high_conflict_risk", return_value=False)
-    @patch("pokepoke.merge_queue.get_default_branch", return_value="main")
-    @patch("pokepoke.merge_queue.is_worktree_clean", return_value=True)
+    @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
+    @patch("pokepoke.git.merge_queue.is_high_conflict_risk", return_value=False)
+    @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
+    @patch("pokepoke.git.merge_queue.is_worktree_clean", return_value=True)
     @patch("subprocess.run")
     def test_submit_and_process(self, mock_subproc, mock_clean,
                                 mock_branch, mock_conflict, mock_shutdown,
                                 tmp_path):
-        with patch("pokepoke.worktree_finalization.merge_worktree_to_dev", return_value=True):
+        with patch("pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev", return_value=True):
             mock_subproc.return_value = MagicMock(returncode=0)
             self.queue.start()
             future = self.queue.submit(tmp_path, _item("merge-1"))
@@ -90,7 +90,7 @@ class TestMergeQueueLifecycle:
             assert result.status == MergeStatus.SUCCESS
             assert result.item_id == "merge-1"
 
-    @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
+    @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
     def test_drain_on_shutdown(self, mock_shutdown):
         self.queue.start()
         # Submit items then immediately shutdown
@@ -109,7 +109,7 @@ class TestMergeQueueLifecycle:
 # ── _rebase_worktree ───────────────────────────────────────────────
 
 class TestRebaseWorktree:
-    @patch("pokepoke.merge_queue.get_default_branch", return_value="main")
+    @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("subprocess.run")
     def test_successful_rebase(self, mock_run, mock_branch, tmp_path):
         mock_run.return_value = MagicMock(returncode=0)
@@ -117,7 +117,7 @@ class TestRebaseWorktree:
         assert result is True
         assert mock_run.call_count == 2  # fetch + rebase
 
-    @patch("pokepoke.merge_queue.get_default_branch", return_value="main")
+    @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("subprocess.run")
     def test_rebase_with_explicit_branch(self, mock_run, mock_branch, tmp_path):
         mock_run.return_value = MagicMock(returncode=0)
@@ -127,7 +127,7 @@ class TestRebaseWorktree:
         fetch_call = mock_run.call_args_list[0]
         assert "develop" in fetch_call[0][0]
 
-    @patch("pokepoke.merge_queue.get_default_branch", return_value="main")
+    @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("subprocess.run")
     def test_rebase_failure_aborts(self, mock_run, mock_branch, tmp_path):
         # Fetch succeeds, rebase fails
@@ -139,7 +139,7 @@ class TestRebaseWorktree:
         result = _rebase_worktree(tmp_path)
         assert result is False
 
-    @patch("pokepoke.merge_queue.get_default_branch", return_value="main")
+    @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("subprocess.run")
     def test_rebase_timeout_aborts(self, mock_run, mock_branch, tmp_path):
         mock_run.side_effect = [
@@ -210,16 +210,16 @@ class TestProcessRequest:
         if self.queue.is_running:
             self.queue.shutdown(timeout=5.0)
 
-    @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
-    @patch("pokepoke.merge_queue.is_high_conflict_risk", return_value=True)
-    @patch("pokepoke.merge_queue.get_default_branch", return_value="main")
-    @patch("pokepoke.merge_queue.is_worktree_clean", return_value=True)
+    @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
+    @patch("pokepoke.git.merge_queue.is_high_conflict_risk", return_value=True)
+    @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
+    @patch("pokepoke.git.merge_queue.is_worktree_clean", return_value=True)
     @patch("subprocess.run")
     def test_high_conflict_does_double_rebase(self, mock_run, mock_clean,
                                               mock_branch, mock_conflict,
                                               mock_shutdown, tmp_path):
         mock_run.return_value = MagicMock(returncode=0)
-        with patch("pokepoke.worktree_finalization.merge_worktree_to_dev", return_value=True):
+        with patch("pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev", return_value=True):
             self.queue.start()
             future = self.queue.submit(tmp_path, _item("hc-1"))
             result = future.result(timeout=10.0)
@@ -227,10 +227,10 @@ class TestProcessRequest:
             # Double rebase means 4 subprocess calls (2x fetch + 2x rebase)
             assert mock_run.call_count == 4
 
-    @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
-    @patch("pokepoke.merge_queue.is_high_conflict_risk", return_value=False)
-    @patch("pokepoke.merge_queue.get_default_branch", return_value="main")
-    @patch("pokepoke.merge_queue.is_worktree_clean", return_value=False)
+    @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
+    @patch("pokepoke.git.merge_queue.is_high_conflict_risk", return_value=False)
+    @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
+    @patch("pokepoke.git.merge_queue.is_worktree_clean", return_value=False)
     @patch("subprocess.run")
     def test_rebase_fail_dirty_worktree_marks_failed(self, mock_run, mock_clean,
                                                      mock_branch, mock_conflict,
@@ -241,23 +241,23 @@ class TestProcessRequest:
             subprocess.CalledProcessError(1, "rebase", stderr="conflict"),
             MagicMock(returncode=0),  # abort
         ]
-        with patch("pokepoke.worktree_cleanup.add_uncleaned_worktree"):
+        with patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree"):
             self.queue.start()
             future = self.queue.submit(tmp_path, _item("dirty-1"))
             result = future.result(timeout=10.0)
             assert result.status == MergeStatus.FAILED
             assert "dirty" in result.message.lower()
 
-    @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
-    @patch("pokepoke.merge_queue.is_high_conflict_risk", return_value=False)
-    @patch("pokepoke.merge_queue.get_default_branch", return_value="main")
-    @patch("pokepoke.merge_queue.is_worktree_clean", return_value=True)
+    @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
+    @patch("pokepoke.git.merge_queue.is_high_conflict_risk", return_value=False)
+    @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
+    @patch("pokepoke.git.merge_queue.is_worktree_clean", return_value=True)
     @patch("subprocess.run")
     def test_merge_exception_marks_failed(self, mock_run, mock_clean,
                                           mock_branch, mock_conflict,
                                           mock_shutdown, tmp_path):
         mock_run.return_value = MagicMock(returncode=0)
-        with patch("pokepoke.worktree_finalization.merge_worktree_to_dev",
+        with patch("pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev",
                     side_effect=RuntimeError("merge exploded")):
             self.queue.start()
             future = self.queue.submit(tmp_path, _item("exc-1"))
@@ -265,16 +265,16 @@ class TestProcessRequest:
             assert result.status == MergeStatus.FAILED
             assert "merge exploded" in result.message
 
-    @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
-    @patch("pokepoke.merge_queue.is_high_conflict_risk", return_value=False)
-    @patch("pokepoke.merge_queue.get_default_branch", return_value="main")
-    @patch("pokepoke.merge_queue.is_worktree_clean", return_value=True)
+    @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
+    @patch("pokepoke.git.merge_queue.is_high_conflict_risk", return_value=False)
+    @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
+    @patch("pokepoke.git.merge_queue.is_worktree_clean", return_value=True)
     @patch("subprocess.run")
     def test_merge_returns_false(self, mock_run, mock_clean,
                                  mock_branch, mock_conflict, mock_shutdown,
                                  tmp_path):
         mock_run.return_value = MagicMock(returncode=0)
-        with patch("pokepoke.worktree_finalization.merge_worktree_to_dev",
+        with patch("pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev",
                     return_value=False):
             self.queue.start()
             future = self.queue.submit(tmp_path, _item("fail-1"))

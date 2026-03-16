@@ -20,7 +20,7 @@ def _chdir(path: Path):
 
 
 def test_setup_complete_event_roundtrip() -> None:
-    from pokepoke.desktop_api import DesktopAPI
+    from pokepoke.desktop.desktop_api import DesktopAPI
 
     api = DesktopAPI()
 
@@ -31,12 +31,12 @@ def test_setup_complete_event_roundtrip() -> None:
 
 
 def test_create_default_config_writes_yaml(tmp_path: Path, monkeypatch) -> None:
-    from pokepoke.desktop_api import DesktopAPI
+    from pokepoke.desktop.desktop_api import DesktopAPI
 
     api = DesktopAPI()
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("pokepoke.project_utils.resolve_git_toplevel", lambda _: tmp_path)
+    monkeypatch.setattr("pokepoke.utils.project_utils.resolve_git_toplevel", lambda _: tmp_path)
     result = api.create_default_config(
         {
             "project_name": "ExampleProject",
@@ -57,12 +57,12 @@ def test_create_default_config_writes_yaml(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_scaffold_prompt_overrides_copies_beads_item(tmp_path: Path, monkeypatch) -> None:
-    from pokepoke.desktop_api import DesktopAPI
+    from pokepoke.desktop.desktop_api import DesktopAPI
 
     api = DesktopAPI()
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("pokepoke.project_utils.resolve_git_toplevel", lambda _: tmp_path)
+    monkeypatch.setattr("pokepoke.utils.project_utils.resolve_git_toplevel", lambda _: tmp_path)
     result = api.scaffold_prompt_overrides(["beads-item"], False)
     assert result["success"] is True
     written = result.get("written") or []
@@ -71,7 +71,7 @@ def test_scaffold_prompt_overrides_copies_beads_item(tmp_path: Path, monkeypatch
 
 
 def test_orchestrator_main_waits_for_setup_then_runs(tmp_path: Path) -> None:
-    from pokepoke.desktop_ui import DesktopUI
+    from pokepoke.desktop.desktop_ui import DesktopUI
 
     class FakeDesktopUI(DesktopUI):
         def __init__(self) -> None:
@@ -89,11 +89,11 @@ def test_orchestrator_main_waits_for_setup_then_runs(tmp_path: Path) -> None:
 
     with (
         _chdir(tmp_path),
-        patch("pokepoke.terminal_ui.ui", fake_ui),
-        patch("pokepoke.orchestrator.run_orchestrator", return_value=0) as mock_run,
-        patch("pokepoke.project_utils.is_git_repo", side_effect=[False, True]),
-        patch("pokepoke.project_utils.has_pokepoke_config", return_value=True),
-        patch("pokepoke.project_utils.check_beads_available", return_value=True),
+        patch("pokepoke.desktop.terminal_ui.ui", fake_ui),
+        patch("pokepoke.orchestration.orchestrator.run_orchestrator", return_value=0) as mock_run,
+        patch("pokepoke.utils.project_utils.is_git_repo", side_effect=[False, True]),
+        patch("pokepoke.utils.project_utils.has_pokepoke_config", return_value=True),
+        patch("pokepoke.utils.project_utils.check_beads_available", return_value=True),
         patch("sys.argv", ["pokepoke", "--autonomous"]),
     ):
         from pokepoke.__main__ import main
@@ -105,16 +105,16 @@ def test_orchestrator_main_waits_for_setup_then_runs(tmp_path: Path) -> None:
 
 
 def test_check_setup_status_returns_correct_structure(tmp_path: Path) -> None:
-    from pokepoke.desktop_api import DesktopAPI
+    from pokepoke.desktop.desktop_api import DesktopAPI
 
     api = DesktopAPI()
 
     with (
         _chdir(tmp_path),
-        patch("pokepoke.project_utils.is_git_repo", return_value=True),
-        patch("pokepoke.project_utils.resolve_git_toplevel", return_value=tmp_path),
-        patch("pokepoke.project_utils.has_pokepoke_config", return_value=False),
-        patch("pokepoke.project_utils.check_beads_available", return_value=False),
+        patch("pokepoke.utils.project_utils.is_git_repo", return_value=True),
+        patch("pokepoke.utils.project_utils.resolve_git_toplevel", return_value=tmp_path),
+        patch("pokepoke.utils.project_utils.has_pokepoke_config", return_value=False),
+        patch("pokepoke.utils.project_utils.check_beads_available", return_value=False),
     ):
         result = api.check_setup_status()
 
@@ -127,14 +127,14 @@ def test_check_setup_status_returns_correct_structure(tmp_path: Path) -> None:
 
 
 def test_git_init_success(tmp_path: Path) -> None:
-    from pokepoke.desktop_api import DesktopAPI
+    from pokepoke.desktop.desktop_api import DesktopAPI
 
     api = DesktopAPI()
 
     mock_result = Mock(stdout="Initialized empty Git repository\n", stderr="")
     with (
         _chdir(tmp_path),
-        patch("pokepoke.desktop_api_setup.subprocess.run", return_value=mock_result) as mock_run,
+        patch("pokepoke.desktop.desktop_api_setup.subprocess.run", return_value=mock_result) as mock_run,
     ):
         result = api.git_init("main")
 
@@ -146,14 +146,14 @@ def test_git_init_success(tmp_path: Path) -> None:
 
 
 def test_git_init_timeout(tmp_path: Path) -> None:
-    from pokepoke.desktop_api import DesktopAPI
+    from pokepoke.desktop.desktop_api import DesktopAPI
 
     api = DesktopAPI()
 
     with (
         _chdir(tmp_path),
         patch(
-            "pokepoke.desktop_api_setup.subprocess.run",
+            "pokepoke.desktop.desktop_api_setup.subprocess.run",
             side_effect=subprocess.TimeoutExpired(cmd="git init", timeout=30),
         ),
     ):
@@ -164,14 +164,14 @@ def test_git_init_timeout(tmp_path: Path) -> None:
 
 
 def test_git_init_failure(tmp_path: Path) -> None:
-    from pokepoke.desktop_api import DesktopAPI
+    from pokepoke.desktop.desktop_api import DesktopAPI
 
     api = DesktopAPI()
 
     exc = subprocess.CalledProcessError(128, "git init", stderr="fatal: error")
     with (
         _chdir(tmp_path),
-        patch("pokepoke.desktop_api_setup.subprocess.run", side_effect=exc),
+        patch("pokepoke.desktop.desktop_api_setup.subprocess.run", side_effect=exc),
     ):
         result = api.git_init()
 
@@ -179,7 +179,7 @@ def test_git_init_failure(tmp_path: Path) -> None:
 
 
 def test_coerce_process_output() -> None:
-    from pokepoke.desktop_api_utils import coerce_process_output
+    from pokepoke.desktop.desktop_api_utils import coerce_process_output
 
     assert coerce_process_output(None) is None
     assert coerce_process_output("") is None
@@ -189,14 +189,14 @@ def test_coerce_process_output() -> None:
 
 def test_require_yaml_available() -> None:
     """require_yaml should not raise when yaml is installed."""
-    from pokepoke.desktop_api_utils import require_yaml
+    from pokepoke.desktop.desktop_api_utils import require_yaml
     require_yaml("load config")  # should not raise
 
 
 def test_require_yaml_missing(monkeypatch) -> None:
     """require_yaml should raise ImportError when HAS_YAML is False."""
     import pytest
-    import pokepoke.desktop_api_utils as dau
+    import pokepoke.desktop.desktop_api_utils as dau
 
     monkeypatch.setattr(dau, "HAS_YAML", False)
     with pytest.raises(ImportError, match="PyYAML is required"):
@@ -204,14 +204,14 @@ def test_require_yaml_missing(monkeypatch) -> None:
 
 
 def test_bd_init_delegates(tmp_path: Path) -> None:
-    from pokepoke.desktop_api import DesktopAPI
+    from pokepoke.desktop.desktop_api import DesktopAPI
 
     api = DesktopAPI()
 
     with (
         _chdir(tmp_path),
-        patch("pokepoke.repo_check.initialize_beads_repo", return_value=True) as mock_init,
-        patch("pokepoke.project_utils.resolve_git_toplevel", return_value=tmp_path),
+        patch("pokepoke.git.repo_check.initialize_beads_repo", return_value=True) as mock_init,
+        patch("pokepoke.utils.project_utils.resolve_git_toplevel", return_value=tmp_path),
     ):
         result = api.bd_init()
 
@@ -220,7 +220,7 @@ def test_bd_init_delegates(tmp_path: Path) -> None:
 
 
 def test_create_default_config_rejects_non_dict() -> None:
-    from pokepoke.desktop_api import DesktopAPI
+    from pokepoke.desktop.desktop_api import DesktopAPI
     import pytest
 
     api = DesktopAPI()
@@ -230,7 +230,7 @@ def test_create_default_config_rejects_non_dict() -> None:
 
 
 def test_scaffold_prompt_overrides_skips_existing(tmp_path: Path) -> None:
-    from pokepoke.desktop_api import DesktopAPI
+    from pokepoke.desktop.desktop_api import DesktopAPI
 
     api = DesktopAPI()
 
@@ -245,7 +245,7 @@ def test_scaffold_prompt_overrides_skips_existing(tmp_path: Path) -> None:
 
 
 def test_complete_setup_without_event() -> None:
-    from pokepoke.desktop_api_setup import complete_setup
+    from pokepoke.desktop.desktop_api_setup import complete_setup
 
     obj = object()
     result = complete_setup(obj)
@@ -253,7 +253,7 @@ def test_complete_setup_without_event() -> None:
 
 
 def test_wait_for_setup_complete_without_event() -> None:
-    from pokepoke.desktop_api_setup import wait_for_setup_complete
+    from pokepoke.desktop.desktop_api_setup import wait_for_setup_complete
 
     obj = object()
     assert wait_for_setup_complete(obj) is True

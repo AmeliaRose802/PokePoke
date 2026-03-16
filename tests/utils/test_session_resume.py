@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 
-from pokepoke.copilot_sdk import (
+from pokepoke.models.copilot_sdk import (
     build_resume_prompt,
     _summarize_output,
     invoke_copilot_sdk_sync,
@@ -89,7 +89,7 @@ class TestBuildGateResumePrompt:
     """Tests for build_gate_resume_prompt function."""
 
     def test_basic_gate_resume(self, sample_work_item):
-        from pokepoke.sdk_helpers import build_gate_resume_prompt
+        from pokepoke.models.sdk_helpers import build_gate_resume_prompt
         result = build_gate_resume_prompt(sample_work_item)
         assert "Gate Agent Session Resume" in result
         assert sample_work_item.id in result
@@ -98,7 +98,7 @@ class TestBuildGateResumePrompt:
         assert "Gate Agent" in result
 
     def test_includes_handoff_context(self, sample_work_item):
-        from pokepoke.sdk_helpers import build_gate_resume_prompt
+        from pokepoke.models.sdk_helpers import build_gate_resume_prompt
         result = build_gate_resume_prompt(
             sample_work_item, handoff_context="diff --stat output"
         )
@@ -106,7 +106,7 @@ class TestBuildGateResumePrompt:
         assert "diff --stat output" in result
 
     def test_includes_previous_output(self, sample_work_item):
-        from pokepoke.sdk_helpers import build_gate_resume_prompt
+        from pokepoke.models.sdk_helpers import build_gate_resume_prompt
         result = build_gate_resume_prompt(
             sample_work_item, previous_output_summary="Running pytest..."
         )
@@ -114,17 +114,17 @@ class TestBuildGateResumePrompt:
         assert "Running pytest..." in result
 
     def test_no_previous_output(self, sample_work_item):
-        from pokepoke.sdk_helpers import build_gate_resume_prompt
+        from pokepoke.models.sdk_helpers import build_gate_resume_prompt
         result = build_gate_resume_prompt(sample_work_item, previous_output_summary=None)
         assert "Previous Progress" not in result
 
     def test_custom_default_branch(self, sample_work_item):
-        from pokepoke.sdk_helpers import build_gate_resume_prompt
+        from pokepoke.models.sdk_helpers import build_gate_resume_prompt
         result = build_gate_resume_prompt(sample_work_item, default_branch="main")
         assert "`main`" in result
 
     def test_no_description(self, work_item_no_desc):
-        from pokepoke.sdk_helpers import build_gate_resume_prompt
+        from pokepoke.models.sdk_helpers import build_gate_resume_prompt
         result = build_gate_resume_prompt(work_item_no_desc)
         assert "Gate Agent Session Resume" in result
         assert "Description" not in result
@@ -235,7 +235,7 @@ class TestBuildResumePrompt:
 
     def test_resume_prompt_shorter_than_full_prompt(self, sample_work_item):
         """Resume prompt should be meaningfully shorter than the full template."""
-        from pokepoke.copilot_sdk import build_prompt_from_work_item
+        from pokepoke.models.copilot_sdk import build_prompt_from_work_item
 
         full = build_prompt_from_work_item(sample_work_item)
         resume = build_resume_prompt(sample_work_item)
@@ -249,7 +249,7 @@ class TestBuildResumePrompt:
 class TestSessionIdGeneration:
     """Tests for session_id generation and passing."""
 
-    @patch('pokepoke.copilot_sdk.asyncio.run')
+    @patch('pokepoke.models.copilot_sdk.asyncio.run')
     def test_sync_wrapper_passes_session_id(self, mock_run, sample_work_item):
         mock_run.return_value = CopilotResult(
             work_item_id=sample_work_item.id, success=True, session_id="test-sid"
@@ -264,7 +264,7 @@ class TestSessionIdGeneration:
 
         assert result.session_id == "test-sid"
 
-    @patch('pokepoke.copilot_sdk.asyncio.run')
+    @patch('pokepoke.models.copilot_sdk.asyncio.run')
     def test_sync_wrapper_passes_is_resume(self, mock_run, sample_work_item):
         mock_run.return_value = CopilotResult(
             work_item_id=sample_work_item.id, success=True
@@ -284,19 +284,19 @@ class TestSessionConfigWithId:
     """Tests for _build_session_config with session_id."""
 
     def test_session_id_included_in_config(self):
-        from pokepoke.sdk_helpers import _build_session_config
+        from pokepoke.models.sdk_helpers import _build_session_config
 
         config = _build_session_config("gpt-4", deny_write=False, session_id="my-session")
         assert config["session_id"] == "my-session"
 
     def test_no_session_id_when_none(self):
-        from pokepoke.sdk_helpers import _build_session_config
+        from pokepoke.models.sdk_helpers import _build_session_config
 
         config = _build_session_config("gpt-4", deny_write=False, session_id=None)
         assert "session_id" not in config
 
     def test_session_id_empty_string_not_included(self):
-        from pokepoke.sdk_helpers import _build_session_config
+        from pokepoke.models.sdk_helpers import _build_session_config
 
         config = _build_session_config("gpt-4", deny_write=False, session_id="")
         assert "session_id" not in config
@@ -339,14 +339,14 @@ class TestFailResultSessionFields:
     """Tests for _fail_result with session_id and output summary."""
 
     def test_fail_result_includes_session_id(self):
-        from pokepoke.sdk_helpers import _fail_result
+        from pokepoke.models.sdk_helpers import _fail_result
 
         result = _fail_result("item-1", "timeout", session_id="sid-123")
         assert result.session_id == "sid-123"
         assert result.success is False
 
     def test_fail_result_includes_output_summary(self):
-        from pokepoke.sdk_helpers import _fail_result
+        from pokepoke.models.sdk_helpers import _fail_result
 
         result = _fail_result(
             "item-1", "timeout",
@@ -356,7 +356,7 @@ class TestFailResultSessionFields:
         assert result.last_output_summary == "some output"
 
     def test_fail_result_defaults_session_fields_to_none(self):
-        from pokepoke.sdk_helpers import _fail_result
+        from pokepoke.models.sdk_helpers import _fail_result
 
         result = _fail_result("item-1", "some error")
         assert result.session_id is None
@@ -370,7 +370,7 @@ class TestBuildCopilotResultSessionId:
     """Tests for _build_copilot_result with session_id."""
 
     def test_includes_session_id(self, sample_work_item):
-        from pokepoke.sdk_helpers import _build_copilot_result
+        from pokepoke.models.sdk_helpers import _build_copilot_result
         import time
 
         stats = {
@@ -410,7 +410,7 @@ class TestInvokeSdkTimeoutSessionState:
 
     @pytest.fixture
     def mock_client_class(self):
-        with patch("pokepoke.copilot_sdk.CopilotClient") as mock_cls:
+        with patch("pokepoke.models.copilot_sdk.CopilotClient") as mock_cls:
             mock_client = AsyncMock()
             mock_client.start = AsyncMock()
             mock_client.stop = AsyncMock()
@@ -422,7 +422,7 @@ class TestInvokeSdkTimeoutSessionState:
     async def test_timeout_result_contains_session_id(
         self, mock_client_class, sample_work_item
     ):
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = mock_client_class.return_value
         mock_session = AsyncMock()
@@ -447,7 +447,7 @@ class TestInvokeSdkTimeoutSessionState:
     async def test_timeout_result_contains_output_summary(
         self, mock_client_class, sample_work_item
     ):
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = mock_client_class.return_value
         mock_session = AsyncMock()
@@ -476,7 +476,7 @@ class TestInvokeSdkTimeoutSessionState:
         self, mock_client_class, sample_work_item
     ):
         """When session_id is provided, it should be passed to session config."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = mock_client_class.return_value
         mock_session = AsyncMock()
@@ -504,7 +504,7 @@ class TestInvokeSdkTimeoutSessionState:
         self, mock_client_class, sample_work_item
     ):
         """When no session_id is provided, one is generated from the work item ID."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = mock_client_class.return_value
         mock_session = AsyncMock()
@@ -528,7 +528,7 @@ class TestInvokeSdkTimeoutSessionState:
         self, mock_client_class, sample_work_item
     ):
         """When is_resume=True and no prompt provided, build_resume_prompt is used."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = mock_client_class.return_value
         mock_session = AsyncMock()
@@ -563,9 +563,9 @@ class TestAIBackendSessionThreading:
     """Tests that session_id and is_resume are threaded through backends."""
 
     def test_copilot_backend_passes_session_params(self, sample_work_item):
-        from pokepoke.ai_backends import CopilotBackend
+        from pokepoke.models.ai_backends import CopilotBackend
 
-        with patch("pokepoke.ai_backends.invoke_copilot_sdk_sync") as mock_sync:
+        with patch("pokepoke.models.ai_backends.invoke_copilot_sdk_sync") as mock_sync:
             mock_sync.return_value = CopilotResult(
                 work_item_id=sample_work_item.id, success=True
             )
@@ -584,9 +584,9 @@ class TestAIBackendSessionThreading:
             assert call_kwargs["is_resume"] is True
 
     def test_invoke_copilot_passes_session_params(self, sample_work_item):
-        from pokepoke.ai_backends import invoke_copilot
+        from pokepoke.models.ai_backends import invoke_copilot
 
-        with patch("pokepoke.ai_backends.get_backend") as mock_get:
+        with patch("pokepoke.models.ai_backends.get_backend") as mock_get:
             mock_backend = MagicMock()
             mock_backend.invoke.return_value = CopilotResult(
                 work_item_id=sample_work_item.id, success=True
@@ -606,7 +606,7 @@ class TestAIBackendSessionThreading:
 
     def test_claude_code_backend_accepts_session_params(self, sample_work_item):
         """ClaudeCodeBackend should accept session_id/is_resume without error."""
-        from pokepoke.ai_backends import ClaudeCodeBackend
+        from pokepoke.models.ai_backends import ClaudeCodeBackend
 
         backend = ClaudeCodeBackend(cli_path="nonexistent-claude-cli")
         result = backend.invoke(

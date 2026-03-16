@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 
-from pokepoke.agent_registry import AgentRecord, AgentRegistry
+from pokepoke.agents.agent_registry import AgentRecord, AgentRegistry
 
 
 class TestAgentRecordConstruction:

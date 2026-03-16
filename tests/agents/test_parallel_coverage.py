@@ -12,7 +12,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from pokepoke.types import BeadsWorkItem, AgentStats, SessionStats, WorkItemResult
-from pokepoke.parallel import (
+from pokepoke.agents.parallel import (
     _hash_string,
     _snake_for_work_item,
     _build_worker_name,
@@ -32,8 +32,8 @@ def _disable_preflight_health(monkeypatch):
     mock_cfg.preflight_health.enabled = False
     mock_cfg.max_parallel_agents = 10
     monkeypatch.setattr("pokepoke.config.get_config", lambda: mock_cfg)
-    monkeypatch.setattr("pokepoke.parallel.assign_and_sync_item", lambda *a, **kw: True)
-    monkeypatch.setattr("pokepoke.parallel.unassign_with_retry", lambda *a, **kw: None)
+    monkeypatch.setattr("pokepoke.agents.parallel.assign_and_sync_item", lambda *a, **kw: True)
+    monkeypatch.setattr("pokepoke.agents.parallel.unassign_with_retry", lambda *a, **kw: None)
 
 
 def _item(id: str = "par-1") -> BeadsWorkItem:
@@ -94,7 +94,7 @@ class TestBuildWorkerName:
 
 class TestRequestSpawnAgent:
     def test_sets_wakeup_event(self):
-        from pokepoke.parallel import _spawn_wakeup
+        from pokepoke.agents.parallel import _spawn_wakeup
         _spawn_wakeup.clear()
         request_spawn_agent()
         assert _spawn_wakeup.is_set()
@@ -104,8 +104,8 @@ class TestRequestSpawnAgent:
 # ── _parallel_process_item ─────────────────────────────────────────
 
 class TestParallelProcessItem:
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.process_work_item")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.process_work_item")
     def test_success(self, mock_process, mock_ui):
         mock_process.return_value = _success_result()
         sem = threading.Semaphore(1)
@@ -115,8 +115,8 @@ class TestParallelProcessItem:
         # Semaphore should be released
         assert sem.acquire(blocking=False)  # Can acquire again
 
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.process_work_item")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.process_work_item")
     def test_failure(self, mock_process, mock_ui):
         mock_process.return_value = _fail_result()
         sem = threading.Semaphore(1)
@@ -124,8 +124,8 @@ class TestParallelProcessItem:
         result = _parallel_process_item(_item(), MagicMock(), sem)
         assert result.success is False
 
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.process_work_item", side_effect=RuntimeError("boom"))
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.process_work_item", side_effect=RuntimeError("boom"))
     def test_exception_releases_semaphore(self, mock_process, mock_ui):
         sem = threading.Semaphore(1)
         sem.acquire()
@@ -263,15 +263,15 @@ class TestFinalizeWorkers:
 class TestRunParallelLoop:
     """Test run_parallel_loop with minimal mocking."""
 
-    @patch("pokepoke.parallel.clear_runtime_parallel_limits")
-    @patch("pokepoke.parallel.set_runtime_parallel_limits")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.is_shutting_down", return_value=False)
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
-    @patch("pokepoke.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.clear_runtime_parallel_limits")
+    @patch("pokepoke.agents.parallel.set_runtime_parallel_limits")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.is_shutting_down", return_value=False)
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
+    @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
+    @patch("pokepoke.agents.parallel.time.sleep")
     def test_no_items_exits(self, mock_sleep, mock_select, mock_ready,
                             mock_repo, mock_shutdown, mock_ui,
                             mock_set_exec, mock_set_limits, mock_clear_limits):
@@ -291,12 +291,12 @@ class TestRunParallelLoop:
         assert exit_code == 0
         finalize_fn.assert_called_once()
 
-    @patch("pokepoke.parallel.clear_runtime_parallel_limits")
-    @patch("pokepoke.parallel.set_runtime_parallel_limits")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=False)
-    @patch("pokepoke.parallel.is_shutting_down", return_value=False)
+    @patch("pokepoke.agents.parallel.clear_runtime_parallel_limits")
+    @patch("pokepoke.agents.parallel.set_runtime_parallel_limits")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=False)
+    @patch("pokepoke.agents.parallel.is_shutting_down", return_value=False)
     def test_repo_check_failure(self, mock_shutdown, mock_repo, mock_ui,
                                 mock_set_exec, mock_set_limits, mock_clear_limits):
         stats = SessionStats(agent_stats=AgentStats())
@@ -311,19 +311,19 @@ class TestRunParallelLoop:
         )
         assert exit_code == 1
 
-    @patch("pokepoke.parallel.clear_runtime_parallel_limits")
-    @patch("pokepoke.parallel.set_runtime_parallel_limits")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.is_shutting_down", return_value=False)
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items")
-    @patch("pokepoke.parallel.select_multiple_items")
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.process_work_item")
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.get_effective_max_agents", return_value=2)
+    @patch("pokepoke.agents.parallel.clear_runtime_parallel_limits")
+    @patch("pokepoke.agents.parallel.set_runtime_parallel_limits")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.is_shutting_down", return_value=False)
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items")
+    @patch("pokepoke.agents.parallel.select_multiple_items")
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.process_work_item")
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.get_effective_max_agents", return_value=2)
     def test_processes_item_and_exits(
         self, mock_max, mock_sleep, mock_process, mock_claimable,
         mock_select, mock_ready, mock_repo, mock_stop,

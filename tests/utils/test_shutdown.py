@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from pokepoke.shutdown import (
+from pokepoke.utils.shutdown import (
     request_shutdown,
     request_shutdown_from_signal,
     start_shutdown_monitor,
@@ -30,7 +30,7 @@ from pokepoke.shutdown import (
 def _reset_shutdown():
     """Reset shutdown state before each test."""
     reset()
-    import pokepoke.shutdown as _mod
+    import pokepoke.utils.shutdown as _mod
     _mod._active_agent_count = 0
     _mod._executor = None
     yield
@@ -53,13 +53,13 @@ class TestIsShuttingDown:
 class TestRequestShutdown:
     """Tests for request_shutdown()."""
 
-    @patch("pokepoke.shutdown.threading.Thread")
+    @patch("pokepoke.utils.shutdown.threading.Thread")
     def test_sets_event(self, mock_thread_cls):
         mock_thread_cls.return_value.start = lambda: None
         request_shutdown()
         assert _shutdown_event.is_set()
 
-    @patch("pokepoke.shutdown.threading.Thread")
+    @patch("pokepoke.utils.shutdown.threading.Thread")
     def test_starts_watchdog(self, mock_thread_cls):
         mock_thread_cls.return_value.start = lambda: None
         request_shutdown()
@@ -68,7 +68,7 @@ class TestRequestShutdown:
         assert call_kwargs.kwargs["daemon"] is True
         assert call_kwargs.kwargs["name"] == "shutdown-watchdog"
 
-    @patch("pokepoke.shutdown.threading.Thread")
+    @patch("pokepoke.utils.shutdown.threading.Thread")
     def test_idempotent(self, mock_thread_cls):
         """Calling request_shutdown twice only starts one watchdog."""
         mock_thread_cls.return_value.start = lambda: None
@@ -87,7 +87,7 @@ class TestRequestShutdownFromSignal:
 
     def test_does_not_acquire_agent_lock(self):
         """Signal-safe path must not touch _agent_count_lock."""
-        import pokepoke.shutdown as mod
+        import pokepoke.utils.shutdown as mod
 
         # Hold the lock in this thread to prove the signal-safe path
         # does not try to acquire it (which would deadlock).
@@ -97,7 +97,7 @@ class TestRequestShutdownFromSignal:
 
     def test_does_not_create_threads(self):
         """Signal-safe path must not create threads."""
-        with patch("pokepoke.shutdown.threading.Thread") as mock_thread_cls:
+        with patch("pokepoke.utils.shutdown.threading.Thread") as mock_thread_cls:
             request_shutdown_from_signal()
             mock_thread_cls.assert_not_called()
 
@@ -105,14 +105,14 @@ class TestRequestShutdownFromSignal:
 class TestCoordinateShutdown:
     """Tests for _coordinate_shutdown() — idempotent coordination."""
 
-    @patch("pokepoke.shutdown.threading.Thread")
+    @patch("pokepoke.utils.shutdown.threading.Thread")
     def test_runs_once(self, mock_thread_cls):
         mock_thread_cls.return_value.start = lambda: None
         _coordinate_shutdown()
         _coordinate_shutdown()
         assert mock_thread_cls.call_count == 1
 
-    @patch("pokepoke.shutdown.threading.Thread")
+    @patch("pokepoke.utils.shutdown.threading.Thread")
     def test_starts_watchdog(self, mock_thread_cls):
         mock_thread_cls.return_value.start = lambda: None
         _coordinate_shutdown()
@@ -125,7 +125,7 @@ class TestStartShutdownMonitor:
 
     def test_monitor_calls_coordinate_on_event(self):
         """Monitor thread should call _coordinate_shutdown when event fires."""
-        with patch("pokepoke.shutdown._coordinate_shutdown") as mock_coord:
+        with patch("pokepoke.utils.shutdown._coordinate_shutdown") as mock_coord:
             start_shutdown_monitor()
             # Signal shutdown
             _shutdown_event.set()
@@ -229,7 +229,7 @@ class TestAgentRegistration:
         register_agent()
         register_agent()
         register_agent()
-        with patch("pokepoke.shutdown.threading.Thread") as mock_thread_cls:
+        with patch("pokepoke.utils.shutdown.threading.Thread") as mock_thread_cls:
             mock_thread_cls.return_value.start = lambda: None
             request_shutdown()
             call_args = mock_thread_cls.call_args
@@ -242,25 +242,25 @@ class TestSetExecutor:
     """Tests for set_executor."""
 
     def test_set_executor_stores_value(self):
-        import pokepoke.shutdown as mod
+        import pokepoke.utils.shutdown as mod
         mock_executor = object()
         set_executor(mock_executor)
         assert mod._executor is mock_executor
 
     def test_set_executor_to_none(self):
-        import pokepoke.shutdown as mod
+        import pokepoke.utils.shutdown as mod
         set_executor(object())
         set_executor(None)
         assert mod._executor is None
 
-    @patch("pokepoke.shutdown.threading.Thread")
+    @patch("pokepoke.utils.shutdown.threading.Thread")
     def test_shutdown_calls_executor_shutdown(self, mock_thread_cls):
         """request_shutdown shuts down the executor if set."""
         mock_thread_cls.return_value.start = lambda: None
-        mock_exec = patch("pokepoke.shutdown._executor").start()
+        mock_exec = patch("pokepoke.utils.shutdown._executor").start()
         mock_exec.is_set = False
 
-        import pokepoke.shutdown as mod
+        import pokepoke.utils.shutdown as mod
         mock_executor = type("FakeExecutor", (), {
             "shutdown": lambda self, wait=True, cancel_futures=False: None
         })()
@@ -274,11 +274,11 @@ class TestSetExecutor:
 class TestWatchdogThread:
     """Tests for _watchdog_thread."""
 
-    @patch("pokepoke.shutdown._thread.interrupt_main")
-    @patch("pokepoke.shutdown.merge_lock_active", return_value=False)
-    @patch("pokepoke.shutdown.time.sleep")
+    @patch("pokepoke.utils.shutdown._thread.interrupt_main")
+    @patch("pokepoke.utils.shutdown.merge_lock_active", return_value=False)
+    @patch("pokepoke.utils.shutdown.time.sleep")
     def test_force_exits_when_still_shutting_down(self, mock_sleep, _mock_lock, mock_interrupt):
-        from pokepoke.shutdown import _watchdog_thread
+        from pokepoke.utils.shutdown import _watchdog_thread
 
         _shutdown_event.set()
         _watchdog_thread(1.0)
@@ -286,10 +286,10 @@ class TestWatchdogThread:
         mock_sleep.assert_called_once_with(1.0)
         mock_interrupt.assert_called_once()
 
-    @patch("pokepoke.shutdown._thread.interrupt_main")
-    @patch("pokepoke.shutdown.time.sleep")
+    @patch("pokepoke.utils.shutdown._thread.interrupt_main")
+    @patch("pokepoke.utils.shutdown.time.sleep")
     def test_no_exit_when_not_shutting_down(self, mock_sleep, mock_interrupt):
-        from pokepoke.shutdown import _watchdog_thread
+        from pokepoke.utils.shutdown import _watchdog_thread
 
         # Don't set shutdown event
         _watchdog_thread(1.0)
@@ -297,11 +297,11 @@ class TestWatchdogThread:
         mock_sleep.assert_called_once_with(1.0)
         mock_interrupt.assert_not_called()
 
-    @patch("pokepoke.shutdown._thread.interrupt_main")
-    @patch("pokepoke.shutdown.merge_lock_active")
-    @patch("pokepoke.shutdown.time.sleep")
+    @patch("pokepoke.utils.shutdown._thread.interrupt_main")
+    @patch("pokepoke.utils.shutdown.merge_lock_active")
+    @patch("pokepoke.utils.shutdown.time.sleep")
     def test_waits_for_merge_lock_before_exit(self, mock_sleep, mock_lock, mock_interrupt):
-        from pokepoke.shutdown import _watchdog_thread
+        from pokepoke.utils.shutdown import _watchdog_thread
 
         _shutdown_event.set()
         # First call: lock active; subsequent call: lock released
@@ -314,13 +314,13 @@ class TestWatchdogThread:
         mock_sleep.assert_any_call(1.0)
         mock_interrupt.assert_called_once()
 
-    @patch("pokepoke.shutdown._thread.interrupt_main")
-    @patch("pokepoke.shutdown.merge_lock_active")
-    @patch("pokepoke.shutdown.time.sleep")
-    @patch("pokepoke.shutdown.time.monotonic")
+    @patch("pokepoke.utils.shutdown._thread.interrupt_main")
+    @patch("pokepoke.utils.shutdown.merge_lock_active")
+    @patch("pokepoke.utils.shutdown.time.sleep")
+    @patch("pokepoke.utils.shutdown.time.monotonic")
     def test_merge_lock_wait_cap(self, mock_monotonic, mock_sleep, mock_lock, mock_interrupt):
         """Watchdog interrupts after merge lock wait cap even if lock is still held."""
-        from pokepoke.shutdown import _watchdog_thread
+        from pokepoke.utils.shutdown import _watchdog_thread
 
         _shutdown_event.set()
         # Lock is always active
@@ -332,12 +332,12 @@ class TestWatchdogThread:
 
         mock_interrupt.assert_called_once()
 
-    @patch("pokepoke.shutdown._thread.interrupt_main")
-    @patch("pokepoke.shutdown.merge_lock_active")
-    @patch("pokepoke.shutdown.time.sleep")
+    @patch("pokepoke.utils.shutdown._thread.interrupt_main")
+    @patch("pokepoke.utils.shutdown.merge_lock_active")
+    @patch("pokepoke.utils.shutdown.time.sleep")
     def test_merge_lock_exception_falls_through(self, mock_sleep, mock_lock, mock_interrupt):
         """Watchdog still interrupts if merge_lock_active raises an exception."""
-        from pokepoke.shutdown import _watchdog_thread
+        from pokepoke.utils.shutdown import _watchdog_thread
 
         _shutdown_event.set()
         mock_lock.side_effect = RuntimeError("file lock broken")
@@ -350,7 +350,7 @@ class TestWatchdogThread:
 class TestMergeQueueShutdown:
     """Tests for merge queue shutdown coordination in request_shutdown."""
 
-    @patch("pokepoke.shutdown.threading.Thread")
+    @patch("pokepoke.utils.shutdown.threading.Thread")
     def test_shutdown_signals_merge_queue_stop(self, mock_thread_cls):
         """request_shutdown non-blockingly signals the merge queue to stop."""
         mock_thread_cls.return_value.start = lambda: None
@@ -365,11 +365,11 @@ class TestMergeQueueShutdown:
             },
         )()
 
-        with patch("pokepoke.merge_queue.get_merge_queue", return_value=mock_mq):
+        with patch("pokepoke.git.merge_queue.get_merge_queue", return_value=mock_mq):
             request_shutdown()
             assert signal_stop_calls == [True]
 
-    @patch("pokepoke.shutdown.threading.Thread")
+    @patch("pokepoke.utils.shutdown.threading.Thread")
     def test_shutdown_skips_merge_queue_if_not_running(self, mock_thread_cls):
         """request_shutdown does not signal merge queue if queue not running."""
         mock_thread_cls.return_value.start = lambda: None
@@ -384,15 +384,15 @@ class TestMergeQueueShutdown:
             },
         )()
 
-        with patch("pokepoke.merge_queue.get_merge_queue", return_value=mock_mq):
+        with patch("pokepoke.git.merge_queue.get_merge_queue", return_value=mock_mq):
             request_shutdown()
             assert signal_stop_calls == []
 
-    @patch("pokepoke.shutdown.threading.Thread")
+    @patch("pokepoke.utils.shutdown.threading.Thread")
     def test_shutdown_handles_merge_queue_exception(self, mock_thread_cls):
         """request_shutdown continues if merge queue raises."""
         mock_thread_cls.return_value.start = lambda: None
-        with patch("pokepoke.merge_queue.get_merge_queue", side_effect=RuntimeError("no queue")):
+        with patch("pokepoke.git.merge_queue.get_merge_queue", side_effect=RuntimeError("no queue")):
             request_shutdown()
             # Should still start the watchdog thread
             assert any(
@@ -412,7 +412,7 @@ class TestHasActiveAgents:
         assert has_active_agents() is True
 
     def test_true_when_executor_set(self):
-        import pokepoke.shutdown as mod
+        import pokepoke.utils.shutdown as mod
         mock_executor = object()
         mod._executor = mock_executor
         assert has_active_agents() is True

@@ -1,7 +1,7 @@
 
 import logging
 from unittest.mock import Mock, patch
-from pokepoke.work_item_selection import (
+from pokepoke.orchestration.work_item_selection import (
     select_work_item,
     _is_human_required,
     interactive_selection,
@@ -41,13 +41,13 @@ class TestSelectWorkItem:
 
     @patch('builtins.print')
     def test_empty_ready_items(self, mock_print: Mock, caplog):
-        with caplog.at_level(logging.DEBUG, logger="pokepoke.work_item_selection"):
+        with caplog.at_level(logging.DEBUG, logger="pokepoke.orchestration.work_item_selection"):
             result = select_work_item([], interactive=False)
         assert result is None
         assert "No ready work" in caplog.text
 
     @patch('builtins.print')
-    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
     def test_skip_ids_filters_items(self, mock_select: Mock, mock_print: Mock):
         items = [_make_item(id="a"), _make_item(id="b")]
         mock_select.return_value = items[1]
@@ -61,47 +61,47 @@ class TestSelectWorkItem:
     @patch('builtins.print')
     def test_all_items_skipped(self, mock_print: Mock, caplog):
         items = [_make_item(id="a")]
-        with caplog.at_level(logging.DEBUG, logger="pokepoke.work_item_selection"):
+        with caplog.at_level(logging.DEBUG, logger="pokepoke.orchestration.work_item_selection"):
             result = select_work_item(items, interactive=False, skip_ids={"a"})
         assert result is None
         assert "previously skipped" in caplog.text
 
     @patch('builtins.print')
-    @patch('pokepoke.work_item_selection.is_assigned_to_current_user', return_value=False)
+    @patch('pokepoke.orchestration.work_item_selection.is_assigned_to_current_user', return_value=False)
     def test_filters_items_assigned_to_other_agents(self, _mock_assigned: Mock, mock_print: Mock, caplog):
         items = [_make_item(id="a")]
-        with caplog.at_level(logging.DEBUG, logger="pokepoke.work_item_selection"):
+        with caplog.at_level(logging.DEBUG, logger="pokepoke.orchestration.work_item_selection"):
             result = select_work_item(items, interactive=False)
         assert result is None
         assert "Skipped" in caplog.text
 
     @patch('builtins.print')
-    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
-    @patch('pokepoke.work_item_selection.is_assigned_to_current_user', return_value=True)
-    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
+    @patch('pokepoke.orchestration.work_item_selection.is_assigned_to_current_user', return_value=True)
+    @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
     def test_filters_human_required_items(self, mock_select: Mock, _m1: Mock, _m2: Mock, mock_print: Mock, caplog):
         human = _make_item(id="h", labels=["human-required"])
         normal = _make_item(id="n")
         mock_select.return_value = normal
-        with caplog.at_level(logging.DEBUG, logger="pokepoke.work_item_selection"):
+        with caplog.at_level(logging.DEBUG, logger="pokepoke.orchestration.work_item_selection"):
             result = select_work_item([human, normal], interactive=False)
         assert result is normal
         assert "human-required" in caplog.text
 
     @patch('builtins.print')
-    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=True)
-    @patch('pokepoke.work_item_selection.is_assigned_to_current_user', return_value=True)
+    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=True)
+    @patch('pokepoke.orchestration.work_item_selection.is_assigned_to_current_user', return_value=True)
     def test_filters_items_with_unmet_dependencies(self, _m1: Mock, _m2: Mock, mock_print: Mock, caplog):
         items = [_make_item(id="a")]
-        with caplog.at_level(logging.DEBUG, logger="pokepoke.work_item_selection"):
+        with caplog.at_level(logging.DEBUG, logger="pokepoke.orchestration.work_item_selection"):
             result = select_work_item(items, interactive=False)
         assert result is None
         assert "blocking dependencies" in caplog.text
 
     @patch('builtins.print')
     @patch('builtins.input')
-    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
-    @patch('pokepoke.work_item_selection.is_assigned_to_current_user', return_value=True)
+    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
+    @patch('pokepoke.orchestration.work_item_selection.is_assigned_to_current_user', return_value=True)
     def test_interactive_long_description_truncated(self, _m1: Mock, _m2: Mock, mock_input: Mock, mock_print: Mock):
         """Items with descriptions > 80 chars get truncated with '...'."""
         long_desc = "A" * 100
@@ -145,7 +145,7 @@ class TestAutonomousSelection:
     """Tests for autonomous_selection."""
 
     @patch('builtins.print')
-    @patch('pokepoke.work_item_selection.select_next_hierarchical_item', return_value=None)
+    @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item', return_value=None)
     def test_returns_none_when_no_selection(self, _mock_select: Mock, _mock_print: Mock):
         result = autonomous_selection([_make_item()])
         assert result is None
@@ -160,18 +160,18 @@ class TestSelectMultipleItems:
     def test_zero_count_returns_empty(self):
         assert select_multiple_items([_make_item()], 0) == []
 
-    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
-    @patch('pokepoke.work_item_selection.is_assigned_to_current_user', return_value=True)
-    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
+    @patch('pokepoke.orchestration.work_item_selection.is_assigned_to_current_user', return_value=True)
+    @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
     def test_selects_up_to_count(self, mock_select: Mock, _m1: Mock, _m2: Mock):
         a, b = _make_item(id="a"), _make_item(id="b")
         mock_select.side_effect = [a, b]
         result = select_multiple_items([a, b], 2)
         assert len(result) == 2
 
-    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
-    @patch('pokepoke.work_item_selection.is_assigned_to_current_user', return_value=True)
-    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
+    @patch('pokepoke.orchestration.work_item_selection.is_assigned_to_current_user', return_value=True)
+    @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
     def test_skips_claimed_ids(self, mock_select: Mock, _m1: Mock, _m2: Mock):
         a, b = _make_item(id="a"), _make_item(id="b")
         mock_select.return_value = b
@@ -180,14 +180,14 @@ class TestSelectMultipleItems:
         call_args = mock_select.call_args[0][0]
         assert all(i.id != "a" for i in call_args)
 
-    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
-    @patch('pokepoke.work_item_selection.is_assigned_to_current_user', return_value=True)
-    @patch('pokepoke.work_item_selection.select_next_hierarchical_item', return_value=None)
+    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
+    @patch('pokepoke.orchestration.work_item_selection.is_assigned_to_current_user', return_value=True)
+    @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item', return_value=None)
     def test_returns_empty_when_hierarchical_returns_none(self, _m1: Mock, _m2: Mock, _m3: Mock):
         assert select_multiple_items([_make_item()], 3) == []
 
-    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=True)
-    @patch('pokepoke.work_item_selection.is_assigned_to_current_user', return_value=True)
+    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=True)
+    @patch('pokepoke.orchestration.work_item_selection.is_assigned_to_current_user', return_value=True)
     def test_filters_items_with_blocking_deps(self, _m1: Mock, _m2: Mock):
         result = select_multiple_items([_make_item()], 1)
         assert result == []
@@ -197,7 +197,7 @@ class TestWorkItemSelectionOutput:
     """Test output behavior of work item selection."""
 
     @patch('builtins.print')
-    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
     def test_autonomous_mode_suppresses_list_output(
         self,
         mock_select_hierarchical: Mock,
@@ -278,10 +278,10 @@ class TestWorkItemSelectionOutput:
 class TestInteractiveSelectionShutdown:
     """Test interactive_selection exits when shutdown is requested."""
 
-    @patch('pokepoke.work_item_selection.is_shutting_down', return_value=True)
+    @patch('pokepoke.orchestration.work_item_selection.is_shutting_down', return_value=True)
     def test_returns_none_on_shutdown(self, mock_shutdown):
         """Covers line 124: return None when is_shutting_down() is True."""
-        from pokepoke.work_item_selection import interactive_selection
+        from pokepoke.orchestration.work_item_selection import interactive_selection
         items = [
             BeadsWorkItem(
                 id="task-1", title="Task", description="",

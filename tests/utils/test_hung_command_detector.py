@@ -2,7 +2,7 @@
 
 
 
-from pokepoke.hung_command_detector import HungCommandDetector, ShellReadState
+from pokepoke.utils.hung_command_detector import HungCommandDetector, ShellReadState
 
 
 class TestShellReadState:

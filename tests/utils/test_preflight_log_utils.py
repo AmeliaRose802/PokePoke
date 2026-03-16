@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from pokepoke.preflight_log_utils import (
+from pokepoke.utils.preflight_log_utils import (
     format_preflight_errors,
     get_preflight_fail_count,
     reset_preflight_rate_limit,

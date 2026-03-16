@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pokepoke.preflight_checks import (
+from pokepoke.utils.preflight_checks import (
     ErrorSeverity,
     check_git_status,
     check_worktree_creation,
@@ -45,9 +45,9 @@ class TestCheckGitStatus:
 
     def test_untracked_files_reported(self, fake_repo, health_config):
         mock_result = MagicMock(returncode=0, stdout="?? new_file.py\n")
-        with patch("pokepoke.preflight_checks.has_uncommitted_changes", return_value=True), \
+        with patch("pokepoke.utils.preflight_checks.has_uncommitted_changes", return_value=True), \
              patch("subprocess.run", return_value=mock_result), \
-             patch("pokepoke.preflight_checks.categorize_git_changes", return_value={
+             patch("pokepoke.utils.preflight_checks.categorize_git_changes", return_value={
                  "other": [], "beads": [], "worktree": [], "untracked": ["new_file.py"],
              }):
             errors, warnings = check_git_status(fake_repo, health_config)
@@ -57,9 +57,9 @@ class TestCheckGitStatus:
 
     def test_other_and_untracked_combined(self, fake_repo, health_config):
         mock_result = MagicMock(returncode=0, stdout="M a.py\n?? b.py\n")
-        with patch("pokepoke.preflight_checks.has_uncommitted_changes", return_value=True), \
+        with patch("pokepoke.utils.preflight_checks.has_uncommitted_changes", return_value=True), \
              patch("subprocess.run", return_value=mock_result), \
-             patch("pokepoke.preflight_checks.categorize_git_changes", return_value={
+             patch("pokepoke.utils.preflight_checks.categorize_git_changes", return_value={
                  "other": ["a.py"], "beads": [], "worktree": [], "untracked": ["b.py"],
              }):
             errors, _ = check_git_status(fake_repo, health_config)
@@ -67,7 +67,7 @@ class TestCheckGitStatus:
         assert status_errors[0].details["total_count"] == 2
 
     def test_no_uncommitted_changes(self, fake_repo, health_config):
-        with patch("pokepoke.preflight_checks.has_uncommitted_changes", return_value=False):
+        with patch("pokepoke.utils.preflight_checks.has_uncommitted_changes", return_value=False):
             errors, warnings = check_git_status(fake_repo, health_config)
         assert len(errors) == 0
 
@@ -77,22 +77,22 @@ class TestCheckGitStatus:
         assert any("Not a git repository" in e.message for e in errors)
 
     def test_called_process_error(self, fake_repo, health_config):
-        with patch("pokepoke.preflight_checks.has_uncommitted_changes", return_value=True), \
+        with patch("pokepoke.utils.preflight_checks.has_uncommitted_changes", return_value=True), \
              patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "git", stderr="bad")):
             errors, _ = check_git_status(fake_repo, health_config)
         assert any(e.severity == ErrorSeverity.ENVIRONMENTAL for e in errors)
 
     def test_timeout_expired(self, fake_repo, health_config):
-        with patch("pokepoke.preflight_checks.has_uncommitted_changes", return_value=True), \
+        with patch("pokepoke.utils.preflight_checks.has_uncommitted_changes", return_value=True), \
              patch("subprocess.run", side_effect=subprocess.TimeoutExpired("git", 10)):
             errors, _ = check_git_status(fake_repo, health_config)
         assert any("timed out" in e.message.lower() for e in errors)
 
     def test_beads_changes_warning(self, fake_repo, health_config):
         mock_result = MagicMock(returncode=0, stdout=".beads/issues.jsonl\n")
-        with patch("pokepoke.preflight_checks.has_uncommitted_changes", return_value=True), \
+        with patch("pokepoke.utils.preflight_checks.has_uncommitted_changes", return_value=True), \
              patch("subprocess.run", return_value=mock_result), \
-             patch("pokepoke.preflight_checks.categorize_git_changes", return_value={
+             patch("pokepoke.utils.preflight_checks.categorize_git_changes", return_value={
                  "other": [], "beads": [".beads/issues.jsonl"], "worktree": [], "untracked": [],
              }):
             errors, warnings = check_git_status(fake_repo, health_config)
@@ -107,7 +107,7 @@ class TestCheckWorktreeCreation:
     def test_success(self, fake_repo, health_config):
         mock_uuid_val = MagicMock()
         mock_uuid_val.hex = "abcd1234xxxxxxxx"
-        with patch("pokepoke.preflight_checks.uuid.uuid4", return_value=mock_uuid_val), \
+        with patch("pokepoke.utils.preflight_checks.uuid.uuid4", return_value=mock_uuid_val), \
              patch("subprocess.run", return_value=MagicMock(returncode=0)):
             # Pre-create the directory the function expects to find
             wt_dir = fake_repo / "worktrees" / "test-health-check-abcd1234"
@@ -142,7 +142,7 @@ class TestCheckLockAvailability:
         lock_dir.mkdir()
         lock_file = lock_dir / "orchestrator.lock"
         lock_file.write_text("12345")
-        with patch("pokepoke.preflight_checks.is_lock_stale", return_value=(True, {"reason": "old"})):
+        with patch("pokepoke.utils.preflight_checks.is_lock_stale", return_value=(True, {"reason": "old"})):
             errors, warnings = check_lock_availability(fake_repo, health_config)
         assert any("Stale lock" in w for w in warnings)
 
@@ -151,7 +151,7 @@ class TestCheckLockAvailability:
         lock_dir.mkdir()
         lock_file = lock_dir / "orchestrator.lock"
         lock_file.write_text("12345")
-        with patch("pokepoke.preflight_checks.is_lock_stale",
+        with patch("pokepoke.utils.preflight_checks.is_lock_stale",
                     return_value=(False, {"reason": "process_still_running"})):
             errors, _ = check_lock_availability(fake_repo, health_config)
         assert any(e.check_name == "lock_availability_check" for e in errors)
@@ -192,7 +192,7 @@ class TestCheckDiskSpace:
 
 class TestCheckRepositoryIntegrity:
     def test_no_worktrees_dir(self, fake_repo, health_config):
-        with patch("pokepoke.preflight_checks.list_worktrees", return_value=[]):
+        with patch("pokepoke.utils.preflight_checks.list_worktrees", return_value=[]):
             errors, warnings = check_repository_integrity(fake_repo, health_config)
         assert len(errors) == 0
 
@@ -200,7 +200,7 @@ class TestCheckRepositoryIntegrity:
         wt_dir = fake_repo / "worktrees"
         wt_dir.mkdir()
         (wt_dir / "orphan-1").mkdir()
-        with patch("pokepoke.preflight_checks.list_worktrees", return_value=[]):
+        with patch("pokepoke.utils.preflight_checks.list_worktrees", return_value=[]):
             errors, warnings = check_repository_integrity(fake_repo, health_config)
         assert len(errors) == 0  # 1 < max of 2
         assert any("orphaned" in w.lower() for w in warnings)
@@ -210,7 +210,7 @@ class TestCheckRepositoryIntegrity:
         wt_dir.mkdir()
         for i in range(5):
             (wt_dir / f"orphan-{i}").mkdir()
-        with patch("pokepoke.preflight_checks.list_worktrees", return_value=[]):
+        with patch("pokepoke.utils.preflight_checks.list_worktrees", return_value=[]):
             errors, _ = check_repository_integrity(fake_repo, health_config)
         assert any("Too many orphaned" in e.message for e in errors)
 
@@ -230,7 +230,7 @@ class TestIsLockStale:
     def test_recent_lock_with_dead_process(self, tmp_path):
         lock = tmp_path / "test.lock"
         lock.write_text("99999")
-        with patch("pokepoke.preflight_checks.is_process_running", return_value=False):
+        with patch("pokepoke.utils.preflight_checks.is_process_running", return_value=False):
             stale, details = is_lock_stale(lock)
         assert stale is True
         assert details["reason"] == "process_not_running"
@@ -238,7 +238,7 @@ class TestIsLockStale:
     def test_recent_lock_with_live_process(self, tmp_path):
         lock = tmp_path / "test.lock"
         lock.write_text("99999")
-        with patch("pokepoke.preflight_checks.is_process_running", return_value=True):
+        with patch("pokepoke.utils.preflight_checks.is_process_running", return_value=True):
             stale, details = is_lock_stale(lock)
         assert stale is False
 

@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pokepoke.preflight_checks import HealthCheckError
-from pokepoke.preflight_repair import (
+from pokepoke.utils.preflight_checks import HealthCheckError
+from pokepoke.utils.preflight_repair import (
     attempt_repair,
     repair_git_status,
     repair_lock_availability,
@@ -67,7 +67,7 @@ class TestRepairGitStatus:
     @pytest.mark.allow_git_repair
     def test_success_path_commit_succeeds(self, git_status_error, repo_path):
         commit_result = MagicMock(returncode=0)
-        with patch("pokepoke.preflight_repair.subprocess.run") as mock_run:
+        with patch("pokepoke.utils.preflight_repair.subprocess.run") as mock_run:
             # First call: git add -u, second call: git commit
             mock_run.side_effect = [MagicMock(), commit_result]
             assert repair_git_status(git_status_error, repo_path) is True
@@ -81,8 +81,8 @@ class TestRepairGitStatus:
     @pytest.mark.allow_git_repair
     def test_failed_commit_invokes_cleanup(self, git_status_error, repo_path):
         commit_result = MagicMock(returncode=1, stderr="hook failed")
-        with patch("pokepoke.preflight_repair.subprocess.run") as mock_run, \
-             patch("pokepoke.preflight_repair._invoke_preflight_cleanup", return_value=True) as mock_cleanup:
+        with patch("pokepoke.utils.preflight_repair.subprocess.run") as mock_run, \
+             patch("pokepoke.utils.preflight_repair._invoke_preflight_cleanup", return_value=True) as mock_cleanup:
             mock_run.side_effect = [MagicMock(), commit_result]
             assert repair_git_status(git_status_error, repo_path) is True
 
@@ -91,8 +91,8 @@ class TestRepairGitStatus:
     @pytest.mark.allow_git_repair
     def test_failed_commit_cleanup_returns_false(self, git_status_error, repo_path):
         commit_result = MagicMock(returncode=1, stderr="")
-        with patch("pokepoke.preflight_repair.subprocess.run") as mock_run, \
-             patch("pokepoke.preflight_repair._invoke_preflight_cleanup", return_value=False) as mock_cleanup:
+        with patch("pokepoke.utils.preflight_repair.subprocess.run") as mock_run, \
+             patch("pokepoke.utils.preflight_repair._invoke_preflight_cleanup", return_value=False) as mock_cleanup:
             mock_run.side_effect = [MagicMock(), commit_result]
             assert repair_git_status(git_status_error, repo_path) is False
 
@@ -101,7 +101,7 @@ class TestRepairGitStatus:
 
     @pytest.mark.allow_git_repair
     def test_called_process_error_returns_false(self, git_status_error, repo_path):
-        with patch("pokepoke.preflight_repair.subprocess.run") as mock_run:
+        with patch("pokepoke.utils.preflight_repair.subprocess.run") as mock_run:
             mock_run.side_effect = subprocess.CalledProcessError(
                 128, "git", stderr="fatal error"
             )
@@ -109,7 +109,7 @@ class TestRepairGitStatus:
 
     @pytest.mark.allow_git_repair
     def test_general_exception_returns_false(self, git_status_error, repo_path):
-        with patch("pokepoke.preflight_repair.subprocess.run") as mock_run:
+        with patch("pokepoke.utils.preflight_repair.subprocess.run") as mock_run:
             mock_run.side_effect = OSError("disk failure")
             assert repair_git_status(git_status_error, repo_path) is False
 
@@ -126,7 +126,7 @@ class TestInvokePreflightCleanup:
         mock_bwi = MagicMock()
 
         with (
-            patch("pokepoke.cleanup_agents.invoke_cleanup_agent", mock_invoke_fn),
+            patch("pokepoke.agents.cleanup_agents.invoke_cleanup_agent", mock_invoke_fn),
             patch("pokepoke.types.BeadsWorkItem", mock_bwi),
         ):
             result = _invoke_preflight_cleanup(repo_path, "lint errors")
@@ -143,7 +143,7 @@ class TestInvokePreflightCleanup:
         mock_bwi = MagicMock()
 
         with (
-            patch("pokepoke.cleanup_agents.invoke_cleanup_agent", mock_invoke_fn),
+            patch("pokepoke.agents.cleanup_agents.invoke_cleanup_agent", mock_invoke_fn),
             patch("pokepoke.types.BeadsWorkItem", mock_bwi),
         ):
             result = _invoke_preflight_cleanup(repo_path, "test failure")
@@ -153,18 +153,18 @@ class TestInvokePreflightCleanup:
     @pytest.mark.allow_git_repair
     def test_import_error_returns_false(self, repo_path):
         import sys
-        saved_cleanup = sys.modules.get("pokepoke.cleanup_agents")
+        saved_cleanup = sys.modules.get("pokepoke.agents.cleanup_agents")
         saved_types = sys.modules.get("pokepoke.types")
         try:
-            sys.modules["pokepoke.cleanup_agents"] = None  # type: ignore[assignment]
+            sys.modules["pokepoke.agents.cleanup_agents"] = None  # type: ignore[assignment]
             sys.modules["pokepoke.types"] = None  # type: ignore[assignment]
             result = _invoke_preflight_cleanup(repo_path, "error msg")
             assert result is False
         finally:
             if saved_cleanup is not None:
-                sys.modules["pokepoke.cleanup_agents"] = saved_cleanup
+                sys.modules["pokepoke.agents.cleanup_agents"] = saved_cleanup
             else:
-                sys.modules.pop("pokepoke.cleanup_agents", None)
+                sys.modules.pop("pokepoke.agents.cleanup_agents", None)
             if saved_types is not None:
                 sys.modules["pokepoke.types"] = saved_types
             else:
@@ -211,7 +211,7 @@ class TestRepairRepositoryIntegrity:
             severity="recoverable",
             details={"orphaned_paths": [str(orphan)]},
         )
-        with patch("pokepoke.preflight_repair.shutil.rmtree") as mock_rm:
+        with patch("pokepoke.utils.preflight_repair.shutil.rmtree") as mock_rm:
             # rmtree does nothing (ignore_errors=True), dir still exists
             mock_rm.return_value = None
             assert repair_repository_integrity(error) is False
@@ -234,7 +234,7 @@ class TestRepairRepositoryIntegrity:
             severity="recoverable",
             details={"orphaned_paths": ["some/path"]},
         )
-        with patch("pokepoke.preflight_repair.Path") as mock_path_cls:
+        with patch("pokepoke.utils.preflight_repair.Path") as mock_path_cls:
             mock_path_cls.side_effect = RuntimeError("unexpected")
             assert repair_repository_integrity(error) is False
 
@@ -255,7 +255,7 @@ class TestRepairLockAvailability:
             severity="recoverable",
             details={"lock_file": str(lock)},
         )
-        with patch("pokepoke.preflight_repair.is_lock_stale", return_value=(True, {"reason": "old"})):
+        with patch("pokepoke.utils.preflight_repair.is_lock_stale", return_value=(True, {"reason": "old"})):
             assert repair_lock_availability(error, tmp_path) is True
         assert not lock.exists()
 
@@ -279,7 +279,7 @@ class TestRepairLockAvailability:
             severity="recoverable",
             details={"lock_file": str(lock)},
         )
-        with patch("pokepoke.preflight_repair.is_lock_stale", return_value=(False, {"reason": "running"})):
+        with patch("pokepoke.utils.preflight_repair.is_lock_stale", return_value=(False, {"reason": "running"})):
             assert repair_lock_availability(error, tmp_path) is False
         assert lock.exists()
 
@@ -301,7 +301,7 @@ class TestRepairLockAvailability:
             severity="recoverable",
             details={"lock_file": str(tmp_path / "lock")},
         )
-        with patch("pokepoke.preflight_repair.Path") as mock_path_cls:
+        with patch("pokepoke.utils.preflight_repair.Path") as mock_path_cls:
             mock_path_cls.side_effect = RuntimeError("unexpected")
             assert repair_lock_availability(error, tmp_path) is False
 
@@ -328,7 +328,7 @@ class TestAttemptRepair:
         health_result = MagicMock()
         health_result.get_recoverable_errors.return_value = [error]
 
-        with patch("pokepoke.preflight_repair.repair_git_status", return_value=True) as mock_fn:
+        with patch("pokepoke.utils.preflight_repair.repair_git_status", return_value=True) as mock_fn:
             result = attempt_repair(health_result, repo_path, {"max_repair_attempts": 1})
 
         assert result is True
@@ -346,7 +346,7 @@ class TestAttemptRepair:
         health_result = MagicMock()
         health_result.get_recoverable_errors.return_value = [error]
 
-        with patch("pokepoke.preflight_repair.repair_repository_integrity", return_value=True) as mock_fn:
+        with patch("pokepoke.utils.preflight_repair.repair_repository_integrity", return_value=True) as mock_fn:
             result = attempt_repair(health_result, repo_path, {"max_repair_attempts": 1})
 
         assert result is True
@@ -362,7 +362,7 @@ class TestAttemptRepair:
         health_result = MagicMock()
         health_result.get_recoverable_errors.return_value = [error]
 
-        with patch("pokepoke.preflight_repair.repair_lock_availability", return_value=True) as mock_fn:
+        with patch("pokepoke.utils.preflight_repair.repair_lock_availability", return_value=True) as mock_fn:
             result = attempt_repair(health_result, repo_path, {"max_repair_attempts": 1})
 
         assert result is True
@@ -391,8 +391,8 @@ class TestAttemptRepair:
         health_result = MagicMock()
         health_result.get_recoverable_errors.return_value = [error]
 
-        with patch("pokepoke.preflight_repair.repair_git_status", side_effect=[False, False, True]) as mock_fn, \
-             patch("pokepoke.preflight_repair.time.sleep") as mock_sleep:
+        with patch("pokepoke.utils.preflight_repair.repair_git_status", side_effect=[False, False, True]) as mock_fn, \
+             patch("pokepoke.utils.preflight_repair.time.sleep") as mock_sleep:
             result = attempt_repair(health_result, repo_path, {"max_repair_attempts": 3})
 
         assert result is True
@@ -412,8 +412,8 @@ class TestAttemptRepair:
         health_result = MagicMock()
         health_result.get_recoverable_errors.return_value = [error]
 
-        with patch("pokepoke.preflight_repair.repair_git_status", return_value=False), \
-             patch("pokepoke.preflight_repair.time.sleep"):
+        with patch("pokepoke.utils.preflight_repair.repair_git_status", return_value=False), \
+             patch("pokepoke.utils.preflight_repair.time.sleep"):
             result = attempt_repair(health_result, repo_path, {"max_repair_attempts": 3})
 
         assert result is False
@@ -431,8 +431,8 @@ class TestAttemptRepair:
         health_result = MagicMock()
         health_result.get_recoverable_errors.return_value = [error]
 
-        with patch("pokepoke.preflight_repair.repair_git_status", return_value=False) as mock_fn, \
-             patch("pokepoke.preflight_repair.time.sleep"):
+        with patch("pokepoke.utils.preflight_repair.repair_git_status", return_value=False) as mock_fn, \
+             patch("pokepoke.utils.preflight_repair.time.sleep"):
             attempt_repair(health_result, repo_path, {})
 
         assert mock_fn.call_count == 3

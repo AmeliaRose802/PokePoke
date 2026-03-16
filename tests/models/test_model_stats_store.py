@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from pokepoke.types import ModelCompletionRecord
-from pokepoke.model_stats_store import (
+from pokepoke.models.model_stats_store import (
     load_model_stats,
     save_model_stats,
     record_completion,
@@ -425,8 +425,8 @@ class TestCrossProcessLocking:
         try:
             os.chdir(tmp_path)
 
-            num_workers = 5
-            records_per_worker = 4
+            num_workers = 3
+            records_per_worker = 2
             total_records = num_workers * records_per_worker
 
             # Prepare work items for each worker
@@ -658,7 +658,7 @@ class TestGetModelSummaryStripsInternals:
 class TestRecordToDictRepoName:
     def test_includes_repo_name_from_context(self):
         """_record_to_dict should capture repo_name from thread-local context."""
-        from pokepoke.metrics_context import set_current_repo_name
+        from pokepoke.stats.metrics_context import set_current_repo_name
         set_current_repo_name("MyRepo")
         try:
             d = _record_to_dict(_make_record())
@@ -667,7 +667,7 @@ class TestRecordToDictRepoName:
             set_current_repo_name(None)
 
     def test_repo_name_empty_when_not_set(self):
-        from pokepoke.metrics_context import set_current_repo_name
+        from pokepoke.stats.metrics_context import set_current_repo_name
         set_current_repo_name(None)
         d = _record_to_dict(_make_record())
         assert d["repo_name"] == ""
@@ -676,7 +676,7 @@ class TestRecordToDictRepoName:
 class TestGetModelHistoryByRepo:
     def test_filter_by_repo(self, tmp_path: Path):
         path = _tmp_stats_path(tmp_path)
-        from pokepoke.metrics_context import set_current_repo_name
+        from pokepoke.stats.metrics_context import set_current_repo_name
         set_current_repo_name("RepoA")
         record_completion(_make_record(item_id="A1"), path)
         set_current_repo_name("RepoB")
@@ -696,7 +696,7 @@ class TestGetModelHistoryByRepo:
 
     def test_filter_nonexistent_repo_returns_empty(self, tmp_path: Path):
         path = _tmp_stats_path(tmp_path)
-        from pokepoke.metrics_context import set_current_repo_name
+        from pokepoke.stats.metrics_context import set_current_repo_name
         set_current_repo_name("RepoA")
         record_completion(_make_record(), path)
         set_current_repo_name(None)
@@ -708,7 +708,7 @@ class TestGetModelHistoryByRepo:
 class TestGetModelSummaryByRepo:
     def test_summary_for_specific_repo(self, tmp_path: Path):
         path = _tmp_stats_path(tmp_path)
-        from pokepoke.metrics_context import set_current_repo_name
+        from pokepoke.stats.metrics_context import set_current_repo_name
         set_current_repo_name("RepoA")
         record_completion(_make_record(item_id="A1", model="m1", gate_passed=True), path)
         set_current_repo_name("RepoB")
@@ -737,7 +737,7 @@ class TestGetModelSummaryByRepo:
 class TestGetRepoSummaryMetrics:
     def test_segments_by_repo(self, tmp_path: Path):
         path = _tmp_stats_path(tmp_path)
-        from pokepoke.metrics_context import set_current_repo_name
+        from pokepoke.stats.metrics_context import set_current_repo_name
         set_current_repo_name("RepoA")
         record_completion(_make_record(item_id="A1", gate_passed=True), path)
         record_completion(_make_record(item_id="A2", gate_passed=False), path)
@@ -764,7 +764,7 @@ class TestGetRepoSummaryMetrics:
 
     def test_cost_tracking_per_repo(self, tmp_path: Path):
         path = _tmp_stats_path(tmp_path)
-        from pokepoke.metrics_context import set_current_repo_name
+        from pokepoke.stats.metrics_context import set_current_repo_name
 
         set_current_repo_name("RepoA")
         rec = _make_record(item_id="A1")

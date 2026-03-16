@@ -1,0 +1,1 @@
+"""pokepoke.beads.beads subpackage."""

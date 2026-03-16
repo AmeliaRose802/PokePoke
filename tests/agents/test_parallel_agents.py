@@ -11,16 +11,16 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 
-from pokepoke.agent_context import clear_agent_name, get_agent_name, set_agent_name
-from pokepoke.logging_utils import RunLogger
-from pokepoke.merge_queue import MergeQueue, MergeResult, MergeStatus
-from pokepoke.parallel import (
+from pokepoke.agents.agent_context import clear_agent_name, get_agent_name, set_agent_name
+from pokepoke.utils.logging_utils import RunLogger
+from pokepoke.git.merge_queue import MergeQueue, MergeResult, MergeStatus
+from pokepoke.agents.parallel import (
     _collect_done_futures,
     _parallel_process_item,
     _build_worker_name,
     _snake_for_work_item,
 )
-from pokepoke.shutdown import (
+from pokepoke.utils.shutdown import (
     is_shutting_down,
     request_shutdown,
     reset,
@@ -69,7 +69,7 @@ class TestConcurrentAgentsNoInterference:
         item_a = _make_item("A-1", "Task A")
         item_b = _make_item("B-2", "Task B")
 
-        with patch("pokepoke.parallel.process_work_item", side_effect=fake_process):
+        with patch("pokepoke.agents.parallel.process_work_item", side_effect=fake_process):
             threads = [
                 threading.Thread(
                     target=_parallel_process_item,
@@ -112,7 +112,7 @@ class TestMergeQueueSerialization:
             time.sleep(0.1)  # simulate merge work
             return MergeResult(status=MergeStatus.SUCCESS, item_id=item.id)
 
-        with patch("pokepoke.merge_queue.MergeQueue._perform_merge", fake_merge, create=True):
+        with patch("pokepoke.git.merge_queue.MergeQueue._perform_merge", fake_merge, create=True):
             # We can't easily monkey-patch _perform_merge because the worker
             # loop calls the merge logic inline. Instead we test the queue's
             # serialization property: submit two items, both futures resolve.
@@ -132,8 +132,8 @@ class TestMergeQueueSerialization:
         # we'll test the queue property: both futures eventually resolve
         # This validates the queue processes items (serialization is by design
         # since it uses a single-threaded worker).
-        with patch("pokepoke.worktree_finalization.merge_worktree_to_dev") as mock_merge, \
-             patch("pokepoke.merge_queue._rebase_worktree", return_value=True):
+        with patch("pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev") as mock_merge, \
+             patch("pokepoke.git.merge_queue._rebase_worktree", return_value=True):
             mock_merge.return_value = True
 
             fut_a = mq2.submit(Path("/fake/a"), item_a)
@@ -157,7 +157,7 @@ class TestSingletonMaintenanceSkip:
 
     def test_singleton_agent_skips_when_locked(self) -> None:
         """If the file lock is already held, the agent should be skipped."""
-        from pokepoke.maintenance_scheduler import MaintenanceScheduler, _SINGLETON_AGENTS
+        from pokepoke.maintenance.maintenance_scheduler import MaintenanceScheduler, _SINGLETON_AGENTS
         from pokepoke.config import MaintenanceAgentConfig
 
         scheduler = MaintenanceScheduler()
@@ -170,7 +170,7 @@ class TestSingletonMaintenanceSkip:
         )
 
         # Simulate the file lock already being held
-        with patch("pokepoke.maintenance_scheduler.try_lock", return_value=None):
+        with patch("pokepoke.maintenance.maintenance_scheduler.try_lock", return_value=None):
             scheduler._maybe_run_agent(
                 agent_name, agent_cfg, Path("."), session_stats, run_logger,
             )
@@ -267,7 +267,7 @@ class TestMaxParallelAgentsConfig:
 
         items = [_make_item(f"CONC-{i}") for i in range(5)]
 
-        with patch("pokepoke.parallel.process_work_item", side_effect=fake_process):
+        with patch("pokepoke.agents.parallel.process_work_item", side_effect=fake_process):
             threads = []
             for i, item in enumerate(items):
                 semaphore.acquire()
@@ -302,7 +302,7 @@ class TestAgentContextInParallelProcessItem:
         semaphore = threading.Semaphore(0)
         logger = MagicMock(spec=RunLogger)
 
-        with patch("pokepoke.parallel.process_work_item", side_effect=fake_process):
+        with patch("pokepoke.agents.parallel.process_work_item", side_effect=fake_process):
             t = threading.Thread(
                 target=_parallel_process_item,
                 args=(_make_item(), logger, semaphore, "special-worker"),
@@ -327,10 +327,10 @@ class TestAgentContextInParallelProcessItem:
                 _make_item(), logger, semaphore, "temp-worker",
             )
             # After completion, thread-local should be cleared
-            from pokepoke.agent_context import _thread_local
+            from pokepoke.agents.agent_context import _thread_local
             post_name.append(getattr(_thread_local, "agent_name", "NOT_SET"))
 
-        with patch("pokepoke.parallel.process_work_item", side_effect=fake_process):
+        with patch("pokepoke.agents.parallel.process_work_item", side_effect=fake_process):
             t = threading.Thread(target=run_and_check)
             t.start()
             t.join(timeout=5)
@@ -456,7 +456,7 @@ class TestWorkerCounterIncrements:
         semaphore = threading.Semaphore(0)
         logger = MagicMock(spec=RunLogger)
 
-        with patch("pokepoke.parallel.process_work_item", side_effect=fake_process):
+        with patch("pokepoke.agents.parallel.process_work_item", side_effect=fake_process):
             threads: list[threading.Thread] = []
             for i, item in enumerate(items, start=1):
                 name = _build_worker_name(base_name, item.id, i)
@@ -500,8 +500,8 @@ class TestStressConcurrentMerges:
         n_agents = 8
         mq = MergeQueue()
 
-        with patch("pokepoke.worktree_finalization.merge_worktree_to_dev") as mock_merge, \
-             patch("pokepoke.merge_queue._rebase_worktree", return_value=True):
+        with patch("pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev") as mock_merge, \
+             patch("pokepoke.git.merge_queue._rebase_worktree", return_value=True):
             mock_merge.return_value = True
 
             futures = []

@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from pokepoke.copilot_sdk import _build_worker_env
-from pokepoke.prompts import PromptService
+from pokepoke.models.copilot_sdk import _build_worker_env
+from pokepoke.prompts.prompts import PromptService
 
 
 # ── Worker prompt templates that must NEVER instruct merging ──────────────
@@ -50,7 +50,9 @@ class TestWorkerPromptsDoNotInstructMerging:
     """Ensure worker prompts explicitly forbid merging and don't instruct it."""
 
     @pytest.fixture()
-    def prompt_service(self) -> PromptService:
+    def prompt_service(self, monkeypatch) -> PromptService:
+        import os
+        monkeypatch.chdir(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
         return PromptService()
 
     @pytest.mark.parametrize("template_name", WORKER_TEMPLATES)

@@ -212,8 +212,8 @@ try {
     foreach ($jobInfo in $staticJobs) {
         Write-Host "  • $($jobInfo.Name)... " -NoNewline -ForegroundColor Gray
         
-        # Wait with timeout - 60s per job max
-        $result = $jobInfo.Job | Wait-Job -Timeout 60 | Receive-Job
+        # Wait with timeout - 600s per job max (Windows Start-Job adds ~3x overhead)
+        $result = $jobInfo.Job | Wait-Job -Timeout 600 | Receive-Job
         
         if ($null -eq $result) {
             # Timeout occurred

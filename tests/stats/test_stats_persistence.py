@@ -11,8 +11,8 @@ from pokepoke.types import (
     ModelCompletionRecord,
     SessionStats,
 )
-from pokepoke.stats import save_session_stats_to_disk, serialize_session_stats
-from pokepoke.logging_utils import RunLogger
+from pokepoke.stats.stats import save_session_stats_to_disk, serialize_session_stats
+from pokepoke.utils.logging_utils import RunLogger
 
 
 # ── Helpers ──────────────────────────────────────────────────────────

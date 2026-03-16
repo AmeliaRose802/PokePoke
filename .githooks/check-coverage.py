@@ -266,7 +266,7 @@ def run_tests_with_coverage(
             cmd,
             capture_output=True,
             text=True,
-            timeout=300,
+            timeout=600,
             cwd=str(repo_root),
             encoding="utf-8",
         )

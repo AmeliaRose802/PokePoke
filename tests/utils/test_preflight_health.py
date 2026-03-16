@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from pokepoke.preflight_health import (
+from pokepoke.utils.preflight_health import (
     PreflightChecker, HealthCheckResult, HealthCheckError, ErrorSeverity,
     run_preflight_checks, attempt_self_repair
 )
@@ -25,17 +25,19 @@ def temp_repo(monkeypatch):
         monkeypatch.delenv(key, raising=False)
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        repo_path = Path(temp_dir)
+        repo_path = Path(temp_dir).resolve()
 
-        # Initialize git repo
-        subprocess.run(['git', 'init'], cwd=str(repo_path), check=True, capture_output=True)
-        subprocess.run(['git', 'config', 'user.name', 'Test User'], cwd=str(repo_path), check=True)
-        subprocess.run(['git', 'config', 'user.email', 'test@example.com'], cwd=str(repo_path), check=True)
+        # Initialize git repo with explicit environment to avoid inheriting
+        # GIT_DIR or other vars that interfere with temp repo creation.
+        git_env = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
+        subprocess.run(['git', 'init'], cwd=str(repo_path), check=True, capture_output=True, env=git_env)
+        subprocess.run(['git', 'config', 'user.name', 'Test User'], cwd=str(repo_path), check=True, capture_output=True, env=git_env)
+        subprocess.run(['git', 'config', 'user.email', 'test@example.com'], cwd=str(repo_path), check=True, capture_output=True, env=git_env)
 
         # Create initial commit
         (repo_path / 'README.md').write_text('# Test Repo')
-        subprocess.run(['git', 'add', 'README.md'], cwd=str(repo_path), check=True, capture_output=True)
-        subprocess.run(['git', 'commit', '-m', 'Initial commit'], cwd=str(repo_path), check=True, capture_output=True)
+        subprocess.run(['git', 'add', 'README.md'], cwd=str(repo_path), check=True, capture_output=True, env=git_env)
+        subprocess.run(['git', 'commit', '-m', 'Initial commit'], cwd=str(repo_path), check=True, capture_output=True, env=git_env)
 
         # Create worktrees directory
         (repo_path / 'worktrees').mkdir(exist_ok=True)
@@ -247,7 +249,7 @@ class TestPreflightChecker:
         assert is_stale
         assert details['reason'] == 'lock_too_old'
 
-    @patch('pokepoke.preflight_checks.is_process_running')
+    @patch('pokepoke.utils.preflight_checks.is_process_running')
     def test_is_lock_stale_dead_pid(self, mock_is_running, temp_repo):
         mock_is_running.return_value = False
 
@@ -291,7 +293,7 @@ class TestSelfRepair:
         assert add_call[0][0] == ['git', 'add', '-u']
 
     @pytest.mark.allow_git_repair
-    @patch('pokepoke.preflight_repair._invoke_preflight_cleanup', return_value=True)
+    @patch('pokepoke.utils.preflight_repair._invoke_preflight_cleanup', return_value=True)
     @patch('subprocess.run')
     def test_repair_git_status_cleanup_agent_on_commit_failure(
         self, mock_run, mock_cleanup, temp_repo, health_config
@@ -312,7 +314,7 @@ class TestSelfRepair:
         mock_cleanup.assert_called_once_with(temp_repo, 'hook failed')
 
     @pytest.mark.allow_git_repair
-    @patch('pokepoke.preflight_repair._invoke_preflight_cleanup', return_value=False)
+    @patch('pokepoke.utils.preflight_repair._invoke_preflight_cleanup', return_value=False)
     @patch('subprocess.run')
     def test_repair_git_status_cleanup_agent_failure(
         self, mock_run, mock_cleanup, temp_repo, health_config
@@ -384,7 +386,7 @@ class TestSelfRepair:
 class TestConvenienceFunctions:
     """Test convenience functions."""
 
-    @patch('pokepoke.preflight_health.PreflightChecker._check_worktree_creation', return_value=([], []))
+    @patch('pokepoke.utils.preflight_health.PreflightChecker._check_worktree_creation', return_value=([], []))
     def test_run_preflight_checks(self, mock_wt_check, temp_repo, health_config):
         result = run_preflight_checks(temp_repo, health_config)
 
@@ -436,8 +438,8 @@ class TestIntegrationScenarios:
         # Mock worktree creation to avoid flaky git operations under parallel xdist
         # Mock repair_git_status to prevent real git add -A / git commit against
         # the host repo (was causing auto-commits of unrelated staged files)
-        with patch('pokepoke.preflight_checks.list_worktrees', return_value=[]), \
-             patch('pokepoke.preflight_repair.repair_git_status', return_value=True):
+        with patch('pokepoke.utils.preflight_checks.list_worktrees', return_value=[]), \
+             patch('pokepoke.utils.preflight_repair.repair_git_status', return_value=True):
             checker = PreflightChecker(temp_repo, health_config)
             with patch.object(checker, '_check_worktree_creation', return_value=([], [])):
                 result = checker.run_all_checks()
@@ -507,7 +509,7 @@ class TestGitStatusEdgeCases:
         """Test that CalledProcessError during git status is handled."""
         checker = PreflightChecker(temp_repo, health_config)
 
-        with patch('pokepoke.preflight_checks.has_uncommitted_changes', return_value=True), \
+        with patch('pokepoke.utils.preflight_checks.has_uncommitted_changes', return_value=True), \
              patch('subprocess.run', side_effect=subprocess.CalledProcessError(1, 'git', stderr='bad')):
             errors, warnings = checker._check_git_status()
 
@@ -519,7 +521,7 @@ class TestGitStatusEdgeCases:
         """Test that TimeoutExpired during git status is handled."""
         checker = PreflightChecker(temp_repo, health_config)
 
-        with patch('pokepoke.preflight_checks.has_uncommitted_changes', return_value=True), \
+        with patch('pokepoke.utils.preflight_checks.has_uncommitted_changes', return_value=True), \
              patch('subprocess.run', side_effect=subprocess.TimeoutExpired('git', 10)):
             errors, warnings = checker._check_git_status()
 
@@ -532,9 +534,9 @@ class TestGitStatusEdgeCases:
         checker = PreflightChecker(temp_repo, health_config)
 
         mock_result = MagicMock(returncode=0, stdout='.beads/issues.jsonl\nworktrees/foo/bar.txt\n')
-        with patch('pokepoke.preflight_checks.has_uncommitted_changes', return_value=True), \
+        with patch('pokepoke.utils.preflight_checks.has_uncommitted_changes', return_value=True), \
              patch('subprocess.run', return_value=mock_result), \
-             patch('pokepoke.preflight_checks.categorize_git_changes', return_value={
+             patch('pokepoke.utils.preflight_checks.categorize_git_changes', return_value={
                  'other': [], 'beads': ['.beads/issues.jsonl'], 'worktree': ['worktrees/foo/bar.txt'], 'untracked': []
              }):
             errors, warnings = checker._check_git_status()
@@ -610,7 +612,7 @@ class TestLockAvailabilityEdgeCases:
         assert len(errors) == 1
         assert errors[0].check_name == 'lock_availability_check'
 
-    @patch('pokepoke.preflight_checks.is_process_running')
+    @patch('pokepoke.utils.preflight_checks.is_process_running')
     def test_is_lock_stale_process_running(self, mock_is_running, temp_repo):
         """Test _is_lock_stale when process is still running."""
         mock_is_running.return_value = True
@@ -750,7 +752,7 @@ class TestRepairEdgeCases:
             'lock_availability_check', 'test', ErrorSeverity.RECOVERABLE,
             details={'lock_file': str(temp_repo / '.pokepoke' / 'test.lock')}
         )
-        with patch('pokepoke.preflight_repair.is_lock_stale', side_effect=RuntimeError('boom')):
+        with patch('pokepoke.utils.preflight_repair.is_lock_stale', side_effect=RuntimeError('boom')):
             # File exists check passes, but is_lock_stale raises
             lock_dir = temp_repo / '.pokepoke'
             lock_dir.mkdir(exist_ok=True)
@@ -769,10 +771,10 @@ class TestRepairEdgeCases:
         assert not success
 
     @pytest.mark.allow_git_repair
-    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent', return_value=(True, None))
+    @patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent', return_value=(True, None))
     def test_invoke_preflight_cleanup_success(self, mock_agent, temp_repo, health_config):
         """Test _invoke_preflight_cleanup delegates to cleanup agent."""
-        from pokepoke.preflight_repair import _invoke_preflight_cleanup
+        from pokepoke.utils.preflight_repair import _invoke_preflight_cleanup
         success = _invoke_preflight_cleanup(temp_repo, 'hook failed')
         assert success
         mock_agent.assert_called_once()
@@ -783,11 +785,11 @@ class TestRepairEdgeCases:
         assert 'hook failed' in item.description
 
     @pytest.mark.allow_git_repair
-    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent',
+    @patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent',
            side_effect=RuntimeError('agent crash'))
     def test_invoke_preflight_cleanup_agent_exception(self, mock_agent, temp_repo, health_config):
         """Test _invoke_preflight_cleanup when cleanup agent raises exception."""
-        from pokepoke.preflight_repair import _invoke_preflight_cleanup
+        from pokepoke.utils.preflight_repair import _invoke_preflight_cleanup
         success = _invoke_preflight_cleanup(temp_repo, 'hook failed')
         assert not success
 
@@ -803,7 +805,7 @@ class TestRepairEdgeCases:
             details={'orphaned_paths': [str(orphan)]}
         )
         # Mock rmtree to do nothing so path still exists after "removal"
-        with patch('pokepoke.preflight_repair.shutil.rmtree'):
+        with patch('pokepoke.utils.preflight_repair.shutil.rmtree'):
             success = checker._repair_repository_integrity(error)
         assert not success
 
@@ -814,7 +816,7 @@ class TestRepairEdgeCases:
             'repository_integrity_check', 'test', ErrorSeverity.RECOVERABLE,
             details={'orphaned_paths': ['nonexistent']}
         )
-        with patch('pokepoke.preflight_repair.Path.exists', side_effect=RuntimeError('boom')):
+        with patch('pokepoke.utils.preflight_repair.Path.exists', side_effect=RuntimeError('boom')):
             success = checker._repair_repository_integrity(error)
         assert not success
 
@@ -829,8 +831,8 @@ class TestRepairEdgeCases:
         ]
 
         # All repair attempts fail
-        with patch('pokepoke.preflight_repair.repair_git_status', return_value=False), \
-             patch('pokepoke.preflight_repair.time.sleep'):
+        with patch('pokepoke.utils.preflight_repair.repair_git_status', return_value=False), \
+             patch('pokepoke.utils.preflight_repair.time.sleep'):
             success = checker.attempt_self_repair(result)
 
         assert not success
@@ -847,7 +849,7 @@ class TestRepairEdgeCases:
             HealthCheckError('git_status_check', 'test', ErrorSeverity.RECOVERABLE)
         ]
 
-        with patch('pokepoke.preflight_repair.repair_git_status', side_effect=RuntimeError('boom')):
+        with patch('pokepoke.utils.preflight_repair.repair_git_status', side_effect=RuntimeError('boom')):
             success = checker.attempt_self_repair(result)
 
         assert not success

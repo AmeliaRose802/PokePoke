@@ -15,7 +15,7 @@ import json
 from pathlib import Path
 
 from pokepoke.types import ModelCompletionRecord
-from pokepoke.gate_rejection_tracker import (
+from pokepoke.stats.gate_rejection_tracker import (
     load_gate_stats,
     save_gate_stats,
     record_gate_check,
@@ -232,7 +232,7 @@ class TestUpdateGateSummaryIncremental:
 class TestRecordGateCheck:
 
     def test_records_pass(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("pokepoke.metrics_context.get_current_repo_name", lambda: "test-repo")
+        monkeypatch.setattr("pokepoke.stats.metrics_context.get_current_repo_name", lambda: "test-repo")
         p = _tmp_gate_path(tmp_path)
         record_gate_check("gate-model-a", "PP-1", True, path=p)
         data = load_gate_stats(p)
@@ -242,7 +242,7 @@ class TestRecordGateCheck:
         assert data["summary"]["gate-model-a"]["total_passed"] == 1
 
     def test_records_rejection(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("pokepoke.metrics_context.get_current_repo_name", lambda: "test-repo")
+        monkeypatch.setattr("pokepoke.stats.metrics_context.get_current_repo_name", lambda: "test-repo")
         p = _tmp_gate_path(tmp_path)
         record_gate_check("gate-model-a", "PP-1", False, path=p)
         data = load_gate_stats(p)
@@ -251,7 +251,7 @@ class TestRecordGateCheck:
         assert data["summary"]["gate-model-a"]["rejection_rate"] == 1.0
 
     def test_multiple_records_accumulate(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("pokepoke.metrics_context.get_current_repo_name", lambda: "test-repo")
+        monkeypatch.setattr("pokepoke.stats.metrics_context.get_current_repo_name", lambda: "test-repo")
         p = _tmp_gate_path(tmp_path)
         record_gate_check("m1", "PP-1", True, path=p)
         record_gate_check("m1", "PP-2", False, path=p)
@@ -265,7 +265,7 @@ class TestRecordGateCheck:
         assert abs(s["rejection_rate"] - 0.3333) < 0.01
 
     def test_multiple_models_tracked(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("pokepoke.metrics_context.get_current_repo_name", lambda: "test-repo")
+        monkeypatch.setattr("pokepoke.stats.metrics_context.get_current_repo_name", lambda: "test-repo")
         p = _tmp_gate_path(tmp_path)
         record_gate_check("strict", "PP-1", False, path=p)
         record_gate_check("lenient", "PP-2", True, path=p)
@@ -286,7 +286,7 @@ class TestGetGateRejectionStats:
         assert result == {}
 
     def test_returns_summary(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("pokepoke.metrics_context.get_current_repo_name", lambda: "test-repo")
+        monkeypatch.setattr("pokepoke.stats.metrics_context.get_current_repo_name", lambda: "test-repo")
         p = _tmp_gate_path(tmp_path)
         record_gate_check("m1", "PP-1", True, path=p)
         record_gate_check("m1", "PP-2", False, path=p)
@@ -321,7 +321,7 @@ class TestPrintGateRejectionLeaderboard:
         assert output == ""
 
     def test_prints_report(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("pokepoke.metrics_context.get_current_repo_name", lambda: "test-repo")
+        monkeypatch.setattr("pokepoke.stats.metrics_context.get_current_repo_name", lambda: "test-repo")
         p = _tmp_gate_path(tmp_path)
         record_gate_check("model-alpha", "PP-1", True, path=p)
         record_gate_check("model-alpha", "PP-2", False, path=p)

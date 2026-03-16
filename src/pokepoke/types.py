@@ -5,10 +5,10 @@ from dataclasses import dataclass, field, replace, is_dataclass
 from collections.abc import Iterator
 from typing import Any
 
-from pokepoke.agent_types import (
+from pokepoke.agents.agent_types import (
     AGENT_TYPES, _empty_agent_run_counts, _normalize_agent_key, resolve_agent_type,
 )
-from pokepoke.merge_queue_stats import MergeQueueStats as MergeQueueStats  # re-export
+from pokepoke.git.merge_queue_stats import MergeQueueStats as MergeQueueStats  # re-export
 
 @dataclass
 class BeadsWorkItem:

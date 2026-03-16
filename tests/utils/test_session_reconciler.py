@@ -1,4 +1,4 @@
-"""Tests for pokepoke.session_reconciler."""
+"""Tests for pokepoke.stats.session_reconciler."""
 
 import json
 import os
@@ -8,12 +8,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pokepoke.session_journal import (
+from pokepoke.stats.session_journal import (
     SessionJournal,
     SessionPhase,
     write_journal,
 )
-from pokepoke.session_reconciler import (
+from pokepoke.stats.session_reconciler import (
     _delete_branch,
     _reconcile_journal,
     _remove_worktree,
@@ -82,9 +82,9 @@ class TestClosedJournal:
         assert journal_path.exists()
 
         with (
-            patch("pokepoke.session_reconciler._remove_worktree") as mock_rm,
-            patch("pokepoke.session_reconciler._delete_branch") as mock_br,
-            patch("pokepoke.session_reconciler._should_unassign") as mock_ua,
+            patch("pokepoke.stats.session_reconciler._remove_worktree") as mock_rm,
+            patch("pokepoke.stats.session_reconciler._delete_branch") as mock_br,
+            patch("pokepoke.stats.session_reconciler._should_unassign") as mock_ua,
         ):
             _reconcile_journal(journal, session_timeout=9999, sessions_dir=sessions_dir)
 
@@ -110,9 +110,11 @@ class TestAlivePidWithinTimeout:
         journal_path = sessions_dir / f"{journal.item_id}.json"
 
         with (
-            patch("pokepoke.session_reconciler._remove_worktree") as mock_rm,
-            patch("pokepoke.session_reconciler._delete_branch") as mock_br,
-            patch("pokepoke.session_reconciler._should_unassign") as mock_ua,
+            patch("pokepoke.stats.session_reconciler.is_process_running", return_value=True),
+            patch("pokepoke.stats.session_reconciler.delete_journal") as mock_delete,
+            patch("pokepoke.stats.session_reconciler._remove_worktree") as mock_rm,
+            patch("pokepoke.stats.session_reconciler._delete_branch") as mock_br,
+            patch("pokepoke.stats.session_reconciler._should_unassign") as mock_ua,
         ):
             _reconcile_journal(journal, session_timeout=999999, sessions_dir=sessions_dir)
 
@@ -121,6 +123,7 @@ class TestAlivePidWithinTimeout:
         mock_rm.assert_not_called()
         mock_br.assert_not_called()
         mock_ua.assert_not_called()
+        mock_delete.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -143,11 +146,11 @@ class TestDeadPidCleanup:
         journal_path = sessions_dir / f"{journal.item_id}.json"
 
         with (
-            patch("pokepoke.session_reconciler.is_process_running", return_value=False),
-            patch("pokepoke.session_reconciler._remove_worktree", return_value=True) as mock_rm,
-            patch("pokepoke.session_reconciler._delete_branch", return_value=True) as mock_br,
-            patch("pokepoke.session_reconciler._should_unassign", return_value=True),
-            patch("pokepoke.session_reconciler._unassign_item", return_value=True) as mock_ua,
+            patch("pokepoke.stats.session_reconciler.is_process_running", return_value=False),
+            patch("pokepoke.stats.session_reconciler._remove_worktree", return_value=True) as mock_rm,
+            patch("pokepoke.stats.session_reconciler._delete_branch", return_value=True) as mock_br,
+            patch("pokepoke.stats.session_reconciler._should_unassign", return_value=True),
+            patch("pokepoke.stats.session_reconciler._unassign_item", return_value=True) as mock_ua,
         ):
             _reconcile_journal(journal, session_timeout=1, sessions_dir=sessions_dir)
 
@@ -169,9 +172,9 @@ class TestDeadPidCleanup:
         journal_path = sessions_dir / f"{journal.item_id}.json"
 
         with (
-            patch("pokepoke.session_reconciler.is_process_running", return_value=False),
-            patch("pokepoke.session_reconciler._delete_branch", return_value=True) as mock_br,
-            patch("pokepoke.session_reconciler._should_unassign", return_value=False),
+            patch("pokepoke.stats.session_reconciler.is_process_running", return_value=False),
+            patch("pokepoke.stats.session_reconciler._delete_branch", return_value=True) as mock_br,
+            patch("pokepoke.stats.session_reconciler._should_unassign", return_value=False),
         ):
             _reconcile_journal(journal, session_timeout=1, sessions_dir=sessions_dir)
 
@@ -201,10 +204,10 @@ class TestCleanupFailures:
         journal_path = sessions_dir / f"{journal.item_id}.json"
 
         with (
-            patch("pokepoke.session_reconciler.is_process_running", return_value=False),
-            patch("pokepoke.session_reconciler._remove_worktree", return_value=False),
-            patch("pokepoke.session_reconciler._delete_branch", return_value=True),
-            patch("pokepoke.session_reconciler._should_unassign", return_value=False),
+            patch("pokepoke.stats.session_reconciler.is_process_running", return_value=False),
+            patch("pokepoke.stats.session_reconciler._remove_worktree", return_value=False),
+            patch("pokepoke.stats.session_reconciler._delete_branch", return_value=True),
+            patch("pokepoke.stats.session_reconciler._should_unassign", return_value=False),
         ):
             _reconcile_journal(journal, session_timeout=1, sessions_dir=sessions_dir)
 
@@ -222,10 +225,10 @@ class TestCleanupFailures:
         journal_path = sessions_dir / f"{journal.item_id}.json"
 
         with (
-            patch("pokepoke.session_reconciler.is_process_running", return_value=False),
-            patch("pokepoke.session_reconciler._delete_branch", return_value=True),
-            patch("pokepoke.session_reconciler._should_unassign", return_value=True),
-            patch("pokepoke.session_reconciler._unassign_item", return_value=False),
+            patch("pokepoke.stats.session_reconciler.is_process_running", return_value=False),
+            patch("pokepoke.stats.session_reconciler._delete_branch", return_value=True),
+            patch("pokepoke.stats.session_reconciler._should_unassign", return_value=True),
+            patch("pokepoke.stats.session_reconciler._unassign_item", return_value=False),
         ):
             _reconcile_journal(journal, session_timeout=1, sessions_dir=sessions_dir)
 
@@ -250,9 +253,9 @@ class TestAbandonedPhase:
         journal_path = sessions_dir / f"{journal.item_id}.json"
 
         with (
-            patch("pokepoke.session_reconciler.is_process_running", return_value=False),
-            patch("pokepoke.session_reconciler._delete_branch", return_value=True),
-            patch("pokepoke.session_reconciler._should_unassign", return_value=False),
+            patch("pokepoke.stats.session_reconciler.is_process_running", return_value=False),
+            patch("pokepoke.stats.session_reconciler._delete_branch", return_value=True),
+            patch("pokepoke.stats.session_reconciler._should_unassign", return_value=False),
         ):
             _reconcile_journal(journal, session_timeout=1, sessions_dir=sessions_dir)
 
@@ -267,7 +270,7 @@ class TestAbandonedPhase:
 class TestSessionTimeout:
     def test_timeout_uses_config(self) -> None:
         """SESSION_TIMEOUT should be configurable via config.timeout_hours * 2."""
-        from pokepoke.session_reconciler import _get_session_timeout_seconds
+        from pokepoke.stats.session_reconciler import _get_session_timeout_seconds
 
         # Default workflow timeout_hours is 2.0, so timeout = 2.0 * 2 * 3600 = 14400
         timeout = _get_session_timeout_seconds()
@@ -301,9 +304,9 @@ class TestRun:
         )
 
         with (
-            patch("pokepoke.session_reconciler.is_process_running", return_value=False),
-            patch("pokepoke.session_reconciler._delete_branch", return_value=True),
-            patch("pokepoke.session_reconciler._should_unassign", return_value=False),
+            patch("pokepoke.stats.session_reconciler.is_process_running", return_value=False),
+            patch("pokepoke.stats.session_reconciler._delete_branch", return_value=True),
+            patch("pokepoke.stats.session_reconciler._should_unassign", return_value=False),
         ):
             result = run(sessions_dir=sessions_dir)
 
@@ -407,8 +410,8 @@ class TestHelpers:
         wt = tmp_path / "wt"
         wt.mkdir()
         with (
-            patch("pokepoke.session_reconciler.Path.exists", return_value=True),
-            patch("pokepoke.worktree_cleanup.force_remove_directory", return_value=True) as mock_frd,
+            patch("pokepoke.stats.session_reconciler.Path.exists", return_value=True),
+            patch("pokepoke.worktrees.worktree_cleanup.force_remove_directory", return_value=True) as mock_frd,
         ):
             result = _remove_worktree(str(wt))
         assert result is True
@@ -418,19 +421,19 @@ class TestHelpers:
         """_remove_worktree returns False when force_remove_directory raises."""
         wt = tmp_path / "wt"
         wt.mkdir()
-        with patch("pokepoke.worktree_cleanup.force_remove_directory", side_effect=RuntimeError("fail")):
+        with patch("pokepoke.worktrees.worktree_cleanup.force_remove_directory", side_effect=RuntimeError("fail")):
             result = _remove_worktree(str(wt))
         assert result is False
 
     def test_delete_branch_nonexistent_returns_true(self) -> None:
         """_delete_branch returns True when branch doesn't exist."""
-        with patch("pokepoke.git_operations.branch_exists", return_value=False):
+        with patch("pokepoke.git.git_operations.branch_exists", return_value=False):
             assert _delete_branch("task/nonexistent") is True
 
     def test_delete_branch_exists_success(self) -> None:
         """_delete_branch returns True on successful git branch -D."""
         with (
-            patch("pokepoke.git_operations.branch_exists", return_value=True),
+            patch("pokepoke.git.git_operations.branch_exists", return_value=True),
             patch("subprocess.run") as mock_run,
         ):
             mock_run.return_value = MagicMock(returncode=0)
@@ -439,19 +442,19 @@ class TestHelpers:
     def test_delete_branch_failure_returns_false(self) -> None:
         """_delete_branch returns False when git branch -D fails."""
         with (
-            patch("pokepoke.git_operations.branch_exists", return_value=True),
+            patch("pokepoke.git.git_operations.branch_exists", return_value=True),
             patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "git")),
         ):
             assert _delete_branch("task/test") is False
 
     def test_unassign_item_success(self) -> None:
         """_unassign_item returns True on success."""
-        with patch("pokepoke.beads_management.unassign_item", return_value=True):
+        with patch("pokepoke.beads.beads_management.unassign_item", return_value=True):
             assert _unassign_item("ITEM-1") is True
 
     def test_unassign_item_failure(self) -> None:
         """_unassign_item returns False on exception."""
-        with patch("pokepoke.beads_management.unassign_item", side_effect=RuntimeError("fail")):
+        with patch("pokepoke.beads.beads_management.unassign_item", side_effect=RuntimeError("fail")):
             assert _unassign_item("ITEM-1") is False
 
     def test_branch_delete_failure_leaves_journal(self, sessions_dir: Path) -> None:
@@ -465,9 +468,9 @@ class TestHelpers:
         journal_path = sessions_dir / f"{journal.item_id}.json"
 
         with (
-            patch("pokepoke.session_reconciler.is_process_running", return_value=False),
-            patch("pokepoke.session_reconciler._delete_branch", return_value=False),
-            patch("pokepoke.session_reconciler._should_unassign", return_value=False),
+            patch("pokepoke.stats.session_reconciler.is_process_running", return_value=False),
+            patch("pokepoke.stats.session_reconciler._delete_branch", return_value=False),
+            patch("pokepoke.stats.session_reconciler._should_unassign", return_value=False),
         ):
             _reconcile_journal(journal, session_timeout=1, sessions_dir=sessions_dir)
 

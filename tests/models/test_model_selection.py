@@ -2,7 +2,7 @@
 
 from unittest.mock import Mock, patch
 
-from pokepoke.model_selection import select_model_for_item, select_gate_model, _matches_rule, get_assignment_for_item
+from pokepoke.models.model_selection import select_model_for_item, select_gate_model, _matches_rule, get_assignment_for_item
 from pokepoke.config import ProjectConfig, ModelConfig, AssignmentConfig, AssignmentRule, AssignmentRuleMatch
 from pokepoke.types import BeadsWorkItem
 
@@ -17,8 +17,8 @@ def _make_item(item_id: str, **kwargs) -> BeadsWorkItem:
 class TestSelectGateModel:
     """Test select_gate_model function."""
 
-    @patch('pokepoke.model_selection.get_model_weights')
-    @patch('pokepoke.model_selection.get_config')
+    @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_selection.get_config')
     def test_selects_different_model_from_candidates(
         self, mock_get_config: Mock, mock_get_weights: Mock
     ) -> None:
@@ -46,8 +46,8 @@ class TestSelectGateModel:
         assert gate_model != "claude-opus-4.6"
         assert gate_model in ["gpt-5.1-codex", "gpt-5"]
 
-    @patch('pokepoke.model_selection.get_model_weights')
-    @patch('pokepoke.model_selection.get_config')
+    @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_selection.get_config')
     def test_uses_fallback_when_only_one_candidate(
         self, mock_get_config: Mock, mock_get_weights: Mock
     ) -> None:
@@ -68,8 +68,8 @@ class TestSelectGateModel:
         # Should use fallback since work model is the only candidate
         assert gate_model == "claude-sonnet-4.5"
 
-    @patch('pokepoke.model_selection.get_model_weights')
-    @patch('pokepoke.model_selection.get_config')
+    @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_selection.get_config')
     def test_uses_default_when_fallback_matches_work(
         self, mock_get_config: Mock, mock_get_weights: Mock
     ) -> None:
@@ -90,8 +90,8 @@ class TestSelectGateModel:
         # Should use default since fallback matches work model
         assert gate_model == "gpt-5"
 
-    @patch('pokepoke.model_selection.get_model_weights')
-    @patch('pokepoke.model_selection.get_config')
+    @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_selection.get_config')
     def test_handles_no_candidates(
         self, mock_get_config: Mock, mock_get_weights: Mock
     ) -> None:
@@ -112,8 +112,8 @@ class TestSelectGateModel:
         # Should use fallback since no candidates
         assert gate_model == "claude-sonnet-4.5"
 
-    @patch('pokepoke.model_selection.get_model_weights')
-    @patch('pokepoke.model_selection.get_config')
+    @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_selection.get_config')
     def test_warns_when_all_models_same(
         self, mock_get_config: Mock, mock_get_weights: Mock
     ) -> None:
@@ -131,9 +131,9 @@ class TestSelectGateModel:
         # Should still return the model (better than failing)
         assert gate_model == "same-model"
 
-    @patch('pokepoke.model_selection.random.choices')
-    @patch('pokepoke.model_selection.get_model_weights')
-    @patch('pokepoke.model_selection.get_config')
+    @patch('pokepoke.models.model_selection.random.choices')
+    @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_selection.get_config')
     def test_respects_model_weights(
         self, mock_get_config: Mock, mock_get_weights: Mock, mock_choices: Mock
     ) -> None:
@@ -172,8 +172,8 @@ class TestSelectGateModel:
 class TestSelectModelForItem:
     """Test select_model_for_item function (existing functionality)."""
 
-    @patch('pokepoke.model_selection.get_model_weights')
-    @patch('pokepoke.model_selection.get_config')
+    @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_selection.get_config')
     def test_synthesizes_candidates_when_none_configured(
         self, mock_get_config: Mock, mock_get_weights: Mock
     ) -> None:
@@ -192,8 +192,8 @@ class TestSelectModelForItem:
         assert model in ["claude-opus-4.6", "claude-sonnet-4.5"]
         mock_get_weights.assert_called_once()
 
-    @patch('pokepoke.model_selection.get_model_weights')
-    @patch('pokepoke.model_selection.get_config')
+    @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_selection.get_config')
     def test_synthesized_candidates_deduped_when_default_equals_fallback(
         self, mock_get_config: Mock, mock_get_weights: Mock
     ) -> None:
@@ -212,8 +212,8 @@ class TestSelectModelForItem:
         assert model == "claude-opus-4.6"
         mock_get_weights.assert_called_once()
 
-    @patch('pokepoke.model_selection.get_model_weights')
-    @patch('pokepoke.model_selection.get_config')
+    @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_selection.get_config')
     def test_selects_from_candidates(
         self, mock_get_config: Mock, mock_get_weights: Mock
     ) -> None:
@@ -276,14 +276,14 @@ class TestMatchesRule:
 class TestGetAssignmentForItem:
     """Test get_assignment_for_item returns the first matching rule."""
 
-    @patch('pokepoke.model_selection.get_config')
+    @patch('pokepoke.models.model_selection.get_config')
     def test_returns_none_when_no_rules(self, mock_config: Mock) -> None:
         mock_config.return_value = ProjectConfig()
         model, prompt = get_assignment_for_item(_make_item("x"))
         assert model is None
         assert prompt is None
 
-    @patch('pokepoke.model_selection.get_config')
+    @patch('pokepoke.models.model_selection.get_config')
     def test_returns_first_matching_rule(self, mock_config: Mock) -> None:
         cfg = ProjectConfig()
         cfg.assignment = AssignmentConfig(rules=[
@@ -300,7 +300,7 @@ class TestGetAssignmentForItem:
         model, prompt = get_assignment_for_item(_make_item("x", issue_type="bug"))
         assert model == "claude-sonnet-4.5"
 
-    @patch('pokepoke.model_selection.get_config')
+    @patch('pokepoke.models.model_selection.get_config')
     def test_returns_prompt_template(self, mock_config: Mock) -> None:
         cfg = ProjectConfig()
         cfg.assignment = AssignmentConfig(rules=[
@@ -321,8 +321,8 @@ class TestGetAssignmentForItem:
 class TestSelectModelWithAssignmentRules:
     """Test select_model_for_item when assignment rules are configured."""
 
-    @patch('pokepoke.model_selection.get_model_weights')
-    @patch('pokepoke.model_selection.get_config')
+    @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_selection.get_config')
     def test_rule_takes_priority_over_ab(
         self, mock_config: Mock, mock_weights: Mock
     ) -> None:
@@ -343,8 +343,8 @@ class TestSelectModelWithAssignmentRules:
         # get_model_weights should not be called when rule matches
         mock_weights.assert_not_called()
 
-    @patch('pokepoke.model_selection.get_model_weights')
-    @patch('pokepoke.model_selection.get_config')
+    @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_selection.get_config')
     def test_fallback_to_ab_when_no_rule_matches(
         self, mock_config: Mock, mock_weights: Mock
     ) -> None:
@@ -366,8 +366,8 @@ class TestSelectModelWithAssignmentRules:
         model = select_model_for_item(_make_item("x", issue_type="task"))
         assert model in ["modelA", "modelB"]
 
-    @patch('pokepoke.model_selection.get_model_weights')
-    @patch('pokepoke.model_selection.get_config')
+    @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_selection.get_config')
     def test_fallback_to_specific_model(
         self, mock_config: Mock, mock_weights: Mock
     ) -> None:

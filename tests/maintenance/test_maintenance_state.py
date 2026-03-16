@@ -1,10 +1,10 @@
-"""Tests for pokepoke.maintenance_state — persistent maintenance counter."""
+"""Tests for pokepoke.maintenance.maintenance_state — persistent maintenance counter."""
 
 import json
 from pathlib import Path
 from unittest.mock import patch
 
-from pokepoke.maintenance_state import (
+from pokepoke.maintenance.maintenance_state import (
     MaintenanceState,
     RepoMaintenanceState,
     load_state,
@@ -43,7 +43,7 @@ class TestLoadState:
 
     def test_returns_default_when_file_missing(self, tmp_path: Path) -> None:
         fake_path = tmp_path / "maintenance_state.json"
-        with patch("pokepoke.maintenance_state.STATE_FILE", fake_path):
+        with patch("pokepoke.maintenance.maintenance_state.STATE_FILE", fake_path):
             state = load_state()
         assert state.total_items_completed == 0
         assert state.repos == {}
@@ -56,7 +56,7 @@ class TestLoadState:
                 "repo-a": {"items_completed": 5, "last_run_timestamp": 100.0},
             },
         }), encoding="utf-8")
-        with patch("pokepoke.maintenance_state.STATE_FILE", fake_path):
+        with patch("pokepoke.maintenance.maintenance_state.STATE_FILE", fake_path):
             state = load_state()
         assert state.total_items_completed == 10
         assert "repo-a" in state.repos
@@ -69,7 +69,7 @@ class TestLoadState:
         fake_path.write_text(json.dumps({
             "total_items_completed": 10,
         }), encoding="utf-8")
-        with patch("pokepoke.maintenance_state.STATE_FILE", fake_path):
+        with patch("pokepoke.maintenance.maintenance_state.STATE_FILE", fake_path):
             state = load_state()
         assert state.total_items_completed == 10
         assert state.repos == {}
@@ -78,7 +78,7 @@ class TestLoadState:
         """Covers exception handling in load_state."""
         fake_path = tmp_path / "maintenance_state.json"
         fake_path.write_text("not valid json!!!", encoding="utf-8")
-        with patch("pokepoke.maintenance_state.STATE_FILE", fake_path):
+        with patch("pokepoke.maintenance.maintenance_state.STATE_FILE", fake_path):
             state = load_state()
         assert state.total_items_completed == 0
 
@@ -86,7 +86,7 @@ class TestLoadState:
         """Covers TypeError from unexpected fields."""
         fake_path = tmp_path / "maintenance_state.json"
         fake_path.write_text(json.dumps({"unexpected_field": 999}), encoding="utf-8")
-        with patch("pokepoke.maintenance_state.STATE_FILE", fake_path):
+        with patch("pokepoke.maintenance.maintenance_state.STATE_FILE", fake_path):
             state = load_state()
         assert state.total_items_completed == 0
 
@@ -99,7 +99,7 @@ class TestSaveState:
         state = MaintenanceState(total_items_completed=7, repos={
             "repo-x": RepoMaintenanceState(items_completed=3, last_run_timestamp=50.0),
         })
-        with patch("pokepoke.maintenance_state.STATE_FILE", fake_path):
+        with patch("pokepoke.maintenance.maintenance_state.STATE_FILE", fake_path):
             save_state(state)
         data = json.loads(fake_path.read_text(encoding="utf-8"))
         assert data["total_items_completed"] == 7
@@ -113,7 +113,7 @@ class TestIncrementItemsCompleted:
     def test_increments_from_zero_global(self, tmp_path: Path) -> None:
         """Legacy: no repo_id increments global counter."""
         fake_path = tmp_path / "maintenance_state.json"
-        with patch("pokepoke.maintenance_state.STATE_FILE", fake_path):
+        with patch("pokepoke.maintenance.maintenance_state.STATE_FILE", fake_path):
             result = increment_items_completed()
         assert result == 1
 
@@ -123,18 +123,18 @@ class TestIncrementItemsCompleted:
             "total_items_completed": 5,
             "repos": {},
         }), encoding="utf-8")
-        with patch("pokepoke.maintenance_state.STATE_FILE", fake_path):
+        with patch("pokepoke.maintenance.maintenance_state.STATE_FILE", fake_path):
             result = increment_items_completed()
         assert result == 6
 
     def test_increments_per_repo(self, tmp_path: Path) -> None:
         """Per-repo: increments both per-repo and global counters."""
         fake_path = tmp_path / "maintenance_state.json"
-        with patch("pokepoke.maintenance_state.STATE_FILE", fake_path):
+        with patch("pokepoke.maintenance.maintenance_state.STATE_FILE", fake_path):
             result = increment_items_completed(repo_id="repo-a")
         assert result == 1
         # Check the persisted state
-        with patch("pokepoke.maintenance_state.STATE_FILE", fake_path):
+        with patch("pokepoke.maintenance.maintenance_state.STATE_FILE", fake_path):
             state = load_state()
         assert state.total_items_completed == 1
         assert state.repos["repo-a"].items_completed == 1
@@ -142,7 +142,7 @@ class TestIncrementItemsCompleted:
     def test_independent_repo_counters(self, tmp_path: Path) -> None:
         """Each repo has its own independent counter."""
         fake_path = tmp_path / "maintenance_state.json"
-        with patch("pokepoke.maintenance_state.STATE_FILE", fake_path):
+        with patch("pokepoke.maintenance.maintenance_state.STATE_FILE", fake_path):
             r1 = increment_items_completed(repo_id="repo-a")
             r2 = increment_items_completed(repo_id="repo-b")
             r3 = increment_items_completed(repo_id="repo-a")
@@ -150,7 +150,7 @@ class TestIncrementItemsCompleted:
         assert r2 == 1
         assert r3 == 2
         # Global should be 3 total
-        with patch("pokepoke.maintenance_state.STATE_FILE", fake_path):
+        with patch("pokepoke.maintenance.maintenance_state.STATE_FILE", fake_path):
             state = load_state()
         assert state.total_items_completed == 3
         assert state.repos["repo-a"].items_completed == 2
@@ -179,7 +179,7 @@ class TestRecordMaintenanceRun:
 
     def test_records_timestamp(self, tmp_path: Path) -> None:
         fake_path = tmp_path / "maintenance_state.json"
-        with patch("pokepoke.maintenance_state.STATE_FILE", fake_path):
+        with patch("pokepoke.maintenance.maintenance_state.STATE_FILE", fake_path):
             record_maintenance_run("repo-a")
             state = load_state()
         assert state.repos["repo-a"].last_run_timestamp > 0
@@ -190,7 +190,7 @@ class TestGetItemsCompletedForRepo:
 
     def test_returns_zero_for_unknown(self, tmp_path: Path) -> None:
         fake_path = tmp_path / "maintenance_state.json"
-        with patch("pokepoke.maintenance_state.STATE_FILE", fake_path):
+        with patch("pokepoke.maintenance.maintenance_state.STATE_FILE", fake_path):
             assert get_items_completed_for_repo("unknown") == 0
 
     def test_returns_count_for_known(self, tmp_path: Path) -> None:
@@ -199,5 +199,5 @@ class TestGetItemsCompletedForRepo:
             "total_items_completed": 5,
             "repos": {"repo-a": {"items_completed": 3, "last_run_timestamp": 0.0}},
         }), encoding="utf-8")
-        with patch("pokepoke.maintenance_state.STATE_FILE", fake_path):
+        with patch("pokepoke.maintenance.maintenance_state.STATE_FILE", fake_path):
             assert get_items_completed_for_repo("repo-a") == 3

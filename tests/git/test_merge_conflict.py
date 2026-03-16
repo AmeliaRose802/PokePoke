@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 import subprocess
 from pathlib import Path
 
-from pokepoke.merge_conflict import (
+from pokepoke.git.merge_conflict import (
     is_merge_in_progress,
     get_unmerged_files,
     abort_merge,
@@ -165,8 +165,8 @@ class TestAbortMerge:
 class TestGetMergeConflictDetails:
     """Tests for get_merge_conflict_details function."""
 
-    @patch('pokepoke.merge_conflict.get_unmerged_files')
-    @patch('pokepoke.merge_conflict.is_merge_in_progress')
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files')
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress')
     @patch('subprocess.run')
     def test_get_details_with_conflict(
         self, mock_run: Mock, mock_is_merge: Mock, mock_get_unmerged: Mock
@@ -183,8 +183,8 @@ class TestGetMergeConflictDetails:
         assert "file1.py" in result["unmerged_files"]
         assert result["merge_head"] == "abc123"
 
-    @patch('pokepoke.merge_conflict.get_unmerged_files')
-    @patch('pokepoke.merge_conflict.is_merge_in_progress')
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files')
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress')
     def test_get_details_no_conflict(
         self, mock_is_merge: Mock, mock_get_unmerged: Mock
     ) -> None:
@@ -198,8 +198,8 @@ class TestGetMergeConflictDetails:
         assert result["conflict_count"] == 0
         assert result["merge_head"] == ""
 
-    @patch('pokepoke.merge_conflict.get_unmerged_files')
-    @patch('pokepoke.merge_conflict.is_merge_in_progress')
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files')
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress')
     @patch('subprocess.run')
     def test_get_details_with_repo_path(
         self, mock_run: Mock, mock_is_merge: Mock, mock_get_unmerged: Mock
@@ -215,8 +215,8 @@ class TestGetMergeConflictDetails:
         call_args = mock_run.call_args[0][0]
         assert "-C" in call_args
 
-    @patch('pokepoke.merge_conflict.get_unmerged_files')
-    @patch('pokepoke.merge_conflict.is_merge_in_progress')
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files')
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress')
     @patch('subprocess.run')
     def test_get_details_merge_head_exception(
         self, mock_run: Mock, mock_is_merge: Mock, mock_get_unmerged: Mock

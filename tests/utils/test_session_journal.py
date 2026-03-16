@@ -1,4 +1,4 @@
-"""Tests for pokepoke.session_journal."""
+"""Tests for pokepoke.stats.session_journal."""
 
 import json
 import os
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from pokepoke.session_journal import (
+from pokepoke.stats.session_journal import (
     SessionJournal,
     SessionPhase,
     delete_journal,

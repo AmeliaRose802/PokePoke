@@ -4,8 +4,8 @@ import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from pokepoke.repo_picker import LaunchConfig
-from pokepoke.project_utils import is_git_repo as _is_git_repo
+from pokepoke.git.repo_picker import LaunchConfig
+from pokepoke.utils.project_utils import is_git_repo as _is_git_repo
 
 
 class TestLaunchConfig:
@@ -24,21 +24,21 @@ class TestLaunchConfig:
 class TestIsGitRepo:
     """Test _is_git_repo helper."""
 
-    @patch("pokepoke.project_utils.subprocess.run")
+    @patch("pokepoke.utils.project_utils.subprocess.run")
     def test_returns_true_for_git_repo(self, mock_run: MagicMock, tmp_path: Path) -> None:
         mock_run.return_value = MagicMock(returncode=0)
         assert _is_git_repo(tmp_path) is True
 
-    @patch("pokepoke.project_utils.subprocess.run")
+    @patch("pokepoke.utils.project_utils.subprocess.run")
     def test_returns_false_for_non_git(self, mock_run: MagicMock, tmp_path: Path) -> None:
         mock_run.return_value = MagicMock(returncode=128)
         assert _is_git_repo(tmp_path) is False
 
-    @patch("pokepoke.project_utils.subprocess.run", side_effect=OSError("no git"))
+    @patch("pokepoke.utils.project_utils.subprocess.run", side_effect=OSError("no git"))
     def test_returns_false_on_os_error(self, mock_run: MagicMock, tmp_path: Path) -> None:
         assert _is_git_repo(tmp_path) is False
 
-    @patch("pokepoke.project_utils.subprocess.run")
+    @patch("pokepoke.utils.project_utils.subprocess.run")
     def test_returns_false_on_timeout(self, mock_run: MagicMock, tmp_path: Path) -> None:
         import subprocess
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="git", timeout=5)
@@ -50,7 +50,7 @@ class TestPickRepoDirectory:
 
     def test_tkinter_launch(self, tmp_path: Path, monkeypatch) -> None:
         """Test the tkinter path with simulated Launch click."""
-        from pokepoke import repo_picker
+        from pokepoke.git import repo_picker
 
         captured_callbacks = {}
 
@@ -131,7 +131,7 @@ class TestPickRepoDirectory:
 
     def test_tkinter_cancel(self, tmp_path: Path, monkeypatch) -> None:
         """Test the tkinter path when user cancels (closes window)."""
-        from pokepoke import repo_picker
+        from pokepoke.git import repo_picker
 
         class FakeVar:
             def __init__(self, value=""):
@@ -173,7 +173,7 @@ class TestPickRepoDirectory:
 
     def test_tkinter_tclerror_fallback(self, tmp_path: Path, monkeypatch) -> None:
         """Fallback to console when tkinter fails to initialize (headless)."""
-        from pokepoke import repo_picker
+        from pokepoke.git import repo_picker
 
         class FakeTclError(Exception):
             pass
@@ -202,7 +202,7 @@ class TestPickRepoDirectory:
 
     def test_console_fallback_quit(self, monkeypatch) -> None:
         """Test console fallback when tkinter is unavailable and user quits."""
-        from pokepoke import repo_picker
+        from pokepoke.git import repo_picker
 
         # Remove tkinter from sys.modules to trigger ImportError
         monkeypatch.setitem(sys.modules, "tkinter", None)
@@ -214,7 +214,7 @@ class TestPickRepoDirectory:
 
     def test_console_fallback_valid_path(self, tmp_path: Path, monkeypatch) -> None:
         """Test console fallback with valid directory input."""
-        from pokepoke import repo_picker
+        from pokepoke.git import repo_picker
 
         monkeypatch.setitem(sys.modules, "tkinter", None)
 
@@ -228,7 +228,7 @@ class TestPickRepoDirectory:
 
     def test_tkinter_runtime_failure_falls_back_to_console(self, tmp_path: Path, monkeypatch) -> None:
         """Test that a tkinter runtime error (e.g. no display) falls back to console."""
-        from pokepoke import repo_picker
+        from pokepoke.git import repo_picker
 
         # Make tkinter importable but crash at Tk() instantiation (no display)
         mock_tk = MagicMock()

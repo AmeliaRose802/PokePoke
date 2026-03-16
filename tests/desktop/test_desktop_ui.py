@@ -6,10 +6,10 @@ import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import pokepoke.desktop_ui as desktop_ui_module
-import pokepoke.frontend_discovery as frontend_discovery_module
-from pokepoke import pywebview_patches
-from pokepoke.desktop_ui import DesktopUI, _shutdown_threading_excepthook
+import pokepoke.desktop.desktop_ui as desktop_ui_module
+import pokepoke.desktop.frontend_discovery as frontend_discovery_module
+from pokepoke.desktop import pywebview_patches
+from pokepoke.desktop.desktop_ui import DesktopUI, _shutdown_threading_excepthook
 
 
 class FakeWebviewModule:

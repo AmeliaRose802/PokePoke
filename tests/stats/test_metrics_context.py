@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 
-from pokepoke.metrics_context import (
+from pokepoke.stats.metrics_context import (
     agent_type_context,
     get_current_agent_type,
     get_current_repo_name,

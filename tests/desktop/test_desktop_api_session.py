@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from pokepoke.desktop_api import DesktopAPI
-from pokepoke.desktop_api_session import (
+from pokepoke.desktop.desktop_api import DesktopAPI
+from pokepoke.desktop.desktop_api_session import (
     set_session_start_time,
     set_session_end_time,
     set_live_session_stats,
@@ -16,8 +16,8 @@ from pokepoke.types import AgentStats, SessionStats
 @pytest.fixture(autouse=True)
 def _isolate_desktop_api(monkeypatch):
     """Prevent DesktopAPI from loading real historical agents or calling git."""
-    monkeypatch.setattr("pokepoke.desktop_api_ext._discover_log_roots", lambda: [])
-    monkeypatch.setattr("pokepoke.desktop_api.get_repository_name", lambda: "test-repo")
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
+    monkeypatch.setattr("pokepoke.desktop.desktop_api.get_repository_name", lambda: "test-repo")
 
 
 # ── set_session_start_time ───────────────────────────────────────────────

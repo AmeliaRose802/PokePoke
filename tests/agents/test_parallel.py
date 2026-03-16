@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch, MagicMock
 import pytest
 
 from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats, WorkItemResult
-from pokepoke.parallel import (
+from pokepoke.agents.parallel import (
     _parallel_process_item,
     _collect_done_futures,
     run_parallel_loop,
@@ -35,11 +35,11 @@ def _disable_preflight_health(monkeypatch):
     mock_cfg.preflight_health.enabled = False
     mock_cfg.max_parallel_agents = 10
     monkeypatch.setattr("pokepoke.config.get_config", lambda: mock_cfg)
-    monkeypatch.setattr("pokepoke.parallel.assign_and_sync_item", lambda *a, **kw: True)
-    monkeypatch.setattr("pokepoke.parallel.unassign_with_retry", lambda *a, **kw: None)
+    monkeypatch.setattr("pokepoke.agents.parallel.assign_and_sync_item", lambda *a, **kw: True)
+    monkeypatch.setattr("pokepoke.agents.parallel.unassign_with_retry", lambda *a, **kw: None)
     # Mock parallel_support dependencies so _finalize_workers doesn't call real processes
-    monkeypatch.setattr("pokepoke.parallel_support.kill_orphaned_copilot_processes", lambda **kw: None)
-    monkeypatch.setattr("pokepoke.parallel_support.terminal_ui", MagicMock())
+    monkeypatch.setattr("pokepoke.agents.parallel_support.kill_orphaned_copilot_processes", lambda **kw: None)
+    monkeypatch.setattr("pokepoke.agents.parallel_support.terminal_ui", MagicMock())
 
 
 # ΓöÇΓöÇ _parallel_process_item ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
@@ -47,8 +47,8 @@ def _disable_preflight_health(monkeypatch):
 class TestParallelProcessItem:
     """Tests for _parallel_process_item wrapper."""
 
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.process_work_item")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.process_work_item")
     def test_success_releases_resources(self, mock_pwi: Mock, mock_ui: Mock) -> None:
         mock_pwi.return_value = WorkItemResult(success=True, request_count=1)
         sem = threading.Semaphore(0)
@@ -78,8 +78,8 @@ class TestParallelProcessItem:
             agent_type="work",
         )
 
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.process_work_item", side_effect=RuntimeError("boom"))
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.process_work_item", side_effect=RuntimeError("boom"))
     def test_exception_releases_resources(self, mock_pwi: Mock, mock_ui: Mock) -> None:
         sem = threading.Semaphore(0)
 
@@ -98,8 +98,8 @@ class TestParallelProcessItem:
             agent_type="work",
         )
 
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.process_work_item")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.process_work_item")
     def test_failure_sets_agent_failed_status(self, mock_pwi: Mock, mock_ui: Mock) -> None:
         """A work item that returns success=False should set agent status to failed."""
         mock_pwi.return_value = WorkItemResult(success=False, request_count=1)
@@ -118,8 +118,8 @@ class TestParallelProcessItem:
             agent_type="work",
         )
 
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.process_work_item")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.process_work_item")
     def test_output_routed_via_agent_output_for(self, mock_pwi: Mock, mock_ui: Mock) -> None:
         """Verify that agent_output_for context manager is used for output routing."""
         mock_pwi.return_value = WorkItemResult(success=True, request_count=1)
@@ -130,8 +130,8 @@ class TestParallelProcessItem:
         # Should use agent_output_for to route output
         mock_ui.ui.agent_output_for.assert_called_once_with("t1")
 
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.process_work_item")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.process_work_item")
     def test_same_item_different_workers_get_unique_agent_ids(
         self, mock_pwi: Mock, mock_ui: Mock,
     ) -> None:
@@ -154,8 +154,8 @@ class TestParallelProcessItem:
         assert "dup-item:worker-1" in agent_ids
         assert "dup-item:worker-2" in agent_ids
 
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.process_work_item")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.process_work_item")
     def test_process_work_item_receives_agent_id(
         self, mock_pwi: Mock, mock_ui: Mock,
     ) -> None:
@@ -275,13 +275,13 @@ class TestCollectDoneFutures:
 class TestRunParallelLoop:
     """Tests for run_parallel_loop."""
 
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.is_shutting_down", side_effect=[False, True])
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
+    @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
     def test_exits_with_no_items(
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
@@ -303,12 +303,12 @@ class TestRunParallelLoop:
         assert code == 0
         finalize_fn.assert_called_once()
 
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", return_value=False)
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=False)
-    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.is_shutting_down", return_value=False)
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=False)
+    @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     def test_exits_on_repo_check_failure(
         self, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
@@ -327,15 +327,15 @@ class TestRunParallelLoop:
 
         assert code == 1
 
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True, True])
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items")
-    @patch("pokepoke.parallel.select_multiple_items")
-    @patch("pokepoke.parallel.process_work_item")
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.is_shutting_down", side_effect=[False, True, True])
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items")
+    @patch("pokepoke.agents.parallel.select_multiple_items")
+    @patch("pokepoke.agents.parallel.process_work_item")
     def test_submits_and_collects_item(
         self, mock_pwi, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
@@ -364,19 +364,19 @@ class TestRunParallelLoop:
         # record_fn should be called at least once (from collect or drain)
         assert record_fn.call_count >= 1
 
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.process_utils.apply_memory_backpressure", side_effect=lambda s: (s, 0))
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.is_shutting_down")
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items")
-    @patch("pokepoke.parallel.select_multiple_items")
-    @patch("pokepoke.parallel._collect_done_futures")
-    @patch("pokepoke.parallel.process_work_item")
-    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=3)
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.utils.process_utils.apply_memory_backpressure", side_effect=lambda s: (s, 0))
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.is_shutting_down")
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items")
+    @patch("pokepoke.agents.parallel.select_multiple_items")
+    @patch("pokepoke.agents.parallel._collect_done_futures")
+    @patch("pokepoke.agents.parallel.process_work_item")
+    @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=3)
     def test_refills_all_slots_after_completions(
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_mem, mock_ui, mock_sleep, mock_claimable,
@@ -418,16 +418,16 @@ class TestRunParallelLoop:
         dispatch_calls = [c for c in mock_sel.call_args_list if c.kwargs.get('count') == 3]
         assert len(dispatch_calls) >= 2
 
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", side_effect=([False] + ([False] * 10) + [True]))
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items")
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
-    @patch("pokepoke.parallel._collect_done_futures", return_value=(0, False, 0, 0))
-    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=2)
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.is_shutting_down", side_effect=([False] + ([False] * 10) + [True]))
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items")
+    @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
+    @patch("pokepoke.agents.parallel._collect_done_futures", return_value=(0, False, 0, 0))
+    @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=2)
     def test_cli_override_uses_effective_parallel_over_config(
         self, mock_dyn_max, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
@@ -448,18 +448,18 @@ class TestRunParallelLoop:
         assert mock_sel.call_count >= 1
         assert mock_sel.call_args_list[0].kwargs["count"] == 6
 
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.is_shutting_down")
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items")
-    @patch("pokepoke.parallel.select_multiple_items")
-    @patch("pokepoke.parallel._collect_done_futures")
-    @patch("pokepoke.parallel.process_work_item")
-    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=1)
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.is_shutting_down")
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items")
+    @patch("pokepoke.agents.parallel.select_multiple_items")
+    @patch("pokepoke.agents.parallel._collect_done_futures")
+    @patch("pokepoke.agents.parallel.process_work_item")
+    @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=1)
     def test_does_not_resubmit_while_future_tracked(
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
@@ -495,15 +495,15 @@ class TestRunParallelLoop:
         # Must not submit again while the original future is still tracked.
         assert mock_sel.call_count == 1
 
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", return_value=False)
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items")
-    @patch("pokepoke.parallel.select_multiple_items")
-    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=1)
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.is_shutting_down", return_value=False)
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items")
+    @patch("pokepoke.agents.parallel.select_multiple_items")
+    @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=1)
     def test_submit_exception_releases_resources(
         self, mock_dyn_max, mock_sel, mock_ready, mock_repo,
         mock_shut, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
@@ -518,8 +518,8 @@ class TestRunParallelLoop:
         mock_executor.submit.side_effect = RuntimeError("submit failed")
         mock_executor.shutdown = MagicMock()
 
-        with patch("pokepoke.parallel.threading.Semaphore", return_value=sem), \
-             patch("pokepoke.parallel.concurrent.futures.ThreadPoolExecutor", return_value=mock_executor):
+        with patch("pokepoke.agents.parallel.threading.Semaphore", return_value=sem), \
+             patch("pokepoke.agents.parallel.concurrent.futures.ThreadPoolExecutor", return_value=mock_executor):
             stats = SessionStats(agent_stats=AgentStats())
             logger = Mock()
 
@@ -535,13 +535,13 @@ class TestRunParallelLoop:
         assert sem.acquire(blocking=False)
         mock_executor.shutdown.assert_called_once()
 
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items", side_effect=RuntimeError("db error"))
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.is_shutting_down", side_effect=[False, True])
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items", side_effect=RuntimeError("db error"))
+    @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
     def test_get_ready_items_exception_handled(
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
@@ -562,15 +562,15 @@ class TestRunParallelLoop:
         assert code == 0
         finalize_fn.assert_called_once()
 
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.cancel_stop_after_current")
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=True)
-    @patch("pokepoke.parallel.is_shutting_down", return_value=False)
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.cancel_stop_after_current")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=True)
+    @patch("pokepoke.agents.parallel.is_shutting_down", return_value=False)
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
+    @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
     def test_stop_after_current_with_no_futures(
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_stop, mock_cancel, mock_set_exec, mock_ui, mock_sleep,
@@ -592,13 +592,13 @@ class TestRunParallelLoop:
         mock_cancel.assert_called_once()
         finalize_fn.assert_called_once()
 
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items")
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.is_shutting_down", side_effect=[False, True])
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items")
+    @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
     def test_double_check_beads_finds_items(
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
@@ -626,13 +626,13 @@ class TestRunParallelLoop:
         # get_ready_work_items should be called at least 2 times
         assert mock_ready.call_count >= 2
 
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items")
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.is_shutting_down", side_effect=[False, True])
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items")
+    @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
     def test_double_check_beads_exception_handled(
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
@@ -656,17 +656,17 @@ class TestRunParallelLoop:
         assert code == 0
         finalize_fn.assert_called_once()
 
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.is_shutting_down", return_value=False)
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items")
-    @patch("pokepoke.parallel.select_multiple_items")
-    @patch("pokepoke.parallel.process_work_item")
-    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=2)
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.is_shutting_down", return_value=False)
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items")
+    @patch("pokepoke.agents.parallel.select_multiple_items")
+    @patch("pokepoke.agents.parallel.process_work_item")
+    @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=2)
     def test_single_shot_drain_updates_stats(
         self, mock_dyn_max, mock_pwi, mock_sel, mock_ready, mock_repo,
         mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
@@ -718,17 +718,17 @@ class TestRunParallelLoop:
         last_stats = mock_ui.ui.update_stats.call_args_list[-1][0][0]
         assert last_stats.items_completed == 2
 
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel._collect_done_futures")
-    @patch("pokepoke.parallel.is_shutting_down")
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items")
-    @patch("pokepoke.parallel.select_multiple_items")
-    @patch("pokepoke.parallel.process_work_item")
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel._collect_done_futures")
+    @patch("pokepoke.agents.parallel.is_shutting_down")
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items")
+    @patch("pokepoke.agents.parallel.select_multiple_items")
+    @patch("pokepoke.agents.parallel.process_work_item")
     def test_shutdown_cleanup_updates_stats(
         self, mock_pwi, mock_sel, mock_ready, mock_repo,
         mock_shut, mock_collect, mock_stop, mock_set_exec,
@@ -773,18 +773,18 @@ class TestRunParallelLoop:
         last_stats = mock_ui.ui.update_stats.call_args_list[-1][0][0]
         assert last_stats.items_completed >= 1
 
-    @patch("pokepoke.process_utils.apply_memory_backpressure", side_effect=lambda s: (s, 0))
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.is_shutting_down")
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items")
-    @patch("pokepoke.parallel.select_multiple_items")
-    @patch("pokepoke.parallel._collect_done_futures")
-    @patch("pokepoke.parallel.process_work_item")
+    @patch("pokepoke.utils.process_utils.apply_memory_backpressure", side_effect=lambda s: (s, 0))
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.is_shutting_down")
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items")
+    @patch("pokepoke.agents.parallel.select_multiple_items")
+    @patch("pokepoke.agents.parallel._collect_done_futures")
+    @patch("pokepoke.agents.parallel.process_work_item")
     def test_dynamic_max_agents_change_respected(
         self, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep,
@@ -812,7 +812,7 @@ class TestRunParallelLoop:
 
         mock_shut.side_effect = [False] * 22 + [True] * 5
 
-        with patch("pokepoke.parallel._get_dynamic_max_agents", side_effect=dynamic_values):
+        with patch("pokepoke.agents.parallel._get_dynamic_max_agents", side_effect=dynamic_values):
             stats = SessionStats(agent_stats=AgentStats())
             run_parallel_loop(
                 effective_parallel=2, mode_name="Autonomous",
@@ -833,13 +833,13 @@ class TestRunParallelLoop:
 class TestContinuousModeLoopBack:
     """Regression tests for PokePoke-5arw: continuous mode should loop after all workers finish."""
 
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, False, True])
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.is_shutting_down", side_effect=[False, False, True])
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
+    @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
     def test_continuous_mode_idle_uses_exponential_backoff(
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
@@ -864,13 +864,13 @@ class TestContinuousModeLoopBack:
         for call in mock_sleep.call_args_list[1:]:
             assert call.args[0] >= 8.0
 
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.is_shutting_down", side_effect=[False, True])
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
+    @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
     def test_continuous_mode_loops_back_when_no_items(
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
@@ -902,13 +902,13 @@ class TestContinuousModeLoopBack:
         )
         assert retry_logged, "Expected continuous-mode retry/idle log message"
 
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.is_shutting_down", side_effect=[False, True])
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
+    @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
     def test_non_continuous_mode_exits_when_no_items(
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
@@ -936,13 +936,13 @@ class TestContinuousModeLoopBack:
         )
         assert not retry_logged, "Non-continuous mode should not retry"
 
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.is_shutting_down", side_effect=[False, True])
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
+    @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
     def test_record_fn_exception_does_not_crash_loop(
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
@@ -1007,22 +1007,22 @@ class TestCollectDoneFuturesWait:
 class TestDynamicParallelCeiling:
     """Pool/semaphore should scale to effective_parallel, not a hardcoded ceiling."""
 
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.is_shutting_down", side_effect=[False, True])
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
+    @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
     def test_pool_sized_above_default_when_effective_parallel_exceeds_ceiling(
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
         """ThreadPoolExecutor should clamp max_workers to ceiling."""
-        from pokepoke.parallel import _DEFAULT_PARALLEL_CEILING
+        from pokepoke.agents.parallel import _DEFAULT_PARALLEL_CEILING
         stats = SessionStats(agent_stats=AgentStats())
 
-        with patch("pokepoke.parallel.concurrent.futures.ThreadPoolExecutor") as MockTPE:
+        with patch("pokepoke.agents.parallel.concurrent.futures.ThreadPoolExecutor") as MockTPE:
             mock_executor = MagicMock()
             MockTPE.return_value = mock_executor
 
@@ -1038,13 +1038,13 @@ class TestDynamicParallelCeiling:
             call_kwargs = MockTPE.call_args
             assert call_kwargs[1]["max_workers"] == _DEFAULT_PARALLEL_CEILING
 
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.is_shutting_down", side_effect=[False, True])
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
+    @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
     def test_pool_uses_effective_parallel_when_smaller_than_ceiling(
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
@@ -1052,7 +1052,7 @@ class TestDynamicParallelCeiling:
         """When effective_parallel < default ceiling, pool uses effective_parallel."""
         stats = SessionStats(agent_stats=AgentStats())
 
-        with patch("pokepoke.parallel.concurrent.futures.ThreadPoolExecutor") as MockTPE:
+        with patch("pokepoke.agents.parallel.concurrent.futures.ThreadPoolExecutor") as MockTPE:
             mock_executor = MagicMock()
             MockTPE.return_value = mock_executor
 
@@ -1067,13 +1067,13 @@ class TestDynamicParallelCeiling:
             call_kwargs = MockTPE.call_args
             assert call_kwargs[1]["max_workers"] == 3
 
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.is_shutting_down", side_effect=[False, True])
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
+    @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
     def test_warning_logged_when_exceeding_default_ceiling(
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
@@ -1081,7 +1081,7 @@ class TestDynamicParallelCeiling:
         """A warning should be logged when effective_parallel > default ceiling."""
         stats = SessionStats(agent_stats=AgentStats())
 
-        with patch("pokepoke.parallel.logger") as mock_logger:
+        with patch("pokepoke.agents.parallel.logger") as mock_logger:
             run_parallel_loop(
                 effective_parallel=10, mode_name="Autonomous",
                 main_repo_path="/repo", failed_claim_ids=set(),
@@ -1100,7 +1100,7 @@ class TestRequestSpawnAgent:
 
     def test_sets_wakeup_event(self) -> None:
         """Covers line 48: _spawn_wakeup.set()."""
-        from pokepoke.parallel import request_spawn_agent, _spawn_wakeup
+        from pokepoke.agents.parallel import request_spawn_agent, _spawn_wakeup
         _spawn_wakeup.clear()
         request_spawn_agent()
         assert _spawn_wakeup.is_set()
@@ -1110,13 +1110,13 @@ class TestRequestSpawnAgent:
 class TestParallelDrainFutureEdgeCases:
     """Tests for drain future edge cases in run_parallel_loop."""
 
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", side_effect=[False, True])
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.is_shutting_down", side_effect=[False, True])
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
+    @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
     def test_no_items_continuous_mode_sleeps(
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
@@ -1134,13 +1134,13 @@ class TestParallelDrainFutureEdgeCases:
         # Should have been shut down, not exit with specific code
         assert result is None or result == 0
 
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.is_shutting_down", return_value=False)
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items", return_value=[])
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.is_shutting_down", return_value=False)
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
+    @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
     def test_no_items_non_continuous_exits(
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
@@ -1168,18 +1168,18 @@ class TestParallelReplenishmentBug:
     replenish UP TO the configured maximum, not just one agent per iteration.
     """
 
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.is_shutting_down")
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items")
-    @patch("pokepoke.parallel.select_multiple_items")
-    @patch("pokepoke.parallel._collect_done_futures")
-    @patch("pokepoke.parallel.process_work_item")
-    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=10)
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.is_shutting_down")
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items")
+    @patch("pokepoke.agents.parallel.select_multiple_items")
+    @patch("pokepoke.agents.parallel._collect_done_futures")
+    @patch("pokepoke.agents.parallel.process_work_item")
+    @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=10)
     def test_all_agents_exit_replenishes_to_limit(
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
@@ -1226,18 +1226,18 @@ class TestParallelReplenishmentBug:
         assert first_count == 10, f"First select should request 10 slots, got {first_count}"
         assert second_count == 10, f"Second select should request 10 slots after all exit, got {second_count}"
 
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.is_shutting_down")
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items")
-    @patch("pokepoke.parallel.select_multiple_items")
-    @patch("pokepoke.parallel._collect_done_futures")
-    @patch("pokepoke.parallel.process_work_item")
-    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=10)
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.is_shutting_down")
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items")
+    @patch("pokepoke.agents.parallel.select_multiple_items")
+    @patch("pokepoke.agents.parallel._collect_done_futures")
+    @patch("pokepoke.agents.parallel.process_work_item")
+    @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=10)
     def test_success_does_not_block_replenishment_continuous(
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
@@ -1281,18 +1281,18 @@ class TestParallelReplenishmentBug:
             f"Replenishment count should be 10 even after success, got {second_count}"
         )
 
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.is_shutting_down")
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items")
-    @patch("pokepoke.parallel.select_multiple_items")
-    @patch("pokepoke.parallel._collect_done_futures")
-    @patch("pokepoke.parallel.process_work_item")
-    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=2)
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.is_shutting_down")
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items")
+    @patch("pokepoke.agents.parallel.select_multiple_items")
+    @patch("pokepoke.agents.parallel._collect_done_futures")
+    @patch("pokepoke.agents.parallel.process_work_item")
+    @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=2)
     def test_single_shot_stops_replenishing_after_success(
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
@@ -1368,7 +1368,7 @@ class TestParallelReplenishmentBug:
             stats = SessionStats(agent_stats=AgentStats())
             record_fn = Mock()
 
-            from pokepoke.parallel import _collect_done_futures
+            from pokepoke.agents.parallel import _collect_done_futures
             total, any_ok, successes, failures = _collect_done_futures(
                 futures_dict, failed, 0, stats, Mock(), record_fn,
             )
@@ -1404,7 +1404,7 @@ class TestParallelReplenishmentBug:
         stats = SessionStats(agent_stats=AgentStats())
         record_fn = Mock()
 
-        from pokepoke.parallel import _collect_done_futures
+        from pokepoke.agents.parallel import _collect_done_futures
         _collect_done_futures(futures_dict, failed, 0, stats, Mock(), record_fn)
 
         # No crashed items should be in failed_claim_ids — they must remain
@@ -1423,24 +1423,24 @@ class TestParallelReplenishmentBug:
 class TestCircuitBreaker:
     """Tests for the circuit breaker that stops dispatch after consecutive failures."""
 
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.is_shutting_down")
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items")
-    @patch("pokepoke.parallel.select_multiple_items")
-    @patch("pokepoke.parallel._collect_done_futures")
-    @patch("pokepoke.parallel.process_work_item")
-    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=5)
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.is_shutting_down")
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items")
+    @patch("pokepoke.agents.parallel.select_multiple_items")
+    @patch("pokepoke.agents.parallel._collect_done_futures")
+    @patch("pokepoke.agents.parallel.process_work_item")
+    @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=5)
     def test_circuit_breaker_trips_after_max_consecutive_failures(
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
         """After _MAX_CONSECUTIVE_FAILURES *rounds* of all-failures, no new workers dispatched."""
-        from pokepoke.parallel import _MAX_CONSECUTIVE_FAILURES
+        from pokepoke.agents.parallel import _MAX_CONSECUTIVE_FAILURES
 
         items = [_make_item(f"cb-{i}") for i in range(_MAX_CONSECUTIVE_FAILURES * 2)]
         mock_ready.return_value = items
@@ -1480,18 +1480,18 @@ class TestCircuitBreaker:
             for call in logger.log_orchestrator.call_args_list
         )
 
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.time.sleep")
-    @patch("pokepoke.parallel.terminal_ui")
-    @patch("pokepoke.parallel.set_executor")
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.is_shutting_down")
-    @patch("pokepoke.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.parallel.get_ready_work_items")
-    @patch("pokepoke.parallel.select_multiple_items")
-    @patch("pokepoke.parallel._collect_done_futures")
-    @patch("pokepoke.parallel.process_work_item")
-    @patch("pokepoke.parallel._get_dynamic_max_agents", return_value=2)
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.time.sleep")
+    @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.agents.parallel.set_executor")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.is_shutting_down")
+    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
+    @patch("pokepoke.agents.parallel.get_ready_work_items")
+    @patch("pokepoke.agents.parallel.select_multiple_items")
+    @patch("pokepoke.agents.parallel._collect_done_futures")
+    @patch("pokepoke.agents.parallel.process_work_item")
+    @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=2)
     def test_circuit_breaker_resets_on_success(
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,

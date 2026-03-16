@@ -1,6 +1,6 @@
-"""Tests for pokepoke.parallel_runtime — runtime parallel agent limits."""
+"""Tests for pokepoke.agents.parallel_runtime — runtime parallel agent limits."""
 
-from pokepoke.parallel_runtime import (
+from pokepoke.agents.parallel_runtime import (
     set_runtime_parallel_limits,
     clear_runtime_parallel_limits,
     compute_effective_max_agents,

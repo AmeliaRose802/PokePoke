@@ -4,7 +4,7 @@ import asyncio
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 
-from pokepoke.copilot_sdk import (
+from pokepoke.models.copilot_sdk import (
     build_prompt_from_work_item,
     invoke_copilot_sdk_sync,
     _fail_result,
@@ -45,7 +45,7 @@ class TestBuildPromptFromWorkItem:
         assert work_item.title in result
         assert isinstance(result, str)
 
-    @patch('pokepoke.copilot_sdk.PromptService')
+    @patch('pokepoke.models.copilot_sdk.PromptService')
     def test_build_prompt_from_work_item(self, mock_service_class, sample_work_item):
         """Test building prompt from work item."""
         mock_service = MagicMock()
@@ -62,7 +62,7 @@ class TestBuildPromptFromWorkItem:
         assert variables["item_id"] == "test-123"
         assert variables["title"] == "Test work item"
 
-    @patch('pokepoke.copilot_sdk.PromptService')
+    @patch('pokepoke.models.copilot_sdk.PromptService')
     def test_build_prompt_without_labels(self, mock_service_class):
         """Test building prompt for work item without labels."""
         mock_service = MagicMock()
@@ -86,7 +86,7 @@ class TestBuildPromptFromWorkItem:
         variables = call_args[0][1]
         assert variables["labels"] is None
 
-    @patch('pokepoke.copilot_sdk.PromptService')
+    @patch('pokepoke.models.copilot_sdk.PromptService')
     def test_build_prompt_uses_custom_template_name(self, mock_service_class, sample_work_item):
         """Test that a custom template_name from assignment rules is used."""
         mock_service = MagicMock()
@@ -99,7 +99,7 @@ class TestBuildPromptFromWorkItem:
         call_args = mock_service.load_and_render.call_args
         assert call_args[0][0] == "high-pri-feature"
 
-    @patch('pokepoke.copilot_sdk.PromptService')
+    @patch('pokepoke.models.copilot_sdk.PromptService')
     def test_build_prompt_defaults_to_beads_item_template(self, mock_service_class, sample_work_item):
         """Test that default template_name is 'beads-item' when none specified."""
         mock_service = MagicMock()
@@ -115,7 +115,7 @@ class TestBuildPromptFromWorkItem:
 class TestInvokeCopilotSDKSync:
     """Tests for invoke_copilot_sdk_sync function signature."""
 
-    @patch('pokepoke.copilot_sdk.asyncio.run')
+    @patch('pokepoke.models.copilot_sdk.asyncio.run')
     def test_invoke_copilot_sdk_sync_with_item_logger(
         self, mock_asyncio_run, sample_work_item
     ):
@@ -143,7 +143,7 @@ class TestInvokeCopilotSDKSync:
         assert result == mock_result
         assert mock_asyncio_run.called
 
-    @patch('pokepoke.copilot_sdk.asyncio.run')
+    @patch('pokepoke.models.copilot_sdk.asyncio.run')
     def test_invoke_copilot_sdk_sync_with_custom_prompt(
         self, mock_asyncio_run, sample_work_item
     ):
@@ -174,7 +174,7 @@ class TestInvokeCopilotSDKSync:
 class TestCopilotClientNone:
     """Test behavior when CopilotClient SDK is not installed."""
 
-    @patch('pokepoke.copilot_sdk.CopilotClient', None)
+    @patch('pokepoke.models.copilot_sdk.CopilotClient', None)
     def test_invoke_sync_raises_when_sdk_missing(self, sample_work_item):
         """Test that invoke_copilot_sdk_sync raises ImportError when SDK not installed."""
         with pytest.raises(ImportError, match="copilot.*SDK.*not installed"):
@@ -190,13 +190,13 @@ class TestInvokeCopilotSDKAsync:
 
     @pytest.fixture(autouse=True)
     def _mock_process_cleanup(self):
-        with patch('pokepoke.process_utils.wait_for_process_cleanup'):
+        with patch('pokepoke.utils.process_utils.wait_for_process_cleanup'):
             yield
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_success(self, mock_client_class, sample_work_item):
         """Test successful SDK invocation."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
 
         # Create mock client and session
@@ -246,10 +246,10 @@ class TestInvokeCopilotSDKAsync:
         mock_client.create_session.assert_called_once()
         mock_client.stop.assert_called_once()
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_message_delta(self, mock_client_class, sample_work_item):
         """Test SDK invocation with streaming message deltas."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
 
         mock_client = AsyncMock()
@@ -299,10 +299,10 @@ class TestInvokeCopilotSDKAsync:
         assert result.success
         assert result.output == "Hello world!"
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_session_end_completes(self, mock_client_class, sample_work_item):
         """Session should complete from session.end event — the explicit agent completion signal."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
 
         mock_client = AsyncMock()
@@ -351,10 +351,10 @@ class TestInvokeCopilotSDKAsync:
 
         assert result.success
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_complete_message(self, mock_client_class, sample_work_item):
         """Test SDK invocation with complete message (no deltas)."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
 
         mock_client = AsyncMock()
@@ -401,10 +401,10 @@ class TestInvokeCopilotSDKAsync:
         assert result.success
         assert result.output == "Complete message content"
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_tool_calls(self, mock_client_class, sample_work_item):
         """Test SDK invocation with tool calls."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
 
         mock_client = AsyncMock()
@@ -456,10 +456,10 @@ class TestInvokeCopilotSDKAsync:
 
         assert result.success
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_error(self, mock_client_class, sample_work_item):
         """Test SDK invocation with session error."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
 
         mock_client = AsyncMock()
@@ -500,10 +500,10 @@ class TestInvokeCopilotSDKAsync:
         assert not result.success
         assert "Test error message" in result.error
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_timeout(self, mock_client_class, sample_work_item):
         """Test SDK invocation with timeout."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -533,10 +533,10 @@ class TestInvokeCopilotSDKAsync:
         # Session must be destroyed even on early exit (timeout path)
         mock_session.destroy.assert_called_once()
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_inactivity_destroys_session(self, mock_client_class, sample_work_item):
         """Test that session.destroy() is called on inactivity early exit."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -550,7 +550,7 @@ class TestInvokeCopilotSDKAsync:
         mock_client_class.return_value = mock_client
 
         # _await_completion returns "inactivity" to trigger that path
-        with patch('pokepoke.copilot_sdk._await_completion', new_callable=AsyncMock, return_value="inactivity"):
+        with patch('pokepoke.models.copilot_sdk._await_completion', new_callable=AsyncMock, return_value="inactivity"):
             mock_session.on = lambda handler: None
             mock_session.send = AsyncMock()
             mock_session.destroy = AsyncMock()
@@ -565,10 +565,10 @@ class TestInvokeCopilotSDKAsync:
         assert "no sdk events" in result.error.lower() or "inactiv" in result.error.lower()
         mock_session.destroy.assert_called_once()
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_exception(self, mock_client_class, sample_work_item):
         """Test SDK invocation with exception during execution."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_client.start = AsyncMock(side_effect=Exception("Connection failed"))
@@ -585,10 +585,10 @@ class TestInvokeCopilotSDKAsync:
         assert "Connection failed" in result.error
         mock_client.stop.assert_called_once()
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_stop_exception(self, mock_client_class, sample_work_item):
         """Test SDK invocation when client.stop() raises exception."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_client.start = AsyncMock(side_effect=Exception("Start failed"))
@@ -604,10 +604,10 @@ class TestInvokeCopilotSDKAsync:
 
         assert not result.success
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_deny_write(self, mock_client_class, sample_work_item):
         """Test SDK invocation with deny_write flag."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -653,13 +653,13 @@ class TestInvokeCopilotSDKAsync:
         assert "write" in captured_config["excluded_tools"]
         assert "edit" in captured_config["excluded_tools"]
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
-    @patch('pokepoke.copilot_sdk.build_prompt_from_work_item')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.build_prompt_from_work_item')
     async def test_invoke_copilot_sdk_generates_prompt_when_not_provided(
         self, mock_build_prompt, mock_client_class, sample_work_item
     ):
         """Test SDK invocation generates prompt when not provided."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_build_prompt.return_value = "Generated prompt"
 
@@ -696,13 +696,13 @@ class TestInvokeCopilotSDKAsync:
 
         mock_build_prompt.assert_called_once_with(sample_work_item, "beads-item")
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
-    @patch('pokepoke.copilot_sdk.build_prompt_from_work_item')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.build_prompt_from_work_item')
     async def test_invoke_copilot_sdk_with_custom_template_name(
         self, mock_build_prompt, mock_client_class, sample_work_item
     ):
         """Test SDK invocation passes custom template_name to prompt builder."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_build_prompt.return_value = "Custom template prompt"
 
@@ -741,10 +741,10 @@ class TestInvokeCopilotSDKAsync:
         # Verify build_prompt_from_work_item was called with custom template
         mock_build_prompt.assert_called_once_with(sample_work_item, "bug-item")
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_tool_execution(self, mock_client_class, sample_work_item):
         """Test SDK invocation with tool execution events."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
 
         mock_client = AsyncMock()
@@ -806,10 +806,10 @@ class TestInvokeCopilotSDKAsync:
         assert "[Tool] read_file" in result.output
         assert "[Result]" in result.output
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_usage_statistics(self, mock_client_class, sample_work_item):
         """Test SDK invocation with usage statistics tracking."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
 
         mock_client = AsyncMock()
@@ -865,10 +865,10 @@ class TestInvokeCopilotSDKAsync:
 
         assert result.success
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_keyboard_interrupt_during_wait(self, mock_client_class, sample_work_item):
         """Test SDK invocation with keyboard interrupt during wait."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
 
         mock_client = AsyncMock()
@@ -904,11 +904,11 @@ class TestInvokeCopilotSDKAsync:
         assert not result.success
         assert "Interrupted by user" in result.error
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
-    @patch('pokepoke.copilot_sdk.os.environ', new_callable=dict)
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.os.environ', new_callable=dict)
     async def test_invoke_copilot_sdk_environment_handling(self, mock_environ, mock_client_class, sample_work_item):
         """Test SDK invocation passes PYTHONIOENCODING via client options without mutating global os.environ."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
 
         # Start with original value
@@ -959,10 +959,10 @@ class TestInvokeCopilotSDKAsync:
         assert 'env' in call_args
         assert call_args['env']['PYTHONIOENCODING'] == 'utf-8:replace'
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_tool_requests(self, mock_client_class, sample_work_item):
         """Test SDK invocation with tool requests in assistant message."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
 
         mock_client = AsyncMock()
@@ -1011,10 +1011,10 @@ class TestInvokeCopilotSDKAsync:
         assert result.success
         assert "Let me read that file" in result.output
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_keyboard_interrupt_outer(self, mock_client_class, sample_work_item):
         """Test SDK invocation with keyboard interrupt in outer try block."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_client.start = AsyncMock(side_effect=KeyboardInterrupt("User interrupted"))
@@ -1030,10 +1030,10 @@ class TestInvokeCopilotSDKAsync:
         assert not result.success
         assert "Interrupted by user" in result.error
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_cwd(self, mock_client_class, sample_work_item):
         """Test SDK invocation passes cwd to client options."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
 
         mock_client = AsyncMock()
@@ -1071,10 +1071,10 @@ class TestInvokeCopilotSDKAsync:
         call_args = mock_client_class.call_args[0][0]
         assert call_args["cwd"] == "/tmp/test-worktree"
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_unicode_decode_error_in_stop(self, mock_client_class, sample_work_item):
         """Test SDK handles UnicodeDecodeError during client.stop()."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
 
         mock_client = AsyncMock()
@@ -1109,10 +1109,10 @@ class TestInvokeCopilotSDKAsync:
 
         assert result.success
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_general_exception(self, mock_client_class, sample_work_item):
         """Test SDK handles general exceptions during execution."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_client.start = AsyncMock(side_effect=RuntimeError("Connection failed"))
@@ -1127,11 +1127,11 @@ class TestInvokeCopilotSDKAsync:
         assert not result.success
         assert "SDK exception: Connection failed" in result.error
 
-    @patch('pokepoke.copilot_sdk.is_shutting_down', return_value=True)
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.is_shutting_down', return_value=True)
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_keyboard_interrupt_during_shutdown(self, mock_client_class, mock_shutting_down, sample_work_item):
         """Test SDK reports shutdown error when KeyboardInterrupt occurs during shutdown."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_client.start = AsyncMock(side_effect=KeyboardInterrupt("shutdown"))
@@ -1146,10 +1146,10 @@ class TestInvokeCopilotSDKAsync:
         assert not result.success
         assert "shutdown" in result.error.lower()
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_stop_timeout(self, mock_client_class, sample_work_item):
         """Test SDK handles timeout during client.stop() in finally block."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
 
         mock_client = AsyncMock()
@@ -1191,12 +1191,12 @@ class TestInvokeCopilotSDKAsync:
 
         assert result.success
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
-    @patch('pokepoke.sdk_helpers.is_shutting_down', return_value=True)
-    @patch('pokepoke.copilot_sdk.is_shutting_down', return_value=True)
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=True)
+    @patch('pokepoke.models.copilot_sdk.is_shutting_down', return_value=True)
     async def test_invoke_copilot_sdk_shutdown_during_wait(self, mock_shutting_down, mock_shutting_down_helpers, mock_client_class, sample_work_item):
         """Test SDK handles shutdown signal during wait loop."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -1226,10 +1226,10 @@ class TestInvokeCopilotSDKAsync:
         assert "shutdown" in result.error.lower()
         mock_session.abort.assert_called_once()
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_stop_timeout_force_fails(self, mock_client_class, sample_work_item):
         """Test SDK handles exception during forced stop after timeout."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
 
         mock_client = AsyncMock()
@@ -1272,10 +1272,10 @@ class TestInvokeCopilotSDKAsync:
 
         assert result.success
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_disconnected_client_forces_completion(self, mock_client_class, sample_work_item):
         """Test SDK detects disconnected client and forces completion instead of hanging."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -1305,10 +1305,10 @@ class TestInvokeCopilotSDKAsync:
         # Should detect disconnection and force-complete (success with no errors)
         assert result.success
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_error_state_forces_completion(self, mock_client_class, sample_work_item):
         """Test SDK detects error state client and forces completion."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -1337,10 +1337,10 @@ class TestInvokeCopilotSDKAsync:
 
         assert result.success
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_get_state_exception_does_not_crash(self, mock_client_class, sample_work_item):
         """Test that get_state() raising an exception doesn't crash the poll loop."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -1389,7 +1389,7 @@ class TestAPIStatsIntegration:
 
     def test_parse_agent_stats_import(self):
         """Test that parse_agent_stats is properly imported and accessible."""
-        from pokepoke.stats import parse_agent_stats
+        from pokepoke.stats.stats import parse_agent_stats
         from pokepoke.types import AgentStats
 
         # Test with sample output
@@ -1424,20 +1424,20 @@ class TestBuildTokenUsageCallback:
         callback = _build_token_usage_callback()
         assert callable(callback)
 
-    @patch('pokepoke.sdk_helpers.terminal_ui')
+    @patch('pokepoke.models.sdk_helpers.terminal_ui')
     def test_callback_pushes_tokens_when_agent_id_set(self, mock_ui):
         callback = _build_token_usage_callback()
         mock_thread = MagicMock()
         mock_thread.agent_id = "agent-1"
-        with patch('pokepoke.desktop_ui._thread_output', mock_thread):
+        with patch('pokepoke.desktop.desktop_ui._thread_output', mock_thread):
             callback(100, 50)
         mock_ui.ui.push_agent_tokens.assert_called_once_with("agent-1", 100, 50)
 
-    @patch('pokepoke.sdk_helpers.terminal_ui')
+    @patch('pokepoke.models.sdk_helpers.terminal_ui')
     def test_callback_noop_when_no_agent_id(self, mock_ui):
         callback = _build_token_usage_callback()
         mock_thread = MagicMock(spec=[])  # no agent_id attribute
-        with patch('pokepoke.desktop_ui._thread_output', mock_thread):
+        with patch('pokepoke.desktop.desktop_ui._thread_output', mock_thread):
             callback(100, 50)
         mock_ui.ui.push_agent_tokens.assert_not_called()
 
@@ -1518,15 +1518,15 @@ class TestRateLimitFallback:
 
     @pytest.fixture(autouse=True)
     def _mock_process_cleanup(self):
-        with patch('pokepoke.process_utils.wait_for_process_cleanup'):
+        with patch('pokepoke.utils.process_utils.wait_for_process_cleanup'):
             yield
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_rate_limit_triggers_fallback_to_fallback_model(
         self, mock_client_class, sample_work_item
     ):
         """RateLimitError on first attempt retries with FALLBACK_MODEL."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         from pokepoke.config import FALLBACK_MODEL
 
         mock_client = AsyncMock()
@@ -1596,12 +1596,12 @@ class TestRateLimitFallback:
         # First session should have been destroyed before fallback
         sessions_created[0].destroy.assert_called()
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_rate_limit_fallback_model_set_in_result(
         self, mock_client_class, sample_work_item
     ):
         """After fallback, result.model should be FALLBACK_MODEL."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         from pokepoke.config import FALLBACK_MODEL
 
         mock_client = AsyncMock()
@@ -1656,12 +1656,12 @@ class TestRateLimitFallback:
         assert result.success
         assert result.model == FALLBACK_MODEL
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_rate_limit_handler_reset_for_retry(
         self, mock_client_class, sample_work_item
     ):
         """Handler state (output, errors) is reset between fallback attempts."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_client.start = AsyncMock()
@@ -1730,12 +1730,12 @@ class TestRateLimitFallback:
         assert "partial before rate limit" not in result.output
         assert "clean fallback output" in result.output
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_rate_limit_on_fallback_model_breaks_with_error(
         self, mock_client_class, sample_work_item
     ):
         """Rate limit on FALLBACK_MODEL itself should not retry — breaks with error."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         from pokepoke.config import FALLBACK_MODEL
 
         mock_client = AsyncMock()
@@ -1788,12 +1788,12 @@ class TestRateLimitFallback:
         # Should NOT have retried — only 1 session created
         assert attempt_count == 1
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_rate_limit_session_destroy_failure_still_falls_back(
         self, mock_client_class, sample_work_item
     ):
         """Fallback proceeds even if session.destroy() fails during cleanup."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         from pokepoke.config import FALLBACK_MODEL
 
         mock_client = AsyncMock()
@@ -1857,12 +1857,12 @@ class TestRateLimitFallback:
         assert attempt_count == 2
         assert result.model == FALLBACK_MODEL
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_rate_limit_both_attempts_exhausted(
         self, mock_client_class, sample_work_item
     ):
         """Rate limit on both attempts results in failure, not infinite loop."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_client.start = AsyncMock()
@@ -1920,7 +1920,7 @@ class TestAwaitCompletionAbortOSError:
 
     async def test_shutdown_abort_oserror_returns_shutdown(self):
         """When session.abort() raises OSError on shutdown, still return 'shutdown'."""
-        from pokepoke.sdk_helpers import _await_completion
+        from pokepoke.models.sdk_helpers import _await_completion
 
         mock_session = AsyncMock()
         mock_session.abort = AsyncMock(side_effect=OSError(22, "Invalid argument"))
@@ -1930,7 +1930,7 @@ class TestAwaitCompletionAbortOSError:
 
         done = asyncio.Event()
 
-        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=True):
+        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=True):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=300.0,
@@ -1941,7 +1941,7 @@ class TestAwaitCompletionAbortOSError:
 
     async def test_timeout_abort_oserror_returns_timeout(self):
         """When session.abort() raises OSError on timeout, still return 'timeout'."""
-        from pokepoke.sdk_helpers import _await_completion
+        from pokepoke.models.sdk_helpers import _await_completion
 
         mock_session = AsyncMock()
         mock_session.abort = AsyncMock(side_effect=OSError(22, "Invalid argument"))
@@ -1951,7 +1951,7 @@ class TestAwaitCompletionAbortOSError:
 
         done = asyncio.Event()
 
-        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=False):
+        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=False):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=0.0,  # Immediate timeout
@@ -1963,7 +1963,7 @@ class TestAwaitCompletionAbortOSError:
     async def test_inactivity_abort_oserror_returns_inactivity(self):
         """When session.abort() raises OSError on inactivity, still return 'inactivity'."""
         import time
-        from pokepoke.sdk_helpers import _await_completion
+        from pokepoke.models.sdk_helpers import _await_completion
 
         mock_session = AsyncMock()
         mock_session.abort = AsyncMock(side_effect=OSError(22, "Invalid argument"))
@@ -1978,7 +1978,7 @@ class TestAwaitCompletionAbortOSError:
             'last_tool_activity_time': time.monotonic() - 700,
         }
 
-        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=False):
+        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=False):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=300.0,
@@ -1991,7 +1991,7 @@ class TestAwaitCompletionAbortOSError:
 
     async def test_shutdown_abort_success_returns_shutdown(self):
         """Normal shutdown abort (no error) still returns 'shutdown'."""
-        from pokepoke.sdk_helpers import _await_completion
+        from pokepoke.models.sdk_helpers import _await_completion
 
         mock_session = AsyncMock()
         mock_session.abort = AsyncMock()
@@ -2001,7 +2001,7 @@ class TestAwaitCompletionAbortOSError:
 
         done = asyncio.Event()
 
-        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=True):
+        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=True):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=300.0,
@@ -2012,7 +2012,7 @@ class TestAwaitCompletionAbortOSError:
 
     async def test_timeout_abort_success_returns_timeout(self):
         """Normal timeout abort (no error) still returns 'timeout'."""
-        from pokepoke.sdk_helpers import _await_completion
+        from pokepoke.models.sdk_helpers import _await_completion
 
         mock_session = AsyncMock()
         mock_session.abort = AsyncMock()
@@ -2022,7 +2022,7 @@ class TestAwaitCompletionAbortOSError:
 
         done = asyncio.Event()
 
-        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=False):
+        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=False):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=0.0,  # Immediate timeout
@@ -2039,7 +2039,7 @@ class TestAwaitCompletionAbortOSError:
         quiet while tools are still executing.
         """
         import time
-        from pokepoke.sdk_helpers import _await_completion
+        from pokepoke.models.sdk_helpers import _await_completion
 
         mock_session = AsyncMock()
         mock_client = MagicMock()
@@ -2056,7 +2056,7 @@ class TestAwaitCompletionAbortOSError:
 
         # Use a very short max_timeout so the loop terminates via timeout
         # rather than inactivity — proving inactivity was skipped.
-        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=False):
+        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=False):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=0.0,
@@ -2070,7 +2070,7 @@ class TestAwaitCompletionAbortOSError:
     async def test_inactivity_fires_when_zero_pending_tool_calls(self):
         """Inactivity timeout fires normally when no tools are pending."""
         import time
-        from pokepoke.sdk_helpers import _await_completion
+        from pokepoke.models.sdk_helpers import _await_completion
 
         mock_session = AsyncMock()
         mock_client = MagicMock()
@@ -2084,7 +2084,7 @@ class TestAwaitCompletionAbortOSError:
             'pending_tool_calls': 0,
         }
 
-        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=False):
+        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=False):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=300.0,
@@ -2097,7 +2097,7 @@ class TestAwaitCompletionAbortOSError:
     async def test_tool_timeout_fires_when_tool_exceeds_limit(self):
         """Tool call watchdog fires when a single tool exceeds the timeout."""
         import time
-        from pokepoke.sdk_helpers import _await_completion
+        from pokepoke.models.sdk_helpers import _await_completion
 
         mock_session = AsyncMock()
         mock_client = MagicMock()
@@ -2112,7 +2112,7 @@ class TestAwaitCompletionAbortOSError:
             'tool_start_times': {'tool-abc': time.monotonic() - 700},
         }
 
-        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=False):
+        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=False):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=300.0,
@@ -2127,7 +2127,7 @@ class TestAwaitCompletionAbortOSError:
     async def test_tool_timeout_does_not_fire_when_within_limit(self):
         """Tool call watchdog does not fire when tools are within the timeout."""
         import time
-        from pokepoke.sdk_helpers import _await_completion
+        from pokepoke.models.sdk_helpers import _await_completion
 
         mock_session = AsyncMock()
         mock_client = MagicMock()
@@ -2142,7 +2142,7 @@ class TestAwaitCompletionAbortOSError:
             'tool_start_times': {'tool-abc': time.monotonic() - 10},
         }
 
-        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=False):
+        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=False):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=0.0,
@@ -2157,7 +2157,7 @@ class TestAwaitCompletionAbortOSError:
     async def test_tool_timeout_abort_oserror_returns_tool_timeout(self):
         """When session.abort() raises OSError on tool timeout, still return 'tool_timeout'."""
         import time
-        from pokepoke.sdk_helpers import _await_completion
+        from pokepoke.models.sdk_helpers import _await_completion
 
         mock_session = AsyncMock()
         mock_session.abort = AsyncMock(side_effect=OSError(22, "Invalid argument"))
@@ -2174,7 +2174,7 @@ class TestAwaitCompletionAbortOSError:
             'tool_start_times': {'tool-xyz': time.monotonic() - 700},
         }
 
-        with patch('pokepoke.sdk_helpers.is_shutting_down', return_value=False):
+        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=False):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=300.0,

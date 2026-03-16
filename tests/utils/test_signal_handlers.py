@@ -6,8 +6,8 @@ import tempfile
 import threading
 from unittest.mock import Mock, patch
 
-from pokepoke.signal_handlers import register_shutdown_handlers, unregister_shutdown_handlers
-from pokepoke.logging_utils import RunLogger
+from pokepoke.utils.signal_handlers import register_shutdown_handlers, unregister_shutdown_handlers
+from pokepoke.utils.logging_utils import RunLogger
 
 
 class TestSignalHandlers:
@@ -46,13 +46,13 @@ class TestSignalHandlers:
         # Should be able to register again without issues
         register_shutdown_handlers(mock_logger)
 
-    @patch('pokepoke.signal_handlers.request_shutdown_from_signal')
+    @patch('pokepoke.utils.signal_handlers.request_shutdown_from_signal')
     def test_sigterm_handler_logs_and_exits(self, mock_request_shutdown_from_signal):
         """Test that SIGTERM handler logs and calls signal-safe shutdown."""
         mock_logger = Mock()
         register_shutdown_handlers(mock_logger)
 
-        from pokepoke.signal_handlers import _signal_handler
+        from pokepoke.utils.signal_handlers import _signal_handler
 
         _signal_handler(signal.SIGTERM, None)
 
@@ -68,13 +68,13 @@ class TestSignalHandlers:
         # Signal handler must use the signal-safe variant, not request_shutdown()
         mock_request_shutdown_from_signal.assert_called_once()
 
-    @patch('pokepoke.signal_handlers.request_shutdown_from_signal')
+    @patch('pokepoke.utils.signal_handlers.request_shutdown_from_signal')
     def test_sigint_handler_logs_and_exits(self, mock_request_shutdown_from_signal):
         """Test that SIGINT handler logs and calls signal-safe shutdown."""
         mock_logger = Mock()
         register_shutdown_handlers(mock_logger)
 
-        from pokepoke.signal_handlers import _signal_handler
+        from pokepoke.utils.signal_handlers import _signal_handler
 
         _signal_handler(signal.SIGINT, None)
 
@@ -85,12 +85,12 @@ class TestSignalHandlers:
 
         mock_request_shutdown_from_signal.assert_called_once()
 
-    @patch('pokepoke.signal_handlers.request_shutdown_from_signal')
-    @patch('pokepoke.signal_handlers.print')
+    @patch('pokepoke.utils.signal_handlers.request_shutdown_from_signal')
+    @patch('pokepoke.utils.signal_handlers.print')
     def test_signal_handler_fallback_when_no_logger(self, mock_print, mock_request_shutdown_from_signal):
         """Test that signal handler falls back to stderr when no logger available."""
         # Don't register a logger
-        from pokepoke.signal_handlers import _signal_handler
+        from pokepoke.utils.signal_handlers import _signal_handler
 
         # Call handler without logger
         _signal_handler(signal.SIGTERM, None)
@@ -105,7 +105,7 @@ class TestSignalHandlers:
 
         mock_request_shutdown_from_signal.assert_called_once()
 
-    @patch('pokepoke.signal_handlers.request_shutdown_from_signal')
+    @patch('pokepoke.utils.signal_handlers.request_shutdown_from_signal')
     def test_signal_handler_handles_logger_exception(self, mock_request_shutdown_from_signal):
         """Test that signal handler handles logging exceptions gracefully."""
         mock_logger = Mock()
@@ -113,14 +113,14 @@ class TestSignalHandlers:
 
         register_shutdown_handlers(mock_logger)
 
-        from pokepoke.signal_handlers import _signal_handler
+        from pokepoke.utils.signal_handlers import _signal_handler
 
         # Call handler - should not raise exception
         _signal_handler(signal.SIGTERM, None)
 
         mock_request_shutdown_from_signal.assert_called_once()
 
-    @patch('pokepoke.signal_handlers.print')
+    @patch('pokepoke.utils.signal_handlers.print')
     def test_signal_handler_catches_request_shutdown_exception(self, mock_print):
         """Covers exception path when request_shutdown_from_signal fails."""
         mock_logger = Mock()
@@ -128,9 +128,9 @@ class TestSignalHandlers:
 
         register_shutdown_handlers(mock_logger)
 
-        from pokepoke.signal_handlers import _signal_handler
+        from pokepoke.utils.signal_handlers import _signal_handler
 
-        with patch('pokepoke.signal_handlers.request_shutdown_from_signal', side_effect=RuntimeError("shutdown broke")):
+        with patch('pokepoke.utils.signal_handlers.request_shutdown_from_signal', side_effect=RuntimeError("shutdown broke")):
             # Should not raise even though request_shutdown_from_signal throws
             _signal_handler(signal.SIGTERM, None)
 
@@ -140,7 +140,7 @@ class TestSignalHandlers:
 
     def test_unregister_restores_sig_dfl_when_no_original(self):
         """Covers line 120: SIG_DFL restore when original handler was None."""
-        import pokepoke.signal_handlers as sh
+        import pokepoke.utils.signal_handlers as sh
 
         # Register handlers first
         register_shutdown_handlers(Mock())
@@ -189,7 +189,7 @@ class TestSignalHandlers:
         assert not error_box, f"register_shutdown_handlers raised on non-main thread: {error_box[0]}"
 
         # Logger should still be stored even though signals weren't registered
-        import pokepoke.signal_handlers as sh
+        import pokepoke.utils.signal_handlers as sh
         assert sh._current_logger is mock_logger
 
         # Clean up
@@ -199,19 +199,19 @@ class TestSignalHandlers:
 class TestOrchestratorSignalIntegration:
     """Test signal handler integration in orchestrator."""
 
-    @patch('pokepoke.orchestrator.register_shutdown_handlers')
+    @patch('pokepoke.orchestration.orchestrator.register_shutdown_handlers')
     def test_orchestrator_registers_handlers(self, mock_register):
         """Test that orchestrator registers signal handlers."""
-        from pokepoke.orchestrator import run_orchestrator
+        from pokepoke.orchestration.orchestrator import run_orchestrator
 
         # Mock out dependencies to avoid full orchestrator startup
-        with patch('pokepoke.orchestrator.initialize_agent_name', return_value='test-agent'), \
-             patch('pokepoke.orchestrator.get_ready_work_items', return_value=[]), \
-             patch('pokepoke.orchestrator.select_work_item', return_value=None), \
-             patch('pokepoke.orchestrator.get_beads_stats', return_value={}), \
-             patch('pokepoke.orchestrator.check_and_commit_main_repo', return_value=True), \
-             patch('pokepoke.orchestrator.terminal_ui'), \
-             patch('pokepoke.orchestrator.load_config') as mock_config:
+        with patch('pokepoke.orchestration.orchestrator.initialize_agent_name', return_value='test-agent'), \
+             patch('pokepoke.orchestration.orchestrator.get_ready_work_items', return_value=[]), \
+             patch('pokepoke.orchestration.orchestrator.select_work_item', return_value=None), \
+             patch('pokepoke.orchestration.orchestrator.get_beads_stats', return_value={}), \
+             patch('pokepoke.orchestration.orchestrator.check_and_commit_main_repo', return_value=True), \
+             patch('pokepoke.orchestration.orchestrator.terminal_ui'), \
+             patch('pokepoke.orchestration.orchestrator.load_config') as mock_config:
 
             mock_config.return_value = Mock(max_parallel_agents=1)
 

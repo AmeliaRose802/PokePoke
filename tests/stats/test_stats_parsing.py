@@ -1,6 +1,6 @@
 """Tests for agent statistics parsing."""
 
-from pokepoke.stats import parse_agent_stats
+from pokepoke.stats.stats import parse_agent_stats
 
 
 def test_parse_agent_stats_with_all_fields():
@@ -53,7 +53,7 @@ def test_parse_agent_stats_with_no_stats(caplog):
     import logging
     output = "Just some regular output with no statistics"
 
-    with caplog.at_level(logging.WARNING, logger="pokepoke.stats"):
+    with caplog.at_level(logging.WARNING, logger="pokepoke.stats.stats"):
         stats = parse_agent_stats(output)
 
     assert stats is None
@@ -160,7 +160,7 @@ def test_parse_agent_stats_with_exception_handling(monkeypatch, caplog):
     monkeypatch.setattr('builtins.float', mock_float)
 
     # Should return None and log a warning
-    with caplog.at_level(logging.WARNING, logger="pokepoke.stats"):
+    with caplog.at_level(logging.WARNING, logger="pokepoke.stats.stats"):
         stats = parse_agent_stats(output)
 
     assert stats is None

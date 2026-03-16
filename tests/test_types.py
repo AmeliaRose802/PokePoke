@@ -4,7 +4,7 @@ import threading
 
 import pytest
 
-from src.pokepoke.types import (
+from pokepoke.types import (
     AgentStats,
     BeadsStats,
     BeadsWorkItem,

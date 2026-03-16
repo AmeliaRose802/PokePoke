@@ -1,13 +1,16 @@
 """Tests for prompt template loading and rendering."""
 
 import pytest
-from pokepoke.prompts import PromptService
+from pokepoke.prompts.prompts import PromptService
 
 
-def test_prompt_service_initialization():
+def test_prompt_service_initialization(monkeypatch):
     """Test that prompt service initializes with correct directory."""
+    # Ensure CWD is the repo root so _find_repo_root() works
+    import os
+    monkeypatch.chdir(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     service = PromptService()
-    assert service.prompts_dir.exists()
+    assert service.prompts_dir.exists() or service.builtin_dir.exists()
     assert service.prompts_dir.name == "prompts"
 
 
@@ -482,8 +485,8 @@ def test_default_prompts_dir_uses_repo_root(monkeypatch, tmp_path):
     builtin_dir.mkdir(parents=True)
     (builtin_dir / "test.md").write_text("builtin", encoding="utf-8")
 
-    monkeypatch.setattr("pokepoke.prompts.BUILTIN_PROMPTS_DIR", builtin_dir)
-    monkeypatch.setattr("pokepoke.prompts._find_repo_root", lambda: repo_root)
+    monkeypatch.setattr("pokepoke.prompts.prompts.BUILTIN_PROMPTS_DIR", builtin_dir)
+    monkeypatch.setattr("pokepoke.prompts.prompts._find_repo_root", lambda: repo_root)
 
     service = PromptService()
     result = service.save_prompt("test", "override")

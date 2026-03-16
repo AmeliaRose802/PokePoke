@@ -5,7 +5,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pokepoke import orchestrator, parallel, workflow, workflow_helpers
+from pokepoke.agents import parallel
+from pokepoke.orchestration import orchestrator, workflow, workflow_helpers
 from pokepoke.types import (
     AgentStats,
     BeadsStats,
@@ -85,7 +86,7 @@ class _DummyUI:
 
 @pytest.fixture(autouse=True)
 def fake_ui(monkeypatch: pytest.MonkeyPatch):
-    from pokepoke import terminal_ui
+    from pokepoke.desktop import terminal_ui
 
     dummy = _DummyUI()
     monkeypatch.setattr(terminal_ui, "ui", dummy)
@@ -96,7 +97,7 @@ def fake_ui(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture(autouse=True)
 def shutdown_controls(monkeypatch: pytest.MonkeyPatch):
-    from pokepoke import shutdown
+    from pokepoke.utils import shutdown
 
     shutdown.reset()
     monkeypatch.setattr(shutdown, "is_shutting_down", lambda: False)
@@ -109,9 +110,9 @@ def shutdown_controls(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture(autouse=True)
 def agent_context_controls(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr("pokepoke.agent_context.get_agent_name", lambda default="pokepoke": "base-agent")
-    monkeypatch.setattr("pokepoke.agent_context.set_agent_name", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("pokepoke.agent_context.clear_agent_name", lambda: None)
+    monkeypatch.setattr("pokepoke.agents.agent_context.get_agent_name", lambda default="pokepoke": "base-agent")
+    monkeypatch.setattr("pokepoke.agents.agent_context.set_agent_name", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("pokepoke.agents.agent_context.clear_agent_name", lambda: None)
 
 
 class WorkflowHarness:
@@ -148,14 +149,14 @@ class WorkflowHarness:
         monkeypatch.setattr(workflow, "run_gate_agent", self._run_gate_agent)
         monkeypatch.setattr(workflow_helpers, "run_cleanup_loop", self._run_cleanup_loop)
         monkeypatch.setattr(workflow_helpers, "has_uncommitted_changes", self._has_uncommitted)
-        monkeypatch.setattr("pokepoke.git_operations.has_commits_ahead", lambda **_kwargs: 0)
+        monkeypatch.setattr("pokepoke.git.git_operations.has_commits_ahead", lambda **_kwargs: 0)
         monkeypatch.setattr(workflow_helpers, "finalize_work_item", self._finalize_work_item)
         monkeypatch.setattr(workflow, "add_comment", self._add_comment)
         monkeypatch.setattr(workflow, "build_prompt_from_work_item", self._build_prompt)
         monkeypatch.setattr(workflow, "select_model_for_item", lambda *_args, **_kwargs: "test-model")
         monkeypatch.setattr(workflow, "get_assignment_for_item", lambda *_args, **_kwargs: ("work", "beads-item"))
         monkeypatch.setattr(workflow_helpers, "run_beta_tester", self._run_beta)
-        monkeypatch.setattr("pokepoke.git_operations.build_handoff_context", lambda **_kwargs: {"context": "noop"})
+        monkeypatch.setattr("pokepoke.git.git_operations.build_handoff_context", lambda **_kwargs: {"context": "noop"})
         monkeypatch.setattr(workflow_helpers, "set_terminal_banner", lambda *_args, **_kwargs: None)
 
     def _assign_and_sync(self, item_id: str) -> bool:
@@ -375,8 +376,8 @@ def test_run_orchestrator_processes_single_item(monkeypatch: pytest.MonkeyPatch,
     result = WorkItemResult(success=True, request_count=2, stats=AgentStats())
     dummy_logger = _DummyRunLogger(tmp_path)
 
-    monkeypatch.setattr("pokepoke.agent_names.initialize_agent_name", lambda **_kwargs: "AgentZero")
-    monkeypatch.setattr("pokepoke.agent_context.set_agent_name", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("pokepoke.agents.agent_names.initialize_agent_name", lambda **_kwargs: "AgentZero")
+    monkeypatch.setattr("pokepoke.agents.agent_context.set_agent_name", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "get_agent_name", lambda default="pokepoke": "AgentZero")
     monkeypatch.setattr(orchestrator, "load_config", lambda: SimpleNamespace(max_parallel_agents=1, preflight_health=MagicMock(enabled=False)))
     monkeypatch.setattr(orchestrator, "get_ready_work_items", lambda: [item])
@@ -388,14 +389,14 @@ def test_run_orchestrator_processes_single_item(monkeypatch: pytest.MonkeyPatch,
     monkeypatch.setattr(orchestrator, "append_model_history_entry", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "run_periodic_maintenance", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "increment_items_completed", lambda *_args, **_kwargs: 1)
-    monkeypatch.setattr("pokepoke.beads_item_stats_store.record_item_completed", lambda *_args, **_kwargs: {"total_created": 1, "total_completed": 1})
-    monkeypatch.setattr("pokepoke.beads_item_stats_store.get_summary", lambda: {"total_created": 1, "total_completed": 0})
-    monkeypatch.setattr("pokepoke.beads_item_stats_backfill.backfill_from_beads_db", lambda **_kwargs: {"backfilled": 0})
-    monkeypatch.setattr("pokepoke.beads.retry_failed_unassigns", lambda **_kwargs: 0)
-    monkeypatch.setattr("pokepoke.beads.get_failed_unassign_count", lambda: 0)
-    monkeypatch.setattr("pokepoke.signal_handlers.register_shutdown_handlers", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("pokepoke.signal_handlers.unregister_shutdown_handlers", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("pokepoke.merge_queue.get_merge_queue", lambda: _NoOpMergeQueue())
+    monkeypatch.setattr("pokepoke.beads.beads_item_stats_store.record_item_completed", lambda *_args, **_kwargs: {"total_created": 1, "total_completed": 1})
+    monkeypatch.setattr("pokepoke.beads.beads_item_stats_store.get_summary", lambda: {"total_created": 1, "total_completed": 0})
+    monkeypatch.setattr("pokepoke.beads.beads_item_stats_backfill.backfill_from_beads_db", lambda **_kwargs: {"backfilled": 0})
+    monkeypatch.setattr("pokepoke.beads.beads.retry_failed_unassigns", lambda **_kwargs: 0)
+    monkeypatch.setattr("pokepoke.beads.beads.get_failed_unassign_count", lambda: 0)
+    monkeypatch.setattr("pokepoke.utils.signal_handlers.register_shutdown_handlers", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("pokepoke.utils.signal_handlers.unregister_shutdown_handlers", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("pokepoke.git.merge_queue.get_merge_queue", lambda: _NoOpMergeQueue())
     monkeypatch.setattr(orchestrator.time, "sleep", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "RunLogger", lambda: dummy_logger)
 
@@ -410,8 +411,8 @@ def test_run_orchestrator_failure_returns_non_zero(monkeypatch: pytest.MonkeyPat
     result = WorkItemResult(success=False, request_count=0, stats=AgentStats())
     dummy_logger = _DummyRunLogger(tmp_path)
 
-    monkeypatch.setattr("pokepoke.agent_names.initialize_agent_name", lambda **_kwargs: "AgentZero")
-    monkeypatch.setattr("pokepoke.agent_context.set_agent_name", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("pokepoke.agents.agent_names.initialize_agent_name", lambda **_kwargs: "AgentZero")
+    monkeypatch.setattr("pokepoke.agents.agent_context.set_agent_name", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "get_agent_name", lambda default="pokepoke": "AgentZero")
     monkeypatch.setattr(orchestrator, "load_config", lambda: SimpleNamespace(max_parallel_agents=1, preflight_health=MagicMock(enabled=False)))
     monkeypatch.setattr(orchestrator, "get_ready_work_items", lambda: [item])
@@ -423,14 +424,14 @@ def test_run_orchestrator_failure_returns_non_zero(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(orchestrator, "append_model_history_entry", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "run_periodic_maintenance", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "increment_items_completed", lambda *_args, **_kwargs: 0)
-    monkeypatch.setattr("pokepoke.beads_item_stats_store.record_item_completed", lambda *_args, **_kwargs: {"total_created": 0, "total_completed": 0})
-    monkeypatch.setattr("pokepoke.beads_item_stats_store.get_summary", lambda: {"total_created": 0, "total_completed": 0})
-    monkeypatch.setattr("pokepoke.beads_item_stats_backfill.backfill_from_beads_db", lambda **_kwargs: {"backfilled": 0})
-    monkeypatch.setattr("pokepoke.beads.retry_failed_unassigns", lambda **_kwargs: 0)
-    monkeypatch.setattr("pokepoke.beads.get_failed_unassign_count", lambda: 0)
-    monkeypatch.setattr("pokepoke.signal_handlers.register_shutdown_handlers", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("pokepoke.signal_handlers.unregister_shutdown_handlers", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("pokepoke.merge_queue.get_merge_queue", lambda: _NoOpMergeQueue())
+    monkeypatch.setattr("pokepoke.beads.beads_item_stats_store.record_item_completed", lambda *_args, **_kwargs: {"total_created": 0, "total_completed": 0})
+    monkeypatch.setattr("pokepoke.beads.beads_item_stats_store.get_summary", lambda: {"total_created": 0, "total_completed": 0})
+    monkeypatch.setattr("pokepoke.beads.beads_item_stats_backfill.backfill_from_beads_db", lambda **_kwargs: {"backfilled": 0})
+    monkeypatch.setattr("pokepoke.beads.beads.retry_failed_unassigns", lambda **_kwargs: 0)
+    monkeypatch.setattr("pokepoke.beads.beads.get_failed_unassign_count", lambda: 0)
+    monkeypatch.setattr("pokepoke.utils.signal_handlers.register_shutdown_handlers", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("pokepoke.utils.signal_handlers.unregister_shutdown_handlers", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("pokepoke.git.merge_queue.get_merge_queue", lambda: _NoOpMergeQueue())
     monkeypatch.setattr(orchestrator.time, "sleep", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "RunLogger", lambda: dummy_logger)
 
@@ -444,8 +445,8 @@ def test_run_orchestrator_parallel_mode_invokes_parallel_loop(monkeypatch: pytes
     dummy_logger = _DummyRunLogger(tmp_path)
     parallel_calls: list[int] = []
 
-    monkeypatch.setattr("pokepoke.agent_names.initialize_agent_name", lambda **_kwargs: "AgentZero")
-    monkeypatch.setattr("pokepoke.agent_context.set_agent_name", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("pokepoke.agents.agent_names.initialize_agent_name", lambda **_kwargs: "AgentZero")
+    monkeypatch.setattr("pokepoke.agents.agent_context.set_agent_name", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "get_agent_name", lambda default="pokepoke": "AgentZero")
     monkeypatch.setattr(orchestrator, "load_config", lambda: SimpleNamespace(max_parallel_agents=2, preflight_health=MagicMock(enabled=False)))
     monkeypatch.setattr(orchestrator, "get_ready_work_items", lambda: [])
@@ -457,14 +458,14 @@ def test_run_orchestrator_parallel_mode_invokes_parallel_loop(monkeypatch: pytes
     monkeypatch.setattr(orchestrator, "append_model_history_entry", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "run_periodic_maintenance", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "increment_items_completed", lambda *_args, **_kwargs: 0)
-    monkeypatch.setattr("pokepoke.beads_item_stats_store.record_item_completed", lambda *_args, **_kwargs: {"total_created": 0, "total_completed": 0})
-    monkeypatch.setattr("pokepoke.beads_item_stats_store.get_summary", lambda: {"total_created": 0, "total_completed": 0})
-    monkeypatch.setattr("pokepoke.beads_item_stats_backfill.backfill_from_beads_db", lambda **_kwargs: {"backfilled": 0})
-    monkeypatch.setattr("pokepoke.beads.retry_failed_unassigns", lambda **_kwargs: 0)
-    monkeypatch.setattr("pokepoke.beads.get_failed_unassign_count", lambda: 0)
-    monkeypatch.setattr("pokepoke.signal_handlers.register_shutdown_handlers", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("pokepoke.signal_handlers.unregister_shutdown_handlers", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("pokepoke.merge_queue.get_merge_queue", lambda: _NoOpMergeQueue())
+    monkeypatch.setattr("pokepoke.beads.beads_item_stats_store.record_item_completed", lambda *_args, **_kwargs: {"total_created": 0, "total_completed": 0})
+    monkeypatch.setattr("pokepoke.beads.beads_item_stats_store.get_summary", lambda: {"total_created": 0, "total_completed": 0})
+    monkeypatch.setattr("pokepoke.beads.beads_item_stats_backfill.backfill_from_beads_db", lambda **_kwargs: {"backfilled": 0})
+    monkeypatch.setattr("pokepoke.beads.beads.retry_failed_unassigns", lambda **_kwargs: 0)
+    monkeypatch.setattr("pokepoke.beads.beads.get_failed_unassign_count", lambda: 0)
+    monkeypatch.setattr("pokepoke.utils.signal_handlers.register_shutdown_handlers", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("pokepoke.utils.signal_handlers.unregister_shutdown_handlers", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("pokepoke.git.merge_queue.get_merge_queue", lambda: _NoOpMergeQueue())
     monkeypatch.setattr(orchestrator.time, "sleep", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "RunLogger", lambda: dummy_logger)
 
@@ -472,7 +473,7 @@ def test_run_orchestrator_parallel_mode_invokes_parallel_loop(monkeypatch: pytes
         parallel_calls.append(kwargs["effective_parallel"])
         return 0
 
-    monkeypatch.setattr("pokepoke.parallel.run_parallel_loop", fake_parallel_loop)
+    monkeypatch.setattr(orchestrator, "run_parallel_loop", fake_parallel_loop)
 
     exit_code = orchestrator.run_orchestrator(interactive=False, continuous=True, max_parallel_agents=3)
 
@@ -486,8 +487,8 @@ def test_run_orchestrator_honors_stop_after_current(monkeypatch: pytest.MonkeyPa
     dummy_logger = _DummyRunLogger(tmp_path)
     stop_checks: list[bool] = []
 
-    monkeypatch.setattr("pokepoke.agent_names.initialize_agent_name", lambda **_kwargs: "AgentZero")
-    monkeypatch.setattr("pokepoke.agent_context.set_agent_name", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("pokepoke.agents.agent_names.initialize_agent_name", lambda **_kwargs: "AgentZero")
+    monkeypatch.setattr("pokepoke.agents.agent_context.set_agent_name", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "get_agent_name", lambda default="pokepoke": "AgentZero")
     monkeypatch.setattr(orchestrator, "load_config", lambda: SimpleNamespace(max_parallel_agents=1, preflight_health=MagicMock(enabled=False)))
     monkeypatch.setattr(orchestrator, "get_ready_work_items", lambda: [item])
@@ -499,14 +500,14 @@ def test_run_orchestrator_honors_stop_after_current(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(orchestrator, "append_model_history_entry", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "run_periodic_maintenance", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "increment_items_completed", lambda *_args, **_kwargs: 1)
-    monkeypatch.setattr("pokepoke.beads_item_stats_store.record_item_completed", lambda *_args, **_kwargs: {"total_created": 1, "total_completed": 1})
-    monkeypatch.setattr("pokepoke.beads_item_stats_store.get_summary", lambda: {"total_created": 1, "total_completed": 0})
-    monkeypatch.setattr("pokepoke.beads_item_stats_backfill.backfill_from_beads_db", lambda **_kwargs: {"backfilled": 0})
-    monkeypatch.setattr("pokepoke.beads.retry_failed_unassigns", lambda **_kwargs: 0)
-    monkeypatch.setattr("pokepoke.beads.get_failed_unassign_count", lambda: 0)
-    monkeypatch.setattr("pokepoke.signal_handlers.register_shutdown_handlers", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("pokepoke.signal_handlers.unregister_shutdown_handlers", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("pokepoke.merge_queue.get_merge_queue", lambda: _NoOpMergeQueue())
+    monkeypatch.setattr("pokepoke.beads.beads_item_stats_store.record_item_completed", lambda *_args, **_kwargs: {"total_created": 1, "total_completed": 1})
+    monkeypatch.setattr("pokepoke.beads.beads_item_stats_store.get_summary", lambda: {"total_created": 1, "total_completed": 0})
+    monkeypatch.setattr("pokepoke.beads.beads_item_stats_backfill.backfill_from_beads_db", lambda **_kwargs: {"backfilled": 0})
+    monkeypatch.setattr("pokepoke.beads.beads.retry_failed_unassigns", lambda **_kwargs: 0)
+    monkeypatch.setattr("pokepoke.beads.beads.get_failed_unassign_count", lambda: 0)
+    monkeypatch.setattr("pokepoke.utils.signal_handlers.register_shutdown_handlers", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("pokepoke.utils.signal_handlers.unregister_shutdown_handlers", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("pokepoke.git.merge_queue.get_merge_queue", lambda: _NoOpMergeQueue())
     monkeypatch.setattr(orchestrator.time, "sleep", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "RunLogger", lambda: dummy_logger)
 
@@ -529,8 +530,8 @@ def test_run_orchestrator_runs_beta_first(monkeypatch: pytest.MonkeyPatch, tmp_p
     dummy_logger = _DummyRunLogger(tmp_path)
     beta_calls: list[int] = []
 
-    monkeypatch.setattr("pokepoke.agent_names.initialize_agent_name", lambda **_kwargs: "AgentZero")
-    monkeypatch.setattr("pokepoke.agent_context.set_agent_name", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("pokepoke.agents.agent_names.initialize_agent_name", lambda **_kwargs: "AgentZero")
+    monkeypatch.setattr("pokepoke.agents.agent_context.set_agent_name", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "get_agent_name", lambda default="pokepoke": "AgentZero")
     monkeypatch.setattr(orchestrator, "load_config", lambda: SimpleNamespace(max_parallel_agents=1, preflight_health=MagicMock(enabled=False)))
     monkeypatch.setattr(orchestrator, "get_ready_work_items", lambda: [item])
@@ -542,21 +543,21 @@ def test_run_orchestrator_runs_beta_first(monkeypatch: pytest.MonkeyPatch, tmp_p
     monkeypatch.setattr(orchestrator, "append_model_history_entry", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "run_periodic_maintenance", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "increment_items_completed", lambda *_args, **_kwargs: 1)
-    monkeypatch.setattr("pokepoke.beads_item_stats_store.record_item_completed", lambda *_args, **_kwargs: {"total_created": 1, "total_completed": 1})
-    monkeypatch.setattr("pokepoke.beads_item_stats_store.get_summary", lambda: {"total_created": 1, "total_completed": 0})
-    monkeypatch.setattr("pokepoke.beads_item_stats_backfill.backfill_from_beads_db", lambda **_kwargs: {"backfilled": 0})
-    monkeypatch.setattr("pokepoke.beads.retry_failed_unassigns", lambda **_kwargs: 0)
-    monkeypatch.setattr("pokepoke.beads.get_failed_unassign_count", lambda: 0)
-    monkeypatch.setattr("pokepoke.signal_handlers.register_shutdown_handlers", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("pokepoke.signal_handlers.unregister_shutdown_handlers", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("pokepoke.merge_queue.get_merge_queue", lambda: _NoOpMergeQueue())
+    monkeypatch.setattr("pokepoke.beads.beads_item_stats_store.record_item_completed", lambda *_args, **_kwargs: {"total_created": 1, "total_completed": 1})
+    monkeypatch.setattr("pokepoke.beads.beads_item_stats_store.get_summary", lambda: {"total_created": 1, "total_completed": 0})
+    monkeypatch.setattr("pokepoke.beads.beads_item_stats_backfill.backfill_from_beads_db", lambda **_kwargs: {"backfilled": 0})
+    monkeypatch.setattr("pokepoke.beads.beads.retry_failed_unassigns", lambda **_kwargs: 0)
+    monkeypatch.setattr("pokepoke.beads.beads.get_failed_unassign_count", lambda: 0)
+    monkeypatch.setattr("pokepoke.utils.signal_handlers.register_shutdown_handlers", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("pokepoke.utils.signal_handlers.unregister_shutdown_handlers", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("pokepoke.git.merge_queue.get_merge_queue", lambda: _NoOpMergeQueue())
     monkeypatch.setattr(orchestrator.time, "sleep", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(orchestrator, "RunLogger", lambda: dummy_logger)
     def fake_beta(**_kwargs):
         beta_calls.append(1)
         return AgentStats()
 
-    monkeypatch.setattr("pokepoke.agent_runner.run_beta_tester", fake_beta)
+    monkeypatch.setattr(orchestrator, "run_beta_tester", fake_beta)
 
     exit_code = orchestrator.run_orchestrator(interactive=False, continuous=False, run_beta_first=True, max_parallel_agents=1)
 

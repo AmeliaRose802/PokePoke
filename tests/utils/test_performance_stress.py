@@ -21,15 +21,15 @@ from concurrent.futures import Future
 from pathlib import Path
 from unittest.mock import patch
 
-from pokepoke.lock_contention import LockContentionTracker
-from pokepoke.merge_queue import MergeQueue, MergeStatus
-from pokepoke.model_stats_store import (
+from pokepoke.worktrees.lock_contention import LockContentionTracker
+from pokepoke.git.merge_queue import MergeQueue, MergeStatus
+from pokepoke.models.model_stats_store import (
     _rebuild_summary,
     load_model_stats,
     record_completion,
     save_model_stats,
 )
-from pokepoke.process_utils import apply_memory_backpressure
+from pokepoke.utils.process_utils import apply_memory_backpressure
 from pokepoke.types import BeadsWorkItem, ModelCompletionRecord
 
 
@@ -209,8 +209,8 @@ class TestMergeQueueThroughput:
         if self.queue.is_running:
             self.queue.shutdown(timeout=10)
 
-    @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
-    @patch("pokepoke.merge_queue._rebase_worktree", return_value=True)
+    @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
+    @patch("pokepoke.git.merge_queue._rebase_worktree", return_value=True)
     def test_items_queued_simultaneously(self, mock_rebase, mock_shutdown) -> None:
         """5 merge requests queued at once are all processed serially."""
         processing_order: list[str] = []
@@ -222,7 +222,7 @@ class TestMergeQueueThroughput:
             time.sleep(0.005)
             return True
 
-        with patch("pokepoke.worktree_finalization.merge_worktree_to_dev", side_effect=mock_merge):
+        with patch("pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev", side_effect=mock_merge):
             self.queue.start()
             futures: list[Future] = []
             for i in range(5):
@@ -235,15 +235,15 @@ class TestMergeQueueThroughput:
         assert all(r.status == MergeStatus.SUCCESS for r in results)
         assert len(processing_order) == 5
 
-    @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
-    @patch("pokepoke.merge_queue._rebase_worktree", return_value=True)
+    @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
+    @patch("pokepoke.git.merge_queue._rebase_worktree", return_value=True)
     def test_concurrent_submitters(self, mock_rebase, mock_shutdown) -> None:
         """Multiple threads submit to the queue simultaneously."""
         def mock_merge(item, worktree_path=None, **kwargs):
             time.sleep(0.005)
             return True
 
-        with patch("pokepoke.worktree_finalization.merge_worktree_to_dev", side_effect=mock_merge):
+        with patch("pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev", side_effect=mock_merge):
             self.queue.start()
             all_futures: list[Future] = []
             barrier = threading.Barrier(4, timeout=5)
@@ -266,8 +266,8 @@ class TestMergeQueueThroughput:
         assert len(results) == 12
         assert all(r.status == MergeStatus.SUCCESS for r in results)
 
-    @patch("pokepoke.merge_queue.is_shutting_down", return_value=False)
-    @patch("pokepoke.merge_queue._rebase_worktree", return_value=True)
+    @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
+    @patch("pokepoke.git.merge_queue._rebase_worktree", return_value=True)
     def test_shutdown_drains_pending(self, mock_rebase, mock_shutdown) -> None:
         """Shutdown resolves all pending requests with SHUTDOWN status."""
         slow_event = threading.Event()
@@ -276,7 +276,7 @@ class TestMergeQueueThroughput:
             slow_event.wait(timeout=10)
             return True
 
-        with patch("pokepoke.worktree_finalization.merge_worktree_to_dev", side_effect=slow_merge):
+        with patch("pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev", side_effect=slow_merge):
             self.queue.start()
             futures = []
             for i in range(5):
@@ -364,7 +364,7 @@ class TestModelStatsScaling:
                 )
                 record_completion(rec, path=stats_path)
 
-        with patch("pokepoke.coordination._lock_dir", return_value=lock_dir):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=lock_dir):
             threads = [threading.Thread(target=writer, args=(t,)) for t in range(num_threads)]
             for t in threads:
                 t.start()
@@ -385,7 +385,7 @@ class TestModelStatsScaling:
         lock_dir = tmp_path / "locks"
         lock_dir.mkdir()
 
-        with patch("pokepoke.coordination._lock_dir", return_value=lock_dir):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=lock_dir):
             t0 = time.monotonic()
             for i in range(30):
                 rec = _make_record(item_id=f"SEQ-{i}", model="seq-model", duration=1.0)
@@ -422,48 +422,48 @@ class TestModelStatsScaling:
 class TestMemoryBackpressure:
     """Verify memory-based slot adjustment thresholds."""
 
-    @patch("pokepoke.process_utils.get_available_memory_mb", return_value=4096)
-    @patch("pokepoke.process_utils.is_memory_pressure", return_value=False)
-    @patch("pokepoke.process_utils.is_memory_critical", return_value=False)
+    @patch("pokepoke.utils.process_utils.get_available_memory_mb", return_value=4096)
+    @patch("pokepoke.utils.process_utils.is_memory_pressure", return_value=False)
+    @patch("pokepoke.utils.process_utils.is_memory_critical", return_value=False)
     def test_no_pressure_preserves_slots(self, *mocks) -> None:
         adjusted, avail = apply_memory_backpressure(8)
         assert adjusted == 8
         assert avail == 4096
 
-    @patch("pokepoke.process_utils.get_available_memory_mb", return_value=1500)
-    @patch("pokepoke.process_utils.is_memory_pressure", return_value=True)
-    @patch("pokepoke.process_utils.is_memory_critical", return_value=False)
+    @patch("pokepoke.utils.process_utils.get_available_memory_mb", return_value=1500)
+    @patch("pokepoke.utils.process_utils.is_memory_pressure", return_value=True)
+    @patch("pokepoke.utils.process_utils.is_memory_critical", return_value=False)
     def test_pressure_throttles_to_1(self, *mocks) -> None:
         adjusted, avail = apply_memory_backpressure(8)
         assert adjusted == 1
         assert avail == 1500
 
-    @patch("pokepoke.process_utils.get_available_memory_mb", return_value=800)
-    @patch("pokepoke.process_utils.is_memory_pressure", return_value=True)
-    @patch("pokepoke.process_utils.is_memory_critical", return_value=True)
+    @patch("pokepoke.utils.process_utils.get_available_memory_mb", return_value=800)
+    @patch("pokepoke.utils.process_utils.is_memory_pressure", return_value=True)
+    @patch("pokepoke.utils.process_utils.is_memory_critical", return_value=True)
     def test_critical_blocks_all(self, *mocks) -> None:
         adjusted, avail = apply_memory_backpressure(8)
         assert adjusted == 0
         assert avail == 800
 
-    @patch("pokepoke.process_utils.get_available_memory_mb", return_value=0)
-    @patch("pokepoke.process_utils.is_memory_pressure", return_value=False)
-    @patch("pokepoke.process_utils.is_memory_critical", return_value=False)
+    @patch("pokepoke.utils.process_utils.get_available_memory_mb", return_value=0)
+    @patch("pokepoke.utils.process_utils.is_memory_pressure", return_value=False)
+    @patch("pokepoke.utils.process_utils.is_memory_critical", return_value=False)
     def test_unknown_memory_passes_through(self, *mocks) -> None:
         adjusted, avail = apply_memory_backpressure(4)
         assert adjusted == 4
         assert avail == 0
 
     def test_zero_slots_unchanged(self) -> None:
-        with patch("pokepoke.process_utils.get_available_memory_mb", return_value=1500), \
-             patch("pokepoke.process_utils.is_memory_pressure", return_value=True), \
-             patch("pokepoke.process_utils.is_memory_critical", return_value=False):
+        with patch("pokepoke.utils.process_utils.get_available_memory_mb", return_value=1500), \
+             patch("pokepoke.utils.process_utils.is_memory_pressure", return_value=True), \
+             patch("pokepoke.utils.process_utils.is_memory_critical", return_value=False):
             adjusted, _ = apply_memory_backpressure(0)
             assert adjusted == 0
 
-    @patch("pokepoke.process_utils.get_available_memory_mb", return_value=1500)
-    @patch("pokepoke.process_utils.is_memory_pressure", return_value=True)
-    @patch("pokepoke.process_utils.is_memory_critical", return_value=False)
+    @patch("pokepoke.utils.process_utils.get_available_memory_mb", return_value=1500)
+    @patch("pokepoke.utils.process_utils.is_memory_pressure", return_value=True)
+    @patch("pokepoke.utils.process_utils.is_memory_critical", return_value=False)
     def test_pressure_caps_high_slot_count(self, *mocks) -> None:
         adjusted, _ = apply_memory_backpressure(16)
         assert adjusted == 1
@@ -523,15 +523,15 @@ class TestIdleLoopTiming:
 class TestSubprocessTimeoutBehavior:
     """Verify timeout handling in process_utils."""
 
-    @patch("pokepoke.process_utils.subprocess.run")
+    @patch("pokepoke.utils.process_utils.subprocess.run")
     def test_check_copilot_processes_timeout(self, mock_run) -> None:
         """check_copilot_processes handles subprocess.TimeoutExpired."""
         import subprocess
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="tasklist", timeout=30)
 
-        from pokepoke.process_utils import check_copilot_processes
+        from pokepoke.utils.process_utils import check_copilot_processes
         # Ensure the cache doesn't interfere
-        import pokepoke.process_utils as pu
+        import pokepoke.utils.process_utils as pu
         old_cache = pu._copilot_process_cache
         pu._copilot_process_cache = None
         try:
@@ -540,23 +540,23 @@ class TestSubprocessTimeoutBehavior:
         finally:
             pu._copilot_process_cache = old_cache
 
-    @patch("pokepoke.process_utils.subprocess.run")
+    @patch("pokepoke.utils.process_utils.subprocess.run")
     def test_kill_orphans_timeout(self, mock_run) -> None:
         """kill_orphaned_copilot_processes handles timeout."""
         import subprocess
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="tasklist", timeout=30)
 
-        from pokepoke.process_utils import kill_orphaned_copilot_processes
+        from pokepoke.utils.process_utils import kill_orphaned_copilot_processes
         killed = kill_orphaned_copilot_processes(expected_count=0)
         assert killed == 0
 
-    @patch("pokepoke.process_utils.subprocess.run")
+    @patch("pokepoke.utils.process_utils.subprocess.run")
     def test_is_process_running_timeout(self, mock_run) -> None:
         """is_process_running handles subprocess timeout."""
         import subprocess
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="tasklist", timeout=10)
 
-        from pokepoke.process_utils import is_process_running
+        from pokepoke.utils.process_utils import is_process_running
         assert is_process_running(99999) is False
 
 
@@ -568,7 +568,7 @@ class TestPreflightDurationBudget:
 
     def test_check_disk_space_speed(self, tmp_path: Path) -> None:
         """Disk space check completes well under 1 second."""
-        from pokepoke.preflight_checks import check_disk_space
+        from pokepoke.utils.preflight_checks import check_disk_space
 
         config = {"min_disk_space_gb": 1.0}
         t0 = time.monotonic()
@@ -579,7 +579,7 @@ class TestPreflightDurationBudget:
 
     def test_check_lock_availability_speed(self, tmp_path: Path) -> None:
         """Lock availability check completes well under 1 second."""
-        from pokepoke.preflight_checks import check_lock_availability
+        from pokepoke.utils.preflight_checks import check_lock_availability
 
         config = {"enable_self_repair": True}
         t0 = time.monotonic()
@@ -590,13 +590,13 @@ class TestPreflightDurationBudget:
 
     def test_check_git_status_mocked_speed(self, tmp_path: Path) -> None:
         """Git status check (mocked) completes within budget."""
-        from pokepoke.preflight_checks import check_git_status
+        from pokepoke.utils.preflight_checks import check_git_status
 
         # Create a minimal .git directory to pass the existence check
         (tmp_path / ".git").mkdir()
         config = {"git_operation_timeout": 30}
 
-        with patch("pokepoke.preflight_checks.has_uncommitted_changes", return_value=False):
+        with patch("pokepoke.utils.preflight_checks.has_uncommitted_changes", return_value=False):
             t0 = time.monotonic()
             errors, warnings = check_git_status(tmp_path, config)
             elapsed = time.monotonic() - t0
@@ -606,13 +606,13 @@ class TestPreflightDurationBudget:
 
     def test_is_lock_stale_speed(self, tmp_path: Path) -> None:
         """Lock staleness check completes well under 1s (with mocked process check)."""
-        from pokepoke.preflight_checks import is_lock_stale
+        from pokepoke.utils.preflight_checks import is_lock_stale
 
         lock_file = tmp_path / "test.lock"
         lock_file.write_text(str(os.getpid()))
 
         # Mock is_process_running to avoid real tasklist calls on Windows
-        with patch("pokepoke.preflight_checks.is_process_running", return_value=True):
+        with patch("pokepoke.utils.preflight_checks.is_process_running", return_value=True):
             t0 = time.monotonic()
             for _ in range(100):
                 is_lock_stale(lock_file)
@@ -733,13 +733,13 @@ class TestCoordinationLockIntegration:
 
     def test_acquire_lock_serializes_work(self, tmp_path: Path) -> None:
         """acquire_lock with real filelock serializes concurrent workers."""
-        from pokepoke.coordination import acquire_lock
+        from pokepoke.worktrees.coordination import acquire_lock
 
         results: list[int] = []
         result_lock = threading.Lock()
 
         # Redirect locks to tmp_path
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             barrier = threading.Barrier(4, timeout=5)
 
             def worker(wid: int) -> None:
@@ -760,14 +760,14 @@ class TestCoordinationLockIntegration:
 
     def test_worktree_lock_contention(self, tmp_path: Path) -> None:
         """with_worktree_lock serializes under contention from 8 threads."""
-        from pokepoke.coordination import with_worktree_lock
+        from pokepoke.worktrees.coordination import with_worktree_lock
 
         counter = {"value": 0}
         violations: list[str] = []
         active = {"count": 0}
         active_lock = threading.Lock()
 
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             barrier = threading.Barrier(4, timeout=5)
 
             def worker() -> None:

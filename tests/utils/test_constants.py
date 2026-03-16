@@ -1,8 +1,8 @@
-"""Tests for pokepoke.constants module."""
+"""Tests for pokepoke.utils.constants module."""
 
 from pathlib import Path
 
-from pokepoke.constants import (
+from pokepoke.utils.constants import (
     POKEPOKE_DIR,
     WORKTREE_DIR,
     BEADS_DIR,

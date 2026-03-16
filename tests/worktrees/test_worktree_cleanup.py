@@ -1,4 +1,4 @@
-"""Tests for pokepoke.worktree_cleanup module.
+"""Tests for pokepoke.worktrees.worktree_cleanup module.
 
 This file specifically tests the manifest operations with file locking.
 Additional worktree cleanup tests exist in test_worktrees.py.
@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from pokepoke.worktree_cleanup import (
+from pokepoke.worktrees.worktree_cleanup import (
     add_uncleaned_worktree,
     get_worktree_manifest_path,
     load_worktree_manifest,
@@ -34,7 +34,7 @@ class TestLoadWorktreeManifest:
     def test_returns_empty_for_missing_file(self, tmp_path: Path) -> None:
         manifest_path = tmp_path / "missing.json"
         with patch(
-            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+            "pokepoke.worktrees.worktree_cleanup.get_worktree_manifest_path",
             return_value=manifest_path,
         ):
             assert load_worktree_manifest() == {}
@@ -43,7 +43,7 @@ class TestLoadWorktreeManifest:
         manifest_path = tmp_path / "corrupt.json"
         manifest_path.write_text("not valid json{{{", encoding="utf-8")
         with patch(
-            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+            "pokepoke.worktrees.worktree_cleanup.get_worktree_manifest_path",
             return_value=manifest_path,
         ):
             assert load_worktree_manifest() == {}
@@ -52,7 +52,7 @@ class TestLoadWorktreeManifest:
         manifest_path = tmp_path / "array.json"
         manifest_path.write_text("[1, 2, 3]", encoding="utf-8")
         with patch(
-            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+            "pokepoke.worktrees.worktree_cleanup.get_worktree_manifest_path",
             return_value=manifest_path,
         ):
             assert load_worktree_manifest() == {}
@@ -62,7 +62,7 @@ class TestLoadWorktreeManifest:
         data = {"task-1": {"path": "/path", "reason": "test", "timestamp": "2026-01-01"}}
         manifest_path.write_text(json.dumps(data), encoding="utf-8")
         with patch(
-            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+            "pokepoke.worktrees.worktree_cleanup.get_worktree_manifest_path",
             return_value=manifest_path,
         ):
             assert load_worktree_manifest() == data
@@ -74,7 +74,7 @@ class TestSaveWorktreeManifest:
     def test_creates_parent_directory(self, tmp_path: Path) -> None:
         manifest_path = tmp_path / "subdir" / "manifest.json"
         with patch(
-            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+            "pokepoke.worktrees.worktree_cleanup.get_worktree_manifest_path",
             return_value=manifest_path,
         ):
             save_worktree_manifest({"test": {"path": "/p", "reason": "r", "timestamp": "t"}})
@@ -84,7 +84,7 @@ class TestSaveWorktreeManifest:
         manifest_path = tmp_path / "manifest.json"
         data = {"task-1": {"path": "/path", "reason": "test", "timestamp": "2026-01-01"}}
         with patch(
-            "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+            "pokepoke.worktrees.worktree_cleanup.get_worktree_manifest_path",
             return_value=manifest_path,
         ):
             save_worktree_manifest(data)
@@ -102,7 +102,7 @@ class TestSaveWorktreeManifest:
 
         with (
             patch(
-                "pokepoke.worktree_cleanup.get_worktree_manifest_path",
+                "pokepoke.worktrees.worktree_cleanup.get_worktree_manifest_path",
                 return_value=manifest_path,
             ),
             patch("pathlib.Path.mkdir", side_effect=OSError("Permission denied")),

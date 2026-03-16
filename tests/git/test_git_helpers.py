@@ -3,7 +3,7 @@
 import subprocess
 from unittest.mock import Mock, patch
 
-from src.pokepoke.git_helpers import (
+from pokepoke.git.git_helpers import (
     restore_beads_stash,
     verify_branch_pushed,
     _run_git_status_with_retry,
@@ -15,7 +15,7 @@ from src.pokepoke.git_helpers import (
 class TestVerifyBranchPushed:
     """Tests for verifying remote branches."""
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_branch_exists(self, mock_run: Mock) -> None:
         """Returns True when ls-remote finds the branch."""
         mock_run.return_value = Mock(stdout="refs/heads/main", returncode=0)
@@ -33,7 +33,7 @@ class TestVerifyBranchPushed:
             cwd=None
         )
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_branch_missing(self, mock_run: Mock) -> None:
         """Handles errors from ls-remote and returns False."""
         mock_run.side_effect = subprocess.CalledProcessError(1, ["git", "ls-remote"])
@@ -44,7 +44,7 @@ class TestVerifyBranchPushed:
 class TestRestoreBeadsStash:
     """Tests for restore_beads_stash helper."""
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_restore_success(self, mock_run: Mock) -> None:
         """Pop succeeds without attempting drop."""
         restore_beads_stash("context")
@@ -52,8 +52,8 @@ class TestRestoreBeadsStash:
         mock_run.assert_called_once()
         assert mock_run.call_args[0][0][:3] == ["git", "stash", "pop"]
 
-    @patch('src.pokepoke.git_helpers.print')
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.print')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_restore_conflict_force_applies_beads(
         self,
         mock_run: Mock,
@@ -75,9 +75,9 @@ class TestRestoreBeadsStash:
         assert mock_run.call_args_list[3][0][0] == ["git", "stash", "drop"]
         mock_print.assert_any_call("✅ Force-applied .beads/ changes from stash.")
 
-    @patch('src.pokepoke.git_helpers._get_stash_ref', return_value="stash@{0}: On main: beads-daemon-changes")
-    @patch('src.pokepoke.git_helpers.print')
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers._get_stash_ref', return_value="stash@{0}: On main: beads-daemon-changes")
+    @patch('pokepoke.git.git_helpers.print')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_restore_checkout_failure_preserves_stash(
         self,
         mock_run: Mock,
@@ -100,8 +100,8 @@ class TestRestoreBeadsStash:
             "Stash preserved — run `git stash list` to inspect."
         )
 
-    @patch('src.pokepoke.git_helpers.print')
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.print')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_restore_force_apply_ok_drop_fails(
         self,
         mock_run: Mock,
@@ -125,15 +125,15 @@ class TestRestoreBeadsStash:
 class TestRunGitStatusWithRetry:
     """Tests for _run_git_status_with_retry retry logic."""
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_succeeds_on_first_attempt(self, mock_run: Mock) -> None:
         """Happy path: command succeeds immediately."""
         mock_run.return_value = Mock(stdout="", returncode=0)
         _run_git_status_with_retry(["git", "status", "--porcelain"])
         assert mock_run.call_count == 1
 
-    @patch('src.pokepoke.git_helpers.time.sleep')
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.time.sleep')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_retries_on_timeout(self, mock_run: Mock, mock_sleep: Mock) -> None:
         """TimeoutExpired triggers up to max_retries attempts."""
         mock_run.side_effect = [
@@ -147,8 +147,8 @@ class TestRunGitStatusWithRetry:
         assert mock_run.call_count == 3
         assert mock_sleep.call_count == 2
 
-    @patch('src.pokepoke.git_helpers.time.sleep')
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.time.sleep')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_raises_timeout_after_all_retries(self, mock_run: Mock, mock_sleep: Mock) -> None:
         """TimeoutExpired is re-raised after all retries are exhausted."""
         import pytest
@@ -159,8 +159,8 @@ class TestRunGitStatusWithRetry:
             )
         assert mock_run.call_count == 2
 
-    @patch('src.pokepoke.git_helpers.time.sleep')
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.time.sleep')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_retries_on_index_lock_in_stderr(self, mock_run: Mock, mock_sleep: Mock) -> None:
         """CalledProcessError with 'index.lock' in stderr triggers retry."""
         index_lock_error = subprocess.CalledProcessError(
@@ -173,7 +173,7 @@ class TestRunGitStatusWithRetry:
         assert mock_run.call_count == 2
         mock_sleep.assert_called_once()
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_raises_immediately_on_non_lock_error(self, mock_run: Mock) -> None:
         """CalledProcessError without 'index.lock' in stderr propagates immediately."""
         import pytest
@@ -182,8 +182,8 @@ class TestRunGitStatusWithRetry:
             _run_git_status_with_retry(["git", "status", "--porcelain"], max_retries=3)
         assert mock_run.call_count == 1
 
-    @patch('src.pokepoke.git_helpers.time.sleep')
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.time.sleep')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_exponential_backoff_delays(self, mock_run: Mock, mock_sleep: Mock) -> None:
         """Back-off delays double on each retry."""
         mock_run.side_effect = [
@@ -201,7 +201,7 @@ class TestRunGitStatusWithRetry:
 class TestValidatePostMerge:
     """Tests for validate_post_merge helper."""
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_valid_merge(self, mock_run: Mock) -> None:
         """Returns True when on correct branch with clean status."""
         mock_run.side_effect = [
@@ -210,13 +210,13 @@ class TestValidatePostMerge:
         ]
         assert validate_post_merge("main") is True
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_wrong_branch(self, mock_run: Mock) -> None:
         """Returns False when on wrong branch."""
         mock_run.return_value = Mock(stdout="feature\n")
         assert validate_post_merge("main") is False
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_dirty_working_tree(self, mock_run: Mock) -> None:
         """Returns False when working tree has uncommitted changes."""
         mock_run.side_effect = [
@@ -229,7 +229,7 @@ class TestValidatePostMerge:
 class TestListWorktrees:
     """Tests for list_worktrees helper."""
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_parses_porcelain_output(self, mock_run: Mock) -> None:
         """Parses git worktree list --porcelain output."""
         mock_run.return_value = Mock(stdout=(
@@ -247,13 +247,13 @@ class TestListWorktrees:
         assert result[0]["branch"] == "refs/heads/main"
         assert result[1]["path"] == "/repo/worktrees/task-1"
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_returns_empty_on_error(self, mock_run: Mock) -> None:
         """Returns empty list on CalledProcessError."""
         mock_run.side_effect = subprocess.CalledProcessError(1, "git")
         assert list_worktrees() == []
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_returns_empty_on_timeout(self, mock_run: Mock) -> None:
         """Returns empty list on TimeoutExpired."""
         mock_run.side_effect = subprocess.TimeoutExpired("git", 30)

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from pokepoke.coordination import (
+from pokepoke.worktrees.coordination import (
     with_worktree_lock,
     _load_worktree_metrics as _load_metrics,
     _record_worktree_attempt as _record_attempt,
@@ -23,7 +23,7 @@ def _worktree_lock_path() -> Path:
 @pytest.fixture
 def isolated_metrics(tmp_path, monkeypatch):
     """Provide an isolated metrics file for each test."""
-    import pokepoke.coordination as coord_module
+    import pokepoke.worktrees.coordination as coord_module
 
     # Create isolated paths for this test
     test_stats_dir = tmp_path / "stats"
@@ -62,7 +62,7 @@ def test_with_worktree_lock_basic(cleanup_lock_files, tmp_path, monkeypatch):
         os.makedirs(lock_dir, exist_ok=True)
         return lock_dir
 
-    monkeypatch.setattr("pokepoke.coordination._lock_dir", _isolated_lock_dir)
+    monkeypatch.setattr("pokepoke.worktrees.coordination._lock_dir", _isolated_lock_dir)
     lock_path = lock_dir / "worktree-setup.lock"
     # Lock should be acquired and released without error
     with with_worktree_lock(timeout=5):
@@ -127,7 +127,7 @@ def test_with_worktree_lock_timeout(cleanup_lock_files):
         """Hold lock for longer than timeout."""
         with with_worktree_lock(timeout=10):
             lock_holder_started.set()
-            time.sleep(3)  # Hold for 3 seconds
+            time.sleep(1)  # Hold for 1 second
 
     # Start thread that holds lock
     holder_thread = threading.Thread(target=long_holder)
@@ -181,7 +181,7 @@ def test_lock_creates_directories(cleanup_lock_files, tmp_path, monkeypatch):
     from unittest.mock import patch
 
     # Use a temporary lock directory so the test is isolated
-    with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), with_worktree_lock(timeout=5):
+    with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path), with_worktree_lock(timeout=5):
             # Lock file should exist in the patched directory
             assert (tmp_path / "worktree-setup.lock").exists()
 

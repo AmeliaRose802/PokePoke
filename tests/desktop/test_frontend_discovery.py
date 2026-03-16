@@ -5,22 +5,22 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import pokepoke.frontend_discovery as frontend_discovery_module
+import pokepoke.desktop.frontend_discovery as frontend_discovery_module
 
 
 @pytest.fixture()
 def mock_desktop_ui(monkeypatch, tmp_path):
-    """Create a mock pokepoke.desktop_ui module and inject it into sys.modules.
+    """Create a mock pokepoke.desktop.desktop_ui module and inject it into sys.modules.
 
     Returns a factory that accepts a relative __file__ path (under tmp_path) and
     returns the mock module.  Patching sys.modules is required because the helper
-    functions use ``import pokepoke.desktop_ui`` which resolves via sys.modules,
+    functions use ``import pokepoke.desktop.desktop_ui`` which resolves via sys.modules,
     not via attribute lookup on the ``pokepoke`` package.
     """
     def _factory(relative_file: str = "src/pokepoke/desktop_ui.py"):
         mock_mod = MagicMock()
         mock_mod.__file__ = str(tmp_path / relative_file)
-        monkeypatch.setitem(sys.modules, "pokepoke.desktop_ui", mock_mod)
+        monkeypatch.setitem(sys.modules, "pokepoke.desktop.desktop_ui", mock_mod)
         return mock_mod
 
     return _factory
@@ -47,7 +47,7 @@ class TestFindDevServerUrl:
         monkeypatch.setenv("POKEPOKE_DEV", "1")
         monkeypatch.delenv("POKEPOKE_DEV_URL", raising=False)
 
-        with patch("pokepoke.frontend_discovery.urllib.request.urlopen"):
+        with patch("pokepoke.desktop.frontend_discovery.urllib.request.urlopen"):
             result = frontend_discovery_module.find_dev_server_url()
         assert result == "http://localhost:5173"
 
@@ -56,7 +56,7 @@ class TestFindDevServerUrl:
         monkeypatch.setenv("POKEPOKE_DEV", "1")
 
         with patch(
-            "pokepoke.frontend_discovery.urllib.request.urlopen",
+            "pokepoke.desktop.frontend_discovery.urllib.request.urlopen",
             side_effect=ConnectionRefusedError,
         ):
             result = frontend_discovery_module.find_dev_server_url()
@@ -67,7 +67,7 @@ class TestFindDevServerUrl:
         monkeypatch.setenv("POKEPOKE_DEV", "true")
         monkeypatch.setenv("POKEPOKE_DEV_URL", "http://localhost:3000")
 
-        with patch("pokepoke.frontend_discovery.urllib.request.urlopen"):
+        with patch("pokepoke.desktop.frontend_discovery.urllib.request.urlopen"):
             result = frontend_discovery_module.find_dev_server_url()
         assert result == "http://localhost:3000"
 
@@ -75,7 +75,7 @@ class TestFindDevServerUrl:
         """POKEPOKE_DEV accepts 'True', 'TRUE', etc."""
         monkeypatch.setenv("POKEPOKE_DEV", "True")
 
-        with patch("pokepoke.frontend_discovery.urllib.request.urlopen"):
+        with patch("pokepoke.desktop.frontend_discovery.urllib.request.urlopen"):
             result = frontend_discovery_module.find_dev_server_url()
         assert result == "http://localhost:5173"
 

@@ -1,11 +1,11 @@
-"""Tests for pokepoke.perf_timing module."""
+"""Tests for pokepoke.stats.perf_timing module."""
 
 import threading
 import time
 
 import pytest
 
-from pokepoke.perf_timing import (
+from pokepoke.stats.perf_timing import (
     OperationTimingRegistry,
     _percentile,
     get_registry,

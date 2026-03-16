@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from pokepoke.worktree_cleanup import (
+from pokepoke.worktrees.worktree_cleanup import (
     force_remove_directory,
     _is_windows_lock_error,
     cleanup_after_merge,
@@ -86,8 +86,8 @@ class TestIsWindowsLockError:
 class TestForceRemoveDirectory:
     """Tests for force_remove_directory function."""
 
-    @patch('pokepoke.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
+    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
     @patch('subprocess.run')
     @patch('builtins.print')
     def test_force_remove_git_worktree_success(
@@ -110,8 +110,8 @@ class TestForceRemoveDirectory:
         assert 'worktree' in first_call[0][0]
         assert 'remove' in first_call[0][0]
 
-    @patch('pokepoke.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
+    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
     @patch('subprocess.run')
     @patch('shutil.rmtree')
     @patch('builtins.print')
@@ -138,8 +138,8 @@ class TestForceRemoveDirectory:
         assert result is True
         mock_rmtree.assert_called_once()
 
-    @patch('pokepoke.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
+    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
     @patch('subprocess.run')
     @patch('shutil.rmtree')
     @patch('builtins.print')
@@ -177,8 +177,8 @@ class TestForceRemoveDirectory:
         # but this depends on implementation details
         assert mock_wait.call_count >= 0  # Just verify mock was used
 
-    @patch('pokepoke.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
+    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
     @patch('subprocess.run')
     @patch('shutil.rmtree')
     @patch('builtins.print')
@@ -201,8 +201,8 @@ class TestForceRemoveDirectory:
 
         assert result is False
 
-    @patch('pokepoke.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
+    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
     @patch('subprocess.run')
     @patch('builtins.print')
     def test_force_remove_timeout_expired(
@@ -220,8 +220,8 @@ class TestForceRemoveDirectory:
         # Should retry after timeout
         assert mock_wait.call_count >= 1
 
-    @patch('pokepoke.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
+    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
     @patch('subprocess.run')
     @patch('shutil.rmtree')
     @patch('builtins.print')
@@ -259,8 +259,8 @@ class TestForceRemoveDirectory:
         # So if we retry twice, sleep should be called at least 2 times
         assert mock_sleep.call_count >= 2
 
-    @patch('pokepoke.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
+    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
     @patch('subprocess.run')
     @patch('builtins.print')
     def test_force_remove_no_wait_on_first_attempt(
@@ -278,8 +278,8 @@ class TestForceRemoveDirectory:
         # Should not wait before first attempt
         mock_wait.assert_not_called()
 
-    @patch('pokepoke.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
+    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
     @patch('subprocess.run')
     @patch('shutil.rmtree')
     @patch('builtins.print')
@@ -303,8 +303,8 @@ class TestForceRemoveDirectory:
         mock_sleep.assert_not_called()
         mock_wait.assert_not_called()
 
-    @patch('pokepoke.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
+    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
     @patch('subprocess.run')
     @patch('builtins.print')
     def test_max_attempts_limits_retries(
@@ -351,8 +351,8 @@ class TestCleanupAfterMerge:
         # Should not raise
         cleanup_after_merge(Path('/repo/worktrees/task-1'), 'task/item-1')
 
-    @patch('pokepoke.worktree_cleanup.force_remove_directory')
-    @patch('pokepoke.worktree_cleanup.add_uncleaned_worktree')
+    @patch('pokepoke.worktrees.worktree_cleanup.force_remove_directory')
+    @patch('pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree')
     @patch('subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('builtins.print')
@@ -377,8 +377,8 @@ class TestCleanupAfterMerge:
         # Should call force_remove_directory with max_attempts=1 (fire-and-forget)
         mock_force_remove.assert_called_once_with(Path('/repo/worktrees/task-1'), max_attempts=1)
 
-    @patch('pokepoke.worktree_cleanup.force_remove_directory')
-    @patch('pokepoke.worktree_cleanup.add_uncleaned_worktree')
+    @patch('pokepoke.worktrees.worktree_cleanup.force_remove_directory')
+    @patch('pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree')
     @patch('subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('builtins.print')
@@ -407,8 +407,8 @@ class TestCleanupAfterMerge:
         assert call_args[0][0] == 'item-1'  # worktree_id extracted from branch name
         assert call_args[0][1] == str(Path('/repo/worktrees/task-1'))  # worktree_path as string
 
-    @patch('pokepoke.worktree_cleanup.force_remove_directory')
-    @patch('pokepoke.worktree_cleanup.add_uncleaned_worktree')
+    @patch('pokepoke.worktrees.worktree_cleanup.force_remove_directory')
+    @patch('pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree')
     @patch('subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('builtins.print')
@@ -450,10 +450,10 @@ class TestCleanupAfterMerge:
 class TestManifestOperations:
     """Tests for manifest loading and saving edge cases."""
 
-    @patch('pokepoke.worktree_cleanup.get_worktree_manifest_path')
+    @patch('pokepoke.worktrees.worktree_cleanup.get_worktree_manifest_path')
     def test_load_nonexistent_manifest(self, mock_path) -> None:
         """Return empty dict for nonexistent manifest."""
-        from pokepoke.worktree_cleanup import load_worktree_manifest
+        from pokepoke.worktrees.worktree_cleanup import load_worktree_manifest
 
         mock_path.return_value = Path('/nonexistent/manifest.json')
 
@@ -461,10 +461,10 @@ class TestManifestOperations:
 
         assert result == {}
 
-    @patch('pokepoke.worktree_cleanup.get_worktree_manifest_path')
+    @patch('pokepoke.worktrees.worktree_cleanup.get_worktree_manifest_path')
     def test_load_corrupted_json_manifest(self, mock_path, tmp_path: Path) -> None:
         """Return empty dict for corrupted JSON."""
-        from pokepoke.worktree_cleanup import load_worktree_manifest
+        from pokepoke.worktrees.worktree_cleanup import load_worktree_manifest
 
         manifest_file = tmp_path / 'manifest.json'
         manifest_file.write_text('{ invalid json', encoding='utf-8')
@@ -474,10 +474,10 @@ class TestManifestOperations:
 
         assert result == {}
 
-    @patch('pokepoke.worktree_cleanup.get_worktree_manifest_path')
+    @patch('pokepoke.worktrees.worktree_cleanup.get_worktree_manifest_path')
     def test_load_non_dict_manifest(self, mock_path, tmp_path: Path) -> None:
         """Return empty dict if manifest is not a dict."""
-        from pokepoke.worktree_cleanup import load_worktree_manifest
+        from pokepoke.worktrees.worktree_cleanup import load_worktree_manifest
 
         manifest_file = tmp_path / 'manifest.json'
         manifest_file.write_text('["array", "not", "dict"]', encoding='utf-8')
@@ -487,10 +487,10 @@ class TestManifestOperations:
 
         assert result == {}
 
-    @patch('pokepoke.worktree_cleanup.get_worktree_manifest_path')
+    @patch('pokepoke.worktrees.worktree_cleanup.get_worktree_manifest_path')
     def test_save_manifest_creates_directory(self, mock_path, tmp_path: Path) -> None:
         """Create parent directory if it doesn't exist."""
-        from pokepoke.worktree_cleanup import save_worktree_manifest
+        from pokepoke.worktrees.worktree_cleanup import save_worktree_manifest
 
         # Create a path with non-existent parent directories
         manifest_file = tmp_path / 'subdir' / 'deep' / 'manifest.json'
@@ -506,8 +506,8 @@ class TestManifestOperations:
 class TestWindowsLockErrorHandling:
     """Integration tests for Windows lock error handling in force_remove_directory."""
 
-    @patch('pokepoke.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
+    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
     @patch('subprocess.run')
     @patch('shutil.rmtree')
     @patch('builtins.print')
@@ -535,8 +535,8 @@ class TestWindowsLockErrorHandling:
 
         assert result is True
 
-    @patch('pokepoke.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
+    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
     @patch('subprocess.run')
     @patch('shutil.rmtree')
     @patch('builtins.print')

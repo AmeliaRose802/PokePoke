@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 import tempfile
 import time
-from pokepoke.logging_utils import (
+from pokepoke.utils.logging_utils import (
     RunLogger, ItemLogger, configure_logging,
     WorkItemFilter, JsonFormatter,
 )
@@ -735,7 +735,7 @@ def test_run_logger_repo_name_in_log_lines():
 
 def test_run_logger_no_repo_name_omits_tag():
     """When no repo name is set, log lines should not have an empty tag."""
-    from pokepoke.metrics_context import set_current_repo_name
+    from pokepoke.stats.metrics_context import set_current_repo_name
     set_current_repo_name(None)
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -753,7 +753,7 @@ def test_run_logger_no_repo_name_omits_tag():
 
 def test_run_logger_picks_up_thread_local_repo():
     """Without repo_name param, log_orchestrator should read thread-local context."""
-    from pokepoke.metrics_context import set_current_repo_name
+    from pokepoke.stats.metrics_context import set_current_repo_name
     set_current_repo_name("ThreadRepo")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -775,7 +775,7 @@ def test_run_logger_picks_up_thread_local_repo():
 
 def test_work_item_filter_injects_fields():
     """WorkItemFilter should add work_item_id, repo_name, agent_type to records."""
-    from pokepoke.metrics_context import (
+    from pokepoke.stats.metrics_context import (
         set_current_work_item_id,
         set_current_repo_name,
         set_current_agent_type,
@@ -804,7 +804,7 @@ def test_work_item_filter_injects_fields():
 
 def test_work_item_filter_defaults_to_empty():
     """WorkItemFilter should default to empty strings when context is unset."""
-    from pokepoke.metrics_context import (
+    from pokepoke.stats.metrics_context import (
         set_current_work_item_id,
         set_current_repo_name,
         set_current_agent_type,
@@ -1006,7 +1006,7 @@ def test_configure_logging_json_output(tmp_path):
 
 def test_configure_logging_json_output_writes_valid_json(tmp_path):
     """JSON output mode should write valid JSON lines to the log file."""
-    from pokepoke.metrics_context import set_current_work_item_id
+    from pokepoke.stats.metrics_context import set_current_work_item_id
     log_file = tmp_path / "debug.log"
 
     root = logging.getLogger()
@@ -1055,7 +1055,7 @@ def test_run_logger_bridges_to_python_logging():
         def emit(self, record: logging.LogRecord) -> None:
             captured.append(record)
 
-    py_logger = logging.getLogger("pokepoke.orchestrator")
+    py_logger = logging.getLogger("pokepoke.orchestration.orchestrator")
     handler = CaptureHandler()
     py_logger.addHandler(handler)
     original_level = py_logger.level
@@ -1081,7 +1081,7 @@ def test_run_logger_bridge_respects_level():
         def emit(self, record: logging.LogRecord) -> None:
             captured.append(record)
 
-    py_logger = logging.getLogger("pokepoke.orchestrator")
+    py_logger = logging.getLogger("pokepoke.orchestration.orchestrator")
     handler = CaptureHandler()
     py_logger.addHandler(handler)
     original_level = py_logger.level

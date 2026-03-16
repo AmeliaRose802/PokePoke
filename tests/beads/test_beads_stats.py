@@ -1,10 +1,12 @@
+import pytest
 """Tests for beads statistics tracking."""
 
 import json
 from unittest.mock import Mock, patch
-from pokepoke.beads import get_beads_stats
+from pokepoke.beads.beads import get_beads_stats
 
 
+@pytest.mark.allow_real_bd
 class TestGetBeadsStats:
     """Test get_beads_stats function."""
 

@@ -1,4 +1,4 @@
-"""Tests for pokepoke.manifest_utils module."""
+"""Tests for pokepoke.utils.manifest_utils module."""
 
 import json
 import logging
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from pokepoke.manifest_utils import (
+from pokepoke.utils.manifest_utils import (
     get_manifest_path,
     load_manifest_from_path,
     save_manifest_to_path,

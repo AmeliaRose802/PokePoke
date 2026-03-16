@@ -7,13 +7,13 @@ child task selection.
 
 from unittest.mock import Mock, patch
 
-from src.pokepoke.types import BeadsWorkItem
-from src.pokepoke.work_item_selection import (
+from pokepoke.types import BeadsWorkItem
+from pokepoke.orchestration.work_item_selection import (
     select_work_item,
     _is_human_required,
 )
-from src.pokepoke.beads_management import select_next_hierarchical_item
-from src.pokepoke.beads_hierarchy import get_next_child_task
+from pokepoke.beads.beads_management import select_next_hierarchical_item
+from pokepoke.beads.beads_hierarchy import get_next_child_task
 
 
 def _make_item(
@@ -65,7 +65,7 @@ class TestIsHumanRequired:
 class TestSelectWorkItemHumanRequired:
     """Tests for human-required filtering in select_work_item."""
 
-    @patch("src.pokepoke.work_item_selection.select_next_hierarchical_item")
+    @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
     def test_human_required_items_filtered_out(
         self, mock_hierarchical: Mock
     ) -> None:
@@ -85,7 +85,7 @@ class TestSelectWorkItemHumanRequired:
         assert result is not None
         assert result.id == "task-1"
 
-    @patch("src.pokepoke.work_item_selection.select_next_hierarchical_item")
+    @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
     def test_all_items_human_required_returns_none(
         self, mock_hierarchical: Mock
     ) -> None:
@@ -100,9 +100,9 @@ class TestSelectWorkItemHumanRequired:
         assert result is None
         mock_hierarchical.assert_not_called()
 
-    @patch("pokepoke.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
-    @patch("pokepoke.work_item_selection.is_assigned_to_current_user", return_value=True)
-    @patch("src.pokepoke.work_item_selection.select_next_hierarchical_item")
+    @patch("pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
+    @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
+    @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
     def test_human_required_skip_message_printed(
         self, mock_hierarchical: Mock, mock_assigned: Mock,
         mock_deps: Mock,
@@ -184,7 +184,7 @@ class TestSelectNextHierarchicalItemHumanRequired:
 class TestGetNextChildTaskHumanRequired:
     """Tests for human-required filtering in get_next_child_task."""
 
-    @patch("src.pokepoke.beads_hierarchy.get_children")
+    @patch("pokepoke.beads.beads_hierarchy.get_children")
     def test_skips_human_required_children(
         self, mock_get_children: Mock
     ) -> None:
@@ -201,7 +201,7 @@ class TestGetNextChildTaskHumanRequired:
         assert result is not None
         assert result.id == "child-2"
 
-    @patch("src.pokepoke.beads_hierarchy.get_children")
+    @patch("pokepoke.beads.beads_hierarchy.get_children")
     def test_all_children_human_required_returns_none(
         self, mock_get_children: Mock
     ) -> None:
@@ -219,7 +219,7 @@ class TestGetNextChildTaskHumanRequired:
 
         assert result is None
 
-    @patch("src.pokepoke.beads_hierarchy.get_children")
+    @patch("pokepoke.beads.beads_hierarchy.get_children")
     def test_human_required_among_completed_children(
         self, mock_get_children: Mock
     ) -> None:

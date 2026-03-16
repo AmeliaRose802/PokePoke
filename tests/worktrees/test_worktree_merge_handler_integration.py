@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch, Mock, MagicMock
 
 from pokepoke.types import BeadsWorkItem
-from pokepoke.worktree_merge_handler import (
+from pokepoke.worktrees.worktree_merge_handler import (
     handle_worktree_merge,
     perform_worktree_merge,
 )
@@ -28,10 +28,10 @@ def _make_test_item(item_id: str = "test-item") -> BeadsWorkItem:
 class TestPerformWorktreeMergeIntegration:
     """Integration tests for perform_worktree_merge."""
 
-    @patch('pokepoke.worktree_merge_handler.cleanup_lock')
-    @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
-    @patch('pokepoke.worktree_merge_handler.merge_worktree')
-    @patch('pokepoke.worktree_cleanup.remove_from_manifest')
+    @patch('pokepoke.worktrees.worktree_merge_handler.cleanup_lock')
+    @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
+    @patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree')
+    @patch('pokepoke.worktrees.worktree_cleanup.remove_from_manifest')
     def test_perform_merge_success_path(
         self,
         mock_remove_manifest,
@@ -61,9 +61,9 @@ class TestPerformWorktreeMergeIntegration:
         mock_check_ready.assert_called_once()
         mock_merge.assert_called_once_with(agent_item.id, cleanup=True, repo_path=None)
 
-    @patch('pokepoke.worktree_merge_handler.cleanup_lock')
-    @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
-    @patch('pokepoke.worktree_merge_handler.invoke_cleanup_agent')
+    @patch('pokepoke.worktrees.worktree_merge_handler.cleanup_lock')
+    @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
+    @patch('pokepoke.worktrees.worktree_merge_handler.invoke_cleanup_agent')
     def test_perform_merge_invokes_cleanup_agent_when_repo_not_ready(
         self,
         mock_invoke_cleanup,
@@ -83,7 +83,7 @@ class TestPerformWorktreeMergeIntegration:
         agent_item = _make_test_item('test-456')
         worktree_path = Path('C:/repos/worktrees/task-test-456')
 
-        with patch('pokepoke.worktree_merge_handler.merge_worktree', return_value=(True, [])):
+        with patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree', return_value=(True, [])):
             success, cleaned = perform_worktree_merge(
                 item_id=agent_item.id,
                 item=agent_item,
@@ -98,9 +98,9 @@ class TestPerformWorktreeMergeIntegration:
         call_args = mock_invoke_cleanup.call_args
         assert call_args[1]['parent_agent_id'] == 'parent-123'
 
-    @patch('pokepoke.worktree_merge_handler.cleanup_lock')
-    @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
-    @patch('pokepoke.worktree_merge_handler.invoke_cleanup_agent')
+    @patch('pokepoke.worktrees.worktree_merge_handler.cleanup_lock')
+    @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
+    @patch('pokepoke.worktrees.worktree_merge_handler.invoke_cleanup_agent')
     def test_perform_merge_fails_when_cleanup_agent_fails(
         self,
         mock_invoke_cleanup,
@@ -130,10 +130,10 @@ class TestPerformWorktreeMergeIntegration:
         assert success is False
         assert cleaned is False
 
-    @patch('pokepoke.worktree_merge_handler.cleanup_lock')
-    @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
-    @patch('pokepoke.worktree_merge_handler.merge_worktree')
-    @patch('pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent')
+    @patch('pokepoke.worktrees.worktree_merge_handler.cleanup_lock')
+    @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
+    @patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree')
+    @patch('pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent')
     def test_perform_merge_handles_merge_conflicts(
         self,
         mock_conflict_agent,
@@ -165,13 +165,13 @@ class TestPerformWorktreeMergeIntegration:
         call_args = mock_conflict_agent.call_args
         assert 'file1.py' in str(call_args)
 
-    @patch('pokepoke.worktree_merge_handler.cleanup_lock')
-    @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
-    @patch('pokepoke.worktree_merge_handler.merge_worktree')
-    @patch('pokepoke.worktree_cleanup.add_uncleaned_worktree')
-    @patch('pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent')
-    @patch('pokepoke.merge_conflict.is_merge_in_progress', return_value=False)
-    @patch('pokepoke.merge_conflict.get_unmerged_files', return_value=[])
+    @patch('pokepoke.worktrees.worktree_merge_handler.cleanup_lock')
+    @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
+    @patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree')
+    @patch('pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree')
+    @patch('pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent')
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=False)
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=[])
     def test_perform_merge_tracks_uncleaned_worktree_on_failure(
         self,
         mock_get_unmerged,
@@ -204,10 +204,10 @@ class TestPerformWorktreeMergeIntegration:
         assert cleaned is False
         mock_add_uncleaned.assert_called_once()
 
-    @patch('pokepoke.worktree_merge_handler.cleanup_lock')
-    @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
-    @patch('pokepoke.worktree_merge_handler.merge_worktree')
-    @patch('pokepoke.worktree_cleanup.remove_from_manifest')
+    @patch('pokepoke.worktrees.worktree_merge_handler.cleanup_lock')
+    @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
+    @patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree')
+    @patch('pokepoke.worktrees.worktree_cleanup.remove_from_manifest')
     def test_perform_merge_removes_from_manifest_on_success(
         self,
         mock_remove_manifest,
@@ -240,8 +240,8 @@ class TestPerformWorktreeMergeIntegration:
 class TestHandleWorktreeMergeIntegration:
     """Integration tests for handle_worktree_merge with merge lock."""
 
-    @patch('pokepoke.worktree_merge_handler.merge_lock')
-    @patch('pokepoke.worktree_merge_handler.perform_worktree_merge')
+    @patch('pokepoke.worktrees.worktree_merge_handler.merge_lock')
+    @patch('pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge')
     def test_handle_merge_acquires_lock(
         self,
         mock_perform,
@@ -271,8 +271,8 @@ class TestHandleWorktreeMergeIntegration:
         mock_lock_context.__enter__.assert_called_once()
         mock_lock_context.__exit__.assert_called_once()
 
-    @patch('pokepoke.worktree_merge_handler.merge_lock')
-    @patch('pokepoke.worktree_merge_handler.perform_worktree_merge')
+    @patch('pokepoke.worktrees.worktree_merge_handler.merge_lock')
+    @patch('pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge')
     def test_handle_merge_passes_through_results(
         self,
         mock_perform,
@@ -299,8 +299,8 @@ class TestHandleWorktreeMergeIntegration:
         assert success is False
         assert cleaned is False
 
-    @patch('pokepoke.worktree_merge_handler.merge_lock')
-    @patch('pokepoke.worktree_merge_handler.perform_worktree_merge')
+    @patch('pokepoke.worktrees.worktree_merge_handler.merge_lock')
+    @patch('pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge')
     def test_handle_merge_releases_lock_on_exception(
         self,
         mock_perform,
@@ -335,10 +335,10 @@ class TestHandleWorktreeMergeIntegration:
 class TestMergeSequenceErrorRecovery:
     """Tests for error recovery during merge sequence."""
 
-    @patch('pokepoke.worktree_merge_handler.cleanup_lock')
-    @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
-    @patch('pokepoke.worktree_merge_handler.invoke_cleanup_agent')
-    @patch('pokepoke.worktree_merge_handler.merge_worktree')
+    @patch('pokepoke.worktrees.worktree_merge_handler.cleanup_lock')
+    @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
+    @patch('pokepoke.worktrees.worktree_merge_handler.invoke_cleanup_agent')
+    @patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree')
     def test_retry_after_successful_cleanup(
         self,
         mock_merge,
@@ -373,9 +373,9 @@ class TestMergeSequenceErrorRecovery:
         assert mock_check_ready.call_count == 2
         mock_merge.assert_called_once()
 
-    @patch('pokepoke.worktree_merge_handler.cleanup_lock')
-    @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
-    @patch('pokepoke.worktree_merge_handler.invoke_cleanup_agent')
+    @patch('pokepoke.worktrees.worktree_merge_handler.cleanup_lock')
+    @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
+    @patch('pokepoke.worktrees.worktree_merge_handler.invoke_cleanup_agent')
     def test_no_retry_if_cleanup_fails(
         self,
         mock_invoke_cleanup,
@@ -391,7 +391,7 @@ class TestMergeSequenceErrorRecovery:
         agent_item = _make_test_item('test-no-retry')
         worktree_path = Path('C:/repos/worktrees/task-test-no-retry')
 
-        with patch('pokepoke.worktree_merge_handler.merge_worktree') as mock_merge:
+        with patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree') as mock_merge:
             success, cleaned = perform_worktree_merge(
                 item_id=agent_item.id,
                 item=agent_item,
@@ -407,9 +407,9 @@ class TestMergeSequenceErrorRecovery:
 class TestCleanupAgentInvocation:
     """Tests for cleanup agent invocation during merge."""
 
-    @patch('pokepoke.worktree_merge_handler.cleanup_lock')
-    @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
-    @patch('pokepoke.worktree_merge_handler.invoke_cleanup_agent')
+    @patch('pokepoke.worktrees.worktree_merge_handler.cleanup_lock')
+    @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
+    @patch('pokepoke.worktrees.worktree_merge_handler.invoke_cleanup_agent')
     def test_cleanup_agent_receives_correct_context(
         self,
         mock_invoke_cleanup,
@@ -430,7 +430,7 @@ class TestCleanupAgentInvocation:
         repo_root = Path('C:/repos')
         parent_id = 'parent-agent-123'
 
-        with patch('pokepoke.worktree_merge_handler.merge_worktree', return_value=(True, [])):
+        with patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree', return_value=(True, [])):
             perform_worktree_merge(
                 item_id=agent_item.id,
                 item=agent_item,
@@ -445,10 +445,10 @@ class TestCleanupAgentInvocation:
         assert call_args[0][0] == agent_item  # item is 1st positional arg
         assert call_args[1]['parent_agent_id'] == parent_id
 
-    @patch('pokepoke.worktree_merge_handler.cleanup_lock')
-    @patch('pokepoke.git_operations.check_main_repo_ready_for_merge')
-    @patch('pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent')
-    @patch('pokepoke.worktree_merge_handler.merge_worktree')
+    @patch('pokepoke.worktrees.worktree_merge_handler.cleanup_lock')
+    @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
+    @patch('pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent')
+    @patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree')
     def test_conflict_agent_receives_conflict_files(
         self,
         mock_merge,

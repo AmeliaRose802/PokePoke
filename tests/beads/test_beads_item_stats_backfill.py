@@ -4,7 +4,7 @@ import json
 import subprocess
 from unittest.mock import MagicMock, patch
 
-from pokepoke.beads_item_stats_backfill import (
+from pokepoke.beads.beads_item_stats_backfill import (
     _determine_agent_type,
     _get_all_beads_items,
     backfill_from_beads_db,
@@ -26,7 +26,7 @@ def test_determine_agent_type_unknown():
     assert _determine_agent_type("system") == "unknown"
 
 
-@patch("pokepoke.beads_item_stats_backfill.subprocess.run")
+@patch("pokepoke.beads.beads_item_stats_backfill.subprocess.run")
 def test_get_all_beads_items_success(mock_run):
     """Test fetching beads items successfully."""
     mock_run.return_value = MagicMock(
@@ -52,7 +52,7 @@ def test_get_all_beads_items_success(mock_run):
     )
 
 
-@patch("pokepoke.beads_item_stats_backfill.subprocess.run")
+@patch("pokepoke.beads.beads_item_stats_backfill.subprocess.run")
 def test_get_all_beads_items_failure(mock_run):
     """Test handling of beads fetch failure."""
     mock_run.side_effect = subprocess.CalledProcessError(1, "bd list")
@@ -62,7 +62,7 @@ def test_get_all_beads_items_failure(mock_run):
     assert items == []
 
 
-@patch("pokepoke.beads_item_stats_backfill.subprocess.run")
+@patch("pokepoke.beads.beads_item_stats_backfill.subprocess.run")
 def test_get_all_beads_items_timeout(mock_run):
     """Test handling of beads fetch timeout."""
     mock_run.side_effect = subprocess.TimeoutExpired("bd list", 30)
@@ -100,7 +100,7 @@ def test_backfill_nothing_needed(tmp_path):
         })
     )
 
-    with patch("pokepoke.beads_item_stats_backfill._get_all_beads_items") as mock_get_items:
+    with patch("pokepoke.beads.beads_item_stats_backfill._get_all_beads_items") as mock_get_items:
         mock_get_items.return_value = [
             {"id": "PokePoke-123", "title": "Test", "created_by": "Amelia Payne"}
         ]
@@ -135,7 +135,7 @@ def test_backfill_from_db(tmp_path):
         })
     )
 
-    with patch("pokepoke.beads_item_stats_backfill._get_all_beads_items") as mock_get_items:
+    with patch("pokepoke.beads.beads_item_stats_backfill._get_all_beads_items") as mock_get_items:
         mock_get_items.return_value = [
             {"id": "PokePoke-123", "title": "New Item", "created_by": "Amelia Payne", "created_at": "2024-01-01T00:00:00Z"},
             {"id": "PokePoke-456", "title": "Existing", "created_by": "bot", "created_at": "2024-01-01T00:30:00Z"},
@@ -191,7 +191,7 @@ def test_backfill_from_completed_history(tmp_path):
         })
     )
 
-    with patch("pokepoke.beads_item_stats_backfill._get_all_beads_items") as mock_get_items:
+    with patch("pokepoke.beads.beads_item_stats_backfill._get_all_beads_items") as mock_get_items:
         mock_get_items.return_value = []  # Item no longer in beads database
 
         result = backfill_from_beads_db(stats_path=stats_file, silent=True)
@@ -226,7 +226,7 @@ def test_backfill_idempotent(tmp_path):
         })
     )
 
-    with patch("pokepoke.beads_item_stats_backfill._get_all_beads_items") as mock_get_items:
+    with patch("pokepoke.beads.beads_item_stats_backfill._get_all_beads_items") as mock_get_items:
         mock_get_items.return_value = [
             {"id": "PokePoke-123", "title": "Test", "created_by": "Amelia", "created_at": "2024-01-01T00:00:00Z"},
         ]

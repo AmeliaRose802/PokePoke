@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 import pytest
 
-from pokepoke.worktrees import (
+from pokepoke.worktrees.worktrees import (
     create_worktree,
     is_worktree_merged,
     merge_worktree,
@@ -74,12 +74,12 @@ class TestRunGit:
 class TestCreateWorktree:
     """Tests for create_worktree function."""
 
-    @patch('pokepoke.worktrees.get_default_branch')
-    @patch('pokepoke.worktrees.list_worktrees')
-    @patch('pokepoke.worktrees.with_worktree_lock')
-    @patch('pokepoke.worktrees._run_git')
+    @patch('pokepoke.worktrees.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.worktrees.list_worktrees')
+    @patch('pokepoke.worktrees.worktrees.with_worktree_lock')
+    @patch('pokepoke.worktrees.worktrees._run_git')
     @patch('pathlib.Path.mkdir')
-    @patch('pokepoke.worktrees._validate_worktree_integrity')
+    @patch('pokepoke.worktrees.worktrees._validate_worktree_integrity')
     def test_create_worktree_new_success(
         self,
         mock_validate,
@@ -105,7 +105,7 @@ class TestCreateWorktree:
         assert 'worktree' in call_args
         assert 'add' in call_args
 
-    @patch('pokepoke.worktrees.list_worktrees')
+    @patch('pokepoke.worktrees.worktrees.list_worktrees')
     def test_create_worktree_reuses_existing(self, mock_list) -> None:
         """Reuse existing worktree if already created."""
         existing_path = Path('/repo/worktrees/task-task-123')
@@ -117,10 +117,10 @@ class TestCreateWorktree:
 
         assert result == existing_path.resolve()
 
-    @patch('pokepoke.worktrees.get_default_branch')
-    @patch('pokepoke.worktrees.list_worktrees')
-    @patch('pokepoke.worktrees.with_worktree_lock')
-    @patch('pokepoke.worktrees._run_git')
+    @patch('pokepoke.worktrees.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.worktrees.list_worktrees')
+    @patch('pokepoke.worktrees.worktrees.with_worktree_lock')
+    @patch('pokepoke.worktrees.worktrees._run_git')
     @patch('pathlib.Path.mkdir')
     def test_create_worktree_git_error_branch_exists(
         self,
@@ -146,10 +146,10 @@ class TestCreateWorktree:
 
         assert result == Path('/repo/worktrees/task-123')
 
-    @patch('pokepoke.worktrees.get_default_branch')
-    @patch('pokepoke.worktrees.list_worktrees')
-    @patch('pokepoke.worktrees.with_worktree_lock')
-    @patch('pokepoke.worktrees._run_git')
+    @patch('pokepoke.worktrees.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.worktrees.list_worktrees')
+    @patch('pokepoke.worktrees.worktrees.with_worktree_lock')
+    @patch('pokepoke.worktrees.worktrees._run_git')
     @patch('pathlib.Path.mkdir')
     def test_create_worktree_git_error_invalid_base_branch(
         self,
@@ -173,10 +173,10 @@ class TestCreateWorktree:
         with pytest.raises(RuntimeError, match="Base branch 'nonexistent' does not exist"):
             create_worktree('task-123')
 
-    @patch('pokepoke.worktrees.get_default_branch')
-    @patch('pokepoke.worktrees.list_worktrees')
-    @patch('pokepoke.worktrees.with_worktree_lock')
-    @patch('pokepoke.worktrees._run_git')
+    @patch('pokepoke.worktrees.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.worktrees.list_worktrees')
+    @patch('pokepoke.worktrees.worktrees.with_worktree_lock')
+    @patch('pokepoke.worktrees.worktrees._run_git')
     @patch('pathlib.Path.mkdir')
     def test_create_worktree_git_timeout(
         self,
@@ -197,10 +197,10 @@ class TestCreateWorktree:
         with pytest.raises(RuntimeError, match="Timed out creating worktree"):
             create_worktree('task-123')
 
-    @patch('pokepoke.worktrees.get_default_branch')
-    @patch('pokepoke.worktrees.list_worktrees')
-    @patch('pokepoke.worktrees.with_worktree_lock')
-    @patch('pokepoke.worktrees._run_git')
+    @patch('pokepoke.worktrees.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.worktrees.list_worktrees')
+    @patch('pokepoke.worktrees.worktrees.with_worktree_lock')
+    @patch('pokepoke.worktrees.worktrees._run_git')
     @patch('pathlib.Path.mkdir')
     def test_create_worktree_lock_timeout(
         self,
@@ -227,10 +227,10 @@ class TestCreateWorktree:
         with pytest.raises(RuntimeError, match="file lock|Timed out"):
             create_worktree('task-123')
 
-    @patch('pokepoke.worktrees.get_default_branch')
-    @patch('pokepoke.worktrees.list_worktrees')
-    @patch('pokepoke.worktrees.with_worktree_lock')
-    @patch('pokepoke.worktrees._run_git')
+    @patch('pokepoke.worktrees.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.worktrees.list_worktrees')
+    @patch('pokepoke.worktrees.worktrees.with_worktree_lock')
+    @patch('pokepoke.worktrees.worktrees._run_git')
     @patch('pathlib.Path.mkdir')
     def test_create_worktree_unexpected_error(
         self,
@@ -251,10 +251,10 @@ class TestCreateWorktree:
         with pytest.raises(RuntimeError, match="Unexpected error creating worktree"):
             create_worktree('task-123')
 
-    @patch('pokepoke.worktrees.get_default_branch')
-    @patch('pokepoke.worktrees.list_worktrees')
-    @patch('pokepoke.worktrees.with_worktree_lock')
-    @patch('pokepoke.worktrees._run_git')
+    @patch('pokepoke.worktrees.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.worktrees.list_worktrees')
+    @patch('pokepoke.worktrees.worktrees.with_worktree_lock')
+    @patch('pokepoke.worktrees.worktrees._run_git')
     @patch('pathlib.Path.mkdir')
     def test_create_worktree_double_check_after_lock(
         self,
@@ -281,11 +281,11 @@ class TestCreateWorktree:
 
     def test_create_worktree_custom_base_branch(self) -> None:
         """Create worktree with custom base branch."""
-        with patch('pokepoke.worktrees.list_worktrees') as mock_list, \
-             patch('pokepoke.worktrees.with_worktree_lock') as mock_lock, \
-             patch('pokepoke.worktrees._run_git') as mock_run_git, \
+        with patch('pokepoke.worktrees.worktrees.list_worktrees') as mock_list, \
+             patch('pokepoke.worktrees.worktrees.with_worktree_lock') as mock_lock, \
+             patch('pokepoke.worktrees.worktrees._run_git') as mock_run_git, \
              patch('pathlib.Path.mkdir'), \
-             patch('pokepoke.worktrees._validate_worktree_integrity'):
+             patch('pokepoke.worktrees.worktrees._validate_worktree_integrity'):
 
             mock_list.return_value = []
             mock_lock.return_value.__enter__ = Mock(return_value=None)
@@ -301,8 +301,8 @@ class TestCreateWorktree:
 class TestIsWorktreeMerged:
     """Tests for is_worktree_merged function."""
 
-    @patch('pokepoke.worktrees.get_default_branch')
-    @patch('pokepoke.worktrees._run_git')
+    @patch('pokepoke.worktrees.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.worktrees._run_git')
     def test_is_worktree_merged_true(self, mock_run_git, mock_default_branch) -> None:
         """Return True when branch is merged."""
         mock_default_branch.return_value = 'main'
@@ -315,8 +315,8 @@ class TestIsWorktreeMerged:
 
         assert result is True
 
-    @patch('pokepoke.worktrees.get_default_branch')
-    @patch('pokepoke.worktrees._run_git')
+    @patch('pokepoke.worktrees.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.worktrees._run_git')
     def test_is_worktree_merged_false(self, mock_run_git, mock_default_branch) -> None:
         """Return False when branch is not merged."""
         mock_default_branch.return_value = 'main'
@@ -329,8 +329,8 @@ class TestIsWorktreeMerged:
 
         assert result is False
 
-    @patch('pokepoke.worktrees.get_default_branch')
-    @patch('pokepoke.worktrees._run_git')
+    @patch('pokepoke.worktrees.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.worktrees._run_git')
     def test_is_worktree_merged_git_error(self, mock_run_git, mock_default_branch) -> None:
         """Return False on git error."""
         mock_default_branch.return_value = 'main'
@@ -340,7 +340,7 @@ class TestIsWorktreeMerged:
 
         assert result is False
 
-    @patch('pokepoke.worktrees._run_git')
+    @patch('pokepoke.worktrees.worktrees._run_git')
     def test_is_worktree_merged_custom_target_branch(self, mock_run_git) -> None:
         """Use custom target branch if provided."""
         mock_run_git.return_value = Mock(stdout='', returncode=0)
@@ -354,14 +354,14 @@ class TestIsWorktreeMerged:
 class TestMergeWorktree:
     """Tests for merge_worktree function."""
 
-    @patch('pokepoke.worktrees.cleanup_after_merge')
-    @patch('pokepoke.worktrees.is_worktree_merged')
-    @patch('pokepoke.worktrees._run_git')
-    @patch('pokepoke.worktrees.validate_post_merge')
-    @patch('pokepoke.worktrees.get_default_branch')
-    @patch('pokepoke.worktrees.is_worktree_clean')
-    @patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo')
-    @patch('pokepoke.worktrees.execute_merge_sequence')
+    @patch('pokepoke.worktrees.worktrees.cleanup_after_merge')
+    @patch('pokepoke.worktrees.worktrees.is_worktree_merged')
+    @patch('pokepoke.worktrees.worktrees._run_git')
+    @patch('pokepoke.worktrees.worktrees.validate_post_merge')
+    @patch('pokepoke.worktrees.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
+    @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
+    @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
     def test_merge_worktree_success(
         self,
         mock_execute,
@@ -388,7 +388,7 @@ class TestMergeWorktree:
         assert success is True
         assert conflicts == []
 
-    @patch('pokepoke.worktrees.is_worktree_clean')
+    @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
     def test_merge_worktree_dirty_worktree(self, mock_is_clean) -> None:
         """Fail when worktree has uncommitted changes."""
         mock_is_clean.return_value = False
@@ -398,10 +398,10 @@ class TestMergeWorktree:
         assert success is False
         assert conflicts == []
 
-    @patch('pokepoke.worktrees.get_default_branch')
-    @patch('pokepoke.worktrees.is_worktree_clean')
-    @patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo')
-    @patch('pokepoke.worktrees.execute_merge_sequence')
+    @patch('pokepoke.worktrees.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
+    @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
+    @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
     def test_merge_worktree_sync_fails(
         self,
         mock_execute,
@@ -419,10 +419,10 @@ class TestMergeWorktree:
         assert success is False
         assert conflicts == []
 
-    @patch('pokepoke.worktrees.get_default_branch')
-    @patch('pokepoke.worktrees.is_worktree_clean')
-    @patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo')
-    @patch('pokepoke.worktrees.execute_merge_sequence')
+    @patch('pokepoke.worktrees.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
+    @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
+    @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
     def test_merge_worktree_conflict_files(
         self,
         mock_execute,
@@ -442,14 +442,14 @@ class TestMergeWorktree:
         assert success is False
         assert conflicts == conflict_files
 
-    @patch('pokepoke.worktrees.cleanup_after_merge')
-    @patch('pokepoke.worktrees.is_worktree_merged')
-    @patch('pokepoke.worktrees._run_git')
-    @patch('pokepoke.worktrees.validate_post_merge')
-    @patch('pokepoke.worktrees.get_default_branch')
-    @patch('pokepoke.worktrees.is_worktree_clean')
-    @patch('pokepoke.worktrees._sync_and_ensure_clean_main_repo')
-    @patch('pokepoke.worktrees.execute_merge_sequence')
+    @patch('pokepoke.worktrees.worktrees.cleanup_after_merge')
+    @patch('pokepoke.worktrees.worktrees.is_worktree_merged')
+    @patch('pokepoke.worktrees.worktrees._run_git')
+    @patch('pokepoke.worktrees.worktrees.validate_post_merge')
+    @patch('pokepoke.worktrees.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
+    @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
+    @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
     def test_merge_worktree_cleanup(
         self,
         mock_execute,
@@ -523,8 +523,8 @@ class TestListWorktrees:
 class TestCleanupWorktree:
     """Tests for cleanup_worktree function."""
 
-    @patch('pokepoke.worktree_cleanup.remove_from_manifest')
-    @patch('pokepoke.worktrees.list_worktrees')
+    @patch('pokepoke.worktrees.worktree_cleanup.remove_from_manifest')
+    @patch('pokepoke.worktrees.worktrees.list_worktrees')
     @patch('subprocess.run')
     def test_cleanup_worktree_success(
         self, mock_run, mock_list, mock_remove_manifest
@@ -540,12 +540,16 @@ class TestCleanupWorktree:
         mock_run.assert_called_once()
         assert mock_run.call_args[0][0] == ['git', 'branch', '-d', 'task/item-1']
 
-    @patch('pokepoke.worktrees._run_git')
-    @patch('pokepoke.worktrees.list_worktrees')
-    def test_cleanup_worktree_not_found(self, mock_list, mock_run_git) -> None:
+    @patch('pokepoke.worktrees.worktree_cleanup._run_git')
+    @patch('pokepoke.worktrees.worktrees._run_git')
+    @patch('pokepoke.worktrees.worktrees.list_worktrees')
+    def test_cleanup_worktree_not_found(self, mock_list, mock_run_git, mock_cleanup_run_git) -> None:
         """Handle cleanup when worktree doesn't exist."""
         mock_run_git.side_effect = subprocess.CalledProcessError(
             1, 'git', stderr='not a working tree'
+        )
+        mock_cleanup_run_git.side_effect = subprocess.CalledProcessError(
+            1, 'git', stderr='error: branch not found'
         )
         mock_list.return_value = []
 

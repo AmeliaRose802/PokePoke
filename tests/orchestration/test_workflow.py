@@ -4,19 +4,19 @@ import subprocess
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from pokepoke.workflow import (
+from pokepoke.orchestration.workflow import (
     select_work_item,
     process_work_item
 )
-from pokepoke.workflow_helpers import (
+from pokepoke.orchestration.workflow_helpers import (
     _setup_worktree,
     run_cleanup_with_timeout as _run_cleanup_with_timeout
 )
-from pokepoke.work_item_selection import (
+from pokepoke.orchestration.work_item_selection import (
     interactive_selection,
     autonomous_selection
 )
-from pokepoke.worktree_finalization import (
+from pokepoke.worktrees.worktree_finalization import (
     finalize_work_item,
     check_and_merge_worktree,
     merge_worktree_to_dev,
@@ -24,7 +24,7 @@ from pokepoke.worktree_finalization import (
     check_parent_hierarchy
 )
 from pokepoke.types import BeadsWorkItem, CopilotResult, AgentStats, GateAgentResult
-from pokepoke.work_item_session import WorkItemSession
+from pokepoke.orchestration.work_item_session import WorkItemSession
 
 
 class TestSelectWorkItem:
@@ -36,8 +36,8 @@ class TestSelectWorkItem:
 
         assert result is None
 
-    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
-    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
+    @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
     def test_autonomous_selection(self, mock_select: Mock, mock_deps: Mock) -> None:
         """Test autonomous mode selection."""
         items = [
@@ -59,7 +59,7 @@ class TestSelectWorkItem:
         # Should have passed the full list (no filtering since no items assigned to others)
         mock_select.assert_called_once()
 
-    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
+    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
     @patch('builtins.input')
     def test_interactive_selection(self, mock_input: Mock, mock_deps: Mock) -> None:
         """Test interactive mode selection."""
@@ -80,8 +80,8 @@ class TestSelectWorkItem:
         assert result is not None
         assert result.id == "task-1"
 
-    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
-    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
+    @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
     def test_filters_items_assigned_to_others(self, mock_select: Mock, mock_deps: Mock) -> None:
         """Test that items assigned to other agents are filtered out."""
         import os
@@ -119,7 +119,7 @@ class TestSelectWorkItem:
         assert result is not None
         assert result.id == "task-2"
 
-    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
+    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
     def test_all_items_assigned_to_others(self, mock_deps: Mock) -> None:
         """Test when all items are assigned to other agents."""
         import os
@@ -265,7 +265,7 @@ class TestInteractiveSelection:
 class TestAutonomousSelection:
     """Test autonomous_selection function."""
 
-    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
     def test_item_selected(self, mock_select: Mock) -> None:
         """Test successful hierarchical selection."""
         items = [
@@ -285,7 +285,7 @@ class TestAutonomousSelection:
         assert result is not None
         assert result.id == "task-1"
 
-    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
     def test_no_item_selected(self, mock_select: Mock) -> None:
         """Test when no item is selected."""
         items = [
@@ -308,7 +308,7 @@ class TestAutonomousSelection:
 class TestSetupWorktree:
     """Test _setup_worktree function."""
 
-    @patch('pokepoke.workflow_helpers.create_worktree')
+    @patch('pokepoke.orchestration.workflow_helpers.create_worktree')
     def test_successful_setup(self, mock_create: Mock) -> None:
         """Test successful worktree creation."""
         item = BeadsWorkItem(
@@ -327,7 +327,7 @@ class TestSetupWorktree:
         assert result == Path("/fake/worktree")
         mock_create.assert_called_once_with("task-1", lock_timeout=300.0, repo_path=None)
 
-    @patch('pokepoke.workflow_helpers.create_worktree')
+    @patch('pokepoke.orchestration.workflow_helpers.create_worktree')
     def test_successful_setup_with_custom_timeout(self, mock_create: Mock) -> None:
         """Test successful worktree creation with custom lock timeout."""
         item = BeadsWorkItem(
@@ -346,7 +346,7 @@ class TestSetupWorktree:
         assert result == Path("/fake/worktree")
         mock_create.assert_called_once_with("task-1", lock_timeout=600.0, repo_path=None)
 
-    @patch('pokepoke.workflow_helpers.create_worktree')
+    @patch('pokepoke.orchestration.workflow_helpers.create_worktree')
     def test_creation_failure(self, mock_create: Mock) -> None:
         """Test worktree creation failure."""
         item = BeadsWorkItem(
@@ -367,8 +367,8 @@ class TestSetupWorktree:
 class TestRunCleanupWithTimeout:
     """Test _run_cleanup_with_timeout function."""
 
-    @patch('pokepoke.workflow_helpers.run_cleanup_loop')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow_helpers.run_cleanup_loop')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
     @patch('time.time')
     def test_no_uncommitted_changes(
         self,
@@ -404,8 +404,8 @@ class TestRunCleanupWithTimeout:
         assert cleanup_runs == 0
         mock_cleanup.assert_not_called()
 
-    @patch('pokepoke.workflow_helpers.run_cleanup_loop')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow_helpers.run_cleanup_loop')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
     @patch('time.time')
     def test_cleanup_success(
         self,
@@ -442,8 +442,8 @@ class TestRunCleanupWithTimeout:
         assert cleanup_runs == 1
         mock_cleanup.assert_called_once()
 
-    @patch('pokepoke.workflow_helpers.run_cleanup_loop')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow_helpers.run_cleanup_loop')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
     @patch('time.time')
     def test_timeout_during_cleanup(
         self,
@@ -484,8 +484,8 @@ class TestRunCleanupWithTimeout:
         assert cleanup_runs == 1  # One cleanup was attempted before timeout
         mock_cleanup.assert_called_once()  # Cleanup called once before timeout
 
-    @patch('pokepoke.workflow_helpers.run_cleanup_loop')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow_helpers.run_cleanup_loop')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
     @patch('time.time')
     def test_cleanup_failure(
         self,
@@ -528,8 +528,8 @@ class TestRunCleanupWithTimeout:
 class TestFinalizeWorkItem:
     """Test finalize_work_item function."""
 
-    @patch('pokepoke.worktree_finalization.close_work_item_and_parents')
-    @patch('pokepoke.worktree_finalization.check_and_merge_worktree')
+    @patch('pokepoke.worktrees.worktree_finalization.close_work_item_and_parents')
+    @patch('pokepoke.worktrees.worktree_finalization.check_and_merge_worktree')
     def test_finalize_returns_false_when_merge_fails(self, mock_merge: Mock, mock_close: Mock) -> None:
         """Test finalize returns False when check_and_merge_worktree fails."""
         item = BeadsWorkItem(id="task-1", title="Task", description="", status="open", priority=1, issue_type="task")
@@ -544,9 +544,9 @@ class TestFinalizeWorkItem:
 class TestCheckAndMergeWorktree:
     """Test check_and_merge_worktree function."""
 
-    @patch('pokepoke.worktree_finalization.merge_lock')
-    @patch('pokepoke.worktree_finalization.merge_worktree_to_dev')
-    @patch('pokepoke.worktree_finalization.cleanup_worktree')
+    @patch('pokepoke.worktrees.worktree_finalization.merge_lock')
+    @patch('pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev')
+    @patch('pokepoke.worktrees.worktree_finalization.cleanup_worktree')
     @patch('subprocess.run')
     def test_no_commits_to_merge(
         self,
@@ -578,8 +578,8 @@ class TestCheckAndMergeWorktree:
         assert len(cwd_calls) == 1
         assert cwd_calls[0].kwargs['cwd'] == str(worktree_path)
 
-    @patch('pokepoke.worktree_finalization.merge_lock')
-    @patch('pokepoke.worktree_finalization.merge_worktree_to_dev')
+    @patch('pokepoke.worktrees.worktree_finalization.merge_lock')
+    @patch('pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev')
     @patch('subprocess.run')
     def test_has_commits_to_merge(
         self,
@@ -606,8 +606,8 @@ class TestCheckAndMergeWorktree:
         assert result is True
         mock_merge.assert_called_once_with(item, parent_agent_id=None, worktree_path=worktree_path, repo_path=None)
 
-    @patch('pokepoke.worktree_finalization.merge_lock')
-    @patch('pokepoke.worktree_finalization.merge_worktree_to_dev')
+    @patch('pokepoke.worktrees.worktree_finalization.merge_lock')
+    @patch('pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev')
     @patch('subprocess.run')
     def test_commit_count_check_fails(
         self,
@@ -639,7 +639,7 @@ class TestCheckAndMergeWorktree:
 class TestMergeWorktreeToDev:
     """Test merge_worktree_to_dev function (delegates to perform_worktree_merge)."""
 
-    @patch('pokepoke.worktree_merge_handler.perform_worktree_merge')
+    @patch('pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge')
     def test_successful_merge(self, mock_perform: Mock) -> None:
         """Test successful worktree merge."""
         item = BeadsWorkItem(
@@ -658,7 +658,7 @@ class TestMergeWorktreeToDev:
         assert result is True
         mock_perform.assert_called_once()
 
-    @patch('pokepoke.worktree_merge_handler.perform_worktree_merge')
+    @patch('pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge')
     def test_merge_fails_autofix_succeeds(self, mock_perform: Mock) -> None:
         """Test merge returns True when perform_worktree_merge succeeds."""
         item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
@@ -667,7 +667,7 @@ class TestMergeWorktreeToDev:
         result = merge_worktree_to_dev(item)
         assert result is True
 
-    @patch('pokepoke.worktree_merge_handler.perform_worktree_merge')
+    @patch('pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge')
     def test_repo_not_ready_autofix_fails(self, mock_perform: Mock) -> None:
         """Test when merge fails."""
         item = BeadsWorkItem(id="task-1", title="Task 1", description="", status="open", priority=1, issue_type="task")
@@ -676,7 +676,7 @@ class TestMergeWorktreeToDev:
         result = merge_worktree_to_dev(item)
         assert result is False
 
-    @patch('pokepoke.worktree_merge_handler.perform_worktree_merge')
+    @patch('pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge')
     def test_repo_not_ready_autofix_succeeds(self, mock_perform: Mock) -> None:
         """Test merge returns True after successful recovery."""
         item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
@@ -685,7 +685,7 @@ class TestMergeWorktreeToDev:
         result = merge_worktree_to_dev(item)
         assert result is True
 
-    @patch('pokepoke.worktree_merge_handler.perform_worktree_merge')
+    @patch('pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge')
     def test_merge_fails_autofix_fails(self, mock_perform: Mock) -> None:
         """Test when merge fails and recovery fails."""
         item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
@@ -698,8 +698,8 @@ class TestMergeWorktreeToDev:
 class TestCloseWorkItemAndParents:
     """Test close_work_item_and_parents function."""
 
-    @patch('pokepoke.worktree_finalization.check_parent_hierarchy')
-    @patch('pokepoke.worktree_finalization.close_item')
+    @patch('pokepoke.worktrees.worktree_finalization.check_parent_hierarchy')
+    @patch('pokepoke.worktrees.worktree_finalization.close_item')
     @patch('subprocess.run')
     def test_item_already_closed(
         self,
@@ -727,8 +727,8 @@ class TestCloseWorkItemAndParents:
         mock_close.assert_not_called()
         mock_check_parents.assert_called_once_with(item)
 
-    @patch('pokepoke.worktree_finalization.check_parent_hierarchy')
-    @patch('pokepoke.worktree_finalization.close_item')
+    @patch('pokepoke.worktrees.worktree_finalization.check_parent_hierarchy')
+    @patch('pokepoke.worktrees.worktree_finalization.close_item')
     @patch('subprocess.run')
     def test_item_not_closed_fallback(
         self,
@@ -756,8 +756,8 @@ class TestCloseWorkItemAndParents:
         mock_close.assert_called_once()
         mock_check_parents.assert_called_once_with(item)
 
-    @patch('pokepoke.worktree_finalization.check_parent_hierarchy')
-    @patch('pokepoke.worktree_finalization.close_item')
+    @patch('pokepoke.worktrees.worktree_finalization.check_parent_hierarchy')
+    @patch('pokepoke.worktrees.worktree_finalization.close_item')
     @patch('subprocess.run')
     def test_check_status_fails(
         self,
@@ -786,8 +786,8 @@ class TestCloseWorkItemAndParents:
 class TestCheckParentHierarchy:
     """Test check_parent_hierarchy function."""
 
-    @patch('pokepoke.worktree_finalization.close_parent_if_complete')
-    @patch('pokepoke.worktree_finalization.get_parent_id')
+    @patch('pokepoke.worktrees.worktree_finalization.close_parent_if_complete')
+    @patch('pokepoke.worktrees.worktree_finalization.get_parent_id')
     def test_no_parent(self, mock_get_parent: Mock, mock_close_parent: Mock) -> None:
         """Test when item has no parent."""
         item = BeadsWorkItem(
@@ -805,8 +805,8 @@ class TestCheckParentHierarchy:
 
         mock_close_parent.assert_not_called()
 
-    @patch('pokepoke.worktree_finalization.close_parent_if_complete')
-    @patch('pokepoke.worktree_finalization.get_parent_id')
+    @patch('pokepoke.worktrees.worktree_finalization.close_parent_if_complete')
+    @patch('pokepoke.worktrees.worktree_finalization.get_parent_id')
     def test_with_parent_no_grandparent(
         self,
         mock_get_parent: Mock,
@@ -829,8 +829,8 @@ class TestCheckParentHierarchy:
         assert mock_close_parent.call_count == 1
         mock_close_parent.assert_called_with("parent-1")
 
-    @patch('pokepoke.worktree_finalization.close_parent_if_complete')
-    @patch('pokepoke.worktree_finalization.get_parent_id')
+    @patch('pokepoke.worktrees.worktree_finalization.close_parent_if_complete')
+    @patch('pokepoke.worktrees.worktree_finalization.get_parent_id')
     def test_with_parent_and_grandparent(
         self,
         mock_get_parent: Mock,
@@ -858,16 +858,16 @@ class TestCheckParentHierarchy:
 class TestProcessWorkItem:
     """Test process_work_item function."""
 
-    @patch('pokepoke.model_selection.get_config')
-    @patch('pokepoke.workflow.get_config')
-    @patch('pokepoke.workflow_helpers.run_beta_tester')  # Mock beta tester
-    @patch('pokepoke.workflow_helpers.finalize_work_item')
+    @patch('pokepoke.models.model_selection.get_config')
+    @patch('pokepoke.orchestration.workflow.get_config')
+    @patch('pokepoke.orchestration.workflow_helpers.run_beta_tester')  # Mock beta tester
+    @patch('pokepoke.orchestration.workflow_helpers.finalize_work_item')
     @patch('os.chdir')
     @patch('os.getcwd')
-    @patch('pokepoke.workflow.run_cleanup_with_timeout')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
-    @patch('pokepoke.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.run_cleanup_with_timeout')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
     @patch('builtins.input')
     @patch('time.time')
     def test_skip_in_interactive_mode(
@@ -915,8 +915,8 @@ class TestProcessWorkItem:
         mock_setup.assert_not_called()
 
     @patch.object(WorkItemSession, 'cleanup_on_failure')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('builtins.input')
     @patch('time.time')
     def test_worktree_setup_fails(
@@ -951,12 +951,12 @@ class TestProcessWorkItem:
         assert result.cleanup_agent_runs == 0
 
     @patch.object(WorkItemSession, 'cleanup_on_failure')
-    @patch('pokepoke.workflow.cleanup_worktree')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
-    @patch('pokepoke.workflow.is_shutting_down')
-    @patch('pokepoke.workflow.select_model_for_item')
+    @patch('pokepoke.orchestration.workflow.cleanup_worktree')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow.is_shutting_down')
+    @patch('pokepoke.orchestration.workflow.select_model_for_item')
     @patch('time.time')
     def test_shutdown_before_first_iteration_does_not_crash(
         self,
@@ -1000,18 +1000,18 @@ class TestProcessWorkItem:
         # Worktree should be preserved on shutdown — cleanup_on_failure must NOT run
         mock_session_cleanup.assert_not_called()
 
-    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
-    @patch('pokepoke.workflow.run_gate_agent')  # Mock gate agent
-    @patch('pokepoke.workflow_helpers.run_beta_tester')  # Mock beta tester
-    @patch('pokepoke.workflow_helpers.finalize_work_item')
+    @patch('pokepoke.git.git_operations.build_handoff_context', return_value='')
+    @patch('pokepoke.orchestration.workflow.run_gate_agent')  # Mock gate agent
+    @patch('pokepoke.orchestration.workflow_helpers.run_beta_tester')  # Mock beta tester
+    @patch('pokepoke.orchestration.workflow_helpers.finalize_work_item')
     @patch('os.chdir')
     @patch('os.getcwd')
-    @patch('pokepoke.workflow.run_cleanup_with_timeout')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.git_operations.has_commits_ahead')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow.run_cleanup_with_timeout')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.git.git_operations.has_commits_ahead')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('builtins.input')
     @patch('time.time')
     def test_no_changes_made(
@@ -1068,18 +1068,18 @@ class TestProcessWorkItem:
         # Cleanup is called even with no changes (it just exits early)
         mock_cleanup_timeout.assert_called_once()
 
-    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
-    @patch('pokepoke.workflow.run_gate_agent')  # Mock gate agent
-    @patch('pokepoke.workflow_helpers.run_beta_tester')  # Mock beta tester
-    @patch('pokepoke.workflow_helpers.finalize_work_item')
+    @patch('pokepoke.git.git_operations.build_handoff_context', return_value='')
+    @patch('pokepoke.orchestration.workflow.run_gate_agent')  # Mock gate agent
+    @patch('pokepoke.orchestration.workflow_helpers.run_beta_tester')  # Mock beta tester
+    @patch('pokepoke.orchestration.workflow_helpers.finalize_work_item')
     @patch('os.chdir')
     @patch('os.getcwd')
-    @patch('pokepoke.workflow.run_cleanup_with_timeout')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.git_operations.has_commits_ahead')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow.run_cleanup_with_timeout')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.git.git_operations.has_commits_ahead')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('builtins.input')
     @patch('time.time')
     def test_changes_already_committed(
@@ -1137,17 +1137,17 @@ class TestProcessWorkItem:
         mock_commits_ahead.assert_called_once()
 
     @patch.object(WorkItemSession, 'cleanup_on_failure')
-    @patch('pokepoke.workflow.get_config')
-    @patch('pokepoke.workflow.run_gate_agent')  # Mock gate agent
-    @patch('pokepoke.workflow_helpers.run_beta_tester')  # Mock beta tester
-    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('pokepoke.orchestration.workflow.get_config')
+    @patch('pokepoke.orchestration.workflow.run_gate_agent')  # Mock gate agent
+    @patch('pokepoke.orchestration.workflow_helpers.run_beta_tester')  # Mock beta tester
+    @patch('pokepoke.orchestration.workflow.cleanup_worktree')
     @patch('os.chdir')
     @patch('os.getcwd')
-    @patch('pokepoke.workflow.run_cleanup_with_timeout')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow.run_cleanup_with_timeout')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('builtins.input')
     @patch('time.time')
     def test_copilot_failure(
@@ -1208,17 +1208,17 @@ class TestProcessWorkItem:
         mock_session_cleanup.assert_called()
 
     @patch.object(WorkItemSession, 'cleanup_on_failure')
-    @patch('pokepoke.workflow.get_config')
-    @patch('pokepoke.workflow.run_gate_agent')
-    @patch('pokepoke.workflow_helpers.run_beta_tester')
-    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('pokepoke.orchestration.workflow.get_config')
+    @patch('pokepoke.orchestration.workflow.run_gate_agent')
+    @patch('pokepoke.orchestration.workflow_helpers.run_beta_tester')
+    @patch('pokepoke.orchestration.workflow.cleanup_worktree')
     @patch('os.chdir')
     @patch('os.getcwd')
-    @patch('pokepoke.workflow.run_cleanup_with_timeout')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow.run_cleanup_with_timeout')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('builtins.input')
     @patch('time.time')
     def test_copilot_failure_retries_exhausted(
@@ -1278,19 +1278,19 @@ class TestProcessWorkItem:
         assert mock_invoke.call_count == 3
         mock_session_cleanup.assert_called()
 
-    @patch('pokepoke.workflow.get_config')
-    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
-    @patch('pokepoke.workflow.run_gate_agent')
-    @patch('pokepoke.workflow_helpers.run_beta_tester')
-    @patch('pokepoke.workflow_helpers.finalize_work_item')
-    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('pokepoke.orchestration.workflow.get_config')
+    @patch('pokepoke.git.git_operations.build_handoff_context', return_value='')
+    @patch('pokepoke.orchestration.workflow.run_gate_agent')
+    @patch('pokepoke.orchestration.workflow_helpers.run_beta_tester')
+    @patch('pokepoke.orchestration.workflow_helpers.finalize_work_item')
+    @patch('pokepoke.orchestration.workflow.cleanup_worktree')
     @patch('os.chdir')
     @patch('os.getcwd')
-    @patch('pokepoke.workflow.run_cleanup_with_timeout')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow.run_cleanup_with_timeout')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('builtins.input')
     @patch('time.time')
     def test_copilot_failure_retried_successfully(
@@ -1357,17 +1357,17 @@ class TestProcessWorkItem:
         assert item.description == ""
 
     @patch.object(WorkItemSession, 'cleanup_on_failure')
-    @patch('pokepoke.workflow.get_config')
-    @patch('pokepoke.workflow.run_gate_agent')
-    @patch('pokepoke.workflow_helpers.run_beta_tester')
-    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('pokepoke.orchestration.workflow.get_config')
+    @patch('pokepoke.orchestration.workflow.run_gate_agent')
+    @patch('pokepoke.orchestration.workflow_helpers.run_beta_tester')
+    @patch('pokepoke.orchestration.workflow.cleanup_worktree')
     @patch('os.chdir')
     @patch('os.getcwd')
-    @patch('pokepoke.workflow.run_cleanup_with_timeout')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow.run_cleanup_with_timeout')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('builtins.input')
     @patch('time.time')
     def test_copilot_failure_no_retry_when_rate_limited(
@@ -1424,19 +1424,19 @@ class TestProcessWorkItem:
         assert result.request_count == 1  # No retry on rate limit
         assert mock_invoke.call_count == 1
 
-    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
-    @patch('pokepoke.workflow.add_comment')
-    @patch('pokepoke.workflow.run_gate_agent')
-    @patch('pokepoke.workflow_helpers.run_beta_tester')
-    @patch('pokepoke.workflow_helpers.finalize_work_item')
-    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('pokepoke.git.git_operations.build_handoff_context', return_value='')
+    @patch('pokepoke.orchestration.workflow.add_comment')
+    @patch('pokepoke.orchestration.workflow.run_gate_agent')
+    @patch('pokepoke.orchestration.workflow_helpers.run_beta_tester')
+    @patch('pokepoke.orchestration.workflow_helpers.finalize_work_item')
+    @patch('pokepoke.orchestration.workflow.cleanup_worktree')
     @patch('os.chdir')
     @patch('os.getcwd')
-    @patch('pokepoke.workflow.run_cleanup_with_timeout')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow.run_cleanup_with_timeout')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('builtins.input')
     @patch('time.time')
     def test_gate_agent_retry_loop(
@@ -1501,19 +1501,19 @@ class TestProcessWorkItem:
         # Description must NOT be mutated — feedback goes via prompt
         assert item.description == ""
 
-    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
-    @patch('pokepoke.workflow.add_comment')
-    @patch('pokepoke.workflow.run_gate_agent')
-    @patch('pokepoke.workflow_helpers.run_beta_tester')
-    @patch('pokepoke.workflow_helpers.finalize_work_item')
-    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('pokepoke.git.git_operations.build_handoff_context', return_value='')
+    @patch('pokepoke.orchestration.workflow.add_comment')
+    @patch('pokepoke.orchestration.workflow.run_gate_agent')
+    @patch('pokepoke.orchestration.workflow_helpers.run_beta_tester')
+    @patch('pokepoke.orchestration.workflow_helpers.finalize_work_item')
+    @patch('pokepoke.orchestration.workflow.cleanup_worktree')
     @patch('os.chdir')
     @patch('os.getcwd')
-    @patch('pokepoke.workflow.run_cleanup_with_timeout')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow.run_cleanup_with_timeout')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('builtins.input')
     @patch('time.time')
     def test_gate_agent_stats_aggregation(
@@ -1591,16 +1591,16 @@ class TestProcessWorkItem:
         assert result.gate_agent_runs == 1  # Gate agent ran once
 
     @patch.object(WorkItemSession, 'cleanup_on_failure')
-    @patch('pokepoke.workflow.run_gate_agent')
-    @patch('pokepoke.workflow_helpers.run_beta_tester')
-    @patch('pokepoke.workflow.cleanup_worktree')
+    @patch('pokepoke.orchestration.workflow.run_gate_agent')
+    @patch('pokepoke.orchestration.workflow_helpers.run_beta_tester')
+    @patch('pokepoke.orchestration.workflow.cleanup_worktree')
     @patch('os.chdir')
     @patch('os.getcwd')
-    @patch('pokepoke.workflow.run_cleanup_with_timeout')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow.run_cleanup_with_timeout')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('builtins.input')
     @patch('time.time')
     def test_cleanup_failure_returns_stats(
@@ -1663,17 +1663,17 @@ class TestProcessWorkItem:
         assert result.stats.wall_duration == 10.0
 
     @patch.object(WorkItemSession, 'cleanup_on_failure')
-    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
-    @patch('pokepoke.workflow.add_comment')
-    @patch('pokepoke.workflow.run_gate_agent')
-    @patch('pokepoke.workflow.select_model_for_item')
-    @patch('pokepoke.workflow.cleanup_worktree')
-    @patch('pokepoke.workflow.run_cleanup_with_timeout')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.git_operations.has_commits_ahead')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.git.git_operations.build_handoff_context', return_value='')
+    @patch('pokepoke.orchestration.workflow.add_comment')
+    @patch('pokepoke.orchestration.workflow.run_gate_agent')
+    @patch('pokepoke.orchestration.workflow.select_model_for_item')
+    @patch('pokepoke.orchestration.workflow.cleanup_worktree')
+    @patch('pokepoke.orchestration.workflow.run_cleanup_with_timeout')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.git.git_operations.has_commits_ahead')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('builtins.input')
     @patch('time.time')
     def test_timeout_restarts_limited(
@@ -1733,16 +1733,16 @@ class TestProcessWorkItem:
         assert result.success is False
         mock_cleanup_worktree.assert_called_with(item.id, force=True)
 
-    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
-    @patch('pokepoke.workflow.run_gate_agent')
-    @patch('pokepoke.workflow_helpers.run_beta_tester')
-    @patch('pokepoke.workflow_helpers.finalize_work_item')
-    @patch('pokepoke.workflow.run_cleanup_with_timeout')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.git_operations.has_commits_ahead')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.git.git_operations.build_handoff_context', return_value='')
+    @patch('pokepoke.orchestration.workflow.run_gate_agent')
+    @patch('pokepoke.orchestration.workflow_helpers.run_beta_tester')
+    @patch('pokepoke.orchestration.workflow_helpers.finalize_work_item')
+    @patch('pokepoke.orchestration.workflow.run_cleanup_with_timeout')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.git.git_operations.has_commits_ahead')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('builtins.input')
     @patch('time.time')
     def test_timeout_restart_then_success(
@@ -1811,8 +1811,8 @@ class TestProcessWorkItem:
 class TestProcessWorkItemCoordination:
     """Tests for concurrent-agent coordination paths in process_work_item."""
 
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('time.time')
     def test_assign_fails_race_condition(
         self,
@@ -1843,8 +1843,8 @@ class TestProcessWorkItemCoordination:
         mock_setup.assert_not_called()
 
     @patch.object(WorkItemSession, 'cleanup_on_failure')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('time.time')
     def test_worktree_lock_timeout(
         self,
@@ -1885,8 +1885,8 @@ class TestProcessWorkItemCoordination:
         assert result.stats is None
 
     @patch.object(WorkItemSession, 'cleanup_on_failure')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('time.time')
     def test_worktree_failure_triggers_unassign(
         self,
@@ -1921,18 +1921,18 @@ class TestProcessWorkItemCoordination:
 class TestGateAgentDisabled:
     """Tests for gate_agent_enabled config setting."""
 
-    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
-    @patch('pokepoke.workflow.run_gate_agent')
-    @patch('pokepoke.workflow_helpers.run_beta_tester')
-    @patch('pokepoke.workflow_helpers.finalize_work_item')
+    @patch('pokepoke.git.git_operations.build_handoff_context', return_value='')
+    @patch('pokepoke.orchestration.workflow.run_gate_agent')
+    @patch('pokepoke.orchestration.workflow_helpers.run_beta_tester')
+    @patch('pokepoke.orchestration.workflow_helpers.finalize_work_item')
     @patch('os.chdir')
     @patch('os.getcwd')
-    @patch('pokepoke.workflow.run_cleanup_with_timeout')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.git_operations.has_commits_ahead')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow.run_cleanup_with_timeout')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.git.git_operations.has_commits_ahead')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('builtins.input')
     @patch('time.time')
     def test_gate_agent_skipped_when_disabled(
@@ -1980,7 +1980,7 @@ class TestGateAgentDisabled:
         from pokepoke.config import ProjectConfig
         cfg = ProjectConfig()
         cfg.gate_agent_enabled = False
-        with patch('pokepoke.workflow.get_config', return_value=cfg):
+        with patch('pokepoke.orchestration.workflow.get_config', return_value=cfg):
             result = process_work_item(
                 item, interactive=True,
             )
@@ -1994,17 +1994,17 @@ class TestUnassignOnFailure:
     """Tests that work items are cleaned up when processing fails after assignment."""
 
     @patch.object(WorkItemSession, 'cleanup_on_failure')
-    @patch('pokepoke.workflow.cleanup_worktree')
-    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
-    @patch('pokepoke.workflow.run_gate_agent')
-    @patch('pokepoke.workflow_helpers.run_beta_tester')
-    @patch('pokepoke.workflow_helpers.finalize_work_item')
-    @patch('pokepoke.workflow.run_cleanup_with_timeout')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.git_operations.has_commits_ahead')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow.cleanup_worktree')
+    @patch('pokepoke.git.git_operations.build_handoff_context', return_value='')
+    @patch('pokepoke.orchestration.workflow.run_gate_agent')
+    @patch('pokepoke.orchestration.workflow_helpers.run_beta_tester')
+    @patch('pokepoke.orchestration.workflow_helpers.finalize_work_item')
+    @patch('pokepoke.orchestration.workflow.run_cleanup_with_timeout')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.git.git_operations.has_commits_ahead')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('time.time')
     def test_finalization_failure_triggers_cleanup(
         self,
@@ -2049,10 +2049,10 @@ class TestUnassignOnFailure:
         mock_cleanup.assert_called_once()
 
     @patch.object(WorkItemSession, 'cleanup_on_failure')
-    @patch('pokepoke.workflow.cleanup_worktree')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow.cleanup_worktree')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('time.time')
     def test_work_agent_failure_triggers_cleanup(
         self,
@@ -2085,17 +2085,17 @@ class TestUnassignOnFailure:
         mock_cleanup.assert_called_once()
 
     @patch.object(WorkItemSession, 'cleanup_on_failure')
-    @patch('pokepoke.workflow.cleanup_worktree')
-    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
-    @patch('pokepoke.workflow.run_gate_agent')
-    @patch('pokepoke.workflow_helpers.run_beta_tester')
-    @patch('pokepoke.workflow_helpers.finalize_work_item')
-    @patch('pokepoke.workflow.run_cleanup_with_timeout')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.git_operations.has_commits_ahead')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow.cleanup_worktree')
+    @patch('pokepoke.git.git_operations.build_handoff_context', return_value='')
+    @patch('pokepoke.orchestration.workflow.run_gate_agent')
+    @patch('pokepoke.orchestration.workflow_helpers.run_beta_tester')
+    @patch('pokepoke.orchestration.workflow_helpers.finalize_work_item')
+    @patch('pokepoke.orchestration.workflow.run_cleanup_with_timeout')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.git.git_operations.has_commits_ahead')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('time.time')
     def test_successful_finalization_skips_cleanup(
         self,
@@ -2145,7 +2145,7 @@ class TestLogFailure:
 
     def test_calls_loggers_when_both_present(self) -> None:
         """Covers lines 38-39: both loggers are called."""
-        from pokepoke.workflow import _log_failure
+        from pokepoke.orchestration.workflow import _log_failure
         run_logger = Mock()
         item_logger = Mock()
         _log_failure(run_logger, item_logger, request_count=3)
@@ -2154,7 +2154,7 @@ class TestLogFailure:
 
     def test_skips_when_no_loggers(self) -> None:
         """Covers lines 37: no-op when loggers are None."""
-        from pokepoke.workflow import _log_failure
+        from pokepoke.orchestration.workflow import _log_failure
         _log_failure(None, None, request_count=1)  # Should not raise
 
 
@@ -2162,15 +2162,15 @@ class TestWorkflowGateException:
     """Tests for gate agent exception handling."""
 
     @patch.object(WorkItemSession, 'cleanup_on_failure')
-    @patch('pokepoke.workflow.cleanup_worktree')
-    @patch('pokepoke.git_operations.build_handoff_context', return_value='')
-    @patch('pokepoke.workflow.run_gate_agent', side_effect=RuntimeError("gate crashed"))
-    @patch('pokepoke.workflow.run_cleanup_with_timeout')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.git_operations.has_commits_ahead')
-    @patch('pokepoke.workflow_helpers.has_uncommitted_changes')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow.cleanup_worktree')
+    @patch('pokepoke.git.git_operations.build_handoff_context', return_value='')
+    @patch('pokepoke.orchestration.workflow.run_gate_agent', side_effect=RuntimeError("gate crashed"))
+    @patch('pokepoke.orchestration.workflow.run_cleanup_with_timeout')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.git.git_operations.has_commits_ahead')
+    @patch('pokepoke.orchestration.workflow_helpers.has_uncommitted_changes')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('time.time')
     def test_gate_agent_exception_triggers_cleanup(
         self,
@@ -2213,10 +2213,10 @@ class TestWorkflowCleanupException:
     """Tests for session cleanup exception handling in finally."""
 
     @patch.object(WorkItemSession, 'cleanup_on_failure', side_effect=RuntimeError("cleanup exploded"))
-    @patch('pokepoke.workflow.cleanup_worktree')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow.cleanup_worktree')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('time.time')
     def test_cleanup_exception_in_finally_propagates(
         self,
@@ -2246,10 +2246,10 @@ class TestWorkflowCleanupException:
             process_work_item(item, interactive=False)
 
     @patch.object(WorkItemSession, 'cleanup_on_failure')
-    @patch('pokepoke.workflow.cleanup_worktree')
-    @patch('pokepoke.workflow.invoke_copilot')
-    @patch('pokepoke.workflow._setup_worktree')
-    @patch('pokepoke.workflow.assign_and_sync_item')
+    @patch('pokepoke.orchestration.workflow.cleanup_worktree')
+    @patch('pokepoke.orchestration.workflow.invoke_copilot')
+    @patch('pokepoke.orchestration.workflow._setup_worktree')
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item')
     @patch('time.time')
     def test_cleanup_called_on_work_agent_failure(
         self,
@@ -2303,8 +2303,8 @@ class TestWorktreeLockTimeout:
         assert expected == 1200.0
 
     @patch.object(WorkItemSession, 'cleanup_on_failure')
-    @patch('pokepoke.workflow.assign_and_sync_item', return_value=True)
-    @patch('pokepoke.workflow._setup_worktree', return_value=None)
+    @patch('pokepoke.orchestration.workflow.assign_and_sync_item', return_value=True)
+    @patch('pokepoke.orchestration.workflow._setup_worktree', return_value=None)
     @patch('time.time', return_value=0.0)
     def test_setup_worktree_called_with_scaled_timeout(
         self,
@@ -2333,7 +2333,7 @@ class TestWorktreeLockTimeout:
         cfg.command_timeout = 300
         cfg.max_parallel_agents = 10
 
-        with patch('pokepoke.workflow.get_config', return_value=cfg):
+        with patch('pokepoke.orchestration.workflow.get_config', return_value=cfg):
             process_work_item(item, interactive=False)
 
         # _setup_worktree should have been called with lock_timeout=1200.0 (max(300, 120*10))

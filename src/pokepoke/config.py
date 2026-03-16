@@ -9,7 +9,7 @@ from typing import Any
 
 import dacite
 
-from pokepoke.model_sync_config import ModelSyncConfig, parse_model_sync_config
+from pokepoke.models.model_sync_config import ModelSyncConfig, parse_model_sync_config
 
 try:
     import yaml  # type: ignore[import-untyped]

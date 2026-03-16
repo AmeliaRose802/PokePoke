@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from pokepoke.repo_check import (
+from pokepoke.git.repo_check import (
     check_and_commit_main_repo,
     _try_auto_commit,
     _stash_uncommitted_changes,
@@ -19,7 +19,7 @@ from pokepoke.repo_check import (
 @pytest.fixture(autouse=True)
 def _mock_cleanup_lock(monkeypatch):
     """Replace cleanup_lock with a noop context manager."""
-    monkeypatch.setattr("pokepoke.repo_check.cleanup_lock", lambda: nullcontext())
+    monkeypatch.setattr("pokepoke.git.repo_check.cleanup_lock", lambda: nullcontext())
 
 
 class TestCheckAndCommitMainRepo:
@@ -162,8 +162,8 @@ class TestCheckAndCommitMainRepo:
         repo_path = Path("/fake/repo")
 
         with patch('subprocess.run') as mock_run, \
-             patch('pokepoke.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
-             patch('pokepoke.repo_check.merge_lock_active', return_value=False):
+             patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.git.repo_check.merge_lock_active', return_value=False):
             # git status, git add (auto-commit), git commit fails, then cleanup agent
             mock_run.side_effect = [
                 Mock(returncode=0, stdout=" M src/module.py\n M README.md", stderr=""),
@@ -187,9 +187,9 @@ class TestCheckAndCommitMainRepo:
         repo_path = Path("/fake/repo")
 
         with patch('subprocess.run') as mock_run, \
-             patch('pokepoke.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
-             patch('pokepoke.repo_check.merge_lock_active', return_value=False), \
-             patch('pokepoke.repo_check.time.sleep'):  # Speed up test
+             patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.git.repo_check.merge_lock_active', return_value=False), \
+             patch('pokepoke.git.repo_check.time.sleep'):  # Speed up test
             # git status, auto-commit (add + commit fail), then stash commands
             mock_run.side_effect = [
                 Mock(returncode=0, stdout=" M src/module.py", stderr=""),  # git status
@@ -216,9 +216,9 @@ class TestCheckAndCommitMainRepo:
         repo_path = Path("/fake/repo")
 
         with patch('subprocess.run') as mock_run, \
-             patch('pokepoke.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
-             patch('pokepoke.repo_check.merge_lock_active', return_value=False), \
-             patch('pokepoke.repo_check.time.sleep'):  # Speed up test
+             patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.git.repo_check.merge_lock_active', return_value=False), \
+             patch('pokepoke.git.repo_check.time.sleep'):  # Speed up test
             # git status, auto-commit fails, then stash also fails
             mock_run.side_effect = [
                 Mock(returncode=0, stdout=" M src/module.py", stderr=""),  # git status
@@ -245,9 +245,9 @@ class TestCheckAndCommitMainRepo:
         repo_path = Path("/fake/repo")
 
         with patch('subprocess.run') as mock_run, \
-             patch('pokepoke.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
-             patch('pokepoke.repo_check.merge_lock_active', return_value=False), \
-             patch('pokepoke.repo_check.time.sleep'):  # Speed up test
+             patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.git.repo_check.merge_lock_active', return_value=False), \
+             patch('pokepoke.git.repo_check.time.sleep'):  # Speed up test
             # git status, auto-commit fails
             mock_run.side_effect = [
                 Mock(returncode=0, stdout=" M src/module.py", stderr=""),
@@ -353,12 +353,12 @@ class TestCheckAndCommitMainRepo:
         repo_path = Path("/fake/repo")
 
         with patch('subprocess.run') as mock_run, \
-             patch('pokepoke.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
-             patch('pokepoke.repo_check.merge_lock_active', return_value=False), \
-             patch('pokepoke.repo_check.time.sleep'), \
-             patch('pokepoke.repo_check.time.monotonic') as mock_mono:
+             patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.git.repo_check.merge_lock_active', return_value=False), \
+             patch('pokepoke.git.repo_check.time.sleep'), \
+             patch('pokepoke.git.repo_check.time.monotonic') as mock_mono:
             # monotonic: start=0, first check exceeds threshold
-            from pokepoke.constants import CLEANUP_AGGREGATE_TIMEOUT
+            from pokepoke.utils.constants import CLEANUP_AGGREGATE_TIMEOUT
             mock_mono.side_effect = [0.0, CLEANUP_AGGREGATE_TIMEOUT + 1.0]
 
             mock_run.side_effect = [
@@ -544,7 +544,7 @@ class TestCheckBeadsAvailable:
 
         assert result is False
 
-    @patch('pokepoke.repo_check.shutil.which', return_value='/usr/bin/bd')
+    @patch('pokepoke.git.repo_check.shutil.which', return_value='/usr/bin/bd')
     def test_bd_available_and_initialized(self, mock_which, tmp_path, monkeypatch):
         """Test when bd is available and .beads directory is initialized."""
         monkeypatch.chdir(tmp_path)
@@ -556,7 +556,7 @@ class TestCheckBeadsAvailable:
 
         assert result is True
 
-    @patch('pokepoke.repo_check.shutil.which', return_value='/usr/bin/bd')
+    @patch('pokepoke.git.repo_check.shutil.which', return_value='/usr/bin/bd')
     def test_bd_not_initialized(self, mock_which, tmp_path, monkeypatch):
         """Test when bd is installed but .beads directory doesn't exist."""
         monkeypatch.chdir(tmp_path)
@@ -565,7 +565,7 @@ class TestCheckBeadsAvailable:
 
         assert result is False
 
-    @patch('pokepoke.repo_check.shutil.which', return_value='/usr/bin/bd')
+    @patch('pokepoke.git.repo_check.shutil.which', return_value='/usr/bin/bd')
     def test_bd_info_timeout(self, mock_which, tmp_path, monkeypatch):
         """Test returns False when .beads directory has no marker files."""
         monkeypatch.chdir(tmp_path)
@@ -575,7 +575,7 @@ class TestCheckBeadsAvailable:
 
         assert result is False
 
-    @patch('pokepoke.repo_check.shutil.which', return_value='/usr/bin/bd')
+    @patch('pokepoke.git.repo_check.shutil.which', return_value='/usr/bin/bd')
     def test_bd_info_exception(self, mock_which, tmp_path, monkeypatch):
         """Test returns False when .beads directory is incomplete."""
         monkeypatch.chdir(tmp_path)
@@ -735,7 +735,7 @@ class TestMergeLockDeferral:
         repo_path = Path("/fake/repo")
 
         with patch('subprocess.run') as mock_run, \
-             patch('pokepoke.repo_check.merge_lock_active', return_value=True):
+             patch('pokepoke.git.repo_check.merge_lock_active', return_value=True):
             # git status shows changes, auto-commit fails
             mock_run.side_effect = [
                 Mock(returncode=0, stdout=" M src/module.py", stderr=""),

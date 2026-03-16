@@ -1,4 +1,4 @@
-"""Comprehensive tests for pokepoke.parallel – targets all uncovered functions."""
+"""Comprehensive tests for pokepoke.agents.parallel – targets all uncovered functions."""
 
 import concurrent.futures
 import threading
@@ -9,7 +9,7 @@ from unittest.mock import patch, Mock, MagicMock, call
 import pytest
 
 from pokepoke.types import BeadsWorkItem, SessionStats, WorkItemResult, AgentStats
-from pokepoke.parallel import (
+from pokepoke.agents.parallel import (
     _get_dynamic_max_agents,
     get_effective_max_agents,
     request_spawn_agent,
@@ -61,10 +61,10 @@ def _disable_preflight(monkeypatch):
     mock_cfg.preflight_health.enabled = False
     mock_cfg.max_parallel_agents = 10
     monkeypatch.setattr("pokepoke.config.get_config", lambda: mock_cfg)
-    monkeypatch.setattr("pokepoke.parallel.assign_and_sync_item", lambda *a, **kw: True)
-    monkeypatch.setattr("pokepoke.parallel.unassign_with_retry", lambda *a, **kw: None)
-    monkeypatch.setattr("pokepoke.parallel_support.kill_orphaned_copilot_processes", lambda **kw: None)
-    monkeypatch.setattr("pokepoke.parallel_support.terminal_ui", MagicMock())
+    monkeypatch.setattr("pokepoke.agents.parallel.assign_and_sync_item", lambda *a, **kw: True)
+    monkeypatch.setattr("pokepoke.agents.parallel.unassign_with_retry", lambda *a, **kw: None)
+    monkeypatch.setattr("pokepoke.agents.parallel_support.kill_orphaned_copilot_processes", lambda **kw: None)
+    monkeypatch.setattr("pokepoke.agents.parallel_support.terminal_ui", MagicMock())
 
 
 # ===================================================================
@@ -159,7 +159,7 @@ class TestBuildWorkerName:
 
 class TestGetDynamicMaxAgents:
     def test_returns_config_value(self):
-        with patch("pokepoke.parallel.get_config" if False else "pokepoke.config.get_config") as mock_gc:
+        with patch("pokepoke.agents.parallel.get_config" if False else "pokepoke.config.get_config") as mock_gc:
             cfg = MagicMock()
             cfg.max_parallel_agents = 5
             mock_gc.return_value = cfg
@@ -187,7 +187,7 @@ class TestGetDynamicMaxAgents:
 
 class TestGetEffectiveMaxAgents:
     def test_delegates_to_compute(self):
-        with patch("pokepoke.parallel.compute_effective_max_agents", return_value=4) as mock_compute, \
+        with patch("pokepoke.agents.parallel.compute_effective_max_agents", return_value=4) as mock_compute, \
              patch("pokepoke.config.get_config") as mock_gc:
             cfg = MagicMock()
             cfg.max_parallel_agents = 6
@@ -227,16 +227,16 @@ class TestParallelProcessItem:
         mock_ui.log_orchestrator = MagicMock()
         mock_ui.agent_output_for = MagicMock(return_value=contextmanager(lambda: (yield))())
 
-        monkeypatch.setattr("pokepoke.parallel.terminal_ui", MagicMock(ui=mock_ui))
-        monkeypatch.setattr("pokepoke.parallel.set_agent_name", MagicMock())
-        monkeypatch.setattr("pokepoke.parallel.clear_agent_name", MagicMock())
-        monkeypatch.setattr("pokepoke.beads.increment_total_attempts", MagicMock())
+        monkeypatch.setattr("pokepoke.agents.parallel.terminal_ui", MagicMock(ui=mock_ui))
+        monkeypatch.setattr("pokepoke.agents.parallel.set_agent_name", MagicMock())
+        monkeypatch.setattr("pokepoke.agents.parallel.clear_agent_name", MagicMock())
+        monkeypatch.setattr("pokepoke.beads.beads.increment_total_attempts", MagicMock())
         return mock_ui
 
     def test_success_path(self, monkeypatch, _mock_deps):
         result = WorkItemResult(success=True, request_count=1)
         monkeypatch.setattr(
-            "pokepoke.parallel.process_work_item",
+            "pokepoke.agents.parallel.process_work_item",
             MagicMock(return_value=result),
         )
 
@@ -253,7 +253,7 @@ class TestParallelProcessItem:
     def test_failure_path(self, monkeypatch, _mock_deps):
         result = WorkItemResult(success=False, request_count=2)
         monkeypatch.setattr(
-            "pokepoke.parallel.process_work_item",
+            "pokepoke.agents.parallel.process_work_item",
             MagicMock(return_value=result),
         )
 
@@ -265,7 +265,7 @@ class TestParallelProcessItem:
 
     def test_exception_releases_semaphore(self, monkeypatch, _mock_deps):
         monkeypatch.setattr(
-            "pokepoke.parallel.process_work_item",
+            "pokepoke.agents.parallel.process_work_item",
             MagicMock(side_effect=RuntimeError("boom")),
         )
 
@@ -279,11 +279,11 @@ class TestParallelProcessItem:
     def test_set_agent_name_called(self, monkeypatch, _mock_deps):
         result = WorkItemResult(success=True, request_count=1)
         monkeypatch.setattr(
-            "pokepoke.parallel.process_work_item",
+            "pokepoke.agents.parallel.process_work_item",
             MagicMock(return_value=result),
         )
         mock_set = MagicMock()
-        monkeypatch.setattr("pokepoke.parallel.set_agent_name", mock_set)
+        monkeypatch.setattr("pokepoke.agents.parallel.set_agent_name", mock_set)
 
         sem = threading.Semaphore(0)
         _parallel_process_item(_make_item(), _make_run_logger(), sem, worker_agent_name="agent-cobra-worker-1")
@@ -292,11 +292,11 @@ class TestParallelProcessItem:
     def test_clear_agent_name_called_on_success(self, monkeypatch, _mock_deps):
         result = WorkItemResult(success=True, request_count=1)
         monkeypatch.setattr(
-            "pokepoke.parallel.process_work_item",
+            "pokepoke.agents.parallel.process_work_item",
             MagicMock(return_value=result),
         )
         mock_clear = MagicMock()
-        monkeypatch.setattr("pokepoke.parallel.clear_agent_name", mock_clear)
+        monkeypatch.setattr("pokepoke.agents.parallel.clear_agent_name", mock_clear)
 
         sem = threading.Semaphore(0)
         _parallel_process_item(_make_item(), _make_run_logger(), sem, worker_agent_name="w")
@@ -305,11 +305,11 @@ class TestParallelProcessItem:
     def test_no_worker_name_skips_set_agent(self, monkeypatch, _mock_deps):
         result = WorkItemResult(success=True, request_count=0)
         monkeypatch.setattr(
-            "pokepoke.parallel.process_work_item",
+            "pokepoke.agents.parallel.process_work_item",
             MagicMock(return_value=result),
         )
         mock_set = MagicMock()
-        monkeypatch.setattr("pokepoke.parallel.set_agent_name", mock_set)
+        monkeypatch.setattr("pokepoke.agents.parallel.set_agent_name", mock_set)
 
         sem = threading.Semaphore(0)
         _parallel_process_item(_make_item(), _make_run_logger(), sem, worker_agent_name=None)
@@ -318,11 +318,11 @@ class TestParallelProcessItem:
     def test_increment_total_attempts_called(self, monkeypatch, _mock_deps):
         result = WorkItemResult(success=True, request_count=1)
         monkeypatch.setattr(
-            "pokepoke.parallel.process_work_item",
+            "pokepoke.agents.parallel.process_work_item",
             MagicMock(return_value=result),
         )
         mock_inc = MagicMock()
-        monkeypatch.setattr("pokepoke.beads.increment_total_attempts", mock_inc)
+        monkeypatch.setattr("pokepoke.beads.beads.increment_total_attempts", mock_inc)
 
         sem = threading.Semaphore(0)
         item = _make_item("X-99")
@@ -332,7 +332,7 @@ class TestParallelProcessItem:
     def test_push_agent_status_called(self, monkeypatch, _mock_deps):
         result = WorkItemResult(success=True, request_count=1)
         monkeypatch.setattr(
-            "pokepoke.parallel.process_work_item",
+            "pokepoke.agents.parallel.process_work_item",
             MagicMock(return_value=result),
         )
 
@@ -348,7 +348,7 @@ class TestParallelProcessItem:
 
     def test_repo_path_forwarded(self, monkeypatch, _mock_deps):
         mock_pw = MagicMock(return_value=WorkItemResult(success=True, request_count=0))
-        monkeypatch.setattr("pokepoke.parallel.process_work_item", mock_pw)
+        monkeypatch.setattr("pokepoke.agents.parallel.process_work_item", mock_pw)
 
         sem = threading.Semaphore(0)
         _parallel_process_item(_make_item(), _make_run_logger(), sem, repo_path="/tmp/repo")
@@ -526,62 +526,62 @@ class TestRunParallelLoop:
             call_count += 1
             return call_count > 1
 
-        monkeypatch.setattr("pokepoke.parallel.is_shutting_down", _is_shutting)
+        monkeypatch.setattr("pokepoke.agents.parallel.is_shutting_down", _is_shutting)
 
         mock_set_executor = MagicMock()
         mock_set_runtime = MagicMock()
         mock_clear_runtime = MagicMock()
-        monkeypatch.setattr("pokepoke.parallel.set_executor", mock_set_executor)
-        monkeypatch.setattr("pokepoke.parallel.set_runtime_parallel_limits", mock_set_runtime)
-        monkeypatch.setattr("pokepoke.parallel.clear_runtime_parallel_limits", mock_clear_runtime)
+        monkeypatch.setattr("pokepoke.agents.parallel.set_executor", mock_set_executor)
+        monkeypatch.setattr("pokepoke.agents.parallel.set_runtime_parallel_limits", mock_set_runtime)
+        monkeypatch.setattr("pokepoke.agents.parallel.clear_runtime_parallel_limits", mock_clear_runtime)
 
         # Kill orphaned processes
-        monkeypatch.setattr("pokepoke.parallel.kill_orphaned_copilot_processes", lambda **kw: None)
+        monkeypatch.setattr("pokepoke.agents.parallel.kill_orphaned_copilot_processes", lambda **kw: None)
 
         # terminal_ui
         mock_ui = MagicMock()
         mock_ui._is_running = False
-        monkeypatch.setattr("pokepoke.parallel.terminal_ui", MagicMock(ui=mock_ui))
+        monkeypatch.setattr("pokepoke.agents.parallel.terminal_ui", MagicMock(ui=mock_ui))
 
         # Preflight – returns ok, 0 failures, empty ready items
         monkeypatch.setattr(
-            "pokepoke.parallel._run_preflight_and_repo_checks",
+            "pokepoke.agents.parallel._run_preflight_and_repo_checks",
             MagicMock(return_value=(True, 0, [])),
         )
 
         # Collect done futures – nothing to collect
         monkeypatch.setattr(
-            "pokepoke.parallel._collect_done_futures",
+            "pokepoke.agents.parallel._collect_done_futures",
             MagicMock(return_value=(0, False, 0, 0)),
         )
 
         # Circuit breaker – no trip
         monkeypatch.setattr(
-            "pokepoke.parallel._update_circuit_breaker",
+            "pokepoke.agents.parallel._update_circuit_breaker",
             MagicMock(return_value=(0, False)),
         )
 
         # Compute slots
         monkeypatch.setattr(
-            "pokepoke.parallel._compute_slots",
+            "pokepoke.agents.parallel._compute_slots",
             MagicMock(return_value=(0, 2, 4096)),
         )
 
         # Dispatch – no items dispatched
         monkeypatch.setattr(
-            "pokepoke.parallel._dispatch_items",
+            "pokepoke.agents.parallel._dispatch_items",
             MagicMock(return_value=0),
         )
 
         # Check loop exit – break immediately
         monkeypatch.setattr(
-            "pokepoke.parallel._check_loop_exit",
+            "pokepoke.agents.parallel._check_loop_exit",
             MagicMock(return_value="break-done"),
         )
 
         # Finalize workers – return immediately
         monkeypatch.setattr(
-            "pokepoke.parallel._finalize_workers",
+            "pokepoke.agents.parallel._finalize_workers",
             MagicMock(return_value=(0, False)),
         )
 
@@ -675,7 +675,7 @@ class TestRunParallelLoop:
 
     def test_shutdown_exits_loop(self, monkeypatch, _loop_mocks):
         """When is_shutting_down returns True immediately, the loop exits."""
-        monkeypatch.setattr("pokepoke.parallel.is_shutting_down", lambda: True)
+        monkeypatch.setattr("pokepoke.agents.parallel.is_shutting_down", lambda: True)
 
         code = run_parallel_loop(
             effective_parallel=2,
@@ -701,9 +701,9 @@ class TestRunParallelLoop:
             count += 1
             return count > 2
 
-        monkeypatch.setattr("pokepoke.parallel.is_shutting_down", _shutting)
+        monkeypatch.setattr("pokepoke.agents.parallel.is_shutting_down", _shutting)
         monkeypatch.setattr(
-            "pokepoke.parallel._run_preflight_and_repo_checks",
+            "pokepoke.agents.parallel._run_preflight_and_repo_checks",
             MagicMock(return_value=(False, 5, [])),
         )
 
@@ -730,10 +730,10 @@ class TestRunParallelLoop:
             count += 1
             return count > 3
 
-        monkeypatch.setattr("pokepoke.parallel.is_shutting_down", _shutting)
+        monkeypatch.setattr("pokepoke.agents.parallel.is_shutting_down", _shutting)
         # First iteration: circuit breaker trips
         monkeypatch.setattr(
-            "pokepoke.parallel._update_circuit_breaker",
+            "pokepoke.agents.parallel._update_circuit_breaker",
             MagicMock(return_value=(10, True)),
         )
 
@@ -760,12 +760,12 @@ class TestRunParallelLoop:
             call_idx += 1
             return call_idx > 2
 
-        monkeypatch.setattr("pokepoke.parallel.is_shutting_down", _shutting)
+        monkeypatch.setattr("pokepoke.agents.parallel.is_shutting_down", _shutting)
 
         # First call returns "recheck", second returns "break-done"
         exit_seq = iter(["recheck", "break-done"])
         monkeypatch.setattr(
-            "pokepoke.parallel._check_loop_exit",
+            "pokepoke.agents.parallel._check_loop_exit",
             MagicMock(side_effect=lambda *a, **kw: next(exit_seq, "break-done")),
         )
 
@@ -792,11 +792,11 @@ class TestRunParallelLoop:
             call_idx += 1
             return call_idx > 2
 
-        monkeypatch.setattr("pokepoke.parallel.is_shutting_down", _shutting)
+        monkeypatch.setattr("pokepoke.agents.parallel.is_shutting_down", _shutting)
 
         exit_seq = iter(["idle", "break-done"])
         monkeypatch.setattr(
-            "pokepoke.parallel._check_loop_exit",
+            "pokepoke.agents.parallel._check_loop_exit",
             MagicMock(side_effect=lambda *a, **kw: next(exit_seq, "break-done")),
         )
 
@@ -824,18 +824,18 @@ class TestRunParallelLoop:
             # After the sleep loop (11 sleep checks) + second iteration
             return call_idx > 2
 
-        monkeypatch.setattr("pokepoke.parallel.is_shutting_down", _shutting)
+        monkeypatch.setattr("pokepoke.agents.parallel.is_shutting_down", _shutting)
 
         # First returns None (enter sleep), second returns break
         exit_seq = iter([None, "break-done"])
         monkeypatch.setattr(
-            "pokepoke.parallel._check_loop_exit",
+            "pokepoke.agents.parallel._check_loop_exit",
             MagicMock(side_effect=lambda *a, **kw: next(exit_seq, "break-done")),
         )
         # Patch time.sleep to avoid real delay
-        monkeypatch.setattr("pokepoke.parallel.time.sleep", lambda _: None)
+        monkeypatch.setattr("pokepoke.agents.parallel.time.sleep", lambda _: None)
         # Patch _spawn_wakeup.is_set so the inner loop exits quickly
-        monkeypatch.setattr("pokepoke.parallel._spawn_wakeup", MagicMock(is_set=MagicMock(return_value=True), clear=MagicMock()))
+        monkeypatch.setattr("pokepoke.agents.parallel._spawn_wakeup", MagicMock(is_set=MagicMock(return_value=True), clear=MagicMock()))
 
         code = run_parallel_loop(
             effective_parallel=2,
@@ -873,7 +873,7 @@ class TestRunParallelLoop:
 
     def test_finalize_fn_called_when_not_finalized(self, monkeypatch, _loop_mocks):
         """When the loop exits via shutdown (not break), finalize_fn is called."""
-        monkeypatch.setattr("pokepoke.parallel.is_shutting_down", lambda: True)
+        monkeypatch.setattr("pokepoke.agents.parallel.is_shutting_down", lambda: True)
 
         finalize_fn = Mock()
         run_parallel_loop(

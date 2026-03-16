@@ -95,7 +95,7 @@ def _suppress_terminal_banner(request):
     if request.node.get_closest_marker("real_terminal_banner"):
         yield
     else:
-        with patch("pokepoke.terminal_ui.set_terminal_banner"):
+        with patch("pokepoke.desktop.terminal_ui.set_terminal_banner"):
             yield
 
 
@@ -117,7 +117,7 @@ def _force_sequential_mode(monkeypatch):
 
     The on-disk config (.pokepoke/config.yaml) may set max_parallel_agents>1.
     Without this fixture, orchestrator tests route through the parallel loop
-    in parallel.py, where test mocks (applied to pokepoke.orchestrator) don't
+    in parallel.py, where test mocks (applied to pokepoke.orchestration.orchestrator) don't
     take effect.  The unmocked parallel loop then runs REAL git add/commit
     via check_and_commit_main_repo, silently auto-committing (and destroying)
     any staged work in the host repository.
@@ -129,8 +129,8 @@ def _force_sequential_mode(monkeypatch):
         cfg.max_parallel_agents = 1
         return cfg
 
-    monkeypatch.setattr("pokepoke.orchestrator.load_config", _patched_load_config)
-    # Also patch the src.pokepoke path used by worktree-coverage tests
+    monkeypatch.setattr("pokepoke.orchestration.orchestrator.load_config", _patched_load_config)
+    # Also patch the pokepoke path used by worktree-coverage tests
     monkeypatch.setattr("pokepoke.config.load_config", _patched_load_config,
                         raising=False)
 
@@ -139,7 +139,7 @@ def _force_sequential_mode(monkeypatch):
 def _fast_repo_guard(monkeypatch):
     """Ensure maintenance tests never block on repo cleanliness."""
     monkeypatch.setattr(
-        "pokepoke.maintenance_scheduler.wait_for_main_repo_clean",
+        "pokepoke.maintenance.maintenance_scheduler.wait_for_main_repo_clean",
         lambda *_, **__: True,
     )
 
@@ -162,11 +162,11 @@ def _isolate_lock_dir(tmp_path, monkeypatch):
         os.makedirs(lock_dir, exist_ok=True)
         return lock_dir
 
-    monkeypatch.setattr("pokepoke.coordination._lock_dir", _isolated_lock_dir)
+    monkeypatch.setattr("pokepoke.worktrees.coordination._lock_dir", _isolated_lock_dir)
 
 
-@pytest.fixture(autouse=True)
-def _mock_cleanup_lock_global(monkeypatch):
+@pytest.fixture(autouse=True, scope="session")
+def _mock_cleanup_lock_global():
     """Prevent file locks from hitting the filesystem during tests.
 
     The real locks use filelock which hangs when orchestrator processes
@@ -177,45 +177,36 @@ def _mock_cleanup_lock_global(monkeypatch):
     Dynamic imports (e.g. worktree_cleanup importing manifest_lock inside
     a function body) are handled by _isolate_lock_dir which redirects the
     underlying lock directory to an isolated tmp path.
+
+    Session-scoped for performance: these no-op replacements are the same
+    for every test and don't need per-test setup/teardown.
     """
     from contextlib import nullcontext
 
-    def _null_lock(**_kw):
-        return nullcontext()
+    patches = [
+        # --- context-manager locks ---
+        patch("pokepoke.git.repo_state_guard.cleanup_lock", lambda: nullcontext()),
+        patch("pokepoke.git.repo_check.cleanup_lock", lambda: nullcontext(), create=True),
+        patch("pokepoke.worktrees.worktree_finalization.merge_lock", lambda: nullcontext(), create=True),
+        patch("pokepoke.worktrees.worktree_merge_handler.cleanup_lock",
+              lambda timeout=600.0: nullcontext(), create=True),
+        patch("pokepoke.worktrees.worktree_merge_handler.merge_lock",
+              lambda timeout=600.0: nullcontext(), create=True),
+        patch("pokepoke.worktrees.worktrees.with_worktree_lock",
+              lambda timeout=300.0: nullcontext(), create=True),
+        # --- lock-active polling helpers (return False = not locked) ---
+        patch("pokepoke.git.repo_check.merge_lock_active", lambda: False, create=True),
+        patch("pokepoke.agents.cleanup_agents.merge_lock_active", lambda: False, create=True),
+        patch("pokepoke.utils.shutdown.merge_lock_active", lambda: False, create=True),
+        patch("pokepoke.git.repo_state_guard.cleanup_lock_active", lambda: False, create=True),
+        patch("pokepoke.git.repo_state_guard.merge_lock_active", lambda: False, create=True),
+    ]
 
-    # --- context-manager locks ---
-    monkeypatch.setattr("pokepoke.repo_state_guard.cleanup_lock", lambda: nullcontext())
-    monkeypatch.setattr("pokepoke.repo_check.cleanup_lock", lambda: nullcontext())
-    monkeypatch.setattr("pokepoke.worktree_finalization.merge_lock", lambda: nullcontext())
-    monkeypatch.setattr(
-        "pokepoke.worktree_merge_handler.cleanup_lock",
-        lambda timeout=600.0: nullcontext(), raising=False,
-    )
-    monkeypatch.setattr(
-        "pokepoke.worktree_merge_handler.merge_lock",
-        lambda timeout=600.0: nullcontext(), raising=False,
-    )
-    monkeypatch.setattr(
-        "pokepoke.worktrees.with_worktree_lock",
-        lambda timeout=300.0: nullcontext(), raising=False,
-    )
-
-    # --- lock-active polling helpers (return False = not locked) ---
-    monkeypatch.setattr(
-        "pokepoke.repo_check.merge_lock_active", lambda: False, raising=False,
-    )
-    monkeypatch.setattr(
-        "pokepoke.cleanup_agents.merge_lock_active", lambda: False, raising=False,
-    )
-    monkeypatch.setattr(
-        "pokepoke.shutdown.merge_lock_active", lambda: False, raising=False,
-    )
-    monkeypatch.setattr(
-        "pokepoke.repo_state_guard.cleanup_lock_active", lambda: False, raising=False,
-    )
-    monkeypatch.setattr(
-        "pokepoke.repo_state_guard.merge_lock_active", lambda: False, raising=False,
-    )
+    for p in patches:
+        p.start()
+    yield
+    for p in patches:
+        p.stop()
 
 
 @pytest.fixture(autouse=True)
@@ -233,22 +224,48 @@ def _block_real_git_repair(request, monkeypatch):
         yield
         return
     monkeypatch.setattr(
-        "pokepoke.preflight_repair.repair_git_status",
+        "pokepoke.utils.preflight_repair.repair_git_status",
         lambda error, repo_path: False,
     )
     monkeypatch.setattr(
-        "pokepoke.preflight_health.repair_git_status",
+        "pokepoke.utils.preflight_health.repair_git_status",
         lambda error, repo_path: False,
     )
     # Also stub out run_preflight_checks so tests that call run_orchestrator()
     # don't run real health checks against the host repo (which would fail
     # when there are unstaged files and cause the orchestrator to exit early).
-    from pokepoke.preflight_health import HealthCheckResult
+    from pokepoke.utils.preflight_health import HealthCheckResult
     _passing = HealthCheckResult(passed=True)
     monkeypatch.setattr(
-        "pokepoke.preflight_health.run_preflight_checks",
+        "pokepoke.utils.preflight_health.run_preflight_checks",
         lambda *args, **kwargs: _passing,
     )
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _block_real_bd_subprocess(request, monkeypatch):
+    """CRITICAL: Prevent _run_bd from spawning real 'bd' subprocess calls.
+
+    Without this, any code path reaching beads_query._run_bd hangs
+    indefinitely when the beads daemon holds file locks.
+
+    Patches _run_bd (not subprocess.run) to avoid globally affecting
+    subprocess.run which is used by git operations and test fixtures.
+
+    Opt out with: @pytest.mark.allow_real_bd
+    """
+    if request.node.get_closest_marker("allow_real_bd"):
+        yield
+        return
+
+    import subprocess as _sp
+
+    def _blocked(args, **kw):
+        return _sp.CompletedProcess(["bd"] + list(args), 1, "", "blocked by test fixture")
+
+    monkeypatch.setattr("pokepoke.beads.beads_query._run_bd", _blocked, raising=False)
+    monkeypatch.setattr("pokepoke.beads.beads_management._run_bd", _blocked, raising=False)
     yield
 
 

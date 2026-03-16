@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from pokepoke import beads_query
+from pokepoke.beads import beads_query
 from pokepoke.types import Dependency, IssueWithDependencies
 
 
@@ -97,16 +97,17 @@ def test_get_beads_stats_returns_none_on_error(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_get_main_repo_root_returns_none_on_runtime_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    import pokepoke.git_operations
+    import pokepoke.git.git_operations
 
     def boom() -> None:
         raise RuntimeError("not a repo")
 
-    monkeypatch.setattr(pokepoke.git_operations, "get_main_repo_root", boom)
+    monkeypatch.setattr(pokepoke.git.git_operations, "get_main_repo_root", boom)
 
     assert beads_query._get_main_repo_root() is None
 
 
+@pytest.mark.allow_real_bd
 def test_run_bd_uses_lock_for_mutating_commands(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: dict[str, object] = {"lock_timeout": None, "ran": False}
 

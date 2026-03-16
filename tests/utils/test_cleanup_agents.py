@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import Mock, MagicMock, patch
 
 import pytest
-from pokepoke.cleanup_agents import (
+from pokepoke.agents.cleanup_agents import (
     get_pokepoke_prompts_dir,
     _get_current_git_context,
     invoke_cleanup_agent,
@@ -25,7 +25,7 @@ class TestCleanupAgents:
         """Test finding prompts directory."""
         mock_exists.return_value = True
 
-        with patch('pokepoke.cleanup_agents.Path') as mock_path:
+        with patch('pokepoke.agents.cleanup_agents.Path') as mock_path:
              mock_path.return_value.parent.parent.parent = Path('/root')
              get_pokepoke_prompts_dir()
              # Logic is Path(__file__).parent.parent.parent / ".pokepoke" / "prompts"
@@ -33,7 +33,7 @@ class TestCleanupAgents:
 
     def test_get_prompts_dir_not_found(self):
         """Test error when prompts directory not found."""
-        with patch('pokepoke.cleanup_agents.Path') as mock_path:
+        with patch('pokepoke.agents.cleanup_agents.Path') as mock_path:
              # Make exists return False
              mock_dir = Mock()
              mock_dir.exists.return_value = False
@@ -76,10 +76,10 @@ class TestCleanupAgents:
         assert branch == "unknown"
         assert is_worktree is False
 
-    @patch('pokepoke.cleanup_agents.merge_lock_active', return_value=False)
-    @patch('pokepoke.cleanup_agents.get_pokepoke_prompts_dir')
-    @patch('pokepoke.cleanup_agents._get_current_git_context')
-    @patch('pokepoke.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.agents.cleanup_agents.merge_lock_active', return_value=False)
+    @patch('pokepoke.agents.cleanup_agents.get_pokepoke_prompts_dir')
+    @patch('pokepoke.agents.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
     def test_invoke_cleanup_agent(self, mock_invoke, mock_context, mock_get_dir, mock_merge_active):
         """Test invoking cleanup agent."""
         mock_dir = MagicMock()
@@ -118,8 +118,8 @@ class TestCleanupAgents:
         assert "feature" in prompt
         assert "True" in prompt
 
-    @patch('pokepoke.cleanup_agents.merge_lock_active', return_value=False)
-    @patch('pokepoke.cleanup_agents.get_pokepoke_prompts_dir')
+    @patch('pokepoke.agents.cleanup_agents.merge_lock_active', return_value=False)
+    @patch('pokepoke.agents.cleanup_agents.get_pokepoke_prompts_dir')
     def test_invoke_cleanup_agent_no_prompt(self, mock_get_dir, mock_merge_active):
         """Test invoking cleanup agent failing due to missing prompt."""
         mock_get_dir.side_effect = FileNotFoundError("Not found")
@@ -130,10 +130,10 @@ class TestCleanupAgents:
         assert success is False
         assert stats is None
 
-    @patch('pokepoke.cleanup_agents.merge_lock_active', return_value=False)
-    @patch('pokepoke.cleanup_agents.get_pokepoke_prompts_dir')
-    @patch('pokepoke.cleanup_agents._get_current_git_context')
-    @patch('pokepoke.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.agents.cleanup_agents.merge_lock_active', return_value=False)
+    @patch('pokepoke.agents.cleanup_agents.get_pokepoke_prompts_dir')
+    @patch('pokepoke.agents.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
     def test_invoke_merge_conflict_cleanup_agent(self, mock_invoke, mock_context, mock_get_dir, mock_merge_active):
         """Test invoking merge conflict cleanup agent."""
         mock_dir = MagicMock()
@@ -169,9 +169,9 @@ class TestCleanupAgents:
         prompt = args[1]['prompt']
         assert "Merge error" in prompt
 
-    @patch('pokepoke.cleanup_agents.merge_lock_active', return_value=False)
-    @patch('pokepoke.cleanup_agents.get_pokepoke_prompts_dir')
-    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent')
+    @patch('pokepoke.agents.cleanup_agents.merge_lock_active', return_value=False)
+    @patch('pokepoke.agents.cleanup_agents.get_pokepoke_prompts_dir')
+    @patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent')
     def test_invoke_merge_conflict_fallback(self, mock_invoke_cleanup, mock_get_dir, mock_merge_active):
         """Test fallback to standard cleanup if merge prompt missing."""
         mock_dir = MagicMock()
@@ -260,9 +260,9 @@ class TestAggregateCleanupStats:
 class TestRunCleanupLoop:
     """Test run_cleanup_loop function."""
 
-    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent')
-    @patch('pokepoke.cleanup_agents.commit_all_changes')
-    @patch('pokepoke.cleanup_agents.verify_main_repo_clean')
+    @patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent')
+    @patch('pokepoke.agents.cleanup_agents.commit_all_changes')
+    @patch('pokepoke.agents.cleanup_agents.verify_main_repo_clean')
     def test_no_uncommitted_changes(
         self,
         mock_verify: Mock,
@@ -295,9 +295,9 @@ class TestRunCleanupLoop:
         mock_commit.assert_not_called()
         mock_invoke.assert_not_called()
 
-    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent')
-    @patch('pokepoke.cleanup_agents.commit_all_changes')
-    @patch('pokepoke.cleanup_agents.verify_main_repo_clean')
+    @patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent')
+    @patch('pokepoke.agents.cleanup_agents.commit_all_changes')
+    @patch('pokepoke.agents.cleanup_agents.verify_main_repo_clean')
     def test_successful_commit_first_try(
         self,
         mock_verify: Mock,
@@ -336,9 +336,9 @@ class TestRunCleanupLoop:
         )
         mock_invoke.assert_not_called()
 
-    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent')
-    @patch('pokepoke.cleanup_agents.commit_all_changes')
-    @patch('pokepoke.cleanup_agents.verify_main_repo_clean')
+    @patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent')
+    @patch('pokepoke.agents.cleanup_agents.commit_all_changes')
+    @patch('pokepoke.agents.cleanup_agents.verify_main_repo_clean')
     def test_commit_fails_cleanup_succeeds(
         self,
         mock_verify: Mock,
@@ -398,9 +398,9 @@ class TestRunCleanupLoop:
         # Stats should be aggregated
         assert result.stats.wall_duration == 15.0
 
-    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent')
-    @patch('pokepoke.cleanup_agents.commit_all_changes')
-    @patch('pokepoke.cleanup_agents.verify_main_repo_clean')
+    @patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent')
+    @patch('pokepoke.agents.cleanup_agents.commit_all_changes')
+    @patch('pokepoke.agents.cleanup_agents.verify_main_repo_clean')
     def test_cleanup_agent_fails(
         self,
         mock_verify: Mock,
@@ -439,7 +439,7 @@ class TestRunCleanupLoop:
 class TestRunCleanupLoopErrorHandling:
     """Test error handling paths in run_cleanup_loop."""
 
-    @patch('pokepoke.cleanup_agents.verify_main_repo_clean')
+    @patch('pokepoke.agents.cleanup_agents.verify_main_repo_clean')
     def test_verify_clean_exception_treats_as_clean(self, mock_verify: Mock) -> None:
         """Test cleanup loop when verify_main_repo_clean raises an exception on first call.
 
@@ -461,9 +461,9 @@ class TestRunCleanupLoopErrorHandling:
         assert success is True
         assert cleanup_runs == 0
 
-    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent')
-    @patch('pokepoke.cleanup_agents.commit_all_changes')
-    @patch('pokepoke.cleanup_agents.verify_main_repo_clean')
+    @patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent')
+    @patch('pokepoke.agents.cleanup_agents.commit_all_changes')
+    @patch('pokepoke.agents.cleanup_agents.verify_main_repo_clean')
     def test_recheck_exception_after_cleanup(
         self, mock_verify: Mock, mock_commit: Mock, mock_invoke: Mock
     ) -> None:
@@ -493,11 +493,11 @@ class TestRunCleanupLoopErrorHandling:
 class TestRunAgentWithUiException:
     """Test exception handling in _run_agent_with_ui."""
 
-    @patch('pokepoke.cleanup_agents.terminal_ui')
-    @patch('pokepoke.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.agents.cleanup_agents.terminal_ui')
+    @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
     def test_run_agent_with_ui_exception_reraises(self, mock_invoke, mock_ui):
         """Test that _run_agent_with_ui re-raises exceptions after logging."""
-        from pokepoke.cleanup_agents import _run_agent_with_ui
+        from pokepoke.agents.cleanup_agents import _run_agent_with_ui
 
         mock_invoke.side_effect = RuntimeError("Copilot crashed")
 
@@ -506,7 +506,7 @@ class TestRunAgentWithUiException:
             status="in_progress", priority=1, issue_type="task"
         )
 
-        with patch('pokepoke.cleanup_agents.agent_type_context', create=True), \
+        with patch('pokepoke.agents.cleanup_agents.agent_type_context', create=True), \
              pytest.raises(RuntimeError, match="Copilot crashed"):
             _run_agent_with_ui(
                 "test-1", "Test Agent", "cleanup",
@@ -517,11 +517,11 @@ class TestRunAgentWithUiException:
 class TestMergeWaitLogic:
     """Test merge wait logic in invoke_cleanup_agent and invoke_merge_conflict_cleanup_agent."""
 
-    @patch('pokepoke.cleanup_agents.merge_lock_active')
-    @patch('pokepoke.cleanup_agents.load_prompt_file')
-    @patch('pokepoke.cleanup_agents._get_current_git_context')
-    @patch('pokepoke.cleanup_agents.invoke_copilot')
-    @patch('pokepoke.cleanup_agents.terminal_ui')
+    @patch('pokepoke.agents.cleanup_agents.merge_lock_active')
+    @patch('pokepoke.agents.cleanup_agents.load_prompt_file')
+    @patch('pokepoke.agents.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.agents.cleanup_agents.terminal_ui')
     def test_cleanup_agent_waits_for_merge_then_proceeds(
         self, mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
     ):
@@ -539,16 +539,16 @@ class TestMergeWaitLogic:
             status="in_progress", priority=1, issue_type="task"
         )
 
-        with patch('pokepoke.cleanup_agents.time.sleep'):
+        with patch('pokepoke.agents.cleanup_agents.time.sleep'):
             success, stats = invoke_cleanup_agent(item, wait_for_merge=True)
 
         assert success is True
 
-    @patch('pokepoke.cleanup_agents.merge_lock_active')
-    @patch('pokepoke.cleanup_agents.load_prompt_file')
-    @patch('pokepoke.cleanup_agents._get_current_git_context')
-    @patch('pokepoke.cleanup_agents.invoke_copilot')
-    @patch('pokepoke.cleanup_agents.terminal_ui')
+    @patch('pokepoke.agents.cleanup_agents.merge_lock_active')
+    @patch('pokepoke.agents.cleanup_agents.load_prompt_file')
+    @patch('pokepoke.agents.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.agents.cleanup_agents.terminal_ui')
     def test_cleanup_agent_merge_timeout_proceeds_anyway(
         self, mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
     ):
@@ -566,16 +566,16 @@ class TestMergeWaitLogic:
             status="in_progress", priority=1, issue_type="task"
         )
 
-        with patch('pokepoke.cleanup_agents.time.sleep'):
+        with patch('pokepoke.agents.cleanup_agents.time.sleep'):
             success, stats = invoke_cleanup_agent(item, wait_for_merge=True)
 
         assert success is True
 
-    @patch('pokepoke.cleanup_agents.merge_lock_active')
-    @patch('pokepoke.cleanup_agents.load_prompt_file')
-    @patch('pokepoke.cleanup_agents._get_current_git_context')
-    @patch('pokepoke.cleanup_agents.invoke_copilot')
-    @patch('pokepoke.cleanup_agents.terminal_ui')
+    @patch('pokepoke.agents.cleanup_agents.merge_lock_active')
+    @patch('pokepoke.agents.cleanup_agents.load_prompt_file')
+    @patch('pokepoke.agents.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.agents.cleanup_agents.terminal_ui')
     def test_cleanup_agent_skips_wait_when_false(
         self, mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
     ):
@@ -596,13 +596,13 @@ class TestMergeWaitLogic:
         assert success is True
         mock_merge_active.assert_not_called()
 
-    @patch('pokepoke.cleanup_agents.merge_lock_active')
-    @patch('pokepoke.cleanup_agents.load_prompt_file')
-    @patch('pokepoke.cleanup_agents._get_current_git_context')
-    @patch('pokepoke.cleanup_agents.invoke_copilot')
-    @patch('pokepoke.cleanup_agents.terminal_ui')
-    @patch('pokepoke.merge_conflict.is_merge_in_progress', return_value=False)
-    @patch('pokepoke.merge_conflict.get_unmerged_files', return_value=[])
+    @patch('pokepoke.agents.cleanup_agents.merge_lock_active')
+    @patch('pokepoke.agents.cleanup_agents.load_prompt_file')
+    @patch('pokepoke.agents.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.agents.cleanup_agents.terminal_ui')
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=False)
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=[])
     def test_merge_conflict_agent_waits_for_merge(
         self, mock_get_unmerged, mock_is_merging,
         mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
@@ -621,20 +621,20 @@ class TestMergeWaitLogic:
             status="in_progress", priority=1, issue_type="task"
         )
 
-        with patch('pokepoke.cleanup_agents.time.sleep'):
+        with patch('pokepoke.agents.cleanup_agents.time.sleep'):
             success, stats = invoke_merge_conflict_cleanup_agent(
                 item, "Merge error", wait_for_merge=True
             )
 
         assert success is True
 
-    @patch('pokepoke.cleanup_agents.merge_lock_active')
-    @patch('pokepoke.cleanup_agents.load_prompt_file')
-    @patch('pokepoke.cleanup_agents._get_current_git_context')
-    @patch('pokepoke.cleanup_agents.invoke_copilot')
-    @patch('pokepoke.cleanup_agents.terminal_ui')
-    @patch('pokepoke.merge_conflict.is_merge_in_progress', return_value=False)
-    @patch('pokepoke.merge_conflict.get_unmerged_files', return_value=[])
+    @patch('pokepoke.agents.cleanup_agents.merge_lock_active')
+    @patch('pokepoke.agents.cleanup_agents.load_prompt_file')
+    @patch('pokepoke.agents.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.agents.cleanup_agents.terminal_ui')
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=False)
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=[])
     def test_merge_conflict_agent_timeout_proceeds(
         self, mock_get_unmerged, mock_is_merging,
         mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
@@ -652,20 +652,20 @@ class TestMergeWaitLogic:
             status="in_progress", priority=1, issue_type="task"
         )
 
-        with patch('pokepoke.cleanup_agents.time.sleep'):
+        with patch('pokepoke.agents.cleanup_agents.time.sleep'):
             success, stats = invoke_merge_conflict_cleanup_agent(
                 item, "Merge error", wait_for_merge=True
             )
 
         assert success is True
 
-    @patch('pokepoke.cleanup_agents.merge_lock_active')
-    @patch('pokepoke.cleanup_agents.load_prompt_file')
-    @patch('pokepoke.cleanup_agents._get_current_git_context')
-    @patch('pokepoke.cleanup_agents.invoke_copilot')
-    @patch('pokepoke.cleanup_agents.terminal_ui')
-    @patch('pokepoke.merge_conflict.is_merge_in_progress', return_value=True)
-    @patch('pokepoke.merge_conflict.get_unmerged_files', return_value=["file1.py", "file2.py", "file3.py", "file4.py", "file5.py", "file6.py"])
+    @patch('pokepoke.agents.cleanup_agents.merge_lock_active')
+    @patch('pokepoke.agents.cleanup_agents.load_prompt_file')
+    @patch('pokepoke.agents.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.agents.cleanup_agents.terminal_ui')
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=True)
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=["file1.py", "file2.py", "file3.py", "file4.py", "file5.py", "file6.py"])
     def test_merge_conflict_agent_with_many_conflict_files(
         self, mock_get_unmerged, mock_is_merging,
         mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
@@ -695,13 +695,13 @@ class TestMergeWaitLogic:
 class TestCleanupAgentTimeout:
     """Test per-invocation timeout and aggregate timeout behavior."""
 
-    @patch('pokepoke.cleanup_agents.merge_lock_active', return_value=False)
-    @patch('pokepoke.cleanup_agents.get_pokepoke_prompts_dir')
-    @patch('pokepoke.cleanup_agents._get_current_git_context')
-    @patch('pokepoke.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.agents.cleanup_agents.merge_lock_active', return_value=False)
+    @patch('pokepoke.agents.cleanup_agents.get_pokepoke_prompts_dir')
+    @patch('pokepoke.agents.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
     def test_cleanup_agent_passes_timeout(self, mock_invoke, mock_context, mock_get_dir, mock_merge_active):
         """Test that invoke_cleanup_agent passes CLEANUP_AGENT_TIMEOUT to invoke_copilot."""
-        from pokepoke.constants import CLEANUP_AGENT_TIMEOUT
+        from pokepoke.utils.constants import CLEANUP_AGENT_TIMEOUT
 
         mock_dir = MagicMock()
         mock_file = Mock()
@@ -726,19 +726,19 @@ class TestCleanupAgentTimeout:
         call_kwargs = mock_invoke.call_args[1]
         assert call_kwargs['timeout'] == CLEANUP_AGENT_TIMEOUT
 
-    @patch('pokepoke.cleanup_agents.merge_lock_active', return_value=False)
-    @patch('pokepoke.cleanup_agents.load_prompt_file')
-    @patch('pokepoke.cleanup_agents._get_current_git_context')
-    @patch('pokepoke.cleanup_agents.invoke_copilot')
-    @patch('pokepoke.cleanup_agents.terminal_ui')
-    @patch('pokepoke.merge_conflict.is_merge_in_progress', return_value=False)
-    @patch('pokepoke.merge_conflict.get_unmerged_files', return_value=[])
+    @patch('pokepoke.agents.cleanup_agents.merge_lock_active', return_value=False)
+    @patch('pokepoke.agents.cleanup_agents.load_prompt_file')
+    @patch('pokepoke.agents.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.agents.cleanup_agents.terminal_ui')
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=False)
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=[])
     def test_merge_conflict_agent_passes_timeout(
         self, mock_get_unmerged, mock_is_merging,
         mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
     ):
         """Test that invoke_merge_conflict_cleanup_agent passes CLEANUP_AGENT_TIMEOUT."""
-        from pokepoke.constants import CLEANUP_AGENT_TIMEOUT
+        from pokepoke.utils.constants import CLEANUP_AGENT_TIMEOUT
 
         mock_load_prompt.return_value = "Fix {merge_error} {cwd} {branch} {is_worktree} {worktree_path} {is_merge_in_progress} {conflict_files} {conflict_count}"
         mock_context.return_value = ("/dir", "main", False)
@@ -760,15 +760,15 @@ class TestCleanupAgentTimeout:
         call_kwargs = mock_invoke.call_args[1]
         assert call_kwargs['timeout'] == CLEANUP_AGENT_TIMEOUT
 
-    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent')
-    @patch('pokepoke.cleanup_agents.commit_all_changes')
-    @patch('pokepoke.cleanup_agents.verify_main_repo_clean')
-    @patch('pokepoke.cleanup_agents.time.monotonic')
+    @patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent')
+    @patch('pokepoke.agents.cleanup_agents.commit_all_changes')
+    @patch('pokepoke.agents.cleanup_agents.verify_main_repo_clean')
+    @patch('pokepoke.agents.cleanup_agents.time.monotonic')
     def test_aggregate_timeout_aborts_cleanup_loop(
         self, mock_monotonic, mock_verify, mock_commit, mock_invoke
     ):
         """Test that run_cleanup_loop aborts when aggregate timeout is exceeded."""
-        from pokepoke.constants import CLEANUP_AGGREGATE_TIMEOUT
+        from pokepoke.utils.constants import CLEANUP_AGGREGATE_TIMEOUT
 
         # First call returns 0 (start), second call returns beyond timeout
         mock_monotonic.side_effect = [0.0, CLEANUP_AGGREGATE_TIMEOUT + 1.0]
@@ -791,10 +791,10 @@ class TestCleanupAgentTimeout:
         mock_commit.assert_not_called()
         mock_invoke.assert_not_called()
 
-    @patch('pokepoke.cleanup_agents.invoke_cleanup_agent')
-    @patch('pokepoke.cleanup_agents.commit_all_changes')
-    @patch('pokepoke.cleanup_agents.verify_main_repo_clean')
-    @patch('pokepoke.cleanup_agents.time.monotonic')
+    @patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent')
+    @patch('pokepoke.agents.cleanup_agents.commit_all_changes')
+    @patch('pokepoke.agents.cleanup_agents.verify_main_repo_clean')
+    @patch('pokepoke.agents.cleanup_agents.time.monotonic')
     def test_recurring_error_short_circuits_cleanup_loop(
         self, mock_monotonic, mock_verify, mock_commit, mock_invoke
     ):
@@ -857,16 +857,16 @@ class TestWorktreeCleanupPromptSafety:
         assert "stale" in content.lower()
         assert "zombie" in content.lower() or "orphan" in content.lower()
 
-    @patch('pokepoke.agent_runner.has_unmerged_worktrees', return_value=True)
-    @patch('pokepoke.agent_runner.get_pokepoke_prompts_dir')
-    @patch('pokepoke.agent_runner._run_main_repo_agent')
-    @patch('pokepoke.agent_runner.terminal_ui')
+    @patch('pokepoke.agents.agent_runner.has_unmerged_worktrees', return_value=True)
+    @patch('pokepoke.agents.agent_runner.get_pokepoke_prompts_dir')
+    @patch('pokepoke.agents.agent_runner._run_main_repo_agent')
+    @patch('pokepoke.agents.agent_runner.terminal_ui')
     def test_worktree_cleanup_injects_orchestrator_pid(
         self, mock_ui, mock_run_agent, mock_prompts_dir, mock_has_unmerged, tmp_path
     ):
         """run_worktree_cleanup must inject the orchestrator PID into the prompt."""
         import os
-        from pokepoke.agent_runner import run_worktree_cleanup
+        from pokepoke.agents.agent_runner import run_worktree_cleanup
 
         # Create a minimal prompt file
         prompt_file = tmp_path / "worktree-cleanup.md"
@@ -874,8 +874,8 @@ class TestWorktreeCleanupPromptSafety:
         mock_prompts_dir.return_value = tmp_path
 
         # Mock the retry/count functions at their source module (they are locally imported)
-        with patch('pokepoke.worktree_cleanup.retry_failed_cleanups', return_value=0), \
-             patch('pokepoke.worktree_cleanup.get_uncleaned_worktree_count', return_value=0):
+        with patch('pokepoke.worktrees.worktree_cleanup.retry_failed_cleanups', return_value=0), \
+             patch('pokepoke.worktrees.worktree_cleanup.get_uncleaned_worktree_count', return_value=0):
             mock_run_agent.return_value = None
             run_worktree_cleanup()
 

@@ -5,14 +5,14 @@ from unittest.mock import patch
 
 import pytest
 
-from pokepoke.beads_item_stats_store import (
+from pokepoke.beads.beads_item_stats_store import (
     get_summary,
     get_summary_by_repo,
     load_beads_item_stats,
     record_item_completed,
     record_item_created,
 )
-from pokepoke.file_utils import replace_with_retry
+from pokepoke.utils.file_utils import replace_with_retry
 
 
 def test_missing_file_loads_empty_store() -> None:
@@ -100,8 +100,8 @@ def test_replace_with_retry_retries_on_permission_error() -> None:
                 raise PermissionError("locked")
             # Success on third attempt — nothing to do, just return
 
-        with patch("pokepoke.file_utils.os.replace", side_effect=fake_replace), \
-             patch("pokepoke.file_utils.time.sleep") as mock_sleep:
+        with patch("pokepoke.utils.file_utils.os.replace", side_effect=fake_replace), \
+             patch("pokepoke.utils.file_utils.time.sleep") as mock_sleep:
             replace_with_retry(src, dst, retries=5, delay=0.01)
 
         assert fail_count[0] == 3
@@ -114,8 +114,8 @@ def test_replace_with_retry_raises_after_all_retries_exhausted() -> None:
         dst = Path(tmpdir) / "dst.json"
         src.write_text("data", encoding="utf-8")
 
-        with patch("pokepoke.file_utils.os.replace", side_effect=PermissionError("locked")), \
-             patch("pokepoke.file_utils.time.sleep"), pytest.raises(PermissionError):
+        with patch("pokepoke.utils.file_utils.os.replace", side_effect=PermissionError("locked")), \
+             patch("pokepoke.utils.file_utils.time.sleep"), pytest.raises(PermissionError):
             replace_with_retry(src, dst, retries=3, delay=0.001)
 
 
@@ -160,7 +160,7 @@ def test_summary_deduplicates_events_by_item_id() -> None:
 
 def test_record_event_includes_repo_name_from_context() -> None:
     """Events should capture repo_name from thread-local context."""
-    from pokepoke.metrics_context import set_current_repo_name
+    from pokepoke.stats.metrics_context import set_current_repo_name
 
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "stats.json"
@@ -176,7 +176,7 @@ def test_record_event_includes_repo_name_from_context() -> None:
 
 def test_record_event_explicit_repo_name_overrides_context() -> None:
     """Explicit repo_name parameter should override thread-local context."""
-    from pokepoke.metrics_context import set_current_repo_name
+    from pokepoke.stats.metrics_context import set_current_repo_name
 
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "stats.json"
@@ -192,7 +192,7 @@ def test_record_event_explicit_repo_name_overrides_context() -> None:
 
 def test_get_summary_by_repo() -> None:
     """get_summary_by_repo should segment created/completed counts per repo."""
-    from pokepoke.metrics_context import set_current_repo_name
+    from pokepoke.stats.metrics_context import set_current_repo_name
 
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "stats.json"

@@ -8,7 +8,7 @@ import threading
 from unittest.mock import Mock, patch, MagicMock
 import pytest
 
-from pokepoke.parallel import (
+from pokepoke.agents.parallel import (
     get_effective_max_agents,
     _hash_string,
     _snake_for_work_item,
@@ -18,13 +18,13 @@ from pokepoke.parallel import (
     request_spawn_agent,
 )
 from pokepoke.types import WorkItemResult, BeadsWorkItem
-from pokepoke.logging_utils import RunLogger
+from pokepoke.utils.logging_utils import RunLogger
 
 
 class TestGetEffectiveMaxAgents:
     """Tests for get_effective_max_agents function."""
 
-    @patch('pokepoke.parallel.compute_effective_max_agents')
+    @patch('pokepoke.agents.parallel.compute_effective_max_agents')
     def test_get_effective_max_agents_calls_compute(self, mock_compute) -> None:
         """get_effective_max_agents delegates to compute_effective_max_agents."""
         mock_compute.return_value = 4
@@ -37,7 +37,7 @@ class TestGetEffectiveMaxAgents:
         call_arg = mock_compute.call_args[0][0]
         assert call_arg >= 1
 
-    @patch('pokepoke.parallel.compute_effective_max_agents')
+    @patch('pokepoke.agents.parallel.compute_effective_max_agents')
     def test_get_effective_max_agents_returns_positive(self, mock_compute) -> None:
         """Result is always at least 1."""
         mock_compute.return_value = 1
@@ -170,9 +170,9 @@ class TestParallelProcessItem:
             issue_type="task",
         )
 
-    @patch('pokepoke.parallel.terminal_ui')
-    @patch('pokepoke.parallel.process_work_item')
-    @patch('pokepoke.parallel.clear_agent_name')
+    @patch('pokepoke.agents.parallel.terminal_ui')
+    @patch('pokepoke.agents.parallel.process_work_item')
+    @patch('pokepoke.agents.parallel.clear_agent_name')
     def test_parallel_process_item_success(
         self,
         mock_clear_agent,
@@ -195,9 +195,9 @@ class TestParallelProcessItem:
         mock_process.assert_called_once()
         mock_clear_agent.assert_called_once()
 
-    @patch('pokepoke.parallel.terminal_ui')
-    @patch('pokepoke.parallel.process_work_item')
-    @patch('pokepoke.parallel.clear_agent_name')
+    @patch('pokepoke.agents.parallel.terminal_ui')
+    @patch('pokepoke.agents.parallel.process_work_item')
+    @patch('pokepoke.agents.parallel.clear_agent_name')
     def test_parallel_process_item_failure(
         self,
         mock_clear_agent,
@@ -218,9 +218,9 @@ class TestParallelProcessItem:
 
         assert result.success is False
 
-    @patch('pokepoke.parallel.terminal_ui')
-    @patch('pokepoke.parallel.process_work_item')
-    @patch('pokepoke.parallel.clear_agent_name')
+    @patch('pokepoke.agents.parallel.terminal_ui')
+    @patch('pokepoke.agents.parallel.process_work_item')
+    @patch('pokepoke.agents.parallel.clear_agent_name')
     def test_parallel_process_item_exception(
         self,
         mock_clear_agent,
@@ -243,10 +243,10 @@ class TestParallelProcessItem:
         # Should release semaphore even on exception
         mock_clear_agent.assert_called_once()
 
-    @patch('pokepoke.parallel.terminal_ui')
-    @patch('pokepoke.parallel.process_work_item')
-    @patch('pokepoke.parallel.set_agent_name')
-    @patch('pokepoke.parallel.clear_agent_name')
+    @patch('pokepoke.agents.parallel.terminal_ui')
+    @patch('pokepoke.agents.parallel.process_work_item')
+    @patch('pokepoke.agents.parallel.set_agent_name')
+    @patch('pokepoke.agents.parallel.clear_agent_name')
     def test_parallel_process_item_with_worker_name(
         self,
         mock_clear_agent,
@@ -432,7 +432,7 @@ class TestCollectDoneFutures:
 class TestRequestSpawnAgent:
     """Tests for request_spawn_agent function."""
 
-    @patch('pokepoke.parallel._spawn_wakeup')
+    @patch('pokepoke.agents.parallel._spawn_wakeup')
     def test_request_spawn_agent_signals_wakeup(self, mock_event) -> None:
         """Signal the wakeup event."""
         request_spawn_agent()

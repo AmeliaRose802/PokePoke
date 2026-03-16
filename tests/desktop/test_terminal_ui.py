@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import patch
-from pokepoke.terminal_ui import format_work_item_banner, set_terminal_banner, clear_terminal_banner, get_ui
+from pokepoke.desktop.terminal_ui import format_work_item_banner, set_terminal_banner, clear_terminal_banner, get_ui
 
 
 class TestFormatWorkItemBanner:
@@ -70,7 +70,7 @@ class TestSetTerminalBanner:
     @pytest.mark.real_terminal_banner
     def test_clear_banner_windows(self):
         """Test clearing banner delegates to set_terminal_banner with 'PokePoke'."""
-        with patch('pokepoke.terminal_ui.set_terminal_banner') as mock_set:
+        with patch('pokepoke.desktop.terminal_ui.set_terminal_banner') as mock_set:
             clear_terminal_banner()
             mock_set.assert_called_with("PokePoke")
 
@@ -80,19 +80,19 @@ class TestLazyUIInit:
 
     def test_get_ui_returns_desktop_ui(self):
         """get_ui() returns a DesktopUI instance."""
-        import pokepoke.terminal_ui as mod
+        import pokepoke.desktop.terminal_ui as mod
         old_ui = mod._ui
         try:
             mod._ui = None
             ui = get_ui()
-            from pokepoke.desktop_ui import DesktopUI
+            from pokepoke.desktop.desktop_ui import DesktopUI
             assert isinstance(ui, DesktopUI)
         finally:
             mod._ui = old_ui
 
     def test_get_ui_returns_same_instance(self):
         """get_ui() returns the same instance on repeated calls."""
-        import pokepoke.terminal_ui as mod
+        import pokepoke.desktop.terminal_ui as mod
         old_ui = mod._ui
         try:
             mod._ui = None
@@ -104,14 +104,14 @@ class TestLazyUIInit:
 
     def test_module_getattr_provides_ui(self):
         """terminal_ui.ui works via module __getattr__."""
-        import pokepoke.terminal_ui as mod
+        import pokepoke.desktop.terminal_ui as mod
         ui = mod.ui
-        from pokepoke.desktop_ui import DesktopUI
+        from pokepoke.desktop.desktop_ui import DesktopUI
         assert isinstance(ui, DesktopUI)
 
     def test_module_getattr_raises_for_unknown(self):
         """Module __getattr__ raises AttributeError for unknown names."""
-        import pokepoke.terminal_ui as mod
+        import pokepoke.desktop.terminal_ui as mod
         with pytest.raises(AttributeError, match="no_such_attr"):
             _ = mod.no_such_attr
 

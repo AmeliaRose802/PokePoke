@@ -11,7 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .constants import BEADS_DIR
+from pokepoke.utils.constants import BEADS_DIR
 
 
 _SAMPLE_CONFIG = """\
@@ -280,7 +280,7 @@ def init_project(
     print("\nNext steps:")
     print("  1. Edit .pokepoke/config.yaml to customize settings")
     print("  2. Add prompt templates in .pokepoke/prompts/")
-    print("  3. Run: python -m pokepoke.orchestrator --interactive")
+    print("  3. Run: python -m pokepoke.orchestration.orchestrator --interactive")
     print("     (Add --agent-name Janitor to pin a custom agent name)")
     return True
 

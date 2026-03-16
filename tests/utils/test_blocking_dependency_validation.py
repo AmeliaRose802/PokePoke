@@ -1,8 +1,8 @@
 """Tests for blocking dependency validation in work item selection."""
 
 from unittest.mock import Mock, patch
-from pokepoke.work_item_selection import select_work_item
-from pokepoke.beads_query import has_unmet_blocking_dependencies
+from pokepoke.orchestration.work_item_selection import select_work_item
+from pokepoke.beads.beads_query import has_unmet_blocking_dependencies
 from pokepoke.types import BeadsWorkItem, IssueWithDependencies, Dependency
 
 
@@ -28,7 +28,7 @@ class TestBlockingDependencyValidation:
             ]
         )
 
-        with patch('pokepoke.beads_query.get_issue_dependencies', return_value=mock_issue):
+        with patch('pokepoke.beads.beads_query.get_issue_dependencies', return_value=mock_issue):
             result = has_unmet_blocking_dependencies("test-1")
             assert result is True
 
@@ -51,7 +51,7 @@ class TestBlockingDependencyValidation:
             ]
         )
 
-        with patch('pokepoke.beads_query.get_issue_dependencies', return_value=mock_issue):
+        with patch('pokepoke.beads.beads_query.get_issue_dependencies', return_value=mock_issue):
             result = has_unmet_blocking_dependencies("test-1")
             assert result is False
 
@@ -81,7 +81,7 @@ class TestBlockingDependencyValidation:
             ]
         )
 
-        with patch('pokepoke.beads_query.get_issue_dependencies', return_value=mock_issue):
+        with patch('pokepoke.beads.beads_query.get_issue_dependencies', return_value=mock_issue):
             result = has_unmet_blocking_dependencies("test-1")
             assert result is False
 
@@ -96,7 +96,7 @@ class TestBlockingDependencyValidation:
             dependencies=[]
         )
 
-        with patch('pokepoke.beads_query.get_issue_dependencies', return_value=mock_issue):
+        with patch('pokepoke.beads.beads_query.get_issue_dependencies', return_value=mock_issue):
             result = has_unmet_blocking_dependencies("test-1")
             assert result is False
 
@@ -126,7 +126,7 @@ class TestBlockingDependencyValidation:
             ]
         )
 
-        with patch('pokepoke.beads_query.get_issue_dependencies', return_value=mock_issue):
+        with patch('pokepoke.beads.beads_query.get_issue_dependencies', return_value=mock_issue):
             result = has_unmet_blocking_dependencies("test-1")
             assert result is False
 
@@ -163,13 +163,13 @@ class TestBlockingDependencyValidation:
             ]
         )
 
-        with patch('pokepoke.beads_query.get_issue_dependencies', return_value=mock_issue):
+        with patch('pokepoke.beads.beads_query.get_issue_dependencies', return_value=mock_issue):
             result = has_unmet_blocking_dependencies("test-1")
             assert result is True
 
     def test_has_unmet_blocking_dependencies_when_issue_not_found(self) -> None:
         """Should return False when issue details cannot be retrieved."""
-        with patch('pokepoke.beads_query.get_issue_dependencies', return_value=None):
+        with patch('pokepoke.beads.beads_query.get_issue_dependencies', return_value=None):
             result = has_unmet_blocking_dependencies("nonexistent-1")
             assert result is False
 
@@ -211,7 +211,7 @@ class TestBlockingDependencyValidation:
         def mock_get_deps(issue_id):
             return {"child-1": child_issue, "parent-1": parent_issue}.get(issue_id)
 
-        with patch('pokepoke.beads_query.get_issue_dependencies', side_effect=mock_get_deps):
+        with patch('pokepoke.beads.beads_query.get_issue_dependencies', side_effect=mock_get_deps):
             result = has_unmet_blocking_dependencies("child-1")
             assert result is True
 
@@ -245,7 +245,7 @@ class TestBlockingDependencyValidation:
         def mock_get_deps(issue_id):
             return {"child-1": child_issue, "parent-1": parent_issue}.get(issue_id)
 
-        with patch('pokepoke.beads_query.get_issue_dependencies', side_effect=mock_get_deps):
+        with patch('pokepoke.beads.beads_query.get_issue_dependencies', side_effect=mock_get_deps):
             result = has_unmet_blocking_dependencies("child-1")
             assert result is False
 
@@ -307,7 +307,7 @@ class TestBlockingDependencyValidation:
                 "grandparent-1": grandparent_issue,
             }.get(issue_id)
 
-        with patch('pokepoke.beads_query.get_issue_dependencies', side_effect=mock_get_deps):
+        with patch('pokepoke.beads.beads_query.get_issue_dependencies', side_effect=mock_get_deps):
             result = has_unmet_blocking_dependencies("grandchild-1")
             assert result is True
 
@@ -349,7 +349,7 @@ class TestBlockingDependencyValidation:
         def mock_get_deps(issue_id):
             return {"a": issue_a, "b": issue_b}.get(issue_id)
 
-        with patch('pokepoke.beads_query.get_issue_dependencies', side_effect=mock_get_deps):
+        with patch('pokepoke.beads.beads_query.get_issue_dependencies', side_effect=mock_get_deps):
             result = has_unmet_blocking_dependencies("a")
             assert result is False
 
@@ -391,12 +391,12 @@ class TestBlockingDependencyValidation:
         def mock_get_deps(issue_id):
             return {"child-1": child_issue, "parent-1": parent_issue}.get(issue_id)
 
-        with patch('pokepoke.beads_query.get_issue_dependencies', side_effect=mock_get_deps):
+        with patch('pokepoke.beads.beads_query.get_issue_dependencies', side_effect=mock_get_deps):
             result = has_unmet_blocking_dependencies("child-1")
             assert result is False
 
-    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies')
-    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies')
+    @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
     def test_select_work_item_filters_items_with_unmet_blockers(
         self,
         mock_select_hierarchical: Mock,
@@ -446,8 +446,8 @@ class TestBlockingDependencyValidation:
         assert call_args[0].id == "task-2"
         assert call_args[1].id == "task-3"
 
-    @patch('pokepoke.work_item_selection.has_unmet_blocking_dependencies')
-    @patch('pokepoke.work_item_selection.select_next_hierarchical_item')
+    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies')
+    @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
     def test_select_work_item_returns_none_when_all_items_have_unmet_blockers(
         self,
         mock_select_hierarchical: Mock,

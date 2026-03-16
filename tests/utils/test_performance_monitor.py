@@ -1,11 +1,11 @@
-"""Tests for pokepoke.performance_monitor module."""
+"""Tests for pokepoke.stats.performance_monitor module."""
 
 import threading
 import time
 
 import pytest
 
-from pokepoke.performance_monitor import (
+from pokepoke.stats.performance_monitor import (
     PerformanceAlert,
     PerformanceMonitor,
     get_performance_monitor,
@@ -95,21 +95,21 @@ class TestPerformanceMonitorMemory:
     def test_returns_none_when_memory_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
         mon = PerformanceMonitor(min_memory_mb=256.0)
         monkeypatch.setattr(
-            "pokepoke.performance_monitor.get_available_memory_mb", lambda: 0,
+            "pokepoke.stats.performance_monitor.get_available_memory_mb", lambda: 0,
         )
         assert mon.check_memory() is None
 
     def test_no_alert_with_enough_memory(self, monkeypatch: pytest.MonkeyPatch) -> None:
         mon = PerformanceMonitor(min_memory_mb=256.0)
         monkeypatch.setattr(
-            "pokepoke.performance_monitor.get_available_memory_mb", lambda: 4096,
+            "pokepoke.stats.performance_monitor.get_available_memory_mb", lambda: 4096,
         )
         assert mon.check_memory() is None
 
     def test_alert_when_memory_low(self, monkeypatch: pytest.MonkeyPatch) -> None:
         mon = PerformanceMonitor(min_memory_mb=512.0)
         monkeypatch.setattr(
-            "pokepoke.performance_monitor.get_available_memory_mb", lambda: 200,
+            "pokepoke.stats.performance_monitor.get_available_memory_mb", lambda: 200,
         )
         alert = mon.check_memory()
         assert alert is not None
@@ -120,7 +120,7 @@ class TestPerformanceMonitorMemory:
     def test_alert_at_boundary(self, monkeypatch: pytest.MonkeyPatch) -> None:
         mon = PerformanceMonitor(min_memory_mb=256.0)
         monkeypatch.setattr(
-            "pokepoke.performance_monitor.get_available_memory_mb", lambda: 256,
+            "pokepoke.stats.performance_monitor.get_available_memory_mb", lambda: 256,
         )
         # Exactly at threshold — no alert (only below fires)
         assert mon.check_memory() is None

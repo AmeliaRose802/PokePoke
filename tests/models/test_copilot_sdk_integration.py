@@ -7,7 +7,7 @@ from unittest.mock import patch, Mock, AsyncMock, MagicMock
 import pytest
 
 from pokepoke.types import BeadsWorkItem, CopilotResult
-from pokepoke.copilot_sdk import (
+from pokepoke.models.copilot_sdk import (
     build_prompt_from_work_item,
     _fail_result,
     invoke_copilot_sdk_sync,
@@ -17,8 +17,8 @@ from pokepoke.copilot_sdk import (
 class TestBuildPromptIntegration:
     """Integration tests for build_prompt_from_work_item."""
 
-    @patch('pokepoke.copilot_sdk.get_config')
-    @patch('pokepoke.copilot_sdk.PromptService')
+    @patch('pokepoke.models.copilot_sdk.get_config')
+    @patch('pokepoke.models.copilot_sdk.PromptService')
     def test_build_prompt_includes_all_fields(
         self, mock_service_class, mock_get_config
     ):
@@ -60,8 +60,8 @@ class TestBuildPromptIntegration:
         assert variables['mcp_enabled'] is True
         assert variables['command_timeout'] == 300
 
-    @patch('pokepoke.copilot_sdk.get_config')
-    @patch('pokepoke.copilot_sdk.PromptService')
+    @patch('pokepoke.models.copilot_sdk.get_config')
+    @patch('pokepoke.models.copilot_sdk.PromptService')
     def test_build_prompt_handles_missing_description(
         self, mock_service_class, mock_get_config
     ):
@@ -91,8 +91,8 @@ class TestBuildPromptIntegration:
         variables = call_args[0][1]
         assert variables['description'] == ""
 
-    @patch('pokepoke.copilot_sdk.get_config')
-    @patch('pokepoke.copilot_sdk.PromptService')
+    @patch('pokepoke.models.copilot_sdk.get_config')
+    @patch('pokepoke.models.copilot_sdk.PromptService')
     def test_build_prompt_with_custom_template(
         self, mock_service_class, mock_get_config
     ):
@@ -139,8 +139,8 @@ class TestFailResultIntegration:
 class TestInvokeCopilotSDKSyncIntegration:
     """Integration tests for invoke_copilot_sdk_sync."""
 
-    @patch('pokepoke.copilot_sdk.invoke_copilot_sdk')
-    @patch('pokepoke.copilot_sdk.asyncio.run')
+    @patch('pokepoke.models.copilot_sdk.invoke_copilot_sdk')
+    @patch('pokepoke.models.copilot_sdk.asyncio.run')
     def test_sync_wrapper_calls_async_version(
         self, mock_asyncio_run, mock_invoke
     ):
@@ -170,8 +170,8 @@ class TestInvokeCopilotSDKSyncIntegration:
         assert result == expected_result
         mock_asyncio_run.assert_called_once()
 
-    @patch('pokepoke.copilot_sdk.invoke_copilot_sdk')
-    @patch('pokepoke.copilot_sdk.asyncio.run')
+    @patch('pokepoke.models.copilot_sdk.invoke_copilot_sdk')
+    @patch('pokepoke.models.copilot_sdk.asyncio.run')
     def test_sync_wrapper_passes_all_parameters(
         self, mock_asyncio_run, mock_invoke
     ):
@@ -206,8 +206,8 @@ class TestInvokeCopilotSDKSyncIntegration:
         mock_asyncio_run.call_args[0]
         # Can't easily inspect coroutine args, but we verified it was called
 
-    @patch('pokepoke.copilot_sdk.invoke_copilot_sdk')
-    @patch('pokepoke.copilot_sdk.asyncio.run')
+    @patch('pokepoke.models.copilot_sdk.invoke_copilot_sdk')
+    @patch('pokepoke.models.copilot_sdk.asyncio.run')
     def test_sync_wrapper_handles_exception(
         self, mock_asyncio_run, mock_invoke
     ):
@@ -233,8 +233,8 @@ class TestCopilotSDKErrorHandling:
         if sys.platform == "win32":
             time.sleep(0.05)
 
-    @patch('pokepoke.copilot_sdk.get_config')
-    @patch('pokepoke.copilot_sdk.PromptService')
+    @patch('pokepoke.models.copilot_sdk.get_config')
+    @patch('pokepoke.models.copilot_sdk.PromptService')
     def test_build_prompt_handles_service_error(
         self, mock_service_class, mock_get_config
     ):
@@ -263,8 +263,8 @@ class TestCopilotSDKErrorHandling:
 class TestCopilotSDKConfiguration:
     """Tests for configuration handling in copilot_sdk."""
 
-    @patch('pokepoke.copilot_sdk.get_config')
-    @patch('pokepoke.copilot_sdk.PromptService')
+    @patch('pokepoke.models.copilot_sdk.get_config')
+    @patch('pokepoke.models.copilot_sdk.PromptService')
     def test_build_prompt_uses_config_test_data(
         self, mock_service_class, mock_get_config
     ):
@@ -301,8 +301,8 @@ class TestCopilotSDKConfiguration:
         assert 'Sample command' in variables['test_data_section']
         assert 'pytest tests/' in variables['test_data_section']
 
-    @patch('pokepoke.copilot_sdk.get_config')
-    @patch('pokepoke.copilot_sdk.PromptService')
+    @patch('pokepoke.models.copilot_sdk.get_config')
+    @patch('pokepoke.models.copilot_sdk.PromptService')
     def test_build_prompt_handles_empty_test_data(
         self, mock_service_class, mock_get_config
     ):
@@ -340,7 +340,7 @@ class TestAwaitCompletionInactivity:
     @pytest.mark.asyncio
     async def test_inactivity_triggers_abort(self):
         """When no events arrive for inactivity_timeout, returns 'inactivity'."""
-        from pokepoke.sdk_helpers import _await_completion
+        from pokepoke.models.sdk_helpers import _await_completion
 
         session = AsyncMock()
         client = MagicMock()
@@ -365,7 +365,7 @@ class TestAwaitCompletionInactivity:
     @pytest.mark.asyncio
     async def test_no_inactivity_when_events_recent(self):
         """When events are recent, inactivity check does not fire."""
-        from pokepoke.sdk_helpers import _await_completion
+        from pokepoke.models.sdk_helpers import _await_completion
 
         session = AsyncMock()
         client = MagicMock()
@@ -394,7 +394,7 @@ class TestAwaitCompletionInactivity:
     @pytest.mark.asyncio
     async def test_inactivity_disabled_when_zero(self):
         """When inactivity_timeout=0, detection is disabled."""
-        from pokepoke.sdk_helpers import _await_completion
+        from pokepoke.models.sdk_helpers import _await_completion
 
         session = AsyncMock()
         client = MagicMock()
@@ -422,7 +422,7 @@ class TestAwaitCompletionInactivity:
     @pytest.mark.asyncio
     async def test_inactivity_without_stats_is_noop(self):
         """When stats=None (default), inactivity check is skipped."""
-        from pokepoke.sdk_helpers import _await_completion
+        from pokepoke.models.sdk_helpers import _await_completion
 
         session = AsyncMock()
         client = MagicMock()
@@ -443,7 +443,7 @@ class TestAwaitCompletionInactivity:
     @pytest.mark.asyncio
     async def test_inactivity_abort_failure_still_returns(self):
         """If session.abort() raises during inactivity, still returns 'inactivity'."""
-        from pokepoke.sdk_helpers import _await_completion
+        from pokepoke.models.sdk_helpers import _await_completion
 
         session = AsyncMock()
         session.abort.side_effect = Exception("abort failed")
@@ -469,7 +469,7 @@ class TestCheckInactivity:
     """Tests for _check_inactivity helper."""
 
     def test_returns_failure_when_detected(self):
-        from pokepoke.sdk_helpers import _check_inactivity
+        from pokepoke.models.sdk_helpers import _check_inactivity
 
         result = _check_inactivity("item-1", True, 600.0)
         assert result is not None
@@ -478,7 +478,7 @@ class TestCheckInactivity:
         assert "600" in result.error
 
     def test_returns_none_when_not_detected(self):
-        from pokepoke.sdk_helpers import _check_inactivity
+        from pokepoke.models.sdk_helpers import _check_inactivity
 
         result = _check_inactivity("item-1", False, 600.0)
         assert result is None
@@ -509,13 +509,13 @@ class TestInvokeCopilotSDKInactivity:
 
     @pytest.fixture(autouse=True)
     def _mock_process_cleanup(self):
-        with patch('pokepoke.process_utils.wait_for_process_cleanup'):
+        with patch('pokepoke.utils.process_utils.wait_for_process_cleanup'):
             yield
 
-    @patch('pokepoke.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_returns_failure_on_inactivity(self, mock_client_class):
         """Full invoke_copilot_sdk returns failure when session goes inactive."""
-        from pokepoke.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -542,7 +542,7 @@ class TestInvokeCopilotSDKInactivity:
         )
 
         # Use very short inactivity timeout to trigger quickly
-        with patch('pokepoke.copilot_sdk.get_config') as mock_cfg:
+        with patch('pokepoke.models.copilot_sdk.get_config') as mock_cfg:
             cfg = Mock()
             cfg.idle_timeout_seconds = 1
             cfg.session_inactivity_timeout = 0.1  # 100ms

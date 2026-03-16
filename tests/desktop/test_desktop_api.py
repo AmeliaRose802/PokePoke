@@ -7,16 +7,16 @@ from unittest.mock import Mock
 
 import pytest
 
-from pokepoke.desktop_api import DesktopAPI
-from pokepoke.desktop_api_ext import _discover_log_roots as _real_discover_log_roots
+from pokepoke.desktop.desktop_api import DesktopAPI
+from pokepoke.desktop.desktop_api_ext import _discover_log_roots as _real_discover_log_roots
 from pokepoke.types import SessionStats, AgentStats, BeadsWorkItem
 
 
 @pytest.fixture(autouse=True)
 def _isolate_desktop_api(monkeypatch):
     """Prevent DesktopAPI from loading real historical agents or calling git."""
-    monkeypatch.setattr("pokepoke.desktop_api_ext._discover_log_roots", lambda: [])
-    monkeypatch.setattr("pokepoke.desktop_api.get_repository_name", lambda: "test-repo")
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
+    monkeypatch.setattr("pokepoke.desktop.desktop_api.get_repository_name", lambda: "test-repo")
 
 
 def test_initial_state_defaults() -> None:
@@ -68,7 +68,7 @@ def test_historical_agent_logs_not_loaded(tmp_path, monkeypatch) -> None:
 
     # Override the autouse fixture's patch to point to our test logs
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._discover_log_roots",
+        "pokepoke.desktop.desktop_api_ext._discover_log_roots",
         lambda: [logs_root],
     )
 
@@ -141,8 +141,8 @@ def test_spawn_agent_honors_effective_max_agents(monkeypatch) -> None:
     api.push_agent_status("a2", "agent-2", status="running")
 
     mock_request = Mock()
-    monkeypatch.setattr("pokepoke.parallel.request_spawn_agent", mock_request)
-    monkeypatch.setattr("pokepoke.parallel.get_effective_max_agents", lambda: 3)
+    monkeypatch.setattr("pokepoke.agents.parallel.request_spawn_agent", mock_request)
+    monkeypatch.setattr("pokepoke.agents.parallel.get_effective_max_agents", lambda: 3)
 
     result = api.spawn_agent()
     assert result["success"] is True
@@ -152,7 +152,7 @@ def test_spawn_agent_honors_effective_max_agents(monkeypatch) -> None:
     mock_request.assert_called_once()
 
     mock_request.reset_mock()
-    monkeypatch.setattr("pokepoke.parallel.get_effective_max_agents", lambda: 2)
+    monkeypatch.setattr("pokepoke.agents.parallel.get_effective_max_agents", lambda: 2)
 
     result = api.spawn_agent()
     assert result["success"] is False
@@ -167,7 +167,7 @@ def test_add_remove_work_item_label(monkeypatch) -> None:
     api.push_work_item("PokePoke-1", "Title", "open", ["urgent"])
 
     mock_run = Mock(returncode=0, stdout="{}", stderr="")
-    monkeypatch.setattr("pokepoke.desktop_api_ext.subprocess.run", lambda *args, **kwargs: mock_run)
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext.subprocess.run", lambda *args, **kwargs: mock_run)
 
     added = api.add_work_item_label("PokePoke-1", "human-required")
     assert added["labels"] == ["urgent", "human-required"]
@@ -189,7 +189,7 @@ def test_add_label_returns_error_on_called_process_error(monkeypatch) -> None:
             stderr="network unavailable",
         )
 
-    monkeypatch.setattr("pokepoke.desktop_api_ext.subprocess.run", _raise)
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext.subprocess.run", _raise)
 
     result = api.add_work_item_label("PokePoke-1", "human-required")
     assert result["success"] is False
@@ -206,7 +206,7 @@ def test_remove_label_returns_error_on_timeout(monkeypatch) -> None:
     def _timeout(*args, **kwargs):
         raise subprocess.TimeoutExpired(cmd=args[0], timeout=30, stderr="timed out")
 
-    monkeypatch.setattr("pokepoke.desktop_api_ext.subprocess.run", _timeout)
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext.subprocess.run", _timeout)
 
     result = api.remove_work_item_label("PokePoke-1", "urgent")
     assert result["success"] is False
@@ -521,7 +521,7 @@ def test_get_model_leaderboard() -> None:
     """get_model_leaderboard should return model summary."""
     from unittest.mock import patch
     api = DesktopAPI()
-    with patch("pokepoke.model_stats_store.get_model_summary", return_value={"test": 1}):
+    with patch("pokepoke.models.model_stats_store.get_model_summary", return_value={"test": 1}):
         result = api.get_model_leaderboard()
     assert result == {"test": 1}
 
@@ -534,7 +534,7 @@ def test_get_model_history_delegates() -> None:
     # Mock raw data from model_history
     raw_data = [{"work_item_id": "A", "wall_time_seconds": 30.0, "quality_gates_passed": True}]
 
-    with patch("pokepoke.model_history.load_model_history_entries", return_value=raw_data) as mock_history:
+    with patch("pokepoke.models.model_history.load_model_history_entries", return_value=raw_data) as mock_history:
         history = api.get_model_history(limit=5)
 
     mock_history.assert_called_once_with(limit=5, repo_name="")
@@ -560,7 +560,7 @@ def test_get_state_includes_model_leaderboard() -> None:
     """get_state should include model_leaderboard field."""
     from unittest.mock import patch
     api = DesktopAPI()
-    with patch("pokepoke.model_stats_store.get_model_summary", return_value={"models": []}):
+    with patch("pokepoke.models.model_stats_store.get_model_summary", return_value={"models": []}):
         state = api.get_state()
     assert "model_leaderboard" in state
 
@@ -680,7 +680,7 @@ def test_list_prompts_returns_list() -> None:
     mock_service.list_prompts.return_value = [
         {"name": "work-item", "is_override": False, "has_builtin": True, "source": "builtin"},
     ]
-    with patch("pokepoke.prompts.get_prompt_service", return_value=mock_service):
+    with patch("pokepoke.prompts.prompts.get_prompt_service", return_value=mock_service):
         result = api.list_prompts()
     assert len(result) == 1
     assert result[0]["name"] == "work-item"
@@ -699,7 +699,7 @@ def test_get_prompt_returns_metadata() -> None:
         "source": "builtin",
         "template_variables": ["name"],
     }
-    with patch("pokepoke.prompts.get_prompt_service", return_value=mock_service):
+    with patch("pokepoke.prompts.prompts.get_prompt_service", return_value=mock_service):
         result = api.get_prompt("work-item")
     assert result["name"] == "work-item"
     assert "name" in result["template_variables"]
@@ -711,7 +711,7 @@ def test_save_prompt_delegates() -> None:
     api = DesktopAPI()
     mock_service = MagicMock()
     mock_service.save_prompt.return_value = {"path": "/tmp/test.md", "saved": True}
-    with patch("pokepoke.prompts.get_prompt_service", return_value=mock_service):
+    with patch("pokepoke.prompts.prompts.get_prompt_service", return_value=mock_service):
         result = api.save_prompt("test", "new content")
     assert result["saved"]
     mock_service.save_prompt.assert_called_once_with("test", "new content")
@@ -723,7 +723,7 @@ def test_reset_prompt_delegates() -> None:
     api = DesktopAPI()
     mock_service = MagicMock()
     mock_service.reset_prompt.return_value = {"reset": True, "had_override": True}
-    with patch("pokepoke.prompts.get_prompt_service", return_value=mock_service):
+    with patch("pokepoke.prompts.prompts.get_prompt_service", return_value=mock_service):
         result = api.reset_prompt("test")
     assert result["reset"]
     mock_service.reset_prompt.assert_called_once_with("test")
@@ -735,7 +735,7 @@ def test_reset_prompt_delegates() -> None:
 def test_initial_state_has_empty_agents(monkeypatch) -> None:
     """get_state should include an empty agents list initially."""
     monkeypatch.delenv("POKEPOKE_LOGS_DIR", raising=False)
-    monkeypatch.setattr("pokepoke.desktop_api_ext._discover_log_roots", lambda: [])
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     state = api.get_state()
     assert state["agents"] == []
@@ -743,7 +743,7 @@ def test_initial_state_has_empty_agents(monkeypatch) -> None:
 
 def test_push_agent_status_registers_agent(monkeypatch) -> None:
     """push_agent_status should add an agent to the tracked set."""
-    monkeypatch.setattr("pokepoke.desktop_api_ext._discover_log_roots", lambda: [])
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     api.push_agent_status("agent-1", "Gate Agent", iteration=2, status="running", model="gpt-5.1")
 
@@ -762,7 +762,7 @@ def test_push_agent_status_registers_agent(monkeypatch) -> None:
 
 def test_push_agent_status_updates_existing(monkeypatch) -> None:
     """push_agent_status should update an existing agent's fields."""
-    monkeypatch.setattr("pokepoke.desktop_api_ext._discover_log_roots", lambda: [])
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     api.push_agent_status(
         "agent-1",
@@ -855,7 +855,7 @@ def test_push_agent_log_trims_excess() -> None:
 
 def test_push_agent_log_ignores_unknown_agent(monkeypatch) -> None:
     """push_agent_log should silently ignore unknown agent IDs."""
-    monkeypatch.setattr("pokepoke.desktop_api_ext._discover_log_roots", lambda: [])
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     api.push_agent_log("nonexistent", "should not crash")
     assert api.get_agents() == []
@@ -863,7 +863,7 @@ def test_push_agent_log_ignores_unknown_agent(monkeypatch) -> None:
 
 def test_remove_agent(monkeypatch) -> None:
     """remove_agent should remove the agent from tracked set."""
-    monkeypatch.setattr("pokepoke.desktop_api_ext._discover_log_roots", lambda: [])
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     api.push_agent_status("agent-1", "Agent A")
     api.push_agent_status("agent-2", "Agent B")
@@ -876,7 +876,7 @@ def test_remove_agent(monkeypatch) -> None:
 
 def test_remove_agent_ignores_unknown(monkeypatch) -> None:
     """remove_agent should silently ignore unknown agent IDs."""
-    monkeypatch.setattr("pokepoke.desktop_api_ext._discover_log_roots", lambda: [])
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     api.remove_agent("nonexistent")
     assert api.get_agents() == []
@@ -884,7 +884,7 @@ def test_remove_agent_ignores_unknown(monkeypatch) -> None:
 
 def test_get_state_includes_agents(monkeypatch) -> None:
     """get_state should include agents in the returned state."""
-    monkeypatch.setattr("pokepoke.desktop_api_ext._discover_log_roots", lambda: [])
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     api.push_agent_status("agent-1", "Worker", iteration=3, status="running")
     api.push_agent_log("agent-1", "doing work")
@@ -957,7 +957,7 @@ def test_get_agent_detail_includes_full_logs_and_timestamps() -> None:
 
 def test_get_state_includes_stop_after_current() -> None:
     """get_state should include stop_after_current flag."""
-    from pokepoke.shutdown import reset as shutdown_reset
+    from pokepoke.utils.shutdown import reset as shutdown_reset
     shutdown_reset()
     api = DesktopAPI()
     state = api.get_state()
@@ -967,7 +967,7 @@ def test_get_state_includes_stop_after_current() -> None:
 
 def test_request_stop_after_current_sets_flag() -> None:
     """request_stop_after_current should set the flag and log a message."""
-    from pokepoke.shutdown import reset as shutdown_reset
+    from pokepoke.utils.shutdown import reset as shutdown_reset
     shutdown_reset()
     api = DesktopAPI()
     result = api.request_stop_after_current()
@@ -980,7 +980,7 @@ def test_request_stop_after_current_sets_flag() -> None:
 
 def test_cancel_stop_after_current_clears_flag() -> None:
     """cancel_stop_after_current should clear the flag and log a message."""
-    from pokepoke.shutdown import reset as shutdown_reset
+    from pokepoke.utils.shutdown import reset as shutdown_reset
     shutdown_reset()
     api = DesktopAPI()
     api.request_stop_after_current()
@@ -1142,7 +1142,7 @@ def test_get_config_no_yaml(monkeypatch) -> None:
             cfg.write_text("key: val\n", encoding="utf-8")
             mock_root.return_value = root
 
-            monkeypatch.setattr("pokepoke.desktop_api_ext.HAS_YAML", False)
+            monkeypatch.setattr("pokepoke.desktop.desktop_api_ext.HAS_YAML", False)
             with pytest.raises(ImportError, match="PyYAML"):
                 api.get_config()
 
@@ -1169,7 +1169,7 @@ def test_save_config_no_yaml(monkeypatch) -> None:
     from unittest.mock import patch
 
     api = DesktopAPI()
-    monkeypatch.setattr("pokepoke.desktop_api_ext.HAS_YAML", False)
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext.HAS_YAML", False)
     with patch("pokepoke.config._find_repo_root"), pytest.raises(ImportError, match="PyYAML"):
         api.save_config({"key": "val"})
 
@@ -1229,7 +1229,7 @@ def test_open_project_nonexistent_directory() -> None:
 
 def test_open_project_not_a_git_repo(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._is_git_repo", lambda p: False
+        "pokepoke.desktop.desktop_api_ext._is_git_repo", lambda p: False
     )
     result = DesktopAPI().open_project(str(tmp_path))
     assert result["success"] is False
@@ -1245,16 +1245,16 @@ def test_open_project_success_with_pokepoke_config(tmp_path, monkeypatch) -> Non
     (tmp_path / ".git").mkdir()  # So _find_repo_root resolves to tmp_path
 
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._is_git_repo", lambda p: True
+        "pokepoke.desktop.desktop_api_ext._is_git_repo", lambda p: True
     )
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._resolve_git_toplevel", lambda p: p
+        "pokepoke.desktop.desktop_api_ext._resolve_git_toplevel", lambda p: p
     )
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._check_beads_available", lambda p: True
+        "pokepoke.desktop.desktop_api_ext._check_beads_available", lambda p: True
     )
     monkeypatch.setattr(
-        "pokepoke.repo_utils.get_repository_name", lambda: "test-repo"
+        "pokepoke.git.repo_utils.get_repository_name", lambda: "test-repo"
     )
 
     api = DesktopAPI()
@@ -1273,16 +1273,16 @@ def test_open_project_success_with_pokepoke_config(tmp_path, monkeypatch) -> Non
 
 def test_open_project_needs_init_when_no_pokepoke_dir(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._is_git_repo", lambda p: True
+        "pokepoke.desktop.desktop_api_ext._is_git_repo", lambda p: True
     )
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._resolve_git_toplevel", lambda p: p
+        "pokepoke.desktop.desktop_api_ext._resolve_git_toplevel", lambda p: p
     )
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._check_beads_available", lambda p: False
+        "pokepoke.desktop.desktop_api_ext._check_beads_available", lambda p: False
     )
     monkeypatch.setattr(
-        "pokepoke.repo_utils.get_repository_name", lambda: "bare-repo"
+        "pokepoke.git.repo_utils.get_repository_name", lambda: "bare-repo"
     )
 
     result = DesktopAPI().open_project(str(tmp_path))
@@ -1318,16 +1318,16 @@ def test_browse_for_project_delegates_to_open_project(tmp_path, monkeypatch) -> 
     (tmp_path / ".git").mkdir()  # So _find_repo_root resolves to tmp_path
 
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._is_git_repo", lambda p: True
+        "pokepoke.desktop.desktop_api_ext._is_git_repo", lambda p: True
     )
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._resolve_git_toplevel", lambda p: p
+        "pokepoke.desktop.desktop_api_ext._resolve_git_toplevel", lambda p: p
     )
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._check_beads_available", lambda p: True
+        "pokepoke.desktop.desktop_api_ext._check_beads_available", lambda p: True
     )
     monkeypatch.setattr(
-        "pokepoke.repo_utils.get_repository_name", lambda: "picked-repo"
+        "pokepoke.git.repo_utils.get_repository_name", lambda: "picked-repo"
     )
 
     api = DesktopAPI()
@@ -1353,16 +1353,16 @@ def test_open_project_resolves_subdirectory_to_git_toplevel(tmp_path, monkeypatc
     (repo_root / ".git").mkdir()  # So _find_repo_root resolves to repo_root
 
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._is_git_repo", lambda p: True
+        "pokepoke.desktop.desktop_api_ext._is_git_repo", lambda p: True
     )
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._resolve_git_toplevel", lambda p: repo_root
+        "pokepoke.desktop.desktop_api_ext._resolve_git_toplevel", lambda p: repo_root
     )
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._check_beads_available", lambda p: True
+        "pokepoke.desktop.desktop_api_ext._check_beads_available", lambda p: True
     )
     monkeypatch.setattr(
-        "pokepoke.repo_utils.get_repository_name", lambda: "resolved-repo"
+        "pokepoke.git.repo_utils.get_repository_name", lambda: "resolved-repo"
     )
 
     result = DesktopAPI().open_project(str(subdir))
@@ -1378,16 +1378,16 @@ def test_open_project_needs_init_with_empty_pokepoke_dir(tmp_path, monkeypatch) 
     # No config.yaml/yml/json inside
 
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._is_git_repo", lambda p: True
+        "pokepoke.desktop.desktop_api_ext._is_git_repo", lambda p: True
     )
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._resolve_git_toplevel", lambda p: p
+        "pokepoke.desktop.desktop_api_ext._resolve_git_toplevel", lambda p: p
     )
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._check_beads_available", lambda p: True
+        "pokepoke.desktop.desktop_api_ext._check_beads_available", lambda p: True
     )
     monkeypatch.setattr(
-        "pokepoke.repo_utils.get_repository_name", lambda: "empty-config"
+        "pokepoke.git.repo_utils.get_repository_name", lambda: "empty-config"
     )
 
     result = DesktopAPI().open_project(str(tmp_path))
@@ -1398,16 +1398,16 @@ def test_open_project_needs_init_with_empty_pokepoke_dir(tmp_path, monkeypatch) 
 def test_open_project_clears_agent_registry(tmp_path, monkeypatch) -> None:
     """Opening a new project clears previously tracked agents."""
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._is_git_repo", lambda p: True
+        "pokepoke.desktop.desktop_api_ext._is_git_repo", lambda p: True
     )
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._resolve_git_toplevel", lambda p: p
+        "pokepoke.desktop.desktop_api_ext._resolve_git_toplevel", lambda p: p
     )
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._check_beads_available", lambda p: True
+        "pokepoke.desktop.desktop_api_ext._check_beads_available", lambda p: True
     )
     monkeypatch.setattr(
-        "pokepoke.repo_utils.get_repository_name", lambda: "fresh-repo"
+        "pokepoke.git.repo_utils.get_repository_name", lambda: "fresh-repo"
     )
 
     api = DesktopAPI()
@@ -1420,23 +1420,23 @@ def test_open_project_clears_agent_registry(tmp_path, monkeypatch) -> None:
 
 def test_open_project_cancels_stop_after_current(tmp_path, monkeypatch) -> None:
     """Opening a new project cancels any pending stop-after-current request."""
-    from pokepoke.shutdown import (
+    from pokepoke.utils.shutdown import (
         request_stop_after_current,
         should_stop_after_current,
         reset as reset_shutdown,
     )
 
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._is_git_repo", lambda p: True
+        "pokepoke.desktop.desktop_api_ext._is_git_repo", lambda p: True
     )
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._resolve_git_toplevel", lambda p: p
+        "pokepoke.desktop.desktop_api_ext._resolve_git_toplevel", lambda p: p
     )
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._check_beads_available", lambda p: True
+        "pokepoke.desktop.desktop_api_ext._check_beads_available", lambda p: True
     )
     monkeypatch.setattr(
-        "pokepoke.repo_utils.get_repository_name", lambda: "fresh-repo"
+        "pokepoke.git.repo_utils.get_repository_name", lambda: "fresh-repo"
     )
 
     try:
@@ -1457,16 +1457,16 @@ def test_open_project_needs_beads_init_when_bd_unavailable(tmp_path, monkeypatch
     )
 
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._is_git_repo", lambda p: True
+        "pokepoke.desktop.desktop_api_ext._is_git_repo", lambda p: True
     )
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._resolve_git_toplevel", lambda p: p
+        "pokepoke.desktop.desktop_api_ext._resolve_git_toplevel", lambda p: p
     )
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._check_beads_available", lambda p: False
+        "pokepoke.desktop.desktop_api_ext._check_beads_available", lambda p: False
     )
     monkeypatch.setattr(
-        "pokepoke.repo_utils.get_repository_name", lambda: "no-beads-repo"
+        "pokepoke.git.repo_utils.get_repository_name", lambda: "no-beads-repo"
     )
 
     result = DesktopAPI().open_project(str(tmp_path))
@@ -1482,20 +1482,20 @@ def test_open_project_fails_when_agents_active(tmp_path, monkeypatch) -> None:
     )
 
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._is_git_repo", lambda p: True
+        "pokepoke.desktop.desktop_api_ext._is_git_repo", lambda p: True
     )
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._resolve_git_toplevel", lambda p: p
+        "pokepoke.desktop.desktop_api_ext._resolve_git_toplevel", lambda p: p
     )
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._has_pokepoke_config", lambda p: True
+        "pokepoke.desktop.desktop_api_ext._has_pokepoke_config", lambda p: True
     )
     monkeypatch.setattr(
-        "pokepoke.desktop_api_ext._check_beads_available", lambda p: True
+        "pokepoke.desktop.desktop_api_ext._check_beads_available", lambda p: True
     )
     # Mock has_active_agents in the shutdown module where it's defined
     monkeypatch.setattr(
-        "pokepoke.shutdown.has_active_agents", lambda: True
+        "pokepoke.utils.shutdown.has_active_agents", lambda: True
     )
 
     result = DesktopAPI().open_project(str(tmp_path))

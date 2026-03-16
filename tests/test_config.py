@@ -20,7 +20,7 @@ from pokepoke.config import (
     _find_repo_root,  # noqa: F401  # used via patch strings
     _load_config_file,
 )
-from pokepoke.repo_config_loader import (
+from pokepoke.git.repo_config_loader import (
     parse_repos_cli,
     validate_repo_config,
     validate_repo_configs,

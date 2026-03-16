@@ -6,7 +6,7 @@ import time
 from unittest.mock import MagicMock, Mock, patch
 
 
-from pokepoke.parallel_support import (
+from pokepoke.agents.parallel_support import (
     handle_preflight_checks,
     finalize_workers,
     _drain_orphaned_futures,
@@ -17,7 +17,7 @@ from pokepoke.parallel_support import (
     update_circuit_breaker,
     compute_slots,
 )
-from pokepoke.preflight_log_utils import (
+from pokepoke.utils.preflight_log_utils import (
     format_preflight_errors,
     should_log_preflight_warning,
     reset_preflight_rate_limit,
@@ -76,7 +76,7 @@ class TestHandlePreflightChecks:
         assert should_continue is True
         assert is_critical is False
 
-    @patch("pokepoke.preflight_health.run_preflight_checks")
+    @patch("pokepoke.utils.preflight_health.run_preflight_checks")
     @patch("pokepoke.config.get_config")
     def test_passed_returns_true(self, mock_get_config, mock_run):
         mock_get_config.return_value = self._mock_config()
@@ -86,7 +86,7 @@ class TestHandlePreflightChecks:
         assert should_continue is True
         assert is_critical is False
 
-    @patch("pokepoke.preflight_health.run_preflight_checks")
+    @patch("pokepoke.utils.preflight_health.run_preflight_checks")
     @patch("pokepoke.config.get_config")
     def test_critical_failure_shuts_down(self, mock_get_config, mock_run):
         err = MagicMock()
@@ -101,7 +101,7 @@ class TestHandlePreflightChecks:
         assert should_continue is False
         assert is_critical is True
 
-    @patch("pokepoke.preflight_health.run_preflight_checks")
+    @patch("pokepoke.utils.preflight_health.run_preflight_checks")
     @patch("pokepoke.config.get_config")
     def test_environmental_failure_shuts_down(self, mock_get_config, mock_run):
         err = MagicMock()
@@ -116,7 +116,7 @@ class TestHandlePreflightChecks:
         assert should_continue is False
         assert is_critical is True
 
-    @patch("pokepoke.preflight_health.run_preflight_checks")
+    @patch("pokepoke.utils.preflight_health.run_preflight_checks")
     @patch("pokepoke.config.get_config")
     def test_non_critical_failure_continues(self, mock_get_config, mock_run):
         err = MagicMock()
@@ -132,7 +132,7 @@ class TestHandlePreflightChecks:
         assert should_continue is True
         assert is_critical is False
 
-    @patch("pokepoke.preflight_health.run_preflight_checks")
+    @patch("pokepoke.utils.preflight_health.run_preflight_checks")
     @patch("pokepoke.config.get_config")
     def test_self_repair_attempted_and_succeeded(self, mock_get_config, mock_run):
         err = MagicMock()
@@ -148,7 +148,7 @@ class TestHandlePreflightChecks:
         assert should_continue is True
         assert is_critical is False
 
-    @patch("pokepoke.preflight_health.run_preflight_checks")
+    @patch("pokepoke.utils.preflight_health.run_preflight_checks")
     @patch("pokepoke.config.get_config")
     def test_self_repair_attempted_and_failed(self, mock_get_config, mock_run):
         err = MagicMock()
@@ -164,7 +164,7 @@ class TestHandlePreflightChecks:
         assert should_continue is False
         assert is_critical is True
 
-    @patch("pokepoke.preflight_health.run_preflight_checks")
+    @patch("pokepoke.utils.preflight_health.run_preflight_checks")
     @patch("pokepoke.config.get_config")
     def test_environmental_no_graceful(self, mock_get_config, mock_run):
         """Environmental failure with graceful shutdown disabled continues."""
@@ -238,7 +238,7 @@ class TestPreflightRateLimiting:
         reset_preflight_rate_limit()
         assert should_log_preflight_warning("disk_space: Low disk") is True
 
-    @patch("pokepoke.preflight_health.run_preflight_checks")
+    @patch("pokepoke.utils.preflight_health.run_preflight_checks")
     @patch("pokepoke.config.get_config")
     def test_passing_checks_reset_rate_limit(self, mock_get_config, mock_run):
         """When checks pass, the rate-limit counter resets."""
@@ -271,7 +271,7 @@ class TestPreflightRateLimiting:
         # After reset, first new failure should be logged
         assert should_log_preflight_warning("some error") is True
 
-    @patch("pokepoke.preflight_health.run_preflight_checks")
+    @patch("pokepoke.utils.preflight_health.run_preflight_checks")
     @patch("pokepoke.config.get_config")
     def test_warning_includes_error_details(self, mock_get_config, mock_run):
         """The log message includes specific error details, not just counts."""
@@ -309,7 +309,7 @@ class TestPreflightRateLimiting:
         assert "disk_space: Only 500MB free" in logged_msg[0][0]
         assert logged_msg[1]["level"] == "WARNING"
 
-    @patch("pokepoke.preflight_health.run_preflight_checks")
+    @patch("pokepoke.utils.preflight_health.run_preflight_checks")
     @patch("pokepoke.config.get_config")
     def test_repeated_warnings_suppressed(self, mock_get_config, mock_run):
         """Repeated identical failures should be rate-limited."""
@@ -363,8 +363,8 @@ class TestPreflightRateLimiting:
 class TestFinalizeWorkers:
     """Tests for finalize_workers."""
 
-    @patch("pokepoke.parallel_support.terminal_ui")
-    @patch("pokepoke.parallel_support.kill_orphaned_copilot_processes")
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel_support.kill_orphaned_copilot_processes")
     def test_empty_futures(self, mock_kill, mock_tui):
         stats = SessionStats(agent_stats=AgentStats())
         run_logger = MagicMock()
@@ -373,8 +373,8 @@ class TestFinalizeWorkers:
         assert timeout is False
         mock_kill.assert_not_called()
 
-    @patch("pokepoke.parallel_support.terminal_ui")
-    @patch("pokepoke.parallel_support.kill_orphaned_copilot_processes")
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel_support.kill_orphaned_copilot_processes")
     def test_successful_worker(self, mock_kill, mock_tui):
         item = _make_item("s1")
         result = WorkItemResult(success=True, request_count=3)
@@ -389,8 +389,8 @@ class TestFinalizeWorkers:
         record_fn.assert_called_once()
         mock_kill.assert_called_once()
 
-    @patch("pokepoke.parallel_support.terminal_ui")
-    @patch("pokepoke.parallel_support.kill_orphaned_copilot_processes")
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel_support.kill_orphaned_copilot_processes")
     def test_failed_worker(self, mock_kill, mock_tui):
         item = _make_item("f1")
         fut = concurrent.futures.Future()
@@ -403,8 +403,8 @@ class TestFinalizeWorkers:
         assert timeout is False
         record_fn.assert_called_once()
 
-    @patch("pokepoke.parallel_support.terminal_ui")
-    @patch("pokepoke.parallel_support.kill_orphaned_copilot_processes")
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel_support.kill_orphaned_copilot_processes")
     def test_record_fn_exception(self, mock_kill, mock_tui):
         """record_fn raising doesn't crash finalize_workers."""
         item = _make_item("r1")
@@ -418,10 +418,10 @@ class TestFinalizeWorkers:
         assert total == 1
         assert timeout is False
 
-    @patch("pokepoke.parallel_support.terminal_ui")
-    @patch("pokepoke.parallel_support.kill_orphaned_copilot_processes")
-    @patch("pokepoke.parallel_support._drain_orphaned_futures")
-    @patch("pokepoke.parallel_support.concurrent.futures.as_completed")
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel_support.kill_orphaned_copilot_processes")
+    @patch("pokepoke.agents.parallel_support._drain_orphaned_futures")
+    @patch("pokepoke.agents.parallel_support.concurrent.futures.as_completed")
     def test_timeout_drains_orphans(self, mock_as_completed, mock_drain, mock_kill, mock_tui):
         """Timeout triggers drain of orphaned futures."""
         mock_as_completed.side_effect = concurrent.futures.TimeoutError()
@@ -442,8 +442,8 @@ class TestFinalizeWorkers:
 class TestDrainOrphanedFutures:
     """Tests for _drain_orphaned_futures."""
 
-    @patch("pokepoke.parallel_support.terminal_ui")
-    @patch("pokepoke.parallel.unassign_with_retry")
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel.unassign_with_retry")
     def test_empty_futures_noop(self, mock_unassign, mock_tui):
         """Empty futures dict is a no-op."""
         futures: dict = {}
@@ -451,8 +451,8 @@ class TestDrainOrphanedFutures:
         _drain_orphaned_futures(futures, SessionStats(agent_stats=AgentStats()), time.time(), run_logger, Mock())
         mock_unassign.assert_not_called()
 
-    @patch("pokepoke.parallel_support.terminal_ui")
-    @patch("pokepoke.parallel.unassign_with_retry")
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel.unassign_with_retry")
     def test_drains_and_records_orphans(self, mock_unassign, mock_tui):
         """Orphaned futures are recorded via record_fn and unassigned."""
         item1 = _make_item("o1")
@@ -481,8 +481,8 @@ class TestDrainOrphanedFutures:
         assert len(success_results) == 1  # fut2's real result
         assert success_results[0].request_count == 5
 
-    @patch("pokepoke.parallel_support.terminal_ui")
-    @patch("pokepoke.parallel.unassign_with_retry")
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel.unassign_with_retry")
     def test_record_fn_exception_handled(self, mock_unassign, mock_tui):
         """record_fn raising doesn't crash the drain."""
         item = _make_item("e1")
@@ -497,8 +497,8 @@ class TestDrainOrphanedFutures:
         record_fn.assert_called_once()
         mock_unassign.assert_called_once_with("e1")
 
-    @patch("pokepoke.parallel_support.terminal_ui")
-    @patch("pokepoke.parallel.unassign_with_retry", side_effect=RuntimeError("unassign boom"))
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel.unassign_with_retry", side_effect=RuntimeError("unassign boom"))
     def test_unassign_exception_handled(self, mock_unassign, mock_tui):
         """unassign_with_retry raising doesn't crash the drain."""
         item = _make_item("u1")
@@ -512,8 +512,8 @@ class TestDrainOrphanedFutures:
         record_fn.assert_called_once()
         mock_unassign.assert_called_once_with("u1")
 
-    @patch("pokepoke.parallel_support.terminal_ui")
-    @patch("pokepoke.parallel.unassign_with_retry")
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel.unassign_with_retry")
     def test_done_future_with_exception(self, mock_unassign, mock_tui):
         """Orphan future that completed with exception still gets recorded."""
         item = _make_item("x1")
@@ -539,9 +539,9 @@ class TestDrainOrphanedFutures:
 class TestDrainCircuitBreaker:
     """Tests for drain_circuit_breaker."""
 
-    @patch("pokepoke.parallel_support.time.sleep")
-    @patch("pokepoke.parallel_support.is_shutting_down", return_value=False)
-    @patch("pokepoke.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel_support.time.sleep")
+    @patch("pokepoke.agents.parallel_support.is_shutting_down", return_value=False)
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
     def test_calls_collect_fn_and_returns_total(self, mock_tui, mock_shutdown, mock_sleep):
         collect_fn = Mock(return_value=(42, True, 1, 0))
         futures: dict = {}
@@ -553,9 +553,9 @@ class TestDrainCircuitBreaker:
         assert result == 42
         collect_fn.assert_called_once()
 
-    @patch("pokepoke.parallel_support.time.sleep")
-    @patch("pokepoke.parallel_support.is_shutting_down", return_value=True)
-    @patch("pokepoke.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel_support.time.sleep")
+    @patch("pokepoke.agents.parallel_support.is_shutting_down", return_value=True)
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
     def test_exits_early_on_shutdown(self, mock_tui, mock_shutdown, mock_sleep):
         """Drain loop should exit when shutdown signaled."""
         item = _make_item("cb1")
@@ -576,11 +576,11 @@ class TestDrainCircuitBreaker:
 class TestDispatchItems:
     """Tests for dispatch_items."""
 
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.select_multiple_items", return_value=[])
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agents.agent_context.get_agent_name", return_value="agent")
     def test_zero_slots_returns_immediately(self, *_mocks):
         run_logger = MagicMock()
         result = dispatch_items(
@@ -589,12 +589,12 @@ class TestDispatchItems:
         )
         assert result == 0
 
-    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.select_multiple_items")
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    @patch("pokepoke.beads.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.select_multiple_items")
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agents.agent_context.get_agent_name", return_value="agent")
     def test_submits_item_to_executor(self, _name, _assign, _claim, mock_select, _stop, _closed):
         item = _make_item("d1")
         mock_select.return_value = [item]
@@ -613,11 +613,11 @@ class TestDispatchItems:
         assert counter == 1
         assert mock_fut in futures
 
-    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.select_multiple_items")
-    @patch("pokepoke.parallel.is_item_claimable", return_value=False)
-    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    @patch("pokepoke.beads.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.select_multiple_items")
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=False)
+    @patch("pokepoke.agents.agent_context.get_agent_name", return_value="agent")
     def test_skips_unclaimed_item(self, _name, _claim, mock_select, _stop, _closed):
         item = _make_item("skip1")
         mock_select.return_value = [item]
@@ -632,12 +632,12 @@ class TestDispatchItems:
         assert counter == 0
         executor.submit.assert_not_called()
 
-    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.select_multiple_items")
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.assign_and_sync_item", return_value=False)
-    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    @patch("pokepoke.beads.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.select_multiple_items")
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.assign_and_sync_item", return_value=False)
+    @patch("pokepoke.agents.agent_context.get_agent_name", return_value="agent")
     def test_failed_assign_adds_to_failed_ids(self, _name, _assign, _claim, mock_select, _stop, _closed):
         item = _make_item("fa1")
         mock_select.return_value = [item]
@@ -650,13 +650,13 @@ class TestDispatchItems:
         )
         assert "fa1" in failed_ids
 
-    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.select_multiple_items")
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.parallel.unassign_with_retry")
-    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    @patch("pokepoke.beads.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.select_multiple_items")
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agents.parallel.unassign_with_retry")
+    @patch("pokepoke.agents.agent_context.get_agent_name", return_value="agent")
     def test_executor_submit_failure_unassigns(self, _name, mock_unassign, _assign, _claim, mock_select, _stop, _closed):
         item = _make_item("ef1")
         mock_select.return_value = [item]
@@ -673,11 +673,11 @@ class TestDispatchItems:
             )
         mock_unassign.assert_called_once_with("ef1")
 
-    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.is_item_claimable")
-    @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    @patch("pokepoke.beads.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.is_item_claimable")
+    @patch("pokepoke.agents.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agents.agent_context.get_agent_name", return_value="agent")
     def test_advances_past_unclaimable_items(self, _name, _assign, mock_claimable, _stop, _closed):
         """Regression for PokePoke-pfoc: dispatch must advance past already-claimed
         items and fill remaining slots from later candidates in the ready queue."""
@@ -695,7 +695,7 @@ class TestDispatchItems:
             candidates = [i for i in ready if i.id not in excluded]
             return candidates[:count]
 
-        with patch("pokepoke.parallel.select_multiple_items", side_effect=fake_select):
+        with patch("pokepoke.agents.parallel.select_multiple_items", side_effect=fake_select):
             executor = MagicMock()
             mock_fut = MagicMock()
             executor.submit.return_value = mock_fut
@@ -715,10 +715,10 @@ class TestDispatchItems:
         # Unclaimable items should be added to failed_claim_ids
         assert unclaimable.issubset(failed_ids)
 
-    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.is_item_claimable", return_value=False)
-    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    @patch("pokepoke.beads.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=False)
+    @patch("pokepoke.agents.agent_context.get_agent_name", return_value="agent")
     def test_unclaimable_items_added_to_failed_ids(self, _name, _claim, _stop, _closed):
         """Regression for PokePoke-pfoc: unclaimable items must be added to
         failed_claim_ids so they are not re-selected in subsequent iterations."""
@@ -733,7 +733,7 @@ class TestDispatchItems:
             candidates = [i for i in ready if i.id not in excluded]
             return candidates[:count]
 
-        with patch("pokepoke.parallel.select_multiple_items", side_effect=fake_select):
+        with patch("pokepoke.agents.parallel.select_multiple_items", side_effect=fake_select):
             run_logger = MagicMock()
             failed_ids: set[str] = set()
 
@@ -745,11 +745,11 @@ class TestDispatchItems:
         # All items should be in failed_claim_ids
         assert failed_ids == {"uc-0", "uc-1", "uc-2"}
 
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
-    @patch("pokepoke.beads_query.is_beads_item_closed")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agents.agent_context.get_agent_name", return_value="agent")
+    @patch("pokepoke.beads.beads_query.is_beads_item_closed")
     def test_closed_item_skipped_and_added_to_failed_ids(
         self, mock_closed, _name, _assign, _claim, _stop,
     ):
@@ -768,7 +768,7 @@ class TestDispatchItems:
             candidates = [i for i in ready if i.id not in excluded]
             return candidates[:count]
 
-        with patch("pokepoke.parallel.select_multiple_items", side_effect=fake_select):
+        with patch("pokepoke.agents.parallel.select_multiple_items", side_effect=fake_select):
             executor = MagicMock()
             mock_fut = MagicMock()
             executor.submit.return_value = mock_fut
@@ -803,11 +803,11 @@ def _make_high_conflict_item(item_id: str = "hc1") -> BeadsWorkItem:
 class TestDispatchHighConflictItems:
     """Tests that high-conflict items run solo (PokePoke-sz6k)."""
 
-    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    @patch("pokepoke.beads.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agents.agent_context.get_agent_name", return_value="agent")
     def test_high_conflict_blocks_new_dispatch(
         self, _name, _assign, _claim, _stop, _closed,
     ):
@@ -827,7 +827,7 @@ class TestDispatchHighConflictItems:
                 excluded.update(claimed_ids)
             return [i for i in ready if i.id not in excluded][:count]
 
-        with patch("pokepoke.parallel.select_multiple_items", side_effect=fake_select):
+        with patch("pokepoke.agents.parallel.select_multiple_items", side_effect=fake_select):
             executor = MagicMock()
             run_logger = MagicMock()
 
@@ -839,11 +839,11 @@ class TestDispatchHighConflictItems:
         assert counter == 0
         executor.submit.assert_not_called()
 
-    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    @patch("pokepoke.beads.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agents.agent_context.get_agent_name", return_value="agent")
     def test_high_conflict_deferred_when_others_active(
         self, _name, _assign, _claim, _stop, _closed,
     ):
@@ -862,7 +862,7 @@ class TestDispatchHighConflictItems:
                 excluded.update(claimed_ids)
             return [i for i in ready if i.id not in excluded][:count]
 
-        with patch("pokepoke.parallel.select_multiple_items", side_effect=fake_select):
+        with patch("pokepoke.agents.parallel.select_multiple_items", side_effect=fake_select):
             executor = MagicMock()
             run_logger = MagicMock()
 
@@ -875,11 +875,11 @@ class TestDispatchHighConflictItems:
         assert counter == 0
         executor.submit.assert_not_called()
 
-    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    @patch("pokepoke.beads.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agents.agent_context.get_agent_name", return_value="agent")
     def test_high_conflict_dispatched_when_idle(
         self, _name, _assign, _claim, _stop, _closed,
     ):
@@ -894,7 +894,7 @@ class TestDispatchHighConflictItems:
                 excluded.update(claimed_ids)
             return [i for i in ready if i.id not in excluded][:count]
 
-        with patch("pokepoke.parallel.select_multiple_items", side_effect=fake_select):
+        with patch("pokepoke.agents.parallel.select_multiple_items", side_effect=fake_select):
             executor = MagicMock()
             mock_fut = MagicMock()
             executor.submit.return_value = mock_fut
@@ -909,11 +909,11 @@ class TestDispatchHighConflictItems:
         assert counter == 1
         assert executor.submit.call_count == 1
 
-    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    @patch("pokepoke.beads.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agents.agent_context.get_agent_name", return_value="agent")
     def test_high_conflict_prevents_additional_dispatch(
         self, _name, _assign, _claim, _stop, _closed,
     ):
@@ -929,7 +929,7 @@ class TestDispatchHighConflictItems:
                 excluded.update(claimed_ids)
             return [i for i in ready if i.id not in excluded][:count]
 
-        with patch("pokepoke.parallel.select_multiple_items", side_effect=fake_select):
+        with patch("pokepoke.agents.parallel.select_multiple_items", side_effect=fake_select):
             executor = MagicMock()
             mock_fut = MagicMock()
             executor.submit.return_value = mock_fut
@@ -945,11 +945,11 @@ class TestDispatchHighConflictItems:
         assert counter == 1
         assert executor.submit.call_count == 1
 
-    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    @patch("pokepoke.beads.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agents.agent_context.get_agent_name", return_value="agent")
     def test_normal_dispatched_before_high_conflict_deferred(
         self, _name, _assign, _claim, _stop, _closed,
     ):
@@ -969,7 +969,7 @@ class TestDispatchHighConflictItems:
             call_count[0] += 1
             return candidates
 
-        with patch("pokepoke.parallel.select_multiple_items", side_effect=fake_select):
+        with patch("pokepoke.agents.parallel.select_multiple_items", side_effect=fake_select):
             executor = MagicMock()
             mock_fut = MagicMock()
             executor.submit.return_value = mock_fut
@@ -985,11 +985,11 @@ class TestDispatchHighConflictItems:
         assert counter >= 1
         assert executor.submit.call_count >= 1
 
-    @patch("pokepoke.beads_query.is_beads_item_closed", return_value=False)
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.parallel.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.agent_context.get_agent_name", return_value="agent")
+    @patch("pokepoke.beads.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agents.agent_context.get_agent_name", return_value="agent")
     def test_deferred_high_conflict_does_not_starve_normal_items(
         self, _name, _assign, _claim, _stop, _closed,
     ):
@@ -1015,7 +1015,7 @@ class TestDispatchHighConflictItems:
                 excluded.update(claimed_ids)
             return [i for i in ready if i.id not in excluded][:count]
 
-        with patch("pokepoke.parallel.select_multiple_items", side_effect=fake_select):
+        with patch("pokepoke.agents.parallel.select_multiple_items", side_effect=fake_select):
             executor = MagicMock()
             mock_fut = MagicMock()
             executor.submit.return_value = mock_fut
@@ -1036,7 +1036,7 @@ class TestDispatchHighConflictItems:
 class TestRunPreflightAndRepoChecks:
     """Tests for run_preflight_and_repo_checks."""
 
-    @patch("pokepoke.parallel_support.handle_preflight_checks", return_value=(True, False))
+    @patch("pokepoke.agents.parallel_support.handle_preflight_checks", return_value=(True, False))
     def test_all_checks_pass(self, _preflight):
         run_logger = MagicMock()
         repo_fn = Mock(return_value=True)
@@ -1050,7 +1050,7 @@ class TestRunPreflightAndRepoChecks:
         assert failures == 0
         assert result == items
 
-    @patch("pokepoke.parallel_support.handle_preflight_checks", return_value=(False, True))
+    @patch("pokepoke.agents.parallel_support.handle_preflight_checks", return_value=(False, True))
     def test_critical_preflight_failure_increments(self, _preflight):
         run_logger = MagicMock()
         ok, failures, result = run_preflight_and_repo_checks(
@@ -1060,7 +1060,7 @@ class TestRunPreflightAndRepoChecks:
         assert failures == 3
         assert result == []
 
-    @patch("pokepoke.parallel_support.handle_preflight_checks", return_value=(False, False))
+    @patch("pokepoke.agents.parallel_support.handle_preflight_checks", return_value=(False, False))
     def test_non_critical_preflight_failure(self, _preflight):
         run_logger = MagicMock()
         ok, failures, result = run_preflight_and_repo_checks(
@@ -1069,7 +1069,7 @@ class TestRunPreflightAndRepoChecks:
         assert ok is False
         assert failures == 1
 
-    @patch("pokepoke.parallel_support.handle_preflight_checks", return_value=(True, False))
+    @patch("pokepoke.agents.parallel_support.handle_preflight_checks", return_value=(True, False))
     def test_repo_check_failure(self, _preflight):
         run_logger = MagicMock()
         repo_fn = Mock(return_value=False)
@@ -1079,7 +1079,7 @@ class TestRunPreflightAndRepoChecks:
         assert ok is False
         assert result == []
 
-    @patch("pokepoke.parallel_support.handle_preflight_checks", return_value=(True, False))
+    @patch("pokepoke.agents.parallel_support.handle_preflight_checks", return_value=(True, False))
     def test_ready_items_exception_returns_empty(self, _preflight):
         run_logger = MagicMock()
         repo_fn = Mock(return_value=True)
@@ -1097,9 +1097,9 @@ class TestRunPreflightAndRepoChecks:
 class TestCheckLoopExit:
     """Tests for check_loop_exit."""
 
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=True)
-    @patch("pokepoke.parallel.cancel_stop_after_current")
-    @patch("pokepoke.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=True)
+    @patch("pokepoke.agents.parallel.cancel_stop_after_current")
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
     def test_stop_after_current_no_futures(self, mock_tui, _cancel, _stop):
         stats = SessionStats(agent_stats=AgentStats())
         finalize_fn = Mock()
@@ -1110,8 +1110,8 @@ class TestCheckLoopExit:
         assert result == "break-success"
         finalize_fn.assert_called_once()
 
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
     def test_non_continuous_done(self, mock_tui, _stop):
         stats = SessionStats(agent_stats=AgentStats())
         finalize_fn = Mock()
@@ -1121,8 +1121,8 @@ class TestCheckLoopExit:
         )
         assert result == "break-done"
 
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
     def test_no_futures_no_items_recheck_finds_items(self, mock_tui, _stop):
         ready_fn = Mock(return_value=[_make_item("rc1")])
         result = check_loop_exit(
@@ -1131,8 +1131,8 @@ class TestCheckLoopExit:
         )
         assert result == "recheck"
 
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
     def test_no_futures_no_items_not_continuous(self, mock_tui, _stop):
         ready_fn = Mock(return_value=[])
         finalize_fn = Mock()
@@ -1143,9 +1143,9 @@ class TestCheckLoopExit:
         assert result == "break-empty"
         finalize_fn.assert_called_once()
 
-    @patch("pokepoke.parallel_support.time.sleep")
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel_support.time.sleep")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
     def test_continuous_idle_sleep(self, mock_tui, _stop, mock_sleep):
         ready_fn = Mock(return_value=[])
         result = check_loop_exit(
@@ -1155,8 +1155,8 @@ class TestCheckLoopExit:
         assert result == "idle-continue"
         mock_sleep.assert_called_once_with(8.0)
 
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
     def test_futures_still_active_returns_none(self, mock_tui, _stop):
         fut = concurrent.futures.Future()
         item = _make_item("active1")
@@ -1167,8 +1167,8 @@ class TestCheckLoopExit:
         )
         assert result is None
 
-    @patch("pokepoke.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
     def test_recheck_exception_falls_through(self, mock_tui, _stop):
         """If recheck raises, it falls through to break-empty (non-continuous)."""
         ready_fn = Mock(side_effect=RuntimeError("beads error"))
@@ -1217,8 +1217,8 @@ class TestUpdateCircuitBreaker:
 class TestComputeSlots:
     """Tests for compute_slots."""
 
-    @patch("pokepoke.parallel_support.apply_memory_backpressure", return_value=(2, 8000))
-    @patch("pokepoke.parallel.get_effective_max_agents", return_value=4)
+    @patch("pokepoke.agents.parallel_support.apply_memory_backpressure", return_value=(2, 8000))
+    @patch("pokepoke.agents.parallel.get_effective_max_agents", return_value=4)
     def test_basic_slot_computation(self, _max, _mem):
         item = _make_item("cs1")
         fut = concurrent.futures.Future()
@@ -1229,8 +1229,8 @@ class TestComputeSlots:
         assert slots == 2
         assert avail_mb == 8000
 
-    @patch("pokepoke.parallel_support.apply_memory_backpressure", return_value=(0, 500))
-    @patch("pokepoke.parallel.get_effective_max_agents", return_value=4)
+    @patch("pokepoke.agents.parallel_support.apply_memory_backpressure", return_value=(0, 500))
+    @patch("pokepoke.agents.parallel.get_effective_max_agents", return_value=4)
     def test_memory_low_blocks_slots(self, _max, _mem):
         item = _make_item("ml1")
         fut = concurrent.futures.Future()
@@ -1240,8 +1240,8 @@ class TestComputeSlots:
         assert slots == 0
         assert avail_mb == 500
 
-    @patch("pokepoke.parallel_support.apply_memory_backpressure", return_value=(1, 2000))
-    @patch("pokepoke.parallel.get_effective_max_agents", return_value=4)
+    @patch("pokepoke.agents.parallel_support.apply_memory_backpressure", return_value=(1, 2000))
+    @patch("pokepoke.agents.parallel.get_effective_max_agents", return_value=4)
     def test_memory_pressure_reduces_slots(self, _max, _mem):
         """Memory pressure: backpressure returns fewer slots than available."""
         run_logger = MagicMock()

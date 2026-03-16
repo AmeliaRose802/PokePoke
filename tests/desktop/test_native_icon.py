@@ -1,11 +1,11 @@
-"""Tests for pokepoke.native_icon — Windows-specific native icon helper."""
+"""Tests for pokepoke.desktop.native_icon — Windows-specific native icon helper."""
 
 import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, call
 
-import pokepoke.native_icon as native_icon_module
-from pokepoke.native_icon import (
+import pokepoke.desktop.native_icon as native_icon_module
+from pokepoke.desktop.native_icon import (
     set_native_window_icon,
     set_app_user_model_id,
     _apply_taskbar_icon,

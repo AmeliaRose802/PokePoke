@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
-from pokepoke.desktop_api_stats import (
+from pokepoke.desktop.desktop_api_stats import (
     _compute_idle_ratio,
     get_cached_leaderboard,
     get_lock_contention_stats,
@@ -222,7 +222,7 @@ class TestGetCachedLeaderboard:
     def test_refreshes_stale_cache(self) -> None:
         fresh = {"model-b": {"success_rate": 0.8}}
         obj = _make_self(_leaderboard_cache={}, _leaderboard_cache_time=0.0)
-        with patch("pokepoke.model_stats_store.get_model_summary", return_value=fresh):
+        with patch("pokepoke.models.model_stats_store.get_model_summary", return_value=fresh):
             result = get_cached_leaderboard(obj)
         assert result == fresh
 
@@ -231,7 +231,7 @@ class TestGetModelLeaderboard:
     def test_calls_get_model_summary(self) -> None:
         obj = _make_self()
         expected = {"model-x": {"total_items_attempted": 5}}
-        with patch("pokepoke.model_stats_store.get_model_summary", return_value=expected):
+        with patch("pokepoke.models.model_stats_store.get_model_summary", return_value=expected):
             result = get_model_leaderboard(obj)
         assert result == expected
 
@@ -260,7 +260,7 @@ class TestGetModelHistory:
         # Expected normalized data
         normalized = [{"item_id": "new", "duration_seconds": 30.0, "gate_passed": True}]
 
-        with patch("pokepoke.model_history.load_model_history_entries", return_value=raw_data):
+        with patch("pokepoke.models.model_history.load_model_history_entries", return_value=raw_data):
             result = get_model_history(obj, limit=10)
 
         assert result == normalized
@@ -286,7 +286,7 @@ class TestGetModelHistory:
             }
         ]
 
-        with patch("pokepoke.model_history.load_model_history_entries", return_value=raw_data):
+        with patch("pokepoke.models.model_history.load_model_history_entries", return_value=raw_data):
             result = get_model_history(obj, limit=10)
 
         assert len(result) == 1
@@ -339,14 +339,14 @@ class TestGetModelLeaderboardByRepo:
     def test_no_repo_calls_global_summary(self) -> None:
         obj = _make_self()
         expected = {"model-x": {"total_items_attempted": 5}}
-        with patch("pokepoke.model_stats_store.get_model_summary", return_value=expected):
+        with patch("pokepoke.models.model_stats_store.get_model_summary", return_value=expected):
             result = get_model_leaderboard(obj)
         assert result == expected
 
     def test_with_repo_calls_summary_by_repo(self) -> None:
         obj = _make_self()
         expected = {"model-y": {"total_items_attempted": 3}}
-        with patch("pokepoke.model_stats_store.get_model_summary_by_repo", return_value=expected) as mock_fn:
+        with patch("pokepoke.models.model_stats_store.get_model_summary_by_repo", return_value=expected) as mock_fn:
             result = get_model_leaderboard(obj, repo_name="RepoA")
         assert result == expected
         mock_fn.assert_called_once_with(repo_name="RepoA")
@@ -360,7 +360,7 @@ class TestGetModelHistoryByRepo:
             {"item_id": "A1", "repo_name": "RepoA", "duration_seconds": 10},
         ]
         with patch(
-            "pokepoke.model_history.load_model_history_entries",
+            "pokepoke.models.model_history.load_model_history_entries",
             return_value=filtered_data,
         ) as mock_load:
             result = get_model_history(obj, limit=10, repo_name="RepoA")
@@ -377,7 +377,7 @@ class TestGetModelHistoryByRepo:
             _history_cache_time=time.time(),
         )
         raw_data = [{"item_id": "X1", "repo_name": "RepoX"}]
-        with patch("pokepoke.model_history.load_model_history_entries", return_value=raw_data):
+        with patch("pokepoke.models.model_history.load_model_history_entries", return_value=raw_data):
             result = get_model_history(obj, limit=200, repo_name="RepoX")
         assert len(result) == 1
         assert result[0]["item_id"] == "X1"
@@ -402,8 +402,8 @@ class TestGetRepoSummary:
                 "net_delta": 2,
             },
         }
-        with patch("pokepoke.model_stats_store.get_repo_summary_metrics", return_value=model_metrics), \
-             patch("pokepoke.beads_item_stats_store.get_summary_by_repo", return_value=beads_metrics):
+        with patch("pokepoke.models.model_stats_store.get_repo_summary_metrics", return_value=model_metrics), \
+             patch("pokepoke.beads.beads_item_stats_store.get_summary_by_repo", return_value=beads_metrics):
             result = get_repo_summary(obj)
 
         assert "RepoA" in result
@@ -419,8 +419,8 @@ class TestGetRepoSummary:
         beads_metrics = {
             "RepoB": {"total_created": 2, "total_completed": 0, "net_delta": 2},
         }
-        with patch("pokepoke.model_stats_store.get_repo_summary_metrics", return_value={}), \
-             patch("pokepoke.beads_item_stats_store.get_summary_by_repo", return_value=beads_metrics):
+        with patch("pokepoke.models.model_stats_store.get_repo_summary_metrics", return_value={}), \
+             patch("pokepoke.beads.beads_item_stats_store.get_summary_by_repo", return_value=beads_metrics):
             result = get_repo_summary(obj)
 
         assert "RepoB" in result
@@ -429,8 +429,8 @@ class TestGetRepoSummary:
 
     def test_empty_returns_empty(self) -> None:
         obj = _make_self()
-        with patch("pokepoke.model_stats_store.get_repo_summary_metrics", return_value={}), \
-             patch("pokepoke.beads_item_stats_store.get_summary_by_repo", return_value={}):
+        with patch("pokepoke.models.model_stats_store.get_repo_summary_metrics", return_value={}), \
+             patch("pokepoke.beads.beads_item_stats_store.get_summary_by_repo", return_value={}):
             result = get_repo_summary(obj)
         assert result == {}
 
@@ -481,7 +481,7 @@ class TestGetCachedLeaderboardThreadSafety:
         def reader() -> None:
             try:
                 for _ in range(30):
-                    with patch("pokepoke.model_stats_store.get_model_summary", return_value=fresh):
+                    with patch("pokepoke.models.model_stats_store.get_model_summary", return_value=fresh):
                         result = get_cached_leaderboard(obj)
                     assert isinstance(result, dict)
             except Exception as e:
@@ -517,7 +517,7 @@ class TestSnapshotMergeQueueStats:
         assert mq["avg_merge_duration_s"] == 0.0
 
     def test_merge_queue_stats_with_data(self) -> None:
-        from pokepoke.merge_queue_stats import MergeQueueStats
+        from pokepoke.git.merge_queue_stats import MergeQueueStats
         mqs = MergeQueueStats(
             total_merges=10,
             successful_merges=8,
@@ -541,13 +541,13 @@ class TestGetLockContentionStats:
     def test_returns_dict(self) -> None:
         obj = _make_self()
         mock_data = {"merge-queue": {"acquired": 5, "timeouts": 0}}
-        with patch("pokepoke.lock_contention.get_lock_contention_stats", return_value=mock_data):
+        with patch("pokepoke.worktrees.lock_contention.get_lock_contention_stats", return_value=mock_data):
             result = get_lock_contention_stats(obj)
         assert result == mock_data
 
     def test_returns_empty_when_no_contention(self) -> None:
         obj = _make_self()
-        with patch("pokepoke.lock_contention.get_lock_contention_stats", return_value={}):
+        with patch("pokepoke.worktrees.lock_contention.get_lock_contention_stats", return_value={}):
             result = get_lock_contention_stats(obj)
         assert result == {}
 
@@ -565,7 +565,7 @@ class TestGetMergeQueueStats:
             pending_count=2,
             is_running=True,
         )
-        with patch("pokepoke.merge_queue.get_merge_queue", return_value=mock_mq):
+        with patch("pokepoke.git.merge_queue.get_merge_queue", return_value=mock_mq):
             result = get_merge_queue_stats(obj)
         assert result["total_merges"] == 5
         assert result["current_queue_depth"] == 2
@@ -573,7 +573,7 @@ class TestGetMergeQueueStats:
 
     def test_returns_empty_on_exception(self) -> None:
         obj = _make_self()
-        with patch("pokepoke.merge_queue.get_merge_queue", side_effect=RuntimeError("not started")):
+        with patch("pokepoke.git.merge_queue.get_merge_queue", side_effect=RuntimeError("not started")):
             result = get_merge_queue_stats(obj)
         assert result == {}
 
@@ -588,7 +588,7 @@ class TestGetOperationTimings:
             "worktree.create": {"count": 3, "mean": 1.5, "p50": 1.2, "p95": 2.0, "p99": 2.1,
                                 "min": 0.8, "max": 2.5, "total": 4.5},
         }
-        with patch("pokepoke.perf_timing.get_registry") as mock_reg:
+        with patch("pokepoke.stats.perf_timing.get_registry") as mock_reg:
             mock_reg.return_value.summary.return_value = mock_summary
             result = get_operation_timings(obj)
         assert "worktree.create" in result
@@ -596,7 +596,7 @@ class TestGetOperationTimings:
 
     def test_returns_empty_when_no_timings(self) -> None:
         obj = _make_self()
-        with patch("pokepoke.perf_timing.get_registry") as mock_reg:
+        with patch("pokepoke.stats.perf_timing.get_registry") as mock_reg:
             mock_reg.return_value.summary.return_value = {}
             result = get_operation_timings(obj)
         assert result == {}
@@ -668,10 +668,10 @@ class TestGetPerformanceMetrics:
         mock_monitor = SimpleNamespace(snapshot=lambda: {
             "enabled": True, "total_checks": 5, "total_alerts": 1,
         })
-        with patch("pokepoke.merge_queue.get_merge_queue", return_value=mock_mq), \
-             patch("pokepoke.lock_contention.get_lock_contention_stats", return_value={"lock-a": {}}), \
-             patch("pokepoke.perf_timing.get_registry") as mock_reg, \
-             patch("pokepoke.performance_monitor.get_performance_monitor", return_value=mock_monitor):
+        with patch("pokepoke.git.merge_queue.get_merge_queue", return_value=mock_mq), \
+             patch("pokepoke.worktrees.lock_contention.get_lock_contention_stats", return_value={"lock-a": {}}), \
+             patch("pokepoke.stats.perf_timing.get_registry") as mock_reg, \
+             patch("pokepoke.stats.performance_monitor.get_performance_monitor", return_value=mock_monitor):
             mock_reg.return_value.summary.return_value = {"op.x": {"count": 2}}
             result = get_performance_metrics(obj)
 
@@ -693,10 +693,10 @@ class TestGetPerformanceMetrics:
             _live_session_stats=None,
         )
         mock_monitor = SimpleNamespace(snapshot=lambda: {"enabled": False})
-        with patch("pokepoke.merge_queue.get_merge_queue", side_effect=RuntimeError), \
-             patch("pokepoke.lock_contention.get_lock_contention_stats", return_value={}), \
-             patch("pokepoke.perf_timing.get_registry") as mock_reg, \
-             patch("pokepoke.performance_monitor.get_performance_monitor", return_value=mock_monitor):
+        with patch("pokepoke.git.merge_queue.get_merge_queue", side_effect=RuntimeError), \
+             patch("pokepoke.worktrees.lock_contention.get_lock_contention_stats", return_value={}), \
+             patch("pokepoke.stats.perf_timing.get_registry") as mock_reg, \
+             patch("pokepoke.stats.performance_monitor.get_performance_monitor", return_value=mock_monitor):
             mock_reg.return_value.summary.return_value = {}
             result = get_performance_metrics(obj)
 

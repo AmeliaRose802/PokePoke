@@ -3,7 +3,8 @@
 from unittest.mock import MagicMock, patch
 
 
-from pokepoke import repo_state_guard as guard
+from pokepoke.git import repo_state_guard as guard
+from pokepoke.git.repo_state_guard import cleanup_lock_active as _real_cleanup_lock_active
 
 
 class TestIsMainRepoClean:
@@ -28,15 +29,18 @@ class TestIsMainRepoClean:
 class TestCleanupLockActive:
     """Tests for cleanup lock detection."""
 
-    def test_returns_false_when_lock_free(self):
+    def test_returns_false_when_lock_free(self, monkeypatch):
         """If try_lock succeeds, the lock is not active."""
+        # Restore real function (conftest replaces cleanup_lock_active)
+        monkeypatch.setattr(guard, "cleanup_lock_active", _real_cleanup_lock_active)
         mock_lock = MagicMock()
         with patch.object(guard, "try_lock", return_value=mock_lock):
             assert guard.cleanup_lock_active() is False
             mock_lock.release.assert_called_once()
 
-    def test_returns_true_when_lock_busy(self):
+    def test_returns_true_when_lock_busy(self, monkeypatch):
         """If try_lock fails, lock is considered active."""
+        monkeypatch.setattr(guard, "cleanup_lock_active", _real_cleanup_lock_active)
         with patch.object(guard, "try_lock", return_value=None):
             assert guard.cleanup_lock_active() is True
 

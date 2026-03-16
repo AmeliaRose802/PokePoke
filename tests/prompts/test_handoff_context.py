@@ -5,17 +5,21 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from src.pokepoke import git_operations, handoff_context
+from pokepoke.prompts import handoff_context
+from pokepoke.prompts.handoff_context import build_handoff_context, _MAX_DIFF_CHARS
 
-build_handoff_context = git_operations.build_handoff_context
-_MAX_DIFF_CHARS = handoff_context._MAX_DIFF_CHARS
+# handoff_context.py calls run_git() (from git.git_helpers), which internally
+# calls subprocess.run.  Patching run_git directly is the correct level.
+# get_default_branch is lazy-imported inside the function from git_operations.
+_PATCH_RUN_GIT = 'pokepoke.prompts.handoff_context.run_git'
+_PATCH_DEFAULT_BRANCH = 'pokepoke.git.git_operations.get_default_branch'
 
 
 class TestBuildHandoffContext:
     """Test build_handoff_context function."""
 
-    @patch('src.pokepoke.handoff_context.get_default_branch', return_value='main')
-    @patch('src.pokepoke.handoff_context.subprocess.run')
+    @patch(_PATCH_DEFAULT_BRANCH, return_value='main')
+    @patch(_PATCH_RUN_GIT)
     def test_returns_empty_when_no_changes(
         self, mock_run: Mock, mock_branch: Mock
     ) -> None:
@@ -26,10 +30,9 @@ class TestBuildHandoffContext:
 
         assert result == ""
         assert mock_run.call_count == 1
-        assert "--name-status" in mock_run.call_args.args[0]
 
-    @patch('src.pokepoke.handoff_context.get_default_branch', return_value='main')
-    @patch('src.pokepoke.handoff_context.subprocess.run')
+    @patch(_PATCH_DEFAULT_BRANCH, return_value='main')
+    @patch(_PATCH_RUN_GIT)
     def test_builds_full_context_with_edge_cases(
         self, mock_run: Mock, mock_branch: Mock
     ) -> None:
@@ -75,8 +78,8 @@ class TestBuildHandoffContext:
             commit_lines.pop()
         assert all(line.strip() for line in commit_lines)
 
-    @patch('src.pokepoke.handoff_context.get_default_branch', return_value='main')
-    @patch('src.pokepoke.handoff_context.subprocess.run')
+    @patch(_PATCH_DEFAULT_BRANCH, return_value='main')
+    @patch(_PATCH_RUN_GIT)
     def test_truncates_large_diff(
         self, mock_run: Mock, mock_branch: Mock
     ) -> None:
@@ -108,8 +111,8 @@ class TestBuildHandoffContext:
             FileNotFoundError("git not found"),
         ],
     )
-    @patch('src.pokepoke.handoff_context.get_default_branch', return_value='main')
-    @patch('src.pokepoke.handoff_context.subprocess.run')
+    @patch(_PATCH_DEFAULT_BRANCH, return_value='main')
+    @patch(_PATCH_RUN_GIT)
     def test_returns_empty_on_initial_git_errors(
         self, mock_run: Mock, mock_branch: Mock, exception: Exception
     ) -> None:
@@ -120,8 +123,8 @@ class TestBuildHandoffContext:
 
         assert result == ""
 
-    @patch('src.pokepoke.handoff_context.get_default_branch', return_value='main')
-    @patch('src.pokepoke.handoff_context.subprocess.run')
+    @patch(_PATCH_DEFAULT_BRANCH, return_value='main')
+    @patch(_PATCH_RUN_GIT)
     def test_omits_sections_when_subsequent_commands_fail(
         self, mock_run: Mock, mock_branch: Mock
     ) -> None:
@@ -144,8 +147,8 @@ class TestBuildHandoffContext:
         assert "### Commit History" not in result
         assert "### Diff Content" not in result
 
-    @patch('src.pokepoke.handoff_context.get_default_branch', return_value='main')
-    @patch('src.pokepoke.handoff_context.subprocess.run')
+    @patch(_PATCH_DEFAULT_BRANCH, return_value='main')
+    @patch(_PATCH_RUN_GIT)
     def test_logs_debug_on_subprocess_failures(
         self, mock_run: Mock, mock_branch: Mock
     ) -> None:

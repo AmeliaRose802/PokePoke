@@ -1,8 +1,8 @@
-"""Tests for pokepoke.lock_contention module."""
+"""Tests for pokepoke.worktrees.lock_contention module."""
 
 import pytest
 
-from pokepoke.lock_contention import (
+from pokepoke.worktrees.lock_contention import (
     LockContentionTracker,
     _HISTOGRAM_BUCKETS,
     _contention_tracker,

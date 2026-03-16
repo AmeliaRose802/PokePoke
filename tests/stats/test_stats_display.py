@@ -4,7 +4,7 @@ import builtins
 import io
 from unittest.mock import patch
 
-from pokepoke.stats import print_stats
+from pokepoke.stats.stats import print_stats
 from pokepoke.types import AgentStats, SessionStats
 
 

@@ -8,8 +8,8 @@ import os
 import sys
 from pathlib import Path
 
-from pokepoke import terminal_ui
-from pokepoke.orchestrator import run_orchestrator
+from pokepoke.desktop import terminal_ui
+from pokepoke.orchestration.orchestrator import run_orchestrator
 
 
 def main() -> int:
@@ -49,7 +49,7 @@ def main() -> int:
             return 1
         os.chdir(repo_path)
     elif getattr(sys, 'frozen', False):
-        from pokepoke.repo_picker import pick_repo_directory
+        from pokepoke.git.repo_picker import pick_repo_directory
         launch_config = pick_repo_directory()
         if launch_config is None:
             return 0
@@ -64,8 +64,8 @@ def main() -> int:
     # Autonomous flag overrides interactive
     interactive = not args.autonomous
 
-    from pokepoke.desktop_ui import DesktopUI
-    from pokepoke.project_utils import ensure_project_ready
+    from pokepoke.desktop.desktop_ui import DesktopUI
+    from pokepoke.utils.project_utils import ensure_project_ready
     active_ui: DesktopUI = terminal_ui.ui
 
     desktop_ui_ref = active_ui if isinstance(active_ui, DesktopUI) else None

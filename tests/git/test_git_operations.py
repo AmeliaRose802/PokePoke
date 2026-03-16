@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 import pytest
 
-from src.pokepoke.git_operations import (
+from pokepoke.git.git_operations import (
     verify_main_repo_clean,
     handle_beads_auto_commit,
     check_main_repo_ready_for_merge,
@@ -23,7 +23,7 @@ from src.pokepoke.git_operations import (
 class TestVerifyMainRepoClean:
     """Test verify_main_repo_clean function."""
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_clean_repo(self, mock_run: Mock) -> None:
         """Test clean repository with no changes."""
         mock_run.return_value = Mock(
@@ -47,7 +47,7 @@ class TestVerifyMainRepoClean:
             cwd=None
         )
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_only_beads_changes(self, mock_run: Mock) -> None:
         """Test repository with only beads changes."""
         mock_run.return_value = Mock(
@@ -61,7 +61,7 @@ class TestVerifyMainRepoClean:
         assert ".beads/" in output
         assert non_beads_changes == []
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_non_beads_changes(self, mock_run: Mock) -> None:
         """Test repository with non-beads changes."""
         mock_run.return_value = Mock(
@@ -77,7 +77,7 @@ class TestVerifyMainRepoClean:
         assert "orchestrator.py" in non_beads_changes[0]
         assert "test_orchestrator.py" in non_beads_changes[1]
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_mixed_changes(self, mock_run: Mock) -> None:
         """Test repository with both beads and non-beads changes."""
         mock_run.return_value = Mock(
@@ -91,7 +91,7 @@ class TestVerifyMainRepoClean:
         assert len(non_beads_changes) == 1
         assert non_beads_changes[0] == " M src/pokepoke/orchestrator.py"
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_git_error(self, mock_run: Mock) -> None:
         """Test error handling when git command fails."""
         mock_run.side_effect = subprocess.CalledProcessError(1, "git status")
@@ -99,7 +99,7 @@ class TestVerifyMainRepoClean:
         with pytest.raises(RuntimeError, match="Error checking git status"):
             verify_main_repo_clean()
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_empty_lines_filtered(self, mock_run: Mock) -> None:
         """Test that empty lines are filtered out."""
         mock_run.return_value = Mock(
@@ -116,7 +116,7 @@ class TestVerifyMainRepoClean:
 class TestHandleBeadsAutoCommit:
     """Test handle_beads_auto_commit function."""
 
-    @patch('src.pokepoke.git_operations.run_git')
+    @patch('pokepoke.git.git_operations.run_git')
     def test_successful_commit(self, mock_run_git: Mock) -> None:
         """Test successful beads auto-commit."""
         mock_run_git.return_value = Mock(returncode=0)
@@ -131,7 +131,7 @@ class TestHandleBeadsAutoCommit:
             cwd=None,
         )
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_commit_failure(self, mock_run: Mock) -> None:
         """Test failure during beads commit."""
         mock_run.side_effect = [
@@ -142,7 +142,7 @@ class TestHandleBeadsAutoCommit:
         with pytest.raises(RuntimeError, match="Failed to commit beads changes"):
             handle_beads_auto_commit()
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_add_failure(self, mock_run: Mock) -> None:
         """Test failure during git add."""
         mock_run.side_effect = subprocess.CalledProcessError(1, "git add")
@@ -154,8 +154,8 @@ class TestHandleBeadsAutoCommit:
 class TestCheckMainRepoReadyForMerge:
     """Test check_main_repo_ready_for_merge function."""
 
-    @patch('src.pokepoke.git_operations.handle_beads_auto_commit')
-    @patch('src.pokepoke.git_operations.verify_main_repo_clean')
+    @patch('pokepoke.git.git_operations.handle_beads_auto_commit')
+    @patch('pokepoke.git.git_operations.verify_main_repo_clean')
     def test_clean_repo(self, mock_verify: Mock, mock_handle: Mock) -> None:
         """Test clean repository ready for merge."""
         mock_verify.return_value = (True, "", [])
@@ -166,8 +166,8 @@ class TestCheckMainRepoReadyForMerge:
         assert error_msg == ""
         mock_handle.assert_not_called()
 
-    @patch('src.pokepoke.git_operations.handle_beads_auto_commit')
-    @patch('src.pokepoke.git_operations.verify_main_repo_clean')
+    @patch('pokepoke.git.git_operations.handle_beads_auto_commit')
+    @patch('pokepoke.git.git_operations.verify_main_repo_clean')
     def test_only_beads_changes_auto_commit(
         self,
         mock_verify: Mock,
@@ -182,8 +182,8 @@ class TestCheckMainRepoReadyForMerge:
         assert error_msg == ""
         mock_handle.assert_called_once()
 
-    @patch('src.pokepoke.git_operations.handle_beads_auto_commit')
-    @patch('src.pokepoke.git_operations.verify_main_repo_clean')
+    @patch('pokepoke.git.git_operations.handle_beads_auto_commit')
+    @patch('pokepoke.git.git_operations.verify_main_repo_clean')
     def test_non_beads_changes_not_ready(
         self,
         mock_verify: Mock,
@@ -203,8 +203,8 @@ class TestCheckMainRepoReadyForMerge:
         assert "src/file.py" in error_msg
         mock_handle.assert_not_called()
 
-    @patch('src.pokepoke.git_operations.handle_beads_auto_commit')
-    @patch('src.pokepoke.git_operations.verify_main_repo_clean')
+    @patch('pokepoke.git.git_operations.handle_beads_auto_commit')
+    @patch('pokepoke.git.git_operations.verify_main_repo_clean')
     def test_auto_commit_failure(
         self,
         mock_verify: Mock,
@@ -220,7 +220,7 @@ class TestCheckMainRepoReadyForMerge:
         assert "Error checking main repo status" in error_msg
         assert "Commit failed" in error_msg
 
-    @patch('src.pokepoke.git_operations.verify_main_repo_clean')
+    @patch('pokepoke.git.git_operations.verify_main_repo_clean')
     def test_verify_exception(self, mock_verify: Mock) -> None:
         """Test exception during verification."""
         mock_verify.side_effect = RuntimeError("Git error")
@@ -235,7 +235,7 @@ class TestCheckMainRepoReadyForMerge:
 class TestHasUncommittedChanges:
     """Test has_uncommitted_changes function."""
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_no_changes(self, mock_run: Mock) -> None:
         """Test repository with no uncommitted changes."""
         mock_run.return_value = Mock(
@@ -257,7 +257,7 @@ class TestHasUncommittedChanges:
             cwd=None
         )
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_has_changes(self, mock_run: Mock) -> None:
         """Test repository with uncommitted changes."""
         mock_run.return_value = Mock(
@@ -269,7 +269,7 @@ class TestHasUncommittedChanges:
 
         assert result is True
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_whitespace_only(self, mock_run: Mock) -> None:
         """Test output with only whitespace is treated as no changes."""
         mock_run.return_value = Mock(
@@ -281,7 +281,7 @@ class TestHasUncommittedChanges:
 
         assert result is False
 
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_git_error(self, mock_run: Mock) -> None:
         """Test error handling when git command fails.
 
@@ -293,8 +293,8 @@ class TestHasUncommittedChanges:
 
         assert result is True  # Assume dirty when git fails to prevent data loss
 
-    @patch('src.pokepoke.git_helpers.time.sleep')
-    @patch('src.pokepoke.git_helpers.subprocess.run')
+    @patch('pokepoke.git.git_helpers.time.sleep')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_git_timeout(self, mock_run: Mock, mock_sleep: Mock) -> None:
         """Test error handling when git command times out.
 
@@ -311,7 +311,7 @@ class TestHasUncommittedChanges:
 class TestCommitAllChanges:
     """Test commit_all_changes function."""
 
-    @patch('src.pokepoke.git_operations.run_git')
+    @patch('pokepoke.git.git_operations.run_git')
     def test_successful_commit(self, mock_run_git: Mock) -> None:
         """Test successful commit with all changes."""
         mock_run_git.return_value = Mock(returncode=0, stderr="")
@@ -333,7 +333,7 @@ class TestCommitAllChanges:
             check=False,
         )
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_commit_with_default_message(self, mock_run: Mock) -> None:
         """Test commit with default message."""
         mock_run.return_value = Mock(returncode=0, stderr="")
@@ -345,7 +345,7 @@ class TestCommitAllChanges:
         calls = mock_run.call_args_list
         assert calls[1][0][0] == ["git", "commit", "-m", "Auto-commit by PokePoke"]
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_commit_failure_with_stderr(self, mock_run: Mock) -> None:
         """Test commit failure with error details in stderr."""
         mock_run.side_effect = [
@@ -363,7 +363,7 @@ class TestCommitAllChanges:
         assert "Test failed" in error_msg
         assert "hint:" not in error_msg  # Hints should be filtered
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_commit_failure_no_stderr(self, mock_run: Mock) -> None:
         """Test commit failure with no error details."""
         mock_run.side_effect = [
@@ -376,7 +376,7 @@ class TestCommitAllChanges:
         assert success is False
         assert "Commit failed" in error_msg
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_add_stage_exception(self, mock_run: Mock) -> None:
         """Test exception during git add stage."""
         mock_run.side_effect = subprocess.CalledProcessError(
@@ -391,7 +391,7 @@ class TestCommitAllChanges:
         assert "Commit error" in error_msg
         assert "Permission denied" in error_msg
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_commit_stage_exception(self, mock_run: Mock) -> None:
         """Test exception during commit stage."""
         mock_run.side_effect = [
@@ -405,7 +405,7 @@ class TestCommitAllChanges:
         assert "Commit error" in error_msg
         assert "Disk full" in error_msg
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_error_line_limit(self, mock_run: Mock) -> None:
         """Test that error messages are limited to 5 lines."""
         long_stderr = "\n".join([f"error line {i}" for i in range(10)])
@@ -422,7 +422,7 @@ class TestCommitAllChanges:
         assert len(error_lines) <= 6  # 5 errors + potential join artifacts
 
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_tracked_only_uses_git_add_u(self, mock_run: Mock) -> None:
         """Test that tracked_only=True uses git add -u instead of -A."""
         mock_run.return_value = Mock(returncode=0, stderr="")
@@ -442,7 +442,7 @@ class TestCommitAllChanges:
             cwd=None
         )
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_default_uses_git_add_all(self, mock_run: Mock) -> None:
         """Test that default (tracked_only=False) uses git add -A."""
         mock_run.return_value = Mock(returncode=0, stderr="")
@@ -465,8 +465,8 @@ class TestCommitAllChanges:
 class TestExecuteMergeSequence:
     """Tests for execute_merge_sequence stash handling."""
 
-    @patch('src.pokepoke.git_operations.restore_beads_stash')
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.restore_beads_stash')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_stash_restored_after_pull_failure(
         self,
         mock_run: Mock,
@@ -497,8 +497,8 @@ class TestExecuteMergeSequence:
         assert unmerged == []
         mock_restore.assert_called_once_with("git pull --rebase failure")
 
-    @patch('src.pokepoke.git_operations.restore_beads_stash')
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.restore_beads_stash')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_stash_restored_after_successful_pull(
         self,
         mock_run: Mock,
@@ -533,8 +533,8 @@ class TestExecuteMergeSequence:
 class TestBuildHandoffContext:
     """Test build_handoff_context function."""
 
-    @patch('pokepoke.git_operations.get_default_branch', return_value='master')
-    @patch('pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.get_default_branch', return_value='master')
+    @patch('pokepoke.prompts.handoff_context.run_git')
     def test_returns_full_context_with_all_sections(
         self, mock_run: Mock, mock_branch: Mock
     ) -> None:
@@ -570,8 +570,8 @@ class TestBuildHandoffContext:
         assert "+new" in result
         assert "Start your verification" in result
 
-    @patch('pokepoke.git_operations.get_default_branch', return_value='master')
-    @patch('pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.get_default_branch', return_value='master')
+    @patch('pokepoke.prompts.handoff_context.run_git')
     def test_returns_empty_when_no_changes(
         self, mock_run: Mock, mock_branch: Mock
     ) -> None:
@@ -582,8 +582,8 @@ class TestBuildHandoffContext:
 
         assert result == ""
 
-    @patch('pokepoke.git_operations.get_default_branch', return_value='master')
-    @patch('pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.get_default_branch', return_value='master')
+    @patch('pokepoke.prompts.handoff_context.run_git')
     def test_returns_empty_on_git_failure(
         self, mock_run: Mock, mock_branch: Mock
     ) -> None:
@@ -594,8 +594,8 @@ class TestBuildHandoffContext:
 
         assert result == ""
 
-    @patch('src.pokepoke.handoff_context.get_default_branch', return_value='master')
-    @patch('src.pokepoke.handoff_context.subprocess.run')
+    @patch('pokepoke.git.git_operations.get_default_branch', return_value='master')
+    @patch('pokepoke.prompts.handoff_context.run_git')
     def test_handles_timeout(
         self, mock_run: Mock, mock_branch: Mock
     ) -> None:
@@ -606,8 +606,8 @@ class TestBuildHandoffContext:
 
         assert result == ""
 
-    @patch('pokepoke.git_operations.get_default_branch', return_value='master')
-    @patch('pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.get_default_branch', return_value='master')
+    @patch('pokepoke.prompts.handoff_context.run_git')
     def test_omits_missing_sections(
         self, mock_run: Mock, mock_branch: Mock
     ) -> None:
@@ -628,8 +628,8 @@ class TestBuildHandoffContext:
         assert "### Commit History" not in result
         assert "### Diff Content" not in result
 
-    @patch('src.pokepoke.handoff_context.get_default_branch', return_value='master')
-    @patch('src.pokepoke.handoff_context.subprocess.run')
+    @patch('pokepoke.git.git_operations.get_default_branch', return_value='master')
+    @patch('pokepoke.prompts.handoff_context.run_git')
     def test_passes_cwd_to_subprocess(
         self, mock_run: Mock, mock_branch: Mock
     ) -> None:
@@ -652,8 +652,8 @@ class TestBuildHandoffContext:
         for call in mock_run.call_args_list:
             assert call.kwargs.get("cwd") == "/my/worktree"
 
-    @patch('src.pokepoke.handoff_context.get_default_branch', return_value='master')
-    @patch('src.pokepoke.handoff_context.subprocess.run')
+    @patch('pokepoke.git.git_operations.get_default_branch', return_value='master')
+    @patch('pokepoke.prompts.handoff_context.run_git')
     def test_truncates_large_diff(
         self, mock_run: Mock, mock_branch: Mock
     ) -> None:
@@ -684,7 +684,7 @@ class TestBuildHandoffContext:
 class TestHandleBeadsAutoCommitTimeout:
     """Test handle_beads_auto_commit TimeoutExpired branch."""
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_commit_timeout_raises_runtime_error(self, mock_run: Mock) -> None:
         """Timeout during commit raises RuntimeError."""
         mock_run.side_effect = [
@@ -698,7 +698,7 @@ class TestHandleBeadsAutoCommitTimeout:
 class TestCommitAllChangesTimeout:
     """Test commit_all_changes TimeoutExpired branch."""
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_timeout_during_commit_returns_error(self, mock_run: Mock) -> None:
         """TimeoutExpired during commit returns failure with message."""
         mock_run.side_effect = [
@@ -713,13 +713,13 @@ class TestCommitAllChangesTimeout:
 class TestGetMainRepoRoot:
     """Tests for get_main_repo_root."""
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_returns_parent_of_git_common_dir(self, mock_run: Mock) -> None:
         mock_run.return_value = Mock(stdout="/repo/.git\n", returncode=0)
         root = get_main_repo_root()
         assert root == Path("/repo/.git").parent
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_raises_runtime_error_outside_repo(self, mock_run: Mock) -> None:
         mock_run.side_effect = subprocess.CalledProcessError(128, "git")
         with pytest.raises(RuntimeError, match="Not in a git repository"):
@@ -730,11 +730,11 @@ class TestSanitizeBranchName:
     """Tests for sanitize_branch_name."""
 
     def test_replaces_spaces(self) -> None:
-        from src.pokepoke.git_operations import sanitize_branch_name
+        from pokepoke.git.git_operations import sanitize_branch_name
         assert sanitize_branch_name("my feature") == "my-feature"
 
     def test_replaces_special_chars(self) -> None:
-        from src.pokepoke.git_operations import sanitize_branch_name
+        from pokepoke.git.git_operations import sanitize_branch_name
         result = sanitize_branch_name("fix: thing")
         # Colon and space are replaced with hyphens, collapsed to one
         assert "fix" in result
@@ -742,11 +742,11 @@ class TestSanitizeBranchName:
         assert ":" not in result
 
     def test_collapses_dots(self) -> None:
-        from src.pokepoke.git_operations import sanitize_branch_name
+        from pokepoke.git.git_operations import sanitize_branch_name
         assert sanitize_branch_name("my...branch") == "my.branch"
 
     def test_strips_leading_trailing(self) -> None:
-        from src.pokepoke.git_operations import sanitize_branch_name
+        from pokepoke.git.git_operations import sanitize_branch_name
         result = sanitize_branch_name("-my-branch-")
         assert not result.startswith("-")
         assert not result.endswith("-")
@@ -755,21 +755,21 @@ class TestSanitizeBranchName:
 class TestBranchExists:
     """Tests for branch_exists."""
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_returns_true_when_branch_exists(self, mock_run: Mock) -> None:
-        from src.pokepoke.git_operations import branch_exists
+        from pokepoke.git.git_operations import branch_exists
         mock_run.return_value = Mock(returncode=0)
         assert branch_exists("main") is True
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_returns_false_when_branch_missing(self, mock_run: Mock) -> None:
-        from src.pokepoke.git_operations import branch_exists
+        from pokepoke.git.git_operations import branch_exists
         mock_run.return_value = Mock(returncode=1)
         assert branch_exists("nonexistent") is False
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_returns_false_on_exception(self, mock_run: Mock) -> None:
-        from src.pokepoke.git_operations import branch_exists
+        from pokepoke.git.git_operations import branch_exists
         mock_run.side_effect = subprocess.CalledProcessError(128, "git")
         assert branch_exists("main") is False
 
@@ -777,17 +777,17 @@ class TestBranchExists:
 class TestIsWorktreeClean:
     """Tests for is_worktree_clean."""
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_returns_true_for_clean_worktree(self, mock_run: Mock) -> None:
         mock_run.return_value = Mock(stdout="", returncode=0)
         assert is_worktree_clean(Path("/some/worktree")) is True
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_returns_false_for_dirty_worktree(self, mock_run: Mock) -> None:
         mock_run.return_value = Mock(stdout=" M file.py\n", returncode=0)
         assert is_worktree_clean(Path("/some/worktree")) is False
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_returns_false_on_error(self, mock_run: Mock) -> None:
         mock_run.side_effect = subprocess.CalledProcessError(128, "git")
         assert is_worktree_clean(Path("/some/worktree")) is False
@@ -796,7 +796,7 @@ class TestIsWorktreeClean:
 class TestValidatePostMerge:
     """Tests for validate_post_merge."""
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_passes_when_on_target_and_clean(self, mock_run: Mock) -> None:
         mock_run.side_effect = [
             Mock(stdout="main\n", returncode=0),   # git branch --show-current
@@ -804,12 +804,12 @@ class TestValidatePostMerge:
         ]
         assert validate_post_merge("main") is True
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_fails_when_on_wrong_branch(self, mock_run: Mock) -> None:
         mock_run.return_value = Mock(stdout="feature\n", returncode=0)
         assert validate_post_merge("main") is False
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_fails_when_uncommitted_changes(self, mock_run: Mock) -> None:
         mock_run.side_effect = [
             Mock(stdout="main\n", returncode=0),
@@ -821,26 +821,26 @@ class TestValidatePostMerge:
 class TestHasCommitsAhead:
     """Tests for has_commits_ahead."""
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_returns_commit_count(self, mock_run: Mock) -> None:
         mock_run.return_value = Mock(stdout="3\n", returncode=0)
         result = has_commits_ahead("main")
         assert result == 3
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_returns_zero_on_failure(self, mock_run: Mock) -> None:
         mock_run.return_value = Mock(stdout="", returncode=1)
         result = has_commits_ahead("main")
         assert result == 0
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_returns_zero_on_exception(self, mock_run: Mock) -> None:
         mock_run.side_effect = subprocess.TimeoutExpired("git", 10)
         result = has_commits_ahead("main")
         assert result == 0
 
-    @patch('src.pokepoke.git_operations.get_default_branch', return_value='main')
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.get_default_branch', return_value='main')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_resolves_default_branch_when_none(
         self, mock_run: Mock, mock_branch: Mock
     ) -> None:
@@ -854,7 +854,7 @@ class TestHasCommitsAhead:
 class TestExecuteMergeSequenceAdditional:
     """Additional tests for execute_merge_sequence uncovered paths."""
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_checkout_failure_returns_error(self, mock_run: Mock) -> None:
         """CalledProcessError during checkout returns failure immediately."""
         mock_run.side_effect = subprocess.CalledProcessError(
@@ -865,10 +865,10 @@ class TestExecuteMergeSequenceAdditional:
         assert "Failed to checkout main" in message
         assert unmerged == []
 
-    @patch('src.pokepoke.merge_conflict.is_merge_in_progress', return_value=True)
-    @patch('src.pokepoke.merge_conflict.get_unmerged_files', return_value=["file.py"])
-    @patch('src.pokepoke.git_operations.restore_beads_stash')
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=True)
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=["file.py"])
+    @patch('pokepoke.git.git_operations.restore_beads_stash')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_merge_conflict_returns_unmerged_files(
         self, mock_run: Mock, mock_restore: Mock,
         mock_unmerged: Mock, mock_in_progress: Mock
@@ -892,10 +892,10 @@ class TestExecuteMergeSequenceAdditional:
         assert "conflicts" in message.lower()
         assert "file.py" in unmerged
 
-    @patch('src.pokepoke.merge_conflict.is_merge_in_progress', return_value=False)
-    @patch('src.pokepoke.merge_conflict.get_unmerged_files', return_value=[])
-    @patch('src.pokepoke.git_operations.restore_beads_stash')
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=False)
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=[])
+    @patch('pokepoke.git.git_operations.restore_beads_stash')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_merge_failure_without_conflict(
         self, mock_run: Mock, mock_restore: Mock,
         mock_unmerged: Mock, mock_in_progress: Mock
@@ -918,7 +918,7 @@ class TestExecuteMergeSequenceAdditional:
         assert success is False
         assert "Merge failed" in message
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_stash_failure_is_swallowed(self, mock_run: Mock) -> None:
         """CalledProcessError during stash is caught and merge continues."""
 
@@ -944,9 +944,9 @@ class TestExecuteMergeSequenceAdditional:
 class TestExecuteMergeSequenceRollback:
     """Tests for execute_merge_sequence rollback on failure."""
 
-    @patch('src.pokepoke.merge_conflict.is_merge_in_progress', return_value=True)
-    @patch('src.pokepoke.merge_conflict.get_unmerged_files', return_value=["conflict.py"])
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=True)
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=["conflict.py"])
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_merge_abort_called_on_conflict(
         self, mock_run: Mock, mock_unmerged: Mock, mock_in_progress: Mock
     ) -> None:
@@ -974,9 +974,9 @@ class TestExecuteMergeSequenceRollback:
         assert "conflict" in message.lower()
         assert abort_called, "git merge --abort should have been called"
 
-    @patch('src.pokepoke.merge_conflict.is_merge_in_progress', return_value=False)
-    @patch('src.pokepoke.merge_conflict.get_unmerged_files', return_value=[])
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=False)
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=[])
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_merge_abort_not_called_when_no_merge_in_progress(
         self, mock_run: Mock, mock_unmerged: Mock, mock_in_progress: Mock
     ) -> None:
@@ -1003,9 +1003,9 @@ class TestExecuteMergeSequenceRollback:
         assert success is False
         assert not abort_called, "git merge --abort should NOT be called when no merge in progress"
 
-    @patch('src.pokepoke.merge_conflict.is_merge_in_progress', return_value=True)
-    @patch('src.pokepoke.merge_conflict.get_unmerged_files', return_value=["conflict.py"])
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=True)
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=["conflict.py"])
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_merge_abort_failure_does_not_mask_error(
         self, mock_run: Mock, mock_unmerged: Mock, mock_in_progress: Mock
     ) -> None:
@@ -1031,8 +1031,8 @@ class TestExecuteMergeSequenceRollback:
         assert "conflict" in message.lower()
         assert "conflict.py" in unmerged
 
-    @patch('src.pokepoke.git_operations.restore_beads_stash')
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.restore_beads_stash')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_rebase_abort_called_on_pull_failure(
         self, mock_run: Mock, mock_restore: Mock
     ) -> None:
@@ -1058,8 +1058,8 @@ class TestExecuteMergeSequenceRollback:
         assert "Failed to pull with rebase" in message
         assert rebase_abort_called, "git rebase --abort should have been called"
 
-    @patch('src.pokepoke.git_operations.restore_beads_stash')
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.restore_beads_stash')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_rebase_abort_failure_does_not_mask_error(
         self, mock_run: Mock, mock_restore: Mock
     ) -> None:
@@ -1086,7 +1086,7 @@ class TestExecuteMergeSequenceRollback:
 class TestExecuteMergeSequenceTimeoutExpired:
     """Tests for execute_merge_sequence TimeoutExpired handling."""
 
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_checkout_timeout_returns_failure(self, mock_run: Mock) -> None:
         """TimeoutExpired during checkout returns failure tuple."""
         mock_run.side_effect = subprocess.TimeoutExpired("git checkout", 30)
@@ -1096,8 +1096,8 @@ class TestExecuteMergeSequenceTimeoutExpired:
         assert "30s" in message
         assert unmerged == []
 
-    @patch('src.pokepoke.git_operations.restore_beads_stash')
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.restore_beads_stash')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_pull_timeout_aborts_rebase_and_restores_stash(
         self, mock_run: Mock, mock_restore: Mock
     ) -> None:
@@ -1123,8 +1123,8 @@ class TestExecuteMergeSequenceTimeoutExpired:
         assert unmerged == []
         mock_restore.assert_called_once()
 
-    @patch('src.pokepoke.git_operations.restore_beads_stash')
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.git_operations.restore_beads_stash')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_pull_timeout_without_stash(
         self, mock_run: Mock, mock_restore: Mock
     ) -> None:
@@ -1146,10 +1146,10 @@ class TestExecuteMergeSequenceTimeoutExpired:
         assert "timed out" in message
         mock_restore.assert_not_called()
 
-    @patch('src.pokepoke.merge_conflict.is_merge_in_progress', return_value=True)
-    @patch('src.pokepoke.merge_conflict.get_unmerged_files', return_value=["dirty.py"])
-    @patch('src.pokepoke.git_operations.restore_beads_stash')
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=True)
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=["dirty.py"])
+    @patch('pokepoke.git.git_operations.restore_beads_stash')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_merge_timeout_aborts_merge_and_returns_unmerged(
         self, mock_run: Mock, mock_restore: Mock,
         mock_unmerged: Mock, mock_in_progress: Mock
@@ -1175,10 +1175,10 @@ class TestExecuteMergeSequenceTimeoutExpired:
         assert "60s" in message
         assert "dirty.py" in unmerged
 
-    @patch('src.pokepoke.merge_conflict.is_merge_in_progress', return_value=False)
-    @patch('src.pokepoke.merge_conflict.get_unmerged_files', return_value=[])
-    @patch('src.pokepoke.git_operations.restore_beads_stash')
-    @patch('src.pokepoke.git_operations.subprocess.run')
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=False)
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=[])
+    @patch('pokepoke.git.git_operations.restore_beads_stash')
+    @patch('pokepoke.git.git_operations.subprocess.run')
     def test_merge_timeout_no_merge_in_progress(
         self, mock_run: Mock, mock_restore: Mock,
         mock_unmerged: Mock, mock_in_progress: Mock

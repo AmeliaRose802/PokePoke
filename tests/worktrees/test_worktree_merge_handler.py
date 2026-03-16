@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from pokepoke.types import BeadsWorkItem
-from pokepoke.worktree_merge_handler import handle_worktree_merge, perform_worktree_merge
+from pokepoke.worktrees.worktree_merge_handler import handle_worktree_merge, perform_worktree_merge
 
 
 def _make_agent_item(item_id: str = "maintenance-test") -> BeadsWorkItem:
@@ -25,11 +25,11 @@ def _make_agent_item(item_id: str = "maintenance-test") -> BeadsWorkItem:
 # ---------------------------------------------------------------------------
 
 
-@patch("pokepoke.worktree_cleanup.remove_from_manifest")
-@patch("pokepoke.worktree_merge_handler.merge_worktree")
-@patch("pokepoke.worktree_merge_handler.invoke_cleanup_agent")
-@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
-@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+@patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.invoke_cleanup_agent")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_handle_worktree_merge_retries_after_successful_cleanup(
     mock_check_ready,
     mock_add_manifest,
@@ -59,11 +59,11 @@ def test_handle_worktree_merge_retries_after_successful_cleanup(
     mock_add_manifest.assert_called_once()  # ensure manifest still tracks preserved state before cleanup
 
 
-@patch("pokepoke.worktree_cleanup.remove_from_manifest")
-@patch("pokepoke.worktree_merge_handler.merge_worktree")
-@patch("pokepoke.worktree_merge_handler.invoke_cleanup_agent")
-@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
-@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+@patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.invoke_cleanup_agent")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_handle_worktree_merge_cleanup_retry_respects_second_failure(
     mock_check_ready,
     mock_add_manifest,
@@ -92,14 +92,14 @@ def test_handle_worktree_merge_cleanup_retry_respects_second_failure(
     mock_add_manifest.assert_called_once()
 
 
-@patch("pokepoke.merge_conflict.abort_merge")
-@patch("pokepoke.merge_conflict.is_merge_in_progress")
-@patch("pokepoke.merge_conflict.get_unmerged_files")
-@patch("pokepoke.worktree_cleanup.remove_from_manifest")
-@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
-@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
-@patch("pokepoke.worktree_merge_handler.merge_worktree")
-@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+@patch("pokepoke.git.merge_conflict.abort_merge")
+@patch("pokepoke.git.merge_conflict.is_merge_in_progress")
+@patch("pokepoke.git.merge_conflict.get_unmerged_files")
+@patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_handle_worktree_merge_conflict_cleanup_retry_succeeds(
     mock_check_ready,
     mock_merge_worktree,
@@ -137,13 +137,13 @@ def test_handle_worktree_merge_conflict_cleanup_retry_succeeds(
     mock_abort_merge.assert_called_once()
 
 
-@patch("pokepoke.merge_conflict.abort_merge")
-@patch("pokepoke.merge_conflict.is_merge_in_progress")
-@patch("pokepoke.worktree_cleanup.remove_from_manifest")
-@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
-@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
-@patch("pokepoke.worktree_merge_handler.merge_worktree")
-@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+@patch("pokepoke.git.merge_conflict.abort_merge")
+@patch("pokepoke.git.merge_conflict.is_merge_in_progress")
+@patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_handle_worktree_merge_conflict_cleanup_failure(
     mock_check_ready,
     mock_merge_worktree,
@@ -183,10 +183,10 @@ def test_handle_worktree_merge_conflict_cleanup_failure(
 # ---------------------------------------------------------------------------
 
 
-@patch("pokepoke.worktree_cleanup.remove_from_manifest")
-@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
-@patch("pokepoke.worktree_merge_handler.merge_worktree")
-@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+@patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_perform_first_merge_succeeds(
     mock_check, mock_merge, mock_add, mock_remove,
 ) -> None:
@@ -203,9 +203,9 @@ def test_perform_first_merge_succeeds(
     mock_add.assert_not_called()
 
 
-@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
-@patch("pokepoke.worktree_merge_handler.invoke_cleanup_agent")
-@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.invoke_cleanup_agent")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_perform_pre_merge_cleanup_fails(
     mock_check, mock_cleanup, mock_add,
 ) -> None:
@@ -222,14 +222,14 @@ def test_perform_pre_merge_cleanup_fails(
     mock_add.assert_called_once()
 
 
-@patch("pokepoke.merge_conflict.abort_merge")
-@patch("pokepoke.merge_conflict.is_merge_in_progress")
-@patch("pokepoke.merge_conflict.get_unmerged_files")
-@patch("pokepoke.worktree_cleanup.remove_from_manifest")
-@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
-@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
-@patch("pokepoke.worktree_merge_handler.merge_worktree")
-@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+@patch("pokepoke.git.merge_conflict.abort_merge")
+@patch("pokepoke.git.merge_conflict.is_merge_in_progress")
+@patch("pokepoke.git.merge_conflict.get_unmerged_files")
+@patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_perform_abort_merge_failure_returns_false(
     mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
     mock_get_unmerged, mock_is_merging, mock_abort,
@@ -252,14 +252,14 @@ def test_perform_abort_merge_failure_returns_false(
     assert mock_merge.call_count == 1
 
 
-@patch("pokepoke.merge_conflict.abort_merge")
-@patch("pokepoke.merge_conflict.is_merge_in_progress")
-@patch("pokepoke.merge_conflict.get_unmerged_files")
-@patch("pokepoke.worktree_cleanup.remove_from_manifest")
-@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
-@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
-@patch("pokepoke.worktree_merge_handler.merge_worktree")
-@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+@patch("pokepoke.git.merge_conflict.abort_merge")
+@patch("pokepoke.git.merge_conflict.is_merge_in_progress")
+@patch("pokepoke.git.merge_conflict.get_unmerged_files")
+@patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_perform_retry_merge_succeeds_after_cleanup(
     mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
     mock_get_unmerged, mock_is_merging, mock_abort,
@@ -281,14 +281,14 @@ def test_perform_retry_merge_succeeds_after_cleanup(
     mock_remove.assert_called_once_with("item-1")
 
 
-@patch("pokepoke.merge_conflict.abort_merge")
-@patch("pokepoke.merge_conflict.is_merge_in_progress")
-@patch("pokepoke.merge_conflict.get_unmerged_files")
-@patch("pokepoke.worktree_cleanup.remove_from_manifest")
-@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
-@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
-@patch("pokepoke.worktree_merge_handler.merge_worktree")
-@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+@patch("pokepoke.git.merge_conflict.abort_merge")
+@patch("pokepoke.git.merge_conflict.is_merge_in_progress")
+@patch("pokepoke.git.merge_conflict.get_unmerged_files")
+@patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_perform_retry_merge_fails_aborts(
     mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
     mock_get_unmerged, mock_is_merging, mock_abort,
@@ -310,12 +310,12 @@ def test_perform_retry_merge_fails_aborts(
     mock_abort.assert_called_once()
 
 
-@patch("pokepoke.merge_conflict.abort_merge")
-@patch("pokepoke.merge_conflict.is_merge_in_progress")
-@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
-@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
-@patch("pokepoke.worktree_merge_handler.merge_worktree")
-@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+@patch("pokepoke.git.merge_conflict.abort_merge")
+@patch("pokepoke.git.merge_conflict.is_merge_in_progress")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_perform_cleanup_failure_no_abort_when_not_merging(
     mock_check, mock_merge, mock_conflict_cleanup, mock_add,
     mock_is_merging, mock_abort,
@@ -334,13 +334,13 @@ def test_perform_cleanup_failure_no_abort_when_not_merging(
     mock_abort.assert_not_called()
 
 
-@patch("pokepoke.merge_conflict.is_merge_in_progress")
-@patch("pokepoke.merge_conflict.get_unmerged_files")
-@patch("pokepoke.worktree_cleanup.remove_from_manifest")
-@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
-@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
-@patch("pokepoke.worktree_merge_handler.merge_worktree")
-@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+@patch("pokepoke.git.merge_conflict.is_merge_in_progress")
+@patch("pokepoke.git.merge_conflict.get_unmerged_files")
+@patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_perform_conflict_details_in_cleanup_prompt(
     mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
     mock_get_unmerged, mock_is_merging,
@@ -365,13 +365,13 @@ def test_perform_conflict_details_in_cleanup_prompt(
     assert call_args.kwargs["unmerged_files"] == files
 
 
-@patch("pokepoke.merge_conflict.is_merge_in_progress")
-@patch("pokepoke.merge_conflict.get_unmerged_files")
-@patch("pokepoke.worktree_cleanup.remove_from_manifest")
-@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
-@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
-@patch("pokepoke.worktree_merge_handler.merge_worktree")
-@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+@patch("pokepoke.git.merge_conflict.is_merge_in_progress")
+@patch("pokepoke.git.merge_conflict.get_unmerged_files")
+@patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_perform_handles_many_conflict_files(
     mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
     mock_get_unmerged, mock_is_merging,
@@ -393,12 +393,12 @@ def test_perform_handles_many_conflict_files(
     assert len(call_kwargs.kwargs["unmerged_files"]) == 15
 
 
-@patch("pokepoke.merge_conflict.is_merge_in_progress")
-@patch("pokepoke.merge_conflict.get_unmerged_files")
-@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
-@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
-@patch("pokepoke.worktree_merge_handler.merge_worktree")
-@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+@patch("pokepoke.git.merge_conflict.is_merge_in_progress")
+@patch("pokepoke.git.merge_conflict.get_unmerged_files")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_perform_fetches_fresh_unmerged_when_not_merging(
     mock_check, mock_merge, mock_conflict_cleanup, mock_add,
     mock_get_unmerged, mock_is_merging,
@@ -418,11 +418,11 @@ def test_perform_fetches_fresh_unmerged_when_not_merging(
     mock_get_unmerged.assert_called_once()
 
 
-@patch("pokepoke.merge_conflict.is_merge_in_progress")
-@patch("pokepoke.merge_conflict.get_unmerged_files")
-@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
-@patch("pokepoke.worktree_merge_handler.merge_worktree")
-@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+@patch("pokepoke.git.merge_conflict.is_merge_in_progress")
+@patch("pokepoke.git.merge_conflict.get_unmerged_files")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_perform_first_merge_worktree_persists(
     mock_check, mock_merge, mock_add,
     mock_get_unmerged, mock_is_merging, tmp_path,
@@ -445,14 +445,14 @@ def test_perform_first_merge_worktree_persists(
     assert "persists" in mock_add.call_args[0][2].lower()
 
 
-@patch("pokepoke.merge_conflict.abort_merge")
-@patch("pokepoke.merge_conflict.is_merge_in_progress")
-@patch("pokepoke.merge_conflict.get_unmerged_files")
-@patch("pokepoke.worktree_cleanup.remove_from_manifest")
-@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
-@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
-@patch("pokepoke.worktree_merge_handler.merge_worktree")
-@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+@patch("pokepoke.git.merge_conflict.abort_merge")
+@patch("pokepoke.git.merge_conflict.is_merge_in_progress")
+@patch("pokepoke.git.merge_conflict.get_unmerged_files")
+@patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_perform_retry_abort_failure_logs_error(
     mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
     mock_get_unmerged, mock_is_merging, mock_abort,
@@ -474,12 +474,12 @@ def test_perform_retry_abort_failure_logs_error(
     mock_abort.assert_called_once()
 
 
-@patch("pokepoke.merge_conflict.abort_merge")
-@patch("pokepoke.merge_conflict.is_merge_in_progress")
-@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
-@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
-@patch("pokepoke.worktree_merge_handler.merge_worktree")
-@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+@patch("pokepoke.git.merge_conflict.abort_merge")
+@patch("pokepoke.git.merge_conflict.is_merge_in_progress")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_perform_cleanup_failure_abort_failure_logged(
     mock_check, mock_merge, mock_conflict_cleanup, mock_add,
     mock_is_merging, mock_abort,
@@ -500,14 +500,14 @@ def test_perform_cleanup_failure_abort_failure_logged(
     mock_abort.assert_called_once()
 
 
-@patch("pokepoke.merge_conflict.abort_merge")
-@patch("pokepoke.merge_conflict.is_merge_in_progress")
-@patch("pokepoke.merge_conflict.get_unmerged_files")
-@patch("pokepoke.worktree_cleanup.remove_from_manifest")
-@patch("pokepoke.worktree_cleanup.add_uncleaned_worktree")
-@patch("pokepoke.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
-@patch("pokepoke.worktree_merge_handler.merge_worktree")
-@patch("pokepoke.git_operations.check_main_repo_ready_for_merge")
+@patch("pokepoke.git.merge_conflict.abort_merge")
+@patch("pokepoke.git.merge_conflict.is_merge_in_progress")
+@patch("pokepoke.git.merge_conflict.get_unmerged_files")
+@patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_perform_retry_merge_worktree_persists(
     mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
     mock_get_unmerged, mock_is_merging, mock_abort, tmp_path,
@@ -536,7 +536,7 @@ def test_perform_retry_merge_worktree_persists(
 def _mock_cleanup_lock(monkeypatch):
     """Ensure cleanup lock is a no-op for tests."""
     monkeypatch.setattr(
-        "pokepoke.worktree_merge_handler.cleanup_lock",
+        "pokepoke.worktrees.worktree_merge_handler.cleanup_lock",
         lambda: nullcontext(),
     )
 
@@ -545,7 +545,7 @@ def _mock_cleanup_lock(monkeypatch):
 def _mock_merge_lock(monkeypatch):
     """Ensure merge lock is a no-op for tests."""
     monkeypatch.setattr(
-        "pokepoke.worktree_merge_handler.merge_lock",
+        "pokepoke.worktrees.worktree_merge_handler.merge_lock",
         lambda: nullcontext(),
     )
 
@@ -570,11 +570,11 @@ def test_handle_worktree_merge_lock_timeout(monkeypatch) -> None:
             pass
 
     monkeypatch.setattr(
-        "pokepoke.worktree_merge_handler.merge_lock",
+        "pokepoke.worktrees.worktree_merge_handler.merge_lock",
         lambda: TimeoutCtx(),
     )
 
-    with patch("pokepoke.worktree_merge_handler.add_uncleaned_worktree") as mock_add, \
+    with patch("pokepoke.worktrees.worktree_merge_handler.add_uncleaned_worktree") as mock_add, \
          patch("builtins.print"):
 
         agent_item = _make_agent_item()
@@ -602,11 +602,11 @@ def test_handle_worktree_merge_unexpected_exception(monkeypatch) -> None:
             pass
 
     monkeypatch.setattr(
-        "pokepoke.worktree_merge_handler.merge_lock",
+        "pokepoke.worktrees.worktree_merge_handler.merge_lock",
         lambda: ErrorCtx(),
     )
 
-    with patch("pokepoke.worktree_merge_handler.add_uncleaned_worktree") as mock_add, \
+    with patch("pokepoke.worktrees.worktree_merge_handler.add_uncleaned_worktree") as mock_add, \
          patch("builtins.print"):
 
         agent_item = _make_agent_item()

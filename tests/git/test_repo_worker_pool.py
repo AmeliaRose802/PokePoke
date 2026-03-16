@@ -3,7 +3,7 @@
 import threading
 
 from pokepoke.config import RepoConfig
-from pokepoke.repo_worker_pool import RepoWorkerPool, _derive_repo_name
+from pokepoke.git.repo_worker_pool import RepoWorkerPool, _derive_repo_name
 
 
 # ---------------------------------------------------------------------------

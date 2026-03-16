@@ -5,7 +5,7 @@ from datetime import datetime, UTC
 from pathlib import Path
 
 from pokepoke.types import AgentStats, BeadsWorkItem, ModelCompletionRecord
-from pokepoke.model_history import (
+from pokepoke.models.model_history import (
     build_model_history_record,
     append_model_history_entry,
     load_model_history_entries,

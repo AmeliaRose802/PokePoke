@@ -1,4 +1,4 @@
-"""Tests for pokepoke.coordination module."""
+"""Tests for pokepoke.worktrees.coordination module."""
 
 import json
 import os
@@ -10,14 +10,14 @@ from unittest.mock import patch
 import pytest
 from filelock import Timeout
 
-from pokepoke.coordination import (
+from pokepoke.worktrees.coordination import (
     acquire_lock, try_lock, worktree_setup_lock, merge_lock, merge_lock_active,
     manifest_lock, clear_lock_if_stale, check_lock_status, with_worktree_lock,
     _load_worktree_metrics, _record_worktree_attempt, _save_worktree_metrics,
     _lock_dir, _lock_path, _MERGE_LOCK_STALE_AGE, _is_pid_alive, _read_lock_metadata,
     _write_lock_metadata,
 )
-from pokepoke.lock_contention import (
+from pokepoke.worktrees.lock_contention import (
     get_lock_contention_stats, _contention_tracker,
 )
 
@@ -26,14 +26,14 @@ class TestLockDir:
     """Tests for lock directory helpers."""
 
     def test_lock_dir_creates_directory(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir") as mock_dir:
+        with patch("pokepoke.worktrees.coordination._lock_dir") as mock_dir:
             d = tmp_path / ".pokepoke" / "locks"
             mock_dir.return_value = d
             result = mock_dir()
             assert result == d
 
     def test_lock_path_returns_correct_name(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             assert _lock_path("foo") == tmp_path / "foo.lock"
 
 
@@ -41,7 +41,7 @@ class TestAcquireLock:
     """Tests for acquire_lock context manager."""
 
     def test_acquires_and_releases(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             with acquire_lock("test") as lock:
                 assert lock.is_locked
                 lock_file = tmp_path / "test.lock"
@@ -49,17 +49,17 @@ class TestAcquireLock:
             assert not lock.is_locked
 
     def test_lock_file_created_in_lock_dir(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), acquire_lock("mylock"):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path), acquire_lock("mylock"):
             assert (tmp_path / "mylock.lock").exists()
 
     def test_timeout_raises(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), acquire_lock("exclusive"):  # noqa: SIM117
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path), acquire_lock("exclusive"):  # noqa: SIM117
             # Same lock with zero timeout should fail
             with pytest.raises(Timeout), acquire_lock("exclusive", timeout=0):
                     pass  # pragma: no cover
 
     def test_release_on_exception(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             lock_ref = None
             with pytest.raises(RuntimeError), acquire_lock("err") as lock:
                 lock_ref = lock
@@ -72,19 +72,19 @@ class TestTryLock:
     """Tests for try_lock non-blocking acquisition."""
 
     def test_returns_lock_when_available(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             lock = try_lock("avail")
             assert lock is not None
             assert lock.is_locked
             lock.release()
 
     def test_returns_none_when_held(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), acquire_lock("held"):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path), acquire_lock("held"):
             result = try_lock("held")
             assert result is None
 
     def test_caller_must_release(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             lock = try_lock("manual")
             assert lock is not None
             assert lock.is_locked
@@ -113,14 +113,14 @@ class TestWorktreeSetupLock:
     """Tests for worktree_setup_lock – the high-level coordination primitive."""
 
     def test_acquires_and_releases(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             with worktree_setup_lock(timeout=5) as lock:
                 assert lock.is_locked
             assert not lock.is_locked
 
     def test_second_agent_times_out_while_first_holds_lock(self, tmp_path: Path) -> None:
         """Second concurrent agent should raise Timeout when first holds the lock."""
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), worktree_setup_lock(timeout=5):  # noqa: SIM117
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path), worktree_setup_lock(timeout=5):  # noqa: SIM117
             with pytest.raises(Timeout), worktree_setup_lock(timeout=0):
                     pass  # pragma: no cover
 
@@ -132,7 +132,7 @@ class TestWorktreeSetupLock:
         errors: list[str] = []
 
         def worker():
-            with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), worktree_setup_lock(timeout=10):
+            with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path), worktree_setup_lock(timeout=10):
                 with lock_obj:
                     inside_count[0] += 1
                     if inside_count[0] > 1:
@@ -152,7 +152,7 @@ class TestWorktreeSetupLock:
         assert not errors, "Two threads were inside worktree_setup_lock simultaneously"
 
     def test_releases_on_exception(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             lock_ref = None
             with pytest.raises(ValueError), worktree_setup_lock(timeout=5) as lock:
                 lock_ref = lock
@@ -165,14 +165,14 @@ class TestMergeLock:
     """Tests for merge_lock – serializes worktree merges across parallel agents."""
 
     def test_acquires_and_releases(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             with merge_lock(timeout=5) as lock:
                 assert lock.is_locked
             assert not lock.is_locked
 
     def test_second_agent_times_out_while_first_holds_lock(self, tmp_path: Path) -> None:
         """Second concurrent agent should raise Timeout when first holds the lock."""
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), merge_lock(timeout=5):  # noqa: SIM117
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path), merge_lock(timeout=5):  # noqa: SIM117
             with pytest.raises(Timeout), merge_lock(timeout=0):
                     pass  # pragma: no cover
 
@@ -184,7 +184,7 @@ class TestMergeLock:
         errors: list[str] = []
 
         def worker():
-            with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), merge_lock(timeout=10):
+            with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path), merge_lock(timeout=10):
                 with lock_obj:
                     inside_count[0] += 1
                     if inside_count[0] > 1:
@@ -204,7 +204,7 @@ class TestMergeLock:
         assert not errors, "Two threads were inside merge_lock simultaneously"
 
     def test_releases_on_exception(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             lock_ref = None
             with pytest.raises(ValueError), merge_lock(timeout=5) as lock:
                 lock_ref = lock
@@ -217,11 +217,11 @@ class TestMergeLockActive:
     """Tests for merge_lock_active helper."""
 
     def test_returns_false_when_not_held(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             assert merge_lock_active() is False
 
     def test_returns_true_when_held(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), merge_lock(timeout=5):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path), merge_lock(timeout=5):
             assert merge_lock_active() is True
 
 
@@ -229,14 +229,14 @@ class TestManifestLock:
     """Tests for manifest_lock – serializes worktree manifest updates."""
 
     def test_acquires_and_releases(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             with manifest_lock(timeout=5) as lock:
                 assert lock.is_locked
             assert not lock.is_locked
 
     def test_second_agent_times_out_while_first_holds_lock(self, tmp_path: Path) -> None:
         """Second concurrent agent should raise Timeout when first holds the lock."""
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), manifest_lock(timeout=5):  # noqa: SIM117
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path), manifest_lock(timeout=5):  # noqa: SIM117
             with pytest.raises(Timeout), manifest_lock(timeout=0):
                     pass  # pragma: no cover
 
@@ -248,7 +248,7 @@ class TestManifestLock:
         errors: list[str] = []
 
         def worker():
-            with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), manifest_lock(timeout=10):
+            with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path), manifest_lock(timeout=10):
                 with lock_obj:
                     inside_count[0] += 1
                     if inside_count[0] > 1:
@@ -268,7 +268,7 @@ class TestManifestLock:
         assert not errors, "Two threads were inside manifest_lock simultaneously"
 
     def test_releases_on_exception(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             lock_ref = None
             with pytest.raises(ValueError), manifest_lock(timeout=5) as lock:
                 lock_ref = lock
@@ -282,7 +282,7 @@ class TestManifestFunctionsUseLocking:
 
     def test_add_uncleaned_worktree_acquires_lock(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """add_uncleaned_worktree should acquire manifest_lock during read-modify-write."""
-        from pokepoke.worktree_cleanup import add_uncleaned_worktree
+        from pokepoke.worktrees.worktree_cleanup import add_uncleaned_worktree
 
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".pokepoke").mkdir(exist_ok=True)
@@ -300,14 +300,14 @@ class TestManifestFunctionsUseLocking:
                 yield lock
 
         # Patch at the coordination module level where it's defined
-        with patch("pokepoke.coordination.manifest_lock", tracking_manifest_lock):
+        with patch("pokepoke.worktrees.coordination.manifest_lock", tracking_manifest_lock):
             add_uncleaned_worktree("test-id", "/path/to/worktree", "test reason")
 
         assert len(lock_acquired) == 1, "manifest_lock should be acquired exactly once"
 
     def test_remove_from_manifest_acquires_lock(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """remove_from_manifest should acquire manifest_lock during read-modify-write."""
-        from pokepoke.worktree_cleanup import add_uncleaned_worktree, remove_from_manifest
+        from pokepoke.worktrees.worktree_cleanup import add_uncleaned_worktree, remove_from_manifest
 
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".pokepoke").mkdir(exist_ok=True)
@@ -328,14 +328,14 @@ class TestManifestFunctionsUseLocking:
                 yield lock
 
         # Patch at the coordination module level where it's defined
-        with patch("pokepoke.coordination.manifest_lock", tracking_manifest_lock):
+        with patch("pokepoke.worktrees.coordination.manifest_lock", tracking_manifest_lock):
             remove_from_manifest("test-id")
 
         assert len(lock_acquired) == 1, "manifest_lock should be acquired exactly once"
 
     def test_concurrent_add_operations_serialized(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Concurrent add_uncleaned_worktree calls should not lose entries due to race conditions."""
-        from pokepoke.worktree_cleanup import add_uncleaned_worktree, load_worktree_manifest
+        from pokepoke.worktrees.worktree_cleanup import add_uncleaned_worktree, load_worktree_manifest
 
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".pokepoke").mkdir(exist_ok=True)
@@ -368,7 +368,7 @@ class TestStaleLockRecovery:
 
     def test_stale_lock_file_removed_before_acquire(self, tmp_path: Path) -> None:
         """A lock file older than stale_timeout is removed so acquire succeeds."""
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             lock_file = tmp_path / "stale.lock"
             # Create an orphan lock file (no real lock held)
             lock_file.write_text("")
@@ -383,7 +383,7 @@ class TestStaleLockRecovery:
 
     def test_fresh_lock_file_not_removed(self, tmp_path: Path) -> None:
         """A recently-modified lock file is left alone (not treated as stale)."""
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             # Hold a real lock in a background thread to simulate a live process
             acquired = threading.Event()
             release = threading.Event()
@@ -453,14 +453,14 @@ class TestPidTracking:
         assert _read_lock_metadata(lock_file) is None
 
     def test_acquire_lock_writes_pid_metadata(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), acquire_lock("pidtest", timeout=5):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path), acquire_lock("pidtest", timeout=5):
             meta = _read_lock_metadata(tmp_path / "pidtest.lock")
             assert meta is not None
             assert meta["pid"] == os.getpid()
 
     def test_stale_lock_with_dead_pid_is_removed(self, tmp_path: Path) -> None:
         """A lock whose holder PID is dead should be force-removed."""
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             lock_file = tmp_path / "stale-pid.lock"
             # Create lock file and sidecar with dead PID
             lock_file.write_text("")
@@ -477,7 +477,7 @@ class TestPidTracking:
 
     def test_stale_lock_with_alive_pid_not_removed(self, tmp_path: Path) -> None:
         """A lock whose holder PID is alive should NOT be force-removed."""
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             lock_file = tmp_path / "alive-pid.lock"
             meta_file = tmp_path / "alive-pid.lock.meta"
             # Write sidecar with our own (alive) PID
@@ -501,7 +501,7 @@ class TestPidTracking:
                 real_lock.release()
 
     def test_try_lock_writes_metadata(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             lock = try_lock("trytest")
             assert lock is not None
             try:
@@ -516,7 +516,7 @@ class TestWorktreeMetrics:
     """Tests for worktree metrics persistence helpers."""
 
     def test_load_metrics_defaults_when_missing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        import pokepoke.coordination as coord_module
+        import pokepoke.worktrees.coordination as coord_module
 
         metrics_path = tmp_path / "worktree_metrics.json"
         monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_PATH", metrics_path)
@@ -529,7 +529,7 @@ class TestWorktreeMetrics:
         assert metrics["total_failures"] == 0
 
     def test_load_metrics_handles_invalid_json(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        import pokepoke.coordination as coord_module
+        import pokepoke.worktrees.coordination as coord_module
 
         metrics_path = tmp_path / "worktree_metrics.json"
         metrics_path.write_text("not json")
@@ -542,7 +542,7 @@ class TestWorktreeMetrics:
         assert metrics["total_wait_time"] == 0.0
 
     def test_save_and_load_metrics_round_trip(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        import pokepoke.coordination as coord_module
+        import pokepoke.worktrees.coordination as coord_module
 
         metrics_path = tmp_path / "worktree_metrics.json"
         monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_PATH", metrics_path)
@@ -562,7 +562,7 @@ class TestWorktreeMetrics:
         assert metrics_out == metrics_in
 
     def test_record_worktree_attempt_updates_metrics(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        import pokepoke.coordination as coord_module
+        import pokepoke.worktrees.coordination as coord_module
 
         metrics_path = tmp_path / "worktree_metrics.json"
         monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_PATH", metrics_path)
@@ -583,13 +583,13 @@ class TestWithWorktreeLock:
     """Tests for worktree lock metrics integration."""
 
     def test_records_successful_lock(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        import pokepoke.coordination as coord_module
+        import pokepoke.worktrees.coordination as coord_module
 
         metrics_path = tmp_path / "worktree_metrics.json"
         monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_PATH", metrics_path)
         monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_DIR", tmp_path)
 
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), with_worktree_lock(timeout=5):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path), with_worktree_lock(timeout=5):
             pass
 
         metrics = _load_worktree_metrics()
@@ -597,7 +597,7 @@ class TestWithWorktreeLock:
         assert metrics["total_successes"] == 1
 
     def test_records_failed_lock(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        import pokepoke.coordination as coord_module
+        import pokepoke.worktrees.coordination as coord_module
 
         metrics_path = tmp_path / "worktree_metrics.json"
         monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_PATH", metrics_path)
@@ -625,13 +625,13 @@ class TestCheckLockStatus:
     """Tests for check_lock_status helper."""
 
     def test_returns_false_when_missing(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             exists, metadata = check_lock_status("missing-lock")
             assert exists is False
             assert metadata is None
 
     def test_returns_metadata_when_present(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             lock_file = tmp_path / "status.lock"
             lock_file.write_text("")
             _write_lock_metadata(lock_file)
@@ -647,7 +647,7 @@ class TestClearLockIfStale:
     """Tests for clear_lock_if_stale helper."""
 
     def test_clears_stale_lock_without_metadata(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             lock_file = tmp_path / "stale-no-meta.lock"
             lock_file.write_text("")
 
@@ -657,7 +657,7 @@ class TestClearLockIfStale:
             assert not lock_file.exists()
 
     def test_clears_stale_lock_when_unheld(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             lock_file = tmp_path / "stale-clear.lock"
             lock_file.write_text("")
             meta_file = tmp_path / "stale-clear.lock.meta"
@@ -673,7 +673,7 @@ class TestClearLockIfStale:
             assert not meta_file.exists()
 
     def test_does_not_clear_when_lock_held(self, tmp_path: Path) -> None:
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), acquire_lock("held-clear", timeout=5):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path), acquire_lock("held-clear", timeout=5):
             meta_file = tmp_path / "held-clear.lock.meta"
             meta_file.write_text(json.dumps({
                 "pid": 2**30,
@@ -691,7 +691,7 @@ class TestAcquireLockContention:
 
     def test_successful_acquire_records_metric(self, tmp_path: Path) -> None:
         _contention_tracker.reset()
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), acquire_lock("track-ok", timeout=5):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path), acquire_lock("track-ok", timeout=5):
             pass
         snap = get_lock_contention_stats()
         assert "track-ok" in snap
@@ -701,7 +701,7 @@ class TestAcquireLockContention:
 
     def test_timeout_records_metric(self, tmp_path: Path) -> None:
         _contention_tracker.reset()
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path), acquire_lock("track-to", timeout=5):  # noqa: SIM117
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path), acquire_lock("track-to", timeout=5):  # noqa: SIM117
             with pytest.raises(Timeout), acquire_lock("track-to", timeout=0):
                 pass  # pragma: no cover
         snap = get_lock_contention_stats()
@@ -710,7 +710,7 @@ class TestAcquireLockContention:
 
     def test_stale_clearance_records_metric(self, tmp_path: Path) -> None:
         _contention_tracker.reset()
-        with patch("pokepoke.coordination._lock_dir", return_value=tmp_path):
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
             lock_file = tmp_path / "track-stale.lock"
             lock_file.write_text("")
             (tmp_path / "track-stale.lock.meta").write_text(json.dumps({

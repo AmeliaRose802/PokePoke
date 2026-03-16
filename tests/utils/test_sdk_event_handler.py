@@ -4,8 +4,8 @@ import asyncio
 import json
 from types import SimpleNamespace
 
-from pokepoke.sdk_event_handler import create_event_handler
-from pokepoke.sdk_beads_tracker import extract_command as _extract_command, parse_created_items as _parse_created_items, record_items_created as _record_items_created
+from pokepoke.models.sdk_event_handler import create_event_handler
+from pokepoke.beads.sdk_beads_tracker import extract_command as _extract_command, parse_created_items as _parse_created_items, record_items_created as _record_items_created
 
 
 class DummyLogger:
@@ -92,9 +92,9 @@ def test_record_items_created_updates_session_stats_and_store(monkeypatch) -> No
         recorded.append((item_id, agent_type))
         return {"total_created": len(recorded), "total_completed": 0}
 
-    monkeypatch.setattr("pokepoke.session_stats_registry.get_current_session_stats", lambda: dummy)
-    monkeypatch.setattr("pokepoke.metrics_context.get_current_agent_type", lambda default="unknown": "janitor")
-    monkeypatch.setattr("pokepoke.beads_item_stats_store.record_item_created", fake_record_item_created)
+    monkeypatch.setattr("pokepoke.stats.session_stats_registry.get_current_session_stats", lambda: dummy)
+    monkeypatch.setattr("pokepoke.stats.metrics_context.get_current_agent_type", lambda default="unknown": "janitor")
+    monkeypatch.setattr("pokepoke.beads.beads_item_stats_store.record_item_created", fake_record_item_created)
 
     _record_items_created([("PokePoke-1", ""), ("PokePoke-2", "Two")])
 
@@ -109,7 +109,7 @@ def test_beads_create_detected_from_powershell_tool(monkeypatch) -> None:
     errors: list[str] = []
 
     created: list[tuple[str, str]] = []
-    monkeypatch.setattr("pokepoke.sdk_event_handler.record_items_created", lambda items: created.extend(items))
+    monkeypatch.setattr("pokepoke.models.sdk_event_handler.record_items_created", lambda items: created.extend(items))
 
     handler, _ = create_event_handler(done, output_lines, errors)
     handler(_make_event(
@@ -130,7 +130,7 @@ def test_beads_create_detected_when_complete_event_lacks_arguments(monkeypatch) 
     errors: list[str] = []
 
     created: list[tuple[str, str]] = []
-    monkeypatch.setattr("pokepoke.sdk_event_handler.record_items_created", lambda items: created.extend(items))
+    monkeypatch.setattr("pokepoke.models.sdk_event_handler.record_items_created", lambda items: created.extend(items))
 
     handler, _ = create_event_handler(done, output_lines, errors)
 

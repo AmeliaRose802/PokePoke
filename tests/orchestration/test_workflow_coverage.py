@@ -13,7 +13,7 @@ from pokepoke.types import (
     BeadsWorkItem, AgentStats, CopilotResult, ModelCompletionRecord,
     GateAgentResult,
 )
-from pokepoke.workflow_helpers import (
+from pokepoke.orchestration.workflow_helpers import (
     _fail_result,
     _build_completion_record,
     _log_failure,
@@ -24,8 +24,8 @@ from pokepoke.workflow_helpers import (
     _maybe_retry_copilot,
     _finalize_item_result,
 )
-from pokepoke.workflow import process_work_item
-from pokepoke.work_item_session import WorkItemSession
+from pokepoke.orchestration.workflow import process_work_item
+from pokepoke.orchestration.work_item_session import WorkItemSession
 
 
 def _item(id: str = "wf-1", desc: str | None = "desc") -> BeadsWorkItem:
@@ -108,18 +108,18 @@ class TestLogFailure:
 # ── _setup_worktree ────────────────────────────────────────────────
 
 class TestSetupWorktree:
-    @patch("pokepoke.workflow_helpers.create_worktree")
+    @patch("pokepoke.orchestration.workflow_helpers.create_worktree")
     def test_success(self, mock_create, tmp_path):
         mock_create.return_value = tmp_path / "worktree"
         result = _setup_worktree(_item())
         assert result == tmp_path / "worktree"
 
-    @patch("pokepoke.workflow_helpers.create_worktree", side_effect=RuntimeError("git failed"))
+    @patch("pokepoke.orchestration.workflow_helpers.create_worktree", side_effect=RuntimeError("git failed"))
     def test_failure_returns_none(self, mock_create):
         result = _setup_worktree(_item())
         assert result is None
 
-    @patch("pokepoke.workflow_helpers.create_worktree", side_effect=RuntimeError("git failed"))
+    @patch("pokepoke.orchestration.workflow_helpers.create_worktree", side_effect=RuntimeError("git failed"))
     def test_failure_logs_error(self, mock_create):
         run_logger = MagicMock()
         item_logger = MagicMock()
@@ -132,8 +132,8 @@ class TestSetupWorktree:
 # ── run_cleanup_with_timeout ──────────────────────────────────────
 
 class TestRunCleanupWithTimeout:
-    @patch("pokepoke.workflow_helpers.run_cleanup_loop", return_value=(True, 1))
-    @patch("pokepoke.workflow_helpers.has_uncommitted_changes")
+    @patch("pokepoke.orchestration.workflow_helpers.run_cleanup_loop", return_value=(True, 1))
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes")
     def test_cleanup_runs_once(self, mock_uncommitted, mock_cleanup):
         # First call: has changes; after cleanup: no changes
         mock_uncommitted.side_effect = [True, False]
@@ -146,8 +146,8 @@ class TestRunCleanupWithTimeout:
         assert success is True
         assert runs == 1
 
-    @patch("pokepoke.workflow_helpers.run_cleanup_loop", return_value=(True, 1))
-    @patch("pokepoke.workflow_helpers.has_uncommitted_changes", return_value=True)
+    @patch("pokepoke.orchestration.workflow_helpers.run_cleanup_loop", return_value=(True, 1))
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=True)
     @patch("time.time")
     def test_cleanup_timeout(self, mock_time, mock_uncommitted, mock_cleanup):
         # Simulate timeout: time.time() returns value past timeout
@@ -163,7 +163,7 @@ class TestRunCleanupWithTimeout:
         assert success is False
         assert runs == 0
 
-    @patch("pokepoke.workflow_helpers.has_uncommitted_changes", return_value=False)
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=False)
     def test_no_changes_skips_cleanup(self, mock_uncommitted):
         item = _item()
         result_obj = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1)
@@ -174,8 +174,8 @@ class TestRunCleanupWithTimeout:
         assert success is True
         assert runs == 0
 
-    @patch("pokepoke.workflow_helpers.run_cleanup_loop", return_value=(False, 1))
-    @patch("pokepoke.workflow_helpers.has_uncommitted_changes", return_value=True)
+    @patch("pokepoke.orchestration.workflow_helpers.run_cleanup_loop", return_value=(False, 1))
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=True)
     def test_cleanup_failure(self, mock_uncommitted, mock_cleanup):
         item = _item()
         result_obj = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1)
@@ -193,16 +193,16 @@ class TestRunCleanupWithTimeout:
 class TestProcessWorkItem:
     """Test process_work_item exercising real control flow."""
 
-    @patch("pokepoke.workflow.unregister_agent")
-    @patch("pokepoke.workflow.register_agent")
-    @patch("pokepoke.workflow.get_config")
-    @patch("pokepoke.workflow.select_model_for_item", return_value="gpt-4")
-    @patch("pokepoke.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
-    @patch("pokepoke.workflow.terminal_ui")
-    @patch("pokepoke.workflow.terminal_ui.set_terminal_banner")
-    @patch("pokepoke.workflow.terminal_ui.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.workflow.get_agent_name", return_value="test-agent")
-    @patch("pokepoke.workflow.assign_and_sync_item", return_value=False)
+    @patch("pokepoke.orchestration.workflow.unregister_agent")
+    @patch("pokepoke.orchestration.workflow.register_agent")
+    @patch("pokepoke.orchestration.workflow.get_config")
+    @patch("pokepoke.orchestration.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.orchestration.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
+    @patch("pokepoke.orchestration.workflow.terminal_ui")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
+    @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=False)
     def test_assign_failure(self, mock_assign, mock_agent_name,
                             mock_banner_fmt, mock_set_banner, mock_ui,
                             mock_assignment, mock_model, mock_config,
@@ -216,19 +216,19 @@ class TestProcessWorkItem:
         assert result.success is False
         assert result.request_count == 0
 
-    @patch("pokepoke.workflow.unregister_agent")
-    @patch("pokepoke.workflow.register_agent")
+    @patch("pokepoke.orchestration.workflow.unregister_agent")
+    @patch("pokepoke.orchestration.workflow.register_agent")
     @patch.object(WorkItemSession, "cleanup_on_failure")
-    @patch("pokepoke.workflow.cleanup_worktree")
-    @patch("pokepoke.workflow.get_config")
-    @patch("pokepoke.workflow.select_model_for_item", return_value="gpt-4")
-    @patch("pokepoke.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
-    @patch("pokepoke.workflow.terminal_ui")
-    @patch("pokepoke.workflow.terminal_ui.set_terminal_banner")
-    @patch("pokepoke.workflow.terminal_ui.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.workflow.get_agent_name", return_value="test-agent")
-    @patch("pokepoke.workflow.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.workflow.create_worktree", return_value=None)
+    @patch("pokepoke.orchestration.workflow.cleanup_worktree")
+    @patch("pokepoke.orchestration.workflow.get_config")
+    @patch("pokepoke.orchestration.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.orchestration.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
+    @patch("pokepoke.orchestration.workflow.terminal_ui")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
+    @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow.create_worktree", return_value=None)
     def test_worktree_failure(self, mock_create, mock_assign, mock_agent_name,
                               mock_banner_fmt, mock_set_banner, mock_ui,
                               mock_assignment, mock_model, mock_config,
@@ -244,24 +244,24 @@ class TestProcessWorkItem:
         result = process_work_item(_item(), interactive=False)
         assert result.success is False
 
-    @patch("pokepoke.workflow.unregister_agent")
-    @patch("pokepoke.workflow.register_agent")
-    @patch("pokepoke.workflow.cleanup_worktree")
-    @patch("pokepoke.workflow_helpers.finalize_work_item", return_value=True)
-    @patch("pokepoke.workflow_helpers.has_uncommitted_changes", return_value=False)
-    @patch("pokepoke.git_operations.has_commits_ahead", return_value=1)
-    @patch("pokepoke.workflow.invoke_copilot")
-    @patch("pokepoke.workflow.build_prompt_from_work_item", return_value="prompt")
-    @patch("pokepoke.workflow.get_config")
-    @patch("pokepoke.workflow.select_model_for_item", return_value="gpt-4")
-    @patch("pokepoke.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
-    @patch("pokepoke.workflow.terminal_ui")
-    @patch("pokepoke.workflow.terminal_ui.set_terminal_banner")
-    @patch("pokepoke.workflow.terminal_ui.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.workflow.get_agent_name", return_value="test-agent")
-    @patch("pokepoke.workflow.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.workflow.create_worktree")
-    @patch("pokepoke.workflow.is_shutting_down", return_value=False)
+    @patch("pokepoke.orchestration.workflow.unregister_agent")
+    @patch("pokepoke.orchestration.workflow.register_agent")
+    @patch("pokepoke.orchestration.workflow.cleanup_worktree")
+    @patch("pokepoke.orchestration.workflow_helpers.finalize_work_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=False)
+    @patch("pokepoke.git.git_operations.has_commits_ahead", return_value=1)
+    @patch("pokepoke.orchestration.workflow.invoke_copilot")
+    @patch("pokepoke.orchestration.workflow.build_prompt_from_work_item", return_value="prompt")
+    @patch("pokepoke.orchestration.workflow.get_config")
+    @patch("pokepoke.orchestration.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.orchestration.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
+    @patch("pokepoke.orchestration.workflow.terminal_ui")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
+    @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow.create_worktree")
+    @patch("pokepoke.orchestration.workflow.is_shutting_down", return_value=False)
     def test_successful_processing_no_gate(
         self, mock_shutdown, mock_create, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
@@ -285,24 +285,24 @@ class TestProcessWorkItem:
         assert result.request_count == 1
         mock_finalize.assert_called_once()
 
-    @patch("pokepoke.workflow.unregister_agent")
-    @patch("pokepoke.workflow.register_agent")
+    @patch("pokepoke.orchestration.workflow.unregister_agent")
+    @patch("pokepoke.orchestration.workflow.register_agent")
     @patch.object(WorkItemSession, "cleanup_on_failure")
-    @patch("pokepoke.workflow.cleanup_worktree")
-    @patch("pokepoke.workflow_helpers.has_uncommitted_changes", return_value=False)
-    @patch("pokepoke.git_operations.has_commits_ahead", return_value=0)
-    @patch("pokepoke.workflow.invoke_copilot")
-    @patch("pokepoke.workflow.build_prompt_from_work_item", return_value="prompt")
-    @patch("pokepoke.workflow.get_config")
-    @patch("pokepoke.workflow.select_model_for_item", return_value="gpt-4")
-    @patch("pokepoke.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
-    @patch("pokepoke.workflow.terminal_ui")
-    @patch("pokepoke.workflow.terminal_ui.set_terminal_banner")
-    @patch("pokepoke.workflow.terminal_ui.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.workflow.get_agent_name", return_value="test-agent")
-    @patch("pokepoke.workflow.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.workflow.create_worktree")
-    @patch("pokepoke.workflow.is_shutting_down", return_value=False)
+    @patch("pokepoke.orchestration.workflow.cleanup_worktree")
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=False)
+    @patch("pokepoke.git.git_operations.has_commits_ahead", return_value=0)
+    @patch("pokepoke.orchestration.workflow.invoke_copilot")
+    @patch("pokepoke.orchestration.workflow.build_prompt_from_work_item", return_value="prompt")
+    @patch("pokepoke.orchestration.workflow.get_config")
+    @patch("pokepoke.orchestration.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.orchestration.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
+    @patch("pokepoke.orchestration.workflow.terminal_ui")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
+    @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow.create_worktree")
+    @patch("pokepoke.orchestration.workflow.is_shutting_down", return_value=False)
     def test_copilot_failure(
         self, mock_shutdown, mock_create, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
@@ -326,26 +326,26 @@ class TestProcessWorkItem:
         assert result.request_count == 1
         mock_session_cleanup.assert_called()
 
-    @patch("pokepoke.workflow.unregister_agent")
-    @patch("pokepoke.workflow.register_agent")
-    @patch("pokepoke.workflow.cleanup_worktree")
-    @patch("pokepoke.workflow_helpers.finalize_work_item", return_value=True)
-    @patch("pokepoke.workflow.add_comment")
-    @patch("pokepoke.workflow.run_gate_agent")
-    @patch("pokepoke.workflow_helpers.has_uncommitted_changes", return_value=False)
-    @patch("pokepoke.git_operations.has_commits_ahead", return_value=1)
-    @patch("pokepoke.workflow.invoke_copilot")
-    @patch("pokepoke.workflow.build_prompt_from_work_item", return_value="prompt")
-    @patch("pokepoke.workflow.get_config")
-    @patch("pokepoke.workflow.select_model_for_item", return_value="gpt-4")
-    @patch("pokepoke.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
-    @patch("pokepoke.workflow.terminal_ui")
-    @patch("pokepoke.workflow.terminal_ui.set_terminal_banner")
-    @patch("pokepoke.workflow.terminal_ui.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.workflow.get_agent_name", return_value="test-agent")
-    @patch("pokepoke.workflow.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.workflow.create_worktree")
-    @patch("pokepoke.workflow.is_shutting_down", return_value=False)
+    @patch("pokepoke.orchestration.workflow.unregister_agent")
+    @patch("pokepoke.orchestration.workflow.register_agent")
+    @patch("pokepoke.orchestration.workflow.cleanup_worktree")
+    @patch("pokepoke.orchestration.workflow_helpers.finalize_work_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow.add_comment")
+    @patch("pokepoke.orchestration.workflow.run_gate_agent")
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=False)
+    @patch("pokepoke.git.git_operations.has_commits_ahead", return_value=1)
+    @patch("pokepoke.orchestration.workflow.invoke_copilot")
+    @patch("pokepoke.orchestration.workflow.build_prompt_from_work_item", return_value="prompt")
+    @patch("pokepoke.orchestration.workflow.get_config")
+    @patch("pokepoke.orchestration.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.orchestration.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
+    @patch("pokepoke.orchestration.workflow.terminal_ui")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
+    @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow.create_worktree")
+    @patch("pokepoke.orchestration.workflow.is_shutting_down", return_value=False)
     def test_gate_agent_pass(
         self, mock_shutdown, mock_create, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
@@ -365,31 +365,31 @@ class TestProcessWorkItem:
             work_item_id="wf-1", success=True, attempt_count=1,
         )
         mock_gate.return_value = GateAgentResult(success=True, reason="looks good")
-        with patch("pokepoke.git_operations.build_handoff_context", return_value="ctx"):
+        with patch("pokepoke.git.git_operations.build_handoff_context", return_value="ctx"):
             result = process_work_item(_item(), interactive=False)
         assert result.success is True
         assert result.gate_agent_runs == 1
 
-    @patch("pokepoke.workflow.unregister_agent")
-    @patch("pokepoke.workflow.register_agent")
-    @patch("pokepoke.workflow.cleanup_worktree")
-    @patch("pokepoke.workflow_helpers.finalize_work_item", return_value=True)
-    @patch("pokepoke.workflow.add_comment")
-    @patch("pokepoke.workflow.run_gate_agent")
-    @patch("pokepoke.workflow_helpers.has_uncommitted_changes", return_value=False)
-    @patch("pokepoke.git_operations.has_commits_ahead", return_value=1)
-    @patch("pokepoke.workflow.invoke_copilot")
-    @patch("pokepoke.workflow.build_prompt_from_work_item", return_value="prompt")
-    @patch("pokepoke.workflow.get_config")
-    @patch("pokepoke.workflow.select_model_for_item", return_value="gpt-4")
-    @patch("pokepoke.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
-    @patch("pokepoke.workflow.terminal_ui")
-    @patch("pokepoke.workflow.terminal_ui.set_terminal_banner")
-    @patch("pokepoke.workflow.terminal_ui.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.workflow.get_agent_name", return_value="test-agent")
-    @patch("pokepoke.workflow.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.workflow.create_worktree")
-    @patch("pokepoke.workflow.is_shutting_down")
+    @patch("pokepoke.orchestration.workflow.unregister_agent")
+    @patch("pokepoke.orchestration.workflow.register_agent")
+    @patch("pokepoke.orchestration.workflow.cleanup_worktree")
+    @patch("pokepoke.orchestration.workflow_helpers.finalize_work_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow.add_comment")
+    @patch("pokepoke.orchestration.workflow.run_gate_agent")
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=False)
+    @patch("pokepoke.git.git_operations.has_commits_ahead", return_value=1)
+    @patch("pokepoke.orchestration.workflow.invoke_copilot")
+    @patch("pokepoke.orchestration.workflow.build_prompt_from_work_item", return_value="prompt")
+    @patch("pokepoke.orchestration.workflow.get_config")
+    @patch("pokepoke.orchestration.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.orchestration.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
+    @patch("pokepoke.orchestration.workflow.terminal_ui")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
+    @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow.create_worktree")
+    @patch("pokepoke.orchestration.workflow.is_shutting_down")
     def test_gate_reject_then_pass(
         self, mock_shutdown, mock_create, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
@@ -415,25 +415,25 @@ class TestProcessWorkItem:
             GateAgentResult(success=False, reason="needs fix"),
             GateAgentResult(success=True, reason="ok"),
         ]
-        with patch("pokepoke.git_operations.build_handoff_context", return_value="ctx"):
+        with patch("pokepoke.git.git_operations.build_handoff_context", return_value="ctx"):
             result = process_work_item(_item(), interactive=False)
         assert result.success is True
         assert result.gate_agent_runs == 2
         assert result.request_count == 2
 
-    @patch("pokepoke.workflow.unregister_agent")
-    @patch("pokepoke.workflow.register_agent")
-    @patch("pokepoke.workflow.cleanup_worktree")
-    @patch("pokepoke.workflow.get_config")
-    @patch("pokepoke.workflow.select_model_for_item", return_value="gpt-4")
-    @patch("pokepoke.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
-    @patch("pokepoke.workflow.terminal_ui")
-    @patch("pokepoke.workflow.terminal_ui.set_terminal_banner")
-    @patch("pokepoke.workflow.terminal_ui.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.workflow.get_agent_name", return_value="test-agent")
-    @patch("pokepoke.workflow.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.workflow.create_worktree")
-    @patch("pokepoke.workflow.is_shutting_down", return_value=True)
+    @patch("pokepoke.orchestration.workflow.unregister_agent")
+    @patch("pokepoke.orchestration.workflow.register_agent")
+    @patch("pokepoke.orchestration.workflow.cleanup_worktree")
+    @patch("pokepoke.orchestration.workflow.get_config")
+    @patch("pokepoke.orchestration.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.orchestration.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
+    @patch("pokepoke.orchestration.workflow.terminal_ui")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
+    @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow.create_worktree")
+    @patch("pokepoke.orchestration.workflow.is_shutting_down", return_value=True)
     def test_shutdown_before_copilot(
         self, mock_shutdown, mock_create, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
@@ -451,18 +451,18 @@ class TestProcessWorkItem:
         # Shutdown exits loop before copilot invocation -> failure
         assert result.success is False
 
-    @patch("pokepoke.workflow.unregister_agent")
-    @patch("pokepoke.workflow.register_agent")
-    @patch("pokepoke.workflow.cleanup_worktree")
-    @patch("pokepoke.workflow.get_config")
-    @patch("pokepoke.workflow.select_model_for_item", return_value="gpt-4")
-    @patch("pokepoke.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
-    @patch("pokepoke.workflow.terminal_ui")
-    @patch("pokepoke.workflow.terminal_ui.set_terminal_banner")
-    @patch("pokepoke.workflow.terminal_ui.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.workflow.get_agent_name", return_value="test-agent")
-    @patch("pokepoke.workflow.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.workflow.create_worktree")
+    @patch("pokepoke.orchestration.workflow.unregister_agent")
+    @patch("pokepoke.orchestration.workflow.register_agent")
+    @patch("pokepoke.orchestration.workflow.cleanup_worktree")
+    @patch("pokepoke.orchestration.workflow.get_config")
+    @patch("pokepoke.orchestration.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.orchestration.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
+    @patch("pokepoke.orchestration.workflow.terminal_ui")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
+    @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow.create_worktree")
     @patch("builtins.input", return_value="n")
     def test_interactive_user_skips(
         self, mock_input, mock_create, mock_assign, mock_agent_name,
@@ -481,26 +481,26 @@ class TestProcessWorkItem:
         assert result.success is False
         assert result.request_count == 0
 
-    @patch("pokepoke.workflow.unregister_agent")
-    @patch("pokepoke.workflow.register_agent")
-    @patch("pokepoke.workflow.cleanup_worktree")
-    @patch("pokepoke.workflow_helpers.finalize_work_item", return_value=True)
-    @patch("pokepoke.workflow.add_comment")
-    @patch("pokepoke.workflow.run_gate_agent")
-    @patch("pokepoke.workflow_helpers.has_uncommitted_changes", return_value=False)
-    @patch("pokepoke.git_operations.has_commits_ahead", return_value=1)
-    @patch("pokepoke.workflow.invoke_copilot")
-    @patch("pokepoke.workflow.build_prompt_from_work_item", return_value="prompt")
-    @patch("pokepoke.workflow.get_config")
-    @patch("pokepoke.workflow.select_model_for_item", return_value="gpt-4")
-    @patch("pokepoke.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
-    @patch("pokepoke.workflow.terminal_ui")
-    @patch("pokepoke.workflow.terminal_ui.set_terminal_banner")
-    @patch("pokepoke.workflow.terminal_ui.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.workflow.get_agent_name", return_value="test-agent")
-    @patch("pokepoke.workflow.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.workflow.create_worktree")
-    @patch("pokepoke.workflow.is_shutting_down")
+    @patch("pokepoke.orchestration.workflow.unregister_agent")
+    @patch("pokepoke.orchestration.workflow.register_agent")
+    @patch("pokepoke.orchestration.workflow.cleanup_worktree")
+    @patch("pokepoke.orchestration.workflow_helpers.finalize_work_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow.add_comment")
+    @patch("pokepoke.orchestration.workflow.run_gate_agent")
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=False)
+    @patch("pokepoke.git.git_operations.has_commits_ahead", return_value=1)
+    @patch("pokepoke.orchestration.workflow.invoke_copilot")
+    @patch("pokepoke.orchestration.workflow.build_prompt_from_work_item", return_value="prompt")
+    @patch("pokepoke.orchestration.workflow.get_config")
+    @patch("pokepoke.orchestration.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.orchestration.workflow.get_assignment_for_item", return_value=("assignment", "beads-item"))
+    @patch("pokepoke.orchestration.workflow.terminal_ui")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
+    @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow.create_worktree")
+    @patch("pokepoke.orchestration.workflow.is_shutting_down")
     def test_retry_routes_output_to_retry_card(
         self, mock_shutdown, mock_create, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
@@ -526,7 +526,7 @@ class TestProcessWorkItem:
             GateAgentResult(success=False, reason="needs fix"),
             GateAgentResult(success=True, reason="ok"),
         ]
-        with patch("pokepoke.git_operations.build_handoff_context", return_value="ctx"):
+        with patch("pokepoke.git.git_operations.build_handoff_context", return_value="ctx"):
             result = process_work_item(_item(), interactive=False)
         assert result.success is True
 
@@ -545,7 +545,7 @@ class TestProcessWorkItem:
 class TestPreLoopValidate:
     """Direct unit tests for _pre_loop_validate."""
 
-    @patch("pokepoke.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
     @patch("builtins.input", return_value="n")
     def test_interactive_user_declines(self, mock_input, mock_tui):
         result, was_assigned, wt, root, cwd = _pre_loop_validate(
@@ -558,9 +558,9 @@ class TestPreLoopValidate:
         mock_tui.ui.stop.assert_called_once()
         mock_tui.ui.start.assert_called_once()
 
-    @patch("pokepoke.workflow_helpers._setup_worktree")
-    @patch("pokepoke.workflow_helpers.assign_and_sync_item", return_value=False)
-    @patch("pokepoke.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers._setup_worktree")
+    @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=False)
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
     def test_assign_failure(self, mock_tui, mock_assign, mock_setup):
         result, was_assigned, wt, root, cwd = _pre_loop_validate(
             _item(), interactive=False, worktree_lock_timeout=10,
@@ -571,9 +571,9 @@ class TestPreLoopValidate:
         assert was_assigned is False
         mock_setup.assert_not_called()
 
-    @patch("pokepoke.workflow_helpers._setup_worktree", return_value=None)
-    @patch("pokepoke.workflow_helpers.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers._setup_worktree", return_value=None)
+    @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
     def test_worktree_setup_failure(self, mock_tui, mock_assign, mock_setup):
         result, was_assigned, wt, root, cwd = _pre_loop_validate(
             _item(), interactive=False, worktree_lock_timeout=10,
@@ -589,9 +589,9 @@ class TestPreLoopValidate:
 class TestRunGateCheck:
     """Direct unit tests for _run_gate_check."""
 
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.run_gate_agent", return_value=GateAgentResult(success=True, reason="all good"))
-    @patch("pokepoke.git_operations.build_handoff_context", return_value="ctx")
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.run_gate_agent", return_value=GateAgentResult(success=True, reason="all good"))
+    @patch("pokepoke.git.git_operations.build_handoff_context", return_value="ctx")
     def test_success_path(self, mock_ctx, mock_gate, mock_tui):
         success, reason, runs, crashed = _run_gate_check(
             _item(), worktree_cwd="/tmp/wt", selected_model="gpt-4",
@@ -605,9 +605,9 @@ class TestRunGateCheck:
         call_kwargs = mock_tui.ui.push_agent_status.call_args
         assert call_kwargs[1]["status"] == "success"
 
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.run_gate_agent", side_effect=RuntimeError("boom"))
-    @patch("pokepoke.git_operations.build_handoff_context", return_value="ctx")
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.run_gate_agent", side_effect=RuntimeError("boom"))
+    @patch("pokepoke.git.git_operations.build_handoff_context", return_value="ctx")
     def test_exception_path(self, mock_ctx, mock_gate, mock_tui):
         import pytest
         with pytest.raises(RuntimeError, match="boom"):
@@ -652,9 +652,9 @@ class TestMaybeRetryCopilot:
 class TestRunCleanupTimeout:
     """Test the timeout branch in run_cleanup_with_timeout."""
 
-    @patch("pokepoke.workflow_helpers.has_uncommitted_changes", return_value=True)
-    @patch("pokepoke.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=True)
+    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
     def test_timeout_during_cleanup(self, mock_banner, mock_set, mock_uncommitted):
         item = _item()
         result = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1)
@@ -673,11 +673,11 @@ class TestRunCleanupTimeout:
 class TestFinalizeItemResult:
     """Direct unit tests for _finalize_item_result."""
 
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.run_beta_tester")
-    @patch("pokepoke.workflow_helpers.finalize_work_item", return_value=True)
-    @patch("pokepoke.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.run_beta_tester")
+    @patch("pokepoke.orchestration.workflow_helpers.finalize_work_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
     def test_beta_test_enabled(self, mock_banner, mock_set, mock_finalize,
                                mock_beta, mock_tui, tmp_path):
         beta_stats = AgentStats(input_tokens=50)
@@ -705,10 +705,10 @@ class TestFinalizeItemResult:
         # Beta stats should be accumulated
         assert wir.stats.input_tokens == 150
 
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.finalize_work_item", return_value=True)
-    @patch("pokepoke.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.finalize_work_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
     def test_with_loggers(self, mock_banner, mock_set, mock_finalize,
                           mock_tui, tmp_path):
         run_logger = MagicMock()
@@ -736,10 +736,10 @@ class TestFinalizeItemResult:
 
     # ── Failure path: reconciliation upgrades to SUCCESS ──────────
 
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.reconcile_completed_item")
-    @patch("pokepoke.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.reconcile_completed_item")
+    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
     def test_failure_reconciled_to_success(self, mock_banner, mock_set,
                                            mock_reconcile, mock_tui, tmp_path):
         """When session fails but reconciliation shows all evidence passed,
@@ -776,11 +776,11 @@ class TestFinalizeItemResult:
 
     # ── Failure path: reconciliation says NOT reconciled ──────────
 
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.reconcile_completed_item")
-    @patch("pokepoke.workflow_helpers.cleanup_worktree")
-    @patch("pokepoke.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.reconcile_completed_item")
+    @patch("pokepoke.orchestration.workflow_helpers.cleanup_worktree")
+    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
     def test_failure_not_reconciled(self, mock_banner, mock_set,
                                     mock_cleanup, mock_reconcile,
                                     mock_tui, tmp_path):
@@ -815,11 +815,11 @@ class TestFinalizeItemResult:
 
     # ── False-positive guard: partial evidence ≠ reconciled ──────
 
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.reconcile_completed_item")
-    @patch("pokepoke.workflow_helpers.cleanup_worktree")
-    @patch("pokepoke.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.reconcile_completed_item")
+    @patch("pokepoke.orchestration.workflow_helpers.cleanup_worktree")
+    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
     def test_failure_partial_evidence_not_reconciled(self, mock_banner, mock_set,
                                                      mock_cleanup, mock_reconcile,
                                                      mock_tui, tmp_path):

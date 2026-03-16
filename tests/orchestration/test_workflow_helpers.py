@@ -1,4 +1,4 @@
-"""Tests for pokepoke.workflow_helpers module."""
+"""Tests for pokepoke.orchestration.workflow_helpers module."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from pokepoke.types import (
     CopilotResult,
     ModelCompletionRecord,
 )
-from pokepoke.workflow_helpers import (
+from pokepoke.orchestration.workflow_helpers import (
     _apply_gate_feedback,
     _build_completion_record,
     _extract_agent_stats,
@@ -178,7 +178,7 @@ class TestExtractAgentStats:
         result = CopilotResult(work_item_id="x", success=True, stats=sample_stats)
         assert _extract_agent_stats(result) is sample_stats
 
-    @patch("pokepoke.stats.parse_agent_stats")
+    @patch("pokepoke.stats.stats.parse_agent_stats")
     def test_parses_from_output(self, mock_parse, sample_stats):
         mock_parse.return_value = sample_stats
         result = CopilotResult(work_item_id="x", success=True, output="raw output")
@@ -220,31 +220,31 @@ class TestApplyGateFeedback:
 
 
 class TestLogCommitStatus:
-    @patch("pokepoke.workflow_helpers.has_uncommitted_changes", return_value=True)
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=True)
     def test_returns_early_when_uncommitted(self, mock_has, capsys):
         _log_commit_status("/some/path")
         mock_has.assert_called_once_with(cwd="/some/path")
         assert capsys.readouterr().out == ""
 
     @patch("builtins.print")
-    @patch("pokepoke.git_operations.has_commits_ahead", return_value=3)
-    @patch("pokepoke.workflow_helpers.has_uncommitted_changes", return_value=False)
+    @patch("pokepoke.git.git_operations.has_commits_ahead", return_value=3)
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=False)
     def test_prints_commits_ahead(self, mock_has, mock_ahead, mock_print):
         _log_commit_status("/wt")
         output = " ".join(str(a) for c in mock_print.call_args_list for a in c.args)
         assert "3 commits ahead" in output
 
     @patch("builtins.print")
-    @patch("pokepoke.git_operations.has_commits_ahead", return_value=1)
-    @patch("pokepoke.workflow_helpers.has_uncommitted_changes", return_value=False)
+    @patch("pokepoke.git.git_operations.has_commits_ahead", return_value=1)
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=False)
     def test_singular_commit(self, mock_has, mock_ahead, mock_print):
         _log_commit_status("/wt")
         output = " ".join(str(a) for c in mock_print.call_args_list for a in c.args)
         assert "1 commit ahead" in output
 
     @patch("builtins.print")
-    @patch("pokepoke.git_operations.has_commits_ahead", return_value=0)
-    @patch("pokepoke.workflow_helpers.has_uncommitted_changes", return_value=False)
+    @patch("pokepoke.git.git_operations.has_commits_ahead", return_value=0)
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=False)
     def test_no_changes(self, mock_has, mock_ahead, mock_print):
         _log_commit_status("/wt")
         output = " ".join(str(a) for c in mock_print.call_args_list for a in c.args)
@@ -292,7 +292,7 @@ class TestMaybeRetryCopilot:
 
 class TestSetupWorktree:
     @patch("builtins.print")
-    @patch("pokepoke.workflow_helpers.create_worktree")
+    @patch("pokepoke.orchestration.workflow_helpers.create_worktree")
     def test_success(self, mock_create, mock_print, sample_item):
         mock_create.return_value = Path("/worktrees/item-42")
         result = _setup_worktree(sample_item)
@@ -302,14 +302,14 @@ class TestSetupWorktree:
         assert "Creating worktree" in output
 
     @patch("builtins.print")
-    @patch("pokepoke.workflow_helpers.create_worktree", side_effect=RuntimeError("lock failed"))
+    @patch("pokepoke.orchestration.workflow_helpers.create_worktree", side_effect=RuntimeError("lock failed"))
     def test_failure_returns_none(self, mock_create, mock_print, sample_item):
         result = _setup_worktree(sample_item)
         assert result is None
         output = " ".join(str(a) for c in mock_print.call_args_list for a in c.args)
         assert "Failed to create worktree" in output
 
-    @patch("pokepoke.workflow_helpers.create_worktree", side_effect=RuntimeError("boom"))
+    @patch("pokepoke.orchestration.workflow_helpers.create_worktree", side_effect=RuntimeError("boom"))
     def test_failure_logs_to_loggers(self, mock_create, sample_item, mock_run_logger, mock_item_logger):
         result = _setup_worktree(
             sample_item, run_logger=mock_run_logger, item_logger=mock_item_logger,
@@ -323,8 +323,8 @@ class TestSetupWorktree:
 
 
 class TestPreLoopValidate:
-    @patch("pokepoke.workflow_helpers._setup_worktree")
-    @patch("pokepoke.workflow_helpers.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow_helpers._setup_worktree")
+    @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=True)
     def test_non_interactive_success(self, mock_assign, mock_setup, sample_item):
         mock_setup.return_value = Path("/wt/item-42")
         early, assigned, wt_path, root, wt_cwd = _pre_loop_validate(
@@ -336,7 +336,7 @@ class TestPreLoopValidate:
         assert wt_path == Path("/wt/item-42")
         assert wt_cwd == str(Path("/wt/item-42"))
 
-    @patch("pokepoke.workflow_helpers.assign_and_sync_item", return_value=False)
+    @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=False)
     def test_assignment_failure(self, mock_assign, sample_item, capsys):
         early, assigned, wt_path, _, _ = _pre_loop_validate(
             sample_item, interactive=False, worktree_lock_timeout=60.0,
@@ -346,8 +346,8 @@ class TestPreLoopValidate:
         assert early.success is False
         assert assigned is False
 
-    @patch("pokepoke.workflow_helpers._setup_worktree", return_value=None)
-    @patch("pokepoke.workflow_helpers.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow_helpers._setup_worktree", return_value=None)
+    @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=True)
     def test_worktree_failure(self, mock_assign, mock_setup, sample_item, capsys):
         early, assigned, wt_path, _, _ = _pre_loop_validate(
             sample_item, interactive=False, worktree_lock_timeout=60.0,
@@ -358,9 +358,9 @@ class TestPreLoopValidate:
         assert assigned is True
         assert wt_path is None
 
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.workflow_helpers._setup_worktree")
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow_helpers._setup_worktree")
     @patch("builtins.input", return_value="n")
     def test_interactive_decline(self, mock_input, mock_setup, mock_assign, mock_tui, sample_item):
         early, assigned, _, _, _ = _pre_loop_validate(
@@ -371,9 +371,9 @@ class TestPreLoopValidate:
         assert early.success is False
         assert assigned is False
 
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.workflow_helpers._setup_worktree")
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow_helpers._setup_worktree")
     @patch("builtins.input", return_value="")
     def test_interactive_accept_empty(self, mock_input, mock_setup, mock_assign, mock_tui, sample_item):
         mock_setup.return_value = Path("/wt/item-42")
@@ -389,7 +389,7 @@ class TestPreLoopValidate:
 
 
 class TestRunCleanupWithTimeout:
-    @patch("pokepoke.workflow_helpers.has_uncommitted_changes", return_value=False)
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=False)
     def test_no_uncommitted_changes(self, mock_has, sample_item, sample_result):
         success, runs = run_cleanup_with_timeout(
             sample_item, sample_result, Path("/repo"), time.time(),
@@ -398,10 +398,10 @@ class TestRunCleanupWithTimeout:
         assert success is True
         assert runs == 0
 
-    @patch("pokepoke.workflow_helpers.run_cleanup_loop", return_value=(True, 1))
-    @patch("pokepoke.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.workflow_helpers.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.workflow_helpers.has_uncommitted_changes", side_effect=[True, False])
+    @patch("pokepoke.orchestration.workflow_helpers.run_cleanup_loop", return_value=(True, 1))
+    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", side_effect=[True, False])
     def test_cleanup_succeeds(self, mock_has, mock_fmt, mock_banner, mock_loop, sample_item, sample_result):
         success, runs = run_cleanup_with_timeout(
             sample_item, sample_result, Path("/repo"), time.time(),
@@ -410,10 +410,10 @@ class TestRunCleanupWithTimeout:
         assert success is True
         assert runs == 1
 
-    @patch("pokepoke.workflow_helpers.run_cleanup_loop", return_value=(False, 1))
-    @patch("pokepoke.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.workflow_helpers.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.workflow_helpers.has_uncommitted_changes", return_value=True)
+    @patch("pokepoke.orchestration.workflow_helpers.run_cleanup_loop", return_value=(False, 1))
+    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=True)
     def test_cleanup_fails_breaks_loop(self, mock_has, mock_fmt, mock_banner, mock_loop, sample_item, sample_result):
         success, runs = run_cleanup_with_timeout(
             sample_item, sample_result, Path("/repo"), time.time(),
@@ -423,7 +423,7 @@ class TestRunCleanupWithTimeout:
         assert runs == 1
 
     @patch("builtins.print")
-    @patch("pokepoke.workflow_helpers.has_uncommitted_changes", return_value=True)
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=True)
     def test_timeout(self, mock_has, mock_print, sample_item, sample_result):
         start = time.time() - 7200  # 2 hours ago
         success, runs = run_cleanup_with_timeout(
@@ -435,7 +435,7 @@ class TestRunCleanupWithTimeout:
         output = " ".join(str(a) for c in mock_print.call_args_list for a in c.args)
         assert "TIMEOUT" in output
 
-    @patch("pokepoke.workflow_helpers.has_uncommitted_changes", return_value=False)
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=False)
     def test_failed_result_skips_loop(self, mock_has, sample_item):
         failed = CopilotResult(work_item_id="x", success=False)
         success, runs = run_cleanup_with_timeout(
@@ -450,9 +450,9 @@ class TestRunCleanupWithTimeout:
 
 
 class TestRunGateCheck:
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.run_gate_agent")
-    @patch("pokepoke.git_operations.build_handoff_context", return_value="ctx")
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.run_gate_agent")
+    @patch("pokepoke.git.git_operations.build_handoff_context", return_value="ctx")
     def test_gate_success(self, mock_ctx, mock_gate, mock_tui, sample_item):
         mock_gate.return_value = (True, None, None, False)
         mock_tui.ui.agent_output_for.return_value.__enter__ = MagicMock()
@@ -465,9 +465,9 @@ class TestRunGateCheck:
         assert runs == 1
         assert crashed is False
 
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.run_gate_agent")
-    @patch("pokepoke.git_operations.build_handoff_context", return_value="ctx")
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.run_gate_agent")
+    @patch("pokepoke.git.git_operations.build_handoff_context", return_value="ctx")
     def test_gate_failure(self, mock_ctx, mock_gate, mock_tui, sample_item):
         mock_gate.return_value = (False, "tests failed", None, False)
         mock_tui.ui.agent_output_for.return_value.__enter__ = MagicMock()
@@ -480,9 +480,9 @@ class TestRunGateCheck:
         assert runs == 2
         assert crashed is False
 
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.run_gate_agent")
-    @patch("pokepoke.git_operations.build_handoff_context", return_value="ctx")
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.run_gate_agent")
+    @patch("pokepoke.git.git_operations.build_handoff_context", return_value="ctx")
     def test_gate_infra_crash(self, mock_ctx, mock_gate, mock_tui, sample_item):
         """SDK crash returns crashed=True so callers can retry the gate."""
         mock_gate.return_value = (False, "Gate Agent execution failed: SDK exception", None, True)
@@ -496,9 +496,9 @@ class TestRunGateCheck:
         assert runs == 1
         assert crashed is True
 
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.run_gate_agent", side_effect=RuntimeError("crash"))
-    @patch("pokepoke.git_operations.build_handoff_context", return_value="ctx")
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.run_gate_agent", side_effect=RuntimeError("crash"))
+    @patch("pokepoke.git.git_operations.build_handoff_context", return_value="ctx")
     def test_gate_exception(self, mock_ctx, mock_gate, mock_tui, sample_item):
         mock_tui.ui.agent_output_for.return_value.__enter__ = MagicMock()
         mock_tui.ui.agent_output_for.return_value.__exit__ = MagicMock(return_value=False)
@@ -512,10 +512,10 @@ class TestRunGateCheck:
 
 
 class TestFinalizeItemResult:
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.workflow_helpers.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.workflow_helpers.finalize_work_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow_helpers.finalize_work_item", return_value=True)
     def test_success_path(self, mock_fin, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats):
         wr, ok = _finalize_item_result(
             result=CopilotResult(work_item_id="item-42", success=True),
@@ -537,10 +537,10 @@ class TestFinalizeItemResult:
         assert ok is True
         assert wr.model_completion is not None
 
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.workflow_helpers.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.workflow_helpers.finalize_work_item", return_value=False)
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow_helpers.finalize_work_item", return_value=False)
     def test_success_but_finalize_fails(self, mock_fin, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats):
         wr, ok = _finalize_item_result(
             result=CopilotResult(work_item_id="item-42", success=True),
@@ -561,11 +561,11 @@ class TestFinalizeItemResult:
         assert wr.success is False
         assert ok is False
 
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.workflow_helpers.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.workflow_helpers.cleanup_worktree")
-    @patch("pokepoke.workflow_helpers.reconcile_completed_item", return_value=(False, {}))
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow_helpers.cleanup_worktree")
+    @patch("pokepoke.orchestration.workflow_helpers.reconcile_completed_item", return_value=(False, {}))
     def test_failure_path_cleanup(self, mock_recon, mock_cleanup, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats, capsys):
         wr, ok = _finalize_item_result(
             result=CopilotResult(work_item_id="item-42", success=False, error="something broke"),
@@ -587,10 +587,10 @@ class TestFinalizeItemResult:
         assert ok is False
         mock_cleanup.assert_called_once_with("item-42", force=True, repo_path=None)
 
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.workflow_helpers.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.workflow_helpers.reconcile_completed_item")
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow_helpers.reconcile_completed_item")
     def test_failure_reconciled_as_success(self, mock_recon, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats):
         mock_recon.return_value = (True, {"beads_closed": True, "commits_on_default": True, "worktree_cleaned": True})
         wr, ok = _finalize_item_result(
@@ -612,11 +612,11 @@ class TestFinalizeItemResult:
         assert wr.success is True
         assert ok is True
 
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.workflow_helpers.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.workflow_helpers.run_beta_tester")
-    @patch("pokepoke.workflow_helpers.finalize_work_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow_helpers.run_beta_tester")
+    @patch("pokepoke.orchestration.workflow_helpers.finalize_work_item", return_value=True)
     def test_success_with_beta_test(self, mock_fin, mock_beta, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats):
         beta_stats = AgentStats(input_tokens=10, output_tokens=5)
         mock_beta.return_value = beta_stats
@@ -640,10 +640,10 @@ class TestFinalizeItemResult:
         assert ok is True
         mock_beta.assert_called_once()
 
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.workflow_helpers.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.workflow_helpers.finalize_work_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow_helpers.finalize_work_item", return_value=True)
     def test_success_with_loggers(self, mock_fin, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats, mock_run_logger, mock_item_logger):
         wr, ok = _finalize_item_result(
             result=CopilotResult(work_item_id="item-42", success=True),
@@ -666,12 +666,12 @@ class TestFinalizeItemResult:
         mock_run_logger.log_orchestrator.assert_called_once()
         assert wr.model_completion.gate_passed is True
 
-    @patch("pokepoke.workflow_helpers.terminal_ui")
-    @patch("pokepoke.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.workflow_helpers.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.workflow_helpers.cleanup_worktree")
-    @patch("pokepoke.workflow_helpers.reconcile_completed_item", return_value=(False, {}))
-    @patch("pokepoke.shutdown.is_shutting_down", return_value=True)
+    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
+    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow_helpers.cleanup_worktree")
+    @patch("pokepoke.orchestration.workflow_helpers.reconcile_completed_item", return_value=(False, {}))
+    @patch("pokepoke.utils.shutdown.is_shutting_down", return_value=True)
     def test_failure_path_skips_cleanup_during_shutdown(
         self, mock_shutting_down, mock_recon, mock_cleanup, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats,
     ):

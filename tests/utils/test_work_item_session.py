@@ -1,4 +1,4 @@
-"""Tests for pokepoke.work_item_session — __enter__, __exit__, and cleanup_on_failure."""
+"""Tests for pokepoke.orchestration.work_item_session — __enter__, __exit__, and cleanup_on_failure."""
 
 import logging
 from pathlib import Path
@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
-from pokepoke.session_journal import SessionPhase
-from pokepoke.work_item_session import WorkItemSession
+from pokepoke.stats.session_journal import SessionPhase
+from pokepoke.orchestration.work_item_session import WorkItemSession
 
 
 # ---------------------------------------------------------------------------
@@ -43,7 +43,7 @@ def _patch_all_helpers():
     """Return a context manager yielding a dict of mocks for all helpers.
 
     Patches are applied to the correct module for each import style:
-    - Module-level imports → patched on ``pokepoke.work_item_session``
+    - Module-level imports → patched on ``pokepoke.orchestration.work_item_session``
     - Lazy (in-function) imports → patched on their source module
     """
     import contextlib
@@ -54,32 +54,32 @@ def _patch_all_helpers():
         mocks = {}
         try:
             # Module-level imports in work_item_session.py
-            p = patch("pokepoke.work_item_session.write_journal", return_value=Path("/j.json"))
+            p = patch("pokepoke.orchestration.work_item_session.write_journal", return_value=Path("/j.json"))
             mocks["write_journal"] = p.start()
             patches["write_journal"] = p
 
-            p = patch("pokepoke.work_item_session.delete_journal", return_value=True)
+            p = patch("pokepoke.orchestration.work_item_session.delete_journal", return_value=True)
             mocks["delete_journal"] = p.start()
             patches["delete_journal"] = p
 
-            p = patch("pokepoke.work_item_session.is_merge_in_progress", return_value=False)
+            p = patch("pokepoke.orchestration.work_item_session.is_merge_in_progress", return_value=False)
             mocks["is_merge"] = p.start()
             patches["is_merge"] = p
 
-            p = patch("pokepoke.work_item_session.run_git")
+            p = patch("pokepoke.orchestration.work_item_session.run_git")
             mocks["subprocess_run"] = p.start()
             patches["subprocess_run"] = p
 
             # Lazy imports — must be patched at their source modules
-            p = patch("pokepoke.worktrees.cleanup_worktree", return_value=True)
+            p = patch("pokepoke.worktrees.worktrees.cleanup_worktree", return_value=True)
             mocks["cleanup_worktree"] = p.start()
             patches["cleanup_worktree"] = p
 
-            p = patch("pokepoke.git_operations.branch_exists", return_value=False)
+            p = patch("pokepoke.git.git_operations.branch_exists", return_value=False)
             mocks["branch_exists"] = p.start()
             patches["branch_exists"] = p
 
-            p = patch("pokepoke.beads_management.unassign_item", return_value=True)
+            p = patch("pokepoke.beads.beads_management.unassign_item", return_value=True)
             mocks["unassign_item"] = p.start()
             patches["unassign_item"] = p
 
@@ -241,7 +241,7 @@ class TestCleanupPartialFailure:
             m["subprocess_run"].side_effect = RuntimeError("merge --abort failed")
             session = _make_session(worktree_path="/tmp/wt/task-test-item")
             # Need to make the worktree path exist for the merge abort check
-            with patch("pokepoke.work_item_session.Path.exists", return_value=True):
+            with patch("pokepoke.orchestration.work_item_session.Path.exists", return_value=True):
                 session.cleanup_on_failure()
 
             last_write = m["write_journal"].call_args_list[-1]
@@ -312,7 +312,7 @@ class TestCleanupErrorLogging:
         with _patch_all_helpers() as m:
             m["cleanup_worktree"].return_value = False
             session = _make_session()
-            with caplog.at_level(logging.ERROR, logger="pokepoke.work_item_session"):
+            with caplog.at_level(logging.ERROR, logger="pokepoke.orchestration.work_item_session"):
                 session.cleanup_on_failure()
 
             error_msgs = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
@@ -324,7 +324,7 @@ class TestCleanupErrorLogging:
         with _patch_all_helpers() as m:
             m["unassign_item"].return_value = False
             session = _make_session()
-            with caplog.at_level(logging.ERROR, logger="pokepoke.work_item_session"):
+            with caplog.at_level(logging.ERROR, logger="pokepoke.orchestration.work_item_session"):
                 session.cleanup_on_failure()
 
             error_msgs = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
@@ -337,7 +337,7 @@ class TestCleanupErrorLogging:
             m["branch_exists"].return_value = True
             m["subprocess_run"].side_effect = RuntimeError("branch -D failed")
             session = _make_session()
-            with caplog.at_level(logging.ERROR, logger="pokepoke.work_item_session"):
+            with caplog.at_level(logging.ERROR, logger="pokepoke.orchestration.work_item_session"):
                 session.cleanup_on_failure()
 
             error_msgs = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
@@ -349,7 +349,7 @@ class TestCleanupErrorLogging:
         with _patch_all_helpers() as m:
             m["write_journal"].side_effect = OSError("disk full")
             session = _make_session()
-            with caplog.at_level(logging.ERROR, logger="pokepoke.work_item_session"):
+            with caplog.at_level(logging.ERROR, logger="pokepoke.orchestration.work_item_session"):
                 session.cleanup_on_failure()
 
             error_msgs = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
@@ -459,32 +459,32 @@ def _patch_enter_helpers():
         patches = {}
         mocks = {}
         try:
-            p = patch("pokepoke.work_item_session.write_journal", return_value=Path("/j.json"))
+            p = patch("pokepoke.orchestration.work_item_session.write_journal", return_value=Path("/j.json"))
             mocks["write_journal"] = p.start()
             patches["write_journal"] = p
 
-            p = patch("pokepoke.work_item_session.delete_journal", return_value=True)
+            p = patch("pokepoke.orchestration.work_item_session.delete_journal", return_value=True)
             mocks["delete_journal"] = p.start()
             patches["delete_journal"] = p
 
-            p = patch("pokepoke.beads_management.assign_and_sync_item", return_value=True)
+            p = patch("pokepoke.beads.beads_management.assign_and_sync_item", return_value=True)
             mocks["assign"] = p.start()
             patches["assign"] = p
 
-            p = patch("pokepoke.worktrees.create_worktree", return_value=Path("/tmp/wt/task-test"))
+            p = patch("pokepoke.worktrees.worktrees.create_worktree", return_value=Path("/tmp/wt/task-test"))
             mocks["create_worktree"] = p.start()
             patches["create_worktree"] = p
 
             # Needed for rollback
-            p = patch("pokepoke.worktrees.cleanup_worktree", return_value=True)
+            p = patch("pokepoke.worktrees.worktrees.cleanup_worktree", return_value=True)
             mocks["cleanup_worktree"] = p.start()
             patches["cleanup_worktree"] = p
 
-            p = patch("pokepoke.git_operations.branch_exists", return_value=False)
+            p = patch("pokepoke.git.git_operations.branch_exists", return_value=False)
             mocks["branch_exists"] = p.start()
             patches["branch_exists"] = p
 
-            p = patch("pokepoke.beads_management.unassign_item", return_value=True)
+            p = patch("pokepoke.beads.beads_management.unassign_item", return_value=True)
             mocks["unassign_item"] = p.start()
             patches["unassign_item"] = p
 
@@ -575,7 +575,7 @@ class TestEnterFailureAndRollback:
             m["create_worktree"].side_effect = RuntimeError("worktree failed")
             m["unassign_item"].side_effect = RuntimeError("unassign failed")
             session = WorkItemSession(item_id="test-1", agent_name="agent")
-            with caplog.at_level(logging.ERROR, logger="pokepoke.work_item_session"), \
+            with caplog.at_level(logging.ERROR, logger="pokepoke.orchestration.work_item_session"), \
                     pytest.raises(RuntimeError, match="worktree failed"):
                     session.__enter__()
 

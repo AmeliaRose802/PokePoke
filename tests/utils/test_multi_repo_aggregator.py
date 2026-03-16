@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from pokepoke.config import RepoConfig
-from pokepoke.multi_repo_aggregator import (
+from pokepoke.git.multi_repo_aggregator import (
     RepoQueryResult,
     _derive_repo_name,
     _merge_and_sort,
@@ -15,7 +15,7 @@ from pokepoke.multi_repo_aggregator import (
     get_aggregated_stats,
     query_repo_ready_items,
 )
-from pokepoke.multi_repo_aggregator import AggregatedWorkItem
+from pokepoke.git.multi_repo_aggregator import AggregatedWorkItem
 from pokepoke.types import BeadsWorkItem
 
 
@@ -92,7 +92,7 @@ class TestQueryRepoReadyItems:
             {"id": "a1", "title": "T", "status": "open", "priority": 1, "issue_type": "task"},
         ]
         monkeypatch.setattr(
-            "pokepoke.multi_repo_aggregator._run_bd",
+            "pokepoke.git.multi_repo_aggregator._run_bd",
             lambda *a, **kw: _bd_stdout(payload),
         )
         result = query_repo_ready_items(_make_repo(path=str(tmp_path)))
@@ -104,14 +104,14 @@ class TestQueryRepoReadyItems:
         def boom(*_a: object, **_kw: object) -> None:
             raise subprocess.CalledProcessError(1, "bd")
 
-        monkeypatch.setattr("pokepoke.multi_repo_aggregator._run_bd", boom)
+        monkeypatch.setattr("pokepoke.git.multi_repo_aggregator._run_bd", boom)
         result = query_repo_ready_items(_make_repo(path=str(tmp_path)))
         assert result.items == []
         assert result.error is not None
 
     def test_handles_empty_stdout(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.setattr(
-            "pokepoke.multi_repo_aggregator._run_bd",
+            "pokepoke.git.multi_repo_aggregator._run_bd",
             lambda *a, **kw: subprocess.CompletedProcess("bd", 0, stdout=""),
         )
         result = query_repo_ready_items(_make_repo(path=str(tmp_path)))
@@ -120,7 +120,7 @@ class TestQueryRepoReadyItems:
 
     def test_handles_malformed_json(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.setattr(
-            "pokepoke.multi_repo_aggregator._run_bd",
+            "pokepoke.git.multi_repo_aggregator._run_bd",
             lambda *a, **kw: subprocess.CompletedProcess("bd", 0, stdout="[{bad json}]"),
         )
         result = query_repo_ready_items(_make_repo(path=str(tmp_path)))
@@ -134,7 +134,7 @@ class TestQueryRepoReadyItems:
             captured_cwd.append(kwargs.get("cwd"))
             return subprocess.CompletedProcess("bd", 0, stdout="[]")
 
-        monkeypatch.setattr("pokepoke.multi_repo_aggregator._run_bd", capture_bd)
+        monkeypatch.setattr("pokepoke.git.multi_repo_aggregator._run_bd", capture_bd)
         query_repo_ready_items(_make_repo(path=str(tmp_path)))
         assert captured_cwd[0] == str(tmp_path)
 
@@ -216,7 +216,7 @@ class TestAggregateReadyWorkItems:
             {"id": "t1", "title": "T", "status": "open", "priority": 2, "issue_type": "task"},
         ]
         monkeypatch.setattr(
-            "pokepoke.multi_repo_aggregator._run_bd",
+            "pokepoke.git.multi_repo_aggregator._run_bd",
             lambda *a, **kw: _bd_stdout(payload),
         )
         items = aggregate_ready_work_items([_make_repo(path=str(tmp_path))])
@@ -241,7 +241,7 @@ class TestAggregateReadyWorkItems:
             payload = call_map.get(cwd, [])
             return _bd_stdout(payload)
 
-        monkeypatch.setattr("pokepoke.multi_repo_aggregator._run_bd", mock_bd)
+        monkeypatch.setattr("pokepoke.git.multi_repo_aggregator._run_bd", mock_bd)
 
         repos = [
             _make_repo(path=str(repo_a), priority_weight=1),
@@ -270,7 +270,7 @@ class TestAggregateReadyWorkItems:
             cwd = kwargs.get("cwd", "")
             return _bd_stdout(call_map.get(cwd, []))
 
-        monkeypatch.setattr("pokepoke.multi_repo_aggregator._run_bd", mock_bd)
+        monkeypatch.setattr("pokepoke.git.multi_repo_aggregator._run_bd", mock_bd)
 
         repos = [_make_repo(path=str(repo_a)), _make_repo(path=str(repo_b))]
         items = aggregate_ready_work_items(repos)
@@ -292,7 +292,7 @@ class TestAggregateReadyWorkItems:
                 {"id": "g1", "title": "Good", "status": "open", "priority": 1, "issue_type": "task"},
             ])
 
-        monkeypatch.setattr("pokepoke.multi_repo_aggregator._run_bd", mock_bd)
+        monkeypatch.setattr("pokepoke.git.multi_repo_aggregator._run_bd", mock_bd)
 
         repos = [_make_repo(path=str(good)), _make_repo(path=str(bad))]
         items = aggregate_ready_work_items(repos)
@@ -325,7 +325,7 @@ class TestGetAggregatedStats:
             cwd = kwargs.get("cwd", "")
             return _bd_stdout(call_map.get(cwd, []))
 
-        monkeypatch.setattr("pokepoke.multi_repo_aggregator._run_bd", mock_bd)
+        monkeypatch.setattr("pokepoke.git.multi_repo_aggregator._run_bd", mock_bd)
 
         repos = [_make_repo(path=str(repo_a)), _make_repo(path=str(repo_b))]
         stats = get_aggregated_stats(repos)
