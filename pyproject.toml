@@ -142,21 +142,21 @@ ignore_missing_imports = true
 # copilot_sdk uses conditional imports that produce different type: ignore
 # needs depending on whether the copilot SDK is installed
 [[tool.mypy.overrides]]
-module = "pokepoke.copilot_sdk"
+module = "pokepoke.models.copilot_sdk"
 warn_unused_ignores = false
 
 # manifest_utils is installed without py.typed marker
 [[tool.mypy.overrides]]
-module = "pokepoke.manifest_utils"
+module = "pokepoke.utils.manifest_utils"
 ignore_missing_imports = true
 follow_imports = "skip"
 
 # worktree_cleanup uses manifest_utils (untyped) — suppress Any-return warnings
 [[tool.mypy.overrides]]
-module = "pokepoke.worktree_cleanup"
+module = "pokepoke.worktrees.worktree_cleanup"
 warn_return_any = false
 
 # git_operations re-exports symbols from git_helpers for convenience
 [[tool.mypy.overrides]]
-module = "pokepoke.git_operations"
+module = "pokepoke.git.git_operations"
 implicit_reexport = true
