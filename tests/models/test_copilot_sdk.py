@@ -174,7 +174,7 @@ class TestInvokeCopilotSDKSync:
 class TestCopilotClientNone:
     """Test behavior when CopilotClient SDK is not installed."""
 
-    @patch('pokepoke.models.copilot_sdk.CopilotClient', None)
+    @patch('pokepoke.models.copilot_sdk._HAS_COPILOT', False)
     def test_invoke_sync_raises_when_sdk_missing(self, sample_work_item):
         """Test that invoke_copilot_sdk_sync raises ImportError when SDK not installed."""
         with pytest.raises(ImportError, match="copilot.*SDK.*not installed"):
@@ -519,7 +519,7 @@ class TestInvokeCopilotSDKAsync:
         # Don't trigger any completion events - will timeout
         mock_session.on = lambda handler: None
         mock_session.send = AsyncMock()
-        mock_session.destroy = AsyncMock()
+        mock_session.disconnect = AsyncMock()
 
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
@@ -530,8 +530,8 @@ class TestInvokeCopilotSDKAsync:
         assert not result.success
         assert "timeout" in result.error.lower()
         mock_session.abort.assert_called_once()
-        # Session must be destroyed even on early exit (timeout path)
-        mock_session.destroy.assert_called_once()
+        # Session must be disconnected even on early exit (timeout path)
+        mock_session.disconnect.assert_called_once()
 
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_inactivity_destroys_session(self, mock_client_class, sample_work_item):
@@ -553,7 +553,7 @@ class TestInvokeCopilotSDKAsync:
         with patch('pokepoke.models.copilot_sdk._await_completion', new_callable=AsyncMock, return_value="inactivity"):
             mock_session.on = lambda handler: None
             mock_session.send = AsyncMock()
-            mock_session.destroy = AsyncMock()
+            mock_session.disconnect = AsyncMock()
 
             result = await invoke_copilot_sdk(
                 work_item=sample_work_item,
@@ -563,7 +563,7 @@ class TestInvokeCopilotSDKAsync:
 
         assert not result.success
         assert "no sdk events" in result.error.lower() or "inactiv" in result.error.lower()
-        mock_session.destroy.assert_called_once()
+        mock_session.disconnect.assert_called_once()
 
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_exception(self, mock_client_class, sample_work_item):
@@ -1593,8 +1593,8 @@ class TestRateLimitFallback:
         assert attempt_count == 2
         assert configs_captured[0]["model"] != FALLBACK_MODEL
         assert configs_captured[1]["model"] == FALLBACK_MODEL
-        # First session should have been destroyed before fallback
-        sessions_created[0].destroy.assert_called()
+        # First session should have been disconnected before fallback
+        sessions_created[0].disconnect.assert_called()
 
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_rate_limit_fallback_model_set_in_result(

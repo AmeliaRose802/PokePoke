@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 try:
-    from copilot import CopilotClient  # type: ignore
+    from copilot import CopilotClient
+    _HAS_COPILOT = True
 except ImportError:
-    CopilotClient = None
+    _HAS_COPILOT = False
 
 from pokepoke.config import get_config, DEFAULT_MODEL, FALLBACK_MODEL
 from pokepoke.utils.constants import DEFAULT_AGENT_TIMEOUT
@@ -101,7 +102,7 @@ def _create_sdk_client(cwd: str | None) -> Any:
     }
     if cwd:
         client_opts["cwd"] = cwd
-    if CopilotClient is None:
+    if not _HAS_COPILOT:
         raise ImportError(
             "The 'copilot' SDK package is required but not installed. "
             "Install it or use a different AI backend."
@@ -188,7 +189,7 @@ def _resolve_prompt(
     return build_prompt_from_work_item(work_item, template_name or "beads-item")
 
 
-async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
+async def invoke_copilot_sdk(
     work_item: BeadsWorkItem,
     prompt: str | None = None,
     retry_config: RetryConfig | None = None,
@@ -252,7 +253,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             if is_resume:
                 print(f"[SDK] Resuming session: {session_id}")
 
-            session = await client.create_session(session_config)  # type: ignore[arg-type]
+            session = await client.create_session(session_config)
             print(f"[SDK] Session created: {session.session_id}\n")
 
             done = asyncio.Event()
@@ -288,9 +289,9 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
                 if attempt < max_attempts - 1 and current_model != FALLBACK_MODEL:
                     print(f"\n[SDK] Retrying with fallback model: {FALLBACK_MODEL}")
                     try:
-                        await session.destroy()
+                        await session.disconnect()
                     except Exception as e:
-                        logger.debug(f"Failed to destroy session for fallback retry: {e}")
+                        logger.debug(f"Failed to disconnect session for fallback retry: {e}")
                     session = None
                     current_model = FALLBACK_MODEL
                     continue
@@ -299,9 +300,9 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
             finally:
                 if session is not None:
                     try:
-                        await session.destroy()
+                        await session.disconnect()
                     except Exception as e:
-                        logger.debug(f"Failed to destroy session during cleanup: {e}")
+                        logger.debug(f"Failed to disconnect session during cleanup: {e}")
                     session = None
 
         # Handle timeout/interrupt/inactivity/tool_timeout early exits
@@ -355,7 +356,7 @@ async def invoke_copilot_sdk(  # type: ignore[no-any-unimported]
         await shutdown_copilot_client(client)
 
 
-def invoke_copilot_sdk_sync(  # type: ignore[no-any-unimported]
+def invoke_copilot_sdk_sync(
     work_item: BeadsWorkItem,
     prompt: str | None = None,
     retry_config: RetryConfig | None = None,
