@@ -100,12 +100,10 @@ class TestSelectWorkItemHumanRequired:
         assert result is None
         mock_hierarchical.assert_not_called()
 
-    @patch("pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies", return_value=False)
     @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
     @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
     def test_human_required_skip_message_printed(
         self, mock_hierarchical: Mock, mock_assigned: Mock,
-        mock_deps: Mock,
     ) -> None:
         """Human-required items are filtered out; only non-HR items reach selection."""
         items = [
