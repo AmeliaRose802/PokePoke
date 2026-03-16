@@ -118,8 +118,12 @@ def run_gate_agent(
             crashed=not is_timeout, is_timeout=is_timeout,
         )
     output = result.output or ""
-    json_match = re.search(r'```json\s*(\{.*\})\s*```', output, re.DOTALL)
-    if json_match:
+    # Find ALL ```json blocks (case-insensitive) and try each, last-first,
+    # since the verdict is expected at the end of the response.
+    json_blocks = list(re.finditer(
+        r'```[jJ][sS][oO][nN]\s*(\{.*?\})\s*```', output, re.DOTALL,
+    ))
+    for json_match in reversed(json_blocks):
         try:
             data = json.loads(json_match.group(1))
             status = data.get("status")
@@ -136,14 +140,15 @@ def run_gate_agent(
                     full_message += f"\nRecommendation: {recommendation}"
 
                 return _finish(True, full_message, crashed=False)
-            else:
+            elif status is not None:
                 reason = data.get("reason", "Verification failed")
                 details = data.get("details", "")
                 full_reason = f"{reason}\nDetails: {details}"
                 return _finish(False, full_reason, crashed=False)
+            # No "status" key — skip this block, try the next one
         except json.JSONDecodeError:
-            pass
-    if "VERIFICATION SUCCESSFUL" in output or "NEW_WORK_VERIFIED" in output:
+            continue
+    if "VERIFICATION SUCCESSFUL" in output.upper() or "NEW_WORK_VERIFIED" in output:
         return _finish(True, "Verification successful (text match)", crashed=False)
     return _finish(False, "Gate Agent did not explicitly approve the fix. Check logs.", crashed=False)
 
