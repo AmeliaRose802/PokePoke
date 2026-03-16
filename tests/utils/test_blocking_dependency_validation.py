@@ -395,14 +395,16 @@ class TestBlockingDependencyValidation:
             result = has_unmet_blocking_dependencies("child-1")
             assert result is False
 
-    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies')
     @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
-    def test_select_work_item_filters_items_with_unmet_blockers(
+    def test_select_work_item_passes_all_items_to_hierarchical_selection(
         self,
         mock_select_hierarchical: Mock,
-        mock_has_unmet: Mock,
     ) -> None:
-        """Work items with unmet blocking dependencies should be filtered out."""
+        """select_work_item no longer filters by blocking dependencies per-item.
+
+        Blocking dependency filtering was removed from select_work_item for
+        performance (bd ready already filters blocked items). All items from
+        the ready queue are passed directly to hierarchical selection."""
         items = [
             BeadsWorkItem(
                 id="task-1",
@@ -427,33 +429,25 @@ class TestBlockingDependencyValidation:
             )
         ]
 
-        # task-1 has unmet blockers, task-2 and task-3 are clear
-        def has_unmet_side_effect(item_id):
-            return item_id == "task-1"
-
-        mock_has_unmet.side_effect = has_unmet_side_effect
-        mock_select_hierarchical.return_value = items[1]  # Returns task-2
+        mock_select_hierarchical.return_value = items[1]
 
         select_work_item(items, interactive=False)
 
-        # Should have checked all items
-        assert mock_has_unmet.call_count == 3
-
-        # Should only pass filtered items to hierarchical selection
-        # The items passed should be task-2 and task-3 (not task-1)
+        # All items should be passed through to hierarchical selection
+        # (blocking dep filtering is handled upstream by bd ready)
+        mock_select_hierarchical.assert_called_once()
         call_args = mock_select_hierarchical.call_args[0][0]
-        assert len(call_args) == 2
-        assert call_args[0].id == "task-2"
-        assert call_args[1].id == "task-3"
+        assert len(call_args) == 3
 
-    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies')
     @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
-    def test_select_work_item_returns_none_when_all_items_have_unmet_blockers(
+    def test_select_work_item_with_single_item_passes_to_hierarchical(
         self,
         mock_select_hierarchical: Mock,
-        mock_has_unmet: Mock,
     ) -> None:
-        """Should return None when all items have unmet blocking dependencies."""
+        """Single item should be passed to hierarchical selection regardless.
+
+        Blocking dependency filtering removed from select_work_item for
+        performance. bd ready upstream handles blocker-aware filtering."""
         items = [
             BeadsWorkItem(
                 id="task-1",
@@ -464,11 +458,9 @@ class TestBlockingDependencyValidation:
             )
         ]
 
-        mock_has_unmet.return_value = True
+        mock_select_hierarchical.return_value = items[0]
 
         result = select_work_item(items, interactive=False)
 
-        assert result is None
-
-        # Should not call hierarchical selection when no items available
-        mock_select_hierarchical.assert_not_called()
+        assert result is not None
+        mock_select_hierarchical.assert_called_once()
