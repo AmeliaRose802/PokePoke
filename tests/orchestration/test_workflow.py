@@ -36,9 +36,8 @@ class TestSelectWorkItem:
 
         assert result is None
 
-    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
     @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
-    def test_autonomous_selection(self, mock_select: Mock, mock_deps: Mock) -> None:
+    def test_autonomous_selection(self, mock_select: Mock) -> None:
         """Test autonomous mode selection."""
         items = [
             BeadsWorkItem(
@@ -59,9 +58,8 @@ class TestSelectWorkItem:
         # Should have passed the full list (no filtering since no items assigned to others)
         mock_select.assert_called_once()
 
-    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
     @patch('builtins.input')
-    def test_interactive_selection(self, mock_input: Mock, mock_deps: Mock) -> None:
+    def test_interactive_selection(self, mock_input: Mock) -> None:
         """Test interactive mode selection."""
         items = [
             BeadsWorkItem(
@@ -80,9 +78,8 @@ class TestSelectWorkItem:
         assert result is not None
         assert result.id == "task-1"
 
-    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
     @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
-    def test_filters_items_assigned_to_others(self, mock_select: Mock, mock_deps: Mock) -> None:
+    def test_filters_items_assigned_to_others(self, mock_select: Mock) -> None:
         """Test that items assigned to other agents are filtered out."""
         import os
         os.environ['AGENT_NAME'] = 'agent_alpha'
@@ -119,8 +116,7 @@ class TestSelectWorkItem:
         assert result is not None
         assert result.id == "task-2"
 
-    @patch('pokepoke.orchestration.work_item_selection.has_unmet_blocking_dependencies', return_value=False)
-    def test_all_items_assigned_to_others(self, mock_deps: Mock) -> None:
+    def test_all_items_assigned_to_others(self) -> None:
         """Test when all items are assigned to other agents."""
         import os
         os.environ['AGENT_NAME'] = 'agent_alpha'
