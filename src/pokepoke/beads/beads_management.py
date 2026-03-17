@@ -325,6 +325,30 @@ def increment_total_attempts(item_id: str) -> bool:
         return False
 
 
+def _resolve_with_timeout(
+    item: BeadsWorkItem, timeout: int = 15,
+) -> BeadsWorkItem | None:
+    """Resolve an epic/feature to a leaf task with a timeout guard.
+
+    Prevents multi-minute stalls when epics have many children that
+    each require a bd show subprocess call.
+    """
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        fut = pool.submit(resolve_to_leaf_task, item)
+        try:
+            return fut.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            logger.warning(
+                "Hierarchical resolve timed out after %ds for %s — skipping",
+                timeout, item.id,
+            )
+            return None
+        except Exception:
+            logger.warning("Hierarchical resolve failed for %s", item.id, exc_info=True)
+            return None
+
+
 def select_next_hierarchical_item(items: list[BeadsWorkItem]) -> BeadsWorkItem | None:
     """Select next work item using hierarchical assignment strategy.
 
@@ -362,10 +386,9 @@ def select_next_hierarchical_item(items: list[BeadsWorkItem]) -> BeadsWorkItem |
 
         # Check if this is an epic or feature
         if item.issue_type in ('epic', 'feature'):
-            # Recursively resolve to a leaf task
-            # This handles nested hierarchies (epic → feature → task)
-            # and ensures we never directly assign a parent with children
-            resolved = resolve_to_leaf_task(item)
+            # Recursively resolve to a leaf task with a timeout to prevent
+            # multi-minute stalls from cascading bd show calls
+            resolved = _resolve_with_timeout(item, timeout=15)
             if resolved:
                 return resolved
             # Could not resolve to an assignable item - skip

@@ -535,6 +535,55 @@ class TestAddComment:
         assert result is False
 
 
+class TestGetTotalAttempts:
+    """Tests for get_total_attempts."""
+
+    @patch("pokepoke.beads.beads_management._run_bd")
+    def test_returns_attempts_from_metadata(self, mock_run_bd: Mock) -> None:
+        from pokepoke.beads.beads_management import get_total_attempts
+        mock_run_bd.return_value = Mock(stdout='[{"metadata": {"total_attempts": 3}}]')
+        assert get_total_attempts("item-1") == 3
+
+    @patch("pokepoke.beads.beads_management._run_bd")
+    def test_returns_zero_when_no_metadata(self, mock_run_bd: Mock) -> None:
+        from pokepoke.beads.beads_management import get_total_attempts
+        mock_run_bd.return_value = Mock(stdout='[{"id": "item-1"}]')
+        assert get_total_attempts("item-1") == 0
+
+    @patch("pokepoke.beads.beads_management._run_bd")
+    def test_returns_zero_on_parse_error(self, mock_run_bd: Mock) -> None:
+        from pokepoke.beads.beads_management import get_total_attempts
+        mock_run_bd.return_value = Mock(stdout="not json")
+        assert get_total_attempts("item-1") == 0
+
+    @patch("pokepoke.beads.beads_management._run_bd")
+    def test_returns_zero_on_exception(self, mock_run_bd: Mock) -> None:
+        from pokepoke.beads.beads_management import get_total_attempts
+        mock_run_bd.side_effect = subprocess.CalledProcessError(1, "bd")
+        assert get_total_attempts("item-1") == 0
+
+
+class TestIncrementTotalAttempts:
+    """Tests for increment_total_attempts."""
+
+    @patch("pokepoke.beads.beads_management._run_bd")
+    @patch("pokepoke.beads.beads_management.get_total_attempts", return_value=2)
+    def test_increments(self, mock_get: Mock, mock_run_bd: Mock) -> None:
+        from pokepoke.beads.beads_management import increment_total_attempts
+        mock_run_bd.return_value = Mock(stdout='{}')
+        assert increment_total_attempts("item-1") is True
+        call_args = mock_run_bd.call_args[0][0]
+        assert 'update' in call_args
+        assert '"total_attempts": 3' in call_args[-1]
+
+    @patch("pokepoke.beads.beads_management._run_bd")
+    @patch("pokepoke.beads.beads_management.get_total_attempts", return_value=0)
+    def test_returns_false_on_error(self, mock_get: Mock, mock_run_bd: Mock) -> None:
+        from pokepoke.beads.beads_management import increment_total_attempts
+        mock_run_bd.side_effect = subprocess.CalledProcessError(1, "bd")
+        assert increment_total_attempts("item-1") is False
+
+
 class TestSelectNextHierarchicalItem:
     """Tests for select_next_hierarchical_item."""
 
@@ -584,5 +633,41 @@ class TestSelectNextHierarchicalItem:
         mock_resolve.return_value = None
 
         result = select_next_hierarchical_item([epic])
+        assert result is None
+
+
+class TestResolveWithTimeout:
+    """Tests for _resolve_with_timeout."""
+
+    @patch("pokepoke.beads.beads_management.resolve_to_leaf_task")
+    def test_returns_resolved_item(self, mock_resolve: Mock) -> None:
+        from pokepoke.beads.beads_management import _resolve_with_timeout
+        from pokepoke.types import BeadsWorkItem
+        epic = BeadsWorkItem(id="e-1", title="Epic", description="", status="open",
+                             priority=1, issue_type="epic")
+        leaf = BeadsWorkItem(id="t-1", title="Leaf", description="", status="open",
+                             priority=1, issue_type="task")
+        mock_resolve.return_value = leaf
+        assert _resolve_with_timeout(epic, timeout=5) is leaf
+
+    @patch("pokepoke.beads.beads_management.resolve_to_leaf_task")
+    def test_returns_none_on_timeout(self, mock_resolve: Mock) -> None:
+        import time
+        from pokepoke.beads.beads_management import _resolve_with_timeout
+        from pokepoke.types import BeadsWorkItem
+        epic = BeadsWorkItem(id="e-1", title="Epic", description="", status="open",
+                             priority=1, issue_type="epic")
+        mock_resolve.side_effect = lambda _item: time.sleep(10)
+        result = _resolve_with_timeout(epic, timeout=1)
+        assert result is None
+
+    @patch("pokepoke.beads.beads_management.resolve_to_leaf_task")
+    def test_returns_none_on_exception(self, mock_resolve: Mock) -> None:
+        from pokepoke.beads.beads_management import _resolve_with_timeout
+        from pokepoke.types import BeadsWorkItem
+        epic = BeadsWorkItem(id="e-1", title="Epic", description="", status="open",
+                             priority=1, issue_type="epic")
+        mock_resolve.side_effect = RuntimeError("boom")
+        result = _resolve_with_timeout(epic, timeout=5)
         assert result is None
 
