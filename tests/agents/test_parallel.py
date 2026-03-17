@@ -61,7 +61,7 @@ class TestParallelProcessItem:
         # when no worker_agent_name is provided)
         mock_ui.ui.push_agent_status.assert_any_call(
             "t1",
-            "agent",
+            "pokepoke",
             iteration=1,
             status="running",
             work_item_id="t1",
@@ -70,7 +70,7 @@ class TestParallelProcessItem:
         )
         mock_ui.ui.push_agent_status.assert_any_call(
             "t1",
-            "agent",
+            "pokepoke",
             iteration=1,
             status="success",
             work_item_id="t1",
@@ -90,7 +90,7 @@ class TestParallelProcessItem:
         # Agent status should be set to failed on exception
         mock_ui.ui.push_agent_status.assert_any_call(
             "t1",
-            "agent",
+            "pokepoke",
             iteration=1,
             status="failed",
             work_item_id="t1",
@@ -110,7 +110,7 @@ class TestParallelProcessItem:
         assert result.success is False
         mock_ui.ui.push_agent_status.assert_any_call(
             "t1",
-            "agent",
+            "pokepoke",
             iteration=1,
             status="failed",
             work_item_id="t1",

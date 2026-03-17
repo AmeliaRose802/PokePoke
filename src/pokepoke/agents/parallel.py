@@ -10,7 +10,7 @@ from typing import Any
 from pokepoke.agents.parallel_runtime import clear_runtime_parallel_limits, compute_effective_max_agents, set_runtime_parallel_limits
 from pokepoke.utils.process_utils import kill_orphaned_copilot_processes  # noqa: F401
 
-from pokepoke.agents.agent_context import set_agent_name, clear_agent_name
+from pokepoke.agents.agent_context import set_agent_name, clear_agent_name, get_agent_name
 from pokepoke.beads.beads import get_ready_work_items, is_item_claimable, assign_and_sync_item, unassign_with_retry  # noqa: F401
 from pokepoke.types import BeadsWorkItem, SessionStats, WorkItemResult
 from pokepoke.orchestration.workflow import process_work_item
@@ -99,7 +99,7 @@ def _parallel_process_item(
 ) -> WorkItemResult:
     """Thread-pool wrapper for process_work_item."""
     agent_id = f"{item.id}:{worker_agent_name}" if worker_agent_name else item.id
-    display_name = worker_agent_name or "agent"
+    display_name = worker_agent_name or get_agent_name(default="pokepoke")
 
     if worker_agent_name:
         set_agent_name(worker_agent_name)
