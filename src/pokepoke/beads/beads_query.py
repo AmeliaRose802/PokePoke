@@ -10,6 +10,12 @@ from typing import Any
 from pokepoke.worktrees.coordination import beads_db_lock
 from pokepoke.stats.perf_timing import timed_block
 from pokepoke.types import BeadsWorkItem, IssueWithDependencies, Dependency, BeadsStats
+from pokepoke.utils.constants import (
+    BEADS_BINARY_BD,
+    BEADS_BINARY_BR,
+    DEFAULT_BEADS_LOCK_TIMEOUT,
+    DEFAULT_BEADS_TIMEOUT,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -23,24 +29,70 @@ _MUTATING_BD_COMMANDS: frozenset[str] = frozenset({
 })
 
 
-def _run_bd(
+# ---------------------------------------------------------------------------
+# Backend configuration
+# ---------------------------------------------------------------------------
+
+
+@dataclasses.dataclass(frozen=True)
+class CLIBackendConfig:
+    """Configuration for a beads CLI backend (``bd`` or ``br``).
+
+    Encapsulates the binary name, timeout defaults, and lock behaviour so
+    that the subprocess runner (:func:`_run_cli`) is backend-agnostic.
+    """
+
+    binary: str
+    default_timeout: int = DEFAULT_BEADS_TIMEOUT
+    lock_timeout: float = DEFAULT_BEADS_LOCK_TIMEOUT
+    mutating_commands: frozenset[str] = _MUTATING_BD_COMMANDS
+
+
+BD_CONFIG = CLIBackendConfig(binary=BEADS_BINARY_BD)
+BR_CONFIG = CLIBackendConfig(binary=BEADS_BINARY_BR)
+
+_active_backend: CLIBackendConfig = BD_CONFIG
+
+
+def get_active_backend() -> CLIBackendConfig:
+    """Return the currently active CLI backend configuration."""
+    return _active_backend
+
+
+def set_active_backend(config: CLIBackendConfig) -> None:
+    """Set the active CLI backend configuration used by :func:`_run_bd`."""
+    global _active_backend
+    _active_backend = config
+
+
+# ---------------------------------------------------------------------------
+# Backend-agnostic subprocess runner
+# ---------------------------------------------------------------------------
+
+
+def _run_cli(
     args: list[str],
     *,
+    backend: CLIBackendConfig,
     check: bool = True,
-    timeout: int | None = 30,
+    timeout: int | None = None,
     cwd: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run a ``bd`` CLI command with standard options.
+    """Run a beads CLI command using the given *backend* configuration.
 
-    IMPORTANT: All mutating beads operations are serialized through a single
-    global lock to prevent SQLite lock contention in parallel mode.
+    This is the backend-agnostic core that both ``bd`` and ``br`` use.
+    Mutating commands (as defined in the backend config) are serialized
+    through a global SQLite lock to prevent contention in parallel mode.
     """
+    if timeout is None:
+        timeout = backend.default_timeout
+
     cmd = args[0] if args else ""
 
     def _run() -> subprocess.CompletedProcess[str]:
-        with timed_block(f"bd.{cmd}" if cmd else "bd.unknown"):
+        with timed_block(f"{backend.binary}.{cmd}" if cmd else f"{backend.binary}.unknown"):
             return subprocess.run(
-                ['bd'] + args,
+                [backend.binary] + args,
                 capture_output=True,
                 text=True,
                 encoding='utf-8',
@@ -50,14 +102,35 @@ def _run_bd(
                 cwd=cwd,
             )
 
-    if cmd in _MUTATING_BD_COMMANDS:
-        # Default timeout of 180s is intentionally larger than the bd subprocess
-        # timeout so contention queues rather than timing out inside SQLite.
-        lock_timeout = 180.0
-        with beads_db_lock(timeout=lock_timeout):
+    if cmd in backend.mutating_commands:
+        with beads_db_lock(timeout=backend.lock_timeout):
             return _run()
 
     return _run()
+
+
+def _run_bd(
+    args: list[str],
+    *,
+    check: bool = True,
+    timeout: int | None = 30,
+    cwd: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run a beads CLI command using the active backend.
+
+    Backward-compatible wrapper around :func:`_run_cli`.  All existing
+    callers continue to work without changes.
+
+    IMPORTANT: All mutating beads operations are serialized through a single
+    global lock to prevent SQLite lock contention in parallel mode.
+    """
+    return _run_cli(
+        args,
+        backend=_active_backend,
+        check=check,
+        timeout=timeout,
+        cwd=cwd,
+    )
 
 
 def _filter_to_dataclass(cls: type, data: dict[str, Any]) -> Any:

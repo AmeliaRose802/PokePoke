@@ -28,6 +28,13 @@ DEFAULT_GIT_TIMEOUT: int = 30
 DEFAULT_ENCODING: str = "utf-8"
 DEFAULT_ENCODING_ERRORS: str = "replace"
 
+# ── Beads backend selection ──────────────────────────────────────────────────
+DEFAULT_BEADS_BACKEND: str = "bd"
+BEADS_BINARY_BD: str = "bd"
+BEADS_BINARY_BR: str = "br"
+DEFAULT_BEADS_TIMEOUT: int = 30
+DEFAULT_BEADS_LOCK_TIMEOUT: float = 180.0
+
 # ── Agent timeout defaults ───────────────────────────────────────────────────
 DEFAULT_AGENT_TIMEOUT: float = 7200.0  # 2 hours
 CLEANUP_AGENT_TIMEOUT: float = 600.0  # 10 minutes per cleanup invocation

@@ -311,3 +311,219 @@ def test_is_beads_item_closed_case_insensitive(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(beads_query, "_run_bd", lambda *args, **kwargs: mock_process)
 
     assert beads_query.is_beads_item_closed("x") is True
+
+
+# ── CLIBackendConfig ────────────────────────────────────────────────
+
+
+def test_cli_backend_config_defaults() -> None:
+    cfg = beads_query.CLIBackendConfig(binary="bd")
+    assert cfg.binary == "bd"
+    assert cfg.default_timeout == 30
+    assert cfg.lock_timeout == 180.0
+    assert "update" in cfg.mutating_commands
+    assert "ready" not in cfg.mutating_commands
+
+
+def test_cli_backend_config_custom_values() -> None:
+    custom_cmds = frozenset({"push", "pull"})
+    cfg = beads_query.CLIBackendConfig(
+        binary="br",
+        default_timeout=60,
+        lock_timeout=300.0,
+        mutating_commands=custom_cmds,
+    )
+    assert cfg.binary == "br"
+    assert cfg.default_timeout == 60
+    assert cfg.lock_timeout == 300.0
+    assert cfg.mutating_commands == custom_cmds
+
+
+def test_cli_backend_config_is_frozen() -> None:
+    cfg = beads_query.CLIBackendConfig(binary="bd")
+    with pytest.raises(AttributeError):
+        cfg.binary = "br"  # type: ignore[misc]
+
+
+def test_predefined_bd_config() -> None:
+    assert beads_query.BD_CONFIG.binary == "bd"
+    assert beads_query.BD_CONFIG.default_timeout == 30
+
+
+def test_predefined_br_config() -> None:
+    assert beads_query.BR_CONFIG.binary == "br"
+    assert beads_query.BR_CONFIG.default_timeout == 30
+
+
+# ── Active backend get/set ──────────────────────────────────────────
+
+
+def test_get_active_backend_returns_bd_by_default() -> None:
+    original = beads_query.get_active_backend()
+    assert original.binary == "bd"
+
+
+def test_set_active_backend_changes_active(monkeypatch: pytest.MonkeyPatch) -> None:
+    original = beads_query.get_active_backend()
+    try:
+        beads_query.set_active_backend(beads_query.BR_CONFIG)
+        assert beads_query.get_active_backend().binary == "br"
+    finally:
+        beads_query.set_active_backend(original)
+
+
+# ── _run_cli backend-agnostic runner ────────────────────────────────
+
+
+def test_run_cli_uses_backend_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(args, 0, stdout="{}")
+
+    monkeypatch.setattr(beads_query.subprocess, "run", fake_run)
+
+    br_config = beads_query.CLIBackendConfig(binary="br")
+    beads_query._run_cli(["ready", "--json"], backend=br_config, check=False)
+
+    called_cmd = captured["args"][0]
+    assert called_cmd[0] == "br"
+    assert called_cmd[1:] == ["ready", "--json"]
+
+
+def test_run_cli_uses_backend_default_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(args, 0, stdout="{}")
+
+    monkeypatch.setattr(beads_query.subprocess, "run", fake_run)
+
+    cfg = beads_query.CLIBackendConfig(binary="br", default_timeout=60)
+    beads_query._run_cli(["ready"], backend=cfg, check=False)
+
+    assert captured["kwargs"]["timeout"] == 60
+
+
+def test_run_cli_explicit_timeout_overrides_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(args, 0, stdout="{}")
+
+    monkeypatch.setattr(beads_query.subprocess, "run", fake_run)
+
+    cfg = beads_query.CLIBackendConfig(binary="br", default_timeout=60)
+    beads_query._run_cli(["ready"], backend=cfg, check=False, timeout=10)
+
+    assert captured["kwargs"]["timeout"] == 10
+
+
+def test_run_cli_locks_for_mutating_commands(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: dict[str, object] = {"lock_timeout": None, "ran": False}
+
+    class _Lock:
+        def __init__(self, *, timeout: float):
+            calls["lock_timeout"] = timeout
+
+        def __enter__(self):
+            return None
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_lock(*, timeout: float):
+        return _Lock(timeout=timeout)
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls["ran"] = True
+        return subprocess.CompletedProcess(args, 0, stdout="{}")
+
+    monkeypatch.setattr(beads_query, "beads_db_lock", fake_lock)
+    monkeypatch.setattr(beads_query.subprocess, "run", fake_run)
+
+    cfg = beads_query.CLIBackendConfig(binary="br", lock_timeout=200.0)
+    beads_query._run_cli(["update", "x"], backend=cfg, check=False)
+
+    assert calls["ran"] is True
+    assert calls["lock_timeout"] == 200.0
+
+
+def test_run_cli_skips_lock_for_non_mutating(monkeypatch: pytest.MonkeyPatch) -> None:
+    lock_called = {"called": False}
+
+    def fake_lock(*, timeout: float):
+        lock_called["called"] = True
+        raise AssertionError("should not lock")
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args, 0, stdout="[]")
+
+    monkeypatch.setattr(beads_query, "beads_db_lock", fake_lock)
+    monkeypatch.setattr(beads_query.subprocess, "run", fake_run)
+
+    beads_query._run_cli(["show", "x", "--json"], backend=beads_query.BD_CONFIG, check=False)
+
+    assert lock_called["called"] is False
+
+
+def test_run_cli_respects_custom_mutating_commands(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Backend with custom mutating commands should lock on those commands."""
+    calls: dict[str, object] = {"locked": False}
+
+    class _Lock:
+        def __init__(self, *, timeout: float):
+            pass
+
+        def __enter__(self):
+            calls["locked"] = True
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_lock(*, timeout: float):
+        return _Lock(timeout=timeout)
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args, 0, stdout="{}")
+
+    monkeypatch.setattr(beads_query, "beads_db_lock", fake_lock)
+    monkeypatch.setattr(beads_query.subprocess, "run", fake_run)
+
+    cfg = beads_query.CLIBackendConfig(
+        binary="br",
+        mutating_commands=frozenset({"push"}),
+    )
+    beads_query._run_cli(["push"], backend=cfg, check=False)
+    assert calls["locked"] is True
+
+    # "update" is NOT in this backend's mutating commands
+    calls["locked"] = False
+    beads_query._run_cli(["update", "x"], backend=cfg, check=False)
+    assert calls["locked"] is False
+
+
+@pytest.mark.allow_real_bd
+def test_run_bd_delegates_to_active_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_run_bd should use the active backend's binary."""
+    captured: dict[str, object] = {}
+
+    def fake_run_cli(args: list[str], *, backend: beads_query.CLIBackendConfig, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured["backend"] = backend
+        captured["args"] = args
+        return subprocess.CompletedProcess(args, 0, stdout="{}")
+
+    monkeypatch.setattr(beads_query, "_run_cli", fake_run_cli)
+
+    original = beads_query.get_active_backend()
+    try:
+        beads_query.set_active_backend(beads_query.BR_CONFIG)
+        beads_query._run_bd(["ready", "--json"], check=False)
+        assert captured["backend"].binary == "br"
+        assert captured["args"] == ["ready", "--json"]
+    finally:
+        beads_query.set_active_backend(original)
