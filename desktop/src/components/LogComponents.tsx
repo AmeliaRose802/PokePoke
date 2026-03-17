@@ -4,29 +4,7 @@
  * These components consume the processed log items from logProcessor.ts.
  */
 
-import hljs from "highlight.js/lib/core";
-import bash from "highlight.js/lib/languages/bash";
-import diff from "highlight.js/lib/languages/diff";
-import javascript from "highlight.js/lib/languages/javascript";
-import json from "highlight.js/lib/languages/json";
-import markdown from "highlight.js/lib/languages/markdown";
-import powershell from "highlight.js/lib/languages/powershell";
-import python from "highlight.js/lib/languages/python";
-import typescript from "highlight.js/lib/languages/typescript";
-import xml from "highlight.js/lib/languages/xml";
-import yaml from "highlight.js/lib/languages/yaml";
-import { useEffect, useRef } from "react";
-
-hljs.registerLanguage("bash", bash);
-hljs.registerLanguage("diff", diff);
-hljs.registerLanguage("javascript", javascript);
-hljs.registerLanguage("json", json);
-hljs.registerLanguage("markdown", markdown);
-hljs.registerLanguage("powershell", powershell);
-hljs.registerLanguage("python", python);
-hljs.registerLanguage("typescript", typescript);
-hljs.registerLanguage("xml", xml);
-hljs.registerLanguage("yaml", yaml);
+// (no React hooks needed — highlighting is done at render time in markdown.ts)
 
 import type { LogEntry } from "../types";
 import {
@@ -215,21 +193,11 @@ interface MarkdownBlockProps {
 export function MarkdownBlock({ entries, startedAt, keyPrefix }: MarkdownBlockProps) {
   const markdown = entries.map((e) => e.message).join("\n");
   const html = renderMarkdown(markdown);
-  const contentRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = contentRef.current;
-    if (!el) return;
-
-    el.querySelectorAll("pre code").forEach((block) => {
-      hljs.highlightElement(block as HTMLElement);
-    });
-  }, [html]);
 
   return (
     <div key={keyPrefix} className="log-entry log-markdown-block">
       <span className="log-timestamp">{formatTime(startedAt)}</span>
-      <div ref={contentRef} className="log-message log-markdown-content" dangerouslySetInnerHTML={{ __html: html }} />
+      <div className="log-message log-markdown-content" dangerouslySetInnerHTML={{ __html: html }} />
     </div>
   );
 }
@@ -246,16 +214,6 @@ export function CodeBlockAccordion({ startedAt, keyPrefix, markdown, lineCount, 
   const html = renderMarkdown(markdown);
   const lineLabel = `${lineCount} line${lineCount === 1 ? "" : "s"}`;
   const codeLabel = language ? `📄 ${language} code block` : "📄 Code block";
-  const contentRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = contentRef.current;
-    if (!el) return;
-
-    el.querySelectorAll("pre code").forEach((block) => {
-      hljs.highlightElement(block as HTMLElement);
-    });
-  }, [html]);
 
   return (
     <details key={keyPrefix} className="log-accordion log-code-block">
@@ -267,7 +225,7 @@ export function CodeBlockAccordion({ startedAt, keyPrefix, markdown, lineCount, 
         </span>
       </summary>
       <div className="log-accordion-details">
-        <div ref={contentRef} className="log-message log-markdown-content" dangerouslySetInnerHTML={{ __html: html }} />
+        <div className="log-message log-markdown-content" dangerouslySetInnerHTML={{ __html: html }} />
       </div>
     </details>
   );

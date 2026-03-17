@@ -30,11 +30,14 @@ describe("renderMarkdown", () => {
     expect(html).toContain("<code>npm test</code>");
   });
 
-  it("renders fenced code blocks", () => {
+  it("renders fenced code blocks with syntax highlighting", () => {
     const html = renderMarkdown("```ts\nconst x = 1\n```\n");
     expect(html).toContain("<pre>");
     expect(html).toContain("<code");
-    expect(html).toContain("const x = 1");
+    // hljs wraps tokens in spans, so check for the keyword and value separately
+    expect(html).toContain("const");
+    expect(html).toContain("1");
+    expect(html).toContain("hljs");
   });
 
   it("adds target=_blank to links", () => {
