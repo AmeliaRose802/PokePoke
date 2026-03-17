@@ -5,6 +5,7 @@ import logging
 from pokepoke.types import BeadsWorkItem
 from pokepoke.beads.beads import select_next_hierarchical_item
 from pokepoke.beads.beads_hierarchy import HUMAN_REQUIRED_LABEL, is_assigned_to_current_user
+from pokepoke.protocols import BeadsClient
 from pokepoke.utils.shutdown import is_shutting_down
 
 logger = logging.getLogger(__name__)
@@ -77,7 +78,7 @@ def _filter_available(ready_items: list[BeadsWorkItem]) -> list[BeadsWorkItem]:
     return available
 
 
-def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool, skip_ids: set[str] | None = None) -> BeadsWorkItem | None:
+def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool, skip_ids: set[str] | None = None, beads_client: BeadsClient | None = None) -> BeadsWorkItem | None:
     """Select a work item to process using hierarchical assignment.
 
     Args:
@@ -122,7 +123,7 @@ def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool, skip_i
     if interactive:
         return interactive_selection(ready_items)
     else:
-        return autonomous_selection(ready_items)
+        return autonomous_selection(ready_items, beads_client=beads_client)
 
 
 def interactive_selection(ready_items: list[BeadsWorkItem]) -> BeadsWorkItem | None:
@@ -146,9 +147,10 @@ def interactive_selection(ready_items: list[BeadsWorkItem]) -> BeadsWorkItem | N
             return None
     return None
 
-def autonomous_selection(ready_items: list[BeadsWorkItem]) -> BeadsWorkItem | None:
+def autonomous_selection(ready_items: list[BeadsWorkItem], beads_client: BeadsClient | None = None) -> BeadsWorkItem | None:
     """Use hierarchical selection for autonomous mode."""
-    selected = select_next_hierarchical_item(ready_items)
+    _select = beads_client.select_next_hierarchical_item if beads_client else select_next_hierarchical_item
+    selected = _select(ready_items)
     if selected:
         logger.info("Hierarchically selected item: %s (Type: %s, Priority: %s)", selected.id, selected.issue_type, selected.priority)
     return selected
@@ -159,6 +161,7 @@ def select_multiple_items(
     count: int,
     skip_ids: set[str] | None = None,
     claimed_ids: set[str] | None = None,
+    beads_client: BeadsClient | None = None,
 ) -> list[BeadsWorkItem]:
     """Select up to *count* work items for parallel processing.
 
@@ -197,12 +200,13 @@ def select_multiple_items(
         return []
 
     # Use hierarchical selection repeatedly to pick up to `count` items
+    _select = beads_client.select_next_hierarchical_item if beads_client else select_next_hierarchical_item
     selected: list[BeadsWorkItem] = []
     remaining = list(filtered)
     for _ in range(count):
         if not remaining:
             break
-        item = select_next_hierarchical_item(remaining)
+        item = _select(remaining)
         if item is None:
             break
         selected.append(item)

@@ -175,8 +175,6 @@ def dispatch_items(
         run_logger.log_orchestrator("High-conflict item active — deferring new dispatches")
         return worker_counter
 
-    # Track IDs attempted this cycle so we advance past already-claimed items
-    # instead of re-selecting them on every iteration (PokePoke-pfoc).
     attempted_this_cycle: set[str] = set()
     dispatched = 0
     logged_replenish = False
@@ -235,10 +233,6 @@ def dispatch_items(
                 high_conflict_dispatched = True
 
         if not made_progress:
-            # Only keep searching if new candidates were evaluated this
-            # iteration; otherwise we'd re-select the same items forever.
-            # This lets the loop skip past deferred high-conflict items and
-            # reach lower-priority non-conflict work (PokePoke-mdaf).
             if len(attempted_this_cycle) > pre_attempt_size:
                 continue
             break

@@ -4,6 +4,7 @@ import concurrent.futures
 import logging
 import threading
 import time
+from dataclasses import dataclass
 from typing import Any
 
 from pokepoke.agents.parallel_runtime import clear_runtime_parallel_limits, compute_effective_max_agents, set_runtime_parallel_limits
@@ -201,6 +202,119 @@ def _collect_done_futures(
     return total_requests, any_success, success_count, failure_count
 
 
+@dataclass
+class _LoopState:
+    """Mutable state carried through the parallel loop iterations."""
+    total_requests: int = 0
+    items_completed: int = 0
+    worker_counter: int = 0
+    finalized: bool = False
+    exit_code: int = 0
+    has_success: bool = False
+    idle_sleep: float = _IDLE_BASE_DELAY
+    consecutive_failures: int = 0
+    consecutive_preflight_failures: int = 0
+    circuit_breaker_tripped: bool = False
+
+
+def _handle_circuit_breaker_drain(
+    state: _LoopState,
+    futures: dict[_Future, BeadsWorkItem],
+    failed_claim_ids: set[str],
+    session_stats: SessionStats,
+    run_logger: RunLogger,
+    record_fn: Any,
+    mode_name: str,
+) -> bool:
+    """Drain futures while circuit breaker is tripped. Returns True to break."""
+    if not futures:
+        run_logger.log_orchestrator("Circuit breaker: all remaining agents finished \u2014 exiting")
+        state.exit_code = 1
+        return True
+    state.total_requests = _drain_circuit_breaker(
+        futures, failed_claim_ids, state.total_requests,
+        session_stats, run_logger, record_fn, _collect_done_futures, mode_name,
+    )
+    return False
+
+
+def _run_loop_iteration(
+    state: _LoopState,
+    futures: dict[_Future, BeadsWorkItem],
+    failed_claim_ids: set[str],
+    session_stats: SessionStats,
+    run_logger: RunLogger,
+    record_fn: Any,
+    finalize_fn: Any,
+    semaphore: threading.Semaphore,
+    executor: concurrent.futures.ThreadPoolExecutor,
+    main_repo_path: Any,
+    start_time: float,
+    continuous: bool,
+    mode_name: str,
+) -> str | None:
+    """Execute one iteration of the parallel loop.
+
+    Returns:
+        ``None`` to continue normally, ``"break"`` to exit the loop,
+        ``"continue"`` to skip the sleep at the end.
+    """
+    ok, state.consecutive_preflight_failures, ready_items = _run_preflight_and_repo_checks(
+        main_repo_path, run_logger, state.consecutive_preflight_failures,
+        _MAX_CONSECUTIVE_PREFLIGHT_FAILURES,
+        check_and_commit_main_repo, get_ready_work_items,
+    )
+    if not ok:
+        state.exit_code = 1
+        return "break"
+
+    state.total_requests, any_success, batch_successes, batch_failures = _collect_done_futures(
+        futures, failed_claim_ids, state.total_requests,
+        session_stats, run_logger, record_fn,
+    )
+    state.items_completed = session_stats.items_completed
+    state.has_success = state.has_success or any_success
+
+    state.consecutive_failures, state.circuit_breaker_tripped = _update_circuit_breaker(
+        batch_successes, batch_failures, state.consecutive_failures,
+        _MAX_CONSECUTIVE_FAILURES, futures, run_logger,
+    )
+    if state.circuit_breaker_tripped and not futures:
+        state.exit_code = 1
+        return "break"
+
+    terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
+    current_active, slots, _avail_mb = _compute_slots(futures, run_logger)
+    kill_orphaned_copilot_processes(expected_count=len(futures))
+
+    if futures or ready_items:
+        state.idle_sleep = _IDLE_BASE_DELAY
+
+    state.worker_counter = _dispatch_items(
+        ready_items, slots, continuous, state.has_success,
+        state.consecutive_failures, _MAX_CONSECUTIVE_FAILURES,
+        failed_claim_ids, current_active,
+        futures, semaphore, executor, run_logger, state.worker_counter,
+        _build_worker_name, _parallel_process_item,
+    )
+
+    action = _check_loop_exit(
+        futures, ready_items, continuous, state.has_success,
+        state.total_requests, state.items_completed, session_stats,
+        start_time, state.idle_sleep, mode_name,
+        run_logger, finalize_fn, get_ready_work_items,
+    )
+    if action is not None:
+        if action.startswith("break"):
+            state.finalized = True
+            state.exit_code = 0 if action != "break-done" or state.has_success else 1
+            return "break"
+        state.idle_sleep = _IDLE_BASE_DELAY if action == "recheck" else min(_IDLE_MAX_DELAY, state.idle_sleep * 2)
+        return "continue"
+
+    return None
+
+
 def run_parallel_loop(
     effective_parallel: int,
     mode_name: str,
@@ -215,8 +329,6 @@ def run_parallel_loop(
     *, cli_override: bool = False,
 ) -> int:
     """Run the parallel orchestrator loop with a ThreadPoolExecutor."""
-    total_requests = 0
-    items_completed = 0
     pool_size = min(effective_parallel, _DEFAULT_PARALLEL_CEILING)
     if effective_parallel > _DEFAULT_PARALLEL_CEILING:
         logger.warning("max_parallel_agents (%d) exceeds ceiling (%d); clamping pool", effective_parallel, _DEFAULT_PARALLEL_CEILING)
@@ -229,84 +341,23 @@ def run_parallel_loop(
     set_executor(executor)
     set_runtime_parallel_limits(effective_parallel, cli_override, baseline=_get_dynamic_max_agents() if cli_override else None)
 
-    _worker_counter = 0
-    finalized = False
-    exit_code = 0
-    has_success = False
-    idle_sleep = _IDLE_BASE_DELAY
-    consecutive_failures = 0
-    consecutive_preflight_failures = 0
-
-    circuit_breaker_tripped = False
+    state = _LoopState()
 
     try:
         while not is_shutting_down():
-            if circuit_breaker_tripped:
-                if not futures:
-                    run_logger.log_orchestrator("Circuit breaker: all remaining agents finished \u2014 exiting")
-                    exit_code = 1
+            if state.circuit_breaker_tripped:
+                if _handle_circuit_breaker_drain(state, futures, failed_claim_ids, session_stats, run_logger, record_fn, mode_name):
                     break
-                total_requests = _drain_circuit_breaker(
-                    futures, failed_claim_ids, total_requests,
-                    session_stats, run_logger, record_fn, _collect_done_futures, mode_name,
-                )
                 continue
 
-            ok, consecutive_preflight_failures, ready_items = _run_preflight_and_repo_checks(
-                main_repo_path, run_logger, consecutive_preflight_failures,
-                _MAX_CONSECUTIVE_PREFLIGHT_FAILURES,
-                check_and_commit_main_repo, get_ready_work_items,
+            result = _run_loop_iteration(
+                state, futures, failed_claim_ids, session_stats, run_logger,
+                record_fn, finalize_fn, semaphore, executor,
+                main_repo_path, start_time, continuous, mode_name,
             )
-            if not ok:
-                exit_code = 1
+            if result == "break":
                 break
-
-            total_requests, any_success, batch_successes, batch_failures = _collect_done_futures(
-                futures, failed_claim_ids, total_requests,
-                session_stats, run_logger, record_fn,
-            )
-            items_completed = session_stats.items_completed
-
-            has_success = has_success or any_success
-
-            consecutive_failures, circuit_breaker_tripped = _update_circuit_breaker(
-                batch_successes, batch_failures, consecutive_failures,
-                _MAX_CONSECUTIVE_FAILURES, futures, run_logger,
-            )
-            if circuit_breaker_tripped and not futures:
-                exit_code = 1
-                break
-
-            terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
-
-            current_active, slots, _avail_mb = _compute_slots(futures, run_logger)
-
-            # Periodically kill orphaned Copilot CLI processes that outlived their agent
-            kill_orphaned_copilot_processes(expected_count=len(futures))
-
-            if futures or ready_items:
-                idle_sleep = _IDLE_BASE_DELAY
-
-            _worker_counter = _dispatch_items(
-                ready_items, slots, continuous, has_success,
-                consecutive_failures, _MAX_CONSECUTIVE_FAILURES,
-                failed_claim_ids, current_active,
-                futures, semaphore, executor, run_logger, _worker_counter,
-                _build_worker_name, _parallel_process_item,
-            )
-
-            action = _check_loop_exit(
-                futures, ready_items, continuous, has_success,
-                total_requests, items_completed, session_stats,
-                start_time, idle_sleep, mode_name,
-                run_logger, finalize_fn, get_ready_work_items,
-            )
-            if action is not None:
-                if action.startswith("break"):
-                    finalized = True
-                    exit_code = 0 if action != "break-done" or has_success else 1
-                    break
-                idle_sleep = _IDLE_BASE_DELAY if action == "recheck" else min(_IDLE_MAX_DELAY, idle_sleep * 2)
+            if result == "continue":
                 continue
 
             terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", f"{len(futures)} agents active")
@@ -317,15 +368,15 @@ def run_parallel_loop(
             _spawn_wakeup.clear()
 
     finally:
-        total_requests, timeout_occurred = _finalize_workers(futures, session_stats, start_time, total_requests, run_logger, record_fn)
+        state.total_requests, timeout_occurred = _finalize_workers(futures, session_stats, start_time, state.total_requests, run_logger, record_fn)
         executor.shutdown(wait=True, cancel_futures=timeout_occurred)
         set_executor(None)
         clear_runtime_parallel_limits()
-        if not finalized:
+        if not state.finalized:
             print("\n🏁 Finalizing session...")
             run_logger.log_orchestrator("Finalizing session on exit")
             if terminal_ui.ui._is_running:
                 terminal_ui.ui.stop_and_capture()
-            finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
+            finalize_fn(session_stats, start_time, state.items_completed, state.total_requests, run_logger)
 
-    return exit_code
+    return state.exit_code

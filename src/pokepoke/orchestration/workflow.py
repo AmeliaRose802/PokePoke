@@ -11,6 +11,7 @@ from pokepoke.models.sdk_helpers import build_resume_prompt
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, WorkItemResult
 from pokepoke.worktrees.worktrees import create_worktree, cleanup_worktree
 from pokepoke.beads.beads import assign_and_sync_item, add_comment
+from pokepoke.protocols import BeadsClient
 from pokepoke.agents.agent_runner import run_gate_agent  # noqa: F401  # re-exported via workflow_helpers
 from pokepoke.orchestration.work_item_selection import select_work_item  # noqa: F401  # re-exported
 from pokepoke.desktop import terminal_ui
@@ -45,10 +46,13 @@ def process_work_item(  # noqa: C901
     max_timeout_restarts: int = 3,
     agent_id: str | None = None,
     repo_path: str | None = None,
+    beads_client: BeadsClient | None = None,
 ) -> WorkItemResult:
     """Process a single work item with timeout protection."""
     # Register this agent for shutdown coordination
     register_agent()
+    _assign = beads_client.assign_and_sync_item if beads_client else assign_and_sync_item
+    _comment = beads_client.add_comment if beads_client else add_comment
     _session: WorkItemSession | None = None
     try:
         start_time = time.time()
@@ -87,7 +91,7 @@ def process_work_item(  # noqa: C901
                 return _fail_result()
 
         print("\n\U0001f512 Claiming work item...")
-        if not assign_and_sync_item(item.id):
+        if not _assign(item.id):
             print(f"❌ Failed to assign work item {item.id}")
             _log_failure(run_logger, item_logger)
             return _fail_result()
@@ -319,7 +323,7 @@ def process_work_item(  # noqa: C901
                         print(f"\n\u23f1\ufe0f  Gate timed out ({gate_timeout_attempts}/{_MAX_GATE_TIMEOUT_RETRIES}), {'resuming' if gate_resume_session_id else 'retrying'}...")
                         continue
                     print(f"\n❌ Gate Agent timed out {gate_timeout_attempts} times — giving up")
-                    add_comment(item.id, f"Gate Agent timed out {gate_timeout_attempts} times:\n{gate_reason}")
+                    _comment(item.id, f"Gate Agent timed out {gate_timeout_attempts} times:\n{gate_reason}")
                     break
 
                 if gate_crashed:
@@ -330,7 +334,7 @@ def process_work_item(  # noqa: C901
                         print(f"\n\u26a0\ufe0f  Gate crashed ({gate_crash_attempts}/{_MAX_GATE_CRASH_RETRIES}): {gate_reason}, retrying...")
                         continue
                     print(f"\n❌ Gate Agent crashed {gate_crash_attempts} times — giving up")
-                    add_comment(item.id, f"Gate Agent crashed {gate_crash_attempts} times:\n{gate_reason}")
+                    _comment(item.id, f"Gate Agent crashed {gate_crash_attempts} times:\n{gate_reason}")
                 break  # Not a crash/timeout — exit the gate retry loop
 
             if gate_success:
@@ -341,7 +345,7 @@ def process_work_item(  # noqa: C901
                 resume_session_id = None
                 resume_output_summary = None
                 print(f"\n❌ Gate Agent rejected: {gate_reason}")
-                add_comment(item.id, f"Gate Agent Rejection:\n{gate_reason}")
+                _comment(item.id, f"Gate Agent Rejection:\n{gate_reason}")
                 last_feedback = gate_reason
                 last_retry_was_gate_feedback = True  # Gate rejection → new card
             else:

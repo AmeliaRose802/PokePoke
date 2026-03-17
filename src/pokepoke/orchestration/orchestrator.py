@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from pokepoke.beads.beads import get_ready_work_items, get_beads_stats, retry_failed_unassigns, get_failed_unassign_count
+from pokepoke.protocols import BeadsClient as _BeadsClientProtocol
 from pokepoke.types import AgentStats, SessionStats, BeadsWorkItem, WorkItemResult
 from pokepoke.stats.stats import print_stats
 from pokepoke.orchestration.workflow import process_work_item
@@ -328,6 +329,7 @@ def run_orchestrator(
     interactive: bool = True, continuous: bool = False,
     run_beta_first: bool = False, agent_name_override: str | None = None,
     max_parallel_agents: int = 1,
+    beads_client: _BeadsClientProtocol | None = None,
 ) -> int:
     """Main orchestrator entry point (interactive or autonomous)."""
     # UI is started by run_with_orchestrator - just update header
