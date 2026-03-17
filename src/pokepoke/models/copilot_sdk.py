@@ -86,6 +86,16 @@ def _build_worker_env(cwd: str | None) -> dict[str, str]:
     return env
 
 
+def _build_add_dir_args(cwd: str) -> list[str]:
+    """Return ``--add-dir`` CLI args so worktree agents can also access the main repo."""
+    cwd_path = Path(cwd).resolve()
+    # Pattern: <repo_root>/worktrees/task-<id>
+    if cwd_path.parent.name == "worktrees":
+        repo_root = str(cwd_path.parent.parent)
+        return ["--add-dir", repo_root]
+    return []
+
+
 def _create_sdk_client(cwd: str | None) -> Any:
     """Create and configure a CopilotClient instance."""
     proj_config = get_config()
@@ -102,6 +112,9 @@ def _create_sdk_client(cwd: str | None) -> Any:
     }
     if cwd:
         client_opts["cwd"] = cwd
+        add_dir_args = _build_add_dir_args(cwd)
+        if add_dir_args:
+            client_opts["cli_args"] = add_dir_args
     if not _HAS_COPILOT:
         raise ImportError(
             "The 'copilot' SDK package is required but not installed. "

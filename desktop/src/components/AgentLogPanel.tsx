@@ -67,6 +67,7 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
   const agentIconPath = getAgentAvatar(agentToUse);
   const fallbackAvatar = getEmojiAvatar(agentToUse.base_agent_id ?? agentToUse.agent_id);
   const iconAlt = `${agentType ?? "agent"} icon`;
+  const [iconFailed, setIconFailed] = useState(false);
   const agentPrompt = agentToUse.agent_prompt;
   const hasPrompt = Boolean(agentPrompt && agentPrompt.trim().length > 0);
   const promptLineCount = hasPrompt ? agentPrompt!.split(/\r?\n/).length : 0;
@@ -174,17 +175,12 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
             ✕
           </button>
         )}
-        {agentIconPath ? (
+        {agentIconPath && !iconFailed ? (
           <img
             src={agentIconPath}
             alt={iconAlt}
             className="agent-log-panel-avatar agent-log-panel-icon agent-log-panel-snake-icon"
-            onError={(e) => {
-              const parent = e.currentTarget.parentElement;
-              if (parent) {
-                parent.innerHTML = `<span class="agent-log-panel-avatar">${fallbackAvatar}</span>`;
-              }
-            }}
+            onError={() => setIconFailed(true)}
           />
         ) : (
           <span className="agent-log-panel-avatar">{fallbackAvatar}</span>

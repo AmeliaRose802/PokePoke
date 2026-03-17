@@ -30,6 +30,18 @@ import {
 import { GateVerdictPreview } from "./GateVerdictPreview";
 import { WorkItemGroupSection } from "./WorkItemGroupSection";
 
+/** Image with React-safe fallback (no direct DOM mutation). */
+function AgentIcon({ src, alt, className, fallback }: {
+  src: string | null | undefined;
+  alt: string;
+  className: string;
+  fallback: ReactElement;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) return fallback;
+  return <img src={src} alt={alt} className={className} onError={() => setFailed(true)} />;
+}
+
 interface Props {
   agents: AgentInfo[];
   currentSessionId?: string | null;
@@ -116,22 +128,12 @@ export function AgentsPanel({
         }}
       >
         <div className="agent-card-top">
-          {agentIconPath ? (
-            <img
+          <AgentIcon
               src={agentIconPath}
               alt={iconAlt}
               className="agent-card-avatar agent-card-snake-icon agent-card-icon"
-              onError={(e) => {
-                const target = e.currentTarget;
-                const parentEl = target.parentElement;
-                if (parentEl) {
-                  parentEl.innerHTML = `<span class="agent-card-avatar">${fallbackEmoji}</span>`;
-                }
-              }}
-            />
-          ) : (
-            <span className="agent-card-avatar">{fallbackEmoji}</span>
-          )}
+              fallback={<span className="agent-card-avatar">{fallbackEmoji}</span>}
+          />
           <div className="agent-card-info">
             <span className="agent-card-name">{label}</span>
             {showAttempt ? (
