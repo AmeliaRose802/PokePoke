@@ -5,6 +5,12 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+try:
+    from copilot import PermissionHandler
+    _approve_all: Any = PermissionHandler.approve_all
+except ImportError:
+    _approve_all = None
+
 from pokepoke.utils.shutdown import is_shutting_down
 from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
 from .sdk_event_handler import SessionStats
@@ -81,7 +87,8 @@ def _build_session_config(
 ) -> dict[str, Any]:
     """Build the SDK session configuration dict."""
     config: dict[str, Any] = {"model": model, "streaming": True}
-    config["on_permission_request"] = lambda _req, _ctx: {"kind": "approved"}
+    if _approve_all is not None:
+        config["on_permission_request"] = _approve_all
     if deny_write:
         config["excluded_tools"] = ["write", "edit"]
     if session_id:
