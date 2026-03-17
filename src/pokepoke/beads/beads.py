@@ -45,6 +45,14 @@ from .beads_recovery import (
     get_failed_unassign_count,
 )
 
+from .sync_strategy import (
+    SyncStrategy,
+    DaemonSync,
+    ExplicitSync,
+    get_active_sync_strategy,
+    set_active_sync_strategy,
+)
+
 from pokepoke.git.multi_repo_aggregator import (
     aggregate_ready_work_items,
     query_repo_ready_items,
@@ -83,6 +91,13 @@ __all__ = [
     'add_comment',
     'get_total_attempts',
     'increment_total_attempts',
+
+    # Sync strategy
+    'SyncStrategy',
+    'DaemonSync',
+    'ExplicitSync',
+    'get_active_sync_strategy',
+    'set_active_sync_strategy',
 
     # Multi-repo aggregation
     'aggregate_ready_work_items',

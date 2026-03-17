@@ -263,7 +263,9 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
         ) : logLines.length === 0 ? (
           <div className="agent-log-panel-empty">Waiting for output…</div>
         ) : (
-          <RenderLogItems items={renderItems} />
+          <div className="agent-log-panel-logs">
+            <RenderLogItems items={renderItems} />
+          </div>
         )}
       </div>
     </div>

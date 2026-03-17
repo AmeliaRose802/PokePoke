@@ -654,7 +654,7 @@ class TestAssignAndSyncItem:
 
         assert result is True
 
-    @patch('pokepoke.beads.beads_management.time.sleep')
+    @patch('pokepoke.beads.sync_strategy.time.sleep')
     @patch('pokepoke.beads.beads_management.subprocess.run')
     def test_assign_sync_retries_on_access_denied(self, mock_run: Mock, mock_sleep: Mock) -> None:
         """Test that sync retries when JSONL file is locked."""

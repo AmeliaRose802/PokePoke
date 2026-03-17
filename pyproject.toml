@@ -160,3 +160,8 @@ warn_return_any = false
 [[tool.mypy.overrides]]
 module = "pokepoke.git.git_operations"
 implicit_reexport = true
+
+# pywebview_patches monkey-patches third-party types; suppress attr-defined
+[[tool.mypy.overrides]]
+module = "pokepoke.desktop.pywebview_patches"
+disable_error_code = ["attr-defined"]
