@@ -1,6 +1,7 @@
 """Tests for the parallel orchestrator loop module."""
 
 import concurrent.futures
+import os
 import threading
 import time
 from unittest.mock import Mock, patch, MagicMock
@@ -47,6 +48,7 @@ def _disable_preflight_health(monkeypatch):
 class TestParallelProcessItem:
     """Tests for _parallel_process_item wrapper."""
 
+    @patch.dict(os.environ, {"AGENT_NAME": ""}, clear=False)
     @patch("pokepoke.agents.parallel.terminal_ui")
     @patch("pokepoke.agents.parallel.process_work_item")
     def test_success_releases_resources(self, mock_pwi: Mock, mock_ui: Mock) -> None:
@@ -78,6 +80,7 @@ class TestParallelProcessItem:
             agent_type="work",
         )
 
+    @patch.dict(os.environ, {"AGENT_NAME": ""}, clear=False)
     @patch("pokepoke.agents.parallel.terminal_ui")
     @patch("pokepoke.agents.parallel.process_work_item", side_effect=RuntimeError("boom"))
     def test_exception_releases_resources(self, mock_pwi: Mock, mock_ui: Mock) -> None:
@@ -98,6 +101,7 @@ class TestParallelProcessItem:
             agent_type="work",
         )
 
+    @patch.dict(os.environ, {"AGENT_NAME": ""}, clear=False)
     @patch("pokepoke.agents.parallel.terminal_ui")
     @patch("pokepoke.agents.parallel.process_work_item")
     def test_failure_sets_agent_failed_status(self, mock_pwi: Mock, mock_ui: Mock) -> None:
