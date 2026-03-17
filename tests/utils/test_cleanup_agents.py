@@ -19,28 +19,20 @@ from pokepoke.types import BeadsWorkItem, CopilotResult, AgentStats
 class TestCleanupAgents:
     """Test cleanup agent functions."""
 
-    @patch('pathlib.Path.exists')
-    @patch('pathlib.Path.parent', new_callable=Mock)
-    def test_get_prompts_dir(self, mock_parent, mock_exists):
+    def test_get_prompts_dir(self):
         """Test finding prompts directory."""
-        mock_exists.return_value = True
+        # The real .pokepoke/prompts/ directory exists in the repo
+        result = get_pokepoke_prompts_dir()
+        assert result.exists()
+        assert result.name == "prompts"
 
-        with patch('pokepoke.agents.cleanup_agents.Path') as mock_path:
-             mock_path.return_value.parent.parent.parent = Path('/root')
-             get_pokepoke_prompts_dir()
-             # Logic is Path(__file__).parent.parent.parent / ".pokepoke" / "prompts"
-             # Since it returns a path, validation passes if no exception
-
-    def test_get_prompts_dir_not_found(self):
+    def test_get_prompts_dir_not_found(self, monkeypatch):
         """Test error when prompts directory not found."""
-        with patch('pokepoke.agents.cleanup_agents.Path') as mock_path:
-             # Make exists return False
-             mock_dir = Mock()
-             mock_dir.exists.return_value = False
-             mock_path.return_value.parent.parent.parent.__truediv__.return_value.__truediv__.return_value = mock_dir
-
-             with pytest.raises(FileNotFoundError):
-                 get_pokepoke_prompts_dir()
+        import pokepoke.agents.cleanup_agents as mod
+        # Use a path outside the repo tree so the walk-up won't find .pokepoke/prompts
+        monkeypatch.setattr(mod, '__file__', r'C:\nonexistent\a\b\c\dummy.py')
+        with pytest.raises(FileNotFoundError):
+            get_pokepoke_prompts_dir()
 
     @patch('subprocess.run')
     @patch('os.getcwd')

@@ -118,19 +118,21 @@ def run_cleanup_loop(
 
 def get_pokepoke_prompts_dir() -> Path:
     """Get the prompts directory from the PokePoke installation."""
-    # Prompts are relative to this file's location in the PokePoke package
-    # This file is at: PokePoke/src/pokepoke/cleanup_agents.py
-    # Prompts are at: PokePoke/.pokepoke/prompts/
-    pokepoke_root = Path(__file__).parent.parent.parent
-    prompts_dir = pokepoke_root / ".pokepoke" / "prompts"
+    # Walk upward from this file to find the repo root containing .pokepoke/prompts/
+    # This file is at: PokePoke/src/pokepoke/agents/cleanup_agents.py
+    current = Path(__file__).resolve().parent
+    for _ in range(10):  # reasonable limit
+        prompts_dir = current / ".pokepoke" / "prompts"
+        if prompts_dir.exists():
+            return prompts_dir
+        if current == current.parent:
+            break
+        current = current.parent
 
-    if not prompts_dir.exists():
-        raise FileNotFoundError(
-            f"PokePoke prompts directory not found at {prompts_dir}. "
-            f"Make sure you have the .pokepoke/prompts/ directory in your PokePoke installation."
-        )
-
-    return prompts_dir
+    raise FileNotFoundError(
+        f"PokePoke prompts directory not found (searched up from {Path(__file__).parent}). "
+        f"Make sure you have the .pokepoke/prompts/ directory in your PokePoke installation."
+    )
 
 
 def load_prompt_file(filename: str) -> str | None:
