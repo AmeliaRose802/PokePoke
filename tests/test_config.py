@@ -473,14 +473,14 @@ class TestToolCallTimeout:
     """Tests for tool_call_timeout configuration."""
 
     def test_default_value(self):
-        """Test that tool_call_timeout defaults to 600."""
+        """Test that tool_call_timeout defaults to 900."""
         config = ProjectConfig()
-        assert config.tool_call_timeout == 600
+        assert config.tool_call_timeout == 900
 
     def test_from_dict_default(self):
-        """Test that tool_call_timeout defaults to 600 when not specified."""
+        """Test that tool_call_timeout defaults to 900 when not specified."""
         config = ProjectConfig.from_dict({})
-        assert config.tool_call_timeout == 600
+        assert config.tool_call_timeout == 900
 
     def test_from_dict_custom_value(self):
         """Test that tool_call_timeout can be set via config dict."""

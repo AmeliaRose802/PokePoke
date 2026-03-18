@@ -207,10 +207,18 @@ async def _await_completion(
         # pre-commit hooks) executes, so silence is expected.  The
         # per-item hard deadline (max_timeout) protects against truly
         # stuck sessions.
+        #
+        # Grace period after tool completion: If a tool just finished
+        # (last_tool_activity_time is recent), give the session 60s to emit
+        # the next SDK event before declaring it dead. This prevents killing
+        # sessions immediately after long tool calls complete.
         if stats is not None and inactivity_timeout > 0:
             has_pending_tools = stats.get('pending_tool_calls', 0) > 0
             since_last_event = time.monotonic() - stats['last_event_time']
-            if since_last_event >= inactivity_timeout and not has_pending_tools:
+            since_last_tool = time.monotonic() - stats.get('last_tool_activity_time', 0)
+            tool_cooldown_grace = 60.0  # Seconds to wait after tool activity before enforcing inactivity timeout
+            is_in_grace_period = since_last_tool < tool_cooldown_grace
+            if since_last_event >= inactivity_timeout and not has_pending_tools and not is_in_grace_period:
                 print(
                     f"\n[SDK] SESSION DEAD: No events received for {since_last_event:.0f}s "
                     f"(threshold: {inactivity_timeout:.0f}s) — aborting"
