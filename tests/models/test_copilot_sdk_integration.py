@@ -466,21 +466,21 @@ class TestAwaitCompletionInactivity:
 
 
 class TestCheckInactivity:
-    """Tests for _check_inactivity helper."""
+    """Tests for inactivity detection via _check_abort_result helper."""
 
     def test_returns_failure_when_detected(self):
-        from pokepoke.models.sdk_helpers import _check_inactivity
+        from pokepoke.models.sdk_helpers import _check_abort_result
 
-        result = _check_inactivity("item-1", True, 600.0)
+        result = _check_abort_result("item-1", True, 600.0, False, 600.0)
         assert result is not None
         assert not result.success
         assert "no SDK events" in result.error
         assert "600" in result.error
 
     def test_returns_none_when_not_detected(self):
-        from pokepoke.models.sdk_helpers import _check_inactivity
+        from pokepoke.models.sdk_helpers import _check_abort_result
 
-        result = _check_inactivity("item-1", False, 600.0)
+        result = _check_abort_result("item-1", False, 600.0, False, 600.0)
         assert result is None
 
 

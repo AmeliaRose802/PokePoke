@@ -23,8 +23,8 @@ from pokepoke.utils.process_utils import shutdown_copilot_client
 from .sdk_event_handler import create_event_handler, RateLimitError, SessionStats as _SDKSessionStats
 from .sdk_helpers import (
     _fail_result, _build_token_usage_callback, _build_copilot_result,
-    _build_session_config, _check_early_exit, _check_inactivity,
-    _check_tool_timeout, _await_completion, _summarize_output,
+    _build_session_config, _check_early_exit, _check_abort_result,
+    _await_completion, _summarize_output,
     build_resume_prompt,
 )
 
@@ -333,11 +333,9 @@ async def invoke_copilot_sdk(
             _check_early_exit(
                 work_item.id, timed_out, interrupted, max_timeout,
             )
-            or _check_inactivity(
+            or _check_abort_result(
                 work_item.id, inactivity_detected, inactivity_timeout,
-            )
-            or _check_tool_timeout(
-                work_item.id, tool_timed_out, tool_call_timeout,
+                tool_timed_out, tool_call_timeout,
                 last_output_summary=output_summary,
             )
         )

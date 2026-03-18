@@ -97,10 +97,7 @@ def _build_session_config(
 
 
 def _check_early_exit(
-    work_item_id: str,
-    timed_out: bool,
-    interrupted: bool,
-    max_timeout: float,
+    work_item_id: str, timed_out: bool, interrupted: bool, max_timeout: float,
 ) -> CopilotResult | None:
     """Return a failure result if the session ended abnormally, else None."""
     if timed_out:
@@ -111,31 +108,18 @@ def _check_early_exit(
     return None
 
 
-def _check_inactivity(
+def _check_abort_result(
     work_item_id: str,
-    inactivity_detected: bool,
-    inactivity_timeout: float,
-) -> CopilotResult | None:
-    """Return a failure result if session died from inactivity, else None."""
-    if inactivity_detected:
-        return _fail_result(
-            work_item_id,
-            f"Session died: no SDK events for {inactivity_timeout:.0f}s",
-        )
-    return None
-
-
-def _check_tool_timeout(
-    work_item_id: str,
-    tool_timed_out: bool,
-    tool_call_timeout: float,
+    inactivity_detected: bool, inactivity_timeout: float,
+    tool_timed_out: bool, tool_call_timeout: float,
     last_output_summary: str | None = None,
 ) -> CopilotResult | None:
-    """Return a failure result if a tool call exceeded the watchdog, else None."""
+    """Return a failure result for inactivity or tool timeout, else None."""
+    if inactivity_detected:
+        return _fail_result(work_item_id, f"Session died: no SDK events for {inactivity_timeout:.0f}s")
     if tool_timed_out:
         return _fail_result(
-            work_item_id,
-            f"Tool call stuck: exceeded {tool_call_timeout:.0f}s watchdog timeout",
+            work_item_id, f"Tool call stuck: exceeded {tool_call_timeout:.0f}s watchdog timeout",
             last_output_summary=last_output_summary,
         )
     return None
