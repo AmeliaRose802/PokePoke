@@ -60,9 +60,25 @@ def get_active_backend() -> CLIBackendConfig:
 
 
 def set_active_backend(config: CLIBackendConfig) -> None:
-    """Set the active CLI backend configuration used by :func:`_run_bd`."""
+    """Set the active CLI backend configuration used by :func:`_run_bd`.
+
+    Also updates the active sync strategy to match the backend:
+    ``bd`` → :class:`~pokepoke.beads.sync_strategy.DaemonSync`,
+    ``br`` → :class:`~pokepoke.beads.sync_strategy.ExplicitSync`.
+    """
     global _active_backend
     _active_backend = config
+
+    from pokepoke.beads.sync_strategy import (
+        DaemonSync,
+        ExplicitSync,
+        set_active_sync_strategy,
+    )
+
+    if config.binary == BEADS_BINARY_BR:
+        set_active_sync_strategy(ExplicitSync(backend=config))
+    else:
+        set_active_sync_strategy(DaemonSync(backend=config))
 
 
 # ---------------------------------------------------------------------------

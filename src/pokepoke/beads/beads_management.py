@@ -3,7 +3,6 @@
 import json
 import logging
 import subprocess
-import time
 
 from filelock import Timeout
 
@@ -18,11 +17,8 @@ from .beads_query import _parse_beads_json, _run_bd
 logger = logging.getLogger(__name__)
 
 
-def _is_transient_jsonl_sync_error(output: str) -> bool:
-    normalized = output.lower()
-    if "access is denied" in normalized and "jsonl" in normalized:
-        return True
-    return "failed to replace jsonl file" in normalized or "jsonl file hash mismatch" in normalized
+# Re-export for backward compatibility (moved to sync_strategy module).
+from .sync_strategy import _is_transient_jsonl_sync_error as _is_transient_jsonl_sync_error
 
 
 def run_bd_sync_with_retry(
@@ -30,40 +26,25 @@ def run_bd_sync_with_retry(
     base_delay: float = 0.5,
     timeout: int | None = 60,
 ) -> subprocess.CompletedProcess[str]:
-    """Run bd sync with retries for transient JSONL lock errors.
+    """Run beads sync with retries for transient errors.
+
+    Delegates to the active :class:`~pokepoke.beads.sync_strategy.SyncStrategy`
+    (``DaemonSync`` for ``bd``, ``ExplicitSync`` for ``br``).
 
     Args:
         max_attempts: Maximum number of retry attempts.
         base_delay: Initial delay between retries (doubles each attempt).
-        timeout: Maximum seconds to wait for ``bd sync`` to complete.
+        timeout: Maximum seconds to wait for sync to complete.
             Defaults to 60s to prevent indefinite hangs inside file locks.
             Pass ``None`` only if an unlimited wait is intentional.
     """
-    last_result: subprocess.CompletedProcess[str] | None = None
-    for attempt in range(1, max_attempts + 1):
-        result = _run_bd(['sync'], check=False, timeout=timeout)
-        last_result = result
-        if result.returncode == 0:
-            if attempt > 1:
-                print(f"✅ bd sync succeeded after retry ({attempt}/{max_attempts})")
-            return result
+    from .sync_strategy import get_active_sync_strategy
 
-        output = f"{result.stdout}\n{result.stderr}"
-        if _is_transient_jsonl_sync_error(output) and attempt < max_attempts:
-            delay = base_delay * (2 ** (attempt - 1))
-            message = (
-                "⚠️  bd sync failed due to locked JSONL file; "
-                f"retrying in {delay:.1f}s (attempt {attempt}/{max_attempts})"
-            )
-            # Keep this as a print as well so interactive runs and tests can observe retries.
-            print(message)
-            logger.warning(message)
-            time.sleep(delay)
-            continue
-        return result
-
-    assert last_result is not None
-    return last_result
+    return get_active_sync_strategy().sync(
+        max_attempts=max_attempts,
+        base_delay=base_delay,
+        timeout=timeout,
+    )
 
 
 def is_item_claimable(item_id: str) -> bool:

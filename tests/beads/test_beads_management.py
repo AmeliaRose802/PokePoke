@@ -221,27 +221,28 @@ class TestRunBdSyncWithRetry:
         assert isinstance(default_timeout, int)
         assert default_timeout > 0
 
-    @patch("pokepoke.beads.beads_management._run_bd")
-    def test_passes_timeout_to_run_bd(self, mock_run_bd: Mock) -> None:
-        """run_bd_sync_with_retry must forward its timeout to _run_bd."""
+    @patch("pokepoke.beads.beads_query._run_cli")
+    def test_passes_timeout_to_run_bd(self, mock_run_cli: Mock) -> None:
+        """run_bd_sync_with_retry must forward its timeout to the sync strategy."""
         from pokepoke.beads.beads_management import run_bd_sync_with_retry
         import subprocess
 
-        mock_run_bd.return_value = Mock(spec=subprocess.CompletedProcess, returncode=0)
+        mock_run_cli.return_value = Mock(spec=subprocess.CompletedProcess, returncode=0)
         run_bd_sync_with_retry(timeout=42)
 
-        mock_run_bd.assert_called_once_with(['sync'], check=False, timeout=42)
+        _, kwargs = mock_run_cli.call_args
+        assert kwargs["timeout"] == 42
 
-    @patch("pokepoke.beads.beads_management._run_bd")
-    def test_default_timeout_forwarded(self, mock_run_bd: Mock) -> None:
-        """When no timeout is provided, the default (60s) is forwarded to _run_bd."""
+    @patch("pokepoke.beads.beads_query._run_cli")
+    def test_default_timeout_forwarded(self, mock_run_cli: Mock) -> None:
+        """When no timeout is provided, the default (60s) is forwarded."""
         from pokepoke.beads.beads_management import run_bd_sync_with_retry
         import subprocess
 
-        mock_run_bd.return_value = Mock(spec=subprocess.CompletedProcess, returncode=0)
+        mock_run_cli.return_value = Mock(spec=subprocess.CompletedProcess, returncode=0)
         run_bd_sync_with_retry()
 
-        _, call_kwargs = mock_run_bd.call_args
+        _, call_kwargs = mock_run_cli.call_args
         assert call_kwargs.get('timeout') is not None
         assert call_kwargs.get('timeout') > 0
 
@@ -273,43 +274,43 @@ class TestIsTransientJsonlSyncError:
 class TestRunBdSyncRetryLogic:
     """Tests for run_bd_sync_with_retry retry behaviour."""
 
-    @patch("pokepoke.beads.beads_management._run_bd")
-    @patch("time.sleep")
-    def test_retries_on_transient_jsonl_error(self, mock_sleep: Mock, mock_run_bd: Mock) -> None:
+    @patch("pokepoke.beads.beads_query._run_cli")
+    @patch("pokepoke.beads.sync_strategy.time.sleep")
+    def test_retries_on_transient_jsonl_error(self, mock_sleep: Mock, mock_run_cli: Mock) -> None:
         from pokepoke.beads.beads_management import run_bd_sync_with_retry
         fail_result = Mock(returncode=1, stdout="failed to replace jsonl file", stderr="")
         ok_result = Mock(returncode=0, stdout="", stderr="")
-        mock_run_bd.side_effect = [fail_result, ok_result]
+        mock_run_cli.side_effect = [fail_result, ok_result]
 
         result = run_bd_sync_with_retry(max_attempts=3, base_delay=0.1)
 
         assert result.returncode == 0
-        assert mock_run_bd.call_count == 2
+        assert mock_run_cli.call_count == 2
         mock_sleep.assert_called_once()
 
-    @patch("pokepoke.beads.beads_management._run_bd")
-    def test_returns_immediately_on_non_transient_error(self, mock_run_bd: Mock) -> None:
+    @patch("pokepoke.beads.beads_query._run_cli")
+    def test_returns_immediately_on_non_transient_error(self, mock_run_cli: Mock) -> None:
         from pokepoke.beads.beads_management import run_bd_sync_with_retry
         fail_result = Mock(returncode=1, stdout="some random error", stderr="")
-        mock_run_bd.return_value = fail_result
+        mock_run_cli.return_value = fail_result
 
         result = run_bd_sync_with_retry(max_attempts=3)
 
         assert result.returncode == 1
-        assert mock_run_bd.call_count == 1
+        assert mock_run_cli.call_count == 1
 
-    @patch("pokepoke.beads.beads_management._run_bd")
-    @patch("time.sleep")
-    def test_succeeds_on_retry_prints_message(self, mock_sleep: Mock, mock_run_bd: Mock, capsys: object) -> None:
+    @patch("pokepoke.beads.beads_query._run_cli")
+    @patch("pokepoke.beads.sync_strategy.time.sleep")
+    def test_succeeds_on_retry_prints_message(self, mock_sleep: Mock, mock_run_cli: Mock, capsys: object) -> None:
         from pokepoke.beads.beads_management import run_bd_sync_with_retry
         fail_result = Mock(returncode=1, stdout="failed to replace jsonl file", stderr="")
         ok_result = Mock(returncode=0, stdout="", stderr="")
-        mock_run_bd.side_effect = [fail_result, ok_result]
+        mock_run_cli.side_effect = [fail_result, ok_result]
 
         run_bd_sync_with_retry(max_attempts=3, base_delay=0.1)
 
         # Should have retried and printed success message (captured as side effect of printing)
-        assert mock_run_bd.call_count == 2
+        assert mock_run_cli.call_count == 2
 
 
 class TestIsItemClaimable:
