@@ -658,7 +658,10 @@ class TestResolveWithTimeout:
         from pokepoke.types import BeadsWorkItem
         epic = BeadsWorkItem(id="e-1", title="Epic", description="", status="open",
                              priority=1, issue_type="epic")
-        mock_resolve.side_effect = lambda _item: time.sleep(10)
+        # Sleep just long enough to exceed the 1s timeout, but short enough
+        # that ThreadPoolExecutor.shutdown(wait=True) finishes within pytest's
+        # default 10s test timeout.
+        mock_resolve.side_effect = lambda _item: time.sleep(3)
         result = _resolve_with_timeout(epic, timeout=1)
         assert result is None
 

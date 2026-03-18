@@ -315,19 +315,21 @@ def _resolve_with_timeout(
     each require a bd show subprocess call.
     """
     import concurrent.futures
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        fut = pool.submit(resolve_to_leaf_task, item)
-        try:
-            return fut.result(timeout=timeout)
-        except concurrent.futures.TimeoutError:
-            logger.warning(
-                "Hierarchical resolve timed out after %ds for %s — skipping",
-                timeout, item.id,
-            )
-            return None
-        except Exception:
-            logger.warning("Hierarchical resolve failed for %s", item.id, exc_info=True)
-            return None
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    fut = pool.submit(resolve_to_leaf_task, item)
+    try:
+        return fut.result(timeout=timeout)
+    except concurrent.futures.TimeoutError:
+        logger.warning(
+            "Hierarchical resolve timed out after %ds for %s — skipping",
+            timeout, item.id,
+        )
+        return None
+    except Exception:
+        logger.warning("Hierarchical resolve failed for %s", item.id, exc_info=True)
+        return None
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 def select_next_hierarchical_item(items: list[BeadsWorkItem]) -> BeadsWorkItem | None:

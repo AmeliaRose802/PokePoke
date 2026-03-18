@@ -203,17 +203,15 @@ def get_ready_work_items() -> list[BeadsWorkItem]:
     try:
         result = _run_bd(['ready', '--json'])
     except subprocess.CalledProcessError as e:
-        # Log error but don't crash the orchestrator
-        # This can happen when beads database is temporarily unavailable
-        logger.warning(f"⚠️  Warning: beads ready command failed (exit code {e.returncode})")
+        logger.warning("⚠️  beads ready command failed (exit code %s)", e.returncode)
         if e.stderr:
-            logger.warning(f"⚠️  Error output: {e.stderr.strip()}")
+            logger.warning("⚠️  Error output: %s", e.stderr.strip())
         return []
     except subprocess.TimeoutExpired:
-        logger.warning("⚠️  Warning: beads ready command timed out after 30 seconds")
+        logger.warning("⚠️  beads ready command timed out")
         return []
     except Exception as e:
-        logger.warning(f"⚠️  Warning: unexpected error querying beads: {e}")
+        logger.warning("⚠️  unexpected error querying beads: %s", e)
         return []
 
     if not result.stdout:
@@ -221,9 +219,10 @@ def get_ready_work_items() -> list[BeadsWorkItem]:
 
     try:
         items_data = _parse_beads_json(result.stdout)
-        if not items_data:
+        if not items_data or isinstance(items_data, dict):
+            if isinstance(items_data, dict) and 'error' in items_data:
+                logger.warning("⚠️  beads returned error: %s", items_data['error'].split('\n')[0])
             return []
-
         return [_filter_to_dataclass(BeadsWorkItem, item) for item in items_data]
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         logger.warning(f"⚠️  Warning: failed to parse beads output: {e}")
@@ -382,7 +381,9 @@ def get_beads_stats() -> BeadsStats | None:
 
         result = _run_bd(['stats', '--json'], cwd=cwd)
 
-        data = json.loads(result.stdout)
+        data = _parse_beads_json(result.stdout)
+        if data is None:
+            return None
         summary = data.get('summary', {})
 
         return BeadsStats(
