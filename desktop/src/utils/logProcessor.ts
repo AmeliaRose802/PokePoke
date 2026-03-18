@@ -166,46 +166,31 @@ function sumReplacementsFromResults(items: ToolItem[]): number {
   return Number.isFinite(total) ? total : 0;
 }
 
+const pl = (n: number, word: string, plural = `${word}s`) => `${n} ${n === 1 ? word : plural}`;
+
 function buildToolGroupSummary(toolName: string, items: ToolItem[]): string | undefined {
   if (toolName === "apply_patch") {
     const files = new Set<string>();
-    for (const item of items) {
+    for (const item of items)
       for (const entry of item.additionalEntries ?? []) {
-        const match = entry.message.match(PATCH_UPDATE_FILE_RE);
-        if (match) files.add(match[1].trim());
+        const m = entry.message.match(PATCH_UPDATE_FILE_RE);
+        if (m) files.add(m[1].trim());
       }
-    }
-    if (files.size > 0) {
-      return `Patched ${files.size} file${files.size === 1 ? "" : "s"}`;
-    }
-    return `${items.length} patch${items.length === 1 ? "" : "es"}`;
+    return files.size > 0 ? `Patched ${pl(files.size, "file")}` : pl(items.length, "patch", "patches");
   }
-
   if (toolName === "edit") {
     const files = new Set(items.flatMap((i) => extractPathsFromArgs(i.argsText)));
     const replacements = sumReplacementsFromResults(items);
-    const fileCount = files.size;
-    if (replacements > 0 && fileCount > 0) {
-      return `Replaced ${replacements} occurrence${replacements === 1 ? "" : "s"} in ${fileCount} file${
-        fileCount === 1 ? "" : "s"
-      }`;
-    }
-    if (fileCount > 0) {
-      return `Edited ${fileCount} file${fileCount === 1 ? "" : "s"}`;
-    }
-    return `Edits: ${items.length}`;
+    if (replacements > 0 && files.size > 0)
+      return `Replaced ${pl(replacements, "occurrence")} in ${pl(files.size, "file")}`;
+    return files.size > 0 ? `Edited ${pl(files.size, "file")}` : `Edits: ${items.length}`;
   }
-
   if (toolName === "create") {
     const files = new Set(items.flatMap((i) => extractPathsFromArgs(i.argsText)));
-    const fileCount = files.size;
-    if (fileCount > 0) {
-      return `Created ${fileCount} file${fileCount === 1 ? "" : "s"}`;
-    }
+    if (files.size > 0) return `Created ${pl(files.size, "file")}`;
   }
-
   if (toolName === "grep" || toolName === "glob" || toolName === "view") {
-    return `${items.length} call${items.length === 1 ? "" : "s"}`;
+    return pl(items.length, "call");
   }
 
   return undefined;
@@ -295,6 +280,23 @@ export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
     };
   }
 
+  /** Re-pair batch results: collects all results and re-assigns positionally. */
+  function repairBatchResults(tools: ToolItem[], trailingIndex: number): number {
+    const allResults: LogEntry[] = [];
+    for (const tool of tools) {
+      if (tool.result) { allResults.push(tool.result); tool.result = undefined; }
+    }
+    let idx = trailingIndex;
+    while (idx < logs.length && isToolResultMessage(logs[idx].message)) allResults.push(logs[idx++]);
+    for (let j = 0; j < Math.min(tools.length, allResults.length); j++) {
+      tools[j].result = allResults[j];
+      const rs = buildToolSummary("", allResults[j].message);
+      tools[j].summary.resultSummary = rs.resultSummary;
+      tools[j].summary.statusClass = rs.statusClass;
+    }
+    return idx;
+  }
+
   function buildToolGroups(tools: ToolItem[]): ToolGroup[] {
     const groups: ToolGroup[] = [];
     let i = 0;
@@ -354,6 +356,7 @@ export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
       }
 
       if (tools.length > 0) {
+        i = repairBatchResults(tools, i);
         const groups = buildToolGroups(tools);
         const completedCalls = tools.filter((t) => Boolean(t.result)).length;
         const totalCalls = tools.length;
@@ -387,6 +390,8 @@ export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
         tools.push(parsed.tool);
         i = parsed.nextIndex;
       }
+
+      i = repairBatchResults(tools, i);
 
       if (tools.length === 1) {
         items.push({ type: "tool", tool: tools[0] });

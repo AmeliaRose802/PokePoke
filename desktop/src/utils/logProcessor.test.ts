@@ -394,3 +394,106 @@ describe("isViewToolWithContent", () => {
     expect(isViewToolWithContent(tool)).toBe(false);
   });
 });
+
+describe("processLogsToRenderItems - non-interleaved batch result pairing", () => {
+  it("pairs results correctly when all calls come before all results (with header)", () => {
+    const entries = makeEntries([
+      "[Copilot] Calling 2 tool(s)...",
+      "[Tool] grep({'pattern': 'foo'})",
+      "[Tool] view({'path': 'bar.ts'})",
+      "✅ Result: Found 5 matches",
+      "✅ Result: File contents shown",
+    ]);
+    const items = processLogsToRenderItems(entries);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].type).toBe("tool-batch");
+    if (items[0].type !== "tool-batch") return;
+
+    const { batch } = items[0];
+    expect(batch.totalCalls).toBe(2);
+    expect(batch.completedCalls).toBe(2);
+
+    // Flatten all tool items from groups
+    const allTools = batch.groups.flatMap((g) => g.items);
+    expect(allTools).toHaveLength(2);
+
+    // First tool (grep) should have the first result
+    expect(allTools[0].toolName).toBe("grep");
+    expect(allTools[0].result?.message).toBe("✅ Result: Found 5 matches");
+    expect(allTools[0].summary.resultSummary).toContain("Found 5 matches");
+
+    // Second tool (view) should have the second result
+    expect(allTools[1].toolName).toBe("view");
+    expect(allTools[1].result?.message).toBe("✅ Result: File contents shown");
+    expect(allTools[1].summary.resultSummary).toContain("File contents shown");
+  });
+
+  it("pairs results correctly when all calls come before all results (without header)", () => {
+    const entries = makeEntries([
+      "[Tool] grep({'pattern': 'foo'})",
+      "[Tool] view({'path': 'bar.ts'})",
+      "✅ Result: Found 5 matches",
+      "✅ Result: File contents shown",
+    ]);
+    const items = processLogsToRenderItems(entries);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].type).toBe("tool-batch");
+    if (items[0].type !== "tool-batch") return;
+
+    const allTools = items[0].batch.groups.flatMap((g) => g.items);
+    expect(allTools[0].toolName).toBe("grep");
+    expect(allTools[0].result?.message).toBe("✅ Result: Found 5 matches");
+    expect(allTools[1].toolName).toBe("view");
+    expect(allTools[1].result?.message).toBe("✅ Result: File contents shown");
+  });
+
+  it("pairs results correctly for partially interleaved batch", () => {
+    const entries = makeEntries([
+      "[Copilot] Calling 3 tool(s)...",
+      "[Tool] grep({'pattern': 'foo'})",
+      "✅ Result: Found 3 matches",
+      "[Tool] view({'path': 'a.ts'})",
+      "[Tool] edit({'path': 'b.ts'})",
+      "✅ Result: File read",
+      "✅ Result: Replaced 1 occurrence",
+    ]);
+    const items = processLogsToRenderItems(entries);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].type).toBe("tool-batch");
+    if (items[0].type !== "tool-batch") return;
+
+    const allTools = items[0].batch.groups.flatMap((g) => g.items);
+    expect(allTools).toHaveLength(3);
+    expect(allTools[0].toolName).toBe("grep");
+    expect(allTools[0].result?.message).toBe("✅ Result: Found 3 matches");
+    expect(allTools[1].toolName).toBe("view");
+    expect(allTools[1].result?.message).toBe("✅ Result: File read");
+    expect(allTools[2].toolName).toBe("edit");
+    expect(allTools[2].result?.message).toBe("✅ Result: Replaced 1 occurrence");
+  });
+
+  it("does not leave trailing results as standalone entries after batch", () => {
+    const entries = makeEntries([
+      "[Copilot] Calling 2 tool(s)...",
+      "[Tool] grep({'pattern': 'foo'})",
+      "[Tool] grep({'pattern': 'bar'})",
+      "✅ Result: Found 5 matches",
+      "✅ Result: Found 3 matches",
+      "Done.",
+    ]);
+    const items = processLogsToRenderItems(entries);
+
+    // Should be: batch + "Done." log entry (no orphaned result entries)
+    const resultEntries = items.filter(
+      (item) => item.type === "log" && item.entry.message.includes("Result:"),
+    );
+    expect(resultEntries).toHaveLength(0);
+
+    expect(items[0].type).toBe("tool-batch");
+    if (items[0].type !== "tool-batch") return;
+    expect(items[0].batch.completedCalls).toBe(2);
+  });
+});

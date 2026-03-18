@@ -258,4 +258,30 @@ describe("LogPanel", () => {
     const viewContent = document.querySelector(".log-view-content");
     expect(viewContent).toBeNull();
   });
+
+  it("pairs non-interleaved batch results with correct tool accordions", () => {
+    const logs: LogEntry[] = [
+      mk(1, "[Copilot] Calling 2 tool(s)..."),
+      mk(2, "[Tool] grep({'pattern': 'foo'})"),
+      mk(3, "[Tool] view({'path': 'README.md'})"),
+      mk(4, "✅ Result: Found 5 matches"),
+      mk(5, "✅ Result: File contents shown"),
+    ];
+
+    render(<LogPanel title="Agent" icon="🤖" logs={logs} accentColor="#7dcfff" />);
+
+    // Batch should exist with all results paired
+    expect(screen.getByText(/Tool batch \(2 calls\)/)).toBeInTheDocument();
+    expect(screen.getByText("2/2")).toBeInTheDocument();
+
+    // Each tool accordion should show its own result summary (appears in both summary + details)
+    expect(screen.getAllByText(/Found 5 matches/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/File contents shown/).length).toBeGreaterThanOrEqual(1);
+
+    // Results should NOT appear as standalone log entries outside the batch
+    const allLogEntries = document.querySelectorAll(".log-panel-body > .log-entry");
+    for (const entry of allLogEntries) {
+      expect(entry.textContent).not.toContain("Result:");
+    }
+  });
 });
