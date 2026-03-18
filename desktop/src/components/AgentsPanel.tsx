@@ -31,12 +31,7 @@ import { GateVerdictPreview } from "./GateVerdictPreview";
 import { WorkItemGroupSection } from "./WorkItemGroupSection";
 
 /** Image with React-safe fallback (no direct DOM mutation). */
-function AgentIcon({ src, alt, className, fallback }: {
-  src: string | null | undefined;
-  alt: string;
-  className: string;
-  fallback: ReactElement;
-}) {
+function AgentIcon({ src, alt, className, fallback }: { src: string | null | undefined; alt: string; className: string; fallback: ReactElement }) {
   const [failed, setFailed] = useState(false);
   if (!src || failed) return fallback;
   return <img src={src} alt={alt} className={className} onError={() => setFailed(true)} />;
@@ -201,21 +196,25 @@ export function AgentsPanel({
               return agent.recent_logs.length === 0 ? (
                 <span className="agent-card-no-logs">Running gate check…</span>
               ) : (
-                agent.recent_logs.map((line, i) => (
-                  <div key={i} className="agent-card-log-line">
-                    {line}
-                  </div>
-                ))
+                <div className="agent-card-log-lines">
+                  {agent.recent_logs.map((line, i) => (
+                    <div key={`${agent.agent_id}-log-${i}`} className="agent-card-log-line">
+                      {line}
+                    </div>
+                  ))}
+                </div>
               );
             })()
           ) : agent.recent_logs.length === 0 ? (
             <span className="agent-card-no-logs">{isPaused ? "Paused" : "Waiting for output…"}</span>
           ) : (
-            agent.recent_logs.map((line, i) => (
-              <div key={i} className="agent-card-log-line">
-                {line}
-              </div>
-            ))
+            <div className="agent-card-log-lines">
+              {agent.recent_logs.map((line, i) => (
+                <div key={`${agent.agent_id}-log-${i}`} className="agent-card-log-line">
+                  {line}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>
@@ -261,14 +260,14 @@ export function AgentsPanel({
 
       // Render non-retry children (gates, maintenance sub-agents) newest-first
       otherKids
-        .sort((a, b) => (b.started_at ?? 0) - (a.started_at ?? 0))
+        .sort((a, b) => (b.started_at ?? 0) - (a.started_at ?? 0) || a.agent_id.localeCompare(b.agent_id))
         .forEach((child) => {
           nodes.push(...renderSessionAgentTree(child, depth + 1, agent));
         });
 
       // Render cleanup children with their own separator (distinct workflow phase)
       cleanupKids
-        .sort((a, b) => (a.started_at ?? a.iteration) - (b.started_at ?? b.iteration))
+        .sort((a, b) => (a.started_at ?? a.iteration) - (b.started_at ?? b.iteration) || a.agent_id.localeCompare(b.agent_id))
         .forEach((child) => {
           nodes.push(
             <div
@@ -284,7 +283,7 @@ export function AgentsPanel({
 
       // Render retry children chronologically (oldest first) with separators
       retryKids
-        .sort((a, b) => (a.started_at ?? a.iteration) - (b.started_at ?? b.iteration))
+        .sort((a, b) => (a.started_at ?? a.iteration) - (b.started_at ?? b.iteration) || a.agent_id.localeCompare(b.agent_id))
         .forEach((child) => {
           nodes.push(
             <div
@@ -484,13 +483,11 @@ export function AgentsPanel({
         )}
       </div>
       <div className="agents-scroll">
-        {sessionGroups.map((group) =>
-          renderSessionGroup(
-            group,
-            group.sessionId === currentSessionId ||
-              (currentSessionId == null && group === sessionGroups[sessionGroups.length - 1]),
-          ),
-        )}
+        {sessionGroups.map((group) => renderSessionGroup(
+          group,
+          group.sessionId === currentSessionId ||
+            (currentSessionId == null && group === sessionGroups[sessionGroups.length - 1]),
+        ))}
       </div>
     </aside>
   );

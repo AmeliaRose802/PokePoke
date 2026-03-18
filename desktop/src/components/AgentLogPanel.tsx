@@ -226,8 +226,8 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
           <div className="agent-log-panel-files">
             <strong>Modified files:</strong>
             <ul className="agent-log-panel-file-list">
-              {agent.modified_files.map((file, i) => (
-                <li key={i}>{file}</li>
+              {agent.modified_files.map((file) => (
+                <li key={file}>{file}</li>
               ))}
             </ul>
           </div>
