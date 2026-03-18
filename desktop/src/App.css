@@ -1005,6 +1005,22 @@
   border-left: 3px solid var(--accent-error);
 }
 
+.agent-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.agent-card-title-row .agent-card-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-card-title-row .agent-card-status {
+  flex-shrink: 0;
+}
+
 .agent-card-top {
   display: flex;
   align-items: center;

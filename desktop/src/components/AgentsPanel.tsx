@@ -127,25 +127,8 @@ export function AgentsPanel({
           }
         }}
       >
-        <div className="agent-card-top">
-          <AgentIcon
-              src={agentIconPath}
-              alt={iconAlt}
-              className="agent-card-avatar agent-card-snake-icon agent-card-icon"
-              fallback={<span className="agent-card-avatar">{fallbackEmoji}</span>}
-          />
-          <div className="agent-card-info">
-            <span className="agent-card-name">{label}</span>
-            {showAttempt ? (
-              <span className="agent-card-iter agent-attempt-label">Attempt {agent.iteration}</span>
-            ) : (
-              <span className="agent-card-iter">v{agent.iteration}</span>
-            )}
-            {roleLabel ? <span className="agent-card-subtitle">{roleLabel}</span> : null}
-            {isGate && gateTargetSummary ? (
-              <span className="agent-card-link-label gate-card-target">{gateTargetSummary}</span>
-            ) : null}
-          </div>
+        <div className="agent-card-title-row">
+          <span className="agent-card-name">{label}</span>
           <div className="agent-card-status">
             {gateSummary && gateForDisplay ? (
               <span
@@ -156,6 +139,25 @@ export function AgentsPanel({
               </span>
             ) : null}
             <span className={`agent-dot ${statusInfo.dot}`} title={statusInfo.label} />
+          </div>
+        </div>
+        <div className="agent-card-top">
+          <AgentIcon
+              src={agentIconPath}
+              alt={iconAlt}
+              className="agent-card-avatar agent-card-snake-icon agent-card-icon"
+              fallback={<span className="agent-card-avatar">{fallbackEmoji}</span>}
+          />
+          <div className="agent-card-info">
+            {showAttempt ? (
+              <span className="agent-card-iter agent-attempt-label">Attempt {agent.iteration}</span>
+            ) : (
+              <span className="agent-card-iter">v{agent.iteration}</span>
+            )}
+            {roleLabel ? <span className="agent-card-subtitle">{roleLabel}</span> : null}
+            {isGate && gateTargetSummary ? (
+              <span className="agent-card-link-label gate-card-target">{gateTargetSummary}</span>
+            ) : null}
           </div>
           {isPaused && (
             <span className="agent-paused-badge" title="Paused">
