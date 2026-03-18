@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AgentLogPanel } from "./components/AgentLogPanel";
 import { AgentsPanel } from "./components/AgentsPanel";
 import { ConnectionIndicator } from "./components/ConnectionIndicator";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LogPanel } from "./components/LogPanel";
 import { LogsLocationBox } from "./components/LogsLocationBox";
 import { PromptEditor } from "./components/PromptEditor";
@@ -230,6 +231,7 @@ function App() {
       <div className={`main-content${isDragging ? " main-content--resizing" : ""}`} ref={containerRef}>
         {/* Primary log output + secondary (collapsible) orchestrator log */}
         <div className="log-container">
+          <ErrorBoundary>
           {selectedAgentDetail ? (
             <AgentLogPanel agent={selectedAgentDetail} onClose={() => setSelectedCardId(null)} />
           ) : autoFollowAgent ? (
@@ -250,7 +252,9 @@ function App() {
               accentColor="var(--accent-warning)"
             />
           )}
+          </ErrorBoundary>
 
+          <ErrorBoundary>
           {shouldShowOrchestratorDrawer ? (
             <details className="orchestrator-collapsible">
               <summary className="orchestrator-collapsible-summary">
@@ -267,6 +271,7 @@ function App() {
               </div>
             </details>
           ) : null}
+          </ErrorBoundary>
         </div>
 
         {/* Resize handle */}
