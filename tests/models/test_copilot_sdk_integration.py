@@ -363,6 +363,37 @@ class TestAwaitCompletionInactivity:
         session.abort.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_inactivity_suppressed_during_tool_cooldown_grace(self):
+        """When a tool just finished, grace period prevents inactivity kill."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        done = asyncio.Event()
+
+        # last_event_time far in the past but tool activity very recent
+        stats = {
+            'last_event_time': time.monotonic() - 700,
+            'event_count': 5,
+            'last_tool_activity_time': time.monotonic() - 10,  # 10s ago — within 60s grace
+        }
+
+        # Set done after a brief delay so the function exits normally
+        async def _set_done():
+            await asyncio.sleep(0.05)
+            done.set()
+        asyncio.create_task(_set_done())
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=600,
+        )
+
+        assert result is None  # Normal completion, NOT inactivity
+        session.abort.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_no_inactivity_when_events_recent(self):
         """When events are recent, inactivity check does not fire."""
         from pokepoke.models.sdk_helpers import _await_completion
@@ -490,7 +521,7 @@ class TestSessionInactivityConfig:
     def test_default_value(self):
         from pokepoke.config import ProjectConfig
         cfg = ProjectConfig()
-        assert cfg.session_inactivity_timeout == 600
+        assert cfg.session_inactivity_timeout == 900
 
     def test_clamped_to_minimum(self):
         from pokepoke.config import ProjectConfig

@@ -104,6 +104,10 @@ def _find_test_files_for_staged(
     # Manual overrides for modules whose tests don't follow naming convention
     test_file_overrides: dict[str, list[str]] = {
         "worktree_cleanup": ["tests/test_worktrees.py"],  # Main tests in test_worktrees.py
+        "sdk_helpers": [
+            "tests/models/test_copilot_sdk.py",
+            "tests/models/test_copilot_sdk_integration.py",
+        ],
     }
 
     for src_file in staged_source:
@@ -266,7 +270,7 @@ def run_tests_with_coverage(
             cmd,
             capture_output=True,
             text=True,
-            timeout=600,
+            timeout=900,
             cwd=str(repo_root),
             encoding="utf-8",
         )

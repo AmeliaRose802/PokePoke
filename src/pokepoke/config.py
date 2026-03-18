@@ -237,8 +237,8 @@ class ProjectConfig:
     gate_agent_enabled: bool = True
     max_copilot_failure_retries: int = 2  # Max retries when Copilot session fails (0 = no retry)
     idle_timeout_seconds: int = 90  # Seconds to wait before confirming a session is idle
-    session_inactivity_timeout: int = 600  # Seconds with no SDK events before treating session as dead
-    tool_call_timeout: int = 600  # Max seconds for a single tool invocation before killing it
+    session_inactivity_timeout: int = 900  # Seconds with no SDK events before treating session as dead
+    tool_call_timeout: int = 900  # Max seconds for a single tool invocation before killing it
     assignment: AssignmentConfig = field(default_factory=AssignmentConfig)
     performance_thresholds: PerformanceThresholdsConfig = field(
         default_factory=PerformanceThresholdsConfig,
