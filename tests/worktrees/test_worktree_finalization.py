@@ -203,6 +203,20 @@ class TestCloseWorkItemAndParents:
         close_work_item_and_parents(item)
         mock_close.assert_called_once()
 
+    def test_ephemeral_item_skips_beads_operations(self) -> None:
+        """Ephemeral items should not trigger any beads operations."""
+        item = BeadsWorkItem(
+            id="maintenance-janitor-20260318-123456",
+            title="Janitor Maintenance",
+            description="Cleanup prompt",
+            status="in_progress",
+            priority=0,
+            issue_type="task",
+            is_ephemeral=True,
+        )
+        # Should return immediately without calling subprocess or close_item
+        close_work_item_and_parents(item)
+
 
 class TestCheckParentHierarchy:
     """Test check_parent_hierarchy function (lines 220-230)."""

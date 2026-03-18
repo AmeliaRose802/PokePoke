@@ -183,7 +183,8 @@ def run_maintenance_agent(
     agent_item = BeadsWorkItem(
         id=agent_id, title=f"{agent_name} Maintenance", description=agent_prompt,
         status=STATUS_IN_PROGRESS, priority=0, issue_type="task",
-        labels=["maintenance", agent_name.lower()]
+        labels=["maintenance", agent_name.lower()],
+        is_ephemeral=True,
     )
     if not needs_worktree:
         return _run_beads_only_agent(agent_name, agent_item, agent_prompt, model=model, item_logger=item_logger)
@@ -270,7 +271,8 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
         cleanup_item = BeadsWorkItem(
             id=agent_id, title="Worktree Cleanup and Merge", description=cleanup_prompt,
             status=STATUS_IN_PROGRESS, priority=0, issue_type="task",
-            labels=["maintenance", "worktree-cleanup"]
+            labels=["maintenance", "worktree-cleanup"],
+            is_ephemeral=True,
         )
 
         cwd = str(repo_root) if repo_root is not None else None
