@@ -131,6 +131,10 @@ def merge_worktree_to_dev(
 
 def close_work_item_and_parents(item: BeadsWorkItem) -> None:
     """Close work item and check if parents should be closed."""
+    if item.is_ephemeral:
+        logger.info("Skipping beads close for ephemeral item %s", item.id)
+        return
+
     print(f"\n🔍 Checking if agent closed beads item {item.id}...")
     try:
         check_result = subprocess.run(

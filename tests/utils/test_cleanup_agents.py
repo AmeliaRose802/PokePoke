@@ -109,6 +109,50 @@ class TestCleanupAgents:
         assert "/cur/dir" in prompt
         assert "feature" in prompt
         assert "True" in prompt
+        # Verify the cleanup item passed to invoke_copilot is marked ephemeral
+        cleanup_item = args[0][0]
+        assert cleanup_item.is_ephemeral is True
+        assert cleanup_item.id == "123-cleanup"
+
+    @patch('pokepoke.agents.cleanup_agents.merge_lock_active', return_value=False)
+    @patch('pokepoke.agents.cleanup_agents.get_pokepoke_prompts_dir')
+    @patch('pokepoke.agents.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
+    def test_ephemeral_item_adds_warning_to_prompt(self, mock_invoke, mock_context, mock_get_dir, mock_merge_active):
+        """Test that ephemeral items include a warning in the prompt not to use bd commands."""
+        mock_dir = MagicMock()
+        mock_file = Mock()
+        mock_file.exists.return_value = True
+        mock_file.read_text.return_value = "Instructions {cwd} {branch} {is_worktree}"
+        mock_dir.__truediv__.return_value = mock_file
+        mock_get_dir.return_value = mock_dir
+
+        mock_context.return_value = ("/cur/dir", "feature", True)
+
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="task-1",
+            success=True,
+            output="Done",
+            attempt_count=1
+        )
+
+        # Create an ephemeral maintenance item
+        item = BeadsWorkItem(
+            id="maintenance-janitor-20260318",
+            title="Janitor Maintenance",
+            description="Cleanup",
+            issue_type="task",
+            priority=0,
+            status="in_progress",
+            is_ephemeral=True,
+        )
+
+        invoke_cleanup_agent(item)
+
+        mock_invoke.assert_called_once()
+        prompt = mock_invoke.call_args[1]['prompt']
+        assert "does NOT exist in the beads database" in prompt
+        assert "Do NOT run any `bd` commands" in prompt
 
     @patch('pokepoke.agents.cleanup_agents.merge_lock_active', return_value=False)
     @patch('pokepoke.agents.cleanup_agents.get_pokepoke_prompts_dir')

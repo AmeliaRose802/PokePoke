@@ -25,6 +25,7 @@ class BeadsWorkItem:
     created_by: str | None = None
     updated_at: str | None = None
     labels: list[str] | None = None
+    is_ephemeral: bool = False  # True for synthetic items (cleanup, maintenance) not in beads DB
 
 @dataclass(frozen=True)
 class BeadsCreatedItem:

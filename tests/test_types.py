@@ -61,6 +61,24 @@ class TestBeadsWorkItem:
 
         assert item.description == "A detailed description"
 
+    def test_is_ephemeral_defaults_to_false(self) -> None:
+        """Test that is_ephemeral defaults to False for real beads items."""
+        item = _make_item()
+        assert item.is_ephemeral is False
+
+    def test_is_ephemeral_can_be_set_true(self) -> None:
+        """Test that is_ephemeral can be explicitly set to True."""
+        item = BeadsWorkItem(
+            id="task-1-cleanup",
+            title="Cleanup",
+            issue_type="task",
+            status="in_progress",
+            priority=0,
+            description="",
+            is_ephemeral=True,
+        )
+        assert item.is_ephemeral is True
+
 
 class TestCopilotResult:
     """Test CopilotResult dataclass."""

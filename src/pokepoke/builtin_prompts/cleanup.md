@@ -79,6 +79,15 @@ This repository has integrity checks that detect tampering:
 
 **If validation fails, you MUST FIX THE CODE, not bypass the check.**
 
+## ⛔ Do NOT Interact with Beads Items
+
+**The orchestrator manages beads item lifecycle.** You must NOT:
+- Run `bd close`, `bd update`, `bd show`, or any other `bd` commands
+- Try to close, reopen, or modify any beads items
+- The work item ID shown above may be an internal/ephemeral identifier that does not exist in the beads database
+
+Your ONLY job is to fix validation errors, get code committed, and push.
+
 ## Your Tasks
 
 1. **Check git status first** - Look for merge conflicts or unmerged paths
@@ -90,19 +99,14 @@ This repository has integrity checks that detect tampering:
    - Resolve build errors
    - Fix failing tests
 5. **Commit with validation** - Let pre-commit hooks run normally
-6. **Merge and cleanup** - Once validation passes
-7. **Close the beads item** - Mark work complete
+6. **Push commits** - Once validation passes, push so the orchestrator can merge
 
-If the work has not been completed, it is acceptable to move the beads item to open and make sure everything on the default development branch is committed. Use 'bd sync' to sync beads changes.
-
-You do not need to make intigration tests pass, just the pre-commit tests.
-
-Beads changes do not need to be commited. Just run bd sync and that's enough.
+You do not need to make integration tests pass, just the pre-commit tests.
 
 ## Important Notes
 
 - Main branch: Use `get_default_branch()` to detect automatically
 - If uncommitted work exists on the current worktree, commit it with validation passing
-- Merge the worktree back to the default development branch
+- Do not merge — the orchestrator handles merging after validation passes
 - Do not leave anything uncommitted
 - Quality gates exist to maintain code health - respect them

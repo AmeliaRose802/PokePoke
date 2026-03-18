@@ -182,6 +182,11 @@ def _build_work_item_context(item: BeadsWorkItem, heading: str, extra: str = "")
                f"**Status:** {item.status}\n\n**Description:**\n{item.description}\n{extra}")
     if item.labels:
         context += f"\n**Labels:** {', '.join(item.labels)}\n"
+    if item.is_ephemeral:
+        context += (
+            "\n⚠️ **This is an internal/ephemeral work item that does NOT exist in the beads database.** "
+            "Do NOT run any `bd` commands (bd show, bd close, bd update, etc.) for this item ID.\n"
+        )
     return context
 
 
@@ -290,7 +295,8 @@ def invoke_cleanup_agent(
         status=STATUS_IN_PROGRESS,
         priority=0,
         issue_type="task",
-        labels=["cleanup", "automated"]
+        labels=["cleanup", "automated"],
+        is_ephemeral=True,
     )
 
     print("\n🧹 Invoking cleanup agent...")
@@ -372,7 +378,8 @@ def invoke_merge_conflict_cleanup_agent(
         status=STATUS_IN_PROGRESS,
         priority=0,
         issue_type="task",
-        labels=["cleanup", "merge-conflict"]
+        labels=["cleanup", "merge-conflict"],
+        is_ephemeral=True,
     )
 
     print("\n🧹 Invoking merge conflict cleanup agent...")
