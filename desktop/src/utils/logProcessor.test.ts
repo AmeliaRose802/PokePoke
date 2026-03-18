@@ -13,6 +13,12 @@ import {
   processLogsToRenderItems,
   stringsToLogEntries,
 } from "./logProcessor";
+import {
+  extensionToLanguage,
+  extractFileExtension,
+  isViewToolWithContent,
+  stripViewLineNumbers,
+} from "./viewContentHelpers";
 
 function makeEntries(lines: string[]): LogEntry[] {
   return stringsToLogEntries(lines, 1000);
@@ -264,5 +270,127 @@ describe("processLogsToRenderItems - 🔧 SDK tool format", () => {
     const items = processLogsToRenderItems(entries);
     expect(items).toHaveLength(1);
     expect(items[0].type).toBe("tool-batch");
+  });
+});
+
+describe("extractFileExtension", () => {
+  it("extracts .ts extension", () => {
+    expect(extractFileExtension("src/app.ts")).toBe("ts");
+  });
+
+  it("extracts .py extension", () => {
+    expect(extractFileExtension("main.py")).toBe("py");
+  });
+
+  it("extracts .tsx extension", () => {
+    expect(extractFileExtension("components/App.tsx")).toBe("tsx");
+  });
+
+  it("returns undefined for no extension", () => {
+    expect(extractFileExtension("Makefile")).toBeUndefined();
+  });
+
+  it("handles paths with dots in directories", () => {
+    expect(extractFileExtension("src/v2.0/config.json")).toBe("json");
+  });
+
+  it("normalizes to lowercase", () => {
+    expect(extractFileExtension("README.MD")).toBe("md");
+  });
+});
+
+describe("extensionToLanguage", () => {
+  it("maps ts to typescript", () => {
+    expect(extensionToLanguage("ts")).toBe("typescript");
+  });
+
+  it("maps tsx to typescript", () => {
+    expect(extensionToLanguage("tsx")).toBe("typescript");
+  });
+
+  it("maps py to python", () => {
+    expect(extensionToLanguage("py")).toBe("python");
+  });
+
+  it("maps json to json", () => {
+    expect(extensionToLanguage("json")).toBe("json");
+  });
+
+  it("maps ps1 to powershell", () => {
+    expect(extensionToLanguage("ps1")).toBe("powershell");
+  });
+
+  it("returns undefined for unknown extensions", () => {
+    expect(extensionToLanguage("xyz")).toBeUndefined();
+  });
+
+  it("is case-insensitive", () => {
+    expect(extensionToLanguage("TS")).toBe("typescript");
+  });
+});
+
+describe("stripViewLineNumbers", () => {
+  it("strips line number prefixes from all lines", () => {
+    const lines = ["1. first line", "2. second line", "3. third line"];
+    const result = stripViewLineNumbers(lines);
+    expect(result.code).toBe("first line\nsecond line\nthird line");
+    expect(result.lineCount).toBe(3);
+  });
+
+  it("handles blank lines mixed with numbered lines", () => {
+    const lines = ["1. code", "", "3. more code"];
+    const result = stripViewLineNumbers(lines);
+    expect(result.code).toBe("code\n\nmore code");
+  });
+
+  it("preserves content when no line numbers present", () => {
+    const lines = ["no numbers here", "just plain text"];
+    const result = stripViewLineNumbers(lines);
+    expect(result.code).toBe("no numbers here\njust plain text");
+    expect(result.lineCount).toBe(2);
+  });
+
+  it("handles single line", () => {
+    const lines = ["1. only line"];
+    const result = stripViewLineNumbers(lines);
+    expect(result.code).toBe("only line");
+    expect(result.lineCount).toBe(1);
+  });
+
+  it("handles empty array", () => {
+    const result = stripViewLineNumbers([]);
+    expect(result.code).toBe("");
+    expect(result.lineCount).toBe(0);
+  });
+});
+
+describe("isViewToolWithContent", () => {
+  it("returns true for view tool with additional entries", () => {
+    const tool = {
+      toolName: "view",
+      entry: { message: "[Tool] view({'path': 'a.ts'})", target: "agent" as const, style: null, timestamp: 1000 },
+      additionalEntries: [{ message: "1. code", target: "agent" as const, style: null, timestamp: 1001 }],
+      summary: { toolLabel: "🔧 view" },
+    };
+    expect(isViewToolWithContent(tool)).toBe(true);
+  });
+
+  it("returns false for view tool with no additional entries", () => {
+    const tool = {
+      toolName: "view",
+      entry: { message: "[Tool] view({'path': 'a.ts'})", target: "agent" as const, style: null, timestamp: 1000 },
+      summary: { toolLabel: "🔧 view" },
+    };
+    expect(isViewToolWithContent(tool)).toBe(false);
+  });
+
+  it("returns false for non-view tools", () => {
+    const tool = {
+      toolName: "grep",
+      entry: { message: "[Tool] grep({'pattern': 'foo'})", target: "agent" as const, style: null, timestamp: 1000 },
+      additionalEntries: [{ message: "match found", target: "agent" as const, style: null, timestamp: 1001 }],
+      summary: { toolLabel: "🔧 grep" },
+    };
+    expect(isViewToolWithContent(tool)).toBe(false);
   });
 });

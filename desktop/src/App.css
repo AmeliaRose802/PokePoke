@@ -1819,6 +1819,26 @@
   background: transparent;
 }
 
+/* ── View Tool Content Block ───────────────────────────────────────────── */
+
+.log-view-content {
+  margin: 4px 0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.log-view-content pre {
+  margin: 0;
+  border-radius: 6px;
+  max-height: 400px;
+  overflow: auto;
+}
+
+.log-view-content pre code {
+  font-size: 0.88em;
+  line-height: 1.5;
+}
+
 .log-markdown-content {
   flex: 1;
   min-width: 0;

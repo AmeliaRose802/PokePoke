@@ -17,6 +17,13 @@ import {
   truncateText,
 } from "../utils/logProcessor";
 import { renderMarkdown } from "../utils/markdown";
+import {
+  extensionToLanguage,
+  extractFileExtension,
+  extractViewFilePath,
+  isViewToolWithContent,
+  stripViewLineNumbers,
+} from "../utils/viewContentHelpers";
 
 // ===================== Render Components =====================
 
@@ -52,6 +59,24 @@ function ToolDescription({ summary }: ToolDescriptionProps) {
   );
 }
 
+interface ViewContentBlockProps {
+  tool: ToolItem;
+}
+
+/** Render view tool file content as a syntax-highlighted code block. */
+function ViewContentBlock({ tool }: ViewContentBlockProps) {
+  const entries = tool.additionalEntries ?? [];
+  const lines = entries.map((e) => e.message);
+  const { code } = stripViewLineNumbers(lines);
+  const filePath = extractViewFilePath(tool);
+  const ext = filePath ? extractFileExtension(filePath) : undefined;
+  const lang = ext ? extensionToLanguage(ext) : undefined;
+  const fence = lang ? `\`\`\`${lang}\n${code}\n\`\`\`` : `\`\`\`\n${code}\n\`\`\``;
+  const html = renderMarkdown(fence);
+
+  return <div className="log-view-content log-markdown-content" dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
 interface ToolAccordionProps {
   tool: ToolItem;
   keyPrefix: string;
@@ -59,8 +84,9 @@ interface ToolAccordionProps {
 }
 
 export function ToolAccordion({ tool, keyPrefix, nested = false }: ToolAccordionProps) {
+  const showViewContent = isViewToolWithContent(tool);
   const detailsEntries = [tool.entry];
-  if (tool.additionalEntries) detailsEntries.push(...tool.additionalEntries);
+  if (!showViewContent && tool.additionalEntries) detailsEntries.push(...tool.additionalEntries);
   if (tool.result) detailsEntries.push(tool.result);
   const nestedClass = nested ? "nested" : "";
 
@@ -79,6 +105,7 @@ export function ToolAccordion({ tool, keyPrefix, nested = false }: ToolAccordion
       </summary>
       <div className="log-accordion-details">
         <ToolDescription summary={tool.summary} />
+        {showViewContent && <ViewContentBlock tool={tool} />}
         {detailsEntries.map((entry, detailIndex) => (
           <LogEntryRenderer
             key={`${keyPrefix}-${detailIndex}`}

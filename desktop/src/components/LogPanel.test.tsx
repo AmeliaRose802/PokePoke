@@ -213,4 +213,49 @@ describe("LogPanel", () => {
       expect(onFocus).not.toHaveBeenCalled();
     });
   });
+
+  it("renders view tool file content as a code block instead of plain log entries", () => {
+    const logs: LogEntry[] = [
+      mk(1, "[Tool] view({'path': 'src/app.ts'})"),
+      mk(2, '1. import { hello } from "./hello";'),
+      mk(3, "2. "),
+      mk(4, "3. hello();"),
+      mk(5, "✅ Result: File read successfully"),
+    ];
+
+    render(<LogPanel title="Agent" icon="🤖" logs={logs} accentColor="#7dcfff" />);
+
+    // Should render tool accordion
+    expect(screen.getByText("🔧 view - src/app.ts")).toBeInTheDocument();
+
+    // Should render a code block container for the view content
+    const viewContent = document.querySelector(".log-view-content");
+    expect(viewContent).not.toBeNull();
+
+    // Code block should contain a <pre><code> for syntax highlighting
+    const pre = viewContent!.querySelector("pre");
+    expect(pre).not.toBeNull();
+    const code = viewContent!.querySelector("code");
+    expect(code).not.toBeNull();
+
+    // Code content should have line numbers stripped
+    expect(code!.textContent).toContain('import { hello } from "./hello"');
+    expect(code!.textContent).toContain("hello();");
+    // Line number prefixes should NOT appear in the code block
+    expect(code!.textContent).not.toMatch(/^1\. /m);
+  });
+
+  it("does not render view content block for non-view tools with additional entries", () => {
+    const logs: LogEntry[] = [
+      mk(1, "[Tool] powershell({'command': 'npm test'})"),
+      mk(2, "PASS tests/app.test.ts"),
+      mk(3, "✅ Result: Tests passed"),
+    ];
+
+    render(<LogPanel title="Agent" icon="🤖" logs={logs} accentColor="#7dcfff" />);
+
+    // Should NOT have view content block
+    const viewContent = document.querySelector(".log-view-content");
+    expect(viewContent).toBeNull();
+  });
 });
