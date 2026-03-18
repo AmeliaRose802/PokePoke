@@ -169,6 +169,10 @@ async def _await_completion(
     on abort.
     """
     deadline = asyncio.get_event_loop().time() + max_timeout
+    _HB_INTERVAL = 30.0
+    last_hb = time.monotonic()
+    last_hb_events = stats.get('event_count', 0) if stats else 0
+
     while not done.is_set():
         if is_shutting_down():
             print("\n[SDK] Shutdown requested - aborting session...")
@@ -185,6 +189,30 @@ async def _await_completion(
                 break
         except Exception:
             pass
+
+        now = time.monotonic()
+
+        # Periodic heartbeat with ping to distinguish live-but-silent from dead
+        if stats is not None and (now - last_hb) >= _HB_INTERVAL:
+            evts = stats['event_count'] - last_hb_events
+            gap = now - stats['last_event_time']
+            remaining_wall = deadline - asyncio.get_event_loop().time()
+            ping_ok = False
+            try:
+                await client.ping()
+                ping_ok = True
+            except Exception:
+                pass
+            logger.info(
+                "SDK heartbeat: ping=%s, event_gap=%.0fs, pending=%d, "
+                "events_delta=%d (total=%d), turns=%d, remaining=%.0fs",
+                "ok" if ping_ok else "FAIL", gap,
+                stats.get('pending_tool_calls', 0), evts, stats['event_count'],
+                stats.get('turn_count', 0), remaining_wall,
+            )
+            last_hb = now
+            last_hb_events = stats['event_count']
+
         # Detect dead sessions: no SDK events for inactivity_timeout seconds.
         # Skip when tools are actively running — the SDK doesn't emit
         # streaming events while a subprocess (e.g. git commit with

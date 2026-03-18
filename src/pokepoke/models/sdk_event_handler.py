@@ -112,14 +112,26 @@ class _EventHandler:
 
     def __call__(self, event: Any) -> None:
         event_type = event.type.value if hasattr(event.type, 'value') else str(event.type)
+        now = time.monotonic()
+        gap = now - self._stats['last_event_time']
         self._stats['event_count'] += 1
-        self._stats['last_event_time'] = time.monotonic()
+        self._stats['last_event_time'] = now
+
+        # Log events after long silence to diagnose silent-model failures
+        if gap > 30:
+            logger.info(
+                "SDK event '%s' after %.1fs silence (events=%d, pending=%d, turns=%d)",
+                event_type, gap, self._stats['event_count'],
+                self._stats['pending_tool_calls'], self._stats['turn_count'],
+            )
 
         handler = self._DISPATCH.get(event_type)
         if handler is not None:
             handler(self, event)
         elif event_type.startswith("tool."):
             self._on_tool_streaming(event)
+        else:
+            logger.debug("Unhandled SDK event: %s", event_type)
 
     # -- per-event handlers ---------------------------------------------------
 
@@ -248,11 +260,26 @@ class _EventHandler:
             if self._on_token_usage is not None:
                 self._on_token_usage(self._stats['total_input_tokens'], self._stats['total_output_tokens'])
 
+    def _on_turn_start(self, _event: Any) -> None:
+        self._stats['last_tool_activity_time'] = time.monotonic()
+        logger.info("Turn %d started (pending=%d)", self._stats['turn_count'] + 1, self._stats['pending_tool_calls'])
+
     def _on_turn_end(self, _event: Any) -> None:
         self._stats['turn_count'] += 1
-        logger.debug("Assistant turn ended (turn %d, pending=%d)",
-                     self._stats['turn_count'], self._stats['pending_tool_calls'])
         self._stats['last_tool_activity_time'] = time.monotonic()
+        logger.info("Turn %d ended (pending=%d)", self._stats['turn_count'], self._stats['pending_tool_calls'])
+
+    def _on_compaction(self, _event: Any) -> None:
+        logger.warning("Session compaction (events=%d, in=%d tok)",
+                       self._stats['event_count'], self._stats['total_input_tokens'])
+
+    def _on_truncation(self, _event: Any) -> None:
+        logger.warning("Session truncation (events=%d, in=%d tok)",
+                       self._stats['event_count'], self._stats['total_input_tokens'])
+
+    def _on_model_change(self, event: Any) -> None:
+        model = getattr(event.data, 'model', None) if hasattr(event, 'data') else None
+        logger.warning("Model changed to: %s", model)
 
     def _on_session_idle(self, _event: Any) -> None:
         if self._stats['idle_task'] and not self._stats['idle_task'].done():
@@ -314,13 +341,18 @@ class _EventHandler:
     _DISPATCH: dict[str, Callable[['_EventHandler', Any], None]] = {
         "assistant.message_delta": _on_message_delta,
         "assistant.message": _on_message,
+        "assistant.turn_start": _on_turn_start,
+        "assistant.turn_end": _on_turn_end,
+        "assistant.usage": _on_usage,
         "tool.execution_start": _on_tool_start,
         "tool.execution_complete": _on_tool_complete,
-        "assistant.usage": _on_usage,
-        "assistant.turn_end": _on_turn_end,
         "session.idle": _on_session_idle,
         "session.end": _on_session_end,
         "session.error": _on_session_error,
+        "session.compaction_start": _on_compaction,
+        "session.compaction_complete": _on_compaction,
+        "session.truncation": _on_truncation,
+        "session.model_change": _on_model_change,
     }
 
 
@@ -333,22 +365,7 @@ def create_event_handler(
     hung_command_detector: HungCommandDetector | None = None,
     on_token_usage: Callable[[int, int], None] | None = None,
 ) -> tuple['_EventHandler', SessionStats]:
-    """Create an event handler for SDK session events.
-
-    Args:
-        done: Event to signal session completion.
-        output_lines: List to append output to.
-        errors: List to append errors to.
-        item_logger: Optional logger for item-specific logging.
-        idle_timeout: Seconds to wait before confirming session is idle.
-        hung_command_detector: Optional detector for hung commands. If None,
-            a default one is created using config settings.
-        on_token_usage: Optional callback invoked on each usage event with
-            (total_input_tokens, total_output_tokens).
-
-    Returns:
-        tuple: (event_handler_function, stats_dict)
-    """
+    """Create an event handler and stats dict for SDK session events."""
     if hung_command_detector is None:
         config = get_config()
         hung_command_detector = HungCommandDetector(
