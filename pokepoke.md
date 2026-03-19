@@ -1,3 +1,4 @@
+```mermaid
 graph TB
     subgraph Entry["🚀 Entry Point"]
         Main["__main__.py<br/>CLI arg parsing"]
@@ -146,3 +147,15 @@ graph TB
     classDef entry fill:#ff9,stroke:#333,stroke-width:2px
     class BeadsDB,GitRepo,CopilotAPI external
     class Main entry
+```
+
+This diagram shows the full PokePoke architecture:
+
+- **Entry** → CLI parses args, launches the Desktop UI and orchestrator
+- **Orchestration** → Main loop selects work items, dispatches them through the workflow pipeline (sequential or parallel via ThreadPool)
+- **Workflow pipeline** → For each item: assign from Beads → create worktree → invoke Work Agent → validate with Gate Agent → retry on failure → run Cleanup Agent → merge back
+- **AI Backend** → Wraps the GitHub Copilot SDK with model selection, prompt building, and session resume
+- **Beads** → Git-backed issue tracker providing the ready queue, hierarchy, assignment, and recovery
+- **Git/Worktrees** → Isolated worktrees per task with filesystem locking for concurrency safety
+- **Maintenance** → Scheduled agents (tech debt, janitor, beta tester, etc.) with singleton guards
+- **Desktop UI** → pywebview hosting a React/TypeScript frontend, connected via a Python↔JS bridge for real-time agent cards, logs, and stats
