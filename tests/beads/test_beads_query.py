@@ -7,6 +7,9 @@ import pytest
 from pokepoke.beads import beads_query
 from pokepoke.types import Dependency, IssueWithDependencies
 
+# Save reference to real _run_bd before conftest replaces it with a blocker.
+_real_run_bd = beads_query._run_bd
+
 
 def test_parse_beads_json_filters_prefixes() -> None:
     output = "Note: info\nWarning: skip\nHint: also skip\nCreated item\n{\n  \"value\": 1\n}\n"
@@ -107,7 +110,6 @@ def test_get_main_repo_root_returns_none_on_runtime_error(monkeypatch: pytest.Mo
     assert beads_query._get_main_repo_root() is None
 
 
-@pytest.mark.allow_real_bd
 def test_run_bd_uses_lock_for_mutating_commands(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: dict[str, object] = {"lock_timeout": None, "ran": False}
 
@@ -128,6 +130,8 @@ def test_run_bd_uses_lock_for_mutating_commands(monkeypatch: pytest.MonkeyPatch)
         calls["ran"] = True
         return subprocess.CompletedProcess(args, 0, stdout="{}")
 
+    # Restore real _run_bd (conftest blocks it for safety)
+    monkeypatch.setattr(beads_query, "_run_bd", _real_run_bd)
     monkeypatch.setattr(beads_query, "beads_db_lock", fake_lock)
     monkeypatch.setattr(beads_query.subprocess, "run", fake_run)
 

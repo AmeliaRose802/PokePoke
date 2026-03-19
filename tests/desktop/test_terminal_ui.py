@@ -42,23 +42,22 @@ class TestSetTerminalBanner:
     @pytest.mark.real_terminal_banner
     def test_set_banner_no_crash(self):
         """Test that setting banner doesn't crash (may not work on all platforms)."""
-        # This test just verifies no exceptions are raised
-        set_terminal_banner("Test Banner")
-        # No assertion needed - we just want to ensure no exception
+        with patch('ctypes.windll.kernel32.SetConsoleTitleW'):
+            set_terminal_banner("Test Banner")
 
     @pytest.mark.real_terminal_banner
     def test_clear_banner_no_crash(self):
         """Test that clearing banner doesn't crash."""
-        clear_terminal_banner()
-        # No assertion needed - we just want to ensure no exception
+        with patch('ctypes.windll.kernel32.SetConsoleTitleW'):
+            clear_terminal_banner()
 
     @pytest.mark.real_terminal_banner
     def test_set_and_clear(self):
         """Test setting and clearing banner in sequence."""
-        set_terminal_banner("Test 1")
-        set_terminal_banner("Test 2")
-        clear_terminal_banner()
-        # No assertion needed - we just want to ensure no exceptions
+        with patch('ctypes.windll.kernel32.SetConsoleTitleW'):
+            set_terminal_banner("Test 1")
+            set_terminal_banner("Test 2")
+            clear_terminal_banner()
 
     @pytest.mark.real_terminal_banner
     def test_set_banner_windows(self):

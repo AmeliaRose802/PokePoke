@@ -3,17 +3,15 @@
 import subprocess
 from unittest.mock import Mock, patch
 import json
-import pytest
 
 from pokepoke.beads.beads import get_ready_work_items, get_issue_dependencies, is_item_claimable
 from pokepoke.types import BeadsWorkItem
 
 
-@pytest.mark.allow_real_bd
 class TestBeadsIntegration:
     """Test beads integration functions."""
 
-    @patch('pokepoke.beads.beads_query.subprocess.run')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_ready_work_items_empty(self, mock_run: Mock) -> None:
         """Test getting ready work items when none available."""
         mock_run.return_value = Mock(
@@ -25,17 +23,10 @@ class TestBeadsIntegration:
 
         assert items == []
         mock_run.assert_called_once_with(
-            ['bd', 'ready', '--json'],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            check=True,
-            timeout=30,
-            cwd=None
+            ['ready', '--json']
         )
 
-    @patch('pokepoke.beads.beads_query.subprocess.run')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_ready_work_items_with_items(self, mock_run: Mock) -> None:
         """Test getting ready work items with results."""
         mock_data = [
@@ -60,7 +51,7 @@ class TestBeadsIntegration:
         assert items[0].title == "Test task"
         assert items[0].priority == 1
 
-    @patch('pokepoke.beads.beads_query.subprocess.run')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_ready_work_items_filters_warnings(self, mock_run: Mock) -> None:
         """Test that warning/note lines are filtered out."""
         mock_data = [{"id": "test-123", "title": "Test", "issue_type": "task", "status": "open", "priority": 1, "description": ""}]
@@ -75,7 +66,7 @@ class TestBeadsIntegration:
         assert len(items) == 1
         assert items[0].id == "test-123"
 
-    @patch('pokepoke.beads.beads_query.subprocess.run')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_ready_work_items_command_failure(self, mock_run: Mock) -> None:
         """Test get_ready_work_items handles subprocess errors gracefully."""
         mock_run.side_effect = subprocess.CalledProcessError(
@@ -86,7 +77,7 @@ class TestBeadsIntegration:
 
         assert items == []
 
-    @patch('pokepoke.beads.beads_query.subprocess.run')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_ready_work_items_timeout(self, mock_run: Mock) -> None:
         """Test get_ready_work_items handles timeout gracefully."""
         mock_run.side_effect = subprocess.TimeoutExpired(
@@ -97,7 +88,7 @@ class TestBeadsIntegration:
 
         assert items == []
 
-    @patch('pokepoke.beads.beads_query.subprocess.run')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_ready_work_items_generic_exception(self, mock_run: Mock) -> None:
         """Test get_ready_work_items handles generic exceptions gracefully."""
         mock_run.side_effect = RuntimeError("Unexpected error")
@@ -106,7 +97,7 @@ class TestBeadsIntegration:
 
         assert items == []
 
-    @patch('pokepoke.beads.beads_query.subprocess.run')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_ready_work_items_json_decode_error(self, mock_run: Mock) -> None:
         """Test get_ready_work_items handles JSON decode errors gracefully."""
         mock_run.return_value = Mock(
@@ -118,7 +109,7 @@ class TestBeadsIntegration:
 
         assert items == []
 
-    @patch('pokepoke.beads.beads_query.subprocess.run')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_issue_dependencies_found(self, mock_run: Mock) -> None:
         """Test getting issue dependencies when issue exists."""
         mock_data = [{
@@ -163,7 +154,7 @@ class TestBeadsIntegration:
         assert len(result.dependents) == 1
         assert result.dependents[0].id == "subtask-1"
 
-    @patch('pokepoke.beads.beads_query.subprocess.run')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_issue_dependencies_not_found(self, mock_run: Mock) -> None:
         """Test getting dependencies for non-existent issue."""
         mock_run.side_effect = subprocess.CalledProcessError(1, 'bd', stderr="not found")
@@ -173,7 +164,7 @@ class TestBeadsIntegration:
         # Should return None when issue not found
         assert result is None
 
-    @patch('pokepoke.beads.beads_query.subprocess.run')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_issue_dependencies_empty_result(self, mock_run: Mock) -> None:
         """Test getting dependencies when issue returns empty array."""
         mock_run.return_value = Mock(
@@ -185,7 +176,7 @@ class TestBeadsIntegration:
 
         assert result is None
 
-    @patch('pokepoke.beads.beads_query.subprocess.run')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_issue_dependencies_no_json_start(self, mock_run: Mock) -> None:
         """Test getting dependencies when no JSON array found."""
         mock_run.return_value = Mock(
@@ -197,28 +188,28 @@ class TestBeadsIntegration:
 
         assert result is None
 
-    @patch('pokepoke.beads.beads_query.subprocess.run')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_ready_work_items_empty_stdout(self, mock_run: Mock) -> None:
         """Test get_ready_work_items returns empty list for empty stdout."""
         mock_run.return_value = Mock(stdout="", returncode=0)
 
         assert get_ready_work_items() == []
 
-    @patch('pokepoke.beads.beads_query.subprocess.run')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_ready_work_items_key_error(self, mock_run: Mock) -> None:
         """Test get_ready_work_items handles KeyError from malformed data."""
         mock_run.return_value = Mock(stdout='[{"unexpected": "data"}]', returncode=0)
 
         assert get_ready_work_items() == []
 
-    @patch('pokepoke.beads.beads_query.subprocess.run')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_issue_dependencies_empty_stdout(self, mock_run: Mock) -> None:
         """Test get_issue_dependencies returns None for empty stdout."""
         mock_run.return_value = Mock(stdout="", returncode=0)
 
         assert get_issue_dependencies("task-1") is None
 
-    @patch('pokepoke.beads.beads_query.subprocess.run')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_has_unmet_blocking_dependencies_no_blockers(self, mock_run: Mock) -> None:
         """Test has_unmet_blocking_dependencies returns False with no blockers."""
         from pokepoke.beads.beads import has_unmet_blocking_dependencies
@@ -236,7 +227,7 @@ class TestBeadsIntegration:
 
         assert has_unmet_blocking_dependencies("task-1") is False
 
-    @patch('pokepoke.beads.beads_query.subprocess.run')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_has_unmet_blocking_dependencies_with_blocker(self, mock_run: Mock) -> None:
         """Test has_unmet_blocking_dependencies returns True with open blocker."""
         from pokepoke.beads.beads import has_unmet_blocking_dependencies
@@ -255,7 +246,6 @@ class TestBeadsIntegration:
         assert has_unmet_blocking_dependencies("task-1") is True
 
 
-@pytest.mark.allow_real_bd
 class TestHasFeatureParent:
     """Test has_feature_parent function."""
 
@@ -349,11 +339,10 @@ class TestHasFeatureParent:
         assert result is False
 
 
-@pytest.mark.allow_real_bd
 class TestIsItemClaimable:
     """Test is_item_claimable function."""
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
+    @patch('pokepoke.beads.beads_management._run_bd')
     def test_unassigned_item_claimable(self, mock_run: Mock) -> None:
         """Test that unassigned item is claimable."""
         mock_run.return_value = Mock(
@@ -365,7 +354,7 @@ class TestIsItemClaimable:
 
         assert result is True
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
+    @patch('pokepoke.beads.beads_management._run_bd')
     def test_assigned_item_not_claimable(self, mock_run: Mock) -> None:
         """Test that item assigned to another agent is not claimable."""
         mock_run.return_value = Mock(
@@ -377,7 +366,7 @@ class TestIsItemClaimable:
 
         assert result is False
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
+    @patch('pokepoke.beads.beads_management._run_bd')
     def test_no_assignee_field_claimable(self, mock_run: Mock) -> None:
         """Test item with missing assignee field is claimable."""
         mock_run.return_value = Mock(
@@ -389,7 +378,7 @@ class TestIsItemClaimable:
 
         assert result is True
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
+    @patch('pokepoke.beads.beads_management._run_bd')
     def test_subprocess_error_not_claimable(self, mock_run: Mock) -> None:
         """Test that subprocess errors return not claimable (safe default)."""
         mock_run.side_effect = subprocess.CalledProcessError(1, 'bd', stderr="error")
@@ -398,7 +387,7 @@ class TestIsItemClaimable:
 
         assert result is False
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
+    @patch('pokepoke.beads.beads_management._run_bd')
     def test_json_decode_error_not_claimable(self, mock_run: Mock) -> None:
         """Test that JSON decode errors return not claimable (safe default)."""
         mock_run.return_value = Mock(stdout="invalid json", returncode=0)
@@ -407,7 +396,7 @@ class TestIsItemClaimable:
 
         assert result is False
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
+    @patch('pokepoke.beads.beads_management._run_bd')
     def test_none_parse_result_not_claimable(self, mock_run: Mock) -> None:
         """Test that None parse result returns not claimable."""
         mock_run.return_value = Mock(stdout="", returncode=0)
@@ -417,12 +406,12 @@ class TestIsItemClaimable:
         assert result is False
 
 
-@pytest.mark.allow_real_bd
 class TestAssignAndSyncItem:
     """Test assign_and_sync_item race condition detection."""
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
-    def test_assign_unassigned_item_success(self, mock_run: Mock) -> None:
+    @patch('pokepoke.beads.beads_management.run_bd_sync_with_retry')
+    @patch('pokepoke.beads.beads_management._run_bd')
+    def test_assign_unassigned_item_success(self, mock_run: Mock, mock_sync: Mock) -> None:
         """Test successfully assigning an unassigned item."""
         from pokepoke.beads.beads import assign_and_sync_item
 
@@ -443,17 +432,16 @@ class TestAssignAndSyncItem:
             returncode=0
         )
 
-        # Mock bd sync succeeds
-        sync_result = Mock(returncode=0)
-
-        mock_run.side_effect = [show_result, update_result, verify_show_result, sync_result]
+        mock_sync.return_value = Mock(returncode=0)
+        mock_run.side_effect = [show_result, update_result, verify_show_result]
 
         result = assign_and_sync_item(item_id, "test-agent")
 
         assert result is True
-        assert mock_run.call_count == 4
+        assert mock_run.call_count == 3
+        mock_sync.assert_called_once()
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
+    @patch('pokepoke.beads.beads_management._run_bd')
     def test_assign_detects_race_condition(self, mock_run: Mock) -> None:
         """Test detection of race condition when another agent claimed item."""
         from pokepoke.beads.beads import assign_and_sync_item
@@ -479,7 +467,7 @@ class TestAssignAndSyncItem:
         # Should only call bd show, NOT bd update
         assert mock_run.call_count == 1
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
+    @patch('pokepoke.beads.beads_management._run_bd')
     def test_assign_claim_verification_detects_stolen_claim(self, mock_run: Mock) -> None:
         """Test that we abort if post-claim verification shows another assignee."""
         from pokepoke.beads.beads import assign_and_sync_item
@@ -503,7 +491,7 @@ class TestAssignAndSyncItem:
         assert result is False
         assert mock_run.call_count == 3
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
+    @patch('pokepoke.beads.beads_management._run_bd')
     def test_assign_allows_claiming_own_item(self, mock_run: Mock) -> None:
         """Test that agent can update items already assigned to them."""
         from pokepoke.beads.beads import assign_and_sync_item
@@ -539,8 +527,9 @@ class TestAssignAndSyncItem:
         assert result is True
         assert mock_run.call_count == 1
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
-    def test_assign_allows_claiming_by_username(self, mock_run: Mock) -> None:
+    @patch('pokepoke.beads.beads_management.run_bd_sync_with_retry')
+    @patch('pokepoke.beads.beads_management._run_bd')
+    def test_assign_allows_claiming_by_username(self, mock_run: Mock, mock_sync: Mock) -> None:
         """Test that agent can claim unassigned items owned by a human user."""
         from pokepoke.beads.beads import assign_and_sync_item
 
@@ -561,16 +550,16 @@ class TestAssignAndSyncItem:
             stdout=json.dumps([{"id": item_id, "assignee": "agent-1", "status": "in_progress"}]),
             returncode=0
         )
-        sync_result = Mock(returncode=0)
 
-        mock_run.side_effect = [show_result, update_result, verify_show_result, sync_result]
+        mock_sync.return_value = Mock(returncode=0)
+        mock_run.side_effect = [show_result, update_result, verify_show_result]
 
         result = assign_and_sync_item(item_id, "agent-1")
 
         assert result is True
-        assert mock_run.call_count == 4
+        assert mock_run.call_count == 3
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
+    @patch('pokepoke.beads.beads_management._run_bd')
     def test_assign_handles_show_failure(self, mock_run: Mock) -> None:
         """Test handling of bd show command failure."""
         from pokepoke.beads.beads import assign_and_sync_item
@@ -585,7 +574,7 @@ class TestAssignAndSyncItem:
         # Should return False on verification failure
         assert result is False
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
+    @patch('pokepoke.beads.beads_management._run_bd')
     def test_assign_handles_update_failure(self, mock_run: Mock) -> None:
         """Test handling of bd update command failure."""
         from pokepoke.beads.beads import assign_and_sync_item
@@ -608,7 +597,7 @@ class TestAssignAndSyncItem:
         # Should return False on update failure
         assert result is False
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
+    @patch('pokepoke.beads.beads_management._run_bd')
     def test_assign_handles_json_parse_error(self, mock_run: Mock) -> None:
         """Test handling of malformed JSON from bd show."""
         from pokepoke.beads.beads import assign_and_sync_item
@@ -628,8 +617,9 @@ class TestAssignAndSyncItem:
         # Should return False on parse error
         assert result is False
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
-    def test_assign_sync_failure_still_succeeds(self, mock_run: Mock) -> None:
+    @patch('pokepoke.beads.beads_management.run_bd_sync_with_retry')
+    @patch('pokepoke.beads.beads_management._run_bd')
+    def test_assign_sync_failure_still_succeeds(self, mock_run: Mock, mock_sync: Mock) -> None:
         """Test that assignment succeeds even if sync fails."""
         from pokepoke.beads.beads import assign_and_sync_item
 
@@ -646,18 +636,17 @@ class TestAssignAndSyncItem:
         )
 
         # Mock bd sync fails (non-zero return)
-        sync_result = Mock(returncode=1)
-
-        mock_run.side_effect = [show_result, update_result, verify_show_result, sync_result]
+        mock_sync.return_value = Mock(returncode=1, stdout='', stderr='sync error')
+        mock_run.side_effect = [show_result, update_result, verify_show_result]
 
         result = assign_and_sync_item(item_id, "agent-1")
 
         assert result is True
 
-    @patch('pokepoke.beads.sync_strategy.time.sleep')
-    @patch('pokepoke.beads.beads_management.subprocess.run')
-    def test_assign_sync_retries_on_access_denied(self, mock_run: Mock, mock_sleep: Mock) -> None:
-        """Test that sync retries when JSONL file is locked."""
+    @patch('pokepoke.beads.beads_management.run_bd_sync_with_retry')
+    @patch('pokepoke.beads.beads_management._run_bd')
+    def test_assign_sync_retries_on_access_denied(self, mock_run: Mock, mock_sync: Mock) -> None:
+        """Test that sync is called after successful claim."""
         from pokepoke.beads.beads import assign_and_sync_item
 
         item_id = "task-assign-sync-retry"
@@ -671,23 +660,19 @@ class TestAssignAndSyncItem:
             stdout=json.dumps([{"id": item_id, "assignee": "agent-1", "status": "in_progress"}]),
             returncode=0
         )
-        sync_failure = Mock(
-            returncode=1,
-            stdout="",
-            stderr="failed to replace JSONL file: rename issues.jsonl.tmp issues.jsonl: Access is denied."
-        )
-        sync_success = Mock(returncode=0)
 
-        mock_run.side_effect = [show_result, update_result, verify_show_result, sync_failure, sync_success]
+        mock_sync.return_value = Mock(returncode=0)
+        mock_run.side_effect = [show_result, update_result, verify_show_result]
 
         result = assign_and_sync_item(item_id, "agent-1")
 
         assert result is True
-        assert mock_run.call_count == 5
-        mock_sleep.assert_called_once()
+        assert mock_run.call_count == 3
+        mock_sync.assert_called_once()
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
-    def test_assign_defaults_agent_name_from_env(self, mock_run: Mock) -> None:
+    @patch('pokepoke.beads.beads_management.run_bd_sync_with_retry')
+    @patch('pokepoke.beads.beads_management._run_bd')
+    def test_assign_defaults_agent_name_from_env(self, mock_run: Mock, mock_sync: Mock) -> None:
         """Test that assign_and_sync_item uses AGENT_NAME env var when agent_name is None."""
         import os
         from pokepoke.beads.beads import assign_and_sync_item
@@ -703,8 +688,8 @@ class TestAssignAndSyncItem:
             stdout=json.dumps([{"id": item_id, "assignee": "env_agent", "status": "in_progress"}]),
             returncode=0
         )
-        sync_result = Mock(returncode=0)
-        mock_run.side_effect = [show_result, update_result, verify_show_result, sync_result]
+        mock_sync.return_value = Mock(returncode=0)
+        mock_run.side_effect = [show_result, update_result, verify_show_result]
 
         old_val = os.environ.get('AGENT_NAME')
         os.environ['AGENT_NAME'] = 'env_agent'
@@ -718,11 +703,10 @@ class TestAssignAndSyncItem:
                 os.environ.pop('AGENT_NAME', None)
 
 
-@pytest.mark.allow_real_bd
 class TestCloseItem:
     """Test close_item function."""
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
+    @patch('pokepoke.beads.beads_management._run_bd')
     def test_close_item_success(self, mock_run: Mock) -> None:
         """Test successful item closing."""
         from pokepoke.beads.beads import close_item
@@ -733,17 +717,10 @@ class TestCloseItem:
 
         assert result is True
         mock_run.assert_called_once_with(
-            ['bd', 'close', 'task-1', '--reason', 'Done'],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            check=True,
-            timeout=30,
-            cwd=None
+            ['close', 'task-1', '--reason', 'Done']
         )
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
+    @patch('pokepoke.beads.beads_management._run_bd')
     def test_close_item_failure(self, mock_run: Mock) -> None:
         """Test close_item returns False on failure."""
         from pokepoke.beads.beads import close_item
@@ -757,11 +734,10 @@ class TestCloseItem:
         assert result is False
 
 
-@pytest.mark.allow_real_bd
 class TestAddComment:
     """Test add_comment function."""
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
+    @patch('pokepoke.beads.beads_management._run_bd')
     def test_add_comment_success(self, mock_run: Mock) -> None:
         """Test successful comment addition."""
         from pokepoke.beads.beads import add_comment
@@ -772,17 +748,10 @@ class TestAddComment:
 
         assert result is True
         mock_run.assert_called_once_with(
-            ['bd', 'comments', 'add', 'task-1', 'Great progress'],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            check=True,
-            timeout=30,
-            cwd=None
+            ['comments', 'add', 'task-1', 'Great progress']
         )
 
-    @patch('pokepoke.beads.beads_management.subprocess.run')
+    @patch('pokepoke.beads.beads_management._run_bd')
     def test_add_comment_failure(self, mock_run: Mock) -> None:
         """Test add_comment returns False on failure."""
         from pokepoke.beads.beads import add_comment
@@ -796,7 +765,6 @@ class TestAddComment:
         assert result is False
 
 
-@pytest.mark.allow_real_bd
 class TestSelectNextHierarchicalItem:
     """Test select_next_hierarchical_item function."""
 
@@ -843,7 +811,6 @@ class TestSelectNextHierarchicalItem:
         assert result is None
 
 
-@pytest.mark.allow_real_bd
 class TestUnassignItem:
     """Test unassign_item function."""
 
