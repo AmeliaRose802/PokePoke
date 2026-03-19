@@ -5,6 +5,7 @@ This directory contains prompt templates used by PokePoke for Copilot SDK invoca
 ## Overview
 
 All prompts are now **loaded from template files** instead of being hardcoded in Python code. This makes prompts easier to:
+
 - Edit without touching code
 - Version control separately
 - Share and reuse across tools
@@ -39,6 +40,7 @@ Conditional sections only render when the variable is truthy (not `None`, `False
 Basic work item prompt for first-time task execution.
 
 **Variables:**
+
 - `id` - Work item ID (e.g., "PokePoke-123")
 - `title` - Work item title
 - `description` - Work item description

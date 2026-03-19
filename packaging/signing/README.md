@@ -135,11 +135,13 @@ certificates:
 ```
 
 **Pros:**
+
 - Free and easy to create
 - No external dependencies
 - Good for development workflows
 
 **Cons:**
+
 - Shows security warnings to end users
 - Not suitable for distribution
 - Only trusted on local machine (unless installed as trusted root)
@@ -155,6 +157,7 @@ certificates:
 3. Configure signing to use the certificate
 
 **Using certificate store:**
+
 ```powershell
 # Build will auto-detect certificates in store
 .\packaging\pyinstaller\build_with_signing.ps1 -CertificateSource Store
@@ -164,6 +167,7 @@ certificates:
 ```
 
 **Using certificate file:**
+
 ```powershell
 # Specify certificate file path
 .\packaging\pyinstaller\build_with_signing.ps1 -CertificateSource File -CertificatePath ".\certificates\code-signing.pfx"
@@ -172,11 +176,13 @@ certificates:
 ```
 
 **Pros:**
+
 - Trusted by Windows SmartScreen
 - No security warnings for end users
 - Professional appearance
 
 **Cons:**
+
 - Cost (varies by CA and certificate type)
 - Annual renewal required
 - EV certificates require hardware security module
@@ -193,11 +199,13 @@ certificates:
    - Grant appropriate permissions
 
 2. **Install AzureSignTool:**
+
    ```bash
    dotnet tool install --global AzureSignTool
    ```
 
 3. **Configure Authentication:**
+
    ```bash
    # Service principal (recommended for CI/CD)
    export AZURE_CLIENT_ID="your-client-id"
@@ -209,6 +217,7 @@ certificates:
    ```
 
 4. **Configure Signing:**
+
    ```bash
    export AZURE_TRUSTED_SIGNING_ENDPOINT="https://eus.codesigning.azure.net/"
    export AZURE_TRUSTED_SIGNING_ACCOUNT_NAME="MyAccount"
@@ -216,6 +225,7 @@ certificates:
    ```
 
 **Pros:**
+
 - No certificate management required
 - Highly secure (HSM-backed)
 - Perfect for CI/CD pipelines
@@ -223,6 +233,7 @@ certificates:
 - Pay-per-signature model
 
 **Cons:**
+
 - Requires Azure subscription
 - Internet connectivity required for signing
 - Setup complexity higher than traditional certificates
@@ -285,6 +296,7 @@ For automated builds, signing happens automatically based on available certifica
 Configure these secrets in your GitHub repository:
 
 **For Azure Trusted Signing:**
+
 - `AZURE_CLIENT_ID` - Service principal client ID
 - `AZURE_CLIENT_SECRET` - Service principal secret
 - `AZURE_TENANT_ID` - Azure tenant ID
@@ -293,12 +305,14 @@ Configure these secrets in your GitHub repository:
 - `AZURE_SIGNING_PROFILE` - Profile name
 
 **For traditional certificates:**
+
 - `CODE_SIGNING_CERT` - Base64-encoded .pfx certificate
 - `CERT_PASSWORD` - Certificate password
 
 ### Workflow Examples
 
 **Azure Trusted Signing:**
+
 ```yaml
 name: Build and Sign
 on: [push, pull_request]
@@ -331,6 +345,7 @@ jobs:
 ```
 
 **Certificate file:**
+
 ```yaml
     - name: Decode certificate
       run: |
