@@ -272,9 +272,9 @@ class TestSessionTimeout:
         """SESSION_TIMEOUT should be configurable via config.timeout_hours * 2."""
         from pokepoke.stats.session_reconciler import _get_session_timeout_seconds
 
-        # Default workflow timeout_hours is 2.0, so timeout = 2.0 * 2 * 3600 = 14400
+        # Default workflow timeout_hours is 0.5, so timeout = 0.5 * 2 * 3600 = 3600
         timeout = _get_session_timeout_seconds()
-        assert timeout == 2.0 * 2 * 3600
+        assert timeout == 0.5 * 2 * 3600
 
 
 # ---------------------------------------------------------------------------

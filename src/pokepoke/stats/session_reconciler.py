@@ -32,10 +32,10 @@ def _get_session_timeout_seconds(timeout_hours: float | None = None) -> float:
     """Return session timeout in seconds.
 
     Default is ``timeout_hours * 2``.  When *timeout_hours* is not provided
-    the workflow default of 2.0 h is used.
+    the workflow default of 0.5 h is used.
     """
     if timeout_hours is None:
-        timeout_hours = 2.0
+        timeout_hours = 0.5
     return timeout_hours * _DEFAULT_TIMEOUT_MULTIPLIER * 3600
 
 

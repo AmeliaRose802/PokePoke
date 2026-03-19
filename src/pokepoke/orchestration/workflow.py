@@ -40,7 +40,7 @@ _MAX_GATE_TIMEOUT_RETRIES = 3  # Retry gate agent up to 3 times on session timeo
 def process_work_item(  # noqa: C901
     item: BeadsWorkItem,
     interactive: bool,
-    timeout_hours: float = 2.0,
+    timeout_hours: float = 0.5,
     run_beta_test: bool = False,
     run_logger: 'RunLogger | None' = None,
     max_timeout_restarts: int = 3,
