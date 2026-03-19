@@ -488,3 +488,141 @@ class TestRegistryBuildCardId:
 
     def test_negative_iteration_defaults_to_one(self) -> None:
         assert AgentRegistry._build_card_id("a1", -5) == "a1::v1"
+
+
+class TestRegistryChildAgentTracking:
+    """Tests for parent-child agent relationship tracking."""
+
+    def test_has_active_children_false_when_no_children(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("parent", "Parent", iteration=1, status="running")
+        assert reg.has_active_children("parent") is False
+
+    def test_has_active_children_true_when_child_running(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("parent", "Parent", iteration=1, status="running")
+        reg.update_status("child", "Child", iteration=1, status="running", parent_agent_id="parent")
+        assert reg.has_active_children("parent") is True
+
+    def test_has_active_children_false_when_child_completed(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("parent", "Parent", iteration=1, status="running")
+        reg.update_status("child", "Child", iteration=1, status="success", parent_agent_id="parent")
+        assert reg.has_active_children("parent") is False
+
+    def test_has_active_children_counts_pending_as_active(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("parent", "Parent", iteration=1, status="running")
+        reg.update_status("child", "Child", iteration=1, status="pending", parent_agent_id="parent")
+        assert reg.has_active_children("parent") is True
+
+    def test_get_active_children_returns_running_children(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("parent", "Parent", iteration=1, status="running")
+        reg.update_status("child1", "Child1", iteration=1, status="running", parent_agent_id="parent")
+        reg.update_status("child2", "Child2", iteration=1, status="pending", parent_agent_id="parent")
+        reg.update_status("child3", "Child3", iteration=1, status="success", parent_agent_id="parent")
+
+        active = reg.get_active_children("parent")
+        assert set(active) == {"child1", "child2"}
+
+    def test_get_active_children_empty_when_no_children(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("parent", "Parent", iteration=1, status="running")
+        assert reg.get_active_children("parent") == []
+
+    def test_get_most_recent_child_activity_returns_none_when_no_children(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("parent", "Parent", iteration=1, status="running")
+        assert reg.get_most_recent_child_activity("parent") is None
+
+    def test_get_most_recent_child_activity_returns_child_log_time(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("parent", "Parent", iteration=1, status="running")
+        reg.update_status("child", "Child", iteration=1, status="running", parent_agent_id="parent")
+        reg.append_log("child", "child log")
+
+        # Get the child's last_log_at timestamp
+        child = reg._agents["child"]
+        expected_time = child.last_log_at
+
+        assert reg.get_most_recent_child_activity("parent") == expected_time
+
+    def test_get_most_recent_child_activity_picks_most_recent(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("parent", "Parent", iteration=1, status="running")
+        reg.update_status("child1", "Child1", iteration=1, status="running", parent_agent_id="parent")
+        reg.update_status("child2", "Child2", iteration=1, status="running", parent_agent_id="parent")
+
+        # Log to child1
+        reg.append_log("child1", "log")
+        time1 = reg._agents["child1"].last_log_at
+
+        # Sleep a tiny bit and log to child2 (should be more recent)
+        import time as time_module
+        time_module.sleep(0.01)
+        reg.append_log("child2", "log")
+        time2 = reg._agents["child2"].last_log_at
+
+        most_recent = reg.get_most_recent_child_activity("parent")
+        assert most_recent == time2
+        assert most_recent != time1
+
+    def test_get_most_recent_child_activity_ignores_completed_children(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("parent", "Parent", iteration=1, status="running")
+        reg.update_status("child1", "Child1", iteration=1, status="success", parent_agent_id="parent")
+        reg.update_status("child2", "Child2", iteration=1, status="running", parent_agent_id="parent")
+
+        reg.append_log("child1", "completed child log")
+        reg.append_log("child2", "running child log")
+
+        # Should only consider child2 (running)
+        most_recent = reg.get_most_recent_child_activity("parent")
+        assert most_recent == reg._agents["child2"].last_log_at
+
+    def test_remove_cleans_up_parent_child_tracking(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("parent", "Parent", iteration=1, status="running")
+        reg.update_status("child", "Child", iteration=1, status="running", parent_agent_id="parent")
+
+        assert reg.has_active_children("parent") is True
+
+        # Remove child
+        reg.remove("child")
+
+        assert reg.has_active_children("parent") is False
+        assert "parent" not in reg._child_tracker._parent_to_children
+
+    def test_remove_parent_cleans_up_children_mapping(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("parent", "Parent", iteration=1, status="running")
+        reg.update_status("child", "Child", iteration=1, status="running", parent_agent_id="parent")
+
+        # Remove parent
+        reg.remove("parent")
+
+        # Parent should be removed from the tracking dict
+        assert "parent" not in reg._child_tracker._parent_to_children
+
+    def test_clear_removes_parent_child_tracking(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("parent", "Parent", iteration=1, status="running")
+        reg.update_status("child", "Child", iteration=1, status="running", parent_agent_id="parent")
+
+        assert len(reg._child_tracker._parent_to_children) > 0
+
+        reg.clear()
+
+        assert reg._child_tracker._parent_to_children == {}
+
+    def test_multiple_children_tracked_correctly(self) -> None:
+        reg = AgentRegistry(threading.RLock())
+        reg.update_status("parent", "Parent", iteration=1, status="running")
+        reg.update_status("child1", "Child1", iteration=1, status="running", parent_agent_id="parent")
+        reg.update_status("child2", "Child2", iteration=1, status="running", parent_agent_id="parent")
+        reg.update_status("child3", "Child3", iteration=1, status="running", parent_agent_id="parent")
+
+        active = reg.get_active_children("parent")
+        assert len(active) == 3
+        assert set(active) == {"child1", "child2", "child3"}

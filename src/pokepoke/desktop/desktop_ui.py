@@ -400,3 +400,15 @@ class DesktopUI:
     def is_agent_paused(self, agent_id: str) -> bool:
         return self._api.is_agent_paused(agent_id)
 
+    def has_active_child_agents(self, agent_id: str) -> bool:
+        """Check if an agent has any active (running/pending) child agents."""
+        return self._api.has_active_child_agents(agent_id)
+
+    def get_child_agent_activity_time(self, agent_id: str) -> float | None:
+        """Get the most recent activity timestamp from any child agent.
+
+        Returns the most recent last_log_at or last_updated timestamp
+        from active children, or None if no active children exist.
+        """
+        return self._api.get_child_agent_activity_time(agent_id)
+

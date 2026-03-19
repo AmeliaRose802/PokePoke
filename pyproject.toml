@@ -112,6 +112,8 @@ max-statements = 50
 "tests/**/*" = ["C901", "PLR0915", "PLR2004"]
 "src/pokepoke/__main__.py" = ["T201"]  # CLI entry point - print() is appropriate
 "src/pokepoke/init.py" = ["T201"]  # CLI entry point - print() is appropriate
+"src/pokepoke/desktop/desktop_ui.py" = ["T201"]  # Desktop UI feedback - print() is appropriate
+"src/pokepoke/models/sdk_helpers.py" = ["T201", "C901"]  # SDK session feedback and complex timeout logic
 
 # Mypy type checking configuration
 [tool.mypy]
