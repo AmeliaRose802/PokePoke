@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import type { LogEntry } from "../types";
 import {
   buildToolSummary,
+  groupPlainLines,
   isToolCallMessage,
   parseToolLabel,
   parseToolLabelAndDescription,
@@ -495,5 +496,122 @@ describe("processLogsToRenderItems - non-interleaved batch result pairing", () =
     expect(items[0].type).toBe("tool-batch");
     if (items[0].type !== "tool-batch") return;
     expect(items[0].batch.completedCalls).toBe(2);
+  });
+});
+
+describe("groupPlainLines", () => {
+  it("merges consecutive plain text lines into a single string", () => {
+    const lines = ["Hello world", "This is a test", "Third line"];
+    const grouped = groupPlainLines(lines);
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]).toBe("Hello world\nThis is a test\nThird line");
+  });
+
+  it("keeps tool call lines separate", () => {
+    const lines = [
+      "Some intro text",
+      "🔧 grep({'pattern': 'foo'})",
+      "✅ Result: Found 3",
+      "Some conclusion",
+    ];
+    const grouped = groupPlainLines(lines);
+    expect(grouped).toEqual([
+      "Some intro text",
+      "🔧 grep({'pattern': 'foo'})",
+      "✅ Result: Found 3",
+      "Some conclusion",
+    ]);
+  });
+
+  it("groups consecutive plain lines between structured lines", () => {
+    const lines = [
+      "Intro line 1",
+      "Intro line 2",
+      "🔧 view({'path': 'src/main.ts'})",
+      "✅ Result: File shown",
+      "Conclusion line 1",
+      "Conclusion line 2",
+      "Conclusion line 3",
+    ];
+    const grouped = groupPlainLines(lines);
+    expect(grouped).toEqual([
+      "Intro line 1\nIntro line 2",
+      "🔧 view({'path': 'src/main.ts'})",
+      "✅ Result: File shown",
+      "Conclusion line 1\nConclusion line 2\nConclusion line 3",
+    ]);
+  });
+
+  it("keeps [Copilot] batch headers separate", () => {
+    const lines = [
+      "Starting work",
+      "[Copilot] Calling 2 tool(s)...",
+      "[Tool] grep({'pattern': 'foo'})",
+      "[Tool] view({'path': 'bar.ts'})",
+      "✅ Result: ok",
+      "✅ Result: ok",
+    ];
+    const grouped = groupPlainLines(lines);
+    expect(grouped[0]).toBe("Starting work");
+    expect(grouped[1]).toBe("[Copilot] Calling 2 tool(s)...");
+  });
+
+  it("returns empty array for empty input", () => {
+    expect(groupPlainLines([])).toEqual([]);
+  });
+
+  it("handles all structured lines", () => {
+    const lines = [
+      "🔧 grep({'pattern': 'a'})",
+      "✅ Result: done",
+      "🔧 view({'path': 'b'})",
+      "✅ Result: done",
+    ];
+    const grouped = groupPlainLines(lines);
+    expect(grouped).toEqual(lines);
+  });
+
+  it("handles single plain text line", () => {
+    const lines = ["Just a single line"];
+    const grouped = groupPlainLines(lines);
+    expect(grouped).toEqual(["Just a single line"]);
+  });
+});
+
+describe("groupPlainLines + processLogsToRenderItems integration", () => {
+  it("renders grouped plain text as a markdown block instead of individual bubbles", () => {
+    const rawLines = [
+      "I've analyzed the code.",
+      "The bug is in handleClick.",
+      "It's missing a null check.",
+    ];
+    const grouped = groupPlainLines(rawLines);
+    const entries = stringsToLogEntries(grouped, 1000);
+    const items = processLogsToRenderItems(entries);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].type).toBe("markdown-block");
+  });
+
+  it("groups text between tool calls into single blocks", () => {
+    const rawLines = [
+      "I'll read the file first.",
+      "Let me check the structure.",
+      "🔧 view({'path': 'src/main.ts'})",
+      "✅ Result: File shown",
+      "The code looks good.",
+      "Now I'll make a fix.",
+    ];
+    const grouped = groupPlainLines(rawLines);
+    const entries = stringsToLogEntries(grouped, 1000);
+    const items = processLogsToRenderItems(entries);
+
+    // Should be: markdown-block (or narration) + tool + markdown-block (or narration)
+    // Not 6 individual bubbles
+    expect(items.length).toBeLessThanOrEqual(3);
+
+    // No individual "log" bubbles for the plain text
+    const logBubbles = items.filter((item) => item.type === "log");
+    expect(logBubbles).toHaveLength(0);
   });
 });
