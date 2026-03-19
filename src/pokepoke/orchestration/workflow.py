@@ -9,7 +9,7 @@ from pokepoke.models.ai_backends import invoke_copilot
 from pokepoke.models.copilot_sdk import build_prompt_from_work_item
 from pokepoke.models.sdk_helpers import build_resume_prompt
 from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, WorkItemResult
-from pokepoke.worktrees.worktrees import create_worktree, cleanup_worktree
+from pokepoke.worktrees.worktrees import create_worktree, cleanup_worktree  # noqa: F401 — kept for test patching
 from pokepoke.beads.beads import assign_and_sync_item, add_comment
 from pokepoke.protocols import BeadsClient
 from pokepoke.agents.agent_runner import run_gate_agent  # noqa: F401  # re-exported via workflow_helpers
@@ -141,7 +141,7 @@ def process_work_item(  # noqa: C901
                 if timeout_restart_count > max_timeout_restarts:
                     print(f"\n\u23f1\ufe0f  TIMEOUT: Exceeded max restarts ({max_timeout_restarts}), failing {item.id}")
                     _log_failure(run_logger, item_logger, request_count)
-                    cleanup_worktree(item.id, force=True)
+                    print(f"\n\u26a0\ufe0f  Preserving worktree for {item.id} (work may be recoverable)")
                     terminal_ui.ui.set_current_agent(None)
                     return _fail_result(request_count=request_count, stats=accumulated_stats,
                                         cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs)

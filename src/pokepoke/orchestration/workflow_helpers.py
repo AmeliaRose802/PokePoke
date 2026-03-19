@@ -14,7 +14,7 @@ from pokepoke.beads.reconciliation import reconcile_completed_item
 from pokepoke.desktop.terminal_ui import format_work_item_banner, set_terminal_banner
 from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult, ModelCompletionRecord, WorkItemResult
 from pokepoke.worktrees.worktree_finalization import finalize_work_item
-from pokepoke.worktrees.worktrees import cleanup_worktree, create_worktree
+from pokepoke.worktrees.worktrees import create_worktree
 
 if TYPE_CHECKING:
     from pokepoke.utils.logging_utils import ItemLogger, RunLogger
@@ -367,13 +367,9 @@ def _finalize_item_result(  # noqa: C901 – inherently complex; see workflow.py
     set_terminal_banner(format_work_item_banner(item.id, item.title, "Failed"))
     print(f"\n❌ Failed to complete work item: {result.error}")
 
-    # Preserve worktree on shutdown so work can be resumed later
-    from pokepoke.utils.shutdown import is_shutting_down
-    if is_shutting_down():
-        print(f"\n⚠️  Shutting down — preserving worktree for {item.id}")
-    else:
-        print("\n🧹 Cleaning up worktree...")
-        cleanup_worktree(item.id, force=True, repo_path=repo_path)
+    # Preserve worktree so agent work is not lost — it can be
+    # manually inspected, resumed, or merged later.
+    print(f"\n⚠️  Preserving worktree for {item.id} (work may be recoverable)")
     _log_failure(run_logger, item_logger, request_count)
     terminal_ui.ui.set_current_agent(None)
     dur = time.time() - start_time

@@ -778,14 +778,13 @@ class TestFinalizeItemResult:
 
     @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
     @patch("pokepoke.orchestration.workflow_helpers.reconcile_completed_item")
-    @patch("pokepoke.orchestration.workflow_helpers.cleanup_worktree")
     @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
     @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
     def test_failure_not_reconciled(self, mock_banner, mock_set,
-                                    mock_cleanup, mock_reconcile,
+                                    mock_reconcile,
                                     mock_tui, tmp_path):
         """When session fails and reconciliation also says not reconciled,
-        _finalize_item_result should return failure and clean up."""
+        _finalize_item_result should return failure and preserve worktree."""
         mock_reconcile.return_value = (False, {
             "beads_closed": False,
             "commits_on_default": False,
@@ -811,17 +810,15 @@ class TestFinalizeItemResult:
         )
         assert success is False
         assert wir.success is False
-        mock_cleanup.assert_called_once_with("wf-1", force=True, repo_path=None)
 
     # ── False-positive guard: partial evidence ≠ reconciled ──────
 
     @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
     @patch("pokepoke.orchestration.workflow_helpers.reconcile_completed_item")
-    @patch("pokepoke.orchestration.workflow_helpers.cleanup_worktree")
     @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
     @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
     def test_failure_partial_evidence_not_reconciled(self, mock_banner, mock_set,
-                                                     mock_cleanup, mock_reconcile,
+                                                     mock_reconcile,
                                                      mock_tui, tmp_path):
         """Worktree cleaned + beads closed but NO merge commit should NOT reconcile.
         This guards against false positives."""

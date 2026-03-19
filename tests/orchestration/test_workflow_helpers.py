@@ -564,9 +564,9 @@ class TestFinalizeItemResult:
     @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
     @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
     @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.orchestration.workflow_helpers.cleanup_worktree")
     @patch("pokepoke.orchestration.workflow_helpers.reconcile_completed_item", return_value=(False, {}))
-    def test_failure_path_cleanup(self, mock_recon, mock_cleanup, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats, capsys):
+    def test_failure_path_cleanup(self, mock_recon, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats, capsys):
+        """On failure, worktree is preserved (not cleaned up)."""
         wr, ok = _finalize_item_result(
             result=CopilotResult(work_item_id="item-42", success=False, error="something broke"),
             item=sample_item,
@@ -585,7 +585,6 @@ class TestFinalizeItemResult:
         )
         assert wr.success is False
         assert ok is False
-        mock_cleanup.assert_called_once_with("item-42", force=True, repo_path=None)
 
     @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
     @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
@@ -669,13 +668,11 @@ class TestFinalizeItemResult:
     @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
     @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
     @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.orchestration.workflow_helpers.cleanup_worktree")
     @patch("pokepoke.orchestration.workflow_helpers.reconcile_completed_item", return_value=(False, {}))
-    @patch("pokepoke.utils.shutdown.is_shutting_down", return_value=True)
     def test_failure_path_skips_cleanup_during_shutdown(
-        self, mock_shutting_down, mock_recon, mock_cleanup, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats,
+        self, mock_recon, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats,
     ):
-        """Worktree should be preserved when the app is shutting down."""
+        """Worktree should be preserved on failure (always, not just shutdown)."""
         wr, ok = _finalize_item_result(
             result=CopilotResult(work_item_id="item-42", success=False, error="shutdown abort"),
             item=sample_item,
@@ -694,4 +691,3 @@ class TestFinalizeItemResult:
         )
         assert wr.success is False
         assert ok is False
-        mock_cleanup.assert_not_called()

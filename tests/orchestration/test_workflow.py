@@ -1727,7 +1727,8 @@ class TestProcessWorkItem:
         )
 
         assert result.success is False
-        mock_cleanup_worktree.assert_called_with(item.id, force=True)
+        # Worktree is preserved on failure (not cleaned up)
+        mock_cleanup_worktree.assert_not_called()
 
     @patch('pokepoke.git.git_operations.build_handoff_context', return_value='')
     @patch('pokepoke.orchestration.workflow.run_gate_agent')
