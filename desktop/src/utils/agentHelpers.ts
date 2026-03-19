@@ -167,16 +167,18 @@ export function getAgentType(agent: AgentInfo): string | null {
  * Get the snake icon path for an agent, or null if the agent doesn't have a work item ID
  */
 export function getAgentAvatar(agent: AgentInfo): string | null {
+  // Prioritize snake icons for work agents
+  if (agent.work_item_id) {
+    return getAgentSnakeIcon(agent.work_item_id, isGateAgent(agent));
+  }
+
+  // Fall back to agent-type icons for system agents
   const agentType = getAgentType(agent);
   if (agentType) {
     return AGENT_ICON_MAP[agentType];
   }
 
-  if (!agent.work_item_id) {
-    return null;
-  }
-
-  return getAgentSnakeIcon(agent.work_item_id, isGateAgent(agent));
+  return null;
 }
 
 /**
