@@ -92,24 +92,26 @@ graph TB
 ## Maintenance Agents
 
 ```mermaid
-graph LR
+graph TB
     Orch["🎯 Orchestrator"]:::core
 
+    Orch -->|"main loop"| Work["🔁 Work Agents"]:::work
     Orch -->|"every N items"| Sched["📅 Scheduler"]:::sched
 
     Sched --> TD["📊 Tech Debt<br/>Find & fix issues"]:::m1
-    Sched --> JN["🧽 Janitor<br/>Clean stale worktrees"]:::m2
+    Sched --> JN["🧽 Janitor<br/>Reduce verbosity"]:::m2
     Sched --> BL["🗑️ Backlog Cleanup<br/>Archive old issues"]:::m3
     Sched --> BT["🧪 Beta Tester<br/>Run beta tests"]:::m4
     Sched --> MS["🔄 Model Sync<br/>Refresh model list"]:::m5
 
     classDef core fill:#FF6B6B,stroke:#C0392B,stroke-width:2px,color:#fff,font-weight:bold
+    classDef work fill:#60A5FA,stroke:#2563EB,stroke-width:2px,color:#fff,font-weight:bold
     classDef sched fill:#FBBF24,stroke:#D97706,stroke-width:2px,color:#333,font-weight:bold
-    classDef m1 fill:#60A5FA,stroke:#2563EB,stroke-width:2px,color:#fff,font-weight:bold
-    classDef m2 fill:#A78BFA,stroke:#7C3AED,stroke-width:2px,color:#fff,font-weight:bold
+    classDef m1 fill:#818CF8,stroke:#4F46E5,stroke-width:2px,color:#fff,font-weight:bold
+    classDef m2 fill:#C084FC,stroke:#9333EA,stroke-width:2px,color:#fff,font-weight:bold
     classDef m3 fill:#F472B6,stroke:#DB2777,stroke-width:2px,color:#fff,font-weight:bold
-    classDef m4 fill:#34D399,stroke:#059669,stroke-width:2px,color:#fff,font-weight:bold
+    classDef m4 fill:#047857,stroke:#064E3B,stroke-width:2px,color:#fff,font-weight:bold
     classDef m5 fill:#FB923C,stroke:#EA580C,stroke-width:2px,color:#fff,font-weight:bold
 ```
 
-**Maintenance:** Between work items, the orchestrator periodically triggers maintenance agents — each with a singleton guard so only one instance runs at a time.
+**Maintenance:** Between work cycles, the scheduler triggers maintenance agents — each with a singleton guard so only one runs at a time.
