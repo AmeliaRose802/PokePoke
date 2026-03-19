@@ -363,25 +363,29 @@ jobs:
 
 ### CodeSigning Module Functions
 
-**Find-CodeSigningCertificate**
+#### Find-CodeSigningCertificate
+
 ```powershell
 $cert = Find-CodeSigningCertificate -CertificateSource Auto
 $cert = Find-CodeSigningCertificate -CertificateSource File -CertificatePath "cert.pfx"
 $cert = Find-CodeSigningCertificate -CertificateSource Store -CertificateThumbprint "ABC123..."
 ```
 
-**Invoke-CodeSigning**
+#### Invoke-CodeSigning
+
 ```powershell
 $success = Invoke-CodeSigning -FilePath "app.exe" -CertificateInfo $cert
 ```
 
-**Test-CodeSignature**
+#### Test-CodeSignature
+
 ```powershell
 $result = Test-CodeSignature -FilePath "app.exe"
 Write-Host "Signed: $($result.IsSigned), Valid: $($result.IsValid)"
 ```
 
-**Get-CodeSigningEnvironment**
+#### Get-CodeSigningEnvironment
+
 ```powershell
 $env = Get-CodeSigningEnvironment
 Write-Host "SignTool: $($env.SignToolPath)"
@@ -390,19 +394,22 @@ Write-Host "Certificates found: $($env.Certificates.Count)"
 
 ### SigningConfiguration Module Functions
 
-**Get-SigningConfiguration**
+#### Get-SigningConfiguration
+
 ```powershell
 $config = Get-SigningConfiguration -Environment "production"
 $config = Get-SigningConfiguration -ConfigFile "custom-signing.yml"
 $config = Get-SigningConfiguration -Parameters @{ SkipSigning = $true }
 ```
 
-**Install-AzureSignTool**
+#### Install-AzureSignTool
+
 ```powershell
 $installed = Install-AzureSignTool
 ```
 
-**Test-AzureTrustedSigning**
+#### Test-AzureTrustedSigning
+
 ```powershell
 $ready = Test-AzureTrustedSigning -Config $config
 ```
@@ -411,28 +418,34 @@ $ready = Test-AzureTrustedSigning -Config $config
 
 ### Common Issues
 
-**"No suitable code signing certificate found"**
+#### "No suitable code signing certificate found"
+
 - Solution: Create a self-signed certificate with `Create-SelfSignedCert.ps1`
 - For production: Purchase and install a proper code signing certificate
 
-**"SignTool not found"**
+#### "SignTool not found"
+
 - Solution: Install Windows SDK or Visual Studio Build Tools
 - Alternative: Ensure signtool.exe is in PATH
 
-**"AzureSignTool not found"**
+#### "AzureSignTool not found"
+
 - Solution: `dotnet tool install --global AzureSignTool`
 - Check: `dotnet --version` (requires .NET 6.0+)
 
-**"Azure authentication failed"**
+#### "Azure authentication failed"
+
 - Check: Azure CLI login (`az login`)
 - Check: Service principal credentials are correct
 - Check: Permissions on Azure Trusted Signing account
 
-**"Certificate has expired"**
+#### "Certificate has expired"
+
 - For self-signed: Create new certificate with `Create-SelfSignedCert.ps1 -Force`
 - For commercial: Renew certificate with your CA
 
-**"File is signed but not trusted"**
+#### "File is signed but not trusted"
+
 - Self-signed: Install as trusted root (requires admin)
 - Commercial: Ensure certificate chain is complete
 - Check: Windows time/date is correct (affects certificate validity)
@@ -457,6 +470,7 @@ Get-AuthenticodeSignature -FilePath "app.exe" | Format-List
 Test how Windows treats your signed files:
 
 1. **Check signature status:**
+
    ```powershell
    Get-AuthenticodeSignature -FilePath "app.exe"
    ```
@@ -467,6 +481,7 @@ Test how Windows treats your signed files:
    - Check for SmartScreen warnings
 
 3. **Verify certificate chain:**
+
    ```powershell
    $cert = (Get-AuthenticodeSignature -FilePath "app.exe").SignerCertificate
    $cert.Verify()  # Should return $true for trusted certificates
@@ -518,7 +533,7 @@ Test how Windows treats your signed files:
 ## Quick Reference Card
 
 | Task | Command |
-|------|---------|
+| ------ | --------- |
 | Create dev certificate | `.\packaging\signing\Create-SelfSignedCert.ps1` |
 | Build signed executable | `.\packaging\pyinstaller\build_with_signing.ps1` |
 | Build signed installer | `.\packaging\installer\build_installer.ps1` |
