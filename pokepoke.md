@@ -30,50 +30,49 @@ graph LR
 ```mermaid
 graph TB
     Beads[("📦 Beads<br/>Issue Queue")]:::ext
-
     Orch["🎯 Orchestrator"]:::core
-
-    subgraph Pool["Thread Pool"]
-        direction LR
-        A1["🐍 Agent 1<br/>Fix login bug"]:::a1
-        A2["🐍 Agent 2<br/>Add caching"]:::a2
-        A3["🐍 Agent 3<br/>Update tests"]:::a3
-        A4["🐍 Agent 4<br/>Refactor API"]:::a4
-    end
-
-    subgraph Gates["Gate Agents"]
-        direction LR
-        G1["🚪 Gate 1"]:::gate
-        G2["🚪 Gate 2"]:::gate
-        G3["🚪 Gate 3"]:::gate
-        G4["🚪 Gate 4"]:::gate
-    end
-
-    subgraph Worktrees["Isolated Worktrees"]
-        direction LR
-        W1["🌳 worktree-1"]:::wt
-        W2["🌳 worktree-2"]:::wt
-        W3["🌳 worktree-3"]:::wt
-        W4["🌳 worktree-4"]:::wt
-    end
-
     Main[("🌳 Main Branch")]:::done
 
     Beads -->|"ready items"| Orch
+
     Orch --> A1 & A2 & A3 & A4
-    A1 --> W1
-    A2 --> W2
-    A3 --> W3
-    A4 --> W4
-    W1 --> G1
-    W2 --> G2
-    W3 --> G3
-    W4 --> G4
-    G1 -->|"❌"| A1
-    G2 -->|"❌"| A2
-    G3 -->|"❌"| A3
-    G4 -->|"❌"| A4
-    G1 & G2 & G3 & G4 -->|"✅"| Main
+
+    subgraph L1["Lane 1"]
+        A1["🐍 Agent 1<br/>Fix login bug"]:::a1
+        W1["🌳 worktree-1"]:::wt
+        G1["🚪 Gate 1"]:::gate
+        A1 --> W1 --> G1
+        G1 -.->|"❌ retry"| A1
+    end
+
+    subgraph L2["Lane 2"]
+        A2["🐍 Agent 2<br/>Add caching"]:::a2
+        W2["🌳 worktree-2"]:::wt
+        G2["🚪 Gate 2"]:::gate
+        A2 --> W2 --> G2
+        G2 -.->|"❌ retry"| A2
+    end
+
+    subgraph L3["Lane 3"]
+        A3["🐍 Agent 3<br/>Update tests"]:::a3
+        W3["🌳 worktree-3"]:::wt
+        G3["🚪 Gate 3"]:::gate
+        A3 --> W3 --> G3
+        G3 -.->|"❌ retry"| A3
+    end
+
+    subgraph L4["Lane 4"]
+        A4["🐍 Agent 4<br/>Refactor API"]:::a4
+        W4["🌳 worktree-4"]:::wt
+        G4["🚪 Gate 4"]:::gate
+        A4 --> W4 --> G4
+        G4 -.->|"❌ retry"| A4
+    end
+
+    G1 -->|"✅"| Main
+    G2 -->|"✅"| Main
+    G3 -->|"✅"| Main
+    G4 -->|"✅"| Main
 
     classDef ext fill:#FB923C,stroke:#EA580C,stroke-width:2px,color:#fff,font-weight:bold
     classDef core fill:#FF6B6B,stroke:#C0392B,stroke-width:2px,color:#fff,font-weight:bold
@@ -86,4 +85,4 @@ graph TB
     classDef done fill:#34D399,stroke:#059669,stroke-width:2px,color:#fff,font-weight:bold
 ```
 
-**Parallel execution:** The orchestrator fans out to N agents, each in its own worktree. Gate agents validate each agent's work — pass merges to main, fail retries the work agent.
+**Parallel execution:** The orchestrator fans out to N agents, each in its own lane: worktree → gate. Pass (✅) merges to main, fail (❌) retries within the lane.
