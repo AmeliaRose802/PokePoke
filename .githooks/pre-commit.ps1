@@ -39,51 +39,7 @@ Set-Location $repoRoot
 
 Write-Host "Pre-commit checks:" -ForegroundColor Cyan
 
-# INTEGRITY CHECK: Verify no bypass parameters exist in quality scripts
-Write-Host "  • Integrity Check... " -NoNewline -ForegroundColor Gray
 $hooksDir = Join-Path $repoRoot ".githooks"
-$bypassPatterns = @(
-    'param\s*\(\s*\[switch\]\s*\$SkipCheck',
-    '\$env:SKIP_',
-    'if\s*\(\s*\$SkipCheck\s*\)',
-    '-SkipCheck',
-    'bypass',
-    'Allow bypass'
-)
-
-$integrityViolations = @()
-$scriptsToCheck = @("check-coverage.ps1", "check-code-quality.ps1", "check-file-length.ps1")
-
-foreach ($script in $scriptsToCheck) {
-    $scriptPath = Join-Path $hooksDir $script
-    if (Test-Path $scriptPath) {
-        $content = Get-Content $scriptPath -Raw
-        foreach ($pattern in $bypassPatterns) {
-            if ($content -match $pattern) {
-                $integrityViolations += "$script contains bypass mechanism: '$($matches[0])'"
-            }
-        }
-    }
-}
-
-if ($integrityViolations.Count -gt 0) {
-    Write-Host "✗" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "🚨 SECURITY VIOLATION: Quality gate scripts have been tampered with!" -ForegroundColor Red
-    Write-Host ""
-    foreach ($violation in $integrityViolations) {
-        Write-Host "  • $violation" -ForegroundColor Red
-    }
-    Write-Host ""
-    Write-Host "Quality gate scripts MUST NOT contain bypass mechanisms." -ForegroundColor Red
-    Write-Host "Any modifications to .githooks/ require admin approval via CODEOWNERS." -ForegroundColor Red
-    Write-Host ""
-    Write-Host "To fix: Restore scripts from git history or main branch." -ForegroundColor Yellow
-    Write-Host "  git checkout origin/main .githooks/" -ForegroundColor Yellow
-    Write-Host ""
-    exit 1
-}
-Write-Host "✓" -ForegroundColor Green
 
 # Run standalone integrity verification
 Write-Host "  • Running standalone verification... " -NoNewline -ForegroundColor Gray
