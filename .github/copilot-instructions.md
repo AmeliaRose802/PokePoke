@@ -37,7 +37,7 @@ This repository uses a **multi-layered defense-in-depth protection system** to p
 **Protected Scripts:**
 - `pre-commit.ps1` - Main pre-commit hook with integrity checks
 - `verify-integrity.ps1` - Standalone integrity verification
-- `check-coverage.ps1` - 80% coverage enforcement (NO BYPASS)
+- `check-coverage.py` - 80% coverage enforcement (NO BYPASS)
 - `check-code-quality.ps1` - Code quality enforcement (NO BYPASS)
 - `check-compile-warnings.ps1` - Zero warnings policy (NO BYPASS)
 - `check-file-length.ps1` - File length limits (NO BYPASS)

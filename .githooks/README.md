@@ -40,7 +40,7 @@ This repository uses a **multi-layered defense-in-depth approach** to prevent AI
   - `check-build.ps1`
   - `check-code-quality.ps1`
   - `check-compile-warnings.ps1`
-  - `check-coverage.ps1`
+  - `check-coverage.py`
   - `check-file-length.ps1`
   - `check-mcp-health.ps1`
   - `check-pokepoke-import.ps1`
@@ -100,7 +100,7 @@ if ($SKIP_MODE) { exit 0 }
 ## How Protection Works
 
 ### Scenario 1: Agent tries to modify scripts directly
-1. Agent edits `.githooks/check-coverage.ps1` to add bypass
+1. Agent edits `.githooks/check-coverage.py` to add bypass
 2. Agent attempts `git commit`
 3. **Pre-commit hook detects tampering** → Commit blocked with security warning
 4. Agent cannot proceed
@@ -131,7 +131,7 @@ if ($SKIP_MODE) { exit 0 }
 .\.githooks\pre-commit.ps1
 
 # Test specific quality check
-.\.githooks\check-coverage.ps1
+python .\.githooks\check-coverage.py
 .\.githooks\check-code-quality.ps1
 ```
 
@@ -144,7 +144,7 @@ If scripts are tampered with:
 git checkout origin/main .githooks/
 
 # Restore specific script
-git checkout origin/main .githooks/check-coverage.ps1
+git checkout origin/main .githooks/check-coverage.py
 
 # Verify restoration
 .\.githooks\verify-integrity.ps1

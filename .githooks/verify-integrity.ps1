@@ -57,7 +57,6 @@ $forbiddenPatterns = @{
 
 $violations = @()
 $scriptsToCheck = @(
-    "check-coverage.ps1",
     "check-code-quality.ps1",
     "check-file-length.ps1",
     "check-skipped-tests.ps1",

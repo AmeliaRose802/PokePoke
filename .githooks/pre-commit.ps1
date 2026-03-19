@@ -88,7 +88,7 @@ if ($hasStagedPython) {
 $buildDependentChecks = @(
     @{ Name = "Build"; Script = "check-build.ps1" }
     @{ Name = "Code Quality"; Script = "check-code-quality.ps1" }
-    @{ Name = "Test Coverage"; Script = "check-coverage.ps1" }
+    @{ Name = "Test Coverage"; Script = "check-coverage.py"; Interpreter = "python" }
 )
 
 # Start static checks in parallel.
@@ -135,7 +135,11 @@ foreach ($check in $buildDependentChecks) {
     try {
         $checkScript = Join-Path $hooksDir $check.Script
         # Stream output directly without buffering
-        & $checkScript
+        if ($check.Interpreter) {
+            & $check.Interpreter $checkScript
+        } else {
+            & $checkScript
+        }
         if ($LASTEXITCODE -eq 0) {
             $passed += $check.Name
         }
