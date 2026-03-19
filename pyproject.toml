@@ -88,7 +88,7 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "B", "UP", "SIM", "C90", "PLR"]
+select = ["E", "F", "W", "B", "UP", "SIM", "C90", "PLR", "T201"]
 ignore = [
     "E402",   # Module-level import not at top - intentional logger-before-imports pattern
     "E501",   # Line too long
@@ -110,6 +110,8 @@ max-statements = 50
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*" = ["C901", "PLR0915", "PLR2004"]
+"src/pokepoke/__main__.py" = ["T201"]  # CLI entry point - print() is appropriate
+"src/pokepoke/init.py" = ["T201"]  # CLI entry point - print() is appropriate
 
 # Mypy type checking configuration
 [tool.mypy]
