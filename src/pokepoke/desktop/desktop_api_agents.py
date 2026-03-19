@@ -121,3 +121,23 @@ def is_agent_paused(self: DesktopAPI, agent_id: str) -> bool:
     """Check if an agent is paused."""
     with self._lock:
         return self._agent_registry.is_paused(agent_id)
+
+
+def has_active_child_agents(self: DesktopAPI, agent_id: str) -> bool:
+    """Check if an agent has any active (running/pending) child agents."""
+    with self._lock:
+        if self._window_disposed:
+            return False
+        return self._agent_registry.has_active_children(agent_id)
+
+
+def get_child_agent_activity_time(self: DesktopAPI, agent_id: str) -> float | None:
+    """Get the most recent activity timestamp from any child agent.
+
+    Returns the most recent last_log_at or last_updated timestamp
+    from active children, or None if no active children exist.
+    """
+    with self._lock:
+        if self._window_disposed:
+            return None
+        return self._agent_registry.get_most_recent_child_activity(agent_id)

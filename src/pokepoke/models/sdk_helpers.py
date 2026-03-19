@@ -185,6 +185,7 @@ async def _await_completion(
     (``"shutdown"``, ``"timeout"``, ``"inactivity"``, ``"tool_timeout"``)
     on abort.
     """
+    from pokepoke.desktop.desktop_ui import _thread_output
     deadline = asyncio.get_event_loop().time() + max_timeout
     _HB_INTERVAL = 30.0
     last_hb = time.monotonic()
@@ -241,23 +242,55 @@ async def _await_completion(
         # (last_tool_activity_time is recent), give the session 60s to emit
         # the next SDK event before declaring it dead. This prevents killing
         # sessions immediately after long tool calls complete.
+        #
+        # Child agent consideration: If this agent has active child agents
+        # (e.g., spawned via task tool), check their activity timestamps
+        # as well. A parent agent may appear idle while child agents are
+        # actively working.
         if stats is not None and inactivity_timeout > 0:
             has_pending_tools = stats.get('pending_tool_calls', 0) > 0
             since_last_event = time.monotonic() - stats['last_event_time']
             since_last_tool = time.monotonic() - stats.get('last_tool_activity_time', 0)
             tool_cooldown_grace = 60.0  # Seconds to wait after tool activity before enforcing inactivity timeout
             is_in_grace_period = since_last_tool < tool_cooldown_grace
-            if since_last_event >= inactivity_timeout and not has_pending_tools and not is_in_grace_period:
+
+            # Check if this agent has active children
+            has_active_children = False
+            child_activity_time: float | None = None
+            try:
+                # Access agent_id from thread-local storage
+                agent_id: str | None = getattr(_thread_output, "agent_id", None)
+                if agent_id:
+                    has_active_children = terminal_ui.ui.has_active_child_agents(agent_id)
+                    if has_active_children:
+                        child_activity_time = terminal_ui.ui.get_child_agent_activity_time(agent_id)
+            except Exception as e:
+                # Swallow errors from child checking - don't break timeout logic
+                logger.debug("Failed to check child agent activity: %s", e)
+
+            # Consider child activity when determining if session is truly idle
+            effective_last_activity = stats['last_event_time']
+            if has_active_children and child_activity_time:
+                # Use whichever is more recent: parent or child activity
+                effective_last_activity = max(
+                    stats['last_event_time'],
+                    child_activity_time
+                )
+                since_last_event = time.monotonic() - effective_last_activity
+
+            if since_last_event >= inactivity_timeout and not has_pending_tools and not is_in_grace_period and not has_active_children:
+                debug_info = f"pending_tools={has_pending_tools}, grace={is_in_grace_period}, active_children={has_active_children}"
                 print(
                     f"\n[SDK] SESSION DEAD: No events received for {since_last_event:.0f}s "
-                    f"(threshold: {inactivity_timeout:.0f}s) — aborting"
+                    f"(threshold: {inactivity_timeout:.0f}s) — aborting ({debug_info})"
                 )
                 logger.error(
                     "SDK session inactivity detected: no events for %.0fs "
-                    "(event_count=%d, last_tool_activity=%.0fs ago)",
+                    "(event_count=%d, last_tool_activity=%.0fs ago, has_children=%s)",
                     since_last_event,
                     stats.get('event_count', 0),
                     time.monotonic() - stats.get('last_tool_activity_time', 0),
+                    has_active_children,
                 )
                 try:
                     await session.abort()

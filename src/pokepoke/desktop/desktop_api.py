@@ -249,12 +249,13 @@ class DesktopAPI:
     # Lock held for full duration of registry calls to prevent TOCTOU races
     (push_agent_status, push_agent_log, push_agent_tokens, remove_agent,
      get_agents, get_agent_detail, pause_agent, resume_agent,
-     is_agent_paused) = (
+     is_agent_paused, has_active_child_agents, get_child_agent_activity_time) = (
         _agents.push_agent_status, _agents.push_agent_log,
         _agents.push_agent_tokens, _agents.remove_agent,
         _agents.get_agents, _agents.get_agent_detail,
         _agents.pause_agent, _agents.resume_agent,
-        _agents.is_agent_paused)
+        _agents.is_agent_paused, _agents.has_active_child_agents,
+        _agents.get_child_agent_activity_time)
     def request_stop_after_current(self) -> dict[str, bool]:
         """Request orchestrator stop after the current item completes."""
         _request_stop_after_current()

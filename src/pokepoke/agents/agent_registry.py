@@ -8,6 +8,8 @@ import threading
 import time
 from typing import Any
 
+from pokepoke.agents.agent_child_tracking import ChildAgentTracker
+
 
 @dataclasses.dataclass
 class AgentRecord:
@@ -125,6 +127,7 @@ class AgentRegistry:
         self._preview_limit = preview_limit
         self._detail_limit = detail_limit
         self._paused_agents: set[str] = set()
+        self._child_tracker = ChildAgentTracker()
 
     def set_limits(self, preview_limit: int, detail_limit: int | None) -> None:
         with self._lock:
@@ -261,6 +264,10 @@ class AgentRegistry:
                 last_log_at=last_log_at,
             )
 
+            # Track parent-child relationship
+            if current_parent:
+                self._child_tracker.add_child(current_parent, agent_id)
+
     def update_token_usage(
         self,
         agent_id: str,
@@ -317,11 +324,19 @@ class AgentRegistry:
             self._agents.clear()
             self._agent_history.clear()
             self._paused_agents.clear()
+            self._child_tracker.clear()
 
     def remove(self, agent_id: str) -> None:
         with self._lock:
-            self._agents.pop(agent_id, None)
+            agent = self._agents.pop(agent_id, None)
             self._paused_agents.discard(agent_id)
+
+            # Clean up parent-child tracking
+            if agent and agent.parent_agent_id:
+                self._child_tracker.remove_child(agent.parent_agent_id, agent_id)
+
+            # Remove this agent as a parent if it had children
+            self._child_tracker.remove_parent(agent_id)
 
     def serialize_all(self) -> list[dict[str, Any]]:
         with self._lock:
@@ -383,4 +398,25 @@ class AgentRegistry:
             return None
         normalized = re.sub(r"[^a-z0-9]+", "_", agent_type.strip().lower()).strip("_")
         return normalized or None
+
+    def has_active_children(self, agent_id: str) -> bool:
+        """Check if an agent has any active (running/pending) child agents."""
+        with self._lock:
+            return self._child_tracker.has_active_children(agent_id, self._agents)
+
+    def get_active_children(self, agent_id: str) -> list[str]:
+        """Get list of active child agent IDs for a given parent."""
+        with self._lock:
+            return self._child_tracker.get_active_children(agent_id, self._agents)
+
+    def get_most_recent_child_activity(self, agent_id: str) -> float | None:
+        """Get the most recent activity timestamp from any child agent.
+
+        Returns the most recent last_log_at or last_updated timestamp
+        from active children, or None if no active children exist.
+        """
+        with self._lock:
+            return self._child_tracker.get_most_recent_child_activity(
+                agent_id, self._agents
+            )
 
