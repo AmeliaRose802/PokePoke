@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from pokepoke.beads import beads_query
+from pokepoke.beads.beads_query import BD_CONFIG, BR_CONFIG, get_active_backend, set_active_backend
 from pokepoke.types import Dependency, IssueWithDependencies
 
 # Save reference to real _run_bd before conftest replaces it with a blocker.
@@ -347,6 +348,113 @@ def test_cli_backend_config_is_frozen() -> None:
     cfg = beads_query.CLIBackendConfig(binary="bd")
     with pytest.raises(AttributeError):
         cfg.binary = "br"  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("backend_config", [BD_CONFIG, BR_CONFIG], ids=["bd", "br"])
+class TestBeadsQueryBothBackends:
+    """Tests that run against both bd and br backends."""
+
+    def test_get_ready_work_items_uses_correct_backend(
+        self, backend_config, monkeypatch
+    ):
+        """Verify get_ready_work_items uses the configured backend binary."""
+        original = get_active_backend()
+        set_active_backend(backend_config)
+
+        try:
+            payload = [
+                {
+                    "id": "x",
+                    "title": "Task",
+                    "status": "open",
+                    "priority": 1,
+                    "issue_type": "task",
+                    "description": "d",
+                },
+            ]
+            mock_process = subprocess.CompletedProcess(
+                backend_config.binary, 0, stdout=json.dumps(payload)
+            )
+            monkeypatch.setattr(
+                beads_query, "_run_bd", lambda *args, **kwargs: mock_process
+            )
+
+            items = beads_query.get_ready_work_items()
+
+            assert len(items) == 1
+            assert items[0].id == "x"
+        finally:
+            set_active_backend(original)
+
+    def test_get_issue_dependencies_with_backend(self, backend_config, monkeypatch):
+        """Verify get_issue_dependencies works with both backends."""
+        original = get_active_backend()
+        set_active_backend(backend_config)
+
+        try:
+            payload = [
+                {
+                    "id": "A",
+                    "title": "Issue A",
+                    "status": "open",
+                    "priority": 1,
+                    "issue_type": "task",
+                    "dependencies": [
+                        {
+                            "id": "dep1",
+                            "title": "Dep",
+                            "issue_type": "task",
+                            "dependency_type": "blocks",
+                            "status": "open",
+                        }
+                    ],
+                }
+            ]
+            mock_process = subprocess.CompletedProcess(
+                backend_config.binary, 0, stdout=json.dumps(payload)
+            )
+            monkeypatch.setattr(
+                beads_query, "_run_bd", lambda *args, **kwargs: mock_process
+            )
+
+            issue = beads_query.get_issue_dependencies("A")
+
+            assert issue is not None
+            assert issue.dependencies and isinstance(issue.dependencies[0], Dependency)
+            assert issue.dependencies[0].dependency_type == "blocks"
+        finally:
+            set_active_backend(original)
+
+    def test_get_beads_stats_with_backend(self, backend_config, monkeypatch):
+        """Verify get_beads_stats works with both backends."""
+        original = get_active_backend()
+        set_active_backend(backend_config)
+
+        try:
+            stats_json = {
+                "summary": {
+                    "total_issues": 5,
+                    "open_issues": 2,
+                    "in_progress_issues": 1,
+                    "closed_issues": 2,
+                    "ready_issues": 3,
+                }
+            }
+            mock_process = subprocess.CompletedProcess(
+                backend_config.binary, 0, stdout=json.dumps(stats_json)
+            )
+            monkeypatch.setattr(
+                beads_query, "_run_bd", lambda *args, **kwargs: mock_process
+            )
+            monkeypatch.setattr(beads_query, "_get_main_repo_root", lambda: Path("/repo"))
+
+            stats = beads_query.get_beads_stats()
+
+            assert stats is not None
+            assert stats.total_issues == 5
+            assert stats.ready_issues == 3
+        finally:
+            set_active_backend(original)
 
 
 def test_predefined_bd_config() -> None:

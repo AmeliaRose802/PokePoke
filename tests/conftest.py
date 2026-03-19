@@ -79,6 +79,35 @@ import pytest  # noqa: E402
 from unittest.mock import patch  # noqa: E402
 
 from pokepoke.types import BeadsWorkItem  # noqa: E402
+from pokepoke.beads.beads_query import (  # noqa: E402
+    BD_CONFIG,
+    BR_CONFIG,
+    get_active_backend,
+    set_active_backend,
+)
+
+
+@pytest.fixture(params=[
+    pytest.param(BD_CONFIG, id="bd"),
+    pytest.param(BR_CONFIG, id="br"),
+])
+def backend_config(request):
+    """Parametrized fixture for both bd and br backends.
+
+    This fixture automatically runs tests twice - once with BD_CONFIG
+    and once with BR_CONFIG. It properly saves and restores the original
+    backend configuration.
+
+    Usage:
+        def test_something(backend_config):
+            # Test runs twice: once with bd, once with br
+            result = get_ready_work_items()
+            assert result is not None
+    """
+    original = get_active_backend()
+    set_active_backend(request.param)
+    yield request.param
+    set_active_backend(original)
 
 
 @pytest.fixture(autouse=True)
