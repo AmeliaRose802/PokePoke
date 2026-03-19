@@ -41,6 +41,14 @@ graph TB
         A4["🐍 Agent 4<br/>Refactor API"]:::a4
     end
 
+    subgraph Gates["Gate Agents"]
+        direction LR
+        G1["🚪 Gate 1"]:::gate
+        G2["🚪 Gate 2"]:::gate
+        G3["🚪 Gate 3"]:::gate
+        G4["🚪 Gate 4"]:::gate
+    end
+
     subgraph Worktrees["Isolated Worktrees"]
         direction LR
         W1["🌳 worktree-1"]:::wt
@@ -57,7 +65,15 @@ graph TB
     A2 --> W2
     A3 --> W3
     A4 --> W4
-    W1 & W2 & W3 & W4 -->|"merge"| Main
+    W1 --> G1
+    W2 --> G2
+    W3 --> G3
+    W4 --> G4
+    G1 -->|"❌"| A1
+    G2 -->|"❌"| A2
+    G3 -->|"❌"| A3
+    G4 -->|"❌"| A4
+    G1 & G2 & G3 & G4 -->|"✅"| Main
 
     classDef ext fill:#FB923C,stroke:#EA580C,stroke-width:2px,color:#fff,font-weight:bold
     classDef core fill:#FF6B6B,stroke:#C0392B,stroke-width:2px,color:#fff,font-weight:bold
@@ -66,7 +82,8 @@ graph TB
     classDef a3 fill:#F472B6,stroke:#DB2777,stroke-width:2px,color:#fff,font-weight:bold
     classDef a4 fill:#FBBF24,stroke:#D97706,stroke-width:2px,color:#333,font-weight:bold
     classDef wt fill:#6EE7B7,stroke:#059669,stroke-width:2px,color:#333,font-weight:bold
+    classDef gate fill:#F87171,stroke:#B91C1C,stroke-width:2px,color:#fff,font-weight:bold
     classDef done fill:#34D399,stroke:#059669,stroke-width:2px,color:#fff,font-weight:bold
 ```
 
-**Parallel execution:** The orchestrator pulls ready items from Beads and fans out to N agents, each working in its own isolated git worktree. Completed work merges back to main.
+**Parallel execution:** The orchestrator fans out to N agents, each in its own worktree. Gate agents validate each agent's work — pass merges to main, fail retries the work agent.
