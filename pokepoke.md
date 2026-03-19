@@ -86,3 +86,31 @@ graph TB
 ```
 
 **Parallel execution:** The orchestrator fans out to N agents, each in its own lane: worktree → gate. Pass (✅) merges to main, fail (❌) retries within the lane.
+
+---
+
+## Gate Agent Detail
+
+```mermaid
+graph LR
+    Work["🧠 Work Agent<br/>writes code"]:::ai
+    Tests["🧪 Run Tests"]:::check
+    Lint["📏 Lint &<br/>Type Check"]:::check
+    Build["🔨 Build"]:::check
+    Gate{"🚪 Gate<br/>Pass?"}:::gate
+    Pass["✅ Pass"]:::done
+    Feedback["📝 Corrective<br/>Feedback"]:::fail
+    Retry["🔁 Retry with<br/>feedback"]:::ai
+
+    Work --> Tests --> Lint --> Build --> Gate
+    Gate -->|"all green"| Pass
+    Gate -->|"failures"| Feedback --> Retry --> Work
+
+    classDef ai fill:#A78BFA,stroke:#7C3AED,stroke-width:2px,color:#fff,font-weight:bold
+    classDef check fill:#60A5FA,stroke:#2563EB,stroke-width:2px,color:#fff,font-weight:bold
+    classDef gate fill:#FBBF24,stroke:#D97706,stroke-width:3px,color:#333,font-weight:bold
+    classDef done fill:#34D399,stroke:#059669,stroke-width:2px,color:#fff,font-weight:bold
+    classDef fail fill:#F87171,stroke:#B91C1C,stroke-width:2px,color:#fff,font-weight:bold
+```
+
+**Gate validation:** After the work agent finishes, the gate runs tests, linting, and build checks. If anything fails, it generates corrective feedback and the work agent retries. This loops until all checks pass.
