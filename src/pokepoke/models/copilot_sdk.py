@@ -149,7 +149,7 @@ async def _send_and_wait(
         abort_reason = await _await_completion(
             session, client, done, max_timeout,
             stats=stats, inactivity_timeout=inactivity_timeout,
-            tool_call_timeout=tool_call_timeout,
+            tool_call_timeout=tool_call_timeout, handler=handler,
         )
         if handler.rate_limit_detected:
             raise RateLimitError()
