@@ -203,7 +203,14 @@ class ExplicitSync(SyncStrategy):
                         f"✅ br sync succeeded after retry "
                         f"({attempt}/{max_attempts})"
                     )
-                self._git_publish_sync()
+                if not self._git_publish_sync():
+                    # br sync succeeded but git publish failed
+                    return subprocess.CompletedProcess(
+                        args=result.args,
+                        returncode=1,
+                        stdout=result.stdout,
+                        stderr="git publish failed after successful br sync"
+                    )
                 return result
 
             output = f"{result.stdout}\n{result.stderr}"
@@ -225,8 +232,13 @@ class ExplicitSync(SyncStrategy):
     # -- internal helpers ----------------------------------------------------
 
     @staticmethod
-    def _git_publish_sync() -> None:
-        """Best-effort ``git add / commit / push`` after a successful ``br sync``."""
+    def _git_publish_sync() -> bool:
+        """Best-effort ``git add / commit / push`` after a successful ``br sync``.
+
+        Returns:
+            True if publish succeeded or there were no changes to publish.
+            False if git operations failed.
+        """
         try:
             status = subprocess.run(
                 ["git", "status", "--porcelain", ".beads/"],
@@ -235,7 +247,7 @@ class ExplicitSync(SyncStrategy):
                 timeout=10,
             )
             if not status.stdout.strip():
-                return  # Nothing to commit
+                return True  # Nothing to commit - success
 
             subprocess.run(
                 ["git", "add", ".beads/"],
@@ -258,8 +270,10 @@ class ExplicitSync(SyncStrategy):
                 timeout=30,
                 check=True,
             )
+            return True
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
             logger.warning("⚠️  Best-effort git publish after br sync failed: %s", exc)
+            return False
 
 
 # ---------------------------------------------------------------------------

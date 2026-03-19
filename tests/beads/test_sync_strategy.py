@@ -315,6 +315,81 @@ class TestExplicitSync:
         # Should not raise
         ExplicitSync._git_publish_sync()
 
+    @patch(_SUBPROCESS_RUN_PATH)
+    def test_git_publish_sync_returns_true_no_changes(self, mock_subprocess: Mock) -> None:
+        """_git_publish_sync returns True when there are no changes."""
+        mock_subprocess.return_value = Mock(stdout="", returncode=0)
+        result = ExplicitSync._git_publish_sync()
+        assert result is True
+
+    @patch(_SUBPROCESS_RUN_PATH)
+    def test_git_publish_sync_returns_true_on_success(self, mock_subprocess: Mock) -> None:
+        """_git_publish_sync returns True when git operations succeed."""
+        mock_subprocess.side_effect = [
+            Mock(stdout=" M .beads/items.jsonl", returncode=0),
+            Mock(stdout="", returncode=0),
+            Mock(stdout="", returncode=0),
+            Mock(stdout="", returncode=0),
+        ]
+        result = ExplicitSync._git_publish_sync()
+        assert result is True
+
+    @patch(_SUBPROCESS_RUN_PATH)
+    def test_git_publish_sync_returns_false_on_push_failure(
+        self, mock_subprocess: Mock,
+    ) -> None:
+        """_git_publish_sync returns False when git push fails."""
+        mock_subprocess.side_effect = [
+            Mock(stdout=" M .beads/items.jsonl", returncode=0),
+            Mock(stdout="", returncode=0),
+            Mock(stdout="", returncode=0),
+            subprocess.CalledProcessError(1, "git push"),
+        ]
+        result = ExplicitSync._git_publish_sync()
+        assert result is False
+
+    @patch(_SUBPROCESS_RUN_PATH)
+    def test_git_publish_sync_returns_false_on_timeout(
+        self, mock_subprocess: Mock,
+    ) -> None:
+        """_git_publish_sync returns False on timeout."""
+        mock_subprocess.side_effect = [
+            subprocess.TimeoutExpired("git", 10),
+        ]
+        result = ExplicitSync._git_publish_sync()
+        assert result is False
+
+    @patch("pokepoke.beads.sync_strategy.ExplicitSync._git_publish_sync")
+    @patch(_RUN_CLI_PATH)
+    def test_sync_returns_failure_when_git_publish_fails(
+        self, mock_run_cli: Mock, mock_git_pub: Mock,
+    ) -> None:
+        """sync() returns non-zero when br sync succeeds but git publish fails."""
+        mock_run_cli.return_value = Mock(returncode=0, stdout="", stderr="")
+        mock_git_pub.return_value = False
+        strategy = ExplicitSync(backend=BR_CONFIG)
+
+        result = strategy.sync()
+
+        assert result.returncode == 1
+        assert "git publish failed" in result.stderr
+        mock_git_pub.assert_called_once()
+
+    @patch("pokepoke.beads.sync_strategy.ExplicitSync._git_publish_sync")
+    @patch(_RUN_CLI_PATH)
+    def test_sync_returns_success_when_git_publish_succeeds(
+        self, mock_run_cli: Mock, mock_git_pub: Mock,
+    ) -> None:
+        """sync() returns zero when both br sync and git publish succeed."""
+        mock_run_cli.return_value = Mock(returncode=0, stdout="", stderr="")
+        mock_git_pub.return_value = True
+        strategy = ExplicitSync(backend=BR_CONFIG)
+
+        result = strategy.sync()
+
+        assert result.returncode == 0
+        mock_git_pub.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # Active sync strategy management
