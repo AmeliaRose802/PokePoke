@@ -13,7 +13,6 @@ export interface ToolSummary {
   resultSummary?: string;
   statusClass?: string;
 }
-
 export interface ToolItem {
   toolName: string;
   argsText?: string;
@@ -22,7 +21,6 @@ export interface ToolItem {
   summary: ToolSummary;
   additionalEntries?: LogEntry[];
 }
-
 export interface ToolGroup {
   toolName: string;
   toolLabel: string;
@@ -30,7 +28,6 @@ export interface ToolGroup {
   statusClass?: string;
   summaryText?: string;
 }
-
 export interface ToolBatch {
   header?: LogEntry;
   expectedTotal?: number;
@@ -47,14 +44,7 @@ export type RenderLogItem =
   | { type: "tool-batch"; batch: ToolBatch }
   | { type: "narration"; entries: LogEntry[]; startedAt: number }
   | { type: "markdown-block"; entries: LogEntry[]; startedAt: number }
-  | {
-      type: "code-block";
-      entries: LogEntry[];
-      startedAt: number;
-      markdown: string;
-      codeLineCount: number;
-      language?: string;
-    };
+  | { type: "code-block"; entries: LogEntry[]; startedAt: number; markdown: string; codeLineCount: number; language?: string };
 
 const TOOL_CALL_PATTERN = /^\s*(?:🔧|🌿|\[Tool\])\s*(.*)$/;
 const TOOL_RESULT_PATTERN = /^\s*(✅|❌)\s*Result:\s*(.*)$/;
@@ -148,19 +138,16 @@ export function buildToolSummary(callMessage: string, resultMessage?: string): T
 function extractPathsFromArgs(argsText: string | undefined): string[] {
   if (!argsText) return [];
   const paths: string[] = [];
-  const re = /\bpath\b\s*[:=]\s*["']([^"']+)["']/gi;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(argsText)) !== null) {
-    paths.push(m[1]);
-  }
+  const re = /\bpath\b\s*[:=]\s*["']([^"']+)["']/gi;
+  while ((m = re.exec(argsText)) !== null) paths.push(m[1]);
   return paths;
 }
 
 function sumReplacementsFromResults(items: ToolItem[]): number {
   let total = 0;
   for (const item of items) {
-    const msg = item.result?.message ?? "";
-    const m = msg.match(/Replaced\s+(\d+)\s+occurrences?/i);
+    const m = (item.result?.message ?? "").match(/Replaced\s+(\d+)\s+occurrences?/i);
     if (m) total += Number(m[1]);
   }
   return Number.isFinite(total) ? total : 0;
@@ -466,13 +453,11 @@ function mergeConsecutiveLogEntries(items: RenderLogItem[]): RenderLogItem[] {
 
 /** Check if a string contains markdown syntax worth rendering. */
 function containsMarkdown(text: string): boolean {
+  if (text.includes("\n")) return true;
   return /(?:^#{1,6}\s|[*_]{1,2}\S|\[.+\]\(.+\)|`[^`]+`|^[-*+]\s|^\d+\.\s|^>\s|^```)/m.test(text);
 }
 
-interface CodeFenceMetadata {
-  language?: string;
-  lineCount: number;
-}
+interface CodeFenceMetadata { language?: string; lineCount: number }
 
 function extractCodeFenceMetadata(markdown: string): CodeFenceMetadata | undefined {
   const match = markdown.match(CODE_FENCE_REGEX);
@@ -480,10 +465,27 @@ function extractCodeFenceMetadata(markdown: string): CodeFenceMetadata | undefin
   const language = match[1]?.trim() || undefined;
   const codeBody = (match[2] ?? "").replace(/\s+$/, "");
   const lines = codeBody.length === 0 ? 0 : codeBody.split(/\r?\n/).length;
-  return {
-    language,
-    lineCount: Math.max(lines, 1),
-  };
+  return { language, lineCount: Math.max(lines, 1) };
+}
+
+/** Group consecutive non-structured (plain text) lines into single strings.
+ * Structured lines (tool calls, results, batch headers) stay separate. */
+export function groupPlainLines(lines: string[]): string[] {
+  const isStructured = (l: string) =>
+    isToolCallMessage(l) || isToolResultMessage(l) || isCopilotToolBatchHeader(l);
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (isStructured(lines[i])) {
+      out.push(lines[i]);
+      i += 1;
+    } else {
+      const start = i;
+      while (i < lines.length && !isStructured(lines[i])) i += 1;
+      out.push(lines.slice(start, i).join("\n"));
+    }
+  }
+  return out;
 }
 
 /** Convert raw string log lines (from AgentInfo) to LogEntry format. */

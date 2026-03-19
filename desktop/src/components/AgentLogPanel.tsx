@@ -17,7 +17,7 @@ import {
   isGateAgent,
 } from "../utils/agentHelpers";
 import { getEmojiAvatar, STATUS_INDICATOR } from "../utils/agentsPanelHelpers";
-import { processLogsToRenderItems, stringsToLogEntries } from "../utils/logProcessor";
+import { groupPlainLines, processLogsToRenderItems, stringsToLogEntries } from "../utils/logProcessor";
 import { RenderLogItems } from "./LogComponents";
 
 interface Props {
@@ -148,10 +148,13 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
   // Capture the fallback timestamp once on mount (avoids Date.now() in render)
   const [fallbackTimestamp] = useState(() => Math.floor(Date.now() / 1000));
 
-  // Convert string log lines to LogEntry format and process for rendering
+  // Convert string log lines to LogEntry format and process for rendering.
+  // groupPlainLines merges consecutive non-structured lines so that they
+  // render as a single block instead of individual bubbles.
   const renderItems = useMemo(() => {
     const baseTimestamp = agent.started_at ?? fallbackTimestamp;
-    const logEntries = stringsToLogEntries(logLines, baseTimestamp);
+    const grouped = groupPlainLines(logLines);
+    const logEntries = stringsToLogEntries(grouped, baseTimestamp);
     return processLogsToRenderItems(logEntries);
   }, [logLines, agent.started_at, fallbackTimestamp]);
 
