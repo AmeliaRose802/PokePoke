@@ -9,7 +9,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-_BEADS_CREATE_RE = re.compile(r"\bbd\s+create\b", re.IGNORECASE)
+_BEADS_CREATE_RE = re.compile(r"\b(bd|br)\s+create\b", re.IGNORECASE)
 _ITEM_ID_RE = re.compile(r"\bPokePoke-[0-9A-Za-z_-]+\b")
 
 

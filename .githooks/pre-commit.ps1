@@ -40,6 +40,7 @@ Set-Location $repoRoot
 Write-Host "Pre-commit checks:" -ForegroundColor Cyan
 
 $hooksDir = Join-Path $repoRoot ".githooks"
+$overallStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
 # Run standalone integrity verification
 Write-Host "  • Running standalone verification... " -NoNewline -ForegroundColor Gray
@@ -132,6 +133,7 @@ catch {
 $buildFailed = $false
 foreach ($check in $buildDependentChecks) {
     Write-Host "  • $($check.Name)... " -ForegroundColor Gray
+    $checkStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     
     try {
         $checkScript = Join-Path $hooksDir $check.Script
@@ -141,10 +143,13 @@ foreach ($check in $buildDependentChecks) {
         } else {
             & $checkScript
         }
+        $checkStopwatch.Stop()
         if ($LASTEXITCODE -eq 0) {
+            Write-Host "    ⏱ $($check.Name): $([math]::Round($checkStopwatch.Elapsed.TotalSeconds, 1))s" -ForegroundColor DarkGray
             $passed += $check.Name
         }
         else {
+            Write-Host "    ⏱ $($check.Name): $([math]::Round($checkStopwatch.Elapsed.TotalSeconds, 1))s" -ForegroundColor DarkGray
             $failed += $check.Name
             $allPassed = $false
             $buildFailed = $true
@@ -153,6 +158,8 @@ foreach ($check in $buildDependentChecks) {
         }
     }
     catch {
+        $checkStopwatch.Stop()
+        Write-Host "    ⏱ $($check.Name): $([math]::Round($checkStopwatch.Elapsed.TotalSeconds, 1))s" -ForegroundColor DarkGray
         Write-Host "Error: $_" -ForegroundColor Red
         $failed += $check.Name
         $allPassed = $false
@@ -183,6 +190,7 @@ if ($buildFailed) {
 # Wait for and process static checks results.
 # Wrapped in try/finally so that ANY error (or Ctrl+C) during Wait-Job /
 # Receive-Job still cleans up remaining background jobs instead of orphaning them.
+$parallelStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 try {
     foreach ($jobInfo in $staticJobs) {
         Write-Host "  • $($jobInfo.Name)... " -NoNewline -ForegroundColor Gray
@@ -223,14 +231,19 @@ finally {
     # Ensure no orphaned pwsh processes remain regardless of how we exit
     Stop-AllStaticJobs
 }
+$parallelStopwatch.Stop()
+Write-Host "    ⏱ Parallel checks: $([math]::Round($parallelStopwatch.Elapsed.TotalSeconds, 1))s" -ForegroundColor DarkGray
 
 Write-Host ""
 
+$overallStopwatch.Stop()
+$totalSeconds = [math]::Round($overallStopwatch.Elapsed.TotalSeconds, 1)
+
 if ($allPassed) {
-    Write-Host "✅ All checks passed" -ForegroundColor Green
+    Write-Host "✅ All checks passed ($($totalSeconds)s)" -ForegroundColor Green
     exit 0
 }
 else {
-    Write-Host "❌ $($failed.Count) check(s) failed: $($failed -join ', ')" -ForegroundColor Red
+    Write-Host "❌ $($failed.Count) check(s) failed: $($failed -join ', ') ($($totalSeconds)s)" -ForegroundColor Red
     exit 1
 }

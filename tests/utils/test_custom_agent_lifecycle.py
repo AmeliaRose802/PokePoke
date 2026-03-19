@@ -341,6 +341,8 @@ class TestCustomAgentSchedulerRegistration:
 
     @patch("pokepoke.maintenance.maintenance_scheduler.get_active_agent_count", return_value=0)
     @patch("pokepoke.utils.shutdown.should_stop_after_current", return_value=False)
+    @patch("pokepoke.stats.session_reconciler.run", return_value=0)
+    @patch("pokepoke.maintenance.maintenance_scheduler.wait_for_main_repo_clean", return_value=True)
     @patch("pokepoke.maintenance.maintenance_scheduler.try_lock")
     @patch("pokepoke.maintenance.maintenance_scheduler.get_config")
     @patch("pokepoke.maintenance.maintenance_scheduler.run_maintenance_agent")
@@ -349,7 +351,7 @@ class TestCustomAgentSchedulerRegistration:
     @patch("pokepoke.desktop.terminal_ui.ui")
     def test_custom_agent_runs_at_frequency(
         self, mock_ui, mock_banner, mock_special, mock_run, mock_config, mock_lock,
-        mock_stop, mock_active,
+        mock_clean, mock_reconciler, mock_stop, mock_active,
     ):
         """A custom agent runs when items_completed hits its frequency."""
         config = ProjectConfig()
@@ -381,6 +383,8 @@ class TestCustomAgentSchedulerRegistration:
         assert calls[0][1]["needs_worktree"] is True
         assert calls[0][1]["merge_changes"] is False
 
+    @patch("pokepoke.stats.session_reconciler.run", return_value=0)
+    @patch("pokepoke.maintenance.maintenance_scheduler.wait_for_main_repo_clean", return_value=True)
     @patch("pokepoke.maintenance.maintenance_scheduler.try_lock")
     @patch("pokepoke.maintenance.maintenance_scheduler.get_config")
     @patch("pokepoke.maintenance.maintenance_scheduler.run_maintenance_agent")
@@ -388,7 +392,8 @@ class TestCustomAgentSchedulerRegistration:
     @patch("pokepoke.maintenance.maintenance_scheduler.set_terminal_banner")
     @patch("pokepoke.desktop.terminal_ui.ui")
     def test_disabled_custom_agent_skipped(
-        self, mock_ui, mock_banner, mock_special, mock_run, mock_config, mock_lock
+        self, mock_ui, mock_banner, mock_special, mock_run, mock_config, mock_lock,
+        mock_clean, mock_reconciler,
     ):
         """A disabled custom agent is never executed."""
         config = ProjectConfig()
@@ -411,6 +416,8 @@ class TestCustomAgentSchedulerRegistration:
 
     @patch("pokepoke.maintenance.maintenance_scheduler.get_active_agent_count", return_value=0)
     @patch("pokepoke.utils.shutdown.should_stop_after_current", return_value=False)
+    @patch("pokepoke.stats.session_reconciler.run", return_value=0)
+    @patch("pokepoke.maintenance.maintenance_scheduler.wait_for_main_repo_clean", return_value=True)
     @patch("pokepoke.maintenance.maintenance_scheduler.try_lock")
     @patch("pokepoke.maintenance.maintenance_scheduler.get_config")
     @patch("pokepoke.maintenance.maintenance_scheduler.run_maintenance_agent")
@@ -419,7 +426,7 @@ class TestCustomAgentSchedulerRegistration:
     @patch("pokepoke.desktop.terminal_ui.ui")
     def test_custom_agent_model_override_passed(
         self, mock_ui, mock_banner, mock_special, mock_run, mock_config, mock_lock,
-        mock_stop, mock_active,
+        mock_clean, mock_reconciler, mock_stop, mock_active,
     ):
         """Custom agent's model override is forwarded to run_maintenance_agent."""
         config = ProjectConfig()

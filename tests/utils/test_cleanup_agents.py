@@ -909,9 +909,9 @@ class TestWorktreeCleanupPromptSafety:
         prompt_file.write_text("# Cleanup\nDo stuff.", encoding='utf-8')
         mock_prompts_dir.return_value = tmp_path
 
-        # Mock the retry/count functions at their source module (they are locally imported)
-        with patch('pokepoke.worktrees.worktree_cleanup.retry_failed_cleanups', return_value=0), \
-             patch('pokepoke.worktrees.worktree_cleanup.get_uncleaned_worktree_count', return_value=0):
+        # Mock the retry/count functions where they are used (imported at top of agent_runner)
+        with patch('pokepoke.agents.agent_runner.retry_failed_cleanups', return_value=0), \
+             patch('pokepoke.agents.agent_runner.get_uncleaned_worktree_count', return_value=0):
             mock_run_agent.return_value = None
             run_worktree_cleanup()
 
