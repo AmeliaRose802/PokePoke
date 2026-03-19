@@ -97,8 +97,7 @@ def _find_test_files_for_staged(
             test_files.append(f)
 
     # Map source files to their test files using naming convention:
-    #   src/pokepoke/foo.py  →  tests/**/test_foo.py
-    #   Also match tests/**/test_foo_*.py (e.g. beads.py → test_beads_*.py)
+    #   src/pokepoke/foo.py → tests/**/test_foo.py (also test_foo_*.py)
     #   Searches subdirectories (tests/utils/, tests/git/, tests/desktop/, etc.)
 
     # Manual overrides for modules whose tests don't follow naming convention
@@ -108,6 +107,7 @@ def _find_test_files_for_staged(
             "tests/models/test_copilot_sdk.py",
             "tests/models/test_copilot_sdk_integration.py",
         ],
+        "sdk_beads_tracker": ["tests/utils/test_sdk_event_handler.py"],
     }
 
     for src_file in staged_source:
