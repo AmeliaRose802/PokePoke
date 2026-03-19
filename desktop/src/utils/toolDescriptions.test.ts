@@ -100,4 +100,90 @@ describe("extractDescriptionFromArgs", () => {
       expect(extractDescriptionFromArgs("view", "just some random text")).toBeUndefined();
     });
   });
+
+  describe("MCP and additional tools - JSON format", () => {
+    it("extracts query_name for run_kusto_query", () => {
+      expect(extractDescriptionFromArgs("run_kusto_query", "{'query_name': 'GetNodeInfo', 'nodeId': 'abc'}")).toBe(
+        "GetNodeInfo",
+      );
+    });
+
+    it("extracts shellId for read_powershell", () => {
+      expect(extractDescriptionFromArgs("read_powershell", "{'shellId': 'shell-1'}")).toBe("shell-1");
+    });
+
+    it("extracts shellId for stop_powershell", () => {
+      expect(extractDescriptionFromArgs("stop_powershell", "{'shellId': 'shell-2'}")).toBe("shell-2");
+    });
+
+    it("extracts incidentId for get_incident_context", () => {
+      expect(extractDescriptionFromArgs("get_incident_context", "{'incidentId': '12345'}")).toBe("Incident 12345");
+    });
+
+    it("extracts queueName for get_incidents_in_queue", () => {
+      expect(extractDescriptionFromArgs("get_incidents_in_queue", "{'queueName': 'DRI\\\\MyQueue'}")).toBe(
+        "DRI\\MyQueue",
+      );
+    });
+
+    it("extracts symptoms for search_similar_incidents", () => {
+      expect(
+        extractDescriptionFromArgs("search_similar_incidents", "{'symptoms': 'Node unreachable after reboot'}"),
+      ).toBe("Node unreachable after reboot");
+    });
+
+    it("extracts containerId for resolve_to_nodeid", () => {
+      expect(extractDescriptionFromArgs("resolve_to_nodeid", "{'containerId': 'abc-123'}")).toBe("abc-123");
+    });
+
+    it("extracts nodeId for check_heartbeat", () => {
+      expect(extractDescriptionFromArgs("check_heartbeat", "{'nodeId': 'node-42'}")).toBe("node-42");
+    });
+
+    it("extracts nodeId for get_node_status", () => {
+      expect(extractDescriptionFromArgs("get_node_status", "{'nodeId': 'node-99'}")).toBe("node-99");
+    });
+
+    it("extracts nodeId for check_node_health", () => {
+      expect(extractDescriptionFromArgs("check_node_health", "{'node_id': 'n-7'}")).toBe("n-7");
+    });
+
+    it("extracts workflowName for run_workflow", () => {
+      expect(extractDescriptionFromArgs("run_workflow", "{'workflowName': 'RestartAgent'}")).toBe("RestartAgent");
+    });
+
+    it("extracts name for get_workflow_schema", () => {
+      expect(extractDescriptionFromArgs("get_workflow_schema", "{'name': 'RestartAgent'}")).toBe("RestartAgent");
+    });
+
+    it("extracts name for get_query_schema", () => {
+      expect(extractDescriptionFromArgs("get_query_schema", "{'name': 'GetNodeInfo'}")).toBe("GetNodeInfo");
+    });
+
+    it("extracts path for read_file", () => {
+      expect(extractDescriptionFromArgs("read_file", "{'path': 'src/main.ts'}")).toBe("src/main.ts");
+    });
+
+    it("extracts nodeId for check_agent_package", () => {
+      expect(extractDescriptionFromArgs("check_agent_package", "{'nodeId': 'node-5'}")).toBe("node-5");
+    });
+  });
+
+  describe("MCP tools - regex fallback", () => {
+    it("extracts incidentId for get_incident_context", () => {
+      expect(extractDescriptionFromArgs("get_incident_context", "incidentId='67890'")).toBe("Incident 67890");
+    });
+
+    it("extracts nodeId for check_heartbeat with regex", () => {
+      expect(extractDescriptionFromArgs("check_heartbeat", 'nodeId="node-abc"')).toBe("node-abc");
+    });
+
+    it("extracts workflowName for run_workflow with regex", () => {
+      expect(extractDescriptionFromArgs("run_workflow", "workflowName='DiagnoseNode'")).toBe("DiagnoseNode");
+    });
+
+    it("extracts query_name for run_kusto_query over inline query", () => {
+      expect(extractDescriptionFromArgs("run_kusto_query", "query_name='GetNodeInfo'")).toBe("GetNodeInfo");
+    });
+  });
 });
