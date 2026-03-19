@@ -7,11 +7,11 @@
 .DESCRIPTION
     Runs the following checks before allowing a commit:
     1. Integrity check (verifies quality scripts haven't been tampered with)
-    2. Build check (Python syntax validation) [sequential]
-    3. Code quality check (mypy type checking) [sequential, after build]
+    2. Ruff lint check (syntax + style) [sequential]
+    3. Code quality check (mypy type checking) [sequential, after ruff]
     4. Test coverage check (modified files must have 80%+ coverage) [sequential, after mypy]
     5. Skipped tests check (no skipped pytest tests) [parallel]
-    6. Ruff lint check [parallel]
+    6. Desktop build check [parallel]
     7. File length check [parallel]
     8. Desktop lint check [parallel]
 
@@ -54,13 +54,6 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "✓" -ForegroundColor Green
 
-# Detect staged Python files to skip unnecessary parallel jobs (e.g., ruff).
-# Sourcing staged-files-utils.ps1 here reuses the shared Get-StagedFiles logic
-# so the orchestrator can avoid spawning a Start-Job just to exit immediately.
-. (Join-Path $hooksDir "staged-files-utils.ps1")
-$hasStagedPython = @(Get-StagedFiles -Pattern '\.py$' `
-    -DenyPatterns @('(venv|.venv|__pycache__|dist|build|worktrees)')).Count -gt 0
-
 $allPassed = $true
 $passed = @()
 $failed = @()
@@ -71,24 +64,14 @@ $staticChecks = @(
     @{ Name = "Skipped Tests"; Script = "check-skipped-tests.ps1" }
     @{ Name = "File Length"; Script = "check-file-length.ps1" }
     @{ Name = "Desktop ESLint"; Script = "check-desktop-lint.ps1" }
-    # Desktop TypeScript check removed: check-build.ps1 already runs
-    # tsc -b via "npm run build" (tsc -b && vite build), so running
-    # check-desktop.ps1 separately duplicates TS error output.
+    @{ Name = "Desktop Build"; Script = "check-build.ps1" }
 )
 
-# Skip ruff job entirely when no Python files are staged to avoid Start-Job overhead
-if ($hasStagedPython) {
-    $staticChecks += @{ Name = "Ruff Lint"; Script = "check-ruff.ps1" }
-} else {
-    Write-Host "  • Ruff Lint... " -NoNewline -ForegroundColor Gray
-    Write-Host "skipped (no Python files staged)" -ForegroundColor DarkGray
-    $passed += "Ruff Lint"
-}
-
-# Checks that need build artifacts or must run in sequence: build -> mypy -> coverage
-# If build or mypy fails, coverage is skipped (early exit on first failure)
+# Sequential chain: ruff -> mypy -> coverage
+# Ruff catches syntax errors (E9xx) so py_compile is unnecessary.
+# If any step fails, remaining checks are skipped (early exit on first failure).
 $buildDependentChecks = @(
-    @{ Name = "Build"; Script = "check-build.ps1" }
+    @{ Name = "Ruff Lint"; Script = "check-ruff.ps1" }
     @{ Name = "Code Quality"; Script = "check-code-quality.ps1" }
     @{ Name = "Test Coverage"; Script = "check-coverage.py"; Interpreter = "python" }
 )
