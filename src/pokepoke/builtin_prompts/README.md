@@ -53,6 +53,7 @@ Basic work item prompt for first-time task execution.
 Enhanced prompt for retry attempts with validation feedback.
 
 **Variables:**
+
 - All from `work-item.md`, plus:
 - `retry_context` - Boolean to show/hide retry section
 - `attempt` - Current attempt number
@@ -90,6 +91,7 @@ prompt = service.load_and_render("work-item", {
 ## Template Guidelines
 
 **DO:**
+
 - [OK] Use descriptive variable names
 - [OK] Document required vs optional variables
 - [OK] Include context and requirements in prompts
@@ -97,6 +99,7 @@ prompt = service.load_and_render("work-item", {
 - [OK] Keep templates focused and single-purpose
 
 **DON'T:**
+
 - [FAIL] Hardcode prompts in Python code
 - [FAIL] Use complex logic in templates (keep it simple)
 - [FAIL] Forget to handle missing/optional variables
@@ -111,6 +114,7 @@ python -m pytest tests/test_prompts.py -v
 ```
 
 Tests verify:
+
 - Template loading
 - Variable substitution
 - Conditional sections
@@ -120,6 +124,7 @@ Tests verify:
 ## Migration from Hardcoded Prompts
 
 **Before:**
+
 ```python
 def build_prompt(work_item):
     return f"""You are working on {work_item.id}
@@ -128,6 +133,7 @@ def build_prompt(work_item):
 ```
 
 **After:**
+
 ```python
 def build_prompt(work_item):
     service = get_prompt_service()
@@ -143,4 +149,3 @@ def build_prompt(work_item):
 - [`pokepoke/prompts.py`](../pokepoke/prompts.py) - Prompt loading service implementation
 - [`tests/test_prompts.py`](../tests/test_prompts.py) - Prompt system tests
 - [`.github/prompts/`](../.github/prompts/) - Additional agent prompts
-
