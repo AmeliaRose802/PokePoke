@@ -127,6 +127,7 @@ def _check_abort_result(
 
 async def _check_tool_watchdog(
     session: Any, stats: SessionStats | None, tool_call_timeout: float,
+    handler: Any = None,
 ) -> str | None:
     """Check if any tool call exceeds the watchdog timeout. Returns 'tool_timeout' or None."""
     if stats is None or tool_call_timeout <= 0:
@@ -138,15 +139,30 @@ async def _check_tool_watchdog(
     for tool_id, start_time in tool_times.items():
         elapsed = now - start_time
         if elapsed >= tool_call_timeout:
-            print(
-                f"\n[SDK] TOOL TIMEOUT: tool call {tool_id} "
-                f"running for {elapsed:.0f}s "
-                f"(limit: {tool_call_timeout:.0f}s) \u2014 aborting"
+            # Look up tool name and args from event handler
+            tool_name = "unknown"
+            args_str = ""
+            if handler and hasattr(handler, '_pending_tools'):
+                tool_info = handler._pending_tools.get(tool_id, {})
+                tool_name = tool_info.get('name', 'unknown')
+                tool_args = tool_info.get('args', {})
+                args_str = str(tool_args)
+
+            timeout_msg = (
+                f"Tool timeout: {tool_name}({args_str}) exceeded {tool_call_timeout:.0f}s watchdog timeout "
+                f"(elapsed: {elapsed:.0f}s)"
             )
+
+            print(f"\n[SDK] TOOL TIMEOUT: {timeout_msg} - aborting")
             logger.error(
-                "Tool call watchdog triggered: tool_id=%s elapsed=%.0fs limit=%.0fs",
-                tool_id, elapsed, tool_call_timeout,
+                "Tool call watchdog triggered: tool_id=%s tool=%s args=%s elapsed=%.0fs limit=%.0fs",
+                tool_id, tool_name, args_str, elapsed, tool_call_timeout,
             )
+
+            # Log to item log if available
+            if handler and hasattr(handler, '_item_logger') and handler._item_logger:
+                handler._item_logger.log_error(timeout_msg)
+
             try:
                 await session.abort()
             except Exception as e:
@@ -161,6 +177,7 @@ async def _await_completion(
     stats: SessionStats | None = None,
     inactivity_timeout: float = 600.0,
     tool_call_timeout: float = 600.0,
+    handler: Any = None,
 ) -> str | None:
     """Poll until the session finishes or an abort condition is met.
 
@@ -248,7 +265,7 @@ async def _await_completion(
                     logger.debug("Failed to abort dead session: %s", e)
                 return "inactivity"
         # Per-tool-call watchdog
-        result = await _check_tool_watchdog(session, stats, tool_call_timeout)
+        result = await _check_tool_watchdog(session, stats, tool_call_timeout, handler)
         if result is not None:
             return result
         remaining = deadline - asyncio.get_event_loop().time()

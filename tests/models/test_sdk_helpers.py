@@ -293,6 +293,46 @@ class TestCheckToolWatchdog:
         result = await _check_tool_watchdog(session, stats, 600.0)
         assert result == "tool_timeout"
 
+    @pytest.mark.asyncio
+    async def test_logs_tool_name_and_args_with_handler(self):
+        """Test that tool name and args are logged when handler is provided."""
+        session = AsyncMock()
+        stats = {"tool_start_times": {"t1": time.monotonic() - 700}}
+
+        # Create mock handler with _pending_tools
+        mock_handler = AsyncMock()
+        mock_handler._pending_tools = {
+            "t1": {"name": "powershell", "args": {"command": "test.ps1", "description": "test"}}
+        }
+        mock_handler._item_logger = None
+
+        result = await _check_tool_watchdog(session, stats, 600.0, handler=mock_handler)
+        assert result == "tool_timeout"
+        session.abort.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_logs_to_item_logger_when_available(self):
+        """Test that timeout is logged to item logger when available."""
+        session = AsyncMock()
+        stats = {"tool_start_times": {"t1": time.monotonic() - 700}}
+
+        # Create mock handler with _pending_tools and _item_logger
+        mock_handler = AsyncMock()
+        mock_handler._pending_tools = {
+            "t1": {"name": "grep", "args": {"pattern": "test", "path": "/foo"}}
+        }
+        mock_item_logger = AsyncMock()
+        mock_handler._item_logger = mock_item_logger
+
+        result = await _check_tool_watchdog(session, stats, 600.0, handler=mock_handler)
+        assert result == "tool_timeout"
+
+        # Verify item logger was called
+        mock_item_logger.log_error.assert_called_once()
+        call_args = mock_item_logger.log_error.call_args[0][0]
+        assert "grep" in call_args
+        assert "pattern" in call_args or "test" in call_args
+
 
 # ── _build_token_usage_callback ──────────────────────────────────────────────
 
