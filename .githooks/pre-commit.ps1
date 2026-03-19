@@ -97,6 +97,13 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "✓" -ForegroundColor Green
 
+# Detect staged Python files to skip unnecessary parallel jobs (e.g., ruff).
+# Sourcing staged-files-utils.ps1 here reuses the shared Get-StagedFiles logic
+# so the orchestrator can avoid spawning a Start-Job just to exit immediately.
+. (Join-Path $hooksDir "staged-files-utils.ps1")
+$hasStagedPython = @(Get-StagedFiles -Pattern '\.py$' `
+    -DenyPatterns @('(venv|.venv|__pycache__|dist|build|worktrees)')).Count -gt 0
+
 $allPassed = $true
 $passed = @()
 $failed = @()
@@ -104,7 +111,6 @@ $failed = @()
 # Checks that don't depend on build artifacts - can run in parallel
 $staticChecks = @(
     @{ Name = "Pokepoke Boot"; Script = "check-pokepoke-import.ps1" }
-    @{ Name = "Ruff Lint"; Script = "check-ruff.ps1" }
     @{ Name = "Skipped Tests"; Script = "check-skipped-tests.ps1" }
     @{ Name = "File Length"; Script = "check-file-length.ps1" }
     @{ Name = "Desktop ESLint"; Script = "check-desktop-lint.ps1" }
@@ -112,6 +118,14 @@ $staticChecks = @(
     # tsc -b via "npm run build" (tsc -b && vite build), so running
     # check-desktop.ps1 separately duplicates TS error output.
 )
+
+# Skip ruff job entirely when no Python files are staged to avoid Start-Job overhead
+if ($hasStagedPython) {
+    $staticChecks += @{ Name = "Ruff Lint"; Script = "check-ruff.ps1" }
+} else {
+    Write-Host "  • Ruff Lint... " -NoNewline -ForegroundColor Gray
+    Write-Host "skipped (no Python files staged)" -ForegroundColor DarkGray
+}
 
 # Checks that need build artifacts or must run in sequence: build -> mypy -> coverage
 # If build or mypy fails, coverage is skipped (early exit on first failure)
