@@ -67,6 +67,43 @@ ai_backend:
 
 The Copilot adapter remains the default; setting `provider: claude-code` switches to the Claude Code CLI adapter. Worktrees and orchestrator workflows automatically honor the selected provider.
 
+## Task tracker backend configuration
+
+PokePoke uses the [beads](https://github.com/steveyegge/beads) issue tracker for work-item management. Two CLI backends are supported:
+
+| Backend | Binary | Description | Sync strategy |
+|---------|--------|-------------|---------------|
+| **bd** (default) | `bd` | Python implementation | Daemon-based auto-sync |
+| **br** | `br` | Rust implementation | Explicit sync (manual `br sync` + git push) |
+
+Both backends share the same command-line interface and produce identical JSON output, so all PokePoke orchestration works identically with either one.
+
+### Selecting a backend
+
+The active backend defaults to `bd`. To switch to `br`, call `set_active_backend()` at startup:
+
+```python
+from pokepoke.beads.beads_query import set_active_backend, BR_CONFIG
+
+set_active_backend(BR_CONFIG)  # Switch to the Rust backend
+```
+
+The backend selection also configures the appropriate sync strategy automatically:
+- **bd** → `DaemonSync` (background daemon commits to the `beads-sync` branch)
+- **br** → `ExplicitSync` (requires explicit `br sync` calls and git operations)
+
+### Adding a new backend
+
+To add a new beads CLI backend:
+
+1. Define a new `CLIBackendConfig` in `src/pokepoke/beads/beads_query.py`:
+   ```python
+   NEW_CONFIG = CLIBackendConfig(binary="new-binary", default_timeout=30)
+   ```
+2. If the new backend has different sync behaviour, create a `SyncStrategy` subclass in `src/pokepoke/beads/sync_strategy.py`.
+3. Update `set_active_backend()` to wire up the correct sync strategy for the new backend.
+4. All existing callers use `_run_bd()`, which delegates to `_run_cli()` with the active backend — no further changes needed.
+
 ## Pre-flight Health Checks
 
 PokePoke includes a comprehensive pre-flight health check system that runs before each work batch to prevent submission to broken environments. This system addresses issues where broken environments (stale locks, dirty git state) caused silent failures with 0 agent requests.

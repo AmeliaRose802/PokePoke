@@ -1,10 +1,13 @@
 # Agent Instructions
 
-This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
+This project uses **beads** for issue tracking with a pluggable CLI backend.
+The default backend is `bd` (Python). An alternative Rust backend `br` is also supported.
+Run `bd onboard` (or `br onboard`) to get started.
 
 ## Quick Reference
 
 ```bash
+# Default backend (bd)
 bd ready              # Find available work
 bd show <id>          # View issue details
 bd update <id> --status in_progress  # Claim work
@@ -12,12 +15,16 @@ bd close <id>         # Complete work
 bd sync               # Sync with git
 ```
 
+> **Note:** All `bd` commands work identically with `br`. PokePoke selects the
+> active backend automatically based on configuration (see README.md).
+
 ## Beads + Worktree Coordination
 
 - Claiming a beads item and creating its worktree is now serialized through `.pokepoke/locks/worktree-setup.lock`.
 - All `assign_and_sync_item()` and `git worktree add` calls inside the orchestrator run under this lock so only one agent mutates `.beads/` + `.git/worktrees/` at a time.
 - Never bypass this lock (e.g., by calling `assign_and_sync_item()` directly) or you risk double-claiming issues and corrupting the repo.
 - If you are building new tooling that also claims beads items, reuse the same lock to keep the critical section atomic.
+- The lock coordination works the same regardless of which beads backend (`bd` or `br`) is active.
 
 ## Landing the Plane (Session Completion)
 

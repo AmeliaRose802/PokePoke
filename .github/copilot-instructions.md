@@ -71,14 +71,14 @@ If quality checks fail:
 **Language:** Python  
 **Purpose:** Autonomous workflow orchestrator that integrates Beads issue tracker with GitHub Copilot CLI for automated development
 
-## PokePoke - Autonomous Beads + Copilot CLI Orchestrator
+## PokePoke - Autonomous Beads + AI CLI Orchestrator
 
 This workspace provides **PokePoke**, an autonomous workflow management tool that:
 
 **Core Capabilities:**
-- 🤖 Reads pending items from beads database
+- 🤖 Reads pending items from beads database (supports `bd` and `br` backends)
 - 🌳 Creates isolated git worktrees for each task
-- 🚀 Invokes GitHub Copilot CLI in programmatic (non-interactive) mode
+- 🚀 Invokes a configurable AI backend (Copilot or Claude Code) in programmatic mode
 - ✅ Validates work with configurable quality gates
 - 🔄 Retries with corrective feedback until validations pass
 - 🧹 Merges completed work and cleans up worktrees
@@ -90,14 +90,14 @@ This workspace provides **PokePoke**, an autonomous workflow management tool tha
 - 🎯 Priority-based task selection from beads ready queue
 - 🔒 Isolated worktree execution prevents conflicts
 - 📊 Configurable maintenance cycles and thresholds
-- 🪝 GitHub Copilot CLI hooks for validation integration
+- 🪝 Pluggable beads backend (`bd` or `br`) with automatic sync-strategy selection
 
 ## Architecture Components
 
 ### 1. Main Orchestrator
-- Queries `bd ready --json` for available work
+- Queries the active beads backend for available work (e.g. `bd ready --json`)
 - Creates worktrees with pattern: `./worktrees/task-{id}`
-- Invokes Copilot CLI with task context and custom instructions
+- Invokes the configured AI backend with task context and custom instructions
 - Monitors completion and validation status
 
 ### 2. Validation Engine
@@ -113,11 +113,11 @@ This workspace provides **PokePoke**, an autonomous workflow management tool tha
 ## Requirements
 
 - **🚫 NEVER bypass git quality gates** - Let validations fail and fix the code
-- Use beads (`bd`) for ALL task tracking - no markdown TODO lists
-- Follow Copilot CLI programmatic mode best practices
+- Use the beads CLI (`bd` by default, or `br`) for ALL task tracking - no markdown TODO lists
+- Follow AI backend programmatic mode best practices
 - Use `--allow-all-tools` cautiously with appropriate `--deny-tool` restrictions
 - Configure maintenance thresholds in `pokepoke.config.json`
-- Use worktrees for isolation - NEVER work directly in main repo during autonomous operation 
+- Use worktrees for isolation - NEVER work directly in main repo during autonomous operation
 
 ## 🚀 RUNNING POKEPOKE
 
@@ -142,7 +142,7 @@ python -m pokepoke.orchestrator --autonomous --continuous
 ```
 
 **How it works:**
-1. Fetches ready work items from beads database (`bd ready --json`)
+1. Fetches ready work items from beads database (e.g. `bd ready --json`)
 2. Displays available work items with ID, title, type, and priority
 3. In interactive mode: prompts you to select an item by number
 4. In autonomous mode: automatically selects highest priority item
@@ -320,9 +320,11 @@ copilot -p "Run a kusto query with null parameters to test my fix" --allow-all-t
 
 ### Overview
 
-This project uses **[bd (beads)](https://github.com/steveyegge/beads)** for ALL task tracking and issue management. Beads is a git-backed issue tracker designed specifically for AI-supervised coding workflows.
+This project uses **[beads](https://github.com/steveyegge/beads)** for ALL task tracking and issue management. Beads is a git-backed issue tracker designed specifically for AI-supervised coding workflows.
 
-### ✅ REQUIRED: Use bd for All Task Tracking
+PokePoke supports two CLI backends for beads: `bd` (Python, default) and `br` (Rust). Both expose the same command interface. Examples below use `bd`; substitute `br` if using the Rust backend.
+
+### ✅ REQUIRED: Use the beads CLI for All Task Tracking
 
 **NEVER create:**
 - Markdown TODO lists
@@ -331,9 +333,9 @@ This project uses **[bd (beads)](https://github.com/steveyegge/beads)** for ALL 
 - Duplicate tracking systems
 
 **ALWAYS use:**
-- `bd` commands for creating, updating, and tracking work
-- `bd ready` to find unblocked work
-- `bd create` with `discovered-from` links when discovering new work
+- Beads CLI commands for creating, updating, and tracking work
+- `bd ready` (or `br ready`) to find unblocked work
+- `bd create` (or `br create`) with `discovered-from` links when discovering new work
 
 ### Installation & Setup
 
@@ -583,12 +585,18 @@ bd sync
 
 ### Auto-Sync Behavior
 
-Beads automatically syncs with git:
+Beads sync behaviour depends on the active backend:
+
+**`bd` (default — daemon sync):**
 - **Exports** to `.beads/issues.jsonl` after changes (30s debounce for batching)
 - **Imports** from JSONL after `git pull`
 - **Manual sync** with `bd sync` forces immediate flush/commit/push
 
-**IMPORTANT:** Always run `bd sync` at the end of your session to ensure changes are committed.
+**`br` (explicit sync):**
+- Changes are written locally; publish with `br sync` followed by `git add`, `git commit`, and `git push`
+- Explicit sync is required after mutating operations
+
+**IMPORTANT:** Always run `bd sync` (or `br sync`) at the end of your session to ensure changes are committed.
 
 ### 🔀 Git Worktrees Support
 
@@ -726,7 +734,7 @@ bd init --branch beads-sync --quiet
 ### Integration with Feature Development
 
 When adding a new feature:
-1. **Create a bd issue** for the feature: `bd create "Add feature X" -t feature -p 1 --json`
+1. **Create a beads issue** for the feature: `bd create "Add feature X" -t feature -p 1 --json`
 2. **Create feature spec**: `docs/feature_specs/<feature-name>.md`
 3. **Commit the spec**: `git add docs/feature_specs/<feature-name>.md && git commit -m "docs: add spec for feature X"`
 4. **Implement in small increments** with commits after each logical unit
@@ -803,7 +811,7 @@ Changes to document:
 - Verbose architecture documents that should be code comments
 - **Analysis reports** or comprehensive documentation of work done
 - "Beta test response" documents or improvement plans as files
-- **Markdown TODO lists** (use `bd` for task tracking)
+- **Markdown TODO lists** (use the beads CLI for task tracking)
 
 ### ✅ EXCEPTION: USER EXPLICITLY REQUESTS DOCUMENTATION
 - **If user specifically asks** for a summary, report, or analysis document, you may create it
@@ -813,20 +821,20 @@ Changes to document:
 ### ⚠️ IF USER ASKS FOR DOCUMENTATION WITHOUT BEING SPECIFIC:
 1. **ASK** what specific documentation they need and where it should go
 2. **SUGGEST** updating existing docs instead of creating new ones
-3. **OFFER** to put details in git commit messages or bd issues
+3. **OFFER** to put details in git commit messages or beads issues
 4. **ONLY CREATE** new docs if they explicitly confirm that's what they want
 
 ### ✅ ONLY ACCEPTABLE DOCUMENTATION:
 - Updating existing `/docs` files with essential user info
 - Code comments for implementation details
 - Git commit messages for change history
-- **bd issues** for task tracking and work discovery
+- **Beads issues** for task tracking and work discovery
 
 ### Project Structure:
 - `/docs` - User-facing documentation only (update existing files)
 - `/src` - Python source code with inline comments
 - `/tests` - Unit and integration tests
-- `.beads/` - Beads issue tracker database (auto-managed by bd)
+- `.beads/` - Beads issue tracker database (auto-managed by the active backend)
 - `worktrees/` - Isolated git worktrees for task execution
 - Code should be self-documenting with clear naming
 
@@ -835,7 +843,7 @@ Changes to document:
 2. Explain the policy against summary documentation
 3. Offer to:
    - Update existing functional documentation
-   - Create bd issues for tracking work
+   - Create beads issues for tracking work
    - Add code comments for implementation details
    - Write comprehensive git commit messages
 4. Keep any updates focused on HOW to use, not WHAT was implemented

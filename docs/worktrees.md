@@ -10,6 +10,7 @@ PokePoke uses automatic git worktree creation for isolated task execution. Each 
 - **Isolated execution** - each task gets its own branch and working directory
 - **Automatic cleanup** after task completion
 - **Safe cleanup** with uncommitted change detection
+- **Backend-agnostic** - works identically with `bd` and `br` beads backends
 
 ## Worktree Structure
 
@@ -30,11 +31,20 @@ Each worktree creates a new branch: `task/<work-item-id>`
 
 ## How It Works
 
-1. **Work Item Retrieved**: When a work item is selected from beads
+1. **Work Item Retrieved**: When a work item is selected from beads (via the active backend)
 2. **Worktree Created**: A new worktree is created in `./worktrees/task-{id}`
 3. **Branch Created**: A new branch `task/{id}` is created from the source branch
 4. **Execution**: The configured AI backend runs in the worktree directory
 5. **Cleanup**: After completion, the worktree is removed
+
+## Sync Strategy
+
+The worktree sync behaviour is determined by the active beads backend:
+
+- **`bd`** uses `DaemonSync` — a background daemon auto-commits to the `beads-sync` branch.
+- **`br`** uses `ExplicitSync` — requires explicit `br sync` calls and follow-up git operations.
+
+The orchestrator selects the correct strategy automatically when `set_active_backend()` is called. See the README for details on backend configuration.
 
 ## Benefits
 
@@ -84,8 +94,12 @@ The naming scheme provides:
 
 1. **Startup**: Each PokePoke instance generates a random agent name on startup
 2. **Environment Variable**: The name is stored in `$AGENT_NAME` environment variable
-3. **Work Assignment**: When claiming work items, the agent name is used: `bd update <id> --assign <agent_name>`
+3. **Work Assignment**: When claiming work items, the agent name is used (e.g. `bd update <id> --assign <agent_name>`)
 4. **Conflict Prevention**: Other agents see the assignment and avoid claiming the same item
+
+> **Note:** All `bd` commands above work identically with `br`. The active
+> backend is configured at the application level — agents do not need to know
+> which binary is in use.
 
 ### Manual Agent Names
 
