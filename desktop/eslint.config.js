@@ -31,6 +31,12 @@ export default defineConfig([
       // Ban inline styles - force use of CSS classes for consistent theming
       'react/forbid-dom-props': ['error', { forbid: ['style'] }],
       'react/forbid-component-props': ['error', { forbid: ['style'] }],
+      // Prevent explicit 'any' types (caught by TSC, but earlier in lint pass)
+      '@typescript-eslint/no-explicit-any': 'error',
+      // Enforce type-only imports where possible (reduces bundle size)
+      '@typescript-eslint/consistent-type-imports': 'error',
+      // Ban console.log (use structured logging instead; matches ruff T20 on Python side)
+      'no-console': ['error', { allow: ['error', 'warn'] }],
     },
   },
 ])
