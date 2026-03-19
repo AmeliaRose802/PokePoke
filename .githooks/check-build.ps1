@@ -2,14 +2,14 @@
 
 <#
 .SYNOPSIS
-    Build checker for Python and desktop app
+    Build checker for desktop app
     
 .DESCRIPTION
     Performs build validations:
-    - Verifies all Python files have valid syntax
-    - Checks for compilation errors
-    - Validates Python code can be parsed
     - Runs desktop npm build when desktop assets are staged
+    
+    Note: Python syntax validation is handled by ruff (E9xx rules)
+    in the sequential pre-commit chain.
     
 .NOTES
     ⚠️  CRITICAL: This file is protected by CODEOWNERS
@@ -34,40 +34,6 @@ foreach ($util in @("warning-utils.ps1", "staged-files-utils.ps1")) {
         throw "$util not found at $utilPath"
     }
     . $utilPath
-}
-
-$overallPassed = $true
-
-$pythonFiles = Get-StagedFiles -Pattern '\.py$' `
-    -DenyPatterns @('(worktrees|venv|\.venv|\.tox|__pycache__|dist|build|\.eggs)') `
-    -ResolveFullPath -RepoRoot $repoRoot
-
-if ($pythonFiles.Count -eq 0) {
-    Write-Host "No Python files staged for commit; skipping syntax check" -ForegroundColor Gray
-}
-else {
-    Write-Host "🔨 Checking Python syntax for $($pythonFiles.Count) files..." -ForegroundColor Cyan
-    
-    # Pass all files to py_compile in a single Python process to avoid spawn overhead
-    # py_compile.__main__ natively accepts multiple filenames as arguments
-    $result = python -W error -m py_compile $pythonFiles 2>&1
-    
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host ""
-        Write-Host "❌ SYNTAX ERRORS FOUND" -ForegroundColor Red
-        Write-Host ""
-        Write-Host ($result | Out-String).Trim() -ForegroundColor Yellow
-        Write-Host ""
-        Write-Host "Fix the Python syntax errors before committing." -ForegroundColor Yellow
-        $overallPassed = $false
-    }
-    else {
-        Write-Host "✅ All Python files have valid syntax" -ForegroundColor Green
-    }
-}
-
-if (-not $overallPassed) {
-    exit 1
 }
 
 $stagedDesktopFiles = Get-StagedFiles -Pattern '^desktop/.*\.(ts|tsx|js|jsx|css|html)$' `
