@@ -53,16 +53,16 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "✓" -ForegroundColor Green
 
+# Detect staged Python files to skip unnecessary parallel jobs (e.g., ruff).
+# Sourcing staged-files-utils.ps1 here reuses the shared Get-StagedFiles logic
+# so the orchestrator can avoid spawning a Start-Job just to exit immediately.
+. (Join-Path $hooksDir "staged-files-utils.ps1")
+$hasStagedPython = @(Get-StagedFiles -Pattern '\.py$' `
+    -DenyPatterns @('(venv|.venv|__pycache__|dist|build|worktrees)')).Count -gt 0
+
 $allPassed = $true
 $passed = @()
 $failed = @()
-
-# Detect staged file types to skip irrelevant checks.
-# Avoids expensive Start-Job overhead on Windows when no relevant files exist.
-$stagedPaths = @(git diff --cached --name-only --diff-filter=ACM 2>$null)
-$hasStagedPython = ($stagedPaths | Where-Object {
-    $_ -match '\.py$' -and $_ -notmatch '(venv|\.venv|__pycache__|dist|build|worktrees)'
-}).Count -gt 0
 
 # Checks that don't depend on build artifacts - can run in parallel
 $staticChecks = @(
@@ -75,11 +75,12 @@ $staticChecks = @(
     # check-desktop.ps1 separately duplicates TS error output.
 )
 
+# Skip ruff job entirely when no Python files are staged to avoid Start-Job overhead
 if ($hasStagedPython) {
     $staticChecks += @{ Name = "Ruff Lint"; Script = "check-ruff.ps1" }
 } else {
     Write-Host "  • Ruff Lint... " -NoNewline -ForegroundColor Gray
-    Write-Host "skip (no Python files staged)" -ForegroundColor DarkGray
+    Write-Host "skipped (no Python files staged)" -ForegroundColor DarkGray
     $passed += "Ruff Lint"
 }
 
