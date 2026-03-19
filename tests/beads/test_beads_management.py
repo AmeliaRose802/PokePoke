@@ -4,6 +4,8 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch, Mock
 
+import pytest
+
 from pokepoke.beads.beads_recovery import (
     _load_failed_unassign_manifest,
     _save_failed_unassign_manifest,
@@ -13,6 +15,7 @@ from pokepoke.beads.beads_recovery import (
     unassign_with_retry,
     retry_failed_unassigns,
 )
+from pokepoke.beads.beads_query import BD_CONFIG, BR_CONFIG, get_active_backend, set_active_backend
 
 
 class TestFailedUnassignManifest:
@@ -674,4 +677,88 @@ class TestResolveWithTimeout:
         mock_resolve.side_effect = RuntimeError("boom")
         result = _resolve_with_timeout(epic, timeout=5)
         assert result is None
+
+
+@pytest.mark.parametrize("backend_config", [BD_CONFIG, BR_CONFIG], ids=["bd", "br"])
+class TestBothBackendsManagement:
+    """Tests that run against both bd and br backends for management operations."""
+
+    @patch("pokepoke.beads.beads_management.run_bd_sync_with_retry")
+    @patch("pokepoke.beads.beads_management._run_bd")
+    @patch("pokepoke.beads.beads_management._parse_beads_json")
+    @patch("pokepoke.beads.beads_management.acquire_lock")
+    def test_assign_and_sync_item_with_backend(
+        self,
+        mock_lock: Mock,
+        mock_parse: Mock,
+        mock_run_bd: Mock,
+        mock_sync: Mock,
+        backend_config,
+    ) -> None:
+        """Verify assign_and_sync_item works with both backends."""
+        from pokepoke.beads.beads_management import assign_and_sync_item
+        from contextlib import contextmanager
+
+        original = get_active_backend()
+        set_active_backend(backend_config)
+
+        try:
+            @contextmanager
+            def fake_lock(*args: object, **kwargs: object):
+                yield Mock()
+
+            mock_lock.side_effect = fake_lock
+            mock_parse.side_effect = [
+                [{"id": "item-1", "assignee": ""}],  # pre-check: unassigned
+                [{"id": "item-1", "assignee": "my-agent"}],  # verify: us
+            ]
+            mock_run_bd.return_value = Mock(stdout="")
+            mock_sync.return_value = Mock(returncode=0)
+
+            result = assign_and_sync_item("item-1", agent_name="my-agent")
+
+            assert result is True
+        finally:
+            set_active_backend(original)
+
+    @patch("pokepoke.beads.beads_management._run_bd")
+    def test_close_item_with_backend(
+        self, mock_run_bd: Mock, backend_config
+    ) -> None:
+        """Verify close_item works with both backends."""
+        from pokepoke.beads.beads_management import close_item
+
+        original = get_active_backend()
+        set_active_backend(backend_config)
+
+        try:
+            mock_run_bd.return_value = Mock(stdout="", returncode=0)
+
+            result = close_item("item-1", message="done")
+
+            assert result is True
+            assert mock_run_bd.call_count >= 1
+        finally:
+            set_active_backend(original)
+
+    @patch("pokepoke.beads.beads_management.run_bd_sync_with_retry")
+    @patch("pokepoke.beads.beads_management._run_bd")
+    def test_unassign_item_with_backend(
+        self, mock_run_bd: Mock, mock_sync: Mock, backend_config
+    ) -> None:
+        """Verify unassign_item works with both backends."""
+        from pokepoke.beads.beads_management import unassign_item
+
+        original = get_active_backend()
+        set_active_backend(backend_config)
+
+        try:
+            mock_run_bd.return_value = Mock(stdout="", stderr="", returncode=0)
+            mock_sync.return_value = Mock(returncode=0)
+
+            result = unassign_item("item-1")
+
+            assert result is True
+        finally:
+            set_active_backend(original)
 
