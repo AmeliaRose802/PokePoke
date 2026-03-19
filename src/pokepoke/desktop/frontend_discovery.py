@@ -76,9 +76,19 @@ def _extract_package_resources() -> Path | None:
 
     temp_dir = Path(tempfile.gettempdir()) / "pokepoke_static"
 
-    # Return cached extraction if still valid
+    # Check if cached extraction is still valid by comparing index.html mtimes
+    cached_index = temp_dir / "index.html"
     if _has_index_html(temp_dir):
-        return temp_dir
+        try:
+            with pkg_resources.as_file(static_ref / "index.html") as src_index:
+                if src_index.stat().st_mtime <= cached_index.stat().st_mtime:
+                    return temp_dir
+            # Source is newer — wipe stale cache and re-extract below
+            logger.info("Frontend assets changed, clearing stale cache at %s", temp_dir)
+            shutil.rmtree(temp_dir)
+        except Exception:
+            # Can't compare — re-extract to be safe
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
     temp_dir.mkdir(exist_ok=True)
     for resource in static_ref.iterdir():

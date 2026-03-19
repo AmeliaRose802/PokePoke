@@ -1,6 +1,7 @@
 """Tests for frontend discovery functionality."""
 
 import sys
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -425,7 +426,15 @@ class TestFindFrontendDist:
 
         pokepoke_static_dir = temp_dir / "pokepoke_static"
         pokepoke_static_dir.mkdir(parents=True)
-        (pokepoke_static_dir / "index.html").write_text("<html>cached</html>", encoding="utf-8")
+        cached_index = pokepoke_static_dir / "index.html"
+        cached_index.write_text("<html>cached</html>", encoding="utf-8")
+
+        # Create a source index.html that is older than the cached one
+        src_index = tmp_path / "src_index.html"
+        src_index.write_text("<html>source</html>", encoding="utf-8")
+        import os
+        # Make source mtime older than cache so cache is considered valid
+        os.utime(src_index, (cached_index.stat().st_mtime - 10, cached_index.stat().st_mtime - 10))
 
         fake_resource = MagicMock()
         fake_resource.name = "index.html"
@@ -433,6 +442,12 @@ class TestFindFrontendDist:
 
         fake_static_ref = MagicMock()
         fake_static_ref.__truediv__ = lambda self, name: fake_resource if name == "index.html" else MagicMock()
+
+        @contextmanager
+        def mock_as_file(resource):
+            yield src_index
+
+        monkeypatch.setattr("importlib.resources.as_file", mock_as_file)
 
         def mock_files(package_name):
             if package_name == 'pokepoke.static':
