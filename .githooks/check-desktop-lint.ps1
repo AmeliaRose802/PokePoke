@@ -46,6 +46,13 @@ if (-not (Test-Path $desktopDir)) {
     exit 1
 }
 
+# Skip if node_modules not present (common in worktrees)
+$nodeModulesPath = Join-Path $desktopDir "node_modules"
+if (-not (Test-Path $nodeModulesPath)) {
+    Write-Host "⏭  Skipping desktop lint (node_modules not installed in worktree)" -ForegroundColor Gray
+    exit 0
+}
+
 Write-Host "🧼 Running ESLint for $($stagedFiles.Count) staged desktop file(s)..." -ForegroundColor Cyan
 Write-Host "      (Invoking 'npm run lint -- --max-warnings=0')" -ForegroundColor DarkGray
 
