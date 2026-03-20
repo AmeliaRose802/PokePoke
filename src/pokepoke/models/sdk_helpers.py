@@ -8,7 +8,7 @@ from typing import Any
 try:
     from copilot import PermissionHandler
     _approve_all: Any = PermissionHandler.approve_all
-except ImportError:
+except (ImportError, AttributeError):
     _approve_all = None
 
 from pokepoke.utils.shutdown import is_shutting_down
