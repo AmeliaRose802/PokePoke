@@ -47,6 +47,14 @@ if ($stagedDesktopFiles.Count -eq 0) {
 Write-Host "🛠  Building desktop app (npm run build) for $($stagedDesktopFiles.Count) staged file(s)..." -ForegroundColor Cyan
 
 $desktopDir = Join-Path $repoRoot "desktop"
+
+# Skip if node_modules not present (common in worktrees)
+$nodeModulesPath = Join-Path $desktopDir "node_modules"
+if (-not (Test-Path $nodeModulesPath)) {
+    Write-Host "⏭  Skipping desktop build (node_modules not installed in worktree)" -ForegroundColor Gray
+    exit 0
+}
+
 $buildOutputLines = @()
 
 Push-Location $desktopDir
