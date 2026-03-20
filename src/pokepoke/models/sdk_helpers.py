@@ -1,7 +1,6 @@
 """Helper functions for the Copilot SDK integration."""
 import asyncio
 import logging
-import sys
 import time
 from collections.abc import Callable
 from typing import Any
@@ -252,27 +251,12 @@ async def _await_completion(
             gap = now - stats['last_event_time']
             remaining_wall = deadline - asyncio.get_event_loop().time()
             ping_ok = False
-            ping_err = ""
             try:
                 await client.ping()
                 ping_ok = True
                 consecutive_ping_failures = 0
-            except Exception as _ping_exc:
-                consecutive_ping_failures += 1
-                ping_err = str(_ping_exc)[:100]
-            client_state_str = "unknown"
-            try:
-                client_state_str = str(client.get_state())
             except Exception:
-                client_state_str = "get_state_error"
-            print(
-                f"[SDK-DIAG] heartbeat: ping={'ok' if ping_ok else 'FAIL'}, "
-                f"state={client_state_str}, gap={gap:.0f}s, pending={stats.get('pending_tool_calls', 0)}, "
-                f"events={stats['event_count']}, turns={stats.get('turn_count', 0)}, "
-                f"ping_failures={consecutive_ping_failures}/{max_ping_failures}"
-                + (f", ping_err={ping_err}" if ping_err else ""),
-                file=sys.stderr, flush=True,
-            )
+                consecutive_ping_failures += 1
             logger.info(
                 "SDK heartbeat: ping=%s, event_gap=%.0fs, pending=%d, "
                 "events_delta=%d (total=%d), turns=%d, remaining=%.0fs, "
@@ -288,6 +272,21 @@ async def _await_completion(
             # Process-level liveness checks
             should_abort, reason = False, ""
             if consecutive_ping_failures >= max_ping_failures:
+                # Check if the session actually did work. When the Copilot
+                # CLI finishes normally its IPC pipe can enter a broken
+                # state (EINVAL on pings) while get_state() still reports
+                # "connected".  If the session has completed turns and has
+                # no pending tool calls, treat as normal completion instead
+                # of process death.
+                has_done_work = stats.get('turn_count', 0) > 0
+                no_pending = stats.get('pending_tool_calls', 0) == 0
+                if has_done_work and no_pending:
+                    logger.warning(
+                        "Pings failing but session completed (turns=%d, pending=0) "
+                        "- treating as normal completion", stats.get('turn_count', 0),
+                    )
+                    done.set()
+                    break
                 should_abort = True
                 reason = (f"PROCESS DEAD: {consecutive_ping_failures} consecutive "
                           f"ping failures (threshold: {max_ping_failures})")
