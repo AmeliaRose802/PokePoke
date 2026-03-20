@@ -220,6 +220,7 @@ class TestSessionStatsConcurrentIntegrity:
         stop.set()
         for t in writers + readers:
             t.join(timeout=5)
+            assert not t.is_alive(), f"Thread {t.name} did not finish within timeout"
 
         assert not errors, f"Snapshot inconsistencies: {errors[:5]}"
 
@@ -607,6 +608,7 @@ class TestRuntimeLimitsConcurrency:
         stop.set()
         for t in threads:
             t.join(timeout=5)
+            assert not t.is_alive(), f"Thread {t.name} did not finish within timeout"
         clear_runtime_parallel_limits()
 
         assert not errors, f"Runtime limit errors: {errors[:5]}"
