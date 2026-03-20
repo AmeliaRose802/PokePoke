@@ -25,6 +25,10 @@ from pokepoke.worktrees.worktree_finalization import (
 )
 from pokepoke.types import BeadsWorkItem, CopilotResult, AgentStats, GateAgentResult
 from pokepoke.orchestration.work_item_session import WorkItemSession
+from tests.orchestration.conftest import (
+    make_selection_mocks,
+    make_work_item
+)
 
 
 class TestSelectWorkItem:
@@ -36,85 +40,57 @@ class TestSelectWorkItem:
 
         assert result is None
 
-    @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
-    def test_autonomous_selection(self, mock_select: Mock) -> None:
+    def test_autonomous_selection(self) -> None:
         """Test autonomous mode selection."""
-        items = [
-            BeadsWorkItem(
-                id="task-1",
-                title="Task 1",
-                description="",
-                status="open",
-                priority=1,
-                issue_type="task"
-            )
-        ]
-        mock_select.return_value = items[0]
+        item = make_work_item(id="task-1", title="Task 1")
 
-        result = select_work_item(items, interactive=False)
+        with make_selection_mocks(selected_item=item) as mocks:
+            result = select_work_item([item], interactive=False)
 
-        assert result is not None
-        assert result.id == "task-1"
-        # Should have passed the full list (no filtering since no items assigned to others)
-        mock_select.assert_called_once()
+            assert result is not None
+            assert result.id == "task-1"
+            mocks['select'].assert_called_once()
 
     @patch('builtins.input')
     def test_interactive_selection(self, mock_input: Mock) -> None:
         """Test interactive mode selection."""
-        items = [
-            BeadsWorkItem(
-                id="task-1",
-                title="Task 1",
-                description="",
-                status="open",
-                priority=1,
-                issue_type="task"
-            )
-        ]
+        item = make_work_item(id="task-1", title="Task 1")
         mock_input.return_value = '1'
 
-        result = select_work_item(items, interactive=True)
+        result = select_work_item([item], interactive=True)
 
         assert result is not None
         assert result.id == "task-1"
 
-    @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
-    def test_filters_items_assigned_to_others(self, mock_select: Mock) -> None:
+    def test_filters_items_assigned_to_others(self) -> None:
         """Test that items assigned to other agents are filtered out."""
         import os
         os.environ['AGENT_NAME'] = 'agent_alpha'
 
-        items = [
-            BeadsWorkItem(
-                id="task-1",
-                title="Task assigned to other agent",
-                description="",
-                status="in_progress",
-                priority=1,
-                issue_type="task",
-                assignee="agent_beta"  # Assigned to different agent
-            ),
-            BeadsWorkItem(
-                id="task-2",
-                title="Task available",
-                description="",
-                status="open",
-                priority=2,
-                issue_type="task",
-                assignee=None  # Unassigned
-            )
-        ]
-        mock_select.return_value = items[1]
+        item1 = make_work_item(
+            id="task-1",
+            title="Task assigned to other agent",
+            status="in_progress",
+            assignee="agent_beta"
+        )
+        item2 = make_work_item(
+            id="task-2",
+            title="Task available",
+            priority=2,
+            status="open",
+            assignee=None
+        )
 
-        result = select_work_item(items, interactive=False)
+        with make_selection_mocks(selected_item=item2) as mocks:
+            result = select_work_item([item1, item2], interactive=False)
 
-        # Should have filtered out task-1 and only passed task-2
-        mock_select.assert_called_once()
-        passed_items = mock_select.call_args[0][0]
-        assert len(passed_items) == 1
-        assert passed_items[0].id == "task-2"
-        assert result is not None
-        assert result.id == "task-2"
+            # Should have filtered out task-1 and only passed task-2
+            mocks['select'].assert_called_once()
+            passed_items = mocks['select'].call_args[0][0]
+            assert len(passed_items) == 1
+            assert passed_items[0].id == "task-2"
+            assert result is not None
+            assert result.id == "task-2"
 
     def test_all_items_assigned_to_others(self) -> None:
         """Test when all items are assigned to other agents."""
@@ -122,22 +98,17 @@ class TestSelectWorkItem:
         os.environ['AGENT_NAME'] = 'agent_alpha'
 
         items = [
-            BeadsWorkItem(
+            make_work_item(
                 id="task-1",
                 title="Task assigned to beta",
-                description="",
                 status="in_progress",
-                priority=1,
-                issue_type="task",
                 assignee="agent_beta"
             ),
-            BeadsWorkItem(
+            make_work_item(
                 id="task-2",
                 title="Task assigned to gamma",
-                description="",
-                status="in_progress",
                 priority=2,
-                issue_type="task",
+                status="in_progress",
                 assignee="agent_gamma"
             )
         ]
