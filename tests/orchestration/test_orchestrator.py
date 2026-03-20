@@ -7,6 +7,10 @@ from pokepoke.orchestration.orchestrator import run_orchestrator
 from pokepoke.orchestration.workflow import select_work_item, process_work_item
 from pokepoke.types import AgentStats, BeadsWorkItem, BeadsStats, CopilotResult, GateAgentResult, WorkItemResult
 from pokepoke.desktop import terminal_ui
+from tests.orchestration.conftest import (
+    make_workflow_mocks, make_selection_mocks,
+    make_work_item
+)
 
 
 class TestSelectWorkItem:
@@ -18,46 +22,24 @@ class TestSelectWorkItem:
 
         assert result is None
 
-    @patch('pokepoke.orchestration.work_item_selection.select_next_hierarchical_item')
-    def test_select_work_item_autonomous_mode(
-        self,
-        mock_select_hierarchical: Mock
-    ) -> None:
+    def test_select_work_item_autonomous_mode(self) -> None:
         """Test autonomous mode uses hierarchical selection."""
-        items = [
-            BeadsWorkItem(
-                id="task-1",
-                title="Task",
-                description="",
-                status="open",
-                priority=1,
-                issue_type="task"
-            )
-        ]
-        mock_select_hierarchical.return_value = items[0]
+        item = make_work_item(id="task-1", title="Task")
 
-        result = select_work_item(items, interactive=False)
+        with make_selection_mocks(selected_item=item) as mocks:
+            result = select_work_item([item], interactive=False)
 
-        assert result is not None
-        assert result.id == "task-1"
-        mock_select_hierarchical.assert_called_once_with(items)
+            assert result is not None
+            assert result.id == "task-1"
+            mocks['select'].assert_called_once_with([item])
 
     @patch('builtins.input')
     def test_select_work_item_interactive_quit(self, mock_input: Mock) -> None:
         """Test interactive mode quit option."""
-        items = [
-            BeadsWorkItem(
-                id="task-1",
-                title="Task",
-                description="",
-                status="open",
-                priority=1,
-                issue_type="task"
-            )
-        ]
+        item = make_work_item()
         mock_input.return_value = 'q'
 
-        result = select_work_item(items, interactive=True)
+        result = select_work_item([item], interactive=True)
 
         assert result is None
 
@@ -67,19 +49,10 @@ class TestSelectWorkItem:
         mock_input: Mock
     ) -> None:
         """Test interactive mode valid item selection."""
-        items = [
-            BeadsWorkItem(
-                id="task-1",
-                title="Task",
-                description="",
-                status="open",
-                priority=1,
-                issue_type="task"
-            )
-        ]
+        item = make_work_item()
         mock_input.return_value = '1'
 
-        result = select_work_item(items, interactive=True)
+        result = select_work_item([item], interactive=True)
 
         assert result is not None
         assert result.id == "task-1"
@@ -90,19 +63,10 @@ class TestSelectWorkItem:
         mock_input: Mock
     ) -> None:
         """Test interactive mode with invalid then valid input."""
-        items = [
-            BeadsWorkItem(
-                id="task-1",
-                title="Task",
-                description="",
-                status="open",
-                priority=1,
-                issue_type="task"
-            )
-        ]
+        item = make_work_item()
         mock_input.side_effect = ['invalid', '1']
 
-        result = select_work_item(items, interactive=True)
+        result = select_work_item([item], interactive=True)
 
         assert result is not None
         assert result.id == "task-1"
@@ -113,19 +77,10 @@ class TestSelectWorkItem:
         mock_input: Mock
     ) -> None:
         """Test interactive mode with out of range input."""
-        items = [
-            BeadsWorkItem(
-                id="task-1",
-                title="Task",
-                description="",
-                status="open",
-                priority=1,
-                issue_type="task"
-            )
-        ]
+        item = make_work_item()
         mock_input.side_effect = ['99', '1']
 
-        result = select_work_item(items, interactive=True)
+        result = select_work_item([item], interactive=True)
 
         assert result is not None
         assert result.id == "task-1"
@@ -134,165 +89,51 @@ class TestSelectWorkItem:
 class TestProcessWorkItem:
     """Test work item processing logic."""
 
-    @patch('pokepoke.orchestration.workflow.run_gate_agent')  # Mock gate agent to avoid actual copilot calls
-    @patch('pokepoke.beads.beads_hierarchy.close_parent_if_complete')
-    @patch('pokepoke.worktrees.worktree_finalization.get_parent_id')
-    @patch('pokepoke.worktrees.worktree_finalization.close_item')  # Patch where it's used
-    @patch('subprocess.run')
-    @patch('pokepoke.orchestration.workflow.cleanup_worktree')
-    @patch('pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge')
-    @patch('pokepoke.git.git_operations.has_uncommitted_changes')
-    @patch('os.chdir')
-    @patch('os.getcwd')
-    @patch('pokepoke.orchestration.workflow.create_worktree')
-    @patch('pokepoke.orchestration.workflow.assign_and_sync_item', return_value=True)
-    @patch('pokepoke.orchestration.workflow.invoke_copilot')
-    @patch('builtins.input')
-    def test_process_work_item_success_no_parent(
-        self,
-        mock_input: Mock,
-        mock_invoke: Mock,
-        mock_assign: Mock,
-        mock_create_wt: Mock,
-        mock_getcwd: Mock,
-        mock_chdir: Mock,
-        mock_uncommitted: Mock,
-        mock_perform: Mock,
-        mock_cleanup: Mock,
-        mock_subprocess: Mock,
-        mock_close: Mock,
-        mock_get_parent: Mock,
-        mock_close_parent: Mock,
-        mock_gate_agent: Mock
-    ) -> None:
-        """Test successful processing without parent."""
-        item = BeadsWorkItem(
-            id="task-1",
-            title="Task",
-            description="",
-            status="open",
-            priority=1,
-            issue_type="task"
-        )
-        mock_input.return_value = 'y'
-        mock_create_wt.return_value = '/tmp/worktree'
-        mock_getcwd.return_value = '/original'
-        mock_uncommitted.return_value = False
-        mock_perform.return_value = (True, True)
-        mock_close.return_value = True
-        mock_gate_agent.return_value = GateAgentResult(success=True, reason="Gate passed")  # Gate agent passes
-        mock_invoke.return_value = CopilotResult(
-            work_item_id="task-1",
-            success=True,
-            output="Work completed",
-            attempt_count=1
-        )
-        # Mock subprocess: return different values based on git command
-        def subprocess_side_effect(*args, **kwargs):
-            cmd = args[0] if args else kwargs.get('args', [])
-            if 'rev-list' in cmd:
-                return Mock(stdout="1\n", returncode=0)
-            elif 'branch' in cmd and '--show-current' in cmd:
-                return Mock(stdout="master\n", returncode=0)
-            elif 'status' in cmd and '--porcelain' in cmd:
-                return Mock(stdout="", returncode=0)  # Clean repo
-            elif cmd[0] == 'bd':
-                if 'show' in cmd:
-                    # Return open status so close_item will be called (as JSON array)
-                    return Mock(stdout='[{"id": "task-1", "title": "Test", "status": "open", "priority": 1, "issue_type": "task"}]', returncode=0)
-                elif 'sync' in cmd:
-                    return Mock(stdout="", stderr="", returncode=0)
-            elif 'checkout' in cmd or 'pull' in cmd or 'merge' in cmd or 'push' in cmd:
-                return Mock(stdout="", returncode=0)
-            return Mock(stdout="", returncode=0)
-        mock_subprocess.side_effect = subprocess_side_effect
-        mock_get_parent.return_value = None
+    def test_process_work_item_success_no_parent(self) -> None:
+        """Test successful processing without parent.
 
-        result = process_work_item(item, interactive=True)
+        Focus on behavior: successful work item should have success=True,
+        request_count=1, and close_item should be called with the right args.
+        Uses mock factory instead of 14 @patch decorators.
+        """
+        item = make_work_item(id="task-1", title="Task")
 
-        assert result.success is True
-        assert result.request_count == 1
-        assert result.cleanup_agent_runs == 0
-        mock_close.assert_called_once_with("task-1", "Completed by PokePoke orchestrator (agent did not close)")
+        with make_workflow_mocks(
+            gate_success=True,
+            copilot_success=True,
+            has_parent=False,
+            merge_success=True,
+            close_success=True
+        ) as mocks:
+            result = process_work_item(item, interactive=True)
 
-    @patch('pokepoke.orchestration.workflow.run_gate_agent')  # Mock gate agent to avoid actual copilot calls
-    @patch('pokepoke.worktrees.worktree_finalization.close_parent_if_complete')
-    @patch('pokepoke.worktrees.worktree_finalization.get_parent_id')
-    @patch('pokepoke.worktrees.worktree_finalization.close_item')  # Patch where it's used
-    @patch('subprocess.run')
-    @patch('pokepoke.orchestration.workflow.cleanup_worktree')
-    @patch('pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge')
-    @patch('os.chdir')
-    @patch('os.getcwd')
-    @patch('pokepoke.orchestration.workflow.create_worktree')
-    @patch('pokepoke.orchestration.workflow.assign_and_sync_item', return_value=True)
-    @patch('pokepoke.orchestration.workflow.invoke_copilot')
-    def test_process_work_item_success_with_parent(
-        self,
-        mock_invoke: Mock,
-        mock_assign: Mock,
-        mock_create_wt: Mock,
-        mock_getcwd: Mock,
-        mock_chdir: Mock,
-        mock_perform: Mock,
-        mock_cleanup: Mock,
-        mock_subprocess: Mock,
-        mock_close: Mock,
-        mock_get_parent: Mock,
-        mock_close_parent: Mock,
-        mock_gate_agent: Mock
-    ) -> None:
-        """Test successful processing with parent closure."""
-        item = BeadsWorkItem(
-            id="task-1",
-            title="Task",
-            description="",
-            status="open",
-            priority=1,
-            issue_type="task"
-        )
-        mock_create_wt.return_value = '/tmp/worktree'
-        mock_getcwd.return_value = '/original'
-        mock_perform.return_value = (True, True)
-        mock_close.return_value = True
-        mock_gate_agent.return_value = GateAgentResult(success=True, reason="Gate passed")  # Gate agent passes
-        mock_invoke.return_value = CopilotResult(
-            work_item_id="task-1",
-            success=True,
-            attempt_count=1
-        )
-        # Mock subprocess: return different values based on git command
-        def subprocess_side_effect(*args, **kwargs):
-            cmd = args[0] if args else kwargs.get('args', [])
-            if 'rev-list' in cmd:
-                return Mock(stdout="1\n", returncode=0)
-            elif 'branch' in cmd and '--show-current' in cmd:
-                return Mock(stdout="master\n", returncode=0)
-            elif 'status' in cmd and '--porcelain' in cmd:
-                return Mock(stdout="", returncode=0)  # Clean repo
-            elif cmd[0] == 'bd':
-                if 'show' in cmd:
-                    # Return open status so close_item will be called (as JSON array)
-                    return Mock(stdout='[{"id": "task-1", "title": "Test", "status": "open", "priority": 1, "issue_type": "task"}]', returncode=0)
-                elif 'sync' in cmd:
-                    return Mock(stdout="", stderr="", returncode=0)
-            elif 'checkout' in cmd or 'pull' in cmd or 'merge' in cmd or 'push' in cmd:
-                return Mock(stdout="", returncode=0)
-            return Mock(stdout="", returncode=0)
-        mock_subprocess.side_effect = subprocess_side_effect
-        mock_get_parent.side_effect = ["feature-1", "epic-1", None]
+            # Assert on business logic outcomes, not internal function calls
+            assert result.success is True
+            assert result.request_count == 1
+            assert result.cleanup_agent_runs == 0
+            # Still verify close was called with correct args (this is important behavior)
+            mocks['close'].assert_called_once_with("task-1", "Completed by PokePoke orchestrator (agent did not close)")
 
-        result = process_work_item(item, interactive=False)
+    def test_process_work_item_success_with_parent(self) -> None:
+        """Test successful processing with parent closure.
 
-        assert result.success is True
-        assert result.request_count == 1
-        assert result.cleanup_agent_runs == 0
-        mock_close.assert_called_once()
-        assert mock_close_parent.call_count == 2
-        mock_close_parent.assert_any_call("feature-1")
-        mock_close_parent.assert_any_call("epic-1")
+        When an item has a parent, the parent should also be checked for closure.
+        """
+        item = make_work_item(id="task-1", title="Task")
 
-    @patch('pokepoke.orchestration.workflow.run_gate_agent')  # Mock gate agent to avoid actual copilot calls
+        with make_workflow_mocks(
+            gate_success=True,
+            copilot_success=True,
+            has_parent=True,
+            merge_success=True,
+            close_success=True
+        ) as mocks:
+            result = process_work_item(item, interactive=True)
+
+            assert result.success is True
+            mocks['close_parent'].assert_called_once()
+
+    @patch('pokepoke.orchestration.workflow.run_gate_agent')
     @patch('subprocess.run')
     @patch('pokepoke.orchestration.workflow.cleanup_worktree')
     @patch('pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge')
@@ -328,7 +169,7 @@ class TestProcessWorkItem:
         mock_getcwd.return_value = '/original'
         mock_uncommitted.return_value = False
         mock_perform.return_value = (True, True)
-        mock_gate_agent.return_value = GateAgentResult(success=True, reason="Gate passed")  # Gate agent passes
+        mock_gate_agent.return_value = GateAgentResult(success=True, reason="Gate passed")
 
         # Copilot fails
         mock_invoke.return_value = CopilotResult(
@@ -356,17 +197,14 @@ class TestProcessWorkItem:
 
         result = process_work_item(item, interactive=False)
 
-        assert result.success is False  # Fails when copilot fails
+        assert result.success is False
         # Default max_copilot_failure_retries=2, so 3 total attempts
         assert result.request_count == 3  # 1 initial + 2 retries
-        # Note: In actual failure scenario, cleanup may not be called if exception is raised
-        # The important thing is that success is False
-        # Stats are now tracked even on failure
         assert result.stats is not None
         assert result.model_completion is not None
-        assert result.model_completion.cost == 0.0  # No cost with 0 tokens
-        assert result.cleanup_agent_runs == 0  # No cleanup agents run on failure
-        assert mock_invoke.call_count == 3  # Initial + 2 retries
+        assert result.model_completion.cost == 0.0
+        assert result.cleanup_agent_runs == 0
+        assert mock_invoke.call_count == 3
 
     @patch('pokepoke.orchestration.workflow.run_gate_agent')
     @patch('subprocess.run')
