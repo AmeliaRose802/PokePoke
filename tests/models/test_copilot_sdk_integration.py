@@ -578,6 +578,8 @@ class TestInvokeCopilotSDKInactivity:
             cfg.idle_timeout_seconds = 1
             cfg.session_inactivity_timeout = 0.1  # 100ms
             cfg.tool_call_timeout = 60.0
+            cfg.process_output_timeout = 9999  # Don't trigger process output timeout
+            cfg.max_ping_failures = 999  # Don't trigger ping liveness
             cfg.ai_backend.copilot_cli_path = "copilot.cmd"
             cfg.ai_backend.provider = "copilot-sdk"
             cfg.mcp_server.enabled = False
@@ -593,3 +595,266 @@ class TestInvokeCopilotSDKInactivity:
 
         assert not result.success
         assert "no SDK events" in result.error.lower() or "session died" in result.error.lower()
+
+
+# ── Process-level liveness checks ────────────────────────────────────────────
+
+
+class TestAwaitCompletionPingLiveness:
+    """Tests for _await_completion consecutive ping failure detection."""
+
+    @pytest.mark.asyncio
+    @patch('pokepoke.models.sdk_helpers._HB_INTERVAL', 0.1)
+    async def test_consecutive_ping_failures_trigger_process_dead(self):
+        """When ping fails max_ping_failures times in a row, returns 'process_dead'."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        # Ping always fails
+        client.ping = AsyncMock(side_effect=Exception("connection refused"))
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic(),
+            'event_count': 5,
+            'last_tool_activity_time': 0.0,
+            'pending_tool_calls': 0,
+            'tool_start_times': {},
+        }
+
+        # Shift last_event_time back to ensure heartbeat fires immediately
+        stats['last_event_time'] = time.monotonic() - 100
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=9999,  # Don't trigger inactivity
+            max_ping_failures=1,  # Fail after 1 ping failure for fast test
+        )
+
+        assert result == "process_dead"
+        session.abort.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('pokepoke.models.sdk_helpers._HB_INTERVAL', 0.1)
+    async def test_ping_success_resets_failure_count(self):
+        """A successful ping resets the consecutive failure counter."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        # Ping succeeds
+        client.ping = AsyncMock()
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic(),
+            'event_count': 5,
+            'last_tool_activity_time': time.monotonic(),
+            'pending_tool_calls': 0,
+            'tool_start_times': {},
+        }
+
+        # Set done quickly so we exit normally
+        async def _set_done():
+            await asyncio.sleep(0.05)
+            done.set()
+        asyncio.create_task(_set_done())
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=9999,
+            max_ping_failures=3,
+        )
+
+        assert result is None  # Normal completion
+        session.abort.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch('pokepoke.models.sdk_helpers._HB_INTERVAL', 0.1)
+    async def test_process_dead_abort_failure_still_returns(self):
+        """If session.abort() raises during process death, still returns 'process_dead'."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        session.abort.side_effect = Exception("abort failed")
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        client.ping = AsyncMock(side_effect=Exception("connection refused"))
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic() - 100,
+            'event_count': 3,
+            'last_tool_activity_time': 0.0,
+            'pending_tool_calls': 0,
+            'tool_start_times': {},
+        }
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=9999,
+            max_ping_failures=1,
+        )
+
+        assert result == "process_dead"
+
+
+class TestAwaitCompletionProcessOutputTimeout:
+    """Tests for _await_completion process output timeout."""
+
+    @pytest.mark.asyncio
+    @patch('pokepoke.models.sdk_helpers._HB_INTERVAL', 0.1)
+    async def test_output_timeout_with_ping_failure_triggers_process_dead(self):
+        """No events for process_output_timeout AND ping fails -> process_dead."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        client.ping = AsyncMock(side_effect=Exception("connection refused"))
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic() - 400,  # 400s ago
+            'event_count': 5,
+            'last_tool_activity_time': 0.0,
+            'pending_tool_calls': 0,
+            'tool_start_times': {},
+        }
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=9999,  # Don't trigger inactivity
+            process_output_timeout=300,  # Should trigger
+            max_ping_failures=999,  # Don't trigger consecutive ping
+        )
+
+        assert result == "process_dead"
+        session.abort.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('pokepoke.models.sdk_helpers._HB_INTERVAL', 0.1)
+    async def test_output_timeout_suppressed_when_ping_succeeds(self):
+        """Even if no events for process_output_timeout, ping success means alive."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        client.ping = AsyncMock()  # Ping succeeds
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic() - 400,  # 400s ago, but ping OK
+            'event_count': 5,
+            'last_tool_activity_time': time.monotonic(),
+            'pending_tool_calls': 0,
+            'tool_start_times': {},
+        }
+
+        async def _set_done():
+            await asyncio.sleep(0.05)
+            done.set()
+        asyncio.create_task(_set_done())
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=9999,
+            process_output_timeout=300,
+            max_ping_failures=999,
+        )
+
+        assert result is None  # Normal completion, NOT process_dead
+
+    @pytest.mark.asyncio
+    @patch('pokepoke.models.sdk_helpers._HB_INTERVAL', 0.1)
+    async def test_output_timeout_suppressed_with_pending_tools(self):
+        """When tools are pending, process output timeout does not fire."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        client.ping = AsyncMock(side_effect=Exception("connection refused"))
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic() - 400,
+            'event_count': 5,
+            'last_tool_activity_time': 0.0,
+            'pending_tool_calls': 2,  # Tools are running
+            'tool_start_times': {},
+        }
+
+        async def _set_done():
+            await asyncio.sleep(0.05)
+            done.set()
+        asyncio.create_task(_set_done())
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=9999,
+            process_output_timeout=300,
+            max_ping_failures=999,
+        )
+
+        assert result is None  # Should not fire with pending tools
+
+    @pytest.mark.asyncio
+    @patch('pokepoke.models.sdk_helpers._HB_INTERVAL', 0.1)
+    async def test_output_timeout_disabled_when_zero(self):
+        """When process_output_timeout=0, the check is disabled."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        client.ping = AsyncMock(side_effect=Exception("connection refused"))
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic() - 500,
+            'event_count': 1,
+            'last_tool_activity_time': 0.0,
+            'pending_tool_calls': 0,
+            'tool_start_times': {},
+        }
+
+        async def _set_done():
+            await asyncio.sleep(0.05)
+            done.set()
+        asyncio.create_task(_set_done())
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=99999,  # Very high to not trigger
+            process_output_timeout=0,
+            max_ping_failures=999,
+        )
+
+        assert result is None  # Should not fire when disabled
+
+
+class TestProcessLivenessConfig:
+    """Tests for process_output_timeout and max_ping_failures config fields."""
+
+    def test_default_values(self):
+        from pokepoke.config import ProjectConfig
+        cfg = ProjectConfig()
+        assert cfg.process_output_timeout == 300
+        assert cfg.max_ping_failures == 3
+
+    def test_clamped_to_minimum(self):
+        from pokepoke.config import ProjectConfig
+        cfg = ProjectConfig(process_output_timeout=5, max_ping_failures=0)
+        assert cfg.process_output_timeout == 30
+        assert cfg.max_ping_failures == 1
+
+    def test_custom_values_preserved(self):
+        from pokepoke.config import ProjectConfig
+        cfg = ProjectConfig(process_output_timeout=600, max_ping_failures=5)
+        assert cfg.process_output_timeout == 600
+        assert cfg.max_ping_failures == 5

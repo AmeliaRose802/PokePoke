@@ -125,6 +125,30 @@ class TestCheckAbortResult:
         assert result.success is False
         assert "600" in result.error
 
+    def test_returns_failure_on_process_dead(self):
+        result = _check_abort_result(
+            "item-1", False, 600.0, False, 600.0, process_dead=True,
+        )
+        assert result is not None
+        assert result.success is False
+        assert "process" in result.error.lower()
+        assert "ping" in result.error.lower() or "died" in result.error.lower()
+
+    def test_process_dead_includes_output_summary(self):
+        result = _check_abort_result(
+            "item-1", False, 600.0, False, 600.0,
+            process_dead=True, last_output_summary="partial work",
+        )
+        assert result is not None
+        assert result.last_output_summary == "partial work"
+
+    def test_process_dead_takes_priority_over_inactivity(self):
+        result = _check_abort_result(
+            "item-1", True, 600.0, False, 600.0, process_dead=True,
+        )
+        assert result is not None
+        assert "process" in result.error.lower()
+
 
 # ── build_gate_resume_prompt ─────────────────────────────────────────────────
 

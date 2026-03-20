@@ -135,8 +135,7 @@ class _AttemptResult:
 async def _send_and_wait(
     session: Any, client: Any, handler: Any,
     final_prompt: str, done: asyncio.Event,
-    max_timeout: float, stats: Any, inactivity_timeout: float,
-    tool_call_timeout: float = 600.0,
+    max_timeout: float, stats: Any, inactivity_timeout: float, **kw: Any,
 ) -> str | None:
     """Send the prompt and wait for completion. Returns abort reason or None.
 
@@ -149,7 +148,7 @@ async def _send_and_wait(
         abort_reason = await _await_completion(
             session, client, done, max_timeout,
             stats=stats, inactivity_timeout=inactivity_timeout,
-            tool_call_timeout=tool_call_timeout, handler=handler,
+            handler=handler, **kw,
         )
         if handler.rate_limit_detected:
             raise RateLimitError()
@@ -159,8 +158,7 @@ async def _send_and_wait(
 async def _run_attempt(
     session: Any, client: Any, handler: Any,
     final_prompt: str, done: asyncio.Event,
-    max_timeout: float, stats: Any, inactivity_timeout: float,
-    tool_call_timeout: float = 600.0,
+    max_timeout: float, stats: Any, inactivity_timeout: float, **kw: Any,
 ) -> _AttemptResult:
     """Execute one send-and-wait attempt, handling interrupts and timing."""
     result = _AttemptResult()
@@ -168,12 +166,11 @@ async def _run_attempt(
     try:
         abort_reason = await _send_and_wait(
             session, client, handler, final_prompt, done,
-            max_timeout, stats, inactivity_timeout,
-            tool_call_timeout=tool_call_timeout,
+            max_timeout, stats, inactivity_timeout, **kw,
         )
         result.abort_reason = abort_reason
         result.interrupted = abort_reason in (
-            "shutdown", "timeout", "inactivity", "tool_timeout",
+            "shutdown", "timeout", "inactivity", "tool_timeout", "process_dead",
         )
     except KeyboardInterrupt:
         print("\n\n[SDK] ΓÜá∩╕Å  Interrupted by user (Ctrl+C)")
@@ -237,6 +234,8 @@ async def invoke_copilot_sdk(
         idle_timeout = float(get_config().idle_timeout_seconds)
     inactivity_timeout = float(get_config().session_inactivity_timeout)
     tool_call_timeout = float(get_config().tool_call_timeout)
+    liveness_kw = {'process_output_timeout': float(get_config().process_output_timeout),
+                   'max_ping_failures': int(get_config().max_ping_failures)}
 
     client = _create_sdk_client(cwd)
 
@@ -289,7 +288,7 @@ async def invoke_copilot_sdk(
                 attempt_result = await _run_attempt(
                     session, client, handler, final_prompt, done,
                     max_timeout, stats, inactivity_timeout,
-                    tool_call_timeout=tool_call_timeout,
+                    tool_call_timeout=tool_call_timeout, **liveness_kw,
                 )
                 total_wall_duration += attempt_result.elapsed
                 total_api_duration += attempt_result.elapsed
@@ -318,16 +317,17 @@ async def invoke_copilot_sdk(
                         logger.debug(f"Failed to disconnect session during cleanup: {e}")
                     session = None
 
-        # Handle timeout/interrupt/inactivity/tool_timeout early exits
+        # Handle timeout/interrupt/inactivity/tool_timeout/process_dead early exits
         timed_out = abort_reason == "timeout"
         interrupted = abort_reason == "shutdown" or (
             attempt_result.interrupted and abort_reason is None
         )
         inactivity_detected = abort_reason == "inactivity"
         tool_timed_out = abort_reason == "tool_timeout"
+        process_dead = abort_reason == "process_dead"
         # Capture output summary for potential resume on next retry
         output_summary = _summarize_output(output_lines) if (
-            timed_out or inactivity_detected or tool_timed_out
+            timed_out or inactivity_detected or tool_timed_out or process_dead
         ) else None
         early = (
             _check_early_exit(
@@ -336,6 +336,7 @@ async def invoke_copilot_sdk(
             or _check_abort_result(
                 work_item.id, inactivity_detected, inactivity_timeout,
                 tool_timed_out, tool_call_timeout,
+                process_dead=process_dead,
                 last_output_summary=output_summary,
             )
         )

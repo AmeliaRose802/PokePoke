@@ -239,6 +239,8 @@ class ProjectConfig:
     idle_timeout_seconds: int = 90  # Seconds to wait before confirming a session is idle
     session_inactivity_timeout: int = 900  # Seconds with no SDK events before treating session as dead
     tool_call_timeout: int = 900  # Max seconds for a single tool invocation before killing it
+    process_output_timeout: int = 300  # Seconds with no output before treating process as unresponsive
+    max_ping_failures: int = 3  # Consecutive ping failures before declaring process dead
     assignment: AssignmentConfig = field(default_factory=AssignmentConfig)
     performance_thresholds: PerformanceThresholdsConfig = field(
         default_factory=PerformanceThresholdsConfig,
@@ -253,6 +255,8 @@ class ProjectConfig:
         self.idle_timeout_seconds = max(10, self.idle_timeout_seconds)
         self.session_inactivity_timeout = max(60, self.session_inactivity_timeout)
         self.tool_call_timeout = max(60, self.tool_call_timeout)
+        self.process_output_timeout = max(30, self.process_output_timeout)
+        self.max_ping_failures = max(1, self.max_ping_failures)
 
     @staticmethod
     def from_dict(data: dict[str, Any]) -> 'ProjectConfig':

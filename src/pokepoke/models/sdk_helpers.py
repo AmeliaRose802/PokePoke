@@ -18,6 +18,8 @@ from pokepoke.desktop import terminal_ui
 
 logger = logging.getLogger(__name__)
 
+_HB_INTERVAL = 30.0  # Heartbeat interval in seconds
+
 
 def _fail_result(
     work_item_id: str,
@@ -112,9 +114,15 @@ def _check_abort_result(
     work_item_id: str,
     inactivity_detected: bool, inactivity_timeout: float,
     tool_timed_out: bool, tool_call_timeout: float,
+    process_dead: bool = False,
     last_output_summary: str | None = None,
 ) -> CopilotResult | None:
-    """Return a failure result for inactivity or tool timeout, else None."""
+    """Return a failure result for inactivity, tool timeout, or process death, else None."""
+    if process_dead:
+        return _fail_result(
+            work_item_id, "Process died: consecutive ping failures or output timeout",
+            last_output_summary=last_output_summary,
+        )
     if inactivity_detected:
         return _fail_result(work_item_id, f"Session died: no SDK events for {inactivity_timeout:.0f}s")
     if tool_timed_out:
@@ -178,18 +186,20 @@ async def _await_completion(
     inactivity_timeout: float = 600.0,
     tool_call_timeout: float = 600.0,
     handler: Any = None,
+    process_output_timeout: float = 300.0,
+    max_ping_failures: int = 3,
 ) -> str | None:
     """Poll until the session finishes or an abort condition is met.
 
     Returns ``None`` on normal completion, or a reason string
-    (``"shutdown"``, ``"timeout"``, ``"inactivity"``, ``"tool_timeout"``)
-    on abort.
+    (``"shutdown"``, ``"timeout"``, ``"inactivity"``, ``"tool_timeout"``,
+    ``"process_dead"``) on abort.
     """
     from pokepoke.desktop.desktop_ui import _thread_output
     deadline = asyncio.get_event_loop().time() + max_timeout
-    _HB_INTERVAL = 30.0
     last_hb = time.monotonic()
     last_hb_events = stats.get('event_count', 0) if stats else 0
+    consecutive_ping_failures = 0
 
     while not done.is_set():
         if is_shutting_down():
@@ -219,17 +229,41 @@ async def _await_completion(
             try:
                 await client.ping()
                 ping_ok = True
+                consecutive_ping_failures = 0
             except Exception:
-                pass
+                consecutive_ping_failures += 1
             logger.info(
                 "SDK heartbeat: ping=%s, event_gap=%.0fs, pending=%d, "
-                "events_delta=%d (total=%d), turns=%d, remaining=%.0fs",
+                "events_delta=%d (total=%d), turns=%d, remaining=%.0fs, "
+                "ping_failures=%d/%d",
                 "ok" if ping_ok else "FAIL", gap,
                 stats.get('pending_tool_calls', 0), evts, stats['event_count'],
                 stats.get('turn_count', 0), remaining_wall,
+                consecutive_ping_failures, max_ping_failures,
             )
             last_hb = now
             last_hb_events = stats['event_count']
+
+            # Process-level liveness checks
+            should_abort, reason = False, ""
+            if consecutive_ping_failures >= max_ping_failures:
+                should_abort = True
+                reason = (f"PROCESS DEAD: {consecutive_ping_failures} consecutive "
+                          f"ping failures (threshold: {max_ping_failures})")
+            elif (process_output_timeout > 0 and gap >= process_output_timeout
+                  and not ping_ok and stats.get('pending_tool_calls', 0) == 0):
+                should_abort = True
+                reason = (f"PROCESS UNRESPONSIVE: No events for {gap:.0f}s "
+                          f"(threshold: {process_output_timeout:.0f}s) and ping failed")
+            if should_abort:
+                print(f"\n[SDK] {reason} - aborting")
+                logger.error("SDK process liveness: %s (event_count=%d)", reason,
+                             stats.get('event_count', 0))
+                try:
+                    await session.abort()
+                except Exception as e:
+                    logger.debug("Failed to abort session on process death: %s", e)
+                return "process_dead"
 
         # Detect dead sessions: no SDK events for inactivity_timeout seconds.
         # Skip when tools are actively running — the SDK doesn't emit
@@ -316,115 +350,9 @@ async def _await_completion(
     return None
 
 
-# ── Session resume helpers ───────────────────────────────────────────────────
-
-# Maximum characters to include in an output summary for resume context
-_MAX_OUTPUT_SUMMARY_LEN = 2000
-
-
-def _summarize_output(
-    output_lines: list[str], max_length: int = _MAX_OUTPUT_SUMMARY_LEN,
-) -> str | None:
-    """Extract a truncated summary from agent output lines.
-
-    Keeps the most recent output (tail), which represents the agent's
-    latest progress and is most useful for resume context.
-
-    Returns ``None`` if there is no meaningful output.
-    """
-    text = "".join(output_lines).strip()
-    if not text:
-        return None
-    if len(text) <= max_length:
-        return text
-    return "...(earlier output truncated)...\n" + text[-max_length:]
-
-
-
-def build_gate_resume_prompt(
-    work_item: BeadsWorkItem,
-    handoff_context: str | None = None,
-    previous_output_summary: str | None = None,
-    default_branch: str = "master",
-) -> str:
-    """Build a prompt for resuming a timed-out gate agent session."""
-    lines = [
-        f"## Gate Agent Session Resume \u2014 {work_item.id}: {work_item.title}",
-        "",
-        "Your previous **gate verification session timed out** before",
-        "reaching a verdict.  You are being resumed in the same SDK session",
-        "so your earlier tool results and reasoning should still be available.",
-        "",
-        "**Continue your verification from where you left off.**",
-        "",
-        f"**Item:** {work_item.id} \u2014 {work_item.title}",
-        f"**Type:** {work_item.issue_type} | **Priority:** {work_item.priority}",
-    ]
-    if work_item.description:
-        lines.extend(["", "**Description:**", work_item.description])
-    if handoff_context:
-        lines.extend(["", "### Handoff Context", "", handoff_context])
-    if previous_output_summary:
-        lines.extend(["", "### Previous Progress", "", "Here is the tail of your previous gate session output:", "", "```", previous_output_summary, "```"])
-    lines.extend([
-        "", "### Your Task", "",
-        "You are the **Gate Agent** \u2014 a read-only verification agent.",
-        f"Review the changes on this branch compared to `{default_branch}`.",
-        "Run tests, check code quality, and verify the implementation.",
-        "", "Respond with a JSON verdict:",
-        '```json', '{{"status": "success", "message": "...", "reason": "..."}}', '```',
-        "or", '```json', '{{"status": "failure", "reason": "...", "details": "..."}}', '```',
-    ])
-    return "\n".join(lines)
-
-
-def build_resume_prompt(
-    work_item: BeadsWorkItem,
-    previous_output_summary: str | None = None,
-    retry_feedback: list[str] | None = None,
-) -> str:
-    """Build a prompt for resuming a timed-out session.
-
-    The prompt is shorter than a full ``beads-item`` prompt since the SDK
-    may have restored the conversation history.  It includes enough
-    context for the agent to orient itself if the session did *not*
-    actually resume.
-    """
-    lines = [
-        f"## Session Resume — {work_item.id}: {work_item.title}",
-        "",
-        "Your previous session **timed out** before completing the task.",
-        "You are being resumed in the same SDK session so your earlier",
-        "tool results, file reads, and reasoning should still be available.",
-        "",
-        "**Continue from where you left off and complete the task.**",
-        "",
-        f"**Item:** {work_item.id} — {work_item.title}",
-        f"**Type:** {work_item.issue_type} | **Priority:** {work_item.priority}",
-    ]
-    if work_item.description:
-        lines.extend(["", "**Description:**", work_item.description])
-    if previous_output_summary:
-        lines.extend([
-            "",
-            "### Previous Progress",
-            "",
-            "Here is the tail of your previous session output for context:",
-            "",
-            "```",
-            previous_output_summary,
-            "```",
-        ])
-    if retry_feedback:
-        lines.extend(["", "### Feedback from Previous Attempts", ""])
-        for fb in retry_feedback:
-            lines.append(f"- {fb}")
-
-    lines.extend([
-        "",
-        "**Success Criteria:**",
-        "- Provided item is fully implemented",
-        "- All pre-commit validation passes successfully",
-        "- All changes are committed and the worktree has been merged",
-    ])
-    return "\n".join(lines)
+# Re-export resume helpers for backward compatibility
+from pokepoke.models.sdk_resume import (  # noqa: E402
+    _summarize_output as _summarize_output,
+    build_gate_resume_prompt as build_gate_resume_prompt,
+    build_resume_prompt as build_resume_prompt,
+)
