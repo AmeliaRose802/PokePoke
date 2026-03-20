@@ -4,7 +4,6 @@ import asyncio
 import logging
 import time
 from typing import Any, TypedDict
-
 from collections.abc import Callable
 
 from pokepoke.desktop import terminal_ui
@@ -20,7 +19,6 @@ class RateLimitError(Exception):
 
     def __init__(self, message: str = "Rate limit exceeded") -> None:
         super().__init__(message)
-
 
 # Default hung command detection settings
 DEFAULT_MAX_READ_RETRIES = 3  # After 3 reads with no new output, consider hung
@@ -41,7 +39,6 @@ class SessionStats(TypedDict):
     event_count: int
     last_tool_activity_time: float
     tool_start_times: dict[str, float]
-
 
 def _iter_streaming_chunks(event_obj: Any) -> list[tuple[str, str]]:
     """Extract text chunks from tool streaming/progress events."""
@@ -107,8 +104,6 @@ class _EventHandler:
         self._last_idle_pending = None
         self._pending_tools.clear()
         self._stats['tool_start_times'].clear()
-
-    # -- public entry point --------------------------------------------------
 
     def __call__(self, event: Any) -> None:
         event_type = event.type.value if hasattr(event.type, 'value') else str(event.type)
@@ -203,8 +198,18 @@ class _EventHandler:
         success = getattr(event.data, 'success', True)
         tool_id = getattr(event.data, 'tool_call_id', None)
         tool_info = self._pending_tools.pop(str(tool_id), {}) if tool_id else {}
-        self._stats['tool_start_times'].pop(str(tool_id), None)
+        start_time = self._stats['tool_start_times'].pop(str(tool_id), None)
         tool_args = tool_info.get('args', {})
+
+        # Log tool latency for diagnostics (tools > 10s are noteworthy)
+        if start_time is not None:
+            latency = time.monotonic() - start_time
+            if latency >= 10.0:
+                logger.info(
+                    "TOOL_LATENCY: %s latency=%.1fs success=%s args=%s",
+                    tool_name, latency, success, str(tool_args)[:200],
+                )
+
         if not result:
             return
         result_content = getattr(result, 'content', str(result)) if hasattr(result, 'content') else str(result)
@@ -354,7 +359,6 @@ class _EventHandler:
         "session.truncation": _on_truncation,
         "session.model_change": _on_model_change,
     }
-
 
 def create_event_handler(
     done: asyncio.Event,

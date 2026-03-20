@@ -20,6 +20,7 @@ except (ImportError, AttributeError):
 
 from pokepoke.utils.shutdown import is_shutting_down
 from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
+from pokepoke.utils.process_utils import log_process_tree_snapshot as _log_process_tree_snapshot
 from .sdk_event_handler import SessionStats
 from pokepoke.desktop import terminal_ui
 
@@ -174,6 +175,9 @@ async def _check_tool_watchdog(
                 tool_id, tool_name, args_str, elapsed, tool_call_timeout,
             )
 
+            # Capture process tree for diagnostics
+            _log_process_tree_snapshot(tool_name, args_str, elapsed, handler)
+
             # Log to item log if available
             if handler and hasattr(handler, '_item_logger') and handler._item_logger:
                 handler._item_logger.log_error(timeout_msg)
@@ -207,6 +211,7 @@ async def _await_completion(
     last_hb = time.monotonic()
     last_hb_events = stats.get('event_count', 0) if stats else 0
     consecutive_ping_failures = 0
+    last_event_gap_log = time.monotonic()  # Track when we last logged an event gap
 
     while not done.is_set():
         if is_shutting_down():
@@ -226,6 +231,19 @@ async def _await_completion(
             pass
 
         now = time.monotonic()
+
+        # Log significant event gaps (>60s) for diagnostics
+        if stats is not None and (now - last_event_gap_log) >= 30.0:
+            gap = now - stats['last_event_time']
+            if gap >= 60.0:
+                pending = stats.get('pending_tool_calls', 0)
+                logger.info(
+                    "SDK_EVENT_GAP: %.0fs since last event, pending_tools=%d, "
+                    "event_count=%d, turn_count=%d",
+                    gap, pending, stats.get('event_count', 0),
+                    stats.get('turn_count', 0),
+                )
+            last_event_gap_log = now
 
         # Periodic heartbeat with ping to distinguish live-but-silent from dead
         if stats is not None and (now - last_hb) >= _HB_INTERVAL:

@@ -17,6 +17,7 @@ from pokepoke.models.sdk_helpers import (
     build_gate_resume_prompt,
     build_resume_prompt,
 )
+from pokepoke.utils.process_utils import log_process_tree_snapshot as _log_process_tree_snapshot
 from pokepoke.types import BeadsWorkItem
 
 
@@ -356,6 +357,84 @@ class TestCheckToolWatchdog:
         call_args = mock_item_logger.log_error.call_args[0][0]
         assert "grep" in call_args
         assert "pattern" in call_args or "test" in call_args
+
+    @pytest.mark.asyncio
+    async def test_captures_process_tree_on_timeout(self):
+        """Verify _check_tool_watchdog calls _log_process_tree_snapshot on timeout."""
+        session = AsyncMock()
+        stats = {"tool_start_times": {"t1": time.monotonic() - 700}}
+        mock_handler = AsyncMock()
+        mock_handler._pending_tools = {
+            "t1": {"name": "powershell", "args": {"command": "git status"}}
+        }
+        mock_handler._item_logger = None
+
+        with patch("pokepoke.models.sdk_helpers._log_process_tree_snapshot") as mock_snapshot:
+            result = await _check_tool_watchdog(session, stats, 600.0, handler=mock_handler)
+            assert result == "tool_timeout"
+            mock_snapshot.assert_called_once()
+            call_args = mock_snapshot.call_args
+            assert call_args[0][0] == "powershell"  # tool_name
+            assert "git status" in call_args[0][1]   # args_str
+
+
+# ── _log_process_tree_snapshot ───────────────────────────────────────────────
+
+
+class TestLogProcessTreeSnapshot:
+    @patch("pokepoke.utils.process_utils.os")
+    def test_skips_on_non_windows(self, mock_os):
+        """On non-Windows, the function returns immediately."""
+        mock_os.name = "posix"
+        _log_process_tree_snapshot("powershell", "test", 900.0)
+        # No subprocess calls should be made
+
+    @patch("pokepoke.utils.process_utils.subprocess.run")
+    @patch("pokepoke.utils.process_utils.os")
+    def test_logs_child_processes_on_windows(self, mock_os, mock_run):
+        """On Windows, captures tasklist and wmic output."""
+        mock_os.name = "nt"
+        # tasklist returns copilot.exe with PID 1234
+        mock_run.side_effect = [
+            type("Result", (), {"stdout": '"Image Name","PID"\n"copilot.exe","1234"', "returncode": 0})(),
+            type("Result", (), {"stdout": "Name=pwsh.exe\nProcessId=5678\nCommandLine=git commit", "returncode": 0})(),
+        ]
+        _log_process_tree_snapshot("powershell", "git commit", 900.0)
+        assert mock_run.call_count == 2
+
+    @patch("pokepoke.utils.process_utils.subprocess.run")
+    @patch("pokepoke.utils.process_utils.os")
+    def test_handles_no_copilot_processes(self, mock_os, mock_run):
+        """Handles case when no copilot.exe processes are found."""
+        mock_os.name = "nt"
+        mock_run.return_value = type("Result", (), {"stdout": '"Image Name","PID"', "returncode": 0})()
+        _log_process_tree_snapshot("edit", "test.py", 900.0)
+        assert mock_run.call_count == 1  # Only tasklist, no wmic
+
+    @patch("pokepoke.utils.process_utils.subprocess.run")
+    @patch("pokepoke.utils.process_utils.os")
+    def test_handles_subprocess_exception(self, mock_os, mock_run):
+        """Gracefully handles subprocess failures."""
+        mock_os.name = "nt"
+        mock_run.side_effect = Exception("tasklist failed")
+        _log_process_tree_snapshot("powershell", "test", 900.0)
+        # Should not raise
+
+    @patch("pokepoke.utils.process_utils.subprocess.run")
+    @patch("pokepoke.utils.process_utils.os")
+    def test_logs_to_item_logger(self, mock_os, mock_run):
+        """Writes diagnostic info to item logger when available."""
+        mock_os.name = "nt"
+        mock_run.return_value = type("Result", (), {"stdout": '"Image Name","PID"\n"copilot.exe","1234"', "returncode": 0})()
+        # Second call for wmic
+        mock_run.side_effect = [
+            type("Result", (), {"stdout": '"Image Name","PID"\n"copilot.exe","1234"', "returncode": 0})(),
+            type("Result", (), {"stdout": "", "returncode": 0})(),
+        ]
+        mock_handler = AsyncMock()
+        mock_handler._item_logger = AsyncMock()
+        _log_process_tree_snapshot("powershell", "test", 900.0, handler=mock_handler)
+        mock_handler._item_logger.log_error.assert_called_once()
 
 
 # ── _build_token_usage_callback ──────────────────────────────────────────────

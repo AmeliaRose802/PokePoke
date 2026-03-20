@@ -115,6 +115,8 @@ max-statements = 50
 "src/pokepoke/desktop/desktop_ui.py" = ["T201"]  # Desktop UI feedback - print() is appropriate
 "src/pokepoke/models/copilot_sdk.py" = ["T201"]  # SDK session feedback - print() is appropriate
 "src/pokepoke/models/sdk_helpers.py" = ["T201", "C901"]  # SDK session feedback and complex timeout logic
+"src/pokepoke/models/sdk_event_handler.py" = ["T201"]  # SDK session streaming output - print() is appropriate
+"src/pokepoke/utils/process_utils.py" = ["T201"]  # SDK client shutdown feedback - print() is appropriate
 
 # Mypy type checking configuration
 [tool.mypy]

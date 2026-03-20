@@ -1,5 +1,6 @@
 """Process utilities for SDK client management and memory monitoring."""
 import asyncio
+import contextlib
 import ctypes
 import logging
 import os
@@ -147,6 +148,63 @@ def kill_orphaned_copilot_processes(expected_count: int = 0) -> int:
     except Exception as e:
         logger.warning(f"Failed to clean orphaned Copilot processes: {e}")
         return 0
+
+
+def log_process_tree_snapshot(
+    tool_name: str, args_str: str, elapsed: float,
+    handler: Any = None,
+) -> None:
+    """Capture child process tree when a tool timeout fires.
+
+    Logs all child processes of known copilot.exe instances so we can
+    determine whether the hang is git contention, a stuck subprocess,
+    antivirus scanning, or the CLI itself.
+    """
+    if os.name != 'nt':
+        return
+    try:
+        result = subprocess.run(
+            ['tasklist', '/FI', 'IMAGENAME eq copilot.exe', '/FO', 'CSV'],
+            capture_output=True, text=True, timeout=5,
+            encoding='utf-8', errors='replace',
+        )
+        lines = result.stdout.strip().split('\n')
+        if len(lines) <= 1:
+            logger.info("TOOL_TIMEOUT_DIAG: No copilot.exe processes found")
+            return
+        copilot_pids: list[int] = []
+        for line in lines[1:]:
+            parts = line.strip().strip('"').split('","')
+            if len(parts) >= 2:
+                with contextlib.suppress(ValueError):
+                    copilot_pids.append(int(parts[1]))
+
+        for cpid in copilot_pids:
+            child_result = subprocess.run(
+                ['wmic', 'process', 'where', f'ParentProcessId={cpid}',
+                 'get', 'ProcessId,Name,CommandLine', '/format:list'],
+                capture_output=True, text=True, timeout=5,
+                encoding='utf-8', errors='replace',
+            )
+            children = child_result.stdout.strip()
+            if children:
+                logger.info(
+                    "TOOL_TIMEOUT_DIAG: copilot_pid=%d tool=%s elapsed=%.0fs children:\n%s",
+                    cpid, tool_name, elapsed, children,
+                )
+            else:
+                logger.info(
+                    "TOOL_TIMEOUT_DIAG: copilot_pid=%d tool=%s elapsed=%.0fs — no child processes",
+                    cpid, tool_name, elapsed,
+                )
+
+        if handler and hasattr(handler, '_item_logger') and handler._item_logger:
+            handler._item_logger.log_error(
+                f"TOOL_TIMEOUT_DIAG: {len(copilot_pids)} copilot process(es), "
+                f"tool={tool_name}, elapsed={elapsed:.0f}s"
+            )
+    except Exception as e:
+        logger.debug("Failed to capture process tree snapshot: %s", e)
 
 
 def apply_memory_backpressure(slots: int) -> tuple[int, int]:
