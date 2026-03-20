@@ -251,12 +251,27 @@ async def _await_completion(
             gap = now - stats['last_event_time']
             remaining_wall = deadline - asyncio.get_event_loop().time()
             ping_ok = False
+            ping_err = ""
             try:
                 await client.ping()
                 ping_ok = True
                 consecutive_ping_failures = 0
-            except Exception:
+            except Exception as _ping_exc:
                 consecutive_ping_failures += 1
+                ping_err = str(_ping_exc)[:100]
+            client_state_str = "unknown"
+            try:
+                client_state_str = str(client.get_state())
+            except Exception:
+                client_state_str = "get_state_error"
+            print(
+                f"[SDK-DIAG] heartbeat: ping={'ok' if ping_ok else 'FAIL'}, "
+                f"state={client_state_str}, gap={gap:.0f}s, pending={stats.get('pending_tool_calls', 0)}, "
+                f"events={stats['event_count']}, turns={stats.get('turn_count', 0)}, "
+                f"ping_failures={consecutive_ping_failures}/{max_ping_failures}"
+                + (f", ping_err={ping_err}" if ping_err else ""),
+                flush=True,
+            )
             logger.info(
                 "SDK heartbeat: ping=%s, event_gap=%.0fs, pending=%d, "
                 "events_delta=%d (total=%d), turns=%d, remaining=%.0fs, "
