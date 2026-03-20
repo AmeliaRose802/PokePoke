@@ -10,10 +10,11 @@
     2. Ruff lint check (syntax + style) [sequential]
     3. Code quality check (mypy type checking) [sequential, after ruff]
     4. Test coverage check (modified files must have 80%+ coverage) [sequential, after mypy]
-    5. Skipped tests check (no skipped pytest tests) [parallel]
-    6. Desktop build check [parallel]
-    7. File length check [parallel]
-    8. Desktop lint check [parallel]
+    5. Skipped tests check [sequential]
+    6. Desktop build check [sequential]
+    7. File length check [sequential]
+    8. Desktop lint check [sequential]
+    9. Pokepoke boot check [sequential]
 
 .NOTES
     ⚠️  CRITICAL: This file is protected by CODEOWNERS
@@ -58,7 +59,7 @@ $allPassed = $true
 $passed = @()
 $failed = @()
 
-# Checks that don't depend on build artifacts - can run in parallel
+# Static checks that don't depend on build artifacts - run sequentially
 $staticChecks = @(
     @{ Name = "Pokepoke Boot"; Script = "check-pokepoke-import.ps1" }
     @{ Name = "Skipped Tests"; Script = "check-skipped-tests.ps1" }
@@ -75,42 +76,6 @@ $buildDependentChecks = @(
     @{ Name = "Code Quality"; Script = "check-code-quality.ps1" }
     @{ Name = "Test Coverage"; Script = "check-coverage.py"; Interpreter = "python" }
 )
-
-# Start static checks in parallel.
-# Wrapped in try/catch so that if Start-Job fails mid-loop, already-started
-# jobs are cleaned up instead of orphaned.
-$staticJobs = @()
-try {
-    foreach ($check in $staticChecks) {
-        $checkScript = Join-Path $hooksDir $check.Script
-        $job = Start-Job -ScriptBlock {
-            param($script, $workingDir)
-            $ErrorActionPreference = "Stop"
-            try {
-                # Set working directory to repo root for relative paths to work
-                Set-Location $workingDir
-                $output = & $script *>&1 | Out-String
-                @{ ExitCode = $LASTEXITCODE; Output = $output }
-            }
-            catch {
-                @{ ExitCode = 1; Output = $_.Exception.Message }
-            }
-        } -ArgumentList $checkScript, $repoRoot
-        
-        $staticJobs += @{
-            Name = $check.Name
-            Job = $job
-        }
-    }
-}
-catch {
-    Write-Host "Error starting parallel checks: $_" -ForegroundColor Red
-    foreach ($jobInfo in $staticJobs) {
-        Stop-Job $jobInfo.Job -ErrorAction SilentlyContinue
-        Remove-Job $jobInfo.Job -Force -ErrorAction SilentlyContinue
-    }
-    exit 1
-}
 
 # Run build-dependent checks sequentially (abort on first failure)
 $buildFailed = $false
@@ -152,70 +117,47 @@ foreach ($check in $buildDependentChecks) {
     }
 }
 
-# Helper: clean up all remaining Start-Job processes to prevent resource leaks.
-# On Windows, child processes are NOT auto-killed when the parent exits, so
-# every Start-Job that isn't explicitly stopped leaks a full pwsh process.
-function Stop-AllStaticJobs {
-    foreach ($jobInfo in $staticJobs) {
-        Stop-Job $jobInfo.Job -ErrorAction SilentlyContinue
-        Remove-Job $jobInfo.Job -Force -ErrorAction SilentlyContinue
-    }
-}
-
-# If build failed, stop parallel static jobs and exit early
+# If build failed, exit early
 if ($buildFailed) {
-    Stop-AllStaticJobs
     Write-Host ""
     Write-Host "❌ Build failed: $($failed -join ', ') — downstream checks skipped" -ForegroundColor Red
     exit 1
 }
 
-# Wait for and process static checks results.
-# Wrapped in try/finally so that ANY error (or Ctrl+C) during Wait-Job /
-# Receive-Job still cleans up remaining background jobs instead of orphaning them.
-$parallelStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-try {
-    foreach ($jobInfo in $staticJobs) {
-        Write-Host "  • $($jobInfo.Name)... " -NoNewline -ForegroundColor Gray
+# Run static checks sequentially (no Start-Job overhead)
+foreach ($check in $staticChecks) {
+    Write-Host "  • $($check.Name)... " -NoNewline -ForegroundColor Gray
+    $checkStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    
+    try {
+        $checkScript = Join-Path $hooksDir $check.Script
+        # Capture output but don't stream (these checks are fast)
+        $output = & $checkScript *>&1 | Out-String
+        $checkStopwatch.Stop()
         
-        # Wait with timeout - 900s per job max (Windows Start-Job adds ~3x overhead)
-        $result = $jobInfo.Job | Wait-Job -Timeout 900 | Receive-Job
-        
-        if ($null -eq $result) {
-            # Timeout occurred
-            Stop-Job $jobInfo.Job -ErrorAction SilentlyContinue
-            Remove-Job $jobInfo.Job -Force -ErrorAction SilentlyContinue
-            Write-Host "⏱ TIMEOUT" -ForegroundColor Yellow
-            $failed += "$($jobInfo.Name) (timeout)"
-            $allPassed = $false
-            Write-Host "  ⚠️  This check took too long and was terminated to free resources" -ForegroundColor Yellow
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "✓" -ForegroundColor Green
+            $passed += $check.Name
         }
         else {
-            Remove-Job $jobInfo.Job -ErrorAction SilentlyContinue
-            
-            if ($result.ExitCode -eq 0) {
-                Write-Host "✓" -ForegroundColor Green
-                $passed += $jobInfo.Name
-            }
-            else {
-                Write-Host "✗" -ForegroundColor Red
-                $failed += $jobInfo.Name
-                $allPassed = $false
-                if ($result.Output.Trim()) {
-                    Write-Host ""
-                    Write-Host $result.Output.Trim()
-                    Write-Host ""
-                }
+            Write-Host "✗" -ForegroundColor Red
+            $failed += $check.Name
+            $allPassed = $false
+            if ($output.Trim()) {
+                Write-Host ""
+                Write-Host $output.Trim()
+                Write-Host ""
             }
         }
     }
+    catch {
+        $checkStopwatch.Stop()
+        Write-Host "✗" -ForegroundColor Red
+        Write-Host "Error: $_" -ForegroundColor Red
+        $failed += $check.Name
+        $allPassed = $false
+    }
 }
-finally {
-    # Ensure no orphaned pwsh processes remain regardless of how we exit
-    Stop-AllStaticJobs
-}
-$parallelStopwatch.Stop()
-Write-Host "    ⏱ Parallel checks: $([math]::Round($parallelStopwatch.Elapsed.TotalSeconds, 1))s" -ForegroundColor DarkGray
 
 Write-Host ""
 
