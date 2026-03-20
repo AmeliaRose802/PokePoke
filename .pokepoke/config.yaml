@@ -4,4 +4,4 @@ models:
   fallback: claude-sonnet-4.5
 max_parallel_agents: 2
 git:
-  default_branch: main
+  default_branch: master
