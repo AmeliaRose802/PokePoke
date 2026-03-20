@@ -1,6 +1,7 @@
 """Helper functions for the Copilot SDK integration."""
 import asyncio
 import logging
+import sys
 import time
 from collections.abc import Callable
 from typing import Any
@@ -270,7 +271,7 @@ async def _await_completion(
                 f"events={stats['event_count']}, turns={stats.get('turn_count', 0)}, "
                 f"ping_failures={consecutive_ping_failures}/{max_ping_failures}"
                 + (f", ping_err={ping_err}" if ping_err else ""),
-                flush=True,
+                file=sys.stderr, flush=True,
             )
             logger.info(
                 "SDK heartbeat: ping=%s, event_gap=%.0fs, pending=%d, "
