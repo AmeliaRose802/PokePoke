@@ -9,7 +9,14 @@ try:
     from copilot import PermissionHandler
     _approve_all: Any = PermissionHandler.approve_all
 except (ImportError, AttributeError):
-    _approve_all = None
+    # SDK v0.1.0+ on Python 3.13: PermissionHandler is a type alias,
+    # not a class with approve_all. Build an inline approval handler.
+    try:
+        from copilot.types import PermissionRequestResult
+        def _approve_all(req: Any, _ctx: Any = None) -> Any:
+            return PermissionRequestResult(kind="approved", rules=[])
+    except ImportError:
+        _approve_all = None
 
 from pokepoke.utils.shutdown import is_shutting_down
 from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
