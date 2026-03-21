@@ -435,6 +435,144 @@ class TestAssignAndSyncItem:
 
         assert result is False
 
+    @patch("pokepoke.beads.beads_management._rollback_assignment")
+    @patch("pokepoke.beads.beads_management._run_bd")
+    @patch("pokepoke.beads.beads_management._parse_beads_json")
+    @patch("pokepoke.beads.beads_management.acquire_lock")
+    def test_rollback_on_verify_data_none(
+        self, mock_lock: Mock, mock_parse: Mock, mock_run_bd: Mock, mock_rollback: Mock
+    ) -> None:
+        """If bd show succeeds after update but JSON is unparseable, rollback the assignment."""
+        from pokepoke.beads.beads_management import assign_and_sync_item
+        from contextlib import contextmanager
+
+        @contextmanager
+        def fake_lock(*args: object, **kwargs: object):
+            yield Mock()
+
+        mock_lock.side_effect = fake_lock
+        mock_parse.side_effect = [
+            [{"id": "item-1", "assignee": ""}],   # pre-check: unassigned
+            None,                                   # verify: parse returns None
+        ]
+        mock_run_bd.return_value = Mock(stdout="")
+
+        result = assign_and_sync_item("item-1", agent_name="my-agent")
+
+        assert result is False
+        mock_rollback.assert_called_once_with("item-1", "could not re-read after update")
+
+    @patch("pokepoke.beads.beads_management._rollback_assignment")
+    @patch("pokepoke.beads.beads_management._run_bd")
+    @patch("pokepoke.beads.beads_management._parse_beads_json")
+    @patch("pokepoke.beads.beads_management.acquire_lock")
+    def test_rollback_on_assignee_mismatch(
+        self, mock_lock: Mock, mock_parse: Mock, mock_run_bd: Mock, mock_rollback: Mock
+    ) -> None:
+        """If verification shows a different assignee, rollback the assignment."""
+        from pokepoke.beads.beads_management import assign_and_sync_item
+        from contextlib import contextmanager
+
+        @contextmanager
+        def fake_lock(*args: object, **kwargs: object):
+            yield Mock()
+
+        mock_lock.side_effect = fake_lock
+        mock_parse.side_effect = [
+            [{"id": "item-1", "assignee": ""}],            # pre-check: unassigned
+            [{"id": "item-1", "assignee": "other-agent"}],  # verify: someone else
+        ]
+        mock_run_bd.return_value = Mock(stdout="")
+
+        result = assign_and_sync_item("item-1", agent_name="my-agent")
+
+        assert result is False
+        mock_rollback.assert_called_once_with("item-1", "assignee mismatch: 'other-agent'")
+
+    @patch("pokepoke.beads.beads_management._rollback_assignment")
+    @patch("pokepoke.beads.beads_management._run_bd")
+    @patch("pokepoke.beads.beads_management._parse_beads_json")
+    @patch("pokepoke.beads.beads_management.acquire_lock")
+    def test_rollback_on_post_update_exception(
+        self, mock_lock: Mock, mock_parse: Mock, mock_run_bd: Mock, mock_rollback: Mock
+    ) -> None:
+        """If an exception occurs during verification (after update succeeded), rollback."""
+        from pokepoke.beads.beads_management import assign_and_sync_item
+        from contextlib import contextmanager
+
+        @contextmanager
+        def fake_lock(*args: object, **kwargs: object):
+            yield Mock()
+
+        mock_lock.side_effect = fake_lock
+        mock_parse.return_value = [{"id": "item-1", "assignee": ""}]  # pre-check
+        # First call (show) succeeds, second (update) succeeds, third (show for verify) raises
+        mock_run_bd.side_effect = [
+            Mock(stdout=""),                                            # pre-check show
+            Mock(stdout=""),                                            # update
+            subprocess.CalledProcessError(1, "bd", stderr="bd crash"),  # verify show
+        ]
+
+        result = assign_and_sync_item("item-1", agent_name="my-agent")
+
+        assert result is False
+        mock_rollback.assert_called_once()
+        assert "post-update error" in mock_rollback.call_args[0][1]
+
+    @patch("pokepoke.beads.beads_management._rollback_assignment")
+    @patch("pokepoke.beads.beads_management._run_bd")
+    @patch("pokepoke.beads.beads_management._parse_beads_json")
+    @patch("pokepoke.beads.beads_management.acquire_lock")
+    def test_no_rollback_when_update_itself_fails(
+        self, mock_lock: Mock, mock_parse: Mock, mock_run_bd: Mock, mock_rollback: Mock
+    ) -> None:
+        """If the update command itself fails (before it succeeds), no rollback needed."""
+        from pokepoke.beads.beads_management import assign_and_sync_item
+        from contextlib import contextmanager
+
+        @contextmanager
+        def fake_lock(*args: object, **kwargs: object):
+            yield Mock()
+
+        mock_lock.side_effect = fake_lock
+        mock_parse.return_value = [{"id": "item-1", "assignee": ""}]  # pre-check
+        # Show succeeds, update raises
+        mock_run_bd.side_effect = [
+            Mock(stdout=""),                                            # pre-check show
+            subprocess.CalledProcessError(1, "bd", stderr="update fail"),  # update fails
+        ]
+
+        result = assign_and_sync_item("item-1", agent_name="my-agent")
+
+        assert result is False
+        mock_rollback.assert_not_called()
+
+
+class TestRollbackAssignment:
+    """Tests for _rollback_assignment."""
+
+    @patch("pokepoke.beads.beads_management.unassign_item")
+    def test_calls_unassign(self, mock_unassign: Mock) -> None:
+        from pokepoke.beads.beads_management import _rollback_assignment
+        mock_unassign.return_value = True
+
+        _rollback_assignment("item-1", "test reason")
+
+        mock_unassign.assert_called_once_with("item-1")
+
+    @patch("pokepoke.beads.beads_recovery._add_failed_unassign")
+    @patch("pokepoke.beads.beads_management.unassign_item")
+    def test_persists_to_manifest_when_unassign_fails(
+        self, mock_unassign: Mock, mock_add_failed: Mock
+    ) -> None:
+        from pokepoke.beads.beads_management import _rollback_assignment
+        mock_unassign.return_value = False
+
+        _rollback_assignment("item-1", "verify failed")
+
+        mock_unassign.assert_called_once_with("item-1")
+        mock_add_failed.assert_called_once_with("item-1", "rollback failed: verify failed")
+
 
 class TestUnassignItem:
     """Tests for unassign_item."""
