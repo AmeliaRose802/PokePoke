@@ -79,6 +79,14 @@ def is_item_claimable(item_id: str) -> bool:
         return False
 
 
+def _rollback_assignment(item_id: str, reason: str) -> None:
+    """Best-effort rollback: unassign item, or persist to manifest for startup recovery."""
+    logger.warning("↩️  Rolling back assignment for %s: %s", item_id, reason)
+    if not unassign_item(item_id):
+        from .beads_recovery import _add_failed_unassign  # late import: circular dep
+        _add_failed_unassign(item_id, f"rollback failed: {reason}")
+
+
 def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
     """Assign a work item to an agent and sync to prevent parallel conflicts.
 
@@ -133,23 +141,26 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
                         # no-op claim (common when the orchestrator claims in the
                         # main thread before dispatching a worker).
                         if current_status.lower() == STATUS_IN_PROGRESS:
-                            print(f"ℹ️  {item_id} already assigned to {agent_name} and {STATUS_IN_PROGRESS} — skipping bd update")
+                            logger.info("ℹ️  %s already assigned to %s and %s — skipping bd update", item_id, agent_name, STATUS_IN_PROGRESS)
                             return True
 
             except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
                 logger.warning(f"⚠️  Failed to verify {item_id} ownership: {e}")
                 return False
 
+            update_succeeded = False
             try:
                 # Now safe to claim - we verified it's unassigned or ours
                 _run_bd(['update', item_id, '--status', STATUS_IN_PROGRESS, '-a', agent_name, '--json'])
-                print(f"✅ Assigned {item_id} to {agent_name} and marked {STATUS_IN_PROGRESS}")
+                update_succeeded = True
+                logger.info("✅ Assigned %s to %s and marked %s", item_id, agent_name, STATUS_IN_PROGRESS)
 
                 # Detect-and-abort: re-read and verify the assignee is actually us.
                 verify_result = _run_bd(['show', item_id, '--json'])
                 verify_data = _parse_beads_json(verify_result.stdout)
                 if verify_data is None:
                     logger.error(f"⚠️  CLAIM VERIFICATION FAILED: {item_id} could not be re-read after update")
+                    _rollback_assignment(item_id, "could not re-read after update")
                     return False
 
                 verify_item = verify_data[0] if isinstance(verify_data, list) else verify_data
@@ -159,6 +170,7 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
                         f"⚠️  CLAIM VERIFICATION FAILED: {item_id} assignee is '{verify_assignee}', "
                         f"expected '{agent_name}'"
                     )
+                    _rollback_assignment(item_id, f"assignee mismatch: '{verify_assignee}'")
                     return False
 
                 claimed = True
@@ -166,6 +178,8 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
             except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
                 stderr = e.stderr if isinstance(e, subprocess.CalledProcessError) else str(e)
                 logger.error(f"⚠️  Failed to assign {item_id}: {stderr}")
+                if update_succeeded:
+                    _rollback_assignment(item_id, f"post-update error: {stderr}")
                 return False
 
     except Timeout:
@@ -178,7 +192,7 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
         sync_result = run_bd_sync_with_retry()
 
         if sync_result.returncode == 0:
-            print(f"✅ Synced assignment - other agents will see {item_id} is claimed")
+            logger.info("✅ Synced assignment - other agents will see %s is claimed", item_id)
         else:
             logger.warning(f"⚠️  bd sync returned non-zero: {sync_result.returncode}")
             logger.warning("   Assignment may not be immediately visible to other agents")
@@ -206,14 +220,14 @@ def unassign_item(item_id: str) -> bool:
         result = _run_bd(['update', item_id, '--status', 'open', '-a', ''])
         if result.stderr and 'error' in result.stderr.lower():
             raise subprocess.CalledProcessError(1, 'bd', stderr=result.stderr)
-        print(f"↩️  Unassigned {item_id} from {agent_name} and reset to 'open'")
+        logger.info("↩️  Unassigned %s from %s and reset to 'open'", item_id, agent_name)
     except subprocess.CalledProcessError:
         # Some bd versions may not accept an empty -a; fall back to status-only reset.
         try:
             result = _run_bd(['update', item_id, '--status', 'open'])
             if result.stderr and 'error' in result.stderr.lower():
                 raise subprocess.CalledProcessError(1, 'bd', stderr=result.stderr)
-            print(f"↩️  Reset {item_id} to 'open' (assignee field may still reference {agent_name})")
+            logger.info("↩️  Reset %s to 'open' (assignee field may still reference %s)", item_id, agent_name)
         except subprocess.CalledProcessError as e:
             logger.error(f"⚠️  Failed to unassign {item_id}: {e.stderr}")
             return False
@@ -239,7 +253,7 @@ def close_item(item_id: str, message: str = "Completed") -> bool:
     """
     try:
         _run_bd(['close', item_id, '--reason', message])
-        print(f"✅ Closed {item_id}")
+        logger.info("✅ Closed %s", item_id)
         return True
     except subprocess.CalledProcessError as e:
         logger.error(f"⚠️  Failed to close {item_id}: {e.stderr}")
@@ -258,7 +272,7 @@ def add_comment(item_id: str, comment: str) -> bool:
     """
     try:
         _run_bd(['comments', 'add', item_id, comment])
-        print(f"💬 Added comment to {item_id}")
+        logger.info("💬 Added comment to %s", item_id)
         return True
     except subprocess.CalledProcessError as e:
         logger.error(f"⚠️  Failed to add comment to {item_id}: {e.stderr}")
