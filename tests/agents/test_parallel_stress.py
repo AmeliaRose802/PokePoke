@@ -474,8 +474,9 @@ class TestSemaphoreExecutorContention:
                 semaphore.acquire()
                 executor.submit(_worker)
             # Wait for workers by re-acquiring all semaphore slots
-            for _ in range(pool_size):
-                semaphore.acquire(timeout=5)
+            for i in range(pool_size):
+                acquired = semaphore.acquire(timeout=5)
+                assert acquired, f"Worker {i} failed to release semaphore (timeout)"
 
         assert len(results) == pool_size
 
