@@ -378,6 +378,36 @@ def test_get_available_children_excludes_blocked_items(
     assert [c.id for c in available] == ["ok-task"]
 
 
+@patch("pokepoke.beads.beads_hierarchy.logger")
+@patch("pokepoke.beads.beads_hierarchy._get_available_children")
+def test_resolve_to_leaf_task_detects_cycle(
+    mock_available: Mock,
+    mock_logger: Mock,
+) -> None:
+    """resolve_to_leaf_task should detect circular dependencies and return None."""
+    epic_a = _wi(id="A", issue_type="epic")
+    feature_b = _wi(id="B", issue_type="feature", priority=1)
+    feature_c = _wi(id="C", issue_type="feature", priority=1)
+
+    # A -> B -> C -> A (circular)
+    def _side_effect(parent_id: str):
+        if parent_id == "A":
+            return [feature_b], [feature_b]
+        if parent_id == "B":
+            return [feature_c], [feature_c]
+        if parent_id == "C":
+            return [epic_a], [epic_a]
+        raise AssertionError(parent_id)
+
+    mock_available.side_effect = _side_effect
+
+    resolved = resolve_to_leaf_task(epic_a)
+
+    assert resolved is None
+    mock_logger.warning.assert_called_once()
+    assert "Cycle detected" in mock_logger.warning.call_args[0][0]
+
+
 @patch("pokepoke.beads.beads_hierarchy.has_unmet_blocking_dependencies")
 @patch("pokepoke.beads.beads_hierarchy._get_available_children")
 def test_resolve_to_leaf_task_skips_blocked_children(

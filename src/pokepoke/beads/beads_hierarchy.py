@@ -193,7 +193,11 @@ def _get_available_children(parent_id: str) -> tuple[list[BeadsWorkItem], list[B
     return available, children
 
 
-def resolve_to_leaf_task(item: BeadsWorkItem, _depth: int = 0) -> BeadsWorkItem | None:
+def resolve_to_leaf_task(
+    item: BeadsWorkItem,
+    _depth: int = 0,
+    _visited: set[str] | None = None,
+) -> BeadsWorkItem | None:
     """Recursively resolve an epic/feature to an assignable leaf task.
 
     Core rule: NEVER directly assign an epic/feature that has children.
@@ -207,10 +211,12 @@ def resolve_to_leaf_task(item: BeadsWorkItem, _depth: int = 0) -> BeadsWorkItem 
     - If all children are complete, auto-closes the parent and returns None.
     - If all children are blocked (assigned to others, human-required),
       returns None (skip parent entirely).
+    - Circular dependencies are detected and short-circuited with a warning.
 
     Args:
         item: The work item to resolve.
         _depth: Internal recursion depth tracker (prevents infinite loops).
+        _visited: Set of already-visited item IDs for cycle detection.
 
     Returns:
         An assignable leaf task, the item itself if childless, or None if
@@ -219,6 +225,20 @@ def resolve_to_leaf_task(item: BeadsWorkItem, _depth: int = 0) -> BeadsWorkItem 
     _MAX_DEPTH = 10
     if _depth >= _MAX_DEPTH:
         return None
+
+    if _visited is None:
+        _visited = set()
+
+    if item.id in _visited:
+        logger.warning(
+            "Cycle detected in beads hierarchy: item %s was already visited "
+            "(visited: %s). Stopping resolution to avoid infinite loop.",
+            item.id,
+            _visited,
+        )
+        return None
+
+    _visited = _visited | {item.id}
 
     # Non-epic/feature items are always leaf tasks - return directly
     if item.issue_type not in ('epic', 'feature'):
@@ -242,7 +262,7 @@ def resolve_to_leaf_task(item: BeadsWorkItem, _depth: int = 0) -> BeadsWorkItem 
     for child in available:
         if child.issue_type in ('epic', 'feature'):
             # Child is itself an epic/feature - recursively resolve
-            resolved = resolve_to_leaf_task(child, _depth + 1)
+            resolved = resolve_to_leaf_task(child, _depth + 1, _visited)
             if resolved:
                 return resolved
             # This child resolved to nothing - try next sibling
@@ -296,7 +316,7 @@ def close_parent_if_complete(parent_id: str) -> bool:
 
     try:
         _run_bd(['close', parent_id, '-r', 'All child items completed'])
-        print(f"✅ Auto-closed parent {parent_id} - all children complete")
+        logger.info("Auto-closed parent %s - all children complete", parent_id)
         return True
     except CalledProcessError as e:
         logger.error(f"⚠️  Failed to close parent {parent_id}: {e.stderr}")
