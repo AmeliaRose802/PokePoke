@@ -143,22 +143,57 @@ def test_backend_switching():
 
 
 def test_concurrent_backend_operations():
-    """Test that backend state is properly isolated in concurrent scenarios."""
+    """Test that backend state remains consistent under concurrent access.
+
+    Multiple threads rapidly switch the active backend and verify that
+    ``get_active_backend()`` always returns a valid config and the sync
+    strategy stays in agreement with it.
+    """
+    import concurrent.futures
+    import threading
+
     original = get_active_backend()
-    try:
-        # This tests that backend switching doesn't cause race conditions
-        # in the global state
+    errors: list[str] = []
+    lock = threading.Lock()
+    iterations_per_thread = 50
 
-        set_active_backend(BD_CONFIG)
-        assert get_active_backend() == BD_CONFIG
-
-        set_active_backend(BR_CONFIG)
-        assert get_active_backend() == BR_CONFIG
-
-        # State should be consistent
+    def _switch_loop(config):  # type: CLIBackendConfig
         from pokepoke.beads.sync_strategy import get_active_sync_strategy
-        strategy = get_active_sync_strategy()
-        assert strategy._backend == BR_CONFIG
+        for _ in range(iterations_per_thread):
+            set_active_backend(config)
+            active = get_active_backend()
+            strategy = get_active_sync_strategy()
+
+            # The active backend must always be one of the two valid configs
+            if active not in (BD_CONFIG, BR_CONFIG):
+                with lock:
+                    errors.append(f"Invalid active backend: {active}")
+
+            # The strategy must reference a valid backend
+            if strategy._backend not in (BD_CONFIG, BR_CONFIG):
+                with lock:
+                    errors.append(f"Invalid strategy backend: {strategy._backend}")
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            futures = [
+                pool.submit(_switch_loop, BD_CONFIG),
+                pool.submit(_switch_loop, BR_CONFIG),
+                pool.submit(_switch_loop, BD_CONFIG),
+                pool.submit(_switch_loop, BR_CONFIG),
+            ]
+            concurrent.futures.wait(futures)
+            # Re-raise any exception from a worker thread
+            for f in futures:
+                f.result()
+
+        assert not errors, "Concurrent errors detected:\n" + "\n".join(errors)
+
+        # After all threads finish, state must still be consistent
+        final = get_active_backend()
+        assert final in (BD_CONFIG, BR_CONFIG)
+        from pokepoke.beads.sync_strategy import get_active_sync_strategy
+        assert get_active_sync_strategy()._backend == final
 
     finally:
         set_active_backend(original)
