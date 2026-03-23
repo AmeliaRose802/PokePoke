@@ -77,6 +77,18 @@ function ViewContentBlock({ tool }: ViewContentBlockProps) {
   return <div className="log-view-content log-markdown-content" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
+interface ToolOutputBlockProps {
+  entries: LogEntry[];
+}
+
+/** Render tool output (e.g., command output) as a single code block instead of separate lines. */
+function ToolOutputBlock({ entries }: ToolOutputBlockProps) {
+  const code = entries.map((e) => e.message).join("\n");
+  const fence = `\`\`\`\n${code}\n\`\`\``;
+  const html = renderMarkdown(fence);
+  return <div className="log-tool-output log-markdown-content" dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
 interface ToolAccordionProps {
   tool: ToolItem;
   keyPrefix: string;
@@ -85,8 +97,9 @@ interface ToolAccordionProps {
 
 export function ToolAccordion({ tool, keyPrefix, nested = false }: ToolAccordionProps) {
   const showViewContent = isViewToolWithContent(tool);
+  const showToolOutput = !showViewContent && (tool.additionalEntries?.length ?? 0) > 1;
   const detailsEntries = [tool.entry];
-  if (!showViewContent && tool.additionalEntries) detailsEntries.push(...tool.additionalEntries);
+  if (!showViewContent && !showToolOutput && tool.additionalEntries) detailsEntries.push(...tool.additionalEntries);
   if (tool.result) detailsEntries.push(tool.result);
   const nestedClass = nested ? "nested" : "";
 
@@ -106,6 +119,7 @@ export function ToolAccordion({ tool, keyPrefix, nested = false }: ToolAccordion
       <div className="log-accordion-details">
         <ToolDescription summary={tool.summary} />
         {showViewContent && <ViewContentBlock tool={tool} />}
+        {showToolOutput && <ToolOutputBlock entries={tool.additionalEntries!} />}
         {detailsEntries.map((entry, detailIndex) => (
           <LogEntryRenderer
             key={`${keyPrefix}-${detailIndex}`}

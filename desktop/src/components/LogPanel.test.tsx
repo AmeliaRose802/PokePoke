@@ -259,6 +259,43 @@ describe("LogPanel", () => {
     expect(viewContent).toBeNull();
   });
 
+  it("renders multi-line tool output as a single code block instead of separate bubbles", () => {
+    const logs: LogEntry[] = [
+      mk(1, "[Tool] powershell({'command': 'npm test'})"),
+      mk(2, "PASS tests/app.test.ts"),
+      mk(3, "PASS tests/utils.test.ts"),
+      mk(4, "Tests: 2 passed, 2 total"),
+      mk(5, "✅ Result: Tests passed"),
+    ];
+
+    render(<LogPanel title="Agent" icon="🤖" logs={logs} accentColor="#7dcfff" />);
+
+    // Should render a tool output block (not view content block)
+    const toolOutput = document.querySelector(".log-tool-output");
+    expect(toolOutput).not.toBeNull();
+
+    // Output should be in a single <pre><code> block
+    const pre = toolOutput!.querySelector("pre");
+    expect(pre).not.toBeNull();
+    const code = pre!.querySelector("code");
+    expect(code).not.toBeNull();
+
+    // All output lines should be inside the single code block
+    expect(code!.textContent).toContain("PASS tests/app.test.ts");
+    expect(code!.textContent).toContain("PASS tests/utils.test.ts");
+    expect(code!.textContent).toContain("Tests: 2 passed, 2 total");
+
+    // There should NOT be individual log-entry bubbles for the output lines
+    const accordion = document.querySelector("details.log-accordion");
+    const details = accordion!.querySelector(".log-accordion-details");
+    const entries = details!.querySelectorAll(".log-entry");
+    // Only the tool call entry and result entry should be individual entries (not output lines)
+    for (const entry of entries) {
+      expect(entry.textContent).not.toContain("PASS tests/app.test.ts");
+      expect(entry.textContent).not.toContain("PASS tests/utils.test.ts");
+    }
+  });
+
   it("pairs non-interleaved batch results with correct tool accordions", () => {
     const logs: LogEntry[] = [
       mk(1, "[Copilot] Calling 2 tool(s)..."),
