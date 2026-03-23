@@ -67,9 +67,9 @@ Write-Host "🖥️  Starting PokePoke Desktop..." -ForegroundColor Yellow
 $venvPython = Join-Path $repoRoot ".venv\Scripts\python.exe"
 try {
     if (Test-Path $venvPython) {
-        & $venvPython -m pokepoke.orchestrator --autonomous --continuous
+        & $venvPython -m pokepoke --autonomous --continuous @args
     } else {
-        python -m pokepoke.orchestrator --autonomous --continuous
+        python -m pokepoke --autonomous --continuous @args
     }
 } finally {
     # Clean up Vite dev server when the app exits
