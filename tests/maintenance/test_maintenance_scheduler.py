@@ -870,10 +870,11 @@ class TestPerRepoScheduling:
             scheduler._maybe_run_agent("Janitor", agent_cfg, Path.cwd(), session_stats, run_logger, repo_id="repo-a")
             scheduler._maybe_run_agent("Janitor", agent_cfg, Path.cwd(), session_stats, run_logger, repo_id="repo-b")
 
-        # Should have been called with different lock names
+        # Should have been called with different lock names (repo_id is hashed)
         lock_names = [call.args[0] for call in mock_lock.call_args_list]
-        assert "maintenance-janitor-repo-a" in lock_names
-        assert "maintenance-janitor-repo-b" in lock_names
+        assert len(lock_names) == 2
+        assert lock_names[0] != lock_names[1]
+        assert all(name.startswith("maintenance-janitor-") for name in lock_names)
 
     @patch("pokepoke.maintenance.maintenance_scheduler.record_maintenance_run")
     @patch("pokepoke.maintenance.maintenance_scheduler.get_config")

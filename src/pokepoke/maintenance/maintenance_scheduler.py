@@ -244,8 +244,14 @@ class MaintenanceScheduler:
         log_key = agent_name.lower().replace(" ", "_")
         file_lock = None
 
-        # Include repo_id in lock keys so different repos don't block each other
-        lock_suffix = f"-{repo_id}" if repo_id else ""
+        # Include repo_id in lock keys so different repos don't block each other.
+        # Sanitise repo_id for use in filenames (Windows paths contain ':' and '\').
+        if repo_id:
+            import hashlib
+            safe_id = hashlib.sha256(repo_id.encode()).hexdigest()[:12]
+            lock_suffix = f"-{safe_id}"
+        else:
+            lock_suffix = ""
         lock_key = f"{agent_name}{lock_suffix}"
         thread_lock = self._get_agent_lock(lock_key)
 
@@ -289,7 +295,7 @@ class MaintenanceScheduler:
 
         set_terminal_banner(f"PokePoke - Synced {agent_name} Agent")
         terminal_ui.ui.update_header("MAINTENANCE", f"{agent_name} Agent", "Running")
-        print(f"\n🔧 Running {agent_name} Agent...")
+        print(f"\n🔧 Running {agent_name} Agent...")  # noqa: T201
         run_logger.log_maintenance(log_key, f"Starting {agent_name} Agent")
 
         # Update run count on session stats if attribute exists (thread-safe)
