@@ -94,12 +94,7 @@ def _run_cli(
     timeout: int | None = None,
     cwd: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run a beads CLI command using the given *backend* configuration.
-
-    This is the backend-agnostic core that both ``bd`` and ``br`` use.
-    Mutating commands (as defined in the backend config) are serialized
-    through a global SQLite lock to prevent contention in parallel mode.
-    """
+    """Run a beads CLI command.  Mutating commands are serialized via lock."""
     if timeout is None:
         timeout = backend.default_timeout
 
@@ -132,14 +127,7 @@ def _run_bd(
     timeout: int | None = 30,
     cwd: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run a beads CLI command using the active backend.
-
-    Backward-compatible wrapper around :func:`_run_cli`.  All existing
-    callers continue to work without changes.
-
-    IMPORTANT: All mutating beads operations are serialized through a single
-    global lock to prevent SQLite lock contention in parallel mode.
-    """
+    """Run a beads CLI command using the active backend."""
     return _run_cli(
         args,
         backend=_active_backend,
@@ -156,15 +144,7 @@ def _filter_to_dataclass(cls: type, data: dict[str, Any]) -> Any:
 
 
 def _parse_beads_json(output: str, extra_prefixes: tuple[str, ...] = ()) -> Any:
-    """Parse JSON from beads CLI output, filtering warning/note lines.
-
-    Args:
-        output: Raw stdout from a beads command.
-        extra_prefixes: Additional line prefixes to filter out (e.g., 'Created').
-
-    Returns:
-        Parsed JSON data, or None if no JSON found.
-    """
+    """Parse JSON from beads CLI output, filtering warning/note lines."""
     prefixes = ('Note:', 'Warning:', 'Hint:') + extra_prefixes
     filtered_lines = [
         line for line in output.split('\n')
@@ -182,11 +162,7 @@ def _parse_beads_json(output: str, extra_prefixes: tuple[str, ...] = ()) -> Any:
 
 
 def _get_main_repo_root() -> Path | None:
-    """Get the main repository root directory (not a worktree).
-
-    Returns:
-        Path to the main repo root, or None if not in a git repository.
-    """
+    """Return the main repo root, or None if not in a git repo."""
     from pokepoke.git.git_operations import get_main_repo_root
     try:
         return get_main_repo_root()
@@ -195,11 +171,7 @@ def _get_main_repo_root() -> Path | None:
 
 
 def get_ready_work_items() -> list[BeadsWorkItem]:
-    """Query beads database for ready work items.
-
-    Returns:
-        List of ready work items. Returns empty list if beads command fails.
-    """
+    """Query beads for ready work items. Returns empty list on failure."""
     try:
         result = _run_bd(['ready', '--json'])
     except subprocess.CalledProcessError as e:
@@ -226,6 +198,32 @@ def get_ready_work_items() -> list[BeadsWorkItem]:
         return [_filter_to_dataclass(BeadsWorkItem, item) for item in items_data]
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         logger.warning(f"⚠️  Warning: failed to parse beads output: {e}")
+        return []
+
+
+def get_in_progress_items() -> list[BeadsWorkItem]:
+    """Query beads for items with ``in_progress`` status.
+
+    These are items that were claimed by a previous run but never completed
+    (e.g. the orchestrator was killed).  The caller can merge them with
+    ``get_ready_work_items()`` so that existing worktrees are resumed.
+    """
+    try:
+        result = _run_bd(['list', '--status', 'in_progress', '--json'])
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, Exception) as e:
+        logger.warning("⚠️  beads in_progress query failed: %s", e)
+        return []
+
+    if not result.stdout:
+        return []
+
+    try:
+        items_data = _parse_beads_json(result.stdout)
+        if not items_data or isinstance(items_data, dict):
+            return []
+        return [_filter_to_dataclass(BeadsWorkItem, item) for item in items_data]
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        logger.warning("⚠️  failed to parse in_progress output: %s", e)
         return []
 
 

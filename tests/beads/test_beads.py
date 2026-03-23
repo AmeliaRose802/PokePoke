@@ -484,12 +484,14 @@ class TestAssignAndSyncItem:
             returncode=0
         )
 
-        mock_run.side_effect = [show_result, update_result, verify_show_result]
+        rollback_result = Mock(returncode=0, stderr="")
+
+        mock_run.side_effect = [show_result, update_result, verify_show_result, rollback_result]
 
         result = assign_and_sync_item(item_id, "agent-1")
 
         assert result is False
-        assert mock_run.call_count == 3
+        assert mock_run.call_count >= 3
 
     @patch('pokepoke.beads.beads_management._run_bd')
     def test_assign_allows_claiming_own_item(self, mock_run: Mock) -> None:

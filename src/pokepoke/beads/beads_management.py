@@ -26,18 +26,7 @@ def run_bd_sync_with_retry(
     base_delay: float = 0.5,
     timeout: int | None = 60,
 ) -> subprocess.CompletedProcess[str]:
-    """Run beads sync with retries for transient errors.
-
-    Delegates to the active :class:`~pokepoke.beads.sync_strategy.SyncStrategy`
-    (``DaemonSync`` for ``bd``, ``ExplicitSync`` for ``br``).
-
-    Args:
-        max_attempts: Maximum number of retry attempts.
-        base_delay: Initial delay between retries (doubles each attempt).
-        timeout: Maximum seconds to wait for sync to complete.
-            Defaults to 60s to prevent indefinite hangs inside file locks.
-            Pass ``None`` only if an unlimited wait is intentional.
-    """
+    """Run beads sync with retries.  Delegates to DaemonSync (bd) or ExplicitSync (br)."""
     from .sync_strategy import get_active_sync_strategy
 
     return get_active_sync_strategy().sync(
@@ -90,18 +79,7 @@ def _rollback_assignment(item_id: str, reason: str) -> None:
 def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
     """Assign a work item to an agent and sync to prevent parallel conflicts.
 
-    This should be called BEFORE creating a worktree to ensure other parallel
-    agents see the assignment and don't pick the same item.
-
-    CRITICAL: Verifies item is still claimable immediately before assignment
-    to catch race conditions where another agent claimed it between fetch and now.
-
-    Args:
-        item_id: The item ID to assign.
-        agent_name: Agent name to assign to (defaults to $AGENT_NAME env var or 'agent').
-
-    Returns:
-        True if successful, False if already claimed or failed.
+    Verifies the item is claimable before assigning. Returns True on success.
     """
     if agent_name is None:
         agent_name = get_agent_name()
@@ -134,8 +112,17 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
                         is_ours = (current_assignee.lower() == agent_name.lower())
 
                         if not is_ours:
-                            logger.warning(f"⚠️  RACE CONDITION DETECTED: {item_id} already assigned to {current_assignee}")
-                            return False
+                            # Allow reclaiming items from previous PokePoke runs
+                            # that were orphaned when the orchestrator was killed.
+                            is_pokepoke_orphan = current_assignee.lower().startswith("pokepoke_")
+                            if is_pokepoke_orphan:
+                                logger.info(
+                                    "♻️  Reclaiming %s from dead agent %s",
+                                    item_id, current_assignee,
+                                )
+                            else:
+                                logger.warning(f"⚠️  RACE CONDITION DETECTED: {item_id} already assigned to {current_assignee}")
+                                return False
 
                         # If the item is already ours and in progress, this is a
                         # no-op claim (common when the orchestrator claims in the

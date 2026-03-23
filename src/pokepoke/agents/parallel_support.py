@@ -281,6 +281,21 @@ def run_preflight_and_repo_checks(
         run_logger.log_orchestrator(f"Failed to fetch ready items: {e}", level="ERROR")
         ready_items = []
 
+    # Pick up in_progress items orphaned from a previous crashed run.
+    try:
+        from pokepoke.beads.beads_query import get_in_progress_items
+        in_progress = get_in_progress_items()
+        if in_progress:
+            ready_ids = {item.id for item in ready_items}
+            resumed = [item for item in in_progress if item.id not in ready_ids]
+            if resumed:
+                run_logger.log_polling(
+                    f"Resuming {len(resumed)} in-progress item(s) from previous run"
+                )
+                ready_items = resumed + ready_items
+    except Exception as e:
+        run_logger.log_orchestrator(f"Failed to fetch in-progress items: {e}", level="WARNING")
+
     return True, consecutive_preflight_failures, ready_items
 
 
@@ -342,7 +357,6 @@ def check_loop_exit(
     run_logger.exit_idle()
     return None
 
-
 def update_circuit_breaker(
     batch_successes: int, batch_failures: int,
     consecutive_failures: int,
@@ -365,7 +379,6 @@ def update_circuit_breaker(
         )
         tripped = True
     return consecutive_failures, tripped
-
 
 def compute_slots(
     futures: dict[_Future, BeadsWorkItem],
