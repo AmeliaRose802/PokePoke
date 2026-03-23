@@ -500,7 +500,7 @@ class TestDrainOrphanedFutures:
     @patch("pokepoke.agents.parallel_support.terminal_ui")
     @patch("pokepoke.agents.parallel.unassign_with_retry", side_effect=RuntimeError("unassign boom"))
     def test_unassign_exception_handled(self, mock_unassign, mock_tui):
-        """unassign_with_retry raising doesn't crash the drain."""
+        """unassign_with_retry raising doesn't crash the drain and logs a warning."""
         item = _make_item("u1")
         fut = concurrent.futures.Future()
         futures = {fut: item}
@@ -511,6 +511,14 @@ class TestDrainOrphanedFutures:
 
         record_fn.assert_called_once()
         mock_unassign.assert_called_once_with("u1")
+        # Verify the failure is logged, not silently suppressed
+        warning_calls = [
+            c for c in run_logger.log_orchestrator.call_args_list
+            if c.kwargs.get("level") == "WARNING"
+        ]
+        assert any("u1" in str(c) and "unassign" in str(c).lower() for c in warning_calls), (
+            "Expected a WARNING log mentioning item id 'u1' and unassign failure"
+        )
 
     @patch("pokepoke.agents.parallel_support.terminal_ui")
     @patch("pokepoke.agents.parallel.unassign_with_retry")
@@ -673,6 +681,37 @@ class TestDispatchItems:
                 sem, executor, run_logger, 0, Mock(return_value="w"), Mock(),
             )
         mock_unassign.assert_called_once_with("ef1")
+
+    @patch("pokepoke.beads.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.select_multiple_items")
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agents.parallel.unassign_with_retry", side_effect=RuntimeError("unassign boom"))
+    @patch("pokepoke.agents.agent_context.get_agent_name", return_value="agent")
+    def test_executor_submit_unassign_failure_logs_warning(self, _name, mock_unassign, _assign, _claim, mock_select, _stop, _closed):
+        """When executor.submit fails AND unassign also fails, a warning is logged."""
+        item = _make_item("ef2")
+        mock_select.return_value = [item]
+        executor = MagicMock()
+        executor.submit.side_effect = RuntimeError("executor full")
+        run_logger = MagicMock()
+        sem = threading.Semaphore(1)
+
+        import contextlib
+        with contextlib.suppress(RuntimeError):
+            dispatch_items(
+                [item], 1, True, False, 0, 10, set(), set(), {},
+                sem, executor, run_logger, 0, Mock(return_value="w"), Mock(),
+            )
+        mock_unassign.assert_called_once_with("ef2")
+        warning_calls = [
+            c for c in run_logger.log_orchestrator.call_args_list
+            if c.kwargs.get("level") == "WARNING"
+        ]
+        assert any("ef2" in str(c) and "unassign" in str(c).lower() for c in warning_calls), (
+            "Expected a WARNING log mentioning item id 'ef2' and unassign failure"
+        )
 
     @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
     @patch("pokepoke.agents.parallel.assign_and_sync_item")

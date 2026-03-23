@@ -1,7 +1,6 @@
 """Support functions extracted from parallel.py for file length compliance."""
 
 import concurrent.futures
-import contextlib
 import logging
 import threading
 import time
@@ -18,6 +17,19 @@ from pokepoke.utils.preflight_log_utils import handle_preflight_checks  # noqa: 
 logger = logging.getLogger(__name__)
 
 _Future = concurrent.futures.Future[WorkItemResult]
+
+
+def _safe_unassign(item_id: str, run_logger: RunLogger, context: str) -> None:
+    """Attempt to unassign a work item, logging a warning on failure."""
+    from pokepoke.agents.parallel import unassign_with_retry
+    try:
+        unassign_with_retry(item_id)
+        run_logger.log_orchestrator(f"Unassigned {context} {item_id}")
+    except Exception as exc:
+        msg = f"Failed to unassign {context} {item_id} — item may remain stuck: {exc}"
+        logger.warning(msg, exc_info=True)
+        run_logger.log_orchestrator(f"STUCK ITEM: unassign failed for {context} {item_id}: {exc}",
+                                    level="WARNING")
 
 
 def finalize_workers(
@@ -67,8 +79,6 @@ def _drain_orphaned_futures(
     record_fn: Any,
 ) -> None:
     """Drain futures remaining after a timeout, recording each as a failure and unassigning."""
-    from pokepoke.agents.parallel import unassign_with_retry
-
     orphaned = list(futures.items())
     futures.clear()
     if not orphaned:
@@ -88,9 +98,7 @@ def _drain_orphaned_futures(
             record_fn(item, result, session_stats, run_logger)
         except Exception as exc:
             logger.warning(f"record_fn failed for orphan {item.id}: {exc}", exc_info=True)
-        with contextlib.suppress(Exception):
-            unassign_with_retry(item.id)
-            run_logger.log_orchestrator(f"Unassigned orphan {item.id}")
+        _safe_unassign(item.id, run_logger, "orphan")
         terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
 
 def drain_circuit_breaker(
@@ -123,19 +131,10 @@ def _should_skip_item(
     run_logger: RunLogger,
 ) -> bool:
     """Return True if this item should be skipped during dispatch."""
-
-    # High-conflict items must run solo — only dispatch when nothing else is active
     if is_high_conflict_risk(item) and (len(futures) > 0 or dispatched > 0):
         run_logger.log_orchestrator(
             f"Deferring high-conflict {item.id} — other items active")
         return True
-
-    # Note: is_beads_item_closed and is_item_claimable checks removed.
-    # Items come from bd ready (already open & unblocked) and
-    # assign_and_sync_item performs an atomic check-and-claim with
-    # proper locking.  The per-item bd show calls were adding ~5-10s
-    # each, causing multi-minute dispatch delays.
-
     return False
 
 
@@ -158,7 +157,7 @@ def dispatch_items(
 ) -> int:
     """Select, claim, and submit work items. Returns updated worker_counter."""
     # Late import from pokepoke.agents.parallel so test monkey-patches work correctly
-    from pokepoke.agents.parallel import assign_and_sync_item, unassign_with_retry
+    from pokepoke.agents.parallel import assign_and_sync_item
     from pokepoke.agents.parallel import select_multiple_items, should_stop_after_current
     from pokepoke.agents.agent_context import get_agent_name
 
@@ -222,8 +221,7 @@ def dispatch_items(
             except Exception as e:
                 logger.warning(f"Failed to submit work item {item.id} to executor: {e}")
                 semaphore.release()
-                with contextlib.suppress(Exception):
-                    unassign_with_retry(item.id)
+                _safe_unassign(item.id, run_logger, "submit-failed")
                 raise
             futures[fut] = item
             current_active.add(item.id)
