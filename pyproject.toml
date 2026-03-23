@@ -88,18 +88,12 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "B", "UP", "SIM", "C90", "PLR", "T201"]
+select = ["E", "F", "W", "B", "UP", "SIM", "C90", "PLR", "T20", "I", "RUF", "N", "S", "PERF"]
 ignore = [
     "E402",   # Module-level import not at top - intentional logger-before-imports pattern
     "E501",   # Line too long
     "SIM103", # Return condition directly - sometimes less readable
     "SIM108", # Ternary operator - sometimes less readable
-    "PLR0911", # Too many return statements (consider enabling later)
-    "PLR0912", # Too many branches (consider enabling later)
-    "PLR0913", # Too many arguments (consider enabling later)
-    "PLR0914", # Too many variables (requires --preview, consider enabling later)
-    "PLR0915", # Too many statements (consider enabling later)
-    "PLR2004", # Magic value used in comparison - too noisy for existing codebase
 ]
 
 [tool.ruff.lint.mccabe]
@@ -109,14 +103,14 @@ max-complexity = 15
 max-statements = 50
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*" = ["C901", "PLR0915", "PLR2004"]
-"src/pokepoke/__main__.py" = ["T201"]  # CLI entry point - print() is appropriate
-"src/pokepoke/init.py" = ["T201"]  # CLI entry point - print() is appropriate
-"src/pokepoke/desktop/desktop_ui.py" = ["T201"]  # Desktop UI feedback - print() is appropriate
-"src/pokepoke/models/copilot_sdk.py" = ["T201"]  # SDK session feedback - print() is appropriate
-"src/pokepoke/models/sdk_helpers.py" = ["T201", "C901"]  # SDK session feedback and complex timeout logic
-"src/pokepoke/models/sdk_event_handler.py" = ["T201"]  # SDK session streaming output - print() is appropriate
-"src/pokepoke/utils/process_utils.py" = ["T201"]  # SDK client shutdown feedback - print() is appropriate
+"tests/**/*" = ["C901", "S", "T20"]  # Tests: allow security/bandit and print statements
+"src/pokepoke/__main__.py" = ["T20"]  # CLI entry point - print() is appropriate
+"src/pokepoke/init.py" = ["T20"]  # CLI entry point - print() is appropriate
+"src/pokepoke/desktop/desktop_ui.py" = ["T20"]  # Desktop UI feedback - print() is appropriate
+"src/pokepoke/models/copilot_sdk.py" = ["T20"]  # SDK session feedback - print() is appropriate
+"src/pokepoke/models/sdk_helpers.py" = ["T20", "C901"]  # SDK session feedback and complex timeout logic
+"src/pokepoke/models/sdk_event_handler.py" = ["T20"]  # SDK session streaming output - print() is appropriate
+"src/pokepoke/utils/process_utils.py" = ["T20"]  # SDK client shutdown feedback - print() is appropriate
 
 # Mypy type checking configuration
 [tool.mypy]
