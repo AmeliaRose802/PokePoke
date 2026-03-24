@@ -2,7 +2,6 @@ project_name: ExampleProject
 models:
   default: claude-opus-4.6
   fallback: claude-sonnet-4.5
-  ab_testing_enabled: false
 max_parallel_agents: 8
 git:
   default_branch: master
