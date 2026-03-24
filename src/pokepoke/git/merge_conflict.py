@@ -84,6 +84,27 @@ def abort_merge(repo_path: Path | None = None) -> tuple[bool, str]:
         return False, str(e)
 
 
+def abort_rebase(repo_path: Path | None = None) -> tuple[bool, str]:
+    """Abort an in-progress rebase, returning to the state before the rebase started.
+
+    Returns:
+        Tuple of (success, error_message)
+    """
+    try:
+        cmd = ["git", "rebase", "--abort"]
+        if repo_path:
+            cmd = ["git", "-C", str(repo_path), "rebase", "--abort"]
+        result = run_git(cmd, timeout=30, check=False)
+        if result.returncode == 0:
+            return True, ""
+        else:
+            return False, result.stderr.strip() if result.stderr else "Unknown error"
+    except subprocess.TimeoutExpired:
+        return False, "Rebase abort timed out"
+    except Exception as e:
+        return False, str(e)
+
+
 def get_merge_conflict_details(repo_path: Path | None = None) -> dict[str, object]:
     """Get detailed information about the current merge conflict state.
 
