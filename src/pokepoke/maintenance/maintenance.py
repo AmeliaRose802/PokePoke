@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 def aggregate_stats(session_stats: SessionStats, item_stats: AgentStats) -> None:
     """Aggregate item statistics into session statistics."""
-    session_stats.agent_stats.accumulate(item_stats)
+    session_stats.record_agent_stats(item_stats)
 
 
 def _run_special_agent(name: str, repo_root: Path, item_logger: 'ItemLogger | None' = None, parent_agent_id: str | None = None) -> AgentStats | None:
