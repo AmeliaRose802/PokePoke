@@ -172,7 +172,7 @@ async def _run_attempt(
             "shutdown", "timeout", "inactivity", "tool_timeout", "process_dead",
         )
     except KeyboardInterrupt:
-        logger.info("\n\n[SDK] ΓÜá∩╕Å  Interrupted by user (Ctrl+C)")
+        logger.info("\n\n[SDK] ⚡️  Interrupted by user (Ctrl+C)")
         try:
             await session.abort()
         except Exception as e:
@@ -358,7 +358,7 @@ async def invoke_copilot_sdk(
 
     except KeyboardInterrupt:
         error = "Session aborted due to application shutdown" if is_shutting_down() else "Interrupted by user"
-        logger.error(f"\n[SDK] ΓÜá∩╕Å  {error}")
+        logger.error(f"\n[SDK] ⚡️  {error}")
         return _fail_result(work_item.id, error, session_id=session_id)
     except Exception as e:
         logger.info(f"\n[SDK] Exception: {e}")

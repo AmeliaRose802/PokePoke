@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 from pokepoke.desktop.desktop_api import DesktopAPI
+from pokepoke.desktop.desktop_log_handler import DesktopLogHandler
 from pokepoke.desktop.frontend_discovery import find_dev_server_url, find_frontend_dist
 from pokepoke.desktop.native_icon import set_app_user_model_id, set_native_window_icon
 from pokepoke.desktop.pywebview_patches import apply_runtime_patches
@@ -40,6 +41,7 @@ _original_excepthook: Callable[..., Any] | None = None
 # Thread-local storage for per-thread output routing.
 _thread_output = threading.local()
 
+
 class DesktopUI:
     """UI adapter that opens a native pywebview window and forwards state/logs to DesktopAPI."""
     def __init__(self) -> None:
@@ -51,6 +53,11 @@ class DesktopUI:
         self._line_buffer: str = ""
         self._flush_timer: threading.Timer | None = None
         self._buffer_lock = threading.Lock()
+        self._log_handler = DesktopLogHandler(
+            self._api, self._target_buffer, self._buffer_lock,
+            lambda: self._current_style,
+        )
+        self._log_handler.setLevel(logging.DEBUG)
 
     @property
     def is_running(self) -> bool:
@@ -72,6 +79,7 @@ class DesktopUI:
         threading.excepthook = _shutdown_threading_excepthook
         self._is_running = True
         builtins.print = self._print_redirect
+        self._install_log_handler()
         try:
             self._api.push_log(
                 "🖥️  PokePoke Desktop started (pywebview native window)",
@@ -163,6 +171,7 @@ class DesktopUI:
             request_shutdown()
             self._is_running = False
             builtins.print = self._original_print
+            self._remove_log_handler()
             # Wait for orchestrator to finish (needs enough time to collect
             # beads stats and print the session summary).
             if orch_thread.is_alive():
@@ -171,6 +180,7 @@ class DesktopUI:
         finally:
             self._is_running = False
             builtins.print = self._original_print
+            self._remove_log_handler()
             if _original_excepthook is not None:
                 threading.excepthook = _original_excepthook
 
@@ -178,10 +188,12 @@ class DesktopUI:
         """Resume UI output capture (after interactive prompt pause)."""
         self._is_running = True
         builtins.print = self._print_redirect
+        self._install_log_handler()
 
     def stop(self) -> None:
         """Pause UI output capture (for interactive prompts)."""
         builtins.print = self._original_print
+        self._remove_log_handler()
         self._is_running = False
 
     def stop_and_capture(self) -> None:
@@ -191,17 +203,20 @@ class DesktopUI:
     def exit(self) -> None:
         self._is_running = False
 
+    def _install_log_handler(self) -> None:
+        pokepoke_logger = logging.getLogger("pokepoke")
+        if self._log_handler not in pokepoke_logger.handlers:
+            pokepoke_logger.addHandler(self._log_handler)
+
+    def _remove_log_handler(self) -> None:
+        pokepoke_logger = logging.getLogger("pokepoke")
+        if self._log_handler in pokepoke_logger.handlers:
+            pokepoke_logger.removeHandler(self._log_handler)
+
     # ─── Print Redirect ───────────────────────────────────────────────
 
     def _print_redirect(self, *args: Any, **kwargs: Any) -> None:
-        """Redirect print calls to the desktop API log buffer.
-        When a thread has set a thread-local agent_id (via
-        :meth:`agent_output_for`), output is routed to that agent's
-        per-agent log buffer in the :class:`AgentRegistry` instead of
-        the shared orchestrator/agent log stream.  This prevents
-        interleaving of output from parallel agents (dtqz) and ensures
-        the Agents panel has live log data (ukr0).
-        """
+        """Redirect print calls to the desktop API log buffer."""
         file = kwargs.get("file", sys.stdout)
         if file not in (sys.stdout, None):
             self._original_print(*args, **kwargs)
@@ -375,9 +390,6 @@ class DesktopUI:
         return self._api.has_active_child_agents(agent_id)
 
     def get_child_agent_activity_time(self, agent_id: str) -> float | None:
-        """Get the most recent activity timestamp from any child agent.
-        Returns the most recent last_log_at or last_updated timestamp
-        from active children, or None if no active children exist.
-        """
+        """Get the most recent activity timestamp from any child agent."""
         return self._api.get_child_agent_activity_time(agent_id)
 
