@@ -3,6 +3,7 @@
 Loads project-specific settings from .pokepoke/config.yaml, allowing PokePoke
 to be used generically on any project without hardcoded values.
 """
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,8 @@ from typing import Any
 import dacite
 
 from pokepoke.models.model_sync_config import ModelSyncConfig, parse_model_sync_config
+
+logger = logging.getLogger(__name__)
 
 try:
     import yaml  # type: ignore[import-untyped]
@@ -263,48 +266,42 @@ class ProjectConfig:
     def from_dict(data: dict[str, Any]) -> 'ProjectConfig':
         """Create a ProjectConfig from a dictionary (parsed YAML/JSON).
 
-        Uses dacite for deserialization with strict mode to catch unknown keys.
+        Warns and skips unrecognized keys instead of crashing, then retries
+        in non-strict mode so valid settings are still applied.
         """
-        # Handle special cases that need preprocessing
         processed_data = dict(data)
 
-        # Handle model_sync specially since it has custom parsing logic
         if "model_sync" in processed_data:
             processed_data["model_sync"] = parse_model_sync_config(
                 processed_data["model_sync"]
             )
 
-        # Handle maintenance default behavior: if no agents key, use defaults
-        if "maintenance" in processed_data:
-            maint_data = processed_data["maintenance"]
-            if "agents" not in maint_data:
-                # No agents specified, keep default factory behavior
-                del processed_data["maintenance"]
+        if "maintenance" in processed_data and "agents" not in processed_data["maintenance"]:
+            del processed_data["maintenance"]
 
-        # Migrate removed activity_watchdog config: extract idle_timeout_seconds
-        # if present, then drop the key so strict parsing doesn't fail.
+        # Migrate removed activity_watchdog config
         if "activity_watchdog" in processed_data:
             aw = processed_data.pop("activity_watchdog")
             if isinstance(aw, dict) and "idle_timeout_seconds" in aw:
                 processed_data.setdefault("idle_timeout_seconds", aw["idle_timeout_seconds"])
 
-        dacite_config = dacite.Config(
-            strict=True,  # Raise on unknown keys
-            cast=[bool, int, float],  # Allow type coercion for these types
-        )
-
+        cast_types = [bool, int, float]
         try:
             return dacite.from_dict(
                 data_class=ProjectConfig,
                 data=processed_data,
-                config=dacite_config,
+                config=dacite.Config(strict=True, cast=cast_types),
             )
         except dacite.UnexpectedDataError as e:
-            # Provide helpful error message for typos like "comand_timeout"
-            raise ValueError(
-                f"Unknown configuration key(s): {e}. "
-                "Check for typos in your config file."
-            ) from e
+            logger.warning(
+                "Ignoring unrecognized configuration key(s): %s — "
+                "check for typos in your config file.", e,
+            )
+            return dacite.from_dict(
+                data_class=ProjectConfig,
+                data=processed_data,
+                config=dacite.Config(strict=False, cast=cast_types),
+            )
 
 
 def _find_repo_root() -> Path:

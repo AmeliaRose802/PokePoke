@@ -572,37 +572,64 @@ class TestAssignmentConfig:
 
 
 class TestUnknownKeyDetection:
-    """Tests for detecting unknown/typo'd config keys."""
+    """Tests for detecting and gracefully handling unknown/typo'd config keys."""
 
-    def test_typo_in_top_level_key_raises(self):
-        """A typo like 'comand_timeout' should raise an error."""
+    def test_typo_in_top_level_key_warns_and_skips(self, caplog):
+        """A typo like 'comand_timeout' should warn but still load valid defaults."""
         data = {"comand_timeout": 600}  # Typo: missing 'm' in command
-        with pytest.raises(ValueError, match="Unknown configuration key"):
-            ProjectConfig.from_dict(data)
+        with caplog.at_level("WARNING", logger="pokepoke.config"):
+            config = ProjectConfig.from_dict(data)
+        assert "unrecognized configuration key" in caplog.text.lower()
+        assert "comand_timeout" in caplog.text
+        # The valid default is used since the typo key is skipped
+        assert config.command_timeout == 300
 
-    def test_typo_in_nested_key_raises(self):
-        """A typo in nested config should raise an error."""
-        data = {"models": {"defualt": "gpt-4o"}}  # Typo: 'defualt' instead of 'default'
-        with pytest.raises(ValueError, match="Unknown configuration key"):
-            ProjectConfig.from_dict(data)
+    def test_typo_in_nested_key_warns_and_skips(self, caplog):
+        """A typo in nested config should warn but load the rest."""
+        data = {"models": {"defualt": "gpt-4o"}}  # Typo: 'defualt'
+        with caplog.at_level("WARNING", logger="pokepoke.config"):
+            config = ProjectConfig.from_dict(data)
+        assert "unrecognized configuration key" in caplog.text.lower()
+        # The valid default model is kept since the typo key is skipped
+        assert config.models.default == "claude-opus-4.6"
 
-    def test_unknown_section_raises(self):
-        """A completely unknown top-level section should raise an error."""
+    def test_unknown_section_warns_and_skips(self, caplog):
+        """A completely unknown top-level section should warn but not crash."""
         data = {"unknown_section": {"key": "value"}}
-        with pytest.raises(ValueError, match="Unknown configuration key"):
-            ProjectConfig.from_dict(data)
+        with caplog.at_level("WARNING", logger="pokepoke.config"):
+            config = ProjectConfig.from_dict(data)
+        assert "unrecognized configuration key" in caplog.text.lower()
+        assert "unknown_section" in caplog.text
+        # Config loaded with all defaults
+        assert config.project_name == ""
 
-    def test_valid_config_does_not_raise(self):
-        """Valid config keys should not raise errors."""
+    def test_unknown_key_alongside_valid_keys(self, caplog):
+        """Valid keys should still be applied even when unknown keys are present."""
+        data = {
+            "project_name": "my-project",
+            "command_timeout": 600,
+            "ab_testing_enabled": True,  # Unknown key from agent
+        }
+        with caplog.at_level("WARNING", logger="pokepoke.config"):
+            config = ProjectConfig.from_dict(data)
+        assert "ab_testing_enabled" in caplog.text
+        # Valid keys were applied
+        assert config.project_name == "my-project"
+        assert config.command_timeout == 600
+
+    def test_valid_config_does_not_warn(self, caplog):
+        """Valid config keys should not produce warnings."""
         data = {
             "project_name": "test",
             "command_timeout": 600,
             "models": {"default": "gpt-4o"},
         }
-        config = ProjectConfig.from_dict(data)
+        with caplog.at_level("WARNING", logger="pokepoke.config"):
+            config = ProjectConfig.from_dict(data)
         assert config.project_name == "test"
         assert config.command_timeout == 600
         assert config.models.default == "gpt-4o"
+        assert "unrecognized" not in caplog.text.lower()
 
 
 class TestGateAgentEnabled:
