@@ -318,13 +318,17 @@ def execute_merge_sequence(
                      timeout=120, cwd=cwd)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         # Rollback: abort the failed rebase to leave repo in a clean state
-        try:
-            run_git(["git", "rebase", "--abort"], timeout=30, cwd=cwd)
+        from .merge_conflict import abort_rebase
+        repo_path_obj = Path(cwd) if cwd else None
+        success, abort_msg = abort_rebase(repo_path=repo_path_obj)
+        if success:
             logger.info("Rolled back failed rebase with git rebase --abort")
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as abort_err:
-            logger.warning("Could not abort rebase during rollback: %s", abort_err)
+        else:
+            logger.warning("Could not abort rebase during rollback: %s", abort_msg)
+
         if stashed:
             restore_beads_stash("git pull --rebase failure")
+
         if isinstance(e, subprocess.TimeoutExpired):
             return False, "Pull --rebase timed out after 120s", []
         return False, f"Failed to pull with rebase: {e.stderr or str(e)}", []
@@ -338,18 +342,18 @@ def execute_merge_sequence(
                      timeout=60, cwd=cwd)
         return True, "", []
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-        from .merge_conflict import get_unmerged_files, is_merge_in_progress
+        from .merge_conflict import abort_merge, get_unmerged_files, is_merge_in_progress
         repo_path_obj = Path(cwd) if cwd else None
         unmerged = get_unmerged_files(repo_path=repo_path_obj)
         is_merging = is_merge_in_progress(repo_path=repo_path_obj)
 
         # Rollback: abort the failed merge to leave repo in a clean state
         if is_merging:
-            try:
-                run_git(["git", "merge", "--abort"], timeout=30, cwd=cwd)
+            success, abort_msg = abort_merge(repo_path=repo_path_obj)
+            if success:
                 logger.info("Rolled back failed merge with git merge --abort")
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as abort_err:
-                logger.error("Failed to abort merge during rollback: %s", abort_err)
+            else:
+                logger.error("Failed to abort merge during rollback: %s", abort_msg)
 
         if isinstance(e, subprocess.TimeoutExpired):
             return False, "Merge timed out after 60s", unmerged
