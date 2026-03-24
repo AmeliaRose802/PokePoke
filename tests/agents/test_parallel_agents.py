@@ -10,23 +10,21 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-
 from pokepoke.agents.agent_context import clear_agent_name, get_agent_name, set_agent_name
-from pokepoke.utils.logging_utils import RunLogger
-from pokepoke.git.merge_queue import MergeQueue, MergeResult, MergeStatus
 from pokepoke.agents.parallel import (
+    _build_worker_name,
     _collect_done_futures,
     _parallel_process_item,
-    _build_worker_name,
     _snake_for_work_item,
 )
+from pokepoke.git.merge_queue import MergeQueue, MergeResult, MergeStatus
+from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats, WorkItemResult
+from pokepoke.utils.logging_utils import RunLogger
 from pokepoke.utils.shutdown import (
     is_shutting_down,
     request_shutdown,
     reset,
 )
-from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats, WorkItemResult
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -157,8 +155,8 @@ class TestSingletonMaintenanceSkip:
 
     def test_singleton_agent_skips_when_locked(self) -> None:
         """If the file lock is already held, the agent should be skipped."""
-        from pokepoke.maintenance.maintenance_scheduler import MaintenanceScheduler, _SINGLETON_AGENTS
         from pokepoke.config import MaintenanceAgentConfig
+        from pokepoke.maintenance.maintenance_scheduler import _SINGLETON_AGENTS, MaintenanceScheduler
 
         scheduler = MaintenanceScheduler()
         run_logger = MagicMock(spec=RunLogger)

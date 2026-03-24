@@ -1,16 +1,16 @@
 """Tests for repository check utilities."""
 
-from contextlib import nullcontext
 import subprocess
+from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
 
 from pokepoke.git.repo_check import (
-    check_and_commit_main_repo,
-    _try_auto_commit,
     _stash_uncommitted_changes,
+    _try_auto_commit,
+    check_and_commit_main_repo,
     check_beads_available,
     initialize_beads_repo,
 )

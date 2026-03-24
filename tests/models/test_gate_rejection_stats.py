@@ -14,19 +14,18 @@ Covers:
 import json
 from pathlib import Path
 
-from pokepoke.types import ModelCompletionRecord
 from pokepoke.stats.gate_rejection_tracker import (
-    load_gate_stats,
-    save_gate_stats,
-    record_gate_check,
-    get_gate_rejection_stats,
-    print_gate_rejection_leaderboard,
-    _rebuild_gate_summary,
-    _update_gate_summary_incremental,
     _empty_gate_store,
     _format_trend,
+    _rebuild_gate_summary,
+    _update_gate_summary_incremental,
+    get_gate_rejection_stats,
+    load_gate_stats,
+    print_gate_rejection_leaderboard,
+    record_gate_check,
+    save_gate_stats,
 )
-
+from pokepoke.types import ModelCompletionRecord
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -232,7 +231,7 @@ class TestUpdateGateSummaryIncremental:
 class TestRecordGateCheck:
 
     def test_records_pass(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("pokepoke.stats.metrics_context.get_current_repo_name", lambda: "test-repo")
+        monkeypatch.setattr("pokepoke.stats.metrics_context.get_current_repo_name", lambda default="": "test-repo")
         p = _tmp_gate_path(tmp_path)
         record_gate_check("gate-model-a", "PP-1", True, path=p)
         data = load_gate_stats(p)
@@ -242,7 +241,7 @@ class TestRecordGateCheck:
         assert data["summary"]["gate-model-a"]["total_passed"] == 1
 
     def test_records_rejection(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("pokepoke.stats.metrics_context.get_current_repo_name", lambda: "test-repo")
+        monkeypatch.setattr("pokepoke.stats.metrics_context.get_current_repo_name", lambda default="": "test-repo")
         p = _tmp_gate_path(tmp_path)
         record_gate_check("gate-model-a", "PP-1", False, path=p)
         data = load_gate_stats(p)
@@ -251,7 +250,7 @@ class TestRecordGateCheck:
         assert data["summary"]["gate-model-a"]["rejection_rate"] == 1.0
 
     def test_multiple_records_accumulate(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("pokepoke.stats.metrics_context.get_current_repo_name", lambda: "test-repo")
+        monkeypatch.setattr("pokepoke.stats.metrics_context.get_current_repo_name", lambda default="": "test-repo")
         p = _tmp_gate_path(tmp_path)
         record_gate_check("m1", "PP-1", True, path=p)
         record_gate_check("m1", "PP-2", False, path=p)
@@ -265,7 +264,7 @@ class TestRecordGateCheck:
         assert abs(s["rejection_rate"] - 0.3333) < 0.01
 
     def test_multiple_models_tracked(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("pokepoke.stats.metrics_context.get_current_repo_name", lambda: "test-repo")
+        monkeypatch.setattr("pokepoke.stats.metrics_context.get_current_repo_name", lambda default="": "test-repo")
         p = _tmp_gate_path(tmp_path)
         record_gate_check("strict", "PP-1", False, path=p)
         record_gate_check("lenient", "PP-2", True, path=p)
@@ -286,7 +285,7 @@ class TestGetGateRejectionStats:
         assert result == {}
 
     def test_returns_summary(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("pokepoke.stats.metrics_context.get_current_repo_name", lambda: "test-repo")
+        monkeypatch.setattr("pokepoke.stats.metrics_context.get_current_repo_name", lambda default="": "test-repo")
         p = _tmp_gate_path(tmp_path)
         record_gate_check("m1", "PP-1", True, path=p)
         record_gate_check("m1", "PP-2", False, path=p)
@@ -302,17 +301,15 @@ class TestGetGateRejectionStats:
 class TestPrintGateRejectionLeaderboard:
 
     def _capture(self, fn, *args, **kwargs):
-        import builtins
         import io
         from unittest.mock import patch
         buf = io.StringIO()
-        real_print = builtins.print
 
-        def _print_to_buf(*a, **kw):
-            kw["file"] = buf
-            real_print(*a, **kw)
+        def _mock_print(*a, **kw):
+            kw.pop("file", None)
+            buf.write(" ".join(str(x) for x in a) + "\n")
 
-        with patch("builtins.print", side_effect=_print_to_buf):
+        with patch("builtins.print", side_effect=_mock_print):
             fn(*args, **kwargs)
         return buf.getvalue()
 
@@ -321,7 +318,7 @@ class TestPrintGateRejectionLeaderboard:
         assert output == ""
 
     def test_prints_report(self, tmp_path, monkeypatch):
-        monkeypatch.setattr("pokepoke.stats.metrics_context.get_current_repo_name", lambda: "test-repo")
+        monkeypatch.setattr("pokepoke.stats.metrics_context.get_current_repo_name", lambda default="": "test-repo")
         p = _tmp_gate_path(tmp_path)
         record_gate_check("model-alpha", "PP-1", True, path=p)
         record_gate_check("model-alpha", "PP-2", False, path=p)

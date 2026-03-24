@@ -21,7 +21,6 @@ from concurrent.futures import Future
 from pathlib import Path
 from unittest.mock import patch
 
-from pokepoke.worktrees.lock_contention import LockContentionTracker
 from pokepoke.git.merge_queue import MergeQueue, MergeStatus
 from pokepoke.models.model_stats_store import (
     _rebuild_summary,
@@ -29,9 +28,9 @@ from pokepoke.models.model_stats_store import (
     record_completion,
     save_model_stats,
 )
-from pokepoke.utils.process_utils import apply_memory_backpressure
 from pokepoke.types import BeadsWorkItem, ModelCompletionRecord
-
+from pokepoke.utils.process_utils import apply_memory_backpressure
+from pokepoke.worktrees.lock_contention import LockContentionTracker
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -529,9 +528,9 @@ class TestSubprocessTimeoutBehavior:
         import subprocess
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="tasklist", timeout=30)
 
-        from pokepoke.utils.process_utils import check_copilot_processes
         # Ensure the cache doesn't interfere
         import pokepoke.utils.process_utils as pu
+        from pokepoke.utils.process_utils import check_copilot_processes
         old_cache = pu._copilot_process_cache
         pu._copilot_process_cache = None
         try:

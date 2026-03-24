@@ -2,20 +2,20 @@
 
 import subprocess
 from pathlib import Path
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
-from pokepoke.beads.beads_recovery import (
-    _load_failed_unassign_manifest,
-    _save_failed_unassign_manifest,
-    _add_failed_unassign,
-    _remove_failed_unassign,
-    get_failed_unassign_count,
-    unassign_with_retry,
-    retry_failed_unassigns,
-)
 from pokepoke.beads.beads_query import BD_CONFIG, BR_CONFIG, get_active_backend, set_active_backend
+from pokepoke.beads.beads_recovery import (
+    _add_failed_unassign,
+    _load_failed_unassign_manifest,
+    _remove_failed_unassign,
+    _save_failed_unassign_manifest,
+    get_failed_unassign_count,
+    retry_failed_unassigns,
+    unassign_with_retry,
+)
 
 
 class TestFailedUnassignManifest:
@@ -212,6 +212,7 @@ class TestRunBdSyncWithRetry:
         """run_bd_sync_with_retry must pass a finite timeout to prevent hangs
         inside file locks (regression guard for the worktree race condition)."""
         import inspect
+
         from pokepoke.beads.beads_management import run_bd_sync_with_retry
 
         sig = inspect.signature(run_bd_sync_with_retry)
@@ -227,8 +228,9 @@ class TestRunBdSyncWithRetry:
     @patch("pokepoke.beads.beads_query._run_cli")
     def test_passes_timeout_to_run_bd(self, mock_run_cli: Mock) -> None:
         """run_bd_sync_with_retry must forward its timeout to the sync strategy."""
-        from pokepoke.beads.beads_management import run_bd_sync_with_retry
         import subprocess
+
+        from pokepoke.beads.beads_management import run_bd_sync_with_retry
 
         mock_run_cli.return_value = Mock(spec=subprocess.CompletedProcess, returncode=0)
         run_bd_sync_with_retry(timeout=42)
@@ -239,8 +241,9 @@ class TestRunBdSyncWithRetry:
     @patch("pokepoke.beads.beads_query._run_cli")
     def test_default_timeout_forwarded(self, mock_run_cli: Mock) -> None:
         """When no timeout is provided, the default (60s) is forwarded."""
-        from pokepoke.beads.beads_management import run_bd_sync_with_retry
         import subprocess
+
+        from pokepoke.beads.beads_management import run_bd_sync_with_retry
 
         mock_run_cli.return_value = Mock(spec=subprocess.CompletedProcess, returncode=0)
         run_bd_sync_with_retry()
@@ -364,8 +367,9 @@ class TestAssignAndSyncItem:
     def test_successful_assignment(
         self, mock_lock: Mock, mock_parse: Mock, mock_run_bd: Mock, mock_sync: Mock
     ) -> None:
-        from pokepoke.beads.beads_management import assign_and_sync_item
         from contextlib import contextmanager
+
+        from pokepoke.beads.beads_management import assign_and_sync_item
 
         @contextmanager
         def fake_lock(*args: object, **kwargs: object):
@@ -386,8 +390,9 @@ class TestAssignAndSyncItem:
 
     @patch("pokepoke.beads.beads_management.acquire_lock")
     def test_returns_false_when_lock_busy(self, mock_lock: Mock) -> None:
-        from pokepoke.beads.beads_management import assign_and_sync_item
         from filelock import Timeout
+
+        from pokepoke.beads.beads_management import assign_and_sync_item
 
         mock_lock.side_effect = Timeout("lock")
 
@@ -401,8 +406,9 @@ class TestAssignAndSyncItem:
     def test_returns_false_when_already_claimed_by_other(
         self, mock_lock: Mock, mock_parse: Mock, mock_run_bd: Mock
     ) -> None:
-        from pokepoke.beads.beads_management import assign_and_sync_item
         from contextlib import contextmanager
+
+        from pokepoke.beads.beads_management import assign_and_sync_item
 
         @contextmanager
         def fake_lock(*args: object, **kwargs: object):
@@ -421,8 +427,9 @@ class TestAssignAndSyncItem:
     def test_returns_false_on_show_error(
         self, mock_lock: Mock, mock_run_bd: Mock
     ) -> None:
-        from pokepoke.beads.beads_management import assign_and_sync_item
         from contextlib import contextmanager
+
+        from pokepoke.beads.beads_management import assign_and_sync_item
 
         @contextmanager
         def fake_lock(*args: object, **kwargs: object):
@@ -443,8 +450,9 @@ class TestAssignAndSyncItem:
         self, mock_lock: Mock, mock_parse: Mock, mock_run_bd: Mock, mock_rollback: Mock
     ) -> None:
         """If bd show succeeds after update but JSON is unparseable, rollback the assignment."""
-        from pokepoke.beads.beads_management import assign_and_sync_item
         from contextlib import contextmanager
+
+        from pokepoke.beads.beads_management import assign_and_sync_item
 
         @contextmanager
         def fake_lock(*args: object, **kwargs: object):
@@ -470,8 +478,9 @@ class TestAssignAndSyncItem:
         self, mock_lock: Mock, mock_parse: Mock, mock_run_bd: Mock, mock_rollback: Mock
     ) -> None:
         """If verification shows a different assignee, rollback the assignment."""
-        from pokepoke.beads.beads_management import assign_and_sync_item
         from contextlib import contextmanager
+
+        from pokepoke.beads.beads_management import assign_and_sync_item
 
         @contextmanager
         def fake_lock(*args: object, **kwargs: object):
@@ -497,8 +506,9 @@ class TestAssignAndSyncItem:
         self, mock_lock: Mock, mock_parse: Mock, mock_run_bd: Mock, mock_rollback: Mock
     ) -> None:
         """If an exception occurs during verification (after update succeeded), rollback."""
-        from pokepoke.beads.beads_management import assign_and_sync_item
         from contextlib import contextmanager
+
+        from pokepoke.beads.beads_management import assign_and_sync_item
 
         @contextmanager
         def fake_lock(*args: object, **kwargs: object):
@@ -527,8 +537,9 @@ class TestAssignAndSyncItem:
         self, mock_lock: Mock, mock_parse: Mock, mock_run_bd: Mock, mock_rollback: Mock
     ) -> None:
         """If the update command itself fails (before it succeeds), no rollback needed."""
-        from pokepoke.beads.beads_management import assign_and_sync_item
         from contextlib import contextmanager
+
+        from pokepoke.beads.beads_management import assign_and_sync_item
 
         @contextmanager
         def fake_lock(*args: object, **kwargs: object):
@@ -742,8 +753,8 @@ class TestSelectNextHierarchicalItem:
         assert result is item
 
     def test_skips_human_required_items(self) -> None:
-        from pokepoke.beads.beads_management import select_next_hierarchical_item
         from pokepoke.beads.beads_hierarchy import HUMAN_REQUIRED_LABEL
+        from pokepoke.beads.beads_management import select_next_hierarchical_item
         from pokepoke.types import BeadsWorkItem
         human_item = BeadsWorkItem(id="t-1", title="Human Task", description="",
                                    status="open", priority=1, issue_type="task",
@@ -795,6 +806,7 @@ class TestResolveWithTimeout:
     @patch("pokepoke.beads.beads_management.resolve_to_leaf_task")
     def test_returns_none_on_timeout(self, mock_resolve: Mock) -> None:
         import time
+
         from pokepoke.beads.beads_management import _resolve_with_timeout
         from pokepoke.types import BeadsWorkItem
         epic = BeadsWorkItem(id="e-1", title="Epic", description="", status="open",
@@ -834,8 +846,9 @@ class TestBothBackendsManagement:
         backend_config,
     ) -> None:
         """Verify assign_and_sync_item works with both backends."""
-        from pokepoke.beads.beads_management import assign_and_sync_item
         from contextlib import contextmanager
+
+        from pokepoke.beads.beads_management import assign_and_sync_item
 
         original = get_active_backend()
         set_active_backend(backend_config)

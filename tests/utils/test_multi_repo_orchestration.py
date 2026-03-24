@@ -24,21 +24,20 @@ from pokepoke.git.multi_repo_aggregator import (
     get_aggregated_stats,
 )
 from pokepoke.git.repo_worker_pool import RepoWorkerPool
+from pokepoke.maintenance.maintenance_state import (
+    MaintenanceState,
+    RepoMaintenanceState,
+    _state_from_dict,
+    _state_to_dict,
+    get_repo_state,
+    increment_items_completed,
+)
 from pokepoke.stats.metrics_context import (
     get_current_repo_name,
     repo_context,
     set_current_repo_name,
 )
-from pokepoke.maintenance.maintenance_state import (
-    MaintenanceState,
-    RepoMaintenanceState,
-    get_repo_state,
-    increment_items_completed,
-    _state_from_dict,
-    _state_to_dict,
-)
 from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats
-
 
 # ---------------------------------------------------------------------------
 # Helpers

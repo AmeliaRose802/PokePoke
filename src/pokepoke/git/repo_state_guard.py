@@ -7,13 +7,16 @@ other schedulers can wait until the repository is ready.
 
 from __future__ import annotations
 
+import logging
 import time
+from collections.abc import Callable, Generator, Iterable
 from contextlib import contextmanager
 from pathlib import Path
-from collections.abc import Callable, Iterable, Generator
 
-from pokepoke.worktrees.coordination import acquire_lock, try_lock, merge_lock_active
 from pokepoke.git.git_operations import verify_main_repo_clean
+from pokepoke.worktrees.coordination import acquire_lock, merge_lock_active, try_lock
+
+logger = logging.getLogger(__name__)
 
 CleanupLogFn = Callable[[str], None]
 
@@ -25,7 +28,7 @@ def _emit(message: str, log_fn: CleanupLogFn | None) -> None:
     if log_fn:
         log_fn(message)
     else:
-        print(message)
+        logger.info(message)
 
 
 def is_main_repo_clean(repo_path: Path | None = None) -> tuple[bool, list[str]]:

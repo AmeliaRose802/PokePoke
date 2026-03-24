@@ -3,20 +3,21 @@
 import subprocess
 from pathlib import Path
 from unittest.mock import Mock, patch
+
 import pytest
 
 from pokepoke.git.git_operations import (
-    verify_main_repo_clean,
-    handle_beads_auto_commit,
+    build_handoff_context,
     check_main_repo_ready_for_merge,
-    has_uncommitted_changes,
     commit_all_changes,
     execute_merge_sequence,
-    build_handoff_context,
     get_main_repo_root,
+    handle_beads_auto_commit,
+    has_commits_ahead,
+    has_uncommitted_changes,
     is_worktree_clean,
     validate_post_merge,
-    has_commits_ahead,
+    verify_main_repo_clean,
 )
 
 

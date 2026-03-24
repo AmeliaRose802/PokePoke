@@ -8,6 +8,7 @@ import pytest
 
 from pokepoke.config import RepoConfig
 from pokepoke.git.multi_repo_aggregator import (
+    AggregatedWorkItem,
     RepoQueryResult,
     _derive_repo_name,
     _merge_and_sort,
@@ -15,9 +16,7 @@ from pokepoke.git.multi_repo_aggregator import (
     get_aggregated_stats,
     query_repo_ready_items,
 )
-from pokepoke.git.multi_repo_aggregator import AggregatedWorkItem
 from pokepoke.types import BeadsWorkItem
-
 
 # ---------------------------------------------------------------------------
 # Helpers

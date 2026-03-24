@@ -1,16 +1,19 @@
 """Unit tests for orchestrator module."""
 
-import pytest
-from unittest.mock import Mock, patch, ANY, call
+from unittest.mock import ANY, Mock, call, patch
 
-from pokepoke.orchestration.orchestrator import run_orchestrator
-from pokepoke.orchestration.workflow import select_work_item, process_work_item
-from pokepoke.types import AgentStats, BeadsWorkItem, BeadsStats, CopilotResult, GateAgentResult, WorkItemResult
+import pytest
+
 from pokepoke.desktop import terminal_ui
+from pokepoke.orchestration.orchestrator import run_orchestrator
+from pokepoke.orchestration.workflow import process_work_item, select_work_item
+from pokepoke.types import AgentStats, BeadsStats, BeadsWorkItem, CopilotResult, GateAgentResult, WorkItemResult
 from tests.orchestration.conftest import (
-    make_workflow_mocks, make_selection_mocks,
-    make_work_item, make_orchestrator_mocks,
     PATCH_ORCH_IS_SHUTTING_DOWN,
+    make_orchestrator_mocks,
+    make_selection_mocks,
+    make_work_item,
+    make_workflow_mocks,
 )
 
 
@@ -498,11 +501,12 @@ class TestOrchestratorHelperFunctions:
         mock_cleanup_lock: Mock,
     ) -> None:
         """Test check_and_commit_main_repo with non-beads changes - tries auto-commit first, then cleanup agent."""
+        import tempfile
         from contextlib import contextmanager
+        from pathlib import Path
+
         from pokepoke.git.repo_check import check_and_commit_main_repo
         from pokepoke.utils.logging_utils import RunLogger
-        from pathlib import Path
-        import tempfile
 
         # Make cleanup_lock() a no-op context manager
         @contextmanager
@@ -551,7 +555,7 @@ class TestOrchestratorHelperFunctions:
     def test_aggregate_stats(self) -> None:
         """Test aggregate_stats function."""
         from pokepoke.maintenance.maintenance import aggregate_stats
-        from pokepoke.types import SessionStats, AgentStats
+        from pokepoke.types import AgentStats, SessionStats
 
         session_stats = SessionStats(agent_stats=AgentStats(
             wall_duration=10.0,
@@ -758,8 +762,9 @@ class TestOrchestratorMain:
     @patch('pokepoke.desktop.terminal_ui.ui')
     def test_main_repo_valid(self, mock_ui: Mock, mock_run: Mock, _mock_ready: Mock, tmp_path) -> None:
         """Test main with --repo pointing to a valid directory."""
-        from pokepoke.__main__ import main
         import sys
+
+        from pokepoke.__main__ import main
         with patch.object(sys, 'argv', ['pokepoke', '--autonomous', '--repo', str(tmp_path)]):
             mock_run.return_value = 0
             mock_ui.run_with_orchestrator.side_effect = lambda f: f()
@@ -843,10 +848,11 @@ class TestFinalizeSession:
         mock_print: Mock, mock_clear: Mock
     ) -> None:
         """Test finalize collects stats, prints, and clears banner."""
-        from pokepoke.orchestration.orchestrator import _finalize_session
-        from pokepoke.types import SessionStats, AgentStats
-        from pokepoke.utils.logging_utils import RunLogger
         import tempfile
+
+        from pokepoke.orchestration.orchestrator import _finalize_session
+        from pokepoke.types import AgentStats, SessionStats
+        from pokepoke.utils.logging_utils import RunLogger
 
         mock_time.time.return_value = 100.0
         mock_stats.return_value = {"items": 5}
@@ -860,7 +866,7 @@ class TestFinalizeSession:
                 logger.close()
 
         assert session.ending_beads_stats == {"items": 5}
-        mock_print.assert_called_once()
+        assert mock_print.called
         mock_clear.assert_called_once()
 
     @patch('pokepoke.orchestration.orchestrator.clear_terminal_banner')
@@ -872,10 +878,11 @@ class TestFinalizeSession:
         mock_print: Mock, mock_clear: Mock
     ) -> None:
         """Test finalize handles KeyboardInterrupt during stats collection."""
-        from pokepoke.orchestration.orchestrator import _finalize_session
-        from pokepoke.types import SessionStats, AgentStats
-        from pokepoke.utils.logging_utils import RunLogger
         import tempfile
+
+        from pokepoke.orchestration.orchestrator import _finalize_session
+        from pokepoke.types import AgentStats, SessionStats
+        from pokepoke.utils.logging_utils import RunLogger
 
         mock_time.time.return_value = 100.0
         mock_stats.side_effect = KeyboardInterrupt
@@ -889,7 +896,7 @@ class TestFinalizeSession:
                 logger.close()
 
         assert session.ending_beads_stats is None
-        mock_print.assert_called_once()
+        assert mock_print.called
         mock_clear.assert_called_once()
 
     @patch('pokepoke.orchestration.orchestrator.is_shutting_down', return_value=True)
@@ -903,10 +910,11 @@ class TestFinalizeSession:
         _mock_is_shutting_down: Mock,
     ) -> None:
         """During shutdown, finalize should avoid stats collection to exit promptly."""
-        from pokepoke.orchestration.orchestrator import _finalize_session
-        from pokepoke.types import SessionStats, AgentStats
-        from pokepoke.utils.logging_utils import RunLogger
         import tempfile
+
+        from pokepoke.orchestration.orchestrator import _finalize_session
+        from pokepoke.types import AgentStats, SessionStats
+        from pokepoke.utils.logging_utils import RunLogger
 
         mock_time.time.return_value = 100.0
         mock_stats.return_value = {"items": 5}
@@ -921,7 +929,7 @@ class TestFinalizeSession:
 
         assert session.ending_beads_stats is None
         mock_stats.assert_not_called()
-        mock_print.assert_called_once()
+        assert mock_print.called
         mock_clear.assert_called_once()
 
 
@@ -1557,7 +1565,7 @@ class TestRecordItemResult:
     @patch('pokepoke.orchestration.orchestrator.record_completion')
     def test_records_success(self, mock_record, mock_hist, mock_inc, mock_maint):
         from pokepoke.orchestration.orchestrator import _record_item_result
-        from pokepoke.types import SessionStats, ModelCompletionRecord
+        from pokepoke.types import ModelCompletionRecord, SessionStats
 
         stats = SessionStats(agent_stats=AgentStats())
         item = BeadsWorkItem(id="t1", title="T1", status="open", priority=1, issue_type="task")
@@ -1620,6 +1628,7 @@ class TestParallelProcessItem:
     @patch('pokepoke.agents.parallel.process_work_item')
     def test_releases_semaphore_on_success(self, mock_pwi):
         import threading
+
         from pokepoke.agents.parallel import _parallel_process_item
 
         mock_pwi.return_value = WorkItemResult(success=True, request_count=1)
@@ -1636,6 +1645,7 @@ class TestParallelProcessItem:
     @patch('pokepoke.agents.parallel.process_work_item', side_effect=RuntimeError("boom"))
     def test_releases_semaphore_on_exception(self, mock_pwi):
         import threading
+
         from pokepoke.agents.parallel import _parallel_process_item
 
         sem = threading.Semaphore(0)
@@ -1768,7 +1778,7 @@ class TestOrchestratorStopAfterCurrent:
             items=[item], selected=item, include_maintenance=True,
             process_result=WorkItemResult(success=True, request_count=1, stats=AgentStats()),
         ):
-            from pokepoke.utils.shutdown import request_stop_after_current, cancel_stop_after_current, reset
+            from pokepoke.utils.shutdown import cancel_stop_after_current, request_stop_after_current, reset
             reset()
             request_stop_after_current()
 

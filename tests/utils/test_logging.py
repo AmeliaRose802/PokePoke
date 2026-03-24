@@ -2,12 +2,16 @@
 
 import json
 import logging
-from pathlib import Path
 import tempfile
 import time
+from pathlib import Path
+
 from pokepoke.utils.logging_utils import (
-    RunLogger, ItemLogger, configure_logging,
-    WorkItemFilter, JsonFormatter,
+    ItemLogger,
+    JsonFormatter,
+    RunLogger,
+    WorkItemFilter,
+    configure_logging,
 )
 
 
@@ -776,9 +780,9 @@ def test_run_logger_picks_up_thread_local_repo():
 def test_work_item_filter_injects_fields():
     """WorkItemFilter should add work_item_id, repo_name, agent_type to records."""
     from pokepoke.stats.metrics_context import (
-        set_current_work_item_id,
-        set_current_repo_name,
         set_current_agent_type,
+        set_current_repo_name,
+        set_current_work_item_id,
     )
     set_current_work_item_id("PokePoke-abc1")
     set_current_repo_name("MyRepo")
@@ -805,9 +809,9 @@ def test_work_item_filter_injects_fields():
 def test_work_item_filter_defaults_to_empty():
     """WorkItemFilter should default to empty strings when context is unset."""
     from pokepoke.stats.metrics_context import (
-        set_current_work_item_id,
-        set_current_repo_name,
         set_current_agent_type,
+        set_current_repo_name,
+        set_current_work_item_id,
     )
     set_current_work_item_id(None)
     set_current_repo_name(None)

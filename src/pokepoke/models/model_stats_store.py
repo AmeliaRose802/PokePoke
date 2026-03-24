@@ -26,6 +26,7 @@ File layout (.pokepoke/model_stats.json):
 from __future__ import annotations
 
 import json
+import logging
 import os
 import statistics
 import threading
@@ -34,10 +35,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from pokepoke.worktrees.coordination import acquire_lock
-from pokepoke.utils.file_utils import replace_with_retry
 from pokepoke.stats.perf_timing import timed_block
 from pokepoke.types import ModelCompletionRecord
+from pokepoke.utils.file_utils import replace_with_retry
+from pokepoke.worktrees.coordination import acquire_lock
+
+logger = logging.getLogger(__name__)
 
 STATS_FILE = Path(".pokepoke") / "model_stats.json"
 
@@ -313,12 +316,12 @@ def print_model_leaderboard(path: Path | None = None) -> None:
     """Print a human-readable leaderboard of model performance."""
     summary = get_model_summary(path)
     if not summary:
-        print("📊 No model performance data available yet.")
+        logger.info("📊 No model performance data available yet.")
         return
 
-    print("\n" + "=" * 70)
-    print("📊 Model Performance Leaderboard (All-Time)")
-    print("=" * 70)
+    logger.info("\n" + "=" * 70)
+    logger.info("📊 Model Performance Leaderboard (All-Time)")
+    logger.info("=" * 70)
 
     # Sort by success rate (descending), then by attempts (descending)
     ranked = sorted(
@@ -340,10 +343,10 @@ def print_model_leaderboard(path: Path | None = None) -> None:
         # Truncate model name for display
         display_name = model[:30]
 
-        print(f"\n  #{i} {display_name}")
-        print(f"     Attempted: {attempted}  |  ✅ {succeeded}  ❌ {failed}  |  Rate: {rate:.0%}")
-        print(f"     Median:    {median_dur:.1f}s ±{stddev_dur:.1f}s  |  Avg: {avg_dur:.1f}s  |  Last: {last[:19]}")
-    print("\n" + "=" * 70)
+        logger.info(f"\n  #{i} {display_name}")
+        logger.error(f"     Attempted: {attempted}  |  ✅ {succeeded}  ❌ {failed}  |  Rate: {rate:.0%}")
+        logger.info(f"     Median:    {median_dur:.1f}s ±{stddev_dur:.1f}s  |  Avg: {avg_dur:.1f}s  |  Last: {last[:19]}")
+    logger.info("\n" + "=" * 70)
 
 
 def get_model_summary_by_repo(

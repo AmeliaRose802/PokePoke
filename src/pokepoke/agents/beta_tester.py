@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
-from pokepoke.config import get_config
-from pokepoke.utils.constants import STATUS_IN_PROGRESS
-from pokepoke.types import BeadsWorkItem, AgentStats
-from pokepoke.desktop import terminal_ui
 from pokepoke.agents.cleanup_agents import get_pokepoke_prompts_dir
+from pokepoke.config import get_config
+from pokepoke.desktop import terminal_ui
+from pokepoke.types import AgentStats, BeadsWorkItem
+from pokepoke.utils.constants import STATUS_IN_PROGRESS
 
 if TYPE_CHECKING:
     from pokepoke.utils.logging_utils import ItemLogger
@@ -27,19 +27,19 @@ def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | No
     # Register Beta Tester agent in the Agents panel (if not already registered by maintenance)
     agent_id = "beta-tester"
 
-    print(f"\n{'='*60}\n🧪 Running Beta Tester Agent\n{'='*60}")
+    logger.info(f"\n{'='*60}\n🧪 Running Beta Tester Agent\n{'='*60}")
 
     try:
         # Restart MCP server to load latest code (if configured)
         if config.mcp_server.enabled and config.mcp_server.restart_script:
-            print("\n🔄 Restarting MCP server...")
+            logger.info("\n🔄 Restarting MCP server...")
             try:
                 package_root = Path(__file__).resolve().parent.parent.parent
                 restart_script = package_root / config.mcp_server.restart_script
 
                 if not restart_script.exists():
-                    print(f"⚠️  Restart script not found at {restart_script}")
-                    print("   Proceeding without restart - server may have stale code")
+                    logger.warning(f"⚠️  Restart script not found at {restart_script}")
+                    logger.info("   Proceeding without restart - server may have stale code")
                 else:
                     result = subprocess.run(
                         ["pwsh", "-NoProfile", "-File", str(restart_script)],
@@ -47,30 +47,30 @@ def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | No
                         errors='replace',
                     )
                     if result.returncode == 0:
-                        print("✓ MCP server restarted successfully")
+                        logger.info("✓ MCP server restarted successfully")
                     else:
-                        print(f"⚠️  MCP server restart had issues (exit code {result.returncode})")
+                        logger.warning(f"⚠️  MCP server restart had issues (exit code {result.returncode})")
                         if result.stdout:
-                            print(f"   Output: {result.stdout[:200]}")
+                            logger.info(f"   Output: {result.stdout[:200]}")
             except subprocess.TimeoutExpired:
-                print("⚠️  MCP server restart timed out (server may still be starting)")
+                logger.warning("⚠️  MCP server restart timed out (server may still be starting)")
             except Exception as e:
-                print(f"⚠️  Could not restart MCP server: {e}")
-                print("   Proceeding anyway - server may have stale code")
+                logger.warning(f"⚠️  Could not restart MCP server: {e}")
+                logger.info("   Proceeding anyway - server may have stale code")
         elif not config.mcp_server.enabled:
-            print("ℹ️  MCP server not enabled in config - skipping restart")
+            logger.warning("ℹ️  MCP server not enabled in config - skipping restart")
 
         # Load beta tester prompt
         try:
             prompts_dir = get_pokepoke_prompts_dir()
             prompt_path = prompts_dir / "beta-tester.md"
         except FileNotFoundError as e:
-            print(f"❌ {e}")
+            logger.error(f"❌ {e}")
             terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed", parent_agent_id=parent_agent_id, agent_type="beta_tester")
             return None
 
         if not prompt_path.exists():
-            print(f"❌ Prompt not found at {prompt_path}")
+            logger.error(f"❌ Prompt not found at {prompt_path}")
             terminal_ui.ui.push_agent_status(agent_id, "Beta Tester", iteration=1, status="failed", parent_agent_id=parent_agent_id, agent_type="beta_tester")
             return None
 
@@ -84,7 +84,7 @@ def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | No
             labels=["testing", "mcp-server", "automated"]
         )
 
-        print("\n🧪 Invoking beta tester agent in isolated worktree (will be discarded)...")
+        logger.info("\n🧪 Invoking beta tester agent in isolated worktree (will be discarded)...")
         if repo_root is None:
             repo_root = Path.cwd()
 

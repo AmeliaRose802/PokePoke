@@ -1,6 +1,7 @@
 """Tests for prompt template loading and rendering."""
 
 import pytest
+
 from pokepoke.prompts.prompts import PromptService
 
 

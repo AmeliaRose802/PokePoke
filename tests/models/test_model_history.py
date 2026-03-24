@@ -1,15 +1,15 @@
 """Tests for per-model work item completion history logging."""
 
 import json
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from pathlib import Path
 
-from pokepoke.types import AgentStats, BeadsWorkItem, ModelCompletionRecord
 from pokepoke.models.model_history import (
-    build_model_history_record,
     append_model_history_entry,
+    build_model_history_record,
     load_model_history_entries,
 )
+from pokepoke.types import AgentStats, BeadsWorkItem, ModelCompletionRecord
 
 
 def _make_item(**overrides) -> BeadsWorkItem:

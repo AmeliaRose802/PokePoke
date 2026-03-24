@@ -6,16 +6,15 @@ external I/O boundaries (beads CLI calls, user input, shutdown flag).
 
 from unittest.mock import patch
 
-
-from pokepoke.types import BeadsWorkItem
 from pokepoke.orchestration.work_item_selection import (
-    _is_human_required,
     _is_closed,
-    select_work_item,
-    interactive_selection,
+    _is_human_required,
     autonomous_selection,
+    interactive_selection,
     select_multiple_items,
+    select_work_item,
 )
+from pokepoke.types import BeadsWorkItem
 
 
 def _item(id: str, priority: int = 1, labels: list[str] | None = None,

@@ -3,10 +3,10 @@
 import logging
 import sys
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
-import uuid
 
 from pokepoke.utils.logging_filters import JsonFormatter, WorkItemFilter
 
@@ -16,11 +16,11 @@ if TYPE_CHECKING:
 
 # Re-export so existing ``from pokepoke.utils.logging_utils import …`` still works.
 __all__ = [
-    "WorkItemFilter",
-    "JsonFormatter",
-    "configure_logging",
-    "RunLogger",
     "ItemLogger",
+    "JsonFormatter",
+    "RunLogger",
+    "WorkItemFilter",
+    "configure_logging",
 ]
 
 

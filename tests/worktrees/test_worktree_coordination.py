@@ -1,5 +1,6 @@
 """Tests for worktree coordination and locking mechanisms."""
 
+import contextlib
 import threading
 import time
 from pathlib import Path
@@ -7,12 +8,15 @@ from pathlib import Path
 import pytest
 
 from pokepoke.worktrees.coordination import (
-    with_worktree_lock,
     _load_worktree_metrics as _load_metrics,
-    _record_worktree_attempt as _record_attempt,
-    _lock_dir,
 )
-import contextlib
+from pokepoke.worktrees.coordination import (
+    _lock_dir,
+    with_worktree_lock,
+)
+from pokepoke.worktrees.coordination import (
+    _record_worktree_attempt as _record_attempt,
+)
 
 
 def _worktree_lock_path() -> Path:

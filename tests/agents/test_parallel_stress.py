@@ -19,15 +19,15 @@ from pokepoke.agents.parallel import (
     _collect_done_futures,
     _parallel_process_item,
 )
-from pokepoke.agents.parallel_support import (
-    update_circuit_breaker,
-    dispatch_items,
-    compute_slots,
-)
 from pokepoke.agents.parallel_runtime import (
-    set_runtime_parallel_limits,
     clear_runtime_parallel_limits,
     compute_effective_max_agents,
+    set_runtime_parallel_limits,
+)
+from pokepoke.agents.parallel_support import (
+    compute_slots,
+    dispatch_items,
+    update_circuit_breaker,
 )
 from pokepoke.types import (
     AgentStats,
@@ -36,7 +36,6 @@ from pokepoke.types import (
     SessionStats,
     WorkItemResult,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

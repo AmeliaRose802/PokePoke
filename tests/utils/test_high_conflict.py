@@ -1,6 +1,6 @@
 """Tests for high-conflict risk label detection."""
 
-from pokepoke.beads.beads_hierarchy import is_high_conflict_risk, HIGH_CONFLICT_LABELS
+from pokepoke.beads.beads_hierarchy import HIGH_CONFLICT_LABELS, is_high_conflict_risk
 from pokepoke.types import BeadsWorkItem
 
 

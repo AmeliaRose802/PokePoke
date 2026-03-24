@@ -1,5 +1,4 @@
 """Parallel orchestrator loop for running multiple work items concurrently."""
-
 import concurrent.futures
 import logging
 import threading
@@ -7,34 +6,64 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from pokepoke.agents.parallel_runtime import clear_runtime_parallel_limits, compute_effective_max_agents, set_runtime_parallel_limits
-from pokepoke.utils.process_utils import kill_orphaned_copilot_processes  # noqa: F401
-
-from pokepoke.agents.agent_context import set_agent_name, clear_agent_name, get_agent_name
-from pokepoke.beads.beads import get_ready_work_items, is_item_claimable, assign_and_sync_item, unassign_with_retry  # noqa: F401
-from pokepoke.types import BeadsWorkItem, SessionStats, WorkItemResult
-from pokepoke.orchestration.workflow import process_work_item
-from pokepoke.orchestration.work_item_selection import select_multiple_items  # noqa: F401
-from pokepoke.utils.logging_utils import RunLogger
+from pokepoke.agents.agent_context import clear_agent_name, get_agent_name, set_agent_name
+from pokepoke.agents.parallel_runtime import (
+    clear_runtime_parallel_limits,
+    compute_effective_max_agents,
+    set_runtime_parallel_limits,
+)
+from pokepoke.beads.beads import (
+    assign_and_sync_item,
+    get_ready_work_items,
+    is_item_claimable,
+    unassign_with_retry,
+)
 from pokepoke.desktop import terminal_ui
-from pokepoke.git.repo_check import check_and_commit_main_repo  # noqa: F401
-from pokepoke.utils.shutdown import is_shutting_down, set_executor, should_stop_after_current, cancel_stop_after_current  # noqa: F401
+from pokepoke.git.repo_check import check_and_commit_main_repo
+from pokepoke.orchestration.work_item_selection import select_multiple_items
+from pokepoke.orchestration.workflow import process_work_item
+from pokepoke.types import BeadsWorkItem, SessionStats, WorkItemResult
+from pokepoke.utils.logging_utils import RunLogger
+from pokepoke.utils.process_utils import kill_orphaned_copilot_processes
+from pokepoke.utils.shutdown import (
+    cancel_stop_after_current,
+    is_shutting_down,
+    set_executor,
+    should_stop_after_current,
+)
 
 # Re-exported for test monkey-patching via parallel_support late imports
 __all__ = [
-    "get_ready_work_items", "is_item_claimable", "assign_and_sync_item",
-    "unassign_with_retry", "select_multiple_items", "check_and_commit_main_repo",
-    "should_stop_after_current", "cancel_stop_after_current",
+    "assign_and_sync_item",
+    "cancel_stop_after_current",
+    "check_and_commit_main_repo",
+    "get_ready_work_items",
+    "is_item_claimable",
+    "select_multiple_items",
+    "should_stop_after_current",
+    "unassign_with_retry",
 ]
 
 from pokepoke.agents.parallel_support import (
-    finalize_workers as _finalize_workers,
-    drain_circuit_breaker as _drain_circuit_breaker,
-    dispatch_items as _dispatch_items,
-    run_preflight_and_repo_checks as _run_preflight_and_repo_checks,
     check_loop_exit as _check_loop_exit,
-    update_circuit_breaker as _update_circuit_breaker,
+)
+from pokepoke.agents.parallel_support import (
     compute_slots as _compute_slots,
+)
+from pokepoke.agents.parallel_support import (
+    dispatch_items as _dispatch_items,
+)
+from pokepoke.agents.parallel_support import (
+    drain_circuit_breaker as _drain_circuit_breaker,
+)
+from pokepoke.agents.parallel_support import (
+    finalize_workers as _finalize_workers,
+)
+from pokepoke.agents.parallel_support import (
+    run_preflight_and_repo_checks as _run_preflight_and_repo_checks,
+)
+from pokepoke.agents.parallel_support import (
+    update_circuit_breaker as _update_circuit_breaker,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,22 +82,18 @@ _Future = concurrent.futures.Future[WorkItemResult]
 _spawn_wakeup = threading.Event()  # Wake up loop for spawn agent requests from desktop UI
 _SNAKE_TYPES: tuple[str, ...] = ("cobra", "corn", "rainbow_boa", "rattlesnake", "sea_snake")
 
-
 def _get_dynamic_max_agents() -> int:
     """Re-read max_parallel_agents from config so UI changes take effect immediately."""
     from pokepoke.config import get_config
     return max(1, get_config().max_parallel_agents)
 
-
 def get_effective_max_agents() -> int:
     """Return max agents to enforce right now."""
     return compute_effective_max_agents(_get_dynamic_max_agents())
 
-
 def request_spawn_agent() -> None:
     """Signal the parallel loop to spawn an additional agent immediately."""
     _spawn_wakeup.set()
-
 
 def _hash_string(value: str) -> int:
     """Mirror desktop snake hash: deterministic 32-bit string hash (Math.abs())."""
@@ -80,17 +105,14 @@ def _hash_string(value: str) -> int:
         hash_val -= 0x100000000
     return abs(hash_val)
 
-
 def _snake_for_work_item(item_id: str) -> str:
     """Deterministically pick a snake type for a work item ID."""
     index = _hash_string(item_id) % len(_SNAKE_TYPES)
     return _SNAKE_TYPES[index]
 
-
 def _build_worker_name(base_agent_name: str, item_id: str, counter: int) -> str:
     """Compose a worker name that includes the snake icon type and a unique suffix."""
     return f"{base_agent_name}-{_snake_for_work_item(item_id)}-worker-{counter}"
-
 
 def _parallel_process_item(
     item: BeadsWorkItem, run_logger: RunLogger,
@@ -100,21 +122,17 @@ def _parallel_process_item(
     """Thread-pool wrapper for process_work_item."""
     agent_id = f"{item.id}:{worker_agent_name}" if worker_agent_name else item.id
     display_name = worker_agent_name or get_agent_name(default="pokepoke")
-
     if worker_agent_name:
         set_agent_name(worker_agent_name)
 
     def _push(status: str) -> None:
         terminal_ui.ui.push_agent_status(agent_id, display_name, iteration=1, status=status,
             work_item_id=item.id, work_item_title=item.title, agent_type="work")
-
     _push("running")
     terminal_ui.ui.log_orchestrator(f"\U0001f680 Agent {display_name} started item {item.id}: {item.title}")
-
     # Increment total attempts counter for this item
     from pokepoke.beads.beads import increment_total_attempts
     increment_total_attempts(item.id)
-
     try:
         with terminal_ui.ui.agent_output_for(agent_id):
             result = process_work_item(item, interactive=False, run_logger=run_logger, agent_id=agent_id, repo_path=repo_path)
@@ -132,7 +150,6 @@ def _parallel_process_item(
         clear_agent_name()
         semaphore.release()
 
-
 def _collect_done_futures(
     futures: dict[_Future, BeadsWorkItem],
     failed_claim_ids: set[str],
@@ -142,7 +159,6 @@ def _collect_done_futures(
     record_fn: Any,
 ) -> tuple[int, bool, int, int]:
     """Collect completed futures and record results.
-
     Returns (total_requests, any_success, success_count, failure_count).
     """
     done_futs: set[_Future] = set()
@@ -176,22 +192,19 @@ def _collect_done_futures(
         try:
             result = fut.result()
         except Exception as exc:
-            print(f"\n❌ Agent for {item.id} raised: {exc}")
+            logger.error(f"\n❌ Agent for {item.id} raised: {exc}")
             run_logger.log_orchestrator(f"Agent error for {item.id}: {exc}", level="ERROR")
             result = WorkItemResult(success=False, request_count=0)
             was_exception = True
-
         # Only blacklist explicit claim failures, not exception-crashed workers.
         if not result.success and result.request_count == 0 and not was_exception:
             failed_claim_ids.add(item.id)
-
         if result.success:
             failed_claim_ids.discard(item.id)
             any_success = True
             success_count += 1
         else:
             failure_count += 1
-
         total_requests += result.request_count
         try:
             record_fn(item, result, session_stats, run_logger)
@@ -200,7 +213,6 @@ def _collect_done_futures(
             run_logger.log_orchestrator(f"Error recording result for {item.id}: {exc}", level="ERROR")
 
     return total_requests, any_success, success_count, failure_count
-
 
 @dataclass
 class _LoopState:
@@ -215,7 +227,6 @@ class _LoopState:
     consecutive_failures: int = 0
     consecutive_preflight_failures: int = 0
     circuit_breaker_tripped: bool = False
-
 
 def _handle_circuit_breaker_drain(
     state: _LoopState,
@@ -237,7 +248,6 @@ def _handle_circuit_breaker_drain(
     )
     return False
 
-
 def _run_loop_iteration(
     state: _LoopState,
     futures: dict[_Future, BeadsWorkItem],
@@ -254,7 +264,6 @@ def _run_loop_iteration(
     mode_name: str,
 ) -> str | None:
     """Execute one iteration of the parallel loop.
-
     Returns:
         ``None`` to continue normally, ``"break"`` to exit the loop,
         ``"continue"`` to skip the sleep at the end.
@@ -314,7 +323,6 @@ def _run_loop_iteration(
 
     return None
 
-
 def run_parallel_loop(
     effective_parallel: int,
     mode_name: str,
@@ -349,7 +357,6 @@ def run_parallel_loop(
                 if _handle_circuit_breaker_drain(state, futures, failed_claim_ids, session_stats, run_logger, record_fn, mode_name):
                     break
                 continue
-
             result = _run_loop_iteration(
                 state, futures, failed_claim_ids, session_stats, run_logger,
                 record_fn, finalize_fn, semaphore, executor,
@@ -359,7 +366,6 @@ def run_parallel_loop(
                 break
             if result == "continue":
                 continue
-
             terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", f"{len(futures)} agents active")
             for _ in range(10):
                 if is_shutting_down() or _spawn_wakeup.is_set():
@@ -373,7 +379,7 @@ def run_parallel_loop(
         set_executor(None)
         clear_runtime_parallel_limits()
         if not state.finalized:
-            print("\n🏁 Finalizing session...")
+            logger.info("\n🏁 Finalizing session...")
             run_logger.log_orchestrator("Finalizing session on exit")
             if terminal_ui.ui._is_running:
                 terminal_ui.ui.stop_and_capture()

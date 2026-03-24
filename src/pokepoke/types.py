@@ -1,14 +1,17 @@
 """Type definitions for PokePoke orchestrator."""
-
 import threading
-from dataclasses import dataclass, field, replace, is_dataclass
 from collections.abc import Iterator
+from dataclasses import dataclass, field, is_dataclass, replace
 from typing import Any
 
 from pokepoke.agents.agent_types import (
-    AGENT_TYPES, _empty_agent_run_counts, _normalize_agent_key, resolve_agent_type,
+    AGENT_TYPES,
+    _empty_agent_run_counts,
+    _normalize_agent_key,
+    resolve_agent_type,
 )
 from pokepoke.git.merge_queue_stats import MergeQueueStats as MergeQueueStats  # re-export
+
 
 @dataclass
 class BeadsWorkItem:
@@ -143,7 +146,6 @@ class WorkItemResult:
 @dataclass(frozen=True)
 class SessionStatsSnapshot:
     """Frozen snapshot of session stats for UI display."""
-
     agent_stats: AgentStats
     items_completed: int = 0
     items_created: int = 0
@@ -176,7 +178,6 @@ class SessionStatsSnapshot:
 @dataclass
 class SessionStats:
     """Combined session statistics including agent stats and run counts."""
-
     agent_stats: AgentStats
 
     # Per-session beads throughput
@@ -223,13 +224,11 @@ class SessionStats:
                     raise ValueError("items_completed cannot be negative")
                 self.items_completed = items_completed
             self.completed_items_list.append(replace(item))
-
             if agent_type:
                 normalized = agent_type.strip().lower() or "unknown"
                 self.completed_counts_by_agent_type[normalized] = (
                     self.completed_counts_by_agent_type.get(normalized, 0) + 1
                 )
-
             return self.items_completed
 
     def record_created_item(self, item: BeadsCreatedItem) -> int:
@@ -237,11 +236,9 @@ class SessionStats:
         with self._lock:
             if item.id in self._created_item_ids:
                 return self.items_created
-
             self._created_item_ids.add(item.id)
             self.items_created += 1
             self.created_items_list.append(replace(item))
-
             normalized = (item.agent_type or "unknown").strip().lower() or "unknown"
             self.created_counts_by_agent_type[normalized] = (
                 self.created_counts_by_agent_type.get(normalized, 0) + 1

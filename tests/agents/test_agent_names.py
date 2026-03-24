@@ -4,12 +4,7 @@ import os
 import re
 from unittest.mock import patch
 
-from pokepoke.agents.agent_names import (
-    generate_agent_name,
-    initialize_agent_name,
-    ADJECTIVES,
-    CREATURES
-)
+from pokepoke.agents.agent_names import ADJECTIVES, CREATURES, generate_agent_name, initialize_agent_name
 
 
 class TestGenerateAgentName:

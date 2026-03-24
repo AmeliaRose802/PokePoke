@@ -4,7 +4,6 @@ import subprocess
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-
 from pokepoke.git.repo_check import check_beads_available, initialize_beads_repo
 
 

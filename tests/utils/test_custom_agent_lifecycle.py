@@ -19,9 +19,9 @@ from pokepoke.config import (
     reset_config,
 )
 from pokepoke.maintenance.maintenance_scheduler import (
-    MaintenanceScheduler,
     _PARALLEL_SAFE_AGENTS,
     _SINGLETON_AGENTS,
+    MaintenanceScheduler,
 )
 from pokepoke.prompts.prompts import PromptService
 from pokepoke.types import AgentStats, SessionStats

@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from pokepoke.git.merge_queue import MergeQueue, MergeStatus
-from pokepoke.stats.stats import serialize_session_stats, _print_merge_queue_stats
+from pokepoke.stats.stats import _print_merge_queue_stats, serialize_session_stats
 from pokepoke.types import (
     AgentStats,
     BeadsWorkItem,
@@ -366,7 +366,8 @@ class TestPrintMergeQueueStats:
             queue_depth_samples=[1, 3, 2],
         )
         _print_merge_queue_stats(mqs)
-        out = capsys.readouterr().out
+        captured = capsys.readouterr()
+        out = captured.out + captured.err
         assert "Total merges:" in out
         assert "10" in out
         assert "Successful:" in out
@@ -383,7 +384,8 @@ class TestPrintMergeQueueStats:
                               queue_depth_samples=[1],
                               total_rebases=1, successful_rebases=1)
         _print_merge_queue_stats(mqs)
-        out = capsys.readouterr().out
+        captured = capsys.readouterr()
+        out = captured.out + captured.err
         assert "High-conflict" not in out
 
     def test_shows_high_conflict_section(self, capsys):
@@ -396,7 +398,8 @@ class TestPrintMergeQueueStats:
             queue_depth_samples=[1],
         )
         _print_merge_queue_stats(mqs)
-        out = capsys.readouterr().out
+        captured = capsys.readouterr()
+        out = captured.out + captured.err
         assert "High-conflict" in out
         assert "Double-rebase" in out
 

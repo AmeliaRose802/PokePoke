@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from pokepoke.utils.project_utils import (
-    is_git_repo,
-    resolve_git_toplevel,
-    has_pokepoke_config,
     check_beads_available,
     ensure_project_ready,
+    has_pokepoke_config,
+    is_git_repo,
+    resolve_git_toplevel,
 )
 
 

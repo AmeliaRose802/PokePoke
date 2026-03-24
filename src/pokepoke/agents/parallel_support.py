@@ -6,13 +6,13 @@ import threading
 import time
 from typing import Any
 
-from pokepoke.utils.process_utils import apply_memory_backpressure, kill_orphaned_copilot_processes
-from pokepoke.types import BeadsWorkItem, SessionStats, WorkItemResult
-from pokepoke.utils.logging_utils import RunLogger
 from pokepoke.beads.beads_hierarchy import is_high_conflict_risk
 from pokepoke.desktop import terminal_ui
+from pokepoke.types import BeadsWorkItem, SessionStats, WorkItemResult
+from pokepoke.utils.logging_utils import RunLogger
+from pokepoke.utils.preflight_log_utils import handle_preflight_checks
+from pokepoke.utils.process_utils import apply_memory_backpressure, kill_orphaned_copilot_processes
 from pokepoke.utils.shutdown import is_shutting_down
-from pokepoke.utils.preflight_log_utils import handle_preflight_checks  # noqa: F401 – re-exported
 
 logger = logging.getLogger(__name__)
 
@@ -157,9 +157,8 @@ def dispatch_items(
 ) -> int:
     """Select, claim, and submit work items. Returns updated worker_counter."""
     # Late import from pokepoke.agents.parallel so test monkey-patches work correctly
-    from pokepoke.agents.parallel import assign_and_sync_item
-    from pokepoke.agents.parallel import select_multiple_items, should_stop_after_current
     from pokepoke.agents.agent_context import get_agent_name
+    from pokepoke.agents.parallel import assign_and_sync_item, select_multiple_items, should_stop_after_current
 
     if (
         slots <= 0
@@ -314,7 +313,7 @@ def check_loop_exit(
 ) -> str | None:
     """Decide whether the main loop should exit, continue idling, or keep running."""
     # Late import from pokepoke.agents.parallel so test monkey-patches work correctly
-    from pokepoke.agents.parallel import should_stop_after_current, cancel_stop_after_current
+    from pokepoke.agents.parallel import cancel_stop_after_current, should_stop_after_current
     if get_ready_work_items_fn is None:
         from pokepoke.agents.parallel import get_ready_work_items as get_ready_work_items_fn
 

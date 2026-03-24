@@ -5,24 +5,23 @@ import threading
 import time
 from unittest.mock import MagicMock, Mock, patch
 
-
 from pokepoke.agents.parallel_support import (
-    handle_preflight_checks,
-    finalize_workers,
     _drain_orphaned_futures,
-    drain_circuit_breaker,
-    dispatch_items,
-    run_preflight_and_repo_checks,
     check_loop_exit,
-    update_circuit_breaker,
     compute_slots,
-)
-from pokepoke.utils.preflight_log_utils import (
-    format_preflight_errors,
-    should_log_preflight_warning,
-    reset_preflight_rate_limit,
+    dispatch_items,
+    drain_circuit_breaker,
+    finalize_workers,
+    handle_preflight_checks,
+    run_preflight_and_repo_checks,
+    update_circuit_breaker,
 )
 from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats, WorkItemResult
+from pokepoke.utils.preflight_log_utils import (
+    format_preflight_errors,
+    reset_preflight_rate_limit,
+    should_log_preflight_warning,
+)
 
 
 def _make_item(item_id: str = "t1") -> BeadsWorkItem:

@@ -14,7 +14,6 @@ import threading
 
 from pokepoke.types import SessionStats
 
-
 _lock = threading.Lock()
 _current: SessionStats | None = None
 

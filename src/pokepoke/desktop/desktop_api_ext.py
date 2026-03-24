@@ -8,7 +8,7 @@ import logging
 import os
 import subprocess
 from pathlib import Path
-from typing import Any, Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from pokepoke.desktop.desktop_api import DesktopAPI
@@ -287,7 +287,7 @@ def _check_beads_available(path: Path) -> bool:
 
 def open_project(self: DesktopAPI, path: str) -> dict[str, Any]:
     """Open a project directory, validating it and updating internal state."""
-    from pokepoke.config import reset_config, load_config
+    from pokepoke.config import load_config, reset_config
     from pokepoke.git.repo_utils import get_repository_name
     from pokepoke.utils.shutdown import cancel_stop_after_current, has_active_agents
 

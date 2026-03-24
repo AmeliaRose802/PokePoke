@@ -1,7 +1,7 @@
 """Tests for process_utils module."""
 import asyncio
-from unittest.mock import patch, MagicMock, AsyncMock
 import subprocess
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -10,12 +10,12 @@ from pokepoke.utils.process_utils import (
     apply_memory_backpressure,
     check_copilot_processes,
     get_available_memory_mb,
-    is_memory_pressure,
     is_memory_critical,
+    is_memory_pressure,
     is_process_running,
     kill_orphaned_copilot_processes,
-    wait_for_process_cleanup,
     shutdown_copilot_client,
+    wait_for_process_cleanup,
 )
 
 

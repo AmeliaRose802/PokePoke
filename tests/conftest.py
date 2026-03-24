@@ -1,8 +1,8 @@
 """Test configuration for PokePoke tests."""
 import contextlib
-import sys
-import os
 import importlib.util
+import os
+import sys
 import warnings
 from pathlib import Path
 
@@ -56,6 +56,11 @@ if str(SRC_PATH) not in sys.path:
 if sys.platform == 'win32':
     # Set console code page to UTF-8 for Windows
     os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
+    # Reconfigure streams for the current process (env var only affects startup)
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    if hasattr(sys.stderr, 'reconfigure'):
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 # Fail fast if pytest-timeout is not installed.  The timeout=10 setting in
 # pyproject.toml is silently ignored without this plugin, which lets the full
@@ -75,16 +80,92 @@ if importlib.util.find_spec("xdist") is None:
         "Install it with: pip install pytest-xdist"
     )
 
-import pytest  # noqa: E402
-from unittest.mock import patch  # noqa: E402
+import logging as _logging
+from unittest.mock import patch
 
-from pokepoke.types import BeadsWorkItem  # noqa: E402
-from pokepoke.beads.beads_query import (  # noqa: E402
+import pytest
+
+from pokepoke.beads.beads_query import (
     BD_CONFIG,
     BR_CONFIG,
     get_active_backend,
     set_active_backend,
 )
+from pokepoke.types import BeadsWorkItem
+
+
+def _scrub_surrogates(s: str) -> str:
+    """Replace surrogate characters that crash xdist serialization."""
+    return s.encode("utf-8", errors="replace").decode("utf-8")
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Scrub surrogate characters from test reports before xdist serialises.
+
+    xdist serialises test report data (including captured stdout/stderr/log)
+    via execnet which requires valid UTF-8.  Surrogate characters (e.g. from
+    Windows paths decoded with surrogateescape) cause DumpError and crash
+    the worker.  We scrub the sections list which backs capstdout/capstderr/caplog.
+    """
+    outcome = yield
+    report = outcome.get_result()
+    if hasattr(report, "sections"):
+        report.sections = [
+            (name, _scrub_surrogates(content)) for name, content in report.sections
+        ]
+    # Also scrub the longrepr if it's a string (assertion details)
+    if isinstance(getattr(report, "longrepr", None), str):
+        report.longrepr = _scrub_surrogates(report.longrepr)
+
+# ---------------------------------------------------------------------------
+# Route pokepoke logger output through print() so capsys/capsys-like capture
+# works in tests.  Source code uses logger.info/warning/error instead of
+# print(); this handler bridges the gap so existing test assertions on
+# capsys.readouterr().out / .err keep working without modification.
+# ---------------------------------------------------------------------------
+
+class _PrintHandler(_logging.Handler):
+    """Logging handler that routes records through builtins.print().
+
+    Calls builtins.print() so that:
+    - pytest's capsys fixture captures the output (capsys replaces sys.stdout)
+    - tests that mock builtins.print via patch('builtins.print') capture calls
+    WARNING+ goes to stderr, INFO and below to stdout — matching the
+    original print() / print(file=sys.stderr) behaviour.
+    """
+
+    def emit(self, record: _logging.LogRecord) -> None:
+        try:
+            msg = record.getMessage()
+            # Strip surrogate characters that crash xdist worker serialization
+            msg = msg.encode("utf-8", errors="replace").decode("utf-8")
+            if record.levelno >= _logging.WARNING:
+                print(msg, file=sys.stderr)
+            else:
+                print(msg)
+        except Exception:
+            self.handleError(record)
+
+
+_PRINT_HANDLER = _PrintHandler()
+
+
+@pytest.fixture(autouse=True)
+def _ensure_print_handler():
+    """Ensure the _PrintHandler is always present on the pokepoke logger.
+
+    Some tests (e.g. test_logging.py) clear and restore logger handlers.
+    This fixture guarantees our handler is re-added before every test.
+    """
+    pokepoke_logger = _logging.getLogger("pokepoke")
+    if _PRINT_HANDLER not in pokepoke_logger.handlers:
+        pokepoke_logger.addHandler(_PRINT_HANDLER)
+    pokepoke_logger.setLevel(_logging.DEBUG)
+    yield
+    # Re-add after test in case it was removed
+    if _PRINT_HANDLER not in pokepoke_logger.handlers:
+        pokepoke_logger.addHandler(_PRINT_HANDLER)
 
 
 @pytest.fixture(params=[

@@ -1,10 +1,8 @@
 """Tests for invoke_copilot function (moved to ai_backends)."""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from pokepoke.models.ai_backends import (
-    invoke_copilot
-)
+from pokepoke.models.ai_backends import invoke_copilot
 from pokepoke.types import CopilotResult
 
 

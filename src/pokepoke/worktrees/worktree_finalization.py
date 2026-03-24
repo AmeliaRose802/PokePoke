@@ -5,14 +5,15 @@ import logging
 import subprocess
 from pathlib import Path
 
-from pokepoke.utils.constants import WORKTREE_DIR, WORKTREE_TASK_PREFIX
-from pokepoke.git.git_helpers import run_git
-from pokepoke.types import BeadsWorkItem
-from .worktrees import cleanup_worktree
-from pokepoke.git.git_operations import get_default_branch
-from pokepoke.beads.beads_hierarchy import get_parent_id, close_parent_if_complete
+from pokepoke.beads.beads_hierarchy import close_parent_if_complete, get_parent_id
 from pokepoke.beads.beads_management import close_item
+from pokepoke.git.git_helpers import run_git
+from pokepoke.git.git_operations import get_default_branch
+from pokepoke.types import BeadsWorkItem
+from pokepoke.utils.constants import WORKTREE_DIR, WORKTREE_TASK_PREFIX
+
 from .coordination import merge_lock
+from .worktrees import cleanup_worktree
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +35,8 @@ def finalize_work_item(
     Returns:
         True if successful, False otherwise
     """
-    print("\n✅ Successfully completed work item!")
-    print("   All changes committed and validated")
+    logger.info("\n✅ Successfully completed work item!")
+    logger.info("   All changes committed and validated")
 
     if not check_and_merge_worktree(item, worktree_path, parent_agent_id=parent_agent_id, repo_path=repo_path):
         return False
@@ -67,8 +68,8 @@ def check_and_merge_worktree(
         commit_count = int(check_result.stdout.strip())
 
         if commit_count == 0:
-            print("\n⏭️  No commits in worktree - nothing to merge")
-            print("   Cleaning up worktree without merge...")
+            logger.info("\n⏭️  No commits in worktree - nothing to merge")
+            logger.info("   Cleaning up worktree without merge...")
             cleanup_worktree(item.id, force=True, repo_path=repo_path)
             return True
 
@@ -77,11 +78,11 @@ def check_and_merge_worktree(
         return False
     except (subprocess.CalledProcessError, ValueError) as e:
         # Branch not found or parse error — recoverable, attempt merge
-        print(f"\n⚠️  Could not check commit count: {e}")
-        print("   Attempting merge anyway...")
+        logger.warning(f"\n⚠️  Could not check commit count: {e}")
+        logger.info("   Attempting merge anyway...")
     except Exception as e:
         logger.error("Unexpected error checking commit count for %s: %s", item.id, e)
-        print("   Aborting merge to prevent data corruption")
+        logger.info("   Aborting merge to prevent data corruption")
         return False
 
     # Acquire merge lock to serialize with other parallel agents
@@ -135,7 +136,7 @@ def close_work_item_and_parents(item: BeadsWorkItem) -> None:
         logger.info("Skipping beads close for ephemeral item %s", item.id)
         return
 
-    print(f"\n🔍 Checking if agent closed beads item {item.id}...")
+    logger.info(f"\n🔍 Checking if agent closed beads item {item.id}...")
     try:
         check_result = subprocess.run(
             ["bd", "show", item.id, "--json"],
@@ -153,13 +154,13 @@ def close_work_item_and_parents(item: BeadsWorkItem) -> None:
         item_data = items_data[0]
 
         if item_data.get("status") in ["closed", "completed"]:
-            print("   ✅ Agent successfully closed the item")
+            logger.info("   ✅ Agent successfully closed the item")
         else:
-            print("   ⚠️  Item not closed by agent, closing now...")
+            logger.warning("   ⚠️  Item not closed by agent, closing now...")
             close_item(item.id, "Completed by PokePoke orchestrator (agent did not close)")
     except Exception as e:
-        print(f"   ⚠️  Could not check item status: {e}")
-        print("   Closing item as fallback...")
+        logger.warning(f"   ⚠️  Could not check item status: {e}")
+        logger.info("   Closing item as fallback...")
         close_item(item.id, "Completed by PokePoke orchestrator")
 
     # Check parent hierarchy
@@ -170,7 +171,7 @@ def check_parent_hierarchy(item: BeadsWorkItem) -> None:
     """Check and close parent items if all children are complete."""
     parent_id = get_parent_id(item.id)
     if parent_id:
-        print(f"\n🔍 Checking parent {parent_id} completion status...")
+        logger.info(f"\n🔍 Checking parent {parent_id} completion status...")
         close_parent_if_complete(parent_id)
 
         # Recursively check grandparents

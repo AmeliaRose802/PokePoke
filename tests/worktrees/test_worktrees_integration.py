@@ -6,16 +6,17 @@ and related modules to improve coverage of critical data-integrity paths.
 
 import subprocess
 from pathlib import Path
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
+
 import pytest
 
 from pokepoke.worktrees.worktrees import (
+    _sync_and_ensure_clean_main_repo,
+    cleanup_worktree,
     create_worktree,
     is_worktree_merged,
-    merge_worktree,
-    cleanup_worktree,
     list_worktrees,
-    _sync_and_ensure_clean_main_repo,
+    merge_worktree,
 )
 
 

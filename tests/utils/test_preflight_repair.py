@@ -7,13 +7,12 @@ import pytest
 
 from pokepoke.utils.preflight_checks import HealthCheckError
 from pokepoke.utils.preflight_repair import (
+    _invoke_preflight_cleanup,
     attempt_repair,
     repair_git_status,
     repair_lock_availability,
     repair_repository_integrity,
-    _invoke_preflight_cleanup,
 )
-
 
 # -- Fixtures -----------------------------------------------------------------
 

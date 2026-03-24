@@ -3,28 +3,31 @@
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from pokepoke.beads.beads_management import run_bd_sync_with_retry
+from pokepoke.beads.beads_query import _get_main_repo_root, _parse_beads_json, _run_bd
 from pokepoke.config import get_config
 from pokepoke.models.model_sync_parsing import (
     CopilotModelSnapshot,
-    parse_copilot_models_output,
-    normalize_model_entry,
     is_beta_model,
+    normalize_model_entry,
+    parse_copilot_models_output,
 )
 from pokepoke.types import AgentStats
-from pokepoke.beads.beads_query import _parse_beads_json, _run_bd, _get_main_repo_root
-from pokepoke.beads.beads_management import run_bd_sync_with_retry
+
+logger = logging.getLogger(__name__)
 
 REGISTRY_PATH = Path(".pokepoke") / "model_registry.json"
 
 
 def _log(item_logger: Any | None, message: str) -> None:
-    print(message)
+    logger.info(message)
     if item_logger is not None:
         item_logger.log(message + "\n")
 
@@ -330,7 +333,7 @@ def sync_copilot_models(item_logger: Any | None = None) -> AgentStats | None:
         return None
 
     now = datetime.now(UTC)
-    registry, new_models, removed_models = update_registry(models, registry, now)
+    registry, _new_models, removed_models = update_registry(models, registry, now)
     save_registry(registry)
 
     repo_root = _get_main_repo_root()

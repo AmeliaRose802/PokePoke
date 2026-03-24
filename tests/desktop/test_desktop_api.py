@@ -9,7 +9,7 @@ import pytest
 
 from pokepoke.desktop.desktop_api import DesktopAPI
 from pokepoke.desktop.desktop_api_ext import _discover_log_roots as _real_discover_log_roots
-from pokepoke.types import SessionStats, AgentStats, BeadsWorkItem
+from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats
 
 
 @pytest.fixture(autouse=True)
@@ -571,8 +571,8 @@ def test_get_config_reads_yaml() -> None:
     api = DesktopAPI()
     with patch("pokepoke.config._find_repo_root") as mock_root:
         # Create a fake repo root with .pokepoke/config.yaml
-        from pathlib import Path
         import tempfile
+        from pathlib import Path
 
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
@@ -592,12 +592,13 @@ def test_get_config_reads_yaml() -> None:
 
 def test_save_config_writes_yaml() -> None:
     from unittest.mock import patch
+
     import yaml
 
     api = DesktopAPI()
     with patch("pokepoke.config._find_repo_root") as mock_root:
-        from pathlib import Path
         import tempfile
+        from pathlib import Path
 
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
@@ -616,12 +617,13 @@ def test_save_config_writes_yaml() -> None:
 def test_save_config_with_yaml_string() -> None:
     """save_config should accept a YAML string and parse it."""
     from unittest.mock import patch
+
     import yaml
 
     api = DesktopAPI()
     with patch("pokepoke.config._find_repo_root") as mock_root:
-        from pathlib import Path
         import tempfile
+        from pathlib import Path
 
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
@@ -640,6 +642,7 @@ def test_save_config_with_yaml_string() -> None:
 def test_save_config_rejects_invalid_type() -> None:
     """save_config should reject non-dict/non-string input."""
     from unittest.mock import patch
+
     import pytest
 
     api = DesktopAPI()
@@ -650,6 +653,7 @@ def test_save_config_rejects_invalid_type() -> None:
 def test_save_config_rejects_non_dict_yaml() -> None:
     """save_config should reject YAML strings that don't parse to a dict."""
     from unittest.mock import patch
+
     import pytest
 
     api = DesktopAPI()
@@ -674,7 +678,7 @@ def test_push_stats_with_model_completions() -> None:
 
 def test_list_prompts_returns_list() -> None:
     """list_prompts should return a non-empty list of prompt templates."""
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock, patch
     api = DesktopAPI()
     mock_service = MagicMock()
     mock_service.list_prompts.return_value = [
@@ -688,7 +692,7 @@ def test_list_prompts_returns_list() -> None:
 
 def test_get_prompt_returns_metadata() -> None:
     """get_prompt should return prompt content and metadata."""
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock, patch
     api = DesktopAPI()
     mock_service = MagicMock()
     mock_service.get_prompt_metadata.return_value = {
@@ -707,7 +711,7 @@ def test_get_prompt_returns_metadata() -> None:
 
 def test_save_prompt_delegates() -> None:
     """save_prompt should delegate to PromptService."""
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock, patch
     api = DesktopAPI()
     mock_service = MagicMock()
     mock_service.save_prompt.return_value = {"path": "/tmp/test.md", "saved": True}
@@ -719,7 +723,7 @@ def test_save_prompt_delegates() -> None:
 
 def test_reset_prompt_delegates() -> None:
     """reset_prompt should delegate to PromptService."""
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock, patch
     api = DesktopAPI()
     mock_service = MagicMock()
     mock_service.reset_prompt.return_value = {"reset": True, "had_override": True}
@@ -1132,8 +1136,8 @@ def test_get_config_no_yaml(monkeypatch) -> None:
 
     api = DesktopAPI()
     with patch("pokepoke.config._find_repo_root") as mock_root:
-        from pathlib import Path
         import tempfile
+        from pathlib import Path
 
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
@@ -1153,8 +1157,8 @@ def test_get_config_file_not_found(monkeypatch) -> None:
 
     api = DesktopAPI()
     with patch("pokepoke.config._find_repo_root") as mock_root:
-        from pathlib import Path
         import tempfile
+        from pathlib import Path
 
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
@@ -1423,6 +1427,8 @@ def test_open_project_cancels_stop_after_current(tmp_path, monkeypatch) -> None:
     from pokepoke.utils.shutdown import (
         request_stop_after_current,
         should_stop_after_current,
+    )
+    from pokepoke.utils.shutdown import (
         reset as reset_shutdown,
     )
 
@@ -1560,7 +1566,7 @@ def test_disposal_is_thread_safe() -> None:
 
 def test_push_methods_silently_ignore_after_disposal() -> None:
     """All push methods should silently return when window is disposed."""
-    from pokepoke.types import SessionStats, AgentStats
+    from pokepoke.types import AgentStats, SessionStats
 
     api = DesktopAPI()
 

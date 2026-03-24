@@ -3,12 +3,14 @@
 import subprocess
 from unittest.mock import Mock, patch
 
+import pytest
+
 from pokepoke.git.git_helpers import (
-    restore_beads_stash,
-    verify_branch_pushed,
     _run_git_status_with_retry,
-    validate_post_merge,
     list_worktrees,
+    restore_beads_stash,
+    validate_post_merge,
+    verify_branch_pushed,
 )
 
 
@@ -52,12 +54,11 @@ class TestRestoreBeadsStash:
         mock_run.assert_called_once()
         assert mock_run.call_args[0][0][:3] == ["git", "stash", "pop"]
 
-    @patch('pokepoke.git.git_helpers.print')
     @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_restore_conflict_force_applies_beads(
         self,
         mock_run: Mock,
-        mock_print: Mock
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Pop failure force-applies .beads/ from stash then drops."""
         mock_run.side_effect = [
@@ -73,16 +74,16 @@ class TestRestoreBeadsStash:
         assert mock_run.call_args_list[1][0][0] == ["git", "checkout", "--", ".beads/"]
         assert mock_run.call_args_list[2][0][0] == ["git", "checkout", "stash@{0}", "--", ".beads/"]
         assert mock_run.call_args_list[3][0][0] == ["git", "stash", "drop"]
-        mock_print.assert_any_call("✅ Force-applied .beads/ changes from stash.")
+        captured = capsys.readouterr()
+        assert "Force-applied .beads/ changes from stash" in captured.out
 
     @patch('pokepoke.git.git_helpers._get_stash_ref', return_value="stash@{0}: On main: beads-daemon-changes")
-    @patch('pokepoke.git.git_helpers.print')
     @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_restore_checkout_failure_preserves_stash(
         self,
         mock_run: Mock,
-        mock_print: Mock,
         mock_stash_ref: Mock,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """When force-apply fails, stash is preserved with ref logged."""
         mock_run.side_effect = [
@@ -95,17 +96,15 @@ class TestRestoreBeadsStash:
 
         # Stash drop should NOT be called — stash is preserved
         assert mock_run.call_count == 3
-        mock_print.assert_any_call(
-            "⚠️ Could not recover .beads/ from stash (ref: stash@{0}: On main: beads-daemon-changes). "
-            "Stash preserved — run `git stash list` to inspect."
-        )
+        captured = capsys.readouterr()
+        assert "Could not recover .beads/ from stash" in captured.err
+        assert "Stash preserved" in captured.err
 
-    @patch('pokepoke.git.git_helpers.print')
     @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_restore_force_apply_ok_drop_fails(
         self,
         mock_run: Mock,
-        mock_print: Mock,
+        capsys: pytest.CaptureFixture[str],
     ) -> None:
         """Force-apply succeeds but drop fails — warns user."""
         mock_run.side_effect = [
@@ -118,8 +117,9 @@ class TestRestoreBeadsStash:
         restore_beads_stash("pull failure")
 
         assert mock_run.call_count == 4
-        mock_print.assert_any_call("✅ Force-applied .beads/ changes from stash.")
-        mock_print.assert_any_call("⚠️ Could not drop stash after recovery. Run `git stash list` to clean up.")
+        captured = capsys.readouterr()
+        assert "Force-applied .beads/ changes from stash" in captured.out
+        assert "Could not drop stash after recovery" in captured.err
 
 
 class TestRunGitStatusWithRetry:

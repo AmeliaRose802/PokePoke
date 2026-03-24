@@ -12,8 +12,12 @@ from pokepoke.utils.constants import BEADS_DIR, DEFAULT_GIT_TIMEOUT
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "run_git", "verify_branch_pushed", "restore_beads_stash",
-    "_run_git_status_with_retry", "validate_post_merge", "list_worktrees",
+    "_run_git_status_with_retry",
+    "list_worktrees",
+    "restore_beads_stash",
+    "run_git",
+    "validate_post_merge",
+    "verify_branch_pushed",
 ]
 
 
@@ -53,7 +57,7 @@ def _print_command_output(lines: list[str]) -> None:
     for line in lines:
         text = line.strip()
         if text:
-            print(text)
+            logger.info(text)
 
 
 def restore_beads_stash(context: str) -> None:
@@ -66,7 +70,7 @@ def restore_beads_stash(context: str) -> None:
     try:
         run_git(["git", "stash", "pop", "--index"])
     except subprocess.CalledProcessError as pop_error:
-        print(f"⚠️ Stash pop conflict after {context}. Attempting to force-apply .beads/ changes.")
+        logger.warning(f"⚠️ Stash pop conflict after {context}. Attempting to force-apply .beads/ changes.")
         _print_command_output([pop_error.stdout or "", pop_error.stderr or ""])
 
         # Reset only .beads/ from the partially-applied pop so the
@@ -78,18 +82,18 @@ def restore_beads_stash(context: str) -> None:
         # Force-apply .beads/ paths from the stash (theirs-wins strategy)
         try:
             run_git(["git", "checkout", "stash@{0}", "--", f"{BEADS_DIR}/"])
-            print("✅ Force-applied .beads/ changes from stash.")
+            logger.info("✅ Force-applied .beads/ changes from stash.")
             # Only drop the stash after successful recovery
             try:
                 run_git(["git", "stash", "drop"])
             except subprocess.CalledProcessError:
-                print("⚠️ Could not drop stash after recovery. Run `git stash list` to clean up.")
+                logger.warning("⚠️ Could not drop stash after recovery. Run `git stash list` to clean up.")
         except subprocess.CalledProcessError as checkout_error:
             # Recovery failed — preserve the stash for manual inspection
             _print_command_output([checkout_error.stdout or "", checkout_error.stderr or ""])
             stash_ref = _get_stash_ref()
             ref_msg = f" (ref: {stash_ref})" if stash_ref else ""
-            print(
+            logger.warning(
                 f"⚠️ Could not recover .beads/ from stash{ref_msg}. "
                 "Stash preserved — run `git stash list` to inspect."
             )
@@ -132,12 +136,12 @@ def validate_post_merge(target_branch: str, cwd: str | None = None) -> bool:
     current_branch = run_git(
         ["git", "branch", "--show-current"], cwd=cwd).stdout.strip()
     if current_branch != target_branch:
-        print(f"❌ Post-merge validation failed: Not on {target_branch} (on {current_branch})")
+        logger.error(f"❌ Post-merge validation failed: Not on {target_branch} (on {current_branch})")
         return False
     status = run_git(
         ["git", "status", "--porcelain"], cwd=cwd).stdout.strip()
     if status:
-        print(f"❌ Post-merge validation failed: {target_branch} has uncommitted changes")
+        logger.error(f"❌ Post-merge validation failed: {target_branch} has uncommitted changes")
         return False
     return True
 

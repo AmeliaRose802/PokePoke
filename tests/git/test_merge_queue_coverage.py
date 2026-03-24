@@ -7,19 +7,18 @@ worktree_finalization, beads, shutdown.
 
 import subprocess
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-
-from pokepoke.types import BeadsWorkItem
 from pokepoke.git.merge_queue import (
     MergeQueue,
-    MergeStatus,
     MergeResult,
-    _rebase_worktree,
+    MergeStatus,
     _abort_rebase,
+    _rebase_worktree,
     get_merge_queue,
     reset_merge_queue,
 )
+from pokepoke.types import BeadsWorkItem
 
 
 def _item(id: str = "test-1") -> BeadsWorkItem:

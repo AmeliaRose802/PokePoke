@@ -3,17 +3,18 @@
 import threading
 from pathlib import Path
 from unittest.mock import Mock, patch
+
 import pytest
 
+from pokepoke.config import MaintenanceAgentConfig, MaintenanceConfig, ProjectConfig
 from pokepoke.maintenance.maintenance_scheduler import (
+    _PARALLEL_SAFE_AGENTS,
+    _SINGLETON_AGENTS,
     MaintenanceScheduler,
     get_maintenance_scheduler,
     run_periodic_maintenance,
-    _SINGLETON_AGENTS,
-    _PARALLEL_SAFE_AGENTS,
 )
 from pokepoke.types import AgentStats, SessionStats
-from pokepoke.config import MaintenanceConfig, MaintenanceAgentConfig, ProjectConfig
 
 
 @pytest.fixture(autouse=True)

@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from typing import cast
 
-from pokepoke.utils.constants import POKEPOKE_DIR, DEFAULT_ENCODING
+from pokepoke.utils.constants import DEFAULT_ENCODING, POKEPOKE_DIR
 
 logger = logging.getLogger(__name__)
 

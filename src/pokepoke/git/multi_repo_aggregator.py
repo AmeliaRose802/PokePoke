@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from pokepoke.beads.beads_query import _run_bd, _parse_beads_json, _filter_to_dataclass
+from pokepoke.beads.beads_query import _filter_to_dataclass, _parse_beads_json, _run_bd
 from pokepoke.config import RepoConfig
 from pokepoke.types import BeadsWorkItem
 
@@ -186,13 +186,15 @@ def _merge_and_sort(results: list[RepoQueryResult]) -> list[AggregatedWorkItem]:
             continue
         repo_name = _derive_repo_name(result.repo_config)
         weight = result.repo_config.priority_weight
-        for item in result.items:
-            aggregated.append(AggregatedWorkItem(
+        aggregated.extend(
+            AggregatedWorkItem(
                 item=item,
                 repo_path=result.repo_config.path,
                 repo_name=repo_name,
                 repo_priority_weight=weight,
-            ))
+            )
+            for item in result.items
+        )
 
     aggregated.sort(key=lambda a: (-a.repo_priority_weight, a.item.priority, a.item.id))
     return aggregated

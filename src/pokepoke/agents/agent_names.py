@@ -3,7 +3,6 @@
 import random
 import string
 
-
 # Whimsical adjective pool for agent names
 ADJECTIVES = [
     "swift", "clever", "mighty", "cosmic", "nimble", "blazing", "quantum",

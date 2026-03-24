@@ -14,8 +14,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from pokepoke.utils.constants import STATUS_IN_PROGRESS
 from pokepoke.git.git_helpers import run_git
+from pokepoke.utils.constants import STATUS_IN_PROGRESS
 from pokepoke.utils.preflight_checks import HealthCheckError, is_lock_stale
 
 logger = logging.getLogger(__name__)
@@ -75,7 +75,7 @@ def _invoke_preflight_cleanup(repo_path: Path, commit_error: str) -> bool:
     the cleanup agent is unavailable or fails.
     """
     try:
-        from pokepoke.agents.cleanup_agents import invoke_cleanup_agent  # noqa: F811
+        from pokepoke.agents.cleanup_agents import invoke_cleanup_agent
         from pokepoke.types import BeadsWorkItem
     except ImportError:
         logger.warning(
@@ -157,7 +157,7 @@ def repair_lock_availability(error: HealthCheckError, repo_path: Path) -> bool:
             return True  # Already gone
 
         # Double-check that the lock is actually stale
-        stale, details = is_lock_stale(lock_path)
+        stale, _details = is_lock_stale(lock_path)
         if stale:
             logger.info(f"Removing stale lock: {lock_path}")
             lock_path.unlink()

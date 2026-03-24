@@ -1,10 +1,10 @@
 """Unit tests for beads integration."""
 
+import json
 import subprocess
 from unittest.mock import Mock, patch
-import json
 
-from pokepoke.beads.beads import get_ready_work_items, get_issue_dependencies, is_item_claimable
+from pokepoke.beads.beads import get_issue_dependencies, get_ready_work_items, is_item_claimable
 from pokepoke.types import BeadsWorkItem
 
 
@@ -253,7 +253,7 @@ class TestHasFeatureParent:
     def test_has_feature_parent_true(self, mock_get_issue: Mock) -> None:
         """Test has_feature_parent returns True when parent is feature."""
         from pokepoke.beads.beads import has_feature_parent
-        from pokepoke.types import IssueWithDependencies, Dependency
+        from pokepoke.types import Dependency, IssueWithDependencies
 
         mock_get_issue.return_value = IssueWithDependencies(
             id="task-1",
@@ -302,7 +302,7 @@ class TestHasFeatureParent:
     def test_has_feature_parent_false_non_parent_dependency(self, mock_get_issue: Mock) -> None:
         """Test has_feature_parent returns False for non-parent dependencies."""
         from pokepoke.beads.beads import has_feature_parent
-        from pokepoke.types import IssueWithDependencies, Dependency
+        from pokepoke.types import Dependency, IssueWithDependencies
 
         mock_get_issue.return_value = IssueWithDependencies(
             id="task-1",
@@ -677,6 +677,7 @@ class TestAssignAndSyncItem:
     def test_assign_defaults_agent_name_from_env(self, mock_run: Mock, mock_sync: Mock) -> None:
         """Test that assign_and_sync_item uses AGENT_NAME env var when agent_name is None."""
         import os
+
         from pokepoke.beads.beads import assign_and_sync_item
 
         item_id = "task-assign-env-default"

@@ -2,10 +2,10 @@
 
 import logging
 
-from pokepoke.types import BeadsWorkItem
 from pokepoke.beads.beads import select_next_hierarchical_item
 from pokepoke.beads.beads_hierarchy import HUMAN_REQUIRED_LABEL, is_assigned_to_current_user
 from pokepoke.protocols import BeadsClient
+from pokepoke.types import BeadsWorkItem
 from pokepoke.utils.shutdown import is_shutting_down
 
 logger = logging.getLogger(__name__)
@@ -108,17 +108,17 @@ def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool, skip_i
     ready_items = available_items
 
     if interactive:
-        print(f"\n📋 Found {len(ready_items)} ready work items:\n")
+        logger.info(f"\n📋 Found {len(ready_items)} ready work items:\n")
 
         for idx, item in enumerate(ready_items, 1):
-            print(f"{idx}. [{item.id}] {item.title}")
-            print(f"   Type: {item.issue_type} | Priority: {item.priority}")
+            logger.info(f"{idx}. [{item.id}] {item.title}")
+            logger.info(f"   Type: {item.issue_type} | Priority: {item.priority}")
             if item.description:
                 desc = item.description[:80]
                 if len(item.description) > 80:
                     desc += "..."
-                print(f"   {desc}")
-            print()
+                logger.info(f"   {desc}")
+            logger.info("")
 
     if interactive:
         return interactive_selection(ready_items)
@@ -139,11 +139,11 @@ def interactive_selection(ready_items: list[BeadsWorkItem]) -> BeadsWorkItem | N
             if 1 <= idx <= len(ready_items):
                 return ready_items[idx - 1]
             else:
-                print(f"❌ Please enter a number between 1 and {len(ready_items)}")
+                logger.error(f"❌ Please enter a number between 1 and {len(ready_items)}")
         except ValueError:
-            print("❌ Invalid input. Enter a number or 'q' to quit.")
+            logger.error("❌ Invalid input. Enter a number or 'q' to quit.")
         except KeyboardInterrupt:
-            print("\n")
+            logger.info("\n")
             return None
     return None
 

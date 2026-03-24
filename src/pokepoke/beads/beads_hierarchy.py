@@ -3,9 +3,10 @@
 import logging
 from subprocess import CalledProcessError
 
-from pokepoke.types import BeadsWorkItem
-from .beads_query import get_issue_dependencies, has_unmet_blocking_dependencies, _run_bd
 from pokepoke.agents.agent_context import get_agent_name as _get_agent_name
+from pokepoke.types import BeadsWorkItem
+
+from .beads_query import _run_bd, get_issue_dependencies, has_unmet_blocking_dependencies
 
 logger = logging.getLogger(__name__)
 

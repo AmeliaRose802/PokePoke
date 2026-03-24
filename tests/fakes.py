@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 
 from pokepoke.types import BeadsStats, BeadsWorkItem, IssueWithDependencies
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

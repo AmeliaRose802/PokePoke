@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import patch, Mock
-
 import os
 import subprocess
 from contextlib import contextmanager
+from pathlib import Path
+from unittest.mock import Mock, patch
 
 
 @contextmanager
@@ -196,6 +195,7 @@ def test_require_yaml_available() -> None:
 def test_require_yaml_missing(monkeypatch) -> None:
     """require_yaml should raise ImportError when HAS_YAML is False."""
     import pytest
+
     import pokepoke.desktop.desktop_api_utils as dau
 
     monkeypatch.setattr(dau, "HAS_YAML", False)
@@ -220,8 +220,9 @@ def test_bd_init_delegates(tmp_path: Path) -> None:
 
 
 def test_create_default_config_rejects_non_dict() -> None:
-    from pokepoke.desktop.desktop_api import DesktopAPI
     import pytest
+
+    from pokepoke.desktop.desktop_api import DesktopAPI
 
     api = DesktopAPI()
 

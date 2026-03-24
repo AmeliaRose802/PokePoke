@@ -8,9 +8,9 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from pokepoke.worktrees.worktree_cleanup import (
-    force_remove_directory,
     _is_windows_lock_error,
     cleanup_after_merge,
+    force_remove_directory,
 )
 
 

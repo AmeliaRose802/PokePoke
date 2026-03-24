@@ -1,15 +1,18 @@
 """Shared fixtures for orchestration tests."""
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
-from unittest.mock import patch, Mock
-from contextlib import contextmanager, ExitStack
+from unittest.mock import Mock, patch
 
 import pytest
 
 from pokepoke.types import (
-    AgentStats, BeadsWorkItem, CopilotResult,
-    GateAgentResult, WorkItemResult,
+    AgentStats,
+    BeadsWorkItem,
+    CopilotResult,
+    GateAgentResult,
+    WorkItemResult,
 )
-from tests.fakes import FakeGitClient, FakeBeadsClient
+from tests.fakes import FakeBeadsClient, FakeGitClient
 
 
 @pytest.fixture(autouse=True)

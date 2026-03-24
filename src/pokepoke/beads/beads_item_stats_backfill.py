@@ -74,10 +74,10 @@ def backfill_from_beads_db(stats_path: Path | None = None, silent: bool = False)
         }
     """
     from pokepoke.beads.beads_item_stats_store import (
-        load_beads_item_stats,
-        save_beads_item_stats,
         _rebuild_summary,
         _resolve_stats_path,
+        load_beads_item_stats,
+        save_beads_item_stats,
     )
 
     if stats_path is None:

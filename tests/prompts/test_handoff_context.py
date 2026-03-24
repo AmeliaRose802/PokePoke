@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from pokepoke.prompts import handoff_context
-from pokepoke.prompts.handoff_context import build_handoff_context, _MAX_DIFF_CHARS
+from pokepoke.prompts.handoff_context import _MAX_DIFF_CHARS, build_handoff_context
 
 # handoff_context.py calls run_git() (from git.git_helpers), which internally
 # calls subprocess.run.  Patching run_git directly is the correct level.

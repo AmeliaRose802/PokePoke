@@ -7,12 +7,12 @@ import subprocess
 from filelock import Timeout
 
 from pokepoke.agents.agent_context import get_agent_name
+from pokepoke.types import BeadsWorkItem
 from pokepoke.utils.constants import STATUS_IN_PROGRESS
 from pokepoke.worktrees.coordination import acquire_lock
-from pokepoke.types import BeadsWorkItem
-from .beads_hierarchy import resolve_to_leaf_task, HUMAN_REQUIRED_LABEL
-from .beads_query import _parse_beads_json, _run_bd
 
+from .beads_hierarchy import HUMAN_REQUIRED_LABEL, resolve_to_leaf_task
+from .beads_query import _parse_beads_json, _run_bd
 
 logger = logging.getLogger(__name__)
 

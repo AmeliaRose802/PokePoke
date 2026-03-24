@@ -7,22 +7,22 @@ from unittest.mock import patch
 import pytest
 
 from pokepoke.utils.shutdown import (
-    request_shutdown,
-    request_shutdown_from_signal,
-    start_shutdown_monitor,
     _coordinate_shutdown,
-    is_shutting_down,
-    wait_for_shutdown,
-    reset,
-    request_stop_after_current,
+    _shutdown_event,
     cancel_stop_after_current,
-    should_stop_after_current,
-    register_agent,
-    unregister_agent,
     get_active_agent_count,
     has_active_agents,
+    is_shutting_down,
+    register_agent,
+    request_shutdown,
+    request_shutdown_from_signal,
+    request_stop_after_current,
+    reset,
     set_executor,
-    _shutdown_event,
+    should_stop_after_current,
+    start_shutdown_monitor,
+    unregister_agent,
+    wait_for_shutdown,
 )
 
 

@@ -18,16 +18,16 @@ except (ImportError, AttributeError):
     except ImportError:
         _approve_all = None
 
-from pokepoke.utils.shutdown import is_shutting_down
+from pokepoke.desktop import terminal_ui
 from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
 from pokepoke.utils.process_utils import log_process_tree_snapshot as _log_process_tree_snapshot
+from pokepoke.utils.shutdown import is_shutting_down
+
 from .sdk_event_handler import SessionStats
-from pokepoke.desktop import terminal_ui
 
 logger = logging.getLogger(__name__)
 
 _HB_INTERVAL = 30.0  # Heartbeat interval in seconds
-
 
 def _fail_result(
     work_item_id: str,
@@ -41,7 +41,6 @@ def _fail_result(
         session_id=session_id, last_output_summary=last_output_summary,
     )
 
-
 def _build_token_usage_callback() -> Callable[[int, int], None]:
     """Create a token-usage callback that pushes live stats to the agent card."""
     def _on_token_usage(input_tokens: int, output_tokens: int) -> None:
@@ -51,7 +50,6 @@ def _build_token_usage_callback() -> Callable[[int, int], None]:
             terminal_ui.ui.push_agent_tokens(agent_id, input_tokens, output_tokens)
 
     return _on_token_usage
-
 
 def _build_copilot_result(
     work_item: BeadsWorkItem,
@@ -66,9 +64,9 @@ def _build_copilot_result(
     """Assemble the final CopilotResult and print summary statistics."""
     output_text = "".join(output_lines)
     success = len(errors) == 0
-    print(f"\n{'='*60}\n[SDK] Result: {'SUCCESS' if success else 'FAILURE'}\n{'='*60}")
+    logger.error(f"\n{'='*60}\n[SDK] Result: {'SUCCESS' if success else 'FAILURE'}\n{'='*60}")
     if stats["turn_count"] > 0 or stats["total_input_tokens"] > 0:
-        print(
+        logger.info(
             f"\n📊 Stats: {stats['turn_count']} turns, "
             f"{stats['total_input_tokens']:,}+{stats['total_output_tokens']:,} tokens"
         )
@@ -91,7 +89,6 @@ def _build_copilot_result(
         session_id=session_id,
     )
 
-
 def _build_session_config(
     model: str, deny_write: bool, session_id: str | None = None,
 ) -> dict[str, Any]:
@@ -105,7 +102,6 @@ def _build_session_config(
         config["session_id"] = session_id
     return config
 
-
 def _check_early_exit(
     work_item_id: str, timed_out: bool, interrupted: bool, max_timeout: float,
 ) -> CopilotResult | None:
@@ -116,7 +112,6 @@ def _check_early_exit(
         error = "Session aborted due to application shutdown" if is_shutting_down() else "Interrupted by user"
         return _fail_result(work_item_id, error)
     return None
-
 
 def _check_abort_result(
     work_item_id: str,
@@ -169,7 +164,7 @@ async def _check_tool_watchdog(
                 f"(elapsed: {elapsed:.0f}s)"
             )
 
-            print(f"\n[SDK] TOOL TIMEOUT: {timeout_msg} - aborting")
+            logger.info(f"\n[SDK] TOOL TIMEOUT: {timeout_msg} - aborting")
             logger.error(
                 "Tool call watchdog triggered: tool_id=%s tool=%s args=%s elapsed=%.0fs limit=%.0fs",
                 tool_id, tool_name, args_str, elapsed, tool_call_timeout,
@@ -215,7 +210,7 @@ async def _await_completion(
 
     while not done.is_set():
         if is_shutting_down():
-            print("\n[SDK] Shutdown requested - aborting session...")
+            logger.info("\n[SDK] Shutdown requested - aborting session...")
             try:
                 await session.abort()
             except OSError as e:
@@ -224,7 +219,7 @@ async def _await_completion(
         try:
             client_state = client.get_state()
             if client_state in ("disconnected", "error"):
-                print(f"\n[SDK] Client state is '{client_state}' - process has exited, forcing completion")
+                logger.info(f"\n[SDK] Client state is '{client_state}' - process has exited, forcing completion")
                 done.set()
                 break
         except Exception:
@@ -296,7 +291,7 @@ async def _await_completion(
                 reason = (f"PROCESS UNRESPONSIVE: No events for {gap:.0f}s "
                           f"(threshold: {process_output_timeout:.0f}s) and ping failed")
             if should_abort:
-                print(f"\n[SDK] {reason} - aborting")
+                logger.info(f"\n[SDK] {reason} - aborting")
                 logger.error("SDK process liveness: %s (event_count=%d)", reason,
                              stats.get('event_count', 0))
                 try:
@@ -354,7 +349,7 @@ async def _await_completion(
 
             if since_last_event >= inactivity_timeout and not has_pending_tools and not is_in_grace_period and not has_active_children:
                 debug_info = f"pending_tools={has_pending_tools}, grace={is_in_grace_period}, active_children={has_active_children}"
-                print(
+                logger.debug(
                     f"\n[SDK] SESSION DEAD: No events received for {since_last_event:.0f}s "
                     f"(threshold: {inactivity_timeout:.0f}s) — aborting ({debug_info})"
                 )
@@ -377,7 +372,7 @@ async def _await_completion(
             return result
         remaining = deadline - asyncio.get_event_loop().time()
         if remaining <= 0:
-            print(f"\n[SDK] TIMEOUT after {max_timeout}s")
+            logger.info(f"\n[SDK] TIMEOUT after {max_timeout}s")
             try:
                 await session.abort()
             except OSError as e:
@@ -391,8 +386,12 @@ async def _await_completion(
 
 
 # Re-export resume helpers for backward compatibility
-from pokepoke.models.sdk_resume import (  # noqa: E402
+from pokepoke.models.sdk_resume import (
     _summarize_output as _summarize_output,
+)
+from pokepoke.models.sdk_resume import (
     build_gate_resume_prompt as build_gate_resume_prompt,
+)
+from pokepoke.models.sdk_resume import (
     build_resume_prompt as build_resume_prompt,
 )

@@ -6,15 +6,16 @@ Tests for create_worktree, merge_worktree, list_worktrees, and error handling.
 import subprocess
 from pathlib import Path
 from unittest.mock import Mock, patch
+
 import pytest
 
 from pokepoke.worktrees.worktrees import (
+    _run_git,
+    cleanup_worktree,
     create_worktree,
     is_worktree_merged,
-    merge_worktree,
     list_worktrees,
-    cleanup_worktree,
-    _run_git,
+    merge_worktree,
 )
 
 

@@ -20,9 +20,9 @@ class WorkItemFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         from pokepoke.stats.metrics_context import (
-            get_current_work_item_id,
-            get_current_repo_name,
             get_current_agent_type,
+            get_current_repo_name,
+            get_current_work_item_id,
         )
 
         record.work_item_id = get_current_work_item_id(default="")

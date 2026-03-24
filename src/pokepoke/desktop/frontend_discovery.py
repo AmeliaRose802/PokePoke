@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import sys
 import tempfile
-import shutil
 import urllib.request
 from pathlib import Path
 
@@ -161,7 +161,7 @@ def find_frontend_dist() -> Path | None:
             except (ImportError, AttributeError):
                 pass
     except Exception as e:
-        print(f"Warning: Failed to load embedded frontend assets: {e}")
+        logger.error(f"Warning: Failed to load embedded frontend assets: {e}")
 
     # Fallback: development mode, then git worktree
     return _find_dev_dist() or _find_worktree_dist()

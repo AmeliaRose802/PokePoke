@@ -13,18 +13,25 @@ try:
 except ImportError:
     _HAS_COPILOT = False
 
-from pokepoke.config import get_config, DEFAULT_MODEL, FALLBACK_MODEL
-from pokepoke.utils.constants import DEFAULT_AGENT_TIMEOUT
-from pokepoke.types import BeadsWorkItem, CopilotResult, RetryConfig
-from pokepoke.prompts.prompts import PromptService
+from pokepoke.config import DEFAULT_MODEL, FALLBACK_MODEL, get_config
 from pokepoke.desktop import terminal_ui
-from pokepoke.utils.shutdown import is_shutting_down
+from pokepoke.prompts.prompts import PromptService
+from pokepoke.types import BeadsWorkItem, CopilotResult, RetryConfig
+from pokepoke.utils.constants import DEFAULT_AGENT_TIMEOUT
 from pokepoke.utils.process_utils import shutdown_copilot_client
-from .sdk_event_handler import create_event_handler, RateLimitError, SessionStats as _SDKSessionStats
+from pokepoke.utils.shutdown import is_shutting_down
+
+from .sdk_event_handler import RateLimitError, create_event_handler
+from .sdk_event_handler import SessionStats as _SDKSessionStats
 from .sdk_helpers import (
-    _fail_result, _build_token_usage_callback, _build_copilot_result,
-    _build_session_config, _check_early_exit, _check_abort_result,
-    _await_completion, _summarize_output,
+    _await_completion,
+    _build_copilot_result,
+    _build_session_config,
+    _build_token_usage_callback,
+    _check_abort_result,
+    _check_early_exit,
+    _fail_result,
+    _summarize_output,
     build_resume_prompt,
 )
 
@@ -32,7 +39,6 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from pokepoke.utils.logging_utils import ItemLogger
-
 
 def build_prompt_from_work_item(
     work_item: BeadsWorkItem,
@@ -77,14 +83,12 @@ def build_prompt_from_work_item(
 
     return service.load_and_render(template_name, variables)
 
-
 def _build_worker_env(cwd: str | None) -> dict[str, str]:
     """Build environment variables for a worker session."""
     env = {**os.environ, "PYTHONIOENCODING": "utf-8:replace"}
     if cwd:
         env["GIT_CEILING_DIRECTORIES"] = str(Path(cwd).parent)
     return env
-
 
 def _build_add_dir_args(cwd: str) -> list[str]:
     """Return ``--add-dir`` CLI args so worktree agents can also access the main repo."""
@@ -94,7 +98,6 @@ def _build_add_dir_args(cwd: str) -> list[str]:
         repo_root = str(cwd_path.parent.parent)
         return ["--add-dir", repo_root]
     return []
-
 
 def _create_sdk_client(cwd: str | None) -> Any:
     """Create and configure a CopilotClient instance."""
@@ -122,15 +125,12 @@ def _create_sdk_client(cwd: str | None) -> Any:
         )
     return CopilotClient(client_opts)  # type: ignore[arg-type]
 
-
-
 @dataclass
 class _AttemptResult:
     """Result of a single SDK session attempt."""
     abort_reason: str | None = None
     interrupted: bool = False
     elapsed: float = 0.0
-
 
 async def _send_and_wait(
     session: Any, client: Any, handler: Any,
@@ -142,7 +142,7 @@ async def _send_and_wait(
     Raises ``RateLimitError`` if the handler detected a rate limit.
     Raises ``KeyboardInterrupt`` if the user interrupts.
     """
-    print("[SDK] Sending message...\n")
+    logger.info("[SDK] Sending message...\n")
     with terminal_ui.ui.agent_output():
         await session.send({"prompt": final_prompt})
         abort_reason = await _await_completion(
@@ -153,7 +153,6 @@ async def _send_and_wait(
         if handler.rate_limit_detected:
             raise RateLimitError()
         return abort_reason
-
 
 async def _run_attempt(
     session: Any, client: Any, handler: Any,
@@ -173,7 +172,7 @@ async def _run_attempt(
             "shutdown", "timeout", "inactivity", "tool_timeout", "process_dead",
         )
     except KeyboardInterrupt:
-        print("\n\n[SDK] ΓÜá∩╕Å  Interrupted by user (Ctrl+C)")
+        logger.info("\n\n[SDK] ΓÜá∩╕Å  Interrupted by user (Ctrl+C)")
         try:
             await session.abort()
         except Exception as e:
@@ -240,7 +239,7 @@ async def invoke_copilot_sdk(
     client = _create_sdk_client(cwd)
 
     try:
-        print("[SDK] Starting Copilot client...")
+        logger.info("[SDK] Starting Copilot client...")
         await client.start()
 
         current_model = model or DEFAULT_MODEL
@@ -261,12 +260,12 @@ async def invoke_copilot_sdk(
             session_config = _build_session_config(
                 current_model, deny_write, session_id=session_id,
             )
-            print(f"[SDK] Using model: {current_model}")
+            logger.info(f"[SDK] Using model: {current_model}")
             if is_resume:
-                print(f"[SDK] Resuming session: {session_id}")
+                logger.info(f"[SDK] Resuming session: {session_id}")
 
             session = await client.create_session(session_config)
-            print(f"[SDK] Session created: {session.session_id}\n")
+            logger.info(f"[SDK] Session created: {session.session_id}\n")
 
             done = asyncio.Event()
             output_lines.clear()
@@ -299,7 +298,7 @@ async def invoke_copilot_sdk(
 
             except RateLimitError:
                 if attempt < max_attempts - 1 and current_model != FALLBACK_MODEL:
-                    print(f"\n[SDK] Retrying with fallback model: {FALLBACK_MODEL}")
+                    logger.info(f"\n[SDK] Retrying with fallback model: {FALLBACK_MODEL}")
                     try:
                         await session.disconnect()
                     except Exception as e:
@@ -359,10 +358,10 @@ async def invoke_copilot_sdk(
 
     except KeyboardInterrupt:
         error = "Session aborted due to application shutdown" if is_shutting_down() else "Interrupted by user"
-        print(f"\n[SDK] ΓÜá∩╕Å  {error}")
+        logger.error(f"\n[SDK] ΓÜá∩╕Å  {error}")
         return _fail_result(work_item.id, error, session_id=session_id)
     except Exception as e:
-        print(f"\n[SDK] Exception: {e}")
+        logger.info(f"\n[SDK] Exception: {e}")
         return _fail_result(work_item.id, f"SDK exception: {e}", session_id=session_id)
     finally:
         await shutdown_copilot_client(client)

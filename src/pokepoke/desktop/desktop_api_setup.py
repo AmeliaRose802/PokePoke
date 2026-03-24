@@ -8,7 +8,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pokepoke.desktop.desktop_api import DesktopAPI
@@ -28,8 +28,10 @@ def check_setup_status(self: DesktopAPI) -> dict[str, Any]:
     Used by the desktop first-time setup wizard.
     """
     from pokepoke.utils.project_utils import (
-        is_git_repo, resolve_git_toplevel,
-        has_pokepoke_config, check_beads_available,
+        check_beads_available,
+        has_pokepoke_config,
+        is_git_repo,
+        resolve_git_toplevel,
     )
 
     cwd = Path.cwd().resolve()
@@ -90,8 +92,8 @@ def git_init(self: DesktopAPI, default_branch: str | None = None) -> dict[str, A
 
 def bd_init(self: DesktopAPI) -> dict[str, Any]:
     """Initialize beads in the current project (equivalent to running `bd init`)."""
-    from pokepoke.utils.project_utils import resolve_git_toplevel
     from pokepoke.git.repo_check import initialize_beads_repo
+    from pokepoke.utils.project_utils import resolve_git_toplevel
 
     project_root = resolve_git_toplevel(Path.cwd()) or Path.cwd()
     ok = initialize_beads_repo(project_root)
@@ -160,8 +162,8 @@ def scaffold_prompt_overrides(
     force: bool = False,
 ) -> dict[str, Any]:
     """Copy built-in prompt templates into `.pokepoke/prompts/` as user overrides."""
-    from pokepoke.utils.project_utils import resolve_git_toplevel
     from pokepoke.prompts.prompts import BUILTIN_PROMPTS_DIR
+    from pokepoke.utils.project_utils import resolve_git_toplevel
 
     project_root = resolve_git_toplevel(Path.cwd()) or Path.cwd()
     prompts_dir = project_root / ".pokepoke" / "prompts"

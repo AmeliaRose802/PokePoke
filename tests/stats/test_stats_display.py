@@ -1,6 +1,5 @@
 """Tests for orchestrator statistics display functions."""
 
-import builtins
 import io
 from unittest.mock import patch
 
@@ -8,16 +7,19 @@ from pokepoke.stats.stats import print_stats
 from pokepoke.types import AgentStats, SessionStats
 
 
-def _capture_stdout(fn, *args, **kwargs):
-    """Capture print() output robustly, even when builtins.print is mocked."""
+def _capture_output(fn, *args, **kwargs):
+    """Call *fn* and return everything it outputs as a single string.
+
+    Source code uses logger calls routed through the conftest _PrintHandler,
+    which calls builtins.print(). We intercept print() to capture everything.
+    """
     buf = io.StringIO()
-    real_print = builtins.print  # snapshot before any mock can replace it
 
-    def _print_to_buf(*a, **kw):
-        kw["file"] = buf
-        real_print(*a, **kw)
+    def _mock_print(*a, **kw):
+        kw.pop("file", None)  # ignore file= kwarg (stderr routing)
+        buf.write(" ".join(str(x) for x in a) + "\n")
 
-    with patch("builtins.print", side_effect=_print_to_buf):
+    with patch("builtins.print", side_effect=_mock_print):
         fn(*args, **kwargs)
     return buf.getvalue()
 
@@ -49,7 +51,7 @@ def test_print_stats_with_full_stats():
         )
     )
 
-    output = _capture_stdout(print_stats, items_completed=2, total_requests=5, elapsed_seconds=125.0, session_stats=stats)
+    output = _capture_output(print_stats, items_completed=2, total_requests=5, elapsed_seconds=125.0, session_stats=stats)
 
     # Check session statistics
     assert "📊 Session Statistics" in output
@@ -79,7 +81,7 @@ def test_print_stats_with_partial_stats():
         )
     )
 
-    output = _capture_stdout(print_stats, items_completed=1, total_requests=2, elapsed_seconds=65.0, session_stats=stats)
+    output = _capture_output(print_stats, items_completed=1, total_requests=2, elapsed_seconds=65.0, session_stats=stats)
 
     # Check that non-zero stats are shown
     assert "Wall duration:      60.0s" in output
@@ -96,7 +98,7 @@ def test_print_stats_with_no_stats():
     """Test print_stats shows warning when no stats available."""
     stats = SessionStats(agent_stats=AgentStats())  # All zeros
 
-    output = _capture_stdout(print_stats, items_completed=1, total_requests=1, elapsed_seconds=30.0, session_stats=stats)
+    output = _capture_output(print_stats, items_completed=1, total_requests=1, elapsed_seconds=30.0, session_stats=stats)
 
     # Should show session stats
     assert "📊 Session Statistics" in output
@@ -108,7 +110,7 @@ def test_print_stats_with_no_stats():
 
 def test_print_stats_with_none_stats():
     """Test print_stats handles None stats gracefully."""
-    output = _capture_stdout(print_stats, items_completed=1, total_requests=1, elapsed_seconds=30.0, session_stats=None)
+    output = _capture_output(print_stats, items_completed=1, total_requests=1, elapsed_seconds=30.0, session_stats=None)
 
     # Should still show session stats
     assert "📊 Session Statistics" in output
@@ -121,15 +123,15 @@ def test_print_stats_with_none_stats():
 def test_print_stats_time_formatting():
     """Test that time is formatted correctly for different durations."""
     # Test hours, minutes, seconds
-    output = _capture_stdout(print_stats, items_completed=1, total_requests=1, elapsed_seconds=3661.0, session_stats=None)
+    output = _capture_output(print_stats, items_completed=1, total_requests=1, elapsed_seconds=3661.0, session_stats=None)
     assert "1h 1m 1s" in output
 
     # Test minutes and seconds only
-    output = _capture_stdout(print_stats, items_completed=1, total_requests=1, elapsed_seconds=125.0, session_stats=None)
+    output = _capture_output(print_stats, items_completed=1, total_requests=1, elapsed_seconds=125.0, session_stats=None)
     assert "2m 5s" in output
 
     # Test seconds only
-    output = _capture_stdout(print_stats, items_completed=1, total_requests=1, elapsed_seconds=45.0, session_stats=None)
+    output = _capture_output(print_stats, items_completed=1, total_requests=1, elapsed_seconds=45.0, session_stats=None)
     assert "45s" in output
 
 
@@ -137,7 +139,7 @@ def test_print_stats_average_time():
     """Test that average time per item is calculated and displayed."""
     stats = SessionStats(agent_stats=AgentStats(wall_duration=100.0))
 
-    output = _capture_stdout(print_stats, items_completed=4, total_requests=8, elapsed_seconds=240.0, session_stats=stats)
+    output = _capture_output(print_stats, items_completed=4, total_requests=8, elapsed_seconds=240.0, session_stats=stats)
 
     assert "Avg time per item:" in output
     assert "1m 0s" in output  # 240s / 4 items = 60s
@@ -147,7 +149,7 @@ def test_print_stats_zero_items_no_average():
     """Test that average is not shown when zero items completed."""
     stats = SessionStats(agent_stats=AgentStats(wall_duration=10.0))
 
-    output = _capture_stdout(print_stats, items_completed=0, total_requests=0, elapsed_seconds=10.0, session_stats=stats)
+    output = _capture_output(print_stats, items_completed=0, total_requests=0, elapsed_seconds=10.0, session_stats=stats)
 
     # Should not show average
     assert "Avg time per item:" not in output
@@ -164,7 +166,7 @@ def test_print_stats_with_large_numbers():
         )
     )
 
-    output = _capture_stdout(print_stats, items_completed=1, total_requests=1, elapsed_seconds=60.0, session_stats=stats)
+    output = _capture_output(print_stats, items_completed=1, total_requests=1, elapsed_seconds=60.0, session_stats=stats)
 
     # Check comma formatting
     assert "1,234,567" in output  # input tokens
@@ -195,7 +197,7 @@ def test_print_stats_with_beads_statistics():
         )
     )
 
-    output = _capture_stdout(print_stats, items_completed=2, total_requests=3, elapsed_seconds=120.0, session_stats=stats)
+    output = _capture_output(print_stats, items_completed=2, total_requests=3, elapsed_seconds=120.0, session_stats=stats)
 
     # Check beads statistics section
     assert "📋 Beads Database Statistics" in output
@@ -218,7 +220,7 @@ def test_print_stats_with_agent_run_counts():
         backlog_cleanup_agent_runs=1
     )
 
-    output = _capture_stdout(print_stats, items_completed=5, total_requests=10, elapsed_seconds=300.0, session_stats=stats)
+    output = _capture_output(print_stats, items_completed=5, total_requests=10, elapsed_seconds=300.0, session_stats=stats)
 
     # Check agent run counts section
     assert "🤖 Agent Run Counts" in output
@@ -240,7 +242,7 @@ def test_print_stats_with_only_work_agent_runs():
         backlog_cleanup_agent_runs=0
     )
 
-    output = _capture_stdout(print_stats, items_completed=3, total_requests=5, elapsed_seconds=180.0, session_stats=stats)
+    output = _capture_output(print_stats, items_completed=3, total_requests=5, elapsed_seconds=180.0, session_stats=stats)
 
     # Check work agents shown
     _assert_agent_line(output, "📋 Work agents:", 3)
@@ -261,7 +263,7 @@ def test_print_stats_gate_agent_runs_shown():
         gate_agent_runs=3
     )
 
-    output = _capture_stdout(print_stats, items_completed=2, total_requests=4, elapsed_seconds=120.0, session_stats=stats)
+    output = _capture_output(print_stats, items_completed=2, total_requests=4, elapsed_seconds=120.0, session_stats=stats)
 
     _assert_agent_line(output, "📋 Work agents:", 2)
     _assert_agent_line(output, "🚪 Gate agents:", 3)
@@ -275,7 +277,7 @@ def test_print_stats_gate_agent_runs_hidden_when_zero():
         gate_agent_runs=0
     )
 
-    output = _capture_stdout(print_stats, items_completed=1, total_requests=1, elapsed_seconds=60.0, session_stats=stats)
+    output = _capture_output(print_stats, items_completed=1, total_requests=1, elapsed_seconds=60.0, session_stats=stats)
 
     _assert_agent_line(output, "📋 Work agents:", 1)
     assert "🚪 Gate agents:" not in output

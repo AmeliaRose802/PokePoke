@@ -6,27 +6,29 @@ import subprocess
 import time
 from pathlib import Path
 
-from pokepoke.utils.constants import BRANCH_PREFIX, WORKTREE_DIR, WORKTREE_TASK_PREFIX
-from pokepoke.stats.perf_timing import timed_block
 from pokepoke.git.git_helpers import run_git as _run_git
 from pokepoke.git.git_operations import (
-    sanitize_branch_name,
+    execute_merge_sequence,
     get_default_branch,
     is_worktree_clean,
-    execute_merge_sequence,
-    validate_post_merge,
     list_worktrees,
+    sanitize_branch_name,
+    validate_post_merge,
 )
-from pokepoke.worktrees.worktree_helpers import (
-    validate_worktree_integrity as _validate_worktree_integrity,
-    sync_and_ensure_clean_main_repo as _sync_and_ensure_clean_main_repo,
-)
+from pokepoke.stats.perf_timing import timed_block
+from pokepoke.utils.constants import BRANCH_PREFIX, WORKTREE_DIR, WORKTREE_TASK_PREFIX
+from pokepoke.worktrees.coordination import with_worktree_lock
 from pokepoke.worktrees.worktree_cleanup import (
     cleanup_after_merge,
     cleanup_worktree_and_branch,
     force_remove_directory,
 )
-from pokepoke.worktrees.coordination import with_worktree_lock
+from pokepoke.worktrees.worktree_helpers import (
+    sync_and_ensure_clean_main_repo as _sync_and_ensure_clean_main_repo,
+)
+from pokepoke.worktrees.worktree_helpers import (
+    validate_worktree_integrity as _validate_worktree_integrity,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,11 +66,11 @@ def _check_existing_directory(worktree_path: Path, repo_path: str | None = None)
 
     if is_valid_worktree:
         logger.info(f"Directory {worktree_path} is a valid worktree, reusing it")
-        print(f"   ♻️  Reusing existing worktree directory at {worktree_path}")
+        logger.info(f"   ♻️  Reusing existing worktree directory at {worktree_path}")
         return worktree_path
 
     logger.warning(f"Directory {worktree_path} is not a valid worktree, removing it")
-    print(f"   🧹  Removing stale worktree directory at {worktree_path}")
+    logger.info(f"   🧹  Removing stale worktree directory at {worktree_path}")
     if not force_remove_directory(worktree_path):
         raise RuntimeError(f"Failed to remove stale directory {worktree_path}")
 
@@ -91,13 +93,13 @@ def _handle_branch_already_exists(
     for wt in existing_worktrees:
         if wt.get("branch", "").endswith(branch_name):
             logger.info(f"Found existing worktree for {branch_name} at {wt['path']}")
-            print(f"   ♻️  Reusing existing worktree at {wt['path']}")
+            logger.info(f"   ♻️  Reusing existing worktree at {wt['path']}")
             return Path(wt["path"])
 
     # No active worktree uses this branch — it's a stale leftover.
     if "already exists" in stderr.lower():
         logger.info(f"Branch {branch_name} is stale (no active worktree) — deleting and retrying")
-        print(f"   🧹 Cleaning up stale branch {branch_name}...")
+        logger.info(f"   🧹 Cleaning up stale branch {branch_name}...")
         try:
             _run_git(["git", "branch", "-D", branch_name], cwd=repo_path)
             _run_git(["git", "worktree", "add", str(worktree_path), "-b", branch_name, base_branch], cwd=repo_path)
@@ -136,7 +138,7 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
     existing = _find_existing_worktree(worktree_path, branch_name, item_id, repo_path=repo_cwd)
     if existing:
         logger.debug(f"Reusing existing worktree for {item_id} at {existing}")
-        print(f"   ♻️  Reusing existing worktree at {existing}")
+        logger.info(f"   ♻️  Reusing existing worktree at {existing}")
         return existing
 
     (repo_root / WORKTREE_DIR).mkdir(exist_ok=True)
@@ -155,7 +157,7 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
             existing = _find_existing_worktree(worktree_path, branch_name, item_id, repo_path=repo_cwd)
             if existing:
                 logger.debug(f"Worktree created by another agent while waiting for lock: {existing}")
-                print(f"   ♻️  Reusing worktree created by another agent at {existing}")
+                logger.info(f"   ♻️  Reusing worktree created by another agent at {existing}")
                 return existing
 
             if worktree_path.exists():
@@ -180,7 +182,7 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
                     f"  Exit code: {e.returncode}\n"
                     f"  Stderr: {stderr}"
                 )
-                print(f"   ⚠️  Git error (exit {e.returncode}): {stderr}")
+                logger.error(f"   ⚠️  Git error (exit {e.returncode}): {stderr}")
 
                 if "already exists" in stderr.lower() or "already checked out" in stderr.lower():
                     recovered = _handle_branch_already_exists(
@@ -231,7 +233,7 @@ def _rollback_merge_commit(reason: str, cwd: str | None = None) -> None:
     try:
         _run_git(["git", "reset", "--hard", "HEAD~1"], cwd=cwd)
         logger.info("Rolled back merge commit: %s", reason)
-        print(f"🔄 Rolled back merge commit due to {reason}")
+        logger.info(f"🔄 Rolled back merge commit due to {reason}")
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as reset_err:
         logger.error("Failed to rollback merge commit after %s: %s", reason, reset_err)
 
@@ -258,10 +260,10 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
 
     # PRE-MERGE VALIDATION: Verify worktree is clean
     if not is_worktree_clean(worktree_path):
-        print("❌ Pre-merge validation failed: Worktree has uncommitted changes")
+        logger.error("❌ Pre-merge validation failed: Worktree has uncommitted changes")
         return False, []
 
-    print("✅ Pre-merge validation passed: Worktree is clean")
+    logger.info("✅ Pre-merge validation passed: Worktree is clean")
 
     if not _sync_and_ensure_clean_main_repo(branch_name, cwd=repo_cwd):
         return False, []
@@ -271,16 +273,16 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
 
     if not merge_success:
         if unmerged_files:
-            print(f"❌ Merge conflicts detected in {len(unmerged_files)} file(s):")
+            logger.error(f"❌ Merge conflicts detected in {len(unmerged_files)} file(s):")
             for f in unmerged_files[:10]:
-                print(f"   - {f}")
+                logger.info(f"   - {f}")
             if len(unmerged_files) > 10:
-                print(f"   ... and {len(unmerged_files) - 10} more")
+                logger.info(f"   ... and {len(unmerged_files) - 10} more")
         else:
-            print(f"❌ Merge failed: {merge_error}")
+            logger.error(f"❌ Merge failed: {merge_error}")
         return False, unmerged_files
 
-    print(f"✅ Merged {branch_name} into {target_branch}")
+    logger.info(f"✅ Merged {branch_name} into {target_branch}")
 
     try:
         if not validate_post_merge(target_branch, cwd=repo_cwd):
@@ -292,22 +294,22 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
         _rollback_merge_commit("post-merge validation exception", cwd=repo_cwd)
         return False, []
 
-    print(f"✅ Post-merge validation passed: {target_branch} is clean")
+    logger.info(f"✅ Post-merge validation passed: {target_branch} is clean")
 
     try:
         _run_git(["git", "push"], timeout=120, cwd=repo_cwd)
-        print(f"✅ Pushed {target_branch} to remote")
+        logger.info(f"✅ Pushed {target_branch} to remote")
     except subprocess.CalledProcessError as e:
-        print(f"❌ Push failed: {e.stderr if e.stderr else str(e)}")
+        logger.error(f"❌ Push failed: {e.stderr if e.stderr else str(e)}")
         _rollback_merge_commit("push failure", cwd=repo_cwd)
         return False, []
 
     # Verify branch is actually merged (warnings only - push already succeeded)
     if not is_worktree_merged(item_id, target_branch, repo_path=repo_cwd):
-        print(f"\u26a0\ufe0f  Post-push merge verification failed for {branch_name}, but push succeeded")
+        logger.error(f"\u26a0\ufe0f  Post-push merge verification failed for {branch_name}, but push succeeded")
         logger.warning(f"Post-push merge verification failed for {branch_name}, but push to {target_branch} succeeded")
     else:
-        print(f"✅ Merge confirmed: {branch_name} is merged into {target_branch}")
+        logger.info(f"✅ Merge confirmed: {branch_name} is merged into {target_branch}")
 
     if cleanup:
         cleanup_after_merge(worktree_path, branch_name, cwd=repo_cwd)

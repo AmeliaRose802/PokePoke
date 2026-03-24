@@ -47,33 +47,14 @@ class AgentRecord:
         list is included.  ``serialize_all()`` omits it to keep poll payloads
         small; ``get_detail()`` includes it.
         """
-        result: dict[str, Any] = {
-            "agent_id": self.agent_id,
-            "base_agent_id": self.base_agent_id,
-            "card_id": self.card_id,
-            "parent_card_id": self.parent_card_id,
-            "name": self.name,
-            "iteration": self.iteration,
-            "status": self.status,
-            "model": self.model,
-            "parent_agent_id": self.parent_agent_id,
-            "work_item_id": self.work_item_id,
-            "work_item_title": self.work_item_title,
-            "agent_prompt": self.agent_prompt,
-            "session_id": self.session_id,
-            "agent_type": self.agent_type,
-            "modified_files": list(self.modified_files),
-            "recent_logs": list(self.recent_logs),
-            "started_at": self.started_at,
-            "last_updated": self.last_updated,
-            "last_log_at": self.last_log_at,
-            "paused": self.paused,
-            "input_tokens": self.input_tokens,
-            "output_tokens": self.output_tokens,
-            "is_history_entry": self.is_history_entry,
-        }
+        result = dataclasses.asdict(self)
+        # Deep-copy mutable lists to prevent aliasing
+        result["modified_files"] = list(self.modified_files)
+        result["recent_logs"] = list(self.recent_logs)
         if include_log_lines:
             result["log_lines"] = list(self.log_lines)
+        else:
+            result.pop("log_lines", None)
         return result
 
     def copy(
@@ -84,32 +65,16 @@ class AgentRecord:
         include_log_lines: bool = True,
     ) -> AgentRecord:
         """Return a deep-enough copy with optional overrides."""
-        return AgentRecord(
-            agent_id=self.agent_id,
-            base_agent_id=self.base_agent_id,
-            card_id=self.card_id,
-            parent_card_id=self.parent_card_id,
-            name=self.name,
-            iteration=self.iteration,
-            status=self.status,
-            model=self.model,
-            parent_agent_id=self.parent_agent_id,
-            work_item_id=self.work_item_id,
-            work_item_title=self.work_item_title,
-            agent_prompt=self.agent_prompt,
-            session_id=self.session_id,
-            agent_type=self.agent_type,
-            modified_files=list(self.modified_files),
-            recent_logs=list(self.recent_logs),
-            log_lines=list(self.log_lines) if include_log_lines else [],
-            started_at=self.started_at,
-            last_updated=self.last_updated,
-            last_log_at=self.last_log_at,
-            input_tokens=self.input_tokens,
-            output_tokens=self.output_tokens,
-            paused=paused if paused is not None else self.paused,
-            is_history_entry=is_history if is_history is not None else self.is_history_entry,
-        )
+        overrides: dict[str, Any] = {
+            "modified_files": list(self.modified_files),
+            "recent_logs": list(self.recent_logs),
+            "log_lines": list(self.log_lines) if include_log_lines else [],
+        }
+        if paused is not None:
+            overrides["paused"] = paused
+        if is_history is not None:
+            overrides["is_history_entry"] = is_history
+        return dataclasses.replace(self, **overrides)
 
 
 class AgentRegistry:
@@ -341,14 +306,16 @@ class AgentRegistry:
     def serialize_all(self) -> list[dict[str, Any]]:
         with self._lock:
             agents: list[dict[str, Any]] = []
-            for attempts in self._agent_history.values():
-                for attempt in attempts:
-                    agents.append(attempt.to_dict(include_log_lines=True))
-            for agent in self._agents.values():
-                agents.append(
-                    agent.copy(paused=agent.agent_id in self._paused_agents)
-                    .to_dict(include_log_lines=False)
-                )
+            agents.extend(
+                attempt.to_dict(include_log_lines=True)
+                for attempts in self._agent_history.values()
+                for attempt in attempts
+            )
+            agents.extend(
+                agent.copy(paused=agent.agent_id in self._paused_agents)
+                .to_dict(include_log_lines=False)
+                for agent in self._agents.values()
+            )
         agents.sort(
             key=lambda a: a.get("started_at") or 0.0,
             reverse=True,

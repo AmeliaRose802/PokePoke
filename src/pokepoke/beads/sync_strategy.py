@@ -133,7 +133,7 @@ class DaemonSync(SyncStrategy):
             last_result = result
             if result.returncode == 0:
                 if attempt > 1:
-                    print(
+                    logger.info(
                         f"✅ bd sync succeeded after retry "
                         f"({attempt}/{max_attempts})"
                     )
@@ -146,7 +146,7 @@ class DaemonSync(SyncStrategy):
                     "⚠️  bd sync failed due to locked JSONL file; "
                     f"retrying in {delay:.1f}s (attempt {attempt}/{max_attempts})"
                 )
-                print(message)
+                logger.info(message)
                 logger.warning(message)
                 time.sleep(delay)
                 continue
@@ -199,7 +199,7 @@ class ExplicitSync(SyncStrategy):
             last_result = result
             if result.returncode == 0:
                 if attempt > 1:
-                    print(
+                    logger.info(
                         f"✅ br sync succeeded after retry "
                         f"({attempt}/{max_attempts})"
                     )
@@ -220,7 +220,7 @@ class ExplicitSync(SyncStrategy):
                     "⚠️  br sync failed due to transient error; "
                     f"retrying in {delay:.1f}s (attempt {attempt}/{max_attempts})"
                 )
-                print(message)
+                logger.info(message)
                 logger.warning(message)
                 time.sleep(delay)
                 continue

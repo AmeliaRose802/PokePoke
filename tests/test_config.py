@@ -6,19 +6,19 @@ from unittest.mock import patch
 import pytest
 
 from pokepoke.config import (
-    ProjectConfig,
+    GitConfig,
+    MaintenanceAgentConfig,
+    MaintenanceConfig,
     ModelConfig,
     ModelSyncConfig,
-    MaintenanceConfig,
-    MaintenanceAgentConfig,
-    GitConfig,
+    ProjectConfig,
     QualityGateOverrides,
     RepoConfig,
-    load_config,
-    reset_config,
-    get_config,
     _find_repo_root,  # noqa: F401  # used via patch strings
     _load_config_file,
+    get_config,
+    load_config,
+    reset_config,
 )
 from pokepoke.git.repo_config_loader import (
     parse_repos_cli,

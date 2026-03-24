@@ -10,10 +10,9 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Literal
 from types import TracebackType
+from typing import Literal
 
-from pokepoke.utils.constants import BRANCH_PREFIX
 from pokepoke.git.git_helpers import run_git
 from pokepoke.git.merge_conflict import is_merge_in_progress
 from pokepoke.stats.session_journal import (
@@ -21,6 +20,7 @@ from pokepoke.stats.session_journal import (
     delete_journal,
     write_journal,
 )
+from pokepoke.utils.constants import BRANCH_PREFIX
 
 logger = logging.getLogger(__name__)
 

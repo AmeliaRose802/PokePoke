@@ -15,7 +15,6 @@ from typing import Any
 
 from pokepoke.types import AgentStats, BeadsWorkItem, ModelCompletionRecord
 
-
 HISTORY_FILE = Path(".pokepoke") / "model_history.jsonl"
 
 _lock = threading.Lock()

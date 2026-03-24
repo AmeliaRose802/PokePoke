@@ -5,7 +5,7 @@ of critical merge sequence logic.
 """
 
 from pathlib import Path
-from unittest.mock import patch, Mock, MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
 from pokepoke.types import BeadsWorkItem
 from pokepoke.worktrees.worktree_merge_handler import (

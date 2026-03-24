@@ -6,9 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
-from pokepoke.stats.session_journal import SessionPhase
 from pokepoke.orchestration.work_item_session import WorkItemSession
-
+from pokepoke.stats.session_journal import SessionPhase
 
 # ---------------------------------------------------------------------------
 # Helpers

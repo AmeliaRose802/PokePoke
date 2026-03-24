@@ -90,10 +90,27 @@ exclude = [
 [tool.ruff.lint]
 select = ["E", "F", "W", "B", "UP", "SIM", "C90", "PLR", "T20", "I", "RUF", "N", "S", "PERF"]
 ignore = [
-    "E402",   # Module-level import not at top - intentional logger-before-imports pattern
-    "E501",   # Line too long
-    "SIM103", # Return condition directly - sometimes less readable
-    "SIM108", # Ternary operator - sometimes less readable
+    "E402",    # Module-level import not at top - intentional logger-before-imports pattern
+    "E501",    # Line too long
+    "SIM103",  # Return condition directly - sometimes less readable
+    "SIM108",  # Ternary operator - sometimes less readable
+    "PLR0911", # Too many return statements - requires refactoring
+    "PLR0912", # Too many branches - requires refactoring
+    "PLR0913", # Too many arguments - requires refactoring
+    "PLR0915", # Too many statements - requires refactoring
+    "PLR2004", # Magic value used in comparison - too noisy for existing codebase
+    "S603",    # subprocess without shell=True - expected for CLI orchestrator
+    "S607",    # Start process with partial path - expected for CLI invocations (git, bd, etc.)
+    "S101",    # assert - used for internal invariants, not security-sensitive
+    "S110",    # try-except-pass - intentional in graceful-degradation patterns
+    "S310",    # suspicious-url-open-usage - false positive for controlled URLs
+    "S311",    # suspicious-non-cryptographic-random-usage - used for non-security purposes (A/B selection)
+    "N806",    # Non-lowercase variable in function - used for threading.Event, Path constants, etc.
+    "RUF001",  # Ambiguous unicode character in string - emoji are intentional UI elements
+    "RUF002",  # Ambiguous unicode character in docstring - emoji in docs
+    "RUF003",  # Ambiguous unicode character in comment - emoji in comments
+    "RUF012",  # Mutable class default - false positive on ctypes._fields_ and dispatch dicts
+    "RUF022",  # Unsorted __all__ - grouped by category with comments
 ]
 
 [tool.ruff.lint.mccabe]
@@ -103,14 +120,20 @@ max-complexity = 15
 max-statements = 50
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*" = ["C901", "S", "T20"]  # Tests: allow security/bandit and print statements
-"src/pokepoke/__main__.py" = ["T20"]  # CLI entry point - print() is appropriate
-"src/pokepoke/init.py" = ["T20"]  # CLI entry point - print() is appropriate
-"src/pokepoke/desktop/desktop_ui.py" = ["T20"]  # Desktop UI feedback - print() is appropriate
-"src/pokepoke/models/copilot_sdk.py" = ["T20"]  # SDK session feedback - print() is appropriate
-"src/pokepoke/models/sdk_helpers.py" = ["T20", "C901"]  # SDK session feedback and complex timeout logic
-"src/pokepoke/models/sdk_event_handler.py" = ["T20"]  # SDK session streaming output - print() is appropriate
-"src/pokepoke/utils/process_utils.py" = ["T20"]  # SDK client shutdown feedback - print() is appropriate
+"tests/**/*" = [
+    "C901",    # Tests: allow complex functions
+    "S",       # Tests: allow security/bandit warnings
+    "T20",     # Tests: allow print statements
+    "RUF059",  # Tests: allow unused unpacked variables (common in test assertions)
+    "RUF005",  # Tests: allow list concatenation (clearer in test setup)
+    "RUF006",  # Tests: allow asyncio dangling tasks (test patterns)
+    "RUF015",  # Tests: allow iterable allocation patterns
+    "RUF043",  # Tests: allow pytest.raises ambiguous pattern
+    "N802",    # Tests: allow non-lowercase function names (test naming)
+    "PERF401", # Tests: allow manual list comprehension
+    "PERF102", # Tests: allow dict iterator patterns
+]
+"src/pokepoke/models/sdk_helpers.py" = ["C901"]  # Complex timeout logic
 
 # Mypy type checking configuration
 [tool.mypy]

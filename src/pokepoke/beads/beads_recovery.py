@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import cast
 
 from pokepoke.worktrees.coordination import manifest_lock
+
 from .beads_management import unassign_item as _unassign
 
 logger = logging.getLogger(__name__)
@@ -138,5 +139,5 @@ def retry_failed_unassigns() -> int:
             logger.warning("Still unable to unassign %s: %s", item_id, e)
 
     if recovered:
-        print(f"↩️  Recovered {recovered} previously stuck item(s)")
+        logger.info(f"↩️  Recovered {recovered} previously stuck item(s)")
     return recovered

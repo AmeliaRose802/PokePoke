@@ -8,23 +8,26 @@ from __future__ import annotations
 import threading
 import time
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pokepoke.agents.agent_registry import AgentRegistry
-from pokepoke.utils.logging_utils import configure_logging
 from pokepoke.git.repo_utils import get_repository_name
-
+from pokepoke.utils.logging_utils import configure_logging
+from pokepoke.utils.shutdown import (
+    cancel_stop_after_current as _cancel_stop_after_current,
+)
 from pokepoke.utils.shutdown import (
     request_stop_after_current as _request_stop_after_current,
-    cancel_stop_after_current as _cancel_stop_after_current,
+)
+from pokepoke.utils.shutdown import (
     should_stop_after_current as _should_stop_after_current,
 )
 
 from . import desktop_api_agents as _agents
 from . import desktop_api_ext as _ext
-from . import desktop_api_stats as _stats
-from . import desktop_api_setup as _setup
 from . import desktop_api_session as _session
+from . import desktop_api_setup as _setup
+from . import desktop_api_stats as _stats
 
 if TYPE_CHECKING:
     from pokepoke.types import SessionStats
@@ -277,7 +280,7 @@ class DesktopAPI:
           - active: int — number of currently running agents
           - max: int — effective max agents
         """
-        from pokepoke.agents.parallel import request_spawn_agent, get_effective_max_agents
+        from pokepoke.agents.parallel import get_effective_max_agents, request_spawn_agent
 
         max_agents = get_effective_max_agents()
 

@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from pokepoke.orchestration.workflow import _setup_worktree, process_work_item
 from pokepoke.types import (
     AgentStats,
     BeadsWorkItem,
@@ -17,8 +18,6 @@ from pokepoke.types import (
     GateAgentResult,
     WorkItemResult,
 )
-from pokepoke.orchestration.workflow import _setup_worktree, process_work_item
-
 
 # ---------------------------------------------------------------------------
 # Helpers

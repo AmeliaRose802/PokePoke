@@ -315,15 +315,15 @@ def wait_for_process_cleanup(max_wait: float = 3.0) -> None:
 async def shutdown_copilot_client(client: Any) -> None:
     """Shut down the Copilot client gracefully with fallbacks."""
     try:
-        print("\n[SDK] Initiating graceful client shutdown...")
+        logger.info("\n[SDK] Initiating graceful client shutdown...")
         await asyncio.sleep(0.5)
         try:
             await asyncio.wait_for(client.stop(), timeout=10.0)
-            print("[SDK] Client stopped gracefully")
+            logger.info("[SDK] Client stopped gracefully")
             if os.name == "nt":
                 wait_for_process_cleanup(max_wait=2.0)
         except TimeoutError:
-            print("[SDK] Client stop timed out after 10s - forcing shutdown")
+            logger.info("[SDK] Client stop timed out after 10s - forcing shutdown")
             try:
                 await asyncio.wait_for(client.stop(), timeout=5.0)
                 if os.name == "nt":
@@ -339,6 +339,6 @@ async def shutdown_copilot_client(client: Any) -> None:
             except Exception as e:
                 logger.debug(f"Failed to force stop client: {e}")
     except UnicodeDecodeError:
-        print("[SDK] Client stopped (encoding error suppressed)")
+        logger.error("[SDK] Client stopped (encoding error suppressed)")
     except Exception as e:
-        print(f"[SDK] Error stopping client: {e}")
+        logger.error(f"[SDK] Error stopping client: {e}")

@@ -5,21 +5,21 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from pokepoke.beads.sync_strategy import (
-    SyncStrategy,
-    DaemonSync,
-    ExplicitSync,
-    _is_transient_jsonl_sync_error,
-    _is_transient_br_sync_error,
-    get_active_sync_strategy,
-    set_active_sync_strategy,
-)
 from pokepoke.beads.beads_query import (
     BD_CONFIG,
     BR_CONFIG,
     CLIBackendConfig,
     get_active_backend,
     set_active_backend,
+)
+from pokepoke.beads.sync_strategy import (
+    DaemonSync,
+    ExplicitSync,
+    SyncStrategy,
+    _is_transient_br_sync_error,
+    _is_transient_jsonl_sync_error,
+    get_active_sync_strategy,
+    set_active_sync_strategy,
 )
 
 # _run_cli is lazily imported inside strategy methods, so we patch at source.

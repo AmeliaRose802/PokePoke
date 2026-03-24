@@ -6,8 +6,8 @@ import tempfile
 import threading
 from unittest.mock import Mock, patch
 
-from pokepoke.utils.signal_handlers import register_shutdown_handlers, unregister_shutdown_handlers
 from pokepoke.utils.logging_utils import RunLogger
+from pokepoke.utils.signal_handlers import register_shutdown_handlers, unregister_shutdown_handlers
 
 
 class TestSignalHandlers:
@@ -86,8 +86,7 @@ class TestSignalHandlers:
         mock_request_shutdown_from_signal.assert_called_once()
 
     @patch('pokepoke.utils.signal_handlers.request_shutdown_from_signal')
-    @patch('pokepoke.utils.signal_handlers.print')
-    def test_signal_handler_fallback_when_no_logger(self, mock_print, mock_request_shutdown_from_signal):
+    def test_signal_handler_fallback_when_no_logger(self, mock_request_shutdown_from_signal, capsys):
         """Test that signal handler falls back to stderr when no logger available."""
         # Don't register a logger
         from pokepoke.utils.signal_handlers import _signal_handler
@@ -95,13 +94,10 @@ class TestSignalHandlers:
         # Call handler without logger
         _signal_handler(signal.SIGTERM, None)
 
-        # Verify fallback to stderr
-        mock_print.assert_called()
-        # Check that one of the calls was about signal termination
-        call_args_list = mock_print.call_args_list
-        signal_messages = [call for call in call_args_list
-                         if any("signal SIGTERM" in str(arg) for arg in call[0])]
-        assert len(signal_messages) > 0
+        # Verify fallback to stderr/stdout via logger
+        captured = capsys.readouterr()
+        combined = captured.out + captured.err
+        assert "signal SIGTERM" in combined
 
         mock_request_shutdown_from_signal.assert_called_once()
 
@@ -120,8 +116,7 @@ class TestSignalHandlers:
 
         mock_request_shutdown_from_signal.assert_called_once()
 
-    @patch('pokepoke.utils.signal_handlers.print')
-    def test_signal_handler_catches_request_shutdown_exception(self, mock_print):
+    def test_signal_handler_catches_request_shutdown_exception(self, capsys):
         """Covers exception path when request_shutdown_from_signal fails."""
         mock_logger = Mock()
         mock_logger.log_orchestrator.side_effect = Exception("Logging failed")
@@ -134,9 +129,9 @@ class TestSignalHandlers:
             # Should not raise even though request_shutdown_from_signal throws
             _signal_handler(signal.SIGTERM, None)
 
-        # Should have printed error about failed shutdown
-        error_msgs = [str(c) for c in mock_print.call_args_list]
-        assert any("Failed to request graceful shutdown" in msg for msg in error_msgs)
+        # Should have logged error about failed shutdown
+        captured = capsys.readouterr()
+        assert "Failed to request graceful shutdown" in captured.err
 
     def test_unregister_restores_sig_dfl_when_no_original(self):
         """Covers line 120: SIG_DFL restore when original handler was None."""

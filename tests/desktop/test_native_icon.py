@@ -2,13 +2,13 @@
 
 import sys
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, call, patch
 
 import pokepoke.desktop.native_icon as native_icon_module
 from pokepoke.desktop.native_icon import (
-    set_native_window_icon,
-    set_app_user_model_id,
     _apply_taskbar_icon,
+    set_app_user_model_id,
+    set_native_window_icon,
 )
 
 

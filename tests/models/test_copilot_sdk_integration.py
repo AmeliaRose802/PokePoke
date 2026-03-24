@@ -3,15 +3,16 @@
 import asyncio
 import sys
 import time
-from unittest.mock import patch, Mock, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
 import pytest
 
-from pokepoke.types import BeadsWorkItem, CopilotResult
 from pokepoke.models.copilot_sdk import (
-    build_prompt_from_work_item,
     _fail_result,
+    build_prompt_from_work_item,
     invoke_copilot_sdk_sync,
 )
+from pokepoke.types import BeadsWorkItem, CopilotResult
 
 
 class TestBuildPromptIntegration:

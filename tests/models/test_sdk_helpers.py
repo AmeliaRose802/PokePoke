@@ -17,9 +17,8 @@ from pokepoke.models.sdk_helpers import (
     build_gate_resume_prompt,
     build_resume_prompt,
 )
-from pokepoke.utils.process_utils import log_process_tree_snapshot as _log_process_tree_snapshot
 from pokepoke.types import BeadsWorkItem
-
+from pokepoke.utils.process_utils import log_process_tree_snapshot as _log_process_tree_snapshot
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 

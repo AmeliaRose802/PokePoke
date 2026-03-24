@@ -1,16 +1,20 @@
 """Tests for the pre-flight health check system."""
 
 import os
-import tempfile
 import subprocess
+import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from pokepoke.utils.preflight_health import (
-    PreflightChecker, HealthCheckResult, HealthCheckError, ErrorSeverity,
-    run_preflight_checks, attempt_self_repair
+    ErrorSeverity,
+    HealthCheckError,
+    HealthCheckResult,
+    PreflightChecker,
+    attempt_self_repair,
+    run_preflight_checks,
 )
 
 

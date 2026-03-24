@@ -3,17 +3,18 @@
 import logging
 import subprocess
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
 
 from pokepoke.agents.agent_runner import (
-    run_maintenance_agent,
-    run_gate_agent,
     _run_beads_only_agent,
-    _run_worktree_agent
+    _run_worktree_agent,
+    run_gate_agent,
+    run_maintenance_agent,
 )
-from pokepoke.git.git_operations import has_uncommitted_changes, commit_all_changes
-from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult, GateAgentResult
+from pokepoke.git.git_operations import commit_all_changes, has_uncommitted_changes
+from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult, GateAgentResult
 
 
 class TestHasUncommittedChanges:

@@ -1,7 +1,8 @@
 """Tests for RetryContext abstraction."""
 
 import time
-from pokepoke.orchestration.retry_context import RetryContext, NestedRetryContext
+
+from pokepoke.orchestration.retry_context import NestedRetryContext, RetryContext
 
 
 class TestRetryContext:

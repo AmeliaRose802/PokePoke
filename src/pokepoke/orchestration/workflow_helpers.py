@@ -5,13 +5,13 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pokepoke.desktop import terminal_ui
 from pokepoke.agents.agent_runner import run_beta_tester, run_gate_agent
-from pokepoke.beads.beads import assign_and_sync_item
 from pokepoke.agents.cleanup_agents import run_cleanup_loop
-from pokepoke.git.git_operations import has_uncommitted_changes
+from pokepoke.beads.beads import assign_and_sync_item
 from pokepoke.beads.reconciliation import reconcile_completed_item
+from pokepoke.desktop import terminal_ui
 from pokepoke.desktop.terminal_ui import format_work_item_banner, set_terminal_banner
+from pokepoke.git.git_operations import has_uncommitted_changes
 from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult, ModelCompletionRecord, WorkItemResult
 from pokepoke.worktrees.worktree_finalization import finalize_work_item
 from pokepoke.worktrees.worktrees import create_worktree
@@ -80,14 +80,14 @@ def _setup_worktree(
     repo_path: str | None = None,
 ) -> Path | None:
     """Create worktree, logging errors to both file logs and UI."""
-    print(f"\n\U0001f333 Creating worktree for {item.id}...")
+    logger.info(f"\n\U0001f333 Creating worktree for {item.id}...")
     try:
         worktree_path = create_worktree(item.id, lock_timeout=lock_timeout, repo_path=repo_path)
-        print(f"   Created at: {worktree_path}")
+        logger.info(f"   Created at: {worktree_path}")
         return worktree_path
     except Exception as e:
         error_msg = f"Failed to create worktree for {item.id}: {e}"
-        print(f"\n\u274c {error_msg}")
+        logger.error(f"\n\u274c {error_msg}")
         logger.error(error_msg)
         if run_logger:
             run_logger.log_orchestrator(error_msg, level="ERROR")
@@ -113,13 +113,13 @@ def _pre_loop_validate(
         confirm = input("Proceed with this item? [Y/n]: ").strip().lower()
         terminal_ui.ui.start()
         if confirm and confirm != "y":
-            print("\u23ed\ufe0f  Skipped.")
+            logger.warning("\u23ed\ufe0f  Skipped.")
             _log_failure(run_logger, item_logger)
             return _fail_result(), False, None, "", ""
 
-    print("\n\U0001f512 Claiming work item...")
+    logger.info("\n\U0001f512 Claiming work item...")
     if not assign_and_sync_item(item.id):
-        print(f"\u274c Failed to assign work item {item.id}")
+        logger.error(f"\u274c Failed to assign work item {item.id}")
         _log_failure(run_logger, item_logger)
         return _fail_result(), False, None, "", ""
 
@@ -128,13 +128,13 @@ def _pre_loop_validate(
         run_logger=run_logger, item_logger=item_logger,
     )
     if worktree_path is None:
-        print(f"\u21a9\ufe0f  Returning {item.id} to queue (unassigning due to worktree failure)...")
+        logger.error(f"\u21a9\ufe0f  Returning {item.id} to queue (unassigning due to worktree failure)...")
         _log_failure(run_logger, item_logger)
         return _fail_result(), True, None, "", ""
 
     pokepoke_root_cwd = str(Path.cwd())
     worktree_cwd = str(worktree_path)
-    print(f"   Working directory: {worktree_cwd}\n")
+    logger.info(f"   Working directory: {worktree_cwd}\n")
     return None, True, worktree_path, pokepoke_root_cwd, worktree_cwd
 
 
@@ -223,9 +223,9 @@ def _log_commit_status(worktree_cwd: str) -> None:
         return
     ahead = has_commits_ahead(cwd=worktree_cwd)
     if ahead > 0:
-        print(f"\n✅ All changes committed ({ahead} commit{'s' if ahead != 1 else ''} ahead) — skipping cleanup")
+        logger.warning(f"\n✅ All changes committed ({ahead} commit{'s' if ahead != 1 else ''} ahead) — skipping cleanup")
     else:
-        print("\n✅ No changes made — work item may already be complete")
+        logger.info("\n✅ No changes made — work item may already be complete")
 
 
 # ── Retry helper ─────────────────────────────────────────────────────────────
@@ -244,7 +244,7 @@ def _maybe_retry_copilot(
     feedback = result.error or "Copilot agent did not complete the task"
     has_resume = result.session_id is not None and result.last_output_summary is not None
     resume_note = " (will resume session)" if has_resume else ""
-    print(f"\n🔄 Copilot attempt {failure_count} failed, retrying ({failure_count}/{max_retries}){resume_note}...")
+    logger.error(f"\n🔄 Copilot attempt {failure_count} failed, retrying ({failure_count}/{max_retries}){resume_note}...")
     if run_logger:
         run_logger.log_orchestrator(
             f"Copilot failure on attempt {failure_count} for {item_id}, retrying with feedback{resume_note}",
@@ -267,8 +267,8 @@ def run_cleanup_with_timeout(
     while result.success and has_uncommitted_changes(cwd=cwd):
         elapsed = time.time() - start_time
         if elapsed >= timeout_seconds:
-            print(f"\n⏱️  TIMEOUT: Execution exceeded {timeout_hours} hours during cleanup")
-            print(f"   Restarting item {item.id} in same worktree...\n")
+            logger.info(f"\n⏱️  TIMEOUT: Execution exceeded {timeout_hours} hours during cleanup")
+            logger.info(f"   Restarting item {item.id} in same worktree...\n")
             return False, cleanup_agent_runs
 
         cleanup_attempt += 1
@@ -286,7 +286,7 @@ def run_cleanup_with_timeout(
 # ── Post-loop finalisation helper ─────────────────────────────────────────────
 
 
-def _finalize_item_result(  # noqa: C901 – inherently complex; see workflow.py process_work_item
+def _finalize_item_result(
     result: CopilotResult,
     item: BeadsWorkItem,
     worktree_path: Path | None,
@@ -341,7 +341,7 @@ def _finalize_item_result(  # noqa: C901 – inherently complex; see workflow.py
         reconciled, evidence = False, {}
     if reconciled:
         ev = evidence
-        print(
+        logger.error(
             f"\n⚠️  Copilot session reported FAILURE but state shows work already completed."
             f"\n   Evidence: beads_closed={ev.get('beads_closed')}, "
             f"commits_on_default={ev.get('commits_on_default')}, "
@@ -365,11 +365,11 @@ def _finalize_item_result(  # noqa: C901 – inherently complex; see workflow.py
         ), True
 
     set_terminal_banner(format_work_item_banner(item.id, item.title, "Failed"))
-    print(f"\n❌ Failed to complete work item: {result.error}")
+    logger.error(f"\n❌ Failed to complete work item: {result.error}")
 
     # Preserve worktree so agent work is not lost — it can be
     # manually inspected, resumed, or merged later.
-    print(f"\n⚠️  Preserving worktree for {item.id} (work may be recoverable)")
+    logger.warning(f"\n⚠️  Preserving worktree for {item.id} (work may be recoverable)")
     _log_failure(run_logger, item_logger, request_count)
     terminal_ui.ui.set_current_agent(None)
     dur = time.time() - start_time

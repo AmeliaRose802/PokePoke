@@ -19,13 +19,14 @@ from enum import Enum
 from pathlib import Path
 from queue import Empty, Queue
 
+from pokepoke.beads.beads import is_high_conflict_risk
+from pokepoke.stats.perf_timing import timed_block
+from pokepoke.types import BeadsWorkItem
+from pokepoke.utils.shutdown import is_shutting_down
+
 from .git_helpers import run_git
 from .git_operations import get_default_branch, is_worktree_clean
 from .merge_queue_stats import MergeQueueStats
-from pokepoke.stats.perf_timing import timed_block
-from pokepoke.utils.shutdown import is_shutting_down
-from pokepoke.types import BeadsWorkItem
-from pokepoke.beads.beads import is_high_conflict_risk
 
 logger = logging.getLogger(__name__)
 

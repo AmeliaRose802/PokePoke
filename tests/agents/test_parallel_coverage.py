@@ -7,22 +7,22 @@ Exercises real code paths in parallel.py, mocking only external I/O
 import concurrent.futures
 import threading
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pokepoke.types import BeadsWorkItem, AgentStats, SessionStats, WorkItemResult
 from pokepoke.agents.parallel import (
-    _hash_string,
-    _snake_for_work_item,
+    _SNAKE_TYPES,
     _build_worker_name,
-    _parallel_process_item,
     _collect_done_futures,
     _finalize_workers,
-    run_parallel_loop,
+    _hash_string,
+    _parallel_process_item,
+    _snake_for_work_item,
     request_spawn_agent,
-    _SNAKE_TYPES,
+    run_parallel_loop,
 )
+from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats, WorkItemResult
 
 
 @pytest.fixture(autouse=True)

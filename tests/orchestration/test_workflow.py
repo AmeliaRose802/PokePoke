@@ -4,36 +4,28 @@ import subprocess
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from pokepoke.orchestration.workflow import (
-    select_work_item,
-    process_work_item
-)
-from pokepoke.orchestration.workflow_helpers import (
-    _setup_worktree,
-    run_cleanup_with_timeout as _run_cleanup_with_timeout
-)
-from pokepoke.orchestration.work_item_selection import (
-    interactive_selection,
-    autonomous_selection
-)
-from pokepoke.worktrees.worktree_finalization import (
-    finalize_work_item,
-    check_and_merge_worktree,
-    merge_worktree_to_dev,
-    close_work_item_and_parents,
-    check_parent_hierarchy
-)
-from pokepoke.types import BeadsWorkItem, CopilotResult, AgentStats, GateAgentResult
+from pokepoke.orchestration.work_item_selection import autonomous_selection, interactive_selection
 from pokepoke.orchestration.work_item_session import WorkItemSession
+from pokepoke.orchestration.workflow import process_work_item, select_work_item
+from pokepoke.orchestration.workflow_helpers import _setup_worktree
+from pokepoke.orchestration.workflow_helpers import run_cleanup_with_timeout as _run_cleanup_with_timeout
+from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult, GateAgentResult
+from pokepoke.worktrees.worktree_finalization import (
+    check_and_merge_worktree,
+    check_parent_hierarchy,
+    close_work_item_and_parents,
+    finalize_work_item,
+    merge_worktree_to_dev,
+)
 from tests.orchestration.conftest import (
-    make_selection_mocks,
-    make_work_item,
-    make_process_item_mocks,
+    PATCH_MODEL_CONFIG,
+    PATCH_WF_ADD_COMMENT,
     PATCH_WF_GET_CONFIG,
     PATCH_WF_IS_SHUTTING_DOWN,
     PATCH_WF_SELECT_MODEL,
-    PATCH_WF_ADD_COMMENT,
-    PATCH_MODEL_CONFIG,
+    make_process_item_mocks,
+    make_selection_mocks,
+    make_work_item,
 )
 
 

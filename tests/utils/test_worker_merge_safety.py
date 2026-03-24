@@ -12,7 +12,6 @@ import pytest
 from pokepoke.models.copilot_sdk import _build_worker_env
 from pokepoke.prompts.prompts import PromptService
 
-
 # ── Worker prompt templates that must NEVER instruct merging ──────────────
 
 

@@ -12,15 +12,15 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
-from pokepoke.utils.constants import STATUS_IN_PROGRESS
 from pokepoke.git.git_helpers import run_git
-from pokepoke.utils.process_utils import is_process_running
 from pokepoke.stats.session_journal import (
     SessionJournal,
     SessionPhase,
     delete_journal,
     list_abandoned_journals,
 )
+from pokepoke.utils.constants import STATUS_IN_PROGRESS
+from pokepoke.utils.process_utils import is_process_running
 
 logger = logging.getLogger(__name__)
 

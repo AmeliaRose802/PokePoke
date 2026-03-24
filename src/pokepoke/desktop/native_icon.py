@@ -124,8 +124,8 @@ def set_native_window_icon(window: Any, icon_path: str | Path) -> None:
             return
         # Import .NET types (available because pywebview already loaded
         # pythonnet and System.Drawing on Windows).
-        from System.Drawing import Icon as DotNetIcon  # type: ignore[import-not-found]
         from System import Action  # type: ignore[import-not-found]
+        from System.Drawing import Icon as DotNetIcon  # type: ignore[import-not-found]
 
         icon = DotNetIcon(str(icon_path))
 

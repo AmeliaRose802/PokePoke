@@ -10,6 +10,7 @@ of check results plus a computed per-model summary.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 from contextlib import suppress
@@ -17,8 +18,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from pokepoke.worktrees.coordination import acquire_lock
 from pokepoke.utils.file_utils import replace_with_retry
+from pokepoke.worktrees.coordination import acquire_lock
+
+logger = logging.getLogger(__name__)
 
 GATE_STATS_FILE = Path(".pokepoke") / "gate_rejection_stats.json"
 
@@ -158,9 +161,9 @@ def print_gate_rejection_leaderboard(path: Path | None = None) -> None:
     if not stats:
         return
 
-    print("\n" + "=" * 70)
-    print("🕵️ Gate Agent Rejection Rates (Per Model)")
-    print("=" * 70)
+    logger.info("\n" + "=" * 70)
+    logger.info("🕵️ Gate Agent Rejection Rates (Per Model)")
+    logger.info("=" * 70)
 
     ranked = sorted(
         stats.items(),
@@ -176,12 +179,12 @@ def print_gate_rejection_leaderboard(path: Path | None = None) -> None:
         last = s.get("last_used", "never")
         trend_str = _format_trend(s.get("trend", []))
 
-        print(f"\n  #{i} {model[:30]}")
-        print(f"     Checks: {total}  |  ✅ {passed}  ❌ {rejected}  |  Rejection rate: {rate:.0%}")
-        print(f"     Last used: {last[:19]}")
+        logger.info(f"\n  #{i} {model[:30]}")
+        logger.error(f"     Checks: {total}  |  ✅ {passed}  ❌ {rejected}  |  Rejection rate: {rate:.0%}")
+        logger.info(f"     Last used: {last[:19]}")
         if trend_str:
-            print(f"     Trend:     {trend_str}")
-    print("\n" + "=" * 70)
+            logger.info(f"     Trend:     {trend_str}")
+    logger.info("\n" + "=" * 70)
 
 
 def _format_trend(trend_data: list[dict[str, Any]], max_markers: int = 20) -> str:

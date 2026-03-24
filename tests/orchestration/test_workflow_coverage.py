@@ -6,26 +6,28 @@ boundaries (copilot invocation, beads CLI, git operations, filesystem).
 
 import time
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-
-from pokepoke.types import (
-    BeadsWorkItem, AgentStats, CopilotResult, ModelCompletionRecord,
-    GateAgentResult,
-)
+from pokepoke.orchestration.work_item_session import WorkItemSession
+from pokepoke.orchestration.workflow import process_work_item
 from pokepoke.orchestration.workflow_helpers import (
-    _fail_result,
     _build_completion_record,
+    _fail_result,
+    _finalize_item_result,
     _log_failure,
-    _setup_worktree,
-    run_cleanup_with_timeout,
+    _maybe_retry_copilot,
     _pre_loop_validate,
     _run_gate_check,
-    _maybe_retry_copilot,
-    _finalize_item_result,
+    _setup_worktree,
+    run_cleanup_with_timeout,
 )
-from pokepoke.orchestration.workflow import process_work_item
-from pokepoke.orchestration.work_item_session import WorkItemSession
+from pokepoke.types import (
+    AgentStats,
+    BeadsWorkItem,
+    CopilotResult,
+    GateAgentResult,
+    ModelCompletionRecord,
+)
 
 
 def _item(id: str = "wf-1", desc: str | None = "desc") -> BeadsWorkItem:

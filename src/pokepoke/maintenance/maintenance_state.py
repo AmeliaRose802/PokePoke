@@ -8,7 +8,7 @@ preserved for backward compatibility (repo_id="_global").
 import json
 import logging
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 logger = logging.getLogger(__name__)

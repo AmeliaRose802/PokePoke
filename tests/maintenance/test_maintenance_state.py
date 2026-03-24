@@ -7,12 +7,12 @@ from unittest.mock import patch
 from pokepoke.maintenance.maintenance_state import (
     MaintenanceState,
     RepoMaintenanceState,
-    load_state,
-    save_state,
-    increment_items_completed,
-    get_repo_state,
-    record_maintenance_run,
     get_items_completed_for_repo,
+    get_repo_state,
+    increment_items_completed,
+    load_state,
+    record_maintenance_run,
+    save_state,
 )
 
 

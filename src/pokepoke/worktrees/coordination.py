@@ -10,13 +10,13 @@ import json
 import logging
 import os
 import time
+from collections.abc import Generator
 from contextlib import contextmanager, suppress
 from pathlib import Path
-from collections.abc import Generator
 
 from filelock import FileLock, Timeout
 
-from pokepoke.worktrees.lock_contention import _contention_tracker  # noqa: F401 (used in acquire_lock)
+from pokepoke.worktrees.lock_contention import _contention_tracker
 from pokepoke.worktrees.lock_contention import get_lock_contention_stats as get_lock_contention_stats
 
 logger = logging.getLogger(__name__)

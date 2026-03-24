@@ -1,9 +1,10 @@
 """Tests for blocking dependency validation in work item selection."""
 
 from unittest.mock import Mock, patch
-from pokepoke.orchestration.work_item_selection import select_work_item
+
 from pokepoke.beads.beads_query import has_unmet_blocking_dependencies
-from pokepoke.types import BeadsWorkItem, IssueWithDependencies, Dependency
+from pokepoke.orchestration.work_item_selection import select_work_item
+from pokepoke.types import BeadsWorkItem, Dependency, IssueWithDependencies
 
 
 class TestBlockingDependencyValidation:

@@ -13,9 +13,9 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pokepoke.utils.constants import BRANCH_PREFIX, WORKTREE_DIR, WORKTREE_TASK_PREFIX
 from pokepoke.git.git_helpers import run_git
 from pokepoke.git.git_operations import get_default_branch, list_worktrees, sanitize_branch_name
+from pokepoke.utils.constants import BRANCH_PREFIX, WORKTREE_DIR, WORKTREE_TASK_PREFIX
 
 if TYPE_CHECKING:
     from pokepoke.types import BeadsWorkItem

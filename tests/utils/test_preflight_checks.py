@@ -8,11 +8,11 @@ import pytest
 
 from pokepoke.utils.preflight_checks import (
     ErrorSeverity,
-    check_git_status,
-    check_worktree_creation,
-    check_lock_availability,
     check_disk_space,
+    check_git_status,
+    check_lock_availability,
     check_repository_integrity,
+    check_worktree_creation,
     is_lock_stale,
 )
 

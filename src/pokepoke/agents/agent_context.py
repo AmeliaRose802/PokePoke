@@ -18,7 +18,6 @@ the process-wide ``os.environ['AGENT_NAME']`` when running sequentially
 import os
 import threading
 
-
 _thread_local = threading.local()
 
 

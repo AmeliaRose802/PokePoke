@@ -6,9 +6,11 @@ before the main pywebview UI is created.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
 
 @dataclass
 class LaunchConfig:
@@ -20,8 +22,8 @@ class LaunchConfig:
 def _prompt_for_repo() -> LaunchConfig | None:
     """Console fallback when the GUI picker is unavailable."""
     cwd = Path.cwd()
-    print("📁 Current directory is not a git repository.")
-    print(f"   cwd: {cwd}")
+    logger.info("📁 Current directory is not a git repository.")
+    logger.info(f"   cwd: {cwd}")
     while True:
         answer = input("Enter repository path (or 'q' to quit): ").strip()
         if answer.lower() == "q":
@@ -29,7 +31,7 @@ def _prompt_for_repo() -> LaunchConfig | None:
         p = Path(answer).resolve()
         if p.is_dir():
             return LaunchConfig(repo_path=p, max_agents=1)
-        print(f"   ❌ Not a valid directory: {p}")
+        logger.error(f"   ❌ Not a valid directory: {p}")
 
 
 def pick_repo_directory() -> LaunchConfig | None:
@@ -125,7 +127,7 @@ def pick_repo_directory() -> LaunchConfig | None:
 
             return result
         except Exception as exc:
-            print(f"⚠️  GUI not available ({exc}); falling back to console prompt.")
+            logger.warning(f"⚠️  GUI not available ({exc}); falling back to console prompt.")
             return _prompt_for_repo()
 
     except ImportError:

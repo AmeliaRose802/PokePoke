@@ -2,18 +2,19 @@
 
 import unittest.mock
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+
 from pokepoke.agents.cleanup_agents import (
-    get_pokepoke_prompts_dir,
     _get_current_git_context,
+    aggregate_cleanup_stats,
+    get_pokepoke_prompts_dir,
     invoke_cleanup_agent,
     invoke_merge_conflict_cleanup_agent,
-    aggregate_cleanup_stats,
-    run_cleanup_loop
+    run_cleanup_loop,
 )
-from pokepoke.types import BeadsWorkItem, CopilotResult, AgentStats
+from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
 
 
 class TestCleanupAgents:
@@ -902,6 +903,7 @@ class TestWorktreeCleanupPromptSafety:
     ):
         """run_worktree_cleanup must inject the orchestrator PID into the prompt."""
         import os
+
         from pokepoke.agents.agent_runner import run_worktree_cleanup
 
         # Create a minimal prompt file

@@ -1,14 +1,14 @@
 """Tests for merge_conflict module."""
 
-from unittest.mock import Mock, patch
 import subprocess
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 from pokepoke.git.merge_conflict import (
-    is_merge_in_progress,
-    get_unmerged_files,
     abort_merge,
     get_merge_conflict_details,
+    get_unmerged_files,
+    is_merge_in_progress,
 )
 
 

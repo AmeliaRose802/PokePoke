@@ -13,8 +13,10 @@ import yaml
 from pokepoke.desktop.desktop_api import DesktopAPI
 from pokepoke.desktop.desktop_api_ext import (
     _build_label_error_result,
-    _discover_log_roots as _real_discover_log_roots,
     _update_current_labels,
+)
+from pokepoke.desktop.desktop_api_ext import (
+    _discover_log_roots as _real_discover_log_roots,
 )
 from pokepoke.desktop.desktop_api_utils import coerce_process_output as _coerce_process_output
 

@@ -1,8 +1,10 @@
 """Tests for terminal UI banner utilities."""
 
-import pytest
 from unittest.mock import patch
-from pokepoke.desktop.terminal_ui import format_work_item_banner, set_terminal_banner, clear_terminal_banner, get_ui
+
+import pytest
+
+from pokepoke.desktop.terminal_ui import clear_terminal_banner, format_work_item_banner, get_ui, set_terminal_banner
 
 
 class TestFormatWorkItemBanner:

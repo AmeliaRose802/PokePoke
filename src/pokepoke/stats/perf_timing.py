@@ -7,6 +7,9 @@ Usage::
 
     from pokepoke.stats.perf_timing import timed_operation, timed_block, get_registry
 
+
+logger = logging.getLogger(__name__)
+
     @timed_operation("worktree.create")
     def create_worktree(...):
         ...
@@ -15,7 +18,7 @@ Usage::
         do_rebase()
 
     registry = get_registry()
-    print(registry.percentile("worktree.create", 95))
+    logger.info(registry.percentile("worktree.create", 95))
 """
 
 from __future__ import annotations
@@ -24,10 +27,9 @@ import functools
 import threading
 import time
 from collections import defaultdict
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from collections.abc import Iterator
 from typing import Any, TypeVar, overload
-from collections.abc import Callable
 
 _F = TypeVar("_F", bound=Callable[..., Any])
 

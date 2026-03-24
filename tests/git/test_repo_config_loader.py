@@ -2,8 +2,7 @@
 
 
 
-from pokepoke.config import RepoConfig, QualityGateOverrides
-from pokepoke.utils.constants import BEADS_DIR
+from pokepoke.config import QualityGateOverrides, RepoConfig
 from pokepoke.git.repo_config_loader import (
     _check_beads_available,
     _split_repo_entry,
@@ -11,7 +10,7 @@ from pokepoke.git.repo_config_loader import (
     validate_repo_config,
     validate_repo_configs,
 )
-
+from pokepoke.utils.constants import BEADS_DIR
 
 # -- _check_beads_available --------------------------------------------------
 

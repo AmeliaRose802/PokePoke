@@ -5,21 +5,24 @@ Exercises real code paths in orchestrator.py, mocking only external I/O
 """
 
 import time
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-
-from pokepoke.types import (
-    BeadsWorkItem, AgentStats, SessionStats, WorkItemResult,
-    ModelCompletionRecord, BeadsStats,
-)
 from pokepoke.orchestration.orchestrator import (
     _finalize_session,
-    _record_item_result,
-    _setup_orchestrator,
-    _run_preflight,
-    _run_main_loop,
     _OrchestratorContext,
+    _record_item_result,
+    _run_main_loop,
+    _run_preflight,
+    _setup_orchestrator,
     run_orchestrator,
+)
+from pokepoke.types import (
+    AgentStats,
+    BeadsStats,
+    BeadsWorkItem,
+    ModelCompletionRecord,
+    SessionStats,
+    WorkItemResult,
 )
 
 

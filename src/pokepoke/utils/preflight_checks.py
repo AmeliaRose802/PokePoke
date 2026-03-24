@@ -15,10 +15,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from pokepoke.utils.constants import WORKTREE_DIR
 from pokepoke.git.git_helpers import run_git
-from pokepoke.git.git_operations import has_uncommitted_changes, categorize_git_changes, list_worktrees
+from pokepoke.git.git_operations import categorize_git_changes, has_uncommitted_changes, list_worktrees
 from pokepoke.stats.perf_timing import timed_block
+from pokepoke.utils.constants import WORKTREE_DIR
 from pokepoke.utils.process_utils import is_process_running
 
 logger = logging.getLogger(__name__)
@@ -113,7 +113,7 @@ def check_git_status(
         except Exception as e:
             errors.append(HealthCheckError(
                 check_name='git_status_check',
-                message=f"Git status check failed: {str(e)}",
+                message=f"Git status check failed: {e!s}",
                 severity=ErrorSeverity.ENVIRONMENTAL,
                 details={'exception': str(e)}
             ))
@@ -263,7 +263,7 @@ def check_disk_space(
     except Exception as e:
         errors.append(HealthCheckError(
             check_name='disk_space_check',
-            message=f"Failed to check disk space: {str(e)}",
+            message=f"Failed to check disk space: {e!s}",
             severity=ErrorSeverity.ENVIRONMENTAL,
             details={'exception': str(e)}
         ))
@@ -309,7 +309,7 @@ def check_repository_integrity(
                 warnings.append(f"Found {len(orphaned)} orphaned worktree directories")
 
     except Exception as e:
-        warnings.append(f"Failed to check repository integrity: {str(e)}")
+        warnings.append(f"Failed to check repository integrity: {e!s}")
 
     return errors, warnings
 

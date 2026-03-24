@@ -8,21 +8,20 @@ Tests cover:
 - check_parent_hierarchy
 """
 
+import json
 from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
 
-import json
-
 from pokepoke.types import BeadsWorkItem
 from pokepoke.worktrees.worktree_finalization import (
-    merge_worktree_to_dev,
-    finalize_work_item,
     check_and_merge_worktree,
-    close_work_item_and_parents,
     check_parent_hierarchy,
+    close_work_item_and_parents,
+    finalize_work_item,
+    merge_worktree_to_dev,
 )
 
 

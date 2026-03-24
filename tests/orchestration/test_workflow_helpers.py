@@ -8,12 +8,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pokepoke.types import (
-    AgentStats,
-    BeadsWorkItem,
-    CopilotResult,
-    ModelCompletionRecord,
-)
 from pokepoke.orchestration.workflow_helpers import (
     _apply_gate_feedback,
     _build_completion_record,
@@ -28,7 +22,12 @@ from pokepoke.orchestration.workflow_helpers import (
     _setup_worktree,
     run_cleanup_with_timeout,
 )
-
+from pokepoke.types import (
+    AgentStats,
+    BeadsWorkItem,
+    CopilotResult,
+    ModelCompletionRecord,
+)
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
 

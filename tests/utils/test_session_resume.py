@@ -1,15 +1,15 @@
 """Tests for session resume functionality in copilot_sdk.py."""
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
 
 from pokepoke.models.copilot_sdk import (
-    build_resume_prompt,
     _summarize_output,
+    build_resume_prompt,
     invoke_copilot_sdk_sync,
 )
 from pokepoke.types import BeadsWorkItem, CopilotResult
-
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -370,8 +370,9 @@ class TestBuildCopilotResultSessionId:
     """Tests for _build_copilot_result with session_id."""
 
     def test_includes_session_id(self, sample_work_item):
-        from pokepoke.models.sdk_helpers import _build_copilot_result
         import time
+
+        from pokepoke.models.sdk_helpers import _build_copilot_result
 
         stats = {
             'pending_tool_calls': 0,

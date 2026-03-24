@@ -6,6 +6,7 @@ to help new projects adopt PokePoke quickly.
 
 import argparse
 import json
+import logging
 import shutil
 import subprocess
 import sys
@@ -13,6 +14,7 @@ from pathlib import Path
 
 from pokepoke.utils.constants import BEADS_DIR
 
+logger = logging.getLogger(__name__)
 
 _SAMPLE_CONFIG = """\
 # PokePoke Project Configuration
@@ -168,17 +170,17 @@ def _load_existing_beads_titles(root: Path) -> set[str]:
 
 def _seed_setup_beads_items(root: Path) -> None:
     if not (root / BEADS_DIR).exists():
-        print("ℹ️  Beads not initialized yet; skipping setup item seeding.")
+        logger.warning("ℹ️  Beads not initialized yet; skipping setup item seeding.")
         return
     if not shutil.which("bd"):
-        print("ℹ️  Beads CLI not found; skipping setup item seeding.")
+        logger.warning("ℹ️  Beads CLI not found; skipping setup item seeding.")
         return
 
     existing_titles = _load_existing_beads_titles(root)
     for item in _SEED_BEADS_ITEMS:
         title = str(item["title"])
         if title.strip().lower() in existing_titles:
-            print(f"ℹ️  Beads item already exists: {title}")
+            logger.info(f"ℹ️  Beads item already exists: {title}")
             continue
 
         labels = item.get("labels", ())
@@ -210,11 +212,11 @@ def _seed_setup_beads_items(root: Path) -> None:
                 timeout=30,
             )
         except subprocess.TimeoutExpired:
-            print(f"⚠️  Timed out creating beads item: {title}")
+            logger.warning(f"⚠️  Timed out creating beads item: {title}")
             continue
         except subprocess.CalledProcessError as exc:
             error_msg = exc.stderr.strip() if exc.stderr else f"exit code {exc.returncode}"
-            print(f"⚠️  Failed to create beads item '{title}': {error_msg}")
+            logger.error(f"⚠️  Failed to create beads item '{title}': {error_msg}")
             continue
 
         created_id = None
@@ -226,9 +228,9 @@ def _seed_setup_beads_items(root: Path) -> None:
             created_id = None
 
         if isinstance(created_id, str) and created_id:
-            print(f"✅ Created beads item {created_id}: {title}")
+            logger.info(f"✅ Created beads item {created_id}: {title}")
         else:
-            print(f"✅ Created beads item: {title}")
+            logger.info(f"✅ Created beads item: {title}")
 
 
 def init_project(
@@ -256,32 +258,32 @@ def init_project(
     # Check for existing directory
     config_path = pokepoke_dir / "config.yaml"
     if config_path.exists() and not force:
-        print(f"⚠️  {config_path} already exists. Use --force to overwrite.")
+        logger.warning(f"⚠️  {config_path} already exists. Use --force to overwrite.")
         return False
 
     # Create directories
     prompts_dir.mkdir(parents=True, exist_ok=True)
-    print(f"📁 Created {pokepoke_dir}/")
+    logger.info(f"📁 Created {pokepoke_dir}/")
 
     # Write config
     config_content = _SAMPLE_CONFIG.format(project_name=project_name)
     config_path.write_text(config_content, encoding="utf-8")
-    print(f"📄 Created {config_path.relative_to(root)}")
+    logger.info(f"📄 Created {config_path.relative_to(root)}")
 
     # Write sample prompt template
     beads_path = prompts_dir / "beads-item.md"
     if not beads_path.exists() or force:
         beads_path.write_text(_BEADS_ITEM_TEMPLATE, encoding="utf-8")
-        print(f"📄 Created {beads_path.relative_to(root)}")
+        logger.info(f"📄 Created {beads_path.relative_to(root)}")
 
     _seed_setup_beads_items(root)
 
-    print(f"\n✅ PokePoke initialized for '{project_name}'")
-    print("\nNext steps:")
-    print("  1. Edit .pokepoke/config.yaml to customize settings")
-    print("  2. Add prompt templates in .pokepoke/prompts/")
-    print("  3. Run: python -m pokepoke.orchestration.orchestrator --interactive")
-    print("     (Add --agent-name Janitor to pin a custom agent name)")
+    logger.info(f"\n✅ PokePoke initialized for '{project_name}'")
+    logger.info("\nNext steps:")
+    logger.info("  1. Edit .pokepoke/config.yaml to customize settings")
+    logger.info("  2. Add prompt templates in .pokepoke/prompts/")
+    logger.info("  3. Run: python -m pokepoke.orchestration.orchestrator --interactive")
+    logger.info("     (Add --agent-name Janitor to pin a custom agent name)")
     return True
 
 

@@ -9,8 +9,7 @@ from pokepoke.protocols import (
     DefaultBeadsClient,
     DefaultGitClient,
 )
-from pokepoke.types import BeadsWorkItem, BeadsStats
-
+from pokepoke.types import BeadsStats, BeadsWorkItem
 
 # ---------------------------------------------------------------------------
 # DefaultGitClient

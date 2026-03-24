@@ -4,16 +4,16 @@ import concurrent.futures
 import os
 import threading
 import time
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats, WorkItemResult
 from pokepoke.agents.parallel import (
-    _parallel_process_item,
     _collect_done_futures,
+    _parallel_process_item,
     run_parallel_loop,
 )
+from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats, WorkItemResult
 
 
 def _make_item(item_id: str = "t1") -> BeadsWorkItem:
@@ -1104,7 +1104,7 @@ class TestRequestSpawnAgent:
 
     def test_sets_wakeup_event(self) -> None:
         """Covers line 48: _spawn_wakeup.set()."""
-        from pokepoke.agents.parallel import request_spawn_agent, _spawn_wakeup
+        from pokepoke.agents.parallel import _spawn_wakeup, request_spawn_agent
         _spawn_wakeup.clear()
         request_spawn_agent()
         assert _spawn_wakeup.is_set()

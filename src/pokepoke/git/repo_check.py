@@ -1,17 +1,19 @@
 """Repository status check and maintenance utilities."""
 
+import logging
 import shutil
 import subprocess
-import sys
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pokepoke.utils.constants import BEADS_DIR, CLEANUP_AGGREGATE_TIMEOUT, STATUS_IN_PROGRESS, WORKTREE_DIR
 from pokepoke.git.git_helpers import run_git
 from pokepoke.git.git_operations import get_status_porcelain_and_changes
 from pokepoke.git.repo_state_guard import cleanup_lock
+from pokepoke.utils.constants import BEADS_DIR, CLEANUP_AGGREGATE_TIMEOUT, STATUS_IN_PROGRESS, WORKTREE_DIR
 from pokepoke.worktrees.coordination import merge_lock_active
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from pokepoke.utils.logging_utils import RunLogger
@@ -30,16 +32,16 @@ def check_beads_available() -> bool:
     instead, which is reliable regardless of server state.
     """
     if not shutil.which('bd'):
-        print("\nError: 'bd' (beads) command not found.", file=sys.stderr)
-        print("   PokePoke requires beads for work item tracking.", file=sys.stderr)
-        print("   Install beads: pip install beads", file=sys.stderr)
-        print("   Then initialize: bd init", file=sys.stderr)
+        logger.error("Error: 'bd' (beads) command not found.")
+        logger.info("   PokePoke requires beads for work item tracking.")
+        logger.info("   Install beads: pip install beads")
+        logger.info("   Then initialize: bd init")
         return False
 
     beads_dir = Path.cwd() / BEADS_DIR
     if not beads_dir.is_dir():
-        print("\nError: This directory is not a beads repository.", file=sys.stderr)
-        print("   Run 'bd init' to set up beads tracking.", file=sys.stderr)
+        logger.error("\nError: This directory is not a beads repository.")
+        logger.info("   Run 'bd init' to set up beads tracking.")
         return False
 
     # Verify it has at least a config file (not just an empty directory)
@@ -48,8 +50,8 @@ def check_beads_available() -> bool:
         for name in ("config.yaml", "config.yml", "issues.jsonl", "beads.db")
     )
     if not has_marker:
-        print("\nError: .beads/ directory exists but appears incomplete.", file=sys.stderr)
-        print("   Run 'bd init' to reinitialize beads tracking.", file=sys.stderr)
+        logger.error("\nError: .beads/ directory exists but appears incomplete.")
+        logger.info("   Run 'bd init' to reinitialize beads tracking.")
         return False
 
     return True
@@ -58,8 +60,8 @@ def check_beads_available() -> bool:
 def initialize_beads_repo(repo_path: Path) -> bool:
     """Initialize beads in the given repository directory."""
     if not shutil.which('bd'):
-        print("\nError: 'bd' (beads) command not found.", file=sys.stderr)
-        print("   Install beads: pip install beads", file=sys.stderr)
+        logger.error("Error: 'bd' (beads) command not found.")
+        logger.info("   Install beads: pip install beads")
         return False
 
     # Already initialized?
@@ -76,10 +78,10 @@ def initialize_beads_repo(repo_path: Path) -> bool:
         if info_result.returncode == 0:
             return True
     except subprocess.TimeoutExpired:
-        print("\nError: 'bd info' timed out. Beads may not be configured correctly.", file=sys.stderr)
+        logger.error("\nError: 'bd info' timed out. Beads may not be configured correctly.")
         return False
     except Exception as e:
-        print(f"\nError: Failed to check beads status: {e}", file=sys.stderr)
+        logger.error(f"\nError: Failed to check beads status: {e}")
         return False
 
     # Initialize
@@ -94,18 +96,18 @@ def initialize_beads_repo(repo_path: Path) -> bool:
             timeout=BD_INIT_TIMEOUT,
         )
         if init_result.returncode != 0:
-            print(f"\nError: Failed to initialize beads in: {repo_path}", file=sys.stderr)
+            logger.error(f"\nError: Failed to initialize beads in: {repo_path}")
             details = (init_result.stderr or init_result.stdout or "").strip()
             if details:
-                print(details, file=sys.stderr)
-            print("\nTry running manually:", file=sys.stderr)
-            print("   bd init", file=sys.stderr)
+                logger.info(details)
+            logger.info("\nTry running manually:")
+            logger.info("   bd init")
             return False
     except subprocess.TimeoutExpired:
-        print("\nError: 'bd init' timed out.", file=sys.stderr)
+        logger.error("\nError: 'bd init' timed out.")
         return False
     except Exception as e:
-        print(f"\nError: Failed to run 'bd init': {e}", file=sys.stderr)
+        logger.error(f"\nError: Failed to run 'bd init': {e}")
         return False
 
     # Verify
@@ -120,14 +122,14 @@ def initialize_beads_repo(repo_path: Path) -> bool:
             timeout=BD_INFO_TIMEOUT,
         )
         if verify_result.returncode != 0:
-            print("\nError: Beads initialization did not complete successfully.", file=sys.stderr)
-            print("   'bd info' still fails after initialization.", file=sys.stderr)
+            logger.error("\nError: Beads initialization did not complete successfully.")
+            logger.info("   'bd info' still fails after initialization.")
             return False
     except subprocess.TimeoutExpired:
-        print("\nError: 'bd info' timed out after initialization.", file=sys.stderr)
+        logger.error("\nError: 'bd info' timed out after initialization.")
         return False
     except Exception as e:
-        print(f"\nError: Failed to verify beads initialization: {e}", file=sys.stderr)
+        logger.error(f"\nError: Failed to verify beads initialization: {e}")
         return False
 
     return True
@@ -212,20 +214,20 @@ def _stash_uncommitted_changes(repo_path: Path, run_logger: 'RunLogger') -> bool
             run_logger.log_orchestrator(f"Stashed changes: {stash_msg}")
             return True
         error_msg = result.stderr.strip() if result.stderr else "unknown error"
-        print(f"⚠️  git stash failed: {error_msg}")
+        logger.error(f"⚠️  git stash failed: {error_msg}")
         run_logger.log_orchestrator(f"git stash failed: {error_msg}", level="WARNING")
         return False
     except subprocess.TimeoutExpired:
-        print("⚠️  git stash timed out")
+        logger.warning("⚠️  git stash timed out")
         run_logger.log_orchestrator("git stash timed out", level="WARNING")
         return False
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr.strip() if e.stderr else f"exit code {e.returncode}"
-        print(f"⚠️  git add failed: {error_msg}")
+        logger.error(f"⚠️  git add failed: {error_msg}")
         run_logger.log_orchestrator(f"git add for stash failed: {error_msg}", level="WARNING")
         return False
     except Exception as e:
-        print(f"⚠️  Stash failed with unexpected error: {e}")
+        logger.error(f"⚠️  Stash failed with unexpected error: {e}")
         run_logger.log_orchestrator(f"Stash failed: {e}", level="WARNING")
         return False
 
@@ -246,7 +248,7 @@ def _run_cleanup_retries(
         # Enforce aggregate timeout across all cleanup retries
         elapsed = time.monotonic() - cleanup_loop_start
         if elapsed >= CLEANUP_AGGREGATE_TIMEOUT:
-            print(f"\n⏰ Cleanup aggregate timeout reached ({elapsed:.0f}s) - stopping retries")
+            logger.info(f"\n⏰ Cleanup aggregate timeout reached ({elapsed:.0f}s) - stopping retries")
             run_logger.log_orchestrator(
                 f"Cleanup aggregate timeout ({CLEANUP_AGGREGATE_TIMEOUT:.0f}s) exceeded",
                 level="WARNING",
@@ -264,18 +266,18 @@ def _run_cleanup_retries(
         )
 
         with cleanup_lock():
-            cleanup_success, cleanup_stats = invoke_cleanup_agent(
+            cleanup_success, _cleanup_stats = invoke_cleanup_agent(
                 cleanup_item, wait_for_merge=False
             )
 
         if cleanup_success:
-            print("✅ Cleanup agent successfully resolved uncommitted changes")
+            logger.info("✅ Cleanup agent successfully resolved uncommitted changes")
             run_logger.log_orchestrator("Cleanup agent successfully resolved uncommitted changes")
             return True
 
         if attempt < MAX_CLEANUP_RETRIES:
             wait_time = 2 ** attempt  # Exponential backoff: 2, 4, 8 seconds
-            print(f"⚠️  Cleanup attempt {attempt}/{MAX_CLEANUP_RETRIES} failed, retrying in {wait_time}s...")
+            logger.error(f"⚠️  Cleanup attempt {attempt}/{MAX_CLEANUP_RETRIES} failed, retrying in {wait_time}s...")
             run_logger.log_orchestrator(f"Cleanup attempt {attempt} failed, retrying", level="WARNING")
             time.sleep(wait_time)
 
@@ -297,43 +299,43 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
     except subprocess.CalledProcessError as e:
         # Handle git errors gracefully
         error_msg = e.stderr.strip() if e.stderr else f"exit code {e.returncode}"
-        print(f"⚠️  Warning: git status failed in {repo_path}: {error_msg}")
+        logger.error(f"⚠️  Warning: git status failed in {repo_path}: {error_msg}")
         run_logger.log_orchestrator(f"git status failed: {error_msg}", level="WARNING")
         # Check if this is a valid git repository
         git_dir = repo_path / ".git"
         if not git_dir.exists():
-            print(f"❌ Error: {repo_path} is not a git repository")
+            logger.error(f"❌ Error: {repo_path} is not a git repository")
             run_logger.log_orchestrator(f"{repo_path} is not a git repository", level="ERROR")
             return False
         # For other git errors, try to continue
-        print("   Continuing despite git error...")
+        logger.error("   Continuing despite git error...")
         return True
 
     if uncommitted:
 
         # Handle problematic changes that need agent intervention
         if changes['other']:
-            print("\n⚠️  Main repository has uncommitted changes:")
+            logger.warning("\n⚠️  Main repository has uncommitted changes:")
             run_logger.log_orchestrator("Main repository has uncommitted changes", level="WARNING")
             for line in changes['other'][:10]:
-                print(f"   {line}")
+                logger.info(f"   {line}")
             if len(changes['other']) > 10:
-                print(f"   ... and {len(changes['other']) - 10} more")
+                logger.info(f"   ... and {len(changes['other']) - 10} more")
 
             # Try auto-commit first before launching the heavyweight cleanup agent
-            print("\n🔄 Attempting to auto-commit changes...")
+            logger.info("\n🔄 Attempting to auto-commit changes...")
             if _try_auto_commit(repo_path, run_logger):
-                print("✅ Auto-committed uncommitted changes")
+                logger.info("✅ Auto-committed uncommitted changes")
                 return True
 
             # Auto-commit failed - fall back to cleanup agent
-            print("\n🤖 Auto-commit failed, launching cleanup agent...")
+            logger.error("\n🤖 Auto-commit failed, launching cleanup agent...")
             run_logger.log_orchestrator("Auto-commit failed, launching cleanup agent")
 
             # Check if merge operation is active - defer cleanup if so
             if merge_lock_active():
-                print("   ⏳ Merge operation in progress - deferring maintenance cleanup")
-                print("   Workers use isolated worktrees, continuing with orchestration for now")
+                logger.info("   ⏳ Merge operation in progress - deferring maintenance cleanup")
+                logger.info("   Workers use isolated worktrees, continuing with orchestration for now")
                 run_logger.log_orchestrator("Deferring cleanup due to active merge operation")
                 return True  # Continue processing - merge has priority
 
@@ -341,19 +343,19 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
                 return True
 
             # All cleanup retries failed - try stashing as last resort
-            print(f"\n⚠️  All {MAX_CLEANUP_RETRIES} cleanup attempts failed")
-            print("🔄 Attempting to stash uncommitted changes as fallback...")
+            logger.error(f"\n⚠️  All {MAX_CLEANUP_RETRIES} cleanup attempts failed")
+            logger.info("🔄 Attempting to stash uncommitted changes as fallback...")
             run_logger.log_orchestrator("Cleanup retries exhausted, attempting git stash", level="WARNING")
 
             stash_success = _stash_uncommitted_changes(repo_path, run_logger)
             if stash_success:
-                print("✅ Changes stashed successfully - continuing with orchestration")
+                logger.info("✅ Changes stashed successfully - continuing with orchestration")
                 run_logger.log_orchestrator("Uncommitted changes stashed successfully")
                 return True
 
             # Stash failed - but workers use isolated worktrees, so continue anyway
-            print("\n⚠️  Could not resolve uncommitted changes in main repo")
-            print("   Workers use isolated worktrees - continuing anyway")
+            logger.warning("\n⚠️  Could not resolve uncommitted changes in main repo")
+            logger.info("   Workers use isolated worktrees - continuing anyway")
             run_logger.log_orchestrator(
                 "Cleanup and stash both failed, but continuing (workers use worktrees)",
                 level="WARNING"
@@ -363,18 +365,18 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
         # Beads changes are handled by beads' own sync mechanism (bd sync)
         # Do NOT manually commit them - beads daemon handles this automatically
         if changes['beads']:
-            print("ℹ️  Beads database changes detected - will be synced by beads daemon")
-            print("ℹ️  Run 'bd sync' to force immediate sync if needed")
+            logger.info("ℹ️  Beads database changes detected - will be synced by beads daemon")
+            logger.info("ℹ️  Run 'bd sync' to force immediate sync if needed")
 
         # Auto-resolve worktree cleanup deletions
         if changes['worktree']:
-            print("🧹 Committing worktree cleanup changes...")
+            logger.info("🧹 Committing worktree cleanup changes...")
             run_git(["git", "add", f"{WORKTREE_DIR}/"], cwd=str(repo_path))
             run_git(
                 ["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
                 cwd=str(repo_path),
                 timeout=60,
             )
-            print("✅ Worktree cleanup committed")
+            logger.info("✅ Worktree cleanup committed")
 
     return True

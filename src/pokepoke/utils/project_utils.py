@@ -5,8 +5,9 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from .constants import BEADS_DIR
 from pokepoke.git.git_helpers import run_git
+
+from .constants import BEADS_DIR
 
 
 def is_git_repo(path: Path) -> bool:
@@ -86,6 +87,8 @@ def ensure_project_ready(
     """
     from pokepoke.git.repo_check import (
         check_beads_available as check_beads_cli,
+    )
+    from pokepoke.git.repo_check import (
         initialize_beads_repo,
     )
 

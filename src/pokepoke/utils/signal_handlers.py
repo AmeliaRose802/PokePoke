@@ -11,17 +11,18 @@ Signal safety:
   handles the heavier coordination work from a normal thread context.
 """
 
+import logging
 import signal
-import sys
 import threading
-from types import FrameType
 from collections.abc import Callable
-from typing import Any
 from datetime import datetime
+from types import FrameType
+from typing import Any
 
 from pokepoke.utils.logging_utils import RunLogger
 from pokepoke.utils.shutdown import request_shutdown_from_signal, start_shutdown_monitor
 
+logger = logging.getLogger(__name__)
 
 # Global reference to the current RunLogger
 _current_logger: RunLogger | None = None
@@ -91,14 +92,12 @@ def _signal_handler(signum: int, frame: FrameType | None) -> None:
             _current_logger.log_orchestrator("PokePoke orchestrator shutdown due to signal")
         else:
             # Fallback: log directly to stderr if no logger available
-            print(f"[{timestamp}] [WARNING] Process terminated by signal {signal_name} ({signum})",
-                  file=sys.stderr)
-            print(f"[{timestamp}] [WARNING] PokePoke orchestrator shutdown due to signal",
-                  file=sys.stderr)
+            logger.warning(f"[{timestamp}] Process terminated by signal {signal_name} ({signum})")
+            logger.warning(f"[{timestamp}] PokePoke orchestrator shutdown due to signal")
     except Exception as e:
         # Last resort: basic message to stderr
-        print(f"[{timestamp}] [ERROR] Signal handler failed: {e}", file=sys.stderr)
-        print(f"[{timestamp}] [WARNING] Process terminated by signal {signal_name}", file=sys.stderr)
+        logger.error(f"[{timestamp}] Signal handler failed: {e}")
+        logger.warning(f"[{timestamp}] Process terminated by signal {signal_name}")
 
     # Signal the global shutdown coordinator before exiting so other threads
     # (agents, merge queue, executors) can stop cleanly.
@@ -108,7 +107,7 @@ def _signal_handler(signum: int, frame: FrameType | None) -> None:
         request_shutdown_from_signal()
     except Exception as e:
         # Signal handlers must never fail; best-effort log to stderr.
-        print(f"[{timestamp}] [ERROR] Failed to request graceful shutdown: {e}", file=sys.stderr)
+        logger.error(f"[{timestamp}] [ERROR] Failed to request graceful shutdown: {e}")
 
     # Do NOT call sys.exit() here. Raising SystemExit from the signal handler
     # bypasses the orchestrator's except KeyboardInterrupt / except Exception

@@ -1,9 +1,12 @@
 """Tests for repo_utils module."""
 
+import builtins
 import subprocess
 from unittest.mock import Mock, patch
 
-from pokepoke.git.repo_utils import get_repository_name, _get_repo_name_from_git, _get_repo_name_from_config
+from pokepoke.git.repo_utils import _get_repo_name_from_config, _get_repo_name_from_git, get_repository_name
+
+_real_import = builtins.__import__
 
 
 class TestGetRepositoryName:
@@ -171,7 +174,7 @@ class TestGetRepoNameFromConfig:
         def side_effect(name, *args, **kwargs):
             if name == 'pokepoke.config':
                 raise ImportError("Module not found")
-            return __import__(name, *args, **kwargs)
+            return _real_import(name, *args, **kwargs)
         mock_import.side_effect = side_effect
 
         result = _get_repo_name_from_config()

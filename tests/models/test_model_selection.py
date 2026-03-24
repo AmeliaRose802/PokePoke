@@ -2,8 +2,13 @@
 
 from unittest.mock import Mock, patch
 
-from pokepoke.models.model_selection import select_model_for_item, select_gate_model, _matches_rule, get_assignment_for_item
-from pokepoke.config import ProjectConfig, ModelConfig, AssignmentConfig, AssignmentRule, AssignmentRuleMatch
+from pokepoke.config import AssignmentConfig, AssignmentRule, AssignmentRuleMatch, ModelConfig, ProjectConfig
+from pokepoke.models.model_selection import (
+    _matches_rule,
+    get_assignment_for_item,
+    select_gate_model,
+    select_model_for_item,
+)
 from pokepoke.types import BeadsWorkItem
 
 

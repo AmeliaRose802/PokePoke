@@ -6,7 +6,7 @@ preventing TOCTOU races with window disposal.
 """
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pokepoke.stats.metrics_context import get_current_agent_type
 

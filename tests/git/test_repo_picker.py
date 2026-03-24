@@ -2,7 +2,7 @@
 
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from pokepoke.git.repo_picker import LaunchConfig
 from pokepoke.utils.project_utils import is_git_repo as _is_git_repo

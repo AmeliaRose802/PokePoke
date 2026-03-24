@@ -11,16 +11,16 @@ from unittest.mock import patch
 
 import pytest
 
+from pokepoke.config import ModelConfig, ProjectConfig, reset_config
 from pokepoke.models.model_selection import select_model_for_item
+from pokepoke.stats.stats import _format_duration, _print_model_comparison
 from pokepoke.types import (
+    AgentStats,
     BeadsWorkItem,
+    CopilotResult,
     ModelCompletionRecord,
     SessionStats,
-    AgentStats,
-    CopilotResult,
 )
-from pokepoke.config import ModelConfig, ProjectConfig, reset_config
-from pokepoke.stats.stats import _print_model_comparison, _format_duration
 
 
 @pytest.fixture(autouse=True)

@@ -8,26 +8,11 @@ from unittest.mock import Mock, patch
 import pytest
 
 # Import the module to ensure coverage tracking works
-import pokepoke.worktrees.worktrees
-import pokepoke.git.git_operations  # noqa: F401  # imported for coverage tracking
-
-from pokepoke.git.git_operations import (
-    get_main_repo_root,
-    is_worktree_clean,
-    sanitize_branch_name,
-    get_default_branch
-)
-
 from pokepoke.git.git_helpers import verify_branch_pushed
-
-from pokepoke.worktrees.worktrees import (
-    create_worktree,
-    is_worktree_merged,
-    merge_worktree,
-    cleanup_worktree,
-    list_worktrees,
-)
+from pokepoke.git.git_operations import get_default_branch, get_main_repo_root, is_worktree_clean, sanitize_branch_name
 from pokepoke.worktrees.worktree_cleanup import (
+    _handle_remove_readonly,
+    _is_windows_lock_error,
     add_uncleaned_worktree,
     force_remove_directory,
     get_uncleaned_worktree_count,
@@ -35,8 +20,13 @@ from pokepoke.worktrees.worktree_cleanup import (
     remove_from_manifest,
     retry_failed_cleanups,
     save_worktree_manifest,
-    _handle_remove_readonly,
-    _is_windows_lock_error,
+)
+from pokepoke.worktrees.worktrees import (
+    cleanup_worktree,
+    create_worktree,
+    is_worktree_merged,
+    list_worktrees,
+    merge_worktree,
 )
 
 
@@ -310,7 +300,7 @@ class TestCreateWorktree:
             result = create_worktree('incredible_icm-42')
 
             assert result == existing_path
-            mock_print.assert_called_once()
+            assert mock_print.called
             assert 'Reusing existing worktree' in mock_print.call_args[0][0]
 
     def test_create_worktree_already_exists_by_branch(self):
@@ -326,7 +316,7 @@ class TestCreateWorktree:
             result = create_worktree('incredible_icm-42')
 
             assert result == Path('/some/other/path')
-            mock_print.assert_called_once()
+            assert mock_print.called
             assert 'Reusing existing worktree' in mock_print.call_args[0][0]
 
     def test_create_worktree_directory_exists_valid(self):
@@ -346,7 +336,7 @@ class TestCreateWorktree:
             result = create_worktree('incredible_icm-42')
 
             assert result == existing_path.resolve()
-            mock_print.assert_called_once()
+            assert mock_print.called
             assert 'Reusing existing worktree directory' in mock_print.call_args[0][0]
             mock_run_git.assert_called_once_with(
                 ["git", "rev-parse", "--is-inside-work-tree"],

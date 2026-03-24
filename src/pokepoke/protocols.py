@@ -13,7 +13,6 @@ from typing import Protocol
 
 from pokepoke.types import BeadsStats, BeadsWorkItem, IssueWithDependencies
 
-
 # ---------------------------------------------------------------------------
 # Git
 # ---------------------------------------------------------------------------

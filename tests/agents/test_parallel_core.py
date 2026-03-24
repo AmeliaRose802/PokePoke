@@ -5,19 +5,20 @@ Tests for parallel processing, agent spawning, and pool management.
 
 import concurrent.futures
 import threading
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
+
 import pytest
 
 from pokepoke.agents.parallel import (
-    get_effective_max_agents,
-    _hash_string,
-    _snake_for_work_item,
     _build_worker_name,
-    _parallel_process_item,
     _collect_done_futures,
+    _hash_string,
+    _parallel_process_item,
+    _snake_for_work_item,
+    get_effective_max_agents,
     request_spawn_agent,
 )
-from pokepoke.types import WorkItemResult, BeadsWorkItem
+from pokepoke.types import BeadsWorkItem, WorkItemResult
 from pokepoke.utils.logging_utils import RunLogger
 
 

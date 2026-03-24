@@ -1,9 +1,9 @@
 """Prompt template loading and rendering service."""
 
 import logging
+import re
 from pathlib import Path
 from typing import Any
-import re
 
 from pokepoke.config import _find_repo_root
 
@@ -255,7 +255,7 @@ class PromptService:
             section_content = match.group(2)
 
             # Check if variable exists and is truthy
-            if section_name in variables and variables[section_name]:
+            if variables.get(section_name):
                 value = variables[section_name]
 
                 # If value is a list/tuple, iterate over it

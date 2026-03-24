@@ -18,23 +18,22 @@ from pathlib import Path
 
 import pytest
 
-from pokepoke.types import ModelCompletionRecord
 from pokepoke.models.model_stats_store import (
-    load_model_stats,
-    save_model_stats,
-    record_completion,
-    get_model_summary,
-    get_model_weights,
-    get_model_history,
-    get_model_summary_by_repo,
-    get_repo_summary_metrics,
-    print_model_leaderboard,
-    _rebuild_summary,
-    _update_summary_incremental,
     _empty_store,
+    _rebuild_summary,
     _record_to_dict,
+    _update_summary_incremental,
+    get_model_history,
+    get_model_summary,
+    get_model_summary_by_repo,
+    get_model_weights,
+    get_repo_summary_metrics,
+    load_model_stats,
+    print_model_leaderboard,
+    record_completion,
+    save_model_stats,
 )
-
+from pokepoke.types import ModelCompletionRecord
 
 # ── Helpers ──────────────────────────────────────────────────────────
 

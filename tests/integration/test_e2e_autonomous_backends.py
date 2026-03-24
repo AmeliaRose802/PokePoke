@@ -101,7 +101,7 @@ def test_backend_sync_strategy_selection(backend_config):
     try:
         set_active_backend(backend_config)
 
-        from pokepoke.beads.sync_strategy import get_active_sync_strategy, DaemonSync, ExplicitSync
+        from pokepoke.beads.sync_strategy import DaemonSync, ExplicitSync, get_active_sync_strategy
 
         strategy = get_active_sync_strategy()
 
@@ -121,7 +121,7 @@ def test_backend_switching():
     """Test that switching backends updates all state correctly."""
     original = get_active_backend()
     try:
-        from pokepoke.beads.sync_strategy import get_active_sync_strategy, DaemonSync, ExplicitSync
+        from pokepoke.beads.sync_strategy import DaemonSync, ExplicitSync, get_active_sync_strategy
 
         # Switch to bd
         set_active_backend(BD_CONFIG)

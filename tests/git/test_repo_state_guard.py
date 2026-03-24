@@ -2,7 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-
 from pokepoke.git import repo_state_guard as guard
 from pokepoke.git.repo_state_guard import cleanup_lock_active as _real_cleanup_lock_active
 

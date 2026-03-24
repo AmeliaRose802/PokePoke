@@ -4,8 +4,11 @@ import logging
 import time
 from pathlib import Path
 
-from pokepoke.models.ai_backends import invoke_copilot
+from pokepoke.desktop import terminal_ui
 from pokepoke.git.git_helpers import run_git
+from pokepoke.git.git_operations import commit_all_changes, verify_main_repo_clean
+from pokepoke.models.ai_backends import invoke_copilot
+from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
 from pokepoke.utils.constants import (
     CLEANUP_AGENT_TIMEOUT,
     CLEANUP_AGGREGATE_TIMEOUT,
@@ -13,10 +16,7 @@ from pokepoke.utils.constants import (
     WORKTREE_DIR,
     WORKTREE_TASK_PREFIX,
 )
-from pokepoke.types import BeadsWorkItem, AgentStats, CopilotResult
-from pokepoke.git.git_operations import verify_main_repo_clean, commit_all_changes
 from pokepoke.worktrees.coordination import merge_lock_active
-from pokepoke.desktop import terminal_ui
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +40,11 @@ def run_cleanup_loop(
 
     # Check for uncommitted changes, excluding beads-only changes
     try:
-        is_clean, uncommitted, non_beads_changes = verify_main_repo_clean(cwd=cwd)
+        is_clean, _uncommitted, non_beads_changes = verify_main_repo_clean(cwd=cwd)
     except Exception as e:
         # Transient git contention can cause git status to fail; treat as clean.
         logger.warning(f"Error checking git status (treating as clean): {e}", exc_info=True)
-        print(f"\n⚠️  Error checking git status: {e}")
+        logger.error(f"\n⚠️  Error checking git status: {e}")
         return True, cleanup_agent_runs
 
     while result.success and not is_clean:
@@ -54,38 +54,38 @@ def run_cleanup_loop(
             logger.warning(
                 f"Cleanup aggregate timeout reached ({elapsed:.0f}s >= {CLEANUP_AGGREGATE_TIMEOUT:.0f}s)"
             )
-            print(f"\n⏰ Cleanup aggregate timeout reached ({elapsed:.0f}s) - aborting cleanup loop")
+            logger.info(f"\n⏰ Cleanup aggregate timeout reached ({elapsed:.0f}s) - aborting cleanup loop")
             result.success = False
             result.error = f"Cleanup aggregate timeout ({CLEANUP_AGGREGATE_TIMEOUT:.0f}s) exceeded"
             break
 
         cleanup_attempt += 1
-        print(f"\n⚠️  Uncommitted non-beads changes detected (cleanup attempt {cleanup_attempt})")
+        logger.warning(f"\n⚠️  Uncommitted non-beads changes detected (cleanup attempt {cleanup_attempt})")
         names = [f.split()[1] if len(f.split()) > 1 else f for f in non_beads_changes]
         preview = ", ".join(names[:5])
         suffix = "..." if len(names) > 5 else ""
-        print(f"   Files: {preview}{suffix}")
+        logger.info(f"   Files: {preview}{suffix}")
 
         commit_success, commit_error = commit_all_changes(f"Work on {item.id}", cwd=cwd, tracked_only=True)
 
         if commit_success:
-            print("✅ Changes committed successfully (validation passed)")
+            logger.info("✅ Changes committed successfully (validation passed)")
             break
         else:
-            print("\n❌ Commit failed - validation errors:")
-            print(f"   {commit_error}")
+            logger.error("\n❌ Commit failed - validation errors:")
+            logger.error(f"   {commit_error}")
 
             # Detect recurring errors: if same error seen before, short-circuit
             if commit_error and commit_error in previous_errors:
                 logger.warning(f"Recurring commit error detected, short-circuiting cleanup: {commit_error}")
-                print("\n🔁 Same error recurring across attempts - short-circuiting cleanup")
+                logger.error("\n🔁 Same error recurring across attempts - short-circuiting cleanup")
                 result.success = False
                 result.error = f"Recurring cleanup error (short-circuited): {commit_error}"
                 break
             if commit_error:
                 previous_errors.append(commit_error)
 
-        print("\n🧹 Invoking cleanup agent to fix validation errors...")
+        logger.error("\n🧹 Invoking cleanup agent to fix validation errors...")
         cleanup_agent_runs += 1
         # Extract file paths from status lines (e.g. " M file.py" -> "file.py")
         file_paths = [f.split()[-1] if f.split() else f for f in non_beads_changes]
@@ -99,16 +99,16 @@ def run_cleanup_loop(
         aggregate_cleanup_stats(result.stats, cleanup_stats)
 
         if not cleanup_success:
-            print("\n❌ Cleanup agent failed")
+            logger.error("\n❌ Cleanup agent failed")
             result.success = False
             result.error = "Cleanup agent failed to fix issues"
             break
 
         # Re-check status after cleanup
         try:
-            is_clean, uncommitted, non_beads_changes = verify_main_repo_clean(cwd=cwd)
+            is_clean, _uncommitted, non_beads_changes = verify_main_repo_clean(cwd=cwd)
         except Exception as e:
-            print(f"\n⚠️  Error checking git status after cleanup: {e}")
+            logger.error(f"\n⚠️  Error checking git status after cleanup: {e}")
             result.success = False
             result.error = f"Git status check failed: {e}"
             break
@@ -140,12 +140,12 @@ def load_prompt_file(filename: str) -> str | None:
     try:
         prompts_dir = get_pokepoke_prompts_dir()
     except FileNotFoundError as e:
-        print(f"❌ {e}")
+        logger.error(f"❌ {e}")
         return None
 
     prompt_path = prompts_dir / filename
     if not prompt_path.exists():
-        print(f"❌ Prompt not found at {prompt_path}")
+        logger.error(f"❌ Prompt not found at {prompt_path}")
         return None
 
     return prompt_path.read_text(encoding='utf-8')
@@ -238,20 +238,20 @@ def _run_agent_with_ui(
 
 def _wait_for_merge_completion(agent_label: str, item_id: str) -> None:
     """Wait for an active merge operation to complete (polls every 30s, up to 10 min)."""
-    print(f"   ⏳ Merge operation in progress, waiting for completion before {agent_label}...")
+    logger.info(f"   ⏳ Merge operation in progress, waiting for completion before {agent_label}...")
     logger.info(f"{agent_label} agent for {item_id} waiting for merge completion")
     max_wait, interval, waited = 600, 30, 0
 
     while merge_lock_active() and waited < max_wait:
         time.sleep(interval)
         waited += interval
-        print(f"   ⏳ Still waiting for merge completion ({waited}s/{max_wait}s)...")
+        logger.info(f"   ⏳ Still waiting for merge completion ({waited}s/{max_wait}s)...")
 
     if merge_lock_active():
-        print("   ⚠️  Merge operation still active after 10 minutes, proceeding with caution")
+        logger.warning("   ⚠️  Merge operation still active after 10 minutes, proceeding with caution")
         logger.warning(f"{agent_label} agent for {item_id} proceeding despite active merge lock")
     else:
-        print(f"   ✅ Merge operation completed, proceeding with {agent_label}")
+        logger.info(f"   ✅ Merge operation completed, proceeding with {agent_label}")
         logger.info(f"{agent_label} agent for {item_id} proceeding after merge completion")
 
 
@@ -299,7 +299,7 @@ def invoke_cleanup_agent(
         is_ephemeral=True,
     )
 
-    print("\n🧹 Invoking cleanup agent...")
+    logger.info("\n🧹 Invoking cleanup agent...")
 
     return _run_agent_with_ui(
         agent_id, "Cleanup Agent", "cleanup",
@@ -327,11 +327,12 @@ def invoke_merge_conflict_cleanup_agent(
 
     agent_id = f"{item.id}-merge-fix"
 
-    from pokepoke.git.merge_conflict import is_merge_in_progress, get_unmerged_files as git_get_unmerged
+    from pokepoke.git.merge_conflict import get_unmerged_files as git_get_unmerged
+    from pokepoke.git.merge_conflict import is_merge_in_progress
 
     cleanup_prompt_template = load_prompt_file("merge-conflict-cleanup.md")
     if cleanup_prompt_template is None:
-        print("⚠️ Falling back to standard cleanup agent")
+        logger.warning("⚠️ Falling back to standard cleanup agent")
         terminal_ui.ui.push_agent_status(
             agent_id, "Merge Conflict Cleanup", iteration=1, status="failed",
             parent_agent_id=parent_agent_id,
@@ -382,13 +383,13 @@ def invoke_merge_conflict_cleanup_agent(
         is_ephemeral=True,
     )
 
-    print("\n🧹 Invoking merge conflict cleanup agent...")
+    logger.info("\n🧹 Invoking merge conflict cleanup agent...")
     if unmerged_files:
-        print(f"   Conflicted files: {len(unmerged_files)}")
+        logger.info(f"   Conflicted files: {len(unmerged_files)}")
         for f in unmerged_files[:5]:
-            print(f"      - {f}")
+            logger.info(f"      - {f}")
         if len(unmerged_files) > 5:
-            print(f"      ... and {len(unmerged_files) - 5} more")
+            logger.info(f"      ... and {len(unmerged_files) - 5} more")
 
     return _run_agent_with_ui(
         agent_id, "Merge Conflict Cleanup", "merge_conflict_cleanup",

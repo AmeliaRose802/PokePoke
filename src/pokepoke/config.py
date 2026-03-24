@@ -18,6 +18,7 @@ except ImportError:
     HAS_YAML = False
 
 import json
+
 # Default model identifiers (single source of truth)
 DEFAULT_MODEL = "claude-opus-4.6"
 FALLBACK_MODEL = "claude-sonnet-4.5"

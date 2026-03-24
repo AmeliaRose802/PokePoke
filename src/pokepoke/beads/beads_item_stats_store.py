@@ -37,8 +37,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from pokepoke.worktrees.coordination import acquire_lock
 from pokepoke.utils.file_utils import replace_with_retry
+from pokepoke.worktrees.coordination import acquire_lock
 
 STATS_FILE = Path(".pokepoke") / "beads_item_stats.json"
 

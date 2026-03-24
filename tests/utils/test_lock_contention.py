@@ -3,8 +3,8 @@
 import pytest
 
 from pokepoke.worktrees.lock_contention import (
-    LockContentionTracker,
     _HISTOGRAM_BUCKETS,
+    LockContentionTracker,
     _contention_tracker,
     get_lock_contention_stats,
 )

@@ -1,4 +1,5 @@
 import pytest
+
 """Unit tests for hierarchical work assignment."""
 
 import subprocess
@@ -6,16 +7,16 @@ from unittest.mock import Mock, patch
 
 import pokepoke.beads.beads_hierarchy  # noqa: F401  # imported for coverage tracking
 from pokepoke.beads.beads import (
+    all_children_complete,
+    close_item,
+    close_parent_if_complete,
     get_children,
     get_next_child_task,
-    all_children_complete,
-    close_parent_if_complete,
-    select_next_hierarchical_item,
     get_parent_id,
-    close_item,
-    resolve_to_leaf_task
+    resolve_to_leaf_task,
+    select_next_hierarchical_item,
 )
-from pokepoke.types import BeadsWorkItem, IssueWithDependencies, Dependency
+from pokepoke.types import BeadsWorkItem, Dependency, IssueWithDependencies
 
 
 class TestHierarchicalWorkAssignment:

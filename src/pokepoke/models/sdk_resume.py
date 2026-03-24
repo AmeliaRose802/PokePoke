@@ -86,8 +86,7 @@ def build_resume_prompt(
                        "", "```", previous_output_summary, "```"])
     if retry_feedback:
         lines.extend(["", "### Feedback from Previous Attempts", ""])
-        for fb in retry_feedback:
-            lines.append(f"- {fb}")
+        lines.extend(f"- {fb}" for fb in retry_feedback)
     lines.extend([
         "", "**Success Criteria:**",
         "- Provided item is fully implemented",

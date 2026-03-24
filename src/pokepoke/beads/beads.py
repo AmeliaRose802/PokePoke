@@ -8,56 +8,52 @@ Implementation is split across:
 """
 
 # Re-export all public functions for backward compatibility
-from .beads_query import (
-    get_ready_work_items,
-    get_issue_dependencies,
-    get_beads_stats,
-    has_unmet_blocking_dependencies,
-    is_beads_item_closed,
+from pokepoke.git.multi_repo_aggregator import (
+    RepoQueryResult,
+    aggregate_ready_work_items,
+    get_aggregated_stats,
+    query_repo_ready_items,
 )
 
 from .beads_hierarchy import (
-    get_children,
-    get_next_child_task,
+    HIGH_CONFLICT_LABELS,
     all_children_complete,
     close_parent_if_complete,
+    get_children,
+    get_next_child_task,
     get_parent_id,
     has_feature_parent,
-    resolve_to_leaf_task,
     is_high_conflict_risk,
-    HIGH_CONFLICT_LABELS,
+    resolve_to_leaf_task,
 )
-
 from .beads_management import (
-    close_item,
-    select_next_hierarchical_item,
-    is_item_claimable,
-    assign_and_sync_item,
-    unassign_item,
     add_comment,
+    assign_and_sync_item,
+    close_item,
     get_total_attempts,
     increment_total_attempts,
+    is_item_claimable,
+    select_next_hierarchical_item,
+    unassign_item,
 )
-
+from .beads_query import (
+    get_beads_stats,
+    get_issue_dependencies,
+    get_ready_work_items,
+    has_unmet_blocking_dependencies,
+    is_beads_item_closed,
+)
 from .beads_recovery import (
-    unassign_with_retry,
-    retry_failed_unassigns,
     get_failed_unassign_count,
+    retry_failed_unassigns,
+    unassign_with_retry,
 )
-
 from .sync_strategy import (
-    SyncStrategy,
     DaemonSync,
     ExplicitSync,
+    SyncStrategy,
     get_active_sync_strategy,
     set_active_sync_strategy,
-)
-
-from pokepoke.git.multi_repo_aggregator import (
-    aggregate_ready_work_items,
-    query_repo_ready_items,
-    get_aggregated_stats,
-    RepoQueryResult,
 )
 
 __all__ = [

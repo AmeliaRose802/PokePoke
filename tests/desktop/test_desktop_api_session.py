@@ -6,9 +6,9 @@ import pytest
 
 from pokepoke.desktop.desktop_api import DesktopAPI
 from pokepoke.desktop.desktop_api_session import (
-    set_session_start_time,
-    set_session_end_time,
     set_live_session_stats,
+    set_session_end_time,
+    set_session_start_time,
 )
 from pokepoke.types import AgentStats, SessionStats
 

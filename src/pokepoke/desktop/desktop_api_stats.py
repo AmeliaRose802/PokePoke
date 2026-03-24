@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import asdict
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pokepoke.desktop.desktop_api import DesktopAPI
@@ -222,8 +222,8 @@ def get_performance_metrics(self: DesktopAPI) -> dict[str, Any]:
     a single response.
     """
     from pokepoke.stats.perf_timing import get_registry
-    from pokepoke.worktrees.lock_contention import get_lock_contention_stats as _get_lock
     from pokepoke.stats.performance_monitor import get_performance_monitor
+    from pokepoke.worktrees.lock_contention import get_lock_contention_stats as _get_lock
 
     # Merge queue
     merge_queue: dict[str, Any] = {}
@@ -302,8 +302,8 @@ def get_repo_summary(self: DesktopAPI) -> dict[str, dict[str, Any]]:
     Combines model stats (items processed, success rate, cost) with
     beads item stats (items created/completed) per repo.
     """
-    from pokepoke.models.model_stats_store import get_repo_summary_metrics
     from pokepoke.beads.beads_item_stats_store import get_summary_by_repo
+    from pokepoke.models.model_stats_store import get_repo_summary_metrics
 
     model_metrics = get_repo_summary_metrics()
     beads_metrics = get_summary_by_repo()

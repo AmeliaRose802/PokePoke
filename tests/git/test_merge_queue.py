@@ -6,7 +6,6 @@ from concurrent.futures import Future
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-
 import pokepoke.git.merge_queue  # noqa: F401  # imported for coverage tracking
 from pokepoke.git.merge_queue import (
     MergeQueue,

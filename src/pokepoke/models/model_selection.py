@@ -9,12 +9,14 @@ model (and optionally the prompt template) for a work item.  If no rule
 matches, the system falls back to weighted A/B selection.
 """
 
+import logging
 import random
 
-from pokepoke.config import get_config, AssignmentRule
+from pokepoke.config import AssignmentRule, get_config
 from pokepoke.models.model_stats_store import get_model_weights
 from pokepoke.types import BeadsWorkItem
 
+logger = logging.getLogger(__name__)
 
 def _matches_rule(rule: AssignmentRule, item: BeadsWorkItem) -> bool:
     """Check whether a work item matches an assignment rule's criteria.
@@ -69,14 +71,14 @@ def select_model_for_item(item: BeadsWorkItem) -> str:
     # Check assignment rules first
     rule_model, _ = get_assignment_for_item(item)
     if rule_model is not None:
-        print(f"   [A/B] Assigned model '{rule_model}' to {item.id} "
+        logger.info(f"   [A/B] Assigned model '{rule_model}' to {item.id} "
               f"(matched assignment rule)")
         return rule_model
 
     # Check fallback setting
     fallback = config.assignment.fallback
     if fallback != "weighted":
-        print(f"   [A/B] Assigned model '{fallback}' to {item.id} "
+        logger.info(f"   [A/B] Assigned model '{fallback}' to {item.id} "
               f"(assignment fallback)")
         return fallback
 
@@ -98,7 +100,7 @@ def select_model_for_item(item: BeadsWorkItem) -> str:
     # Determine if selection was weighted or uniform
     uniform = all(w == weights[0] for w in weights)
     mode = "uniform" if uniform else "weighted"
-    print(f"   [A/B] Assigned model '{model}' to {item.id} "
+    logger.info(f"   [A/B] Assigned model '{model}' to {item.id} "
           f"({mode}, {len(candidates)} candidates)")
     return model
 
@@ -139,9 +141,9 @@ def select_gate_model(work_model: str, item_id: str) -> str:
             # If default is also same as work model, we have a config issue
             # but proceed with default anyway (better than failing)
             if gate_model == work_model:
-                print(f"   ⚠️  [Gate] No alternative model available to {work_model}, using same model")
+                logger.warning(f"   ⚠️  [Gate] No alternative model available to {work_model}, using same model")
                 return gate_model
-        print(f"   [Gate] Using fallback model '{gate_model}' (work model: {work_model})")
+        logger.info(f"   [Gate] Using fallback model '{gate_model}' (work model: {work_model})")
         return gate_model
 
     # Select from available models using performance weights
@@ -153,7 +155,7 @@ def select_gate_model(work_model: str, item_id: str) -> str:
     # Determine if selection was weighted or uniform
     uniform = all(w == weights[0] for w in weights)
     mode = "uniform" if uniform else "weighted"
-    print(f"   [Gate] Assigned model '{gate_model}' for verification "
+    logger.info(f"   [Gate] Assigned model '{gate_model}' for verification "
           f"({mode}, {len(available)} candidates, excluding work model '{work_model}')")
 
     return gate_model

@@ -13,13 +13,23 @@ _WT_PATH = f"{WORKTREE_DIR}/"
 
 logger = logging.getLogger(__name__)
 
-from .git_helpers import run_git, restore_beads_stash, _run_git_status_with_retry, validate_post_merge, list_worktrees  # noqa: E402,F401
+from .git_helpers import (
+    _run_git_status_with_retry,
+    list_worktrees,
+    restore_beads_stash,
+    run_git,
+    validate_post_merge,
+)
 
 __all__ = [
+    'build_handoff_context',
+    'categorize_git_changes',
+    'check_main_repo_ready_for_merge',
+    'execute_merge_sequence',
+    'get_status_porcelain_and_changes',
     'has_uncommitted_changes',
-    'execute_merge_sequence', 'check_main_repo_ready_for_merge',
-    'categorize_git_changes', 'get_status_porcelain_and_changes',
-    'build_handoff_context', 'list_worktrees', 'validate_post_merge',
+    'list_worktrees',
+    'validate_post_merge',
 ]
 
 
@@ -130,14 +140,14 @@ def verify_main_repo_clean(cwd: str | None = None) -> tuple[bool, str, list[str]
 def handle_beads_auto_commit(cwd: str | None = None) -> None:
     """Commit beads database changes."""
     try:
-        print("🔧 Committing beads database changes in main repo...")
+        logger.info("🔧 Committing beads database changes in main repo...")
         run_git(["git", "add", f"{BEADS_DIR}/"], timeout=10, cwd=cwd)
         run_git(
             ["git", "commit", "-m", "chore: sync beads before worktree merge"],
             timeout=300,
             cwd=cwd,
         )
-        print("✅ Beads changes committed")
+        logger.info("✅ Beads changes committed")
     except subprocess.TimeoutExpired as e:
         raise RuntimeError(f"Beads commit timed out after {e.timeout} seconds") from e
     except subprocess.CalledProcessError as e:
@@ -208,7 +218,7 @@ def get_default_branch(preferred: str | None = None, fallback: str | None = None
                 cwd=cwd,
             )
             # Found on remote, create local tracking branch
-            print(f"   ✨ Creating local tracking branch for {preferred}...")
+            logger.info(f"   ✨ Creating local tracking branch for {preferred}...")
             run_git(
                 ["git", "branch", "--track", preferred, f"origin/{preferred}"],
                 timeout=30,
@@ -362,4 +372,4 @@ def has_commits_ahead(target_branch: str | None = None, cwd: str | None = None) 
         pass
     return 0
 
-from pokepoke.prompts.handoff_context import build_handoff_context  # noqa: E402,F401  # Re-export for backward compat
+from pokepoke.prompts.handoff_context import build_handoff_context  # Re-export for backward compat

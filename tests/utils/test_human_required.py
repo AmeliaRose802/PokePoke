@@ -7,13 +7,13 @@ child task selection.
 
 from unittest.mock import Mock, patch
 
-from pokepoke.types import BeadsWorkItem
-from pokepoke.orchestration.work_item_selection import (
-    select_work_item,
-    _is_human_required,
-)
-from pokepoke.beads.beads_management import select_next_hierarchical_item
 from pokepoke.beads.beads_hierarchy import get_next_child_task
+from pokepoke.beads.beads_management import select_next_hierarchical_item
+from pokepoke.orchestration.work_item_selection import (
+    _is_human_required,
+    select_work_item,
+)
+from pokepoke.types import BeadsWorkItem
 
 
 def _make_item(

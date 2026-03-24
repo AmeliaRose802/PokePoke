@@ -11,14 +11,28 @@ import pytest
 from filelock import Timeout
 
 from pokepoke.worktrees.coordination import (
-    acquire_lock, try_lock, worktree_setup_lock, merge_lock, merge_lock_active,
-    manifest_lock, clear_lock_if_stale, check_lock_status, with_worktree_lock,
-    _load_worktree_metrics, _record_worktree_attempt, _save_worktree_metrics,
-    _lock_dir, _lock_path, _MERGE_LOCK_STALE_AGE, _is_pid_alive, _read_lock_metadata,
+    _MERGE_LOCK_STALE_AGE,
+    _is_pid_alive,
+    _load_worktree_metrics,
+    _lock_dir,
+    _lock_path,
+    _read_lock_metadata,
+    _record_worktree_attempt,
+    _save_worktree_metrics,
     _write_lock_metadata,
+    acquire_lock,
+    check_lock_status,
+    clear_lock_if_stale,
+    manifest_lock,
+    merge_lock,
+    merge_lock_active,
+    try_lock,
+    with_worktree_lock,
+    worktree_setup_lock,
 )
 from pokepoke.worktrees.lock_contention import (
-    get_lock_contention_stats, _contention_tracker,
+    _contention_tracker,
+    get_lock_contention_stats,
 )
 
 

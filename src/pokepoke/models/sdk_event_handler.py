@@ -3,13 +3,13 @@
 import asyncio
 import logging
 import time
-from typing import Any, TypedDict
 from collections.abc import Callable
+from typing import Any, TypedDict
 
+from pokepoke.beads.sdk_beads_tracker import extract_command, is_beads_create, parse_created_items, record_items_created
+from pokepoke.config import FALLBACK_MODEL, get_config
 from pokepoke.desktop import terminal_ui
 from pokepoke.utils.hung_command_detector import HungCommandDetector
-from pokepoke.config import get_config, FALLBACK_MODEL
-from pokepoke.beads.sdk_beads_tracker import extract_command, parse_created_items, record_items_created, is_beads_create
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +139,7 @@ class _EventHandler:
                      or getattr(event.data, 'delta', None)
                      or getattr(event.data, 'content', None))
         if delta:
-            print(delta, end="", flush=True)
+            logger.info(delta)
             self._output_lines.append(delta)
             if self._item_logger:
                 self._item_logger.log_copilot_output(delta)
@@ -149,14 +149,14 @@ class _EventHandler:
         content = getattr(event.data, 'content', None) if hasattr(event, 'data') else None
         tool_requests = getattr(event.data, 'tool_requests', None) if hasattr(event, 'data') else None
         if content and not self._received_deltas:
-            print(content)
+            logger.info(content)
             self._output_lines.append(content)
             if self._item_logger:
                 self._item_logger.log_copilot_output(content)
         self._received_deltas = False
         terminal_ui.ui.set_style(None)
         if tool_requests and len(tool_requests) > 0:
-            print(f"\n[Copilot] Calling {len(tool_requests)} tool(s)...")
+            logger.info(f"\n[Copilot] Calling {len(tool_requests)} tool(s)...")
 
     def _on_tool_start(self, event: Any) -> None:
         terminal_ui.ui.set_style(None)
@@ -172,7 +172,7 @@ class _EventHandler:
         tool_name = getattr(event.data, 'tool_name', 'unknown')
         tool_args = getattr(event.data, 'arguments', {}) or {}
         args_str = str(tool_args)
-        print(f"  🔧 {tool_name}({args_str})")
+        logger.info(f"  🔧 {tool_name}({args_str})")
         self._output_lines.append(f"\n[Tool] {tool_name}({args_str})\n")
         if self._item_logger:
             self._item_logger.log_tool_call(tool_name, args_str)
@@ -214,7 +214,7 @@ class _EventHandler:
             return
         result_content = getattr(result, 'content', str(result)) if hasattr(result, 'content') else str(result)
         status = "✅" if success else "❌"
-        print(f"  {status} Result: {result_content}")
+        logger.info(f"  {status} Result: {result_content}")
         self._output_lines.append(f"[Result] {result_content}\n")
         if self._item_logger:
             self._item_logger.log_tool_call(tool_name, '', result=result_content, success=success)
@@ -227,7 +227,7 @@ class _EventHandler:
             delay = float(tool_args.get('delay', 30))
             is_hung, corrective_msg = self._hung.record_read_powershell(shell_id, delay, result_content)
             if is_hung and corrective_msg:
-                print(f"\n{corrective_msg}")
+                logger.info(f"\n{corrective_msg}")
                 self._output_lines.append(f"\n{corrective_msg}\n")
                 if self._item_logger:
                     self._item_logger.log_error(f"Hung command detected for shell {shell_id}")
@@ -250,7 +250,7 @@ class _EventHandler:
             return
         for source, text in stream_chunks:
             prefix = "[stderr] " if source == "stderr" else ""
-            print(f"{prefix}{text}", end="" if text.endswith("\n") else "\n")
+            logger.info(f"{prefix}{text}")
             self._output_lines.append(text)
             if self._item_logger:
                 self._item_logger.log_copilot_output(text)
@@ -301,12 +301,12 @@ class _EventHandler:
             self._stale_idle_count = 1
             self._last_idle_pending = self._stats['pending_tool_calls']
         if self._stale_idle_count >= self._MAX_STALE_IDLES:
-            print(f"\n[SDK] Session idle with {self._stats['pending_tool_calls']} stale pending tool(s) "
+            logger.warning(f"[SDK] Session idle with {self._stats['pending_tool_calls']} stale pending tool(s) "
                   f"(idle x{self._stale_idle_count}) - forcing completion (process likely exited)")
             self._stats['pending_tool_calls'] = 0
             self._done.set()
         else:
-            print(f"\n[SDK] Session idle but {self._stats['pending_tool_calls']} tool(s) still executing "
+            logger.info(f"[SDK] Session idle but {self._stats['pending_tool_calls']} tool(s) still executing "
                   f"(stale idle {self._stale_idle_count}/{self._MAX_STALE_IDLES}) - continuing...")
 
     def _schedule_idle_completion(self) -> None:
@@ -318,7 +318,7 @@ class _EventHandler:
             try:
                 await asyncio.sleep(self._idle_timeout)
                 if not self._done.is_set() and self._stats['pending_tool_calls'] == 0:
-                    print("[SDK] Session confirmed idle - processing complete")
+                    logger.info("[SDK] Session confirmed idle - processing complete")
                     self._done.set()
             except asyncio.CancelledError:
                 pass
@@ -326,17 +326,17 @@ class _EventHandler:
         self._stats['idle_task'] = asyncio.create_task(check_still_idle())
 
     def _on_session_end(self, _event: Any) -> None:
-        print("[SDK] Agent signaled session complete")
+        logger.info("[SDK] Agent signaled session complete")
         self._done.set()
 
     def _on_session_error(self, event: Any) -> None:
         error_msg = getattr(event.data, 'message', 'Unknown error') if hasattr(event, 'data') else 'Unknown error'
-        print(f"\n[SDK] ERROR: {error_msg}")
+        logger.error(f"\n[SDK] ERROR: {error_msg}")
         if self._item_logger:
             self._item_logger.log_error(error_msg)
         error_lower = error_msg.lower()
         if not self._rate_limit_detected and 'rate' in error_lower and 'limit' in error_lower:
-            print(f"\n[SDK] Rate limit detected, will retry with {FALLBACK_MODEL}...")
+            logger.info(f"\n[SDK] Rate limit detected, will retry with {FALLBACK_MODEL}...")
             self._rate_limit_detected = True
             self._done.set()
             return

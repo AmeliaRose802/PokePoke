@@ -1,15 +1,16 @@
 """Tests for copilot_sdk.py module (direct SDK integration)."""
 
 import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
 
 from pokepoke.models.copilot_sdk import (
+    _build_copilot_result,
+    _build_token_usage_callback,
+    _fail_result,
     build_prompt_from_work_item,
     invoke_copilot_sdk_sync,
-    _fail_result,
-    _build_token_usage_callback,
-    _build_copilot_result,
 )
 from pokepoke.types import BeadsWorkItem
 
@@ -196,8 +197,9 @@ class TestInvokeCopilotSDKAsync:
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_success(self, mock_client_class, sample_work_item):
         """Test successful SDK invocation."""
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
+
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         # Create mock client and session
         mock_client = AsyncMock()
@@ -249,8 +251,9 @@ class TestInvokeCopilotSDKAsync:
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_message_delta(self, mock_client_class, sample_work_item):
         """Test SDK invocation with streaming message deltas."""
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
+
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -302,8 +305,9 @@ class TestInvokeCopilotSDKAsync:
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_session_end_completes(self, mock_client_class, sample_work_item):
         """Session should complete from session.end event — the explicit agent completion signal."""
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
+
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -354,8 +358,9 @@ class TestInvokeCopilotSDKAsync:
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_complete_message(self, mock_client_class, sample_work_item):
         """Test SDK invocation with complete message (no deltas)."""
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
+
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -404,8 +409,9 @@ class TestInvokeCopilotSDKAsync:
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_tool_calls(self, mock_client_class, sample_work_item):
         """Test SDK invocation with tool calls."""
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
+
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -459,8 +465,9 @@ class TestInvokeCopilotSDKAsync:
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_error(self, mock_client_class, sample_work_item):
         """Test SDK invocation with session error."""
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
+
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -744,8 +751,9 @@ class TestInvokeCopilotSDKAsync:
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_tool_execution(self, mock_client_class, sample_work_item):
         """Test SDK invocation with tool execution events."""
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
+
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -809,8 +817,9 @@ class TestInvokeCopilotSDKAsync:
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_usage_statistics(self, mock_client_class, sample_work_item):
         """Test SDK invocation with usage statistics tracking."""
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
+
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -868,8 +877,9 @@ class TestInvokeCopilotSDKAsync:
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_keyboard_interrupt_during_wait(self, mock_client_class, sample_work_item):
         """Test SDK invocation with keyboard interrupt during wait."""
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
+
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -908,8 +918,9 @@ class TestInvokeCopilotSDKAsync:
     @patch('pokepoke.models.copilot_sdk.os.environ', new_callable=dict)
     async def test_invoke_copilot_sdk_environment_handling(self, mock_environ, mock_client_class, sample_work_item):
         """Test SDK invocation passes PYTHONIOENCODING via client options without mutating global os.environ."""
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
+
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         # Start with original value
         mock_environ['PYTHONIOENCODING'] = 'utf-8'
@@ -962,8 +973,9 @@ class TestInvokeCopilotSDKAsync:
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_tool_requests(self, mock_client_class, sample_work_item):
         """Test SDK invocation with tool requests in assistant message."""
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
+
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -1033,8 +1045,9 @@ class TestInvokeCopilotSDKAsync:
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_with_cwd(self, mock_client_class, sample_work_item):
         """Test SDK invocation passes cwd to client options."""
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
+
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -1074,8 +1087,9 @@ class TestInvokeCopilotSDKAsync:
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_unicode_decode_error_in_stop(self, mock_client_class, sample_work_item):
         """Test SDK handles UnicodeDecodeError during client.stop()."""
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
+
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -1149,8 +1163,9 @@ class TestInvokeCopilotSDKAsync:
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_stop_timeout(self, mock_client_class, sample_work_item):
         """Test SDK handles timeout during client.stop() in finally block."""
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
+
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -1229,8 +1244,9 @@ class TestInvokeCopilotSDKAsync:
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     async def test_invoke_copilot_sdk_stop_timeout_force_fails(self, mock_client_class, sample_work_item):
         """Test SDK handles exception during forced stop after timeout."""
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         import asyncio
+
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_session = AsyncMock()
@@ -1526,8 +1542,8 @@ class TestRateLimitFallback:
         self, mock_client_class, sample_work_item
     ):
         """RateLimitError on first attempt retries with FALLBACK_MODEL."""
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         from pokepoke.config import FALLBACK_MODEL
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_client.start = AsyncMock()
@@ -1601,8 +1617,8 @@ class TestRateLimitFallback:
         self, mock_client_class, sample_work_item
     ):
         """After fallback, result.model should be FALLBACK_MODEL."""
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         from pokepoke.config import FALLBACK_MODEL
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_client.start = AsyncMock()
@@ -1735,8 +1751,8 @@ class TestRateLimitFallback:
         self, mock_client_class, sample_work_item
     ):
         """Rate limit on FALLBACK_MODEL itself should not retry — breaks with error."""
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         from pokepoke.config import FALLBACK_MODEL
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_client.start = AsyncMock()
@@ -1793,8 +1809,8 @@ class TestRateLimitFallback:
         self, mock_client_class, sample_work_item
     ):
         """Fallback proceeds even if session.destroy() fails during cleanup."""
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
         from pokepoke.config import FALLBACK_MODEL
+        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
         mock_client = AsyncMock()
         mock_client.start = AsyncMock()
@@ -1963,6 +1979,7 @@ class TestAwaitCompletionAbortOSError:
     async def test_inactivity_abort_oserror_returns_inactivity(self):
         """When session.abort() raises OSError on inactivity, still return 'inactivity'."""
         import time
+
         from pokepoke.models.sdk_helpers import _await_completion
 
         mock_session = AsyncMock()
@@ -2039,6 +2056,7 @@ class TestAwaitCompletionAbortOSError:
         quiet while tools are still executing.
         """
         import time
+
         from pokepoke.models.sdk_helpers import _await_completion
 
         mock_session = AsyncMock()
@@ -2070,6 +2088,7 @@ class TestAwaitCompletionAbortOSError:
     async def test_inactivity_fires_when_zero_pending_tool_calls(self):
         """Inactivity timeout fires normally when no tools are pending."""
         import time
+
         from pokepoke.models.sdk_helpers import _await_completion
 
         mock_session = AsyncMock()
@@ -2097,6 +2116,7 @@ class TestAwaitCompletionAbortOSError:
     async def test_tool_timeout_fires_when_tool_exceeds_limit(self):
         """Tool call watchdog fires when a single tool exceeds the timeout."""
         import time
+
         from pokepoke.models.sdk_helpers import _await_completion
 
         mock_session = AsyncMock()
@@ -2127,6 +2147,7 @@ class TestAwaitCompletionAbortOSError:
     async def test_tool_timeout_does_not_fire_when_within_limit(self):
         """Tool call watchdog does not fire when tools are within the timeout."""
         import time
+
         from pokepoke.models.sdk_helpers import _await_completion
 
         mock_session = AsyncMock()
@@ -2157,6 +2178,7 @@ class TestAwaitCompletionAbortOSError:
     async def test_tool_timeout_abort_oserror_returns_tool_timeout(self):
         """When session.abort() raises OSError on tool timeout, still return 'tool_timeout'."""
         import time
+
         from pokepoke.models.sdk_helpers import _await_completion
 
         mock_session = AsyncMock()

@@ -1,12 +1,13 @@
 
 import logging
 from unittest.mock import Mock, patch
+
 from pokepoke.orchestration.work_item_selection import (
-    select_work_item,
     _is_human_required,
-    interactive_selection,
     autonomous_selection,
+    interactive_selection,
     select_multiple_items,
+    select_work_item,
 )
 from pokepoke.types import BeadsWorkItem
 

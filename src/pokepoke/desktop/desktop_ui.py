@@ -1,24 +1,25 @@
 """Desktop UI adapter for PokePoke orchestrator using pywebview."""
-
 from __future__ import annotations
 
 import builtins
+import logging
 import os
 import sys
 import threading
-from typing import Any, TYPE_CHECKING
-from collections.abc import Iterator, Callable
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any
 
 from pokepoke.desktop.desktop_api import DesktopAPI
-from pokepoke.utils.shutdown import is_shutting_down, request_shutdown
 from pokepoke.desktop.frontend_discovery import find_dev_server_url, find_frontend_dist
-from pokepoke.desktop.native_icon import set_native_window_icon, set_app_user_model_id
+from pokepoke.desktop.native_icon import set_app_user_model_id, set_native_window_icon
 from pokepoke.desktop.pywebview_patches import apply_runtime_patches
+from pokepoke.utils.shutdown import is_shutting_down, request_shutdown
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from pokepoke.types import SessionStats
-
 
 def _shutdown_threading_excepthook(args: threading.ExceptHookArgs) -> None:
     """Suppress noisy UnicodeDecodeError tracebacks from background threads during shutdown."""
@@ -33,18 +34,14 @@ def _shutdown_threading_excepthook(args: threading.ExceptHookArgs) -> None:
         import traceback as _tb
         _tb.print_exception(args.exc_type, args.exc_value, args.exc_traceback)
 
-
 # Saved so we can delegate non-shutdown exceptions.
 _original_excepthook: Callable[..., Any] | None = None
-
 
 # Thread-local storage for per-thread output routing.
 _thread_output = threading.local()
 
-
 class DesktopUI:
     """UI adapter that opens a native pywebview window and forwards state/logs to DesktopAPI."""
-
     def __init__(self) -> None:
         self._api = DesktopAPI()
         self._is_running = False
@@ -66,25 +63,20 @@ class DesktopUI:
     def run_with_orchestrator(self, orchestrator_func: Callable[[], int]) -> int:
         """Run orchestrator on a background thread while pywebview runs on the main thread."""
         import webview
-
         apply_runtime_patches()
-
         # Install a threading excepthook that suppresses UnicodeDecodeError
         # during shutdown (the Copilot SDK subprocess can emit non-UTF-8
         # bytes when forcefully terminated).
         global _original_excepthook
         _original_excepthook = threading.excepthook
         threading.excepthook = _shutdown_threading_excepthook
-
         self._is_running = True
         builtins.print = self._print_redirect
-
         try:
             self._api.push_log(
                 "🖥️  PokePoke Desktop started (pywebview native window)",
                 "orchestrator",
             )
-
             # Find the frontend — prefer Vite dev server for hot reload
             dev_url = find_dev_server_url()
             if dev_url:
@@ -98,14 +90,12 @@ class DesktopUI:
                 dist_dir = find_frontend_dist()
                 if dist_dir is None:
                     builtins.print = self._original_print
-                    print("❌ Desktop frontend not built. Run:", file=sys.stderr)
-                    print("   cd desktop && npm install && npm run build", file=sys.stderr)
+                    logger.error("❌ Desktop frontend not built. Run:")
+                    logger.info("   cd desktop && npm install && npm run build")
                     return 1
                 window_url = str(dist_dir / "index.html")
-
             # Result container for the orchestrator thread
             exit_code_box: list[int] = [0]
-
             def run_orchestrator() -> None:
                 try:
                     exit_code_box[0] = orchestrator_func()
@@ -118,19 +108,15 @@ class DesktopUI:
                 finally:
                     builtins.print = self._original_print
                     self._is_running = False
-
             # Start orchestrator on background thread
             orch_thread = threading.Thread(
                 target=run_orchestrator,
                 daemon=True,
                 name="orchestrator",
             )
-
             orchestrator_started = False
-
             # Create native window pointing at the built React app
             icon_path = dist_dir / "pokepoke.ico" if dist_dir else None
-
             def on_window_loaded() -> None:
                 """Called after the webview window is ready."""
                 nonlocal orchestrator_started
@@ -142,7 +128,6 @@ class DesktopUI:
                 self._api.set_window(window)
                 orch_thread.start()
                 orchestrator_started = True
-
             window_kwargs: dict[str, Any] = {
                 "title": "PokePoke - Autonomous Workflow Manager",
                 "url": window_url,
@@ -152,14 +137,11 @@ class DesktopUI:
                 "min_size": (900, 600),
                 "text_select": True,
             }
-
             # Register the App User Model ID before creating the window so that
             # Windows associates the taskbar button with this app identity and
             # displays the PokePoke icon instead of the python.exe icon.
             set_app_user_model_id()
-
             window = webview.create_window(**window_kwargs)
-
             # Run pywebview on the main thread (blocks until window closes)
             start_kwargs: dict[str, Any] = {
                 "func": on_window_loaded,
@@ -167,7 +149,6 @@ class DesktopUI:
             }
             if icon_path and icon_path.exists():
                 start_kwargs["icon"] = str(icon_path)
-
             try:
                 webview.start(**start_kwargs)
             except Exception as e:
@@ -177,18 +158,15 @@ class DesktopUI:
                 if not orchestrator_started and not is_shutting_down():
                     self._api.push_log(f"❌ Desktop UI error: {e}", "orchestrator", "red")
                     exit_code_box[0] = 1
-
             # Window closed (or UI failed) — dispose window then shut down
             self._api.dispose()
             request_shutdown()
             self._is_running = False
             builtins.print = self._original_print
-
             # Wait for orchestrator to finish (needs enough time to collect
             # beads stats and print the session summary).
             if orch_thread.is_alive():
                 orch_thread.join(timeout=15.0)
-
             return exit_code_box[0]
         finally:
             self._is_running = False
@@ -217,7 +195,6 @@ class DesktopUI:
 
     def _print_redirect(self, *args: Any, **kwargs: Any) -> None:
         """Redirect print calls to the desktop API log buffer.
-
         When a thread has set a thread-local agent_id (via
         :meth:`agent_output_for`), output is routed to that agent's
         per-agent log buffer in the :class:`AgentRegistry` instead of
@@ -229,12 +206,10 @@ class DesktopUI:
         if file not in (sys.stdout, None):
             self._original_print(*args, **kwargs)
             return
-
         sep = kwargs.get("sep", " ")
         end = kwargs.get("end", "\n")
         flush = kwargs.get("flush", False)
         msg = sep.join(str(arg) for arg in args) + end
-
         # Resolve per-thread overrides (set by context managers)
         target: str = getattr(_thread_output, "target", None) or self._target_buffer
         style: str | None = getattr(_thread_output, "style", None)
@@ -242,24 +217,20 @@ class DesktopUI:
             with self._buffer_lock:
                 style = self._current_style
         agent_id: str | None = getattr(_thread_output, "agent_id", None)
-
         # Use per-thread line buffer to avoid interleaving partial lines
         # across parallel agents.  The main thread (no agent_id) still
         # uses the shared instance buffer for backward compatibility.
         if agent_id:
             line_buf: str = getattr(_thread_output, "line_buffer", "")
             line_buf += msg
-
             while "\n" in line_buf:
                 line, line_buf = line_buf.split("\n", 1)
                 if line:
                     self._api.push_agent_log(agent_id, line)
-
             _thread_output.line_buffer = line_buf
         else:
             with self._buffer_lock:
                 self._line_buffer += msg
-
                 while "\n" in self._line_buffer:
                     line, self._line_buffer = self._line_buffer.split("\n", 1)
                     if line:
@@ -267,7 +238,6 @@ class DesktopUI:
                     if self._flush_timer:
                         self._flush_timer.cancel()
                         self._flush_timer = None
-
                 if flush and self._line_buffer:
                     if self._flush_timer:
                         self._flush_timer.cancel()
@@ -406,7 +376,6 @@ class DesktopUI:
 
     def get_child_agent_activity_time(self, agent_id: str) -> float | None:
         """Get the most recent activity timestamp from any child agent.
-
         Returns the most recent last_log_at or last_updated timestamp
         from active children, or None if no active children exist.
         """

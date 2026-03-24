@@ -1,4 +1,5 @@
 import pytest
+
 """Tests for subprocess encoding edge cases and Unicode handling.
 
 Verifies that subprocess invocations across the codebase handle non-ASCII,
@@ -10,7 +11,6 @@ UnicodeDecodeError in _readerthread seen in production.
 import json
 import subprocess
 from unittest.mock import MagicMock, patch
-
 
 # ---------------------------------------------------------------------------
 # 1. Subprocess pipes configured with UTF-8 encoding and errors='replace'

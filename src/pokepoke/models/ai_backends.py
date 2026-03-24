@@ -6,14 +6,14 @@ import logging
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any, Protocol
 
-from pokepoke.utils.constants import DEFAULT_AGENT_TIMEOUT
 from pokepoke.config import get_config
 from pokepoke.models.copilot_sdk import build_prompt_from_work_item, invoke_copilot_sdk_sync
 from pokepoke.types import BeadsWorkItem, CopilotResult, RetryConfig
+from pokepoke.utils.constants import DEFAULT_AGENT_TIMEOUT
 
 logger = logging.getLogger(__name__)
 

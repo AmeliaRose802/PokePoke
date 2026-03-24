@@ -16,18 +16,17 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-from pokepoke.config import get_config, MaintenanceAgentConfig
-from pokepoke.worktrees.coordination import try_lock
+from pokepoke.agents.agent_runner import run_maintenance_agent
+from pokepoke.config import MaintenanceAgentConfig, get_config
+from pokepoke.desktop import terminal_ui
+from pokepoke.desktop.terminal_ui import set_terminal_banner
+from pokepoke.git.repo_state_guard import wait_for_main_repo_clean
+from pokepoke.maintenance.maintenance import _run_special_agent
 from pokepoke.maintenance.maintenance_state import record_maintenance_run
 from pokepoke.types import SessionStats
 from pokepoke.utils.logging_utils import RunLogger
-from pokepoke.maintenance.maintenance import _run_special_agent
-from pokepoke.agents.agent_runner import run_maintenance_agent
-from pokepoke.git.repo_state_guard import wait_for_main_repo_clean
 from pokepoke.utils.shutdown import get_active_agent_count
-from pokepoke.desktop.terminal_ui import set_terminal_banner
-from pokepoke.desktop import terminal_ui
-
+from pokepoke.worktrees.coordination import try_lock
 
 # Agents that require singleton guard (modify shared state or produce duplicates)
 _SINGLETON_AGENTS: set[str] = {
@@ -295,7 +294,7 @@ class MaintenanceScheduler:
 
         set_terminal_banner(f"PokePoke - Synced {agent_name} Agent")
         terminal_ui.ui.update_header("MAINTENANCE", f"{agent_name} Agent", "Running")
-        print(f"\n🔧 Running {agent_name} Agent...")  # noqa: T201
+        logger.info(f"\n🔧 Running {agent_name} Agent...")
         run_logger.log_maintenance(log_key, f"Starting {agent_name} Agent")
 
         # Update run count on session stats if attribute exists (thread-safe)

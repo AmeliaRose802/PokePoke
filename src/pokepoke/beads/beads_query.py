@@ -7,16 +7,15 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from pokepoke.worktrees.coordination import beads_db_lock
 from pokepoke.stats.perf_timing import timed_block
-from pokepoke.types import BeadsWorkItem, IssueWithDependencies, Dependency, BeadsStats
+from pokepoke.types import BeadsStats, BeadsWorkItem, Dependency, IssueWithDependencies
 from pokepoke.utils.constants import (
     BEADS_BINARY_BD,
     BEADS_BINARY_BR,
     DEFAULT_BEADS_LOCK_TIMEOUT,
     DEFAULT_BEADS_TIMEOUT,
 )
-
+from pokepoke.worktrees.coordination import beads_db_lock
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +102,7 @@ def _run_cli(
     def _run() -> subprocess.CompletedProcess[str]:
         with timed_block(f"{backend.binary}.{cmd}" if cmd else f"{backend.binary}.unknown"):
             return subprocess.run(
-                [backend.binary] + args,
+                [backend.binary, *args],
                 capture_output=True,
                 text=True,
                 encoding='utf-8',
@@ -145,7 +144,7 @@ def _filter_to_dataclass(cls: type, data: dict[str, Any]) -> Any:
 
 def _parse_beads_json(output: str, extra_prefixes: tuple[str, ...] = ()) -> Any:
     """Parse JSON from beads CLI output, filtering warning/note lines."""
-    prefixes = ('Note:', 'Warning:', 'Hint:') + extra_prefixes
+    prefixes = ('Note:', 'Warning:', 'Hint:', *extra_prefixes)
     filtered_lines = [
         line for line in output.split('\n')
         if line.strip() and not line.strip().startswith(prefixes)
@@ -264,13 +263,13 @@ def get_issue_dependencies(issue_id: str) -> IssueWithDependencies | None:
                           if k in {f.name for f in dataclasses.fields(IssueWithDependencies)}}
 
         # Convert dependencies if present
-        if 'dependencies' in filtered_issue and filtered_issue['dependencies']:
+        if filtered_issue.get('dependencies'):
             filtered_issue['dependencies'] = [
                 _filter_to_dataclass(Dependency, dep)
                 for dep in filtered_issue['dependencies']
             ]
 
-        if 'dependents' in filtered_issue and filtered_issue['dependents']:
+        if filtered_issue.get('dependents'):
             filtered_issue['dependents'] = [
                 _filter_to_dataclass(Dependency, dep)
                 for dep in filtered_issue['dependents']

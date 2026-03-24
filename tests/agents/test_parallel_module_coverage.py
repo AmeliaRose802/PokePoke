@@ -4,30 +4,29 @@ import concurrent.futures
 import threading
 import time
 from contextlib import contextmanager
-from unittest.mock import patch, Mock, MagicMock, call
+from unittest.mock import MagicMock, Mock, call, patch
 
 import pytest
 
-from pokepoke.types import BeadsWorkItem, SessionStats, WorkItemResult, AgentStats
 from pokepoke.agents.parallel import (
-    _get_dynamic_max_agents,
-    get_effective_max_agents,
-    request_spawn_agent,
-    _hash_string,
-    _snake_for_work_item,
-    _build_worker_name,
-    _parallel_process_item,
-    _collect_done_futures,
-    run_parallel_loop,
-    _spawn_wakeup,
-    _SNAKE_TYPES,
     _DEFAULT_PARALLEL_CEILING,
     _IDLE_BASE_DELAY,
     _IDLE_MAX_DELAY,
     _MAX_CONSECUTIVE_FAILURES,
     _MAX_CONSECUTIVE_PREFLIGHT_FAILURES,
+    _SNAKE_TYPES,
+    _build_worker_name,
+    _collect_done_futures,
+    _get_dynamic_max_agents,
+    _hash_string,
+    _parallel_process_item,
+    _snake_for_work_item,
+    _spawn_wakeup,
+    get_effective_max_agents,
+    request_spawn_agent,
+    run_parallel_loop,
 )
-
+from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats, WorkItemResult
 
 # ---------------------------------------------------------------------------
 # Helpers

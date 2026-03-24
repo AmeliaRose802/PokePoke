@@ -19,28 +19,32 @@ from pathlib import Path
 from typing import Any
 
 from pokepoke.utils.preflight_checks import (
-    HealthCheckError,
     ErrorSeverity,
-    check_git_status,
-    check_worktree_creation,
-    check_lock_availability,
+    HealthCheckError,
     check_disk_space,
+    check_git_status,
+    check_lock_availability,
     check_repository_integrity,
+    check_worktree_creation,
     is_lock_stale,
 )
 from pokepoke.utils.preflight_repair import (
     attempt_repair,
     repair_git_status,
-    repair_repository_integrity,
     repair_lock_availability,
+    repair_repository_integrity,
 )
 
 logger = logging.getLogger(__name__)
 
 # Re-export for backward compatibility
 __all__ = [
-    'HealthCheckResult', 'HealthCheckError', 'ErrorSeverity',
-    'PreflightChecker', 'run_preflight_checks', 'attempt_self_repair'
+    'ErrorSeverity',
+    'HealthCheckError',
+    'HealthCheckResult',
+    'PreflightChecker',
+    'attempt_self_repair',
+    'run_preflight_checks'
 ]
 
 # Re-export from preflight_checks for backward compatibility
@@ -131,7 +135,7 @@ class PreflightChecker:
                 logger.exception(f"Health check {check_name} raised exception: {e}")
                 result.errors.append(HealthCheckError(
                     check_name=check_name,
-                    message=f"Health check failed with exception: {str(e)}",
+                    message=f"Health check failed with exception: {e!s}",
                     severity=ErrorSeverity.ENVIRONMENTAL,
                     details={'exception': str(e)}
                 ))

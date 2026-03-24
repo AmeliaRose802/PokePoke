@@ -4,7 +4,6 @@ import os
 import threading
 from unittest.mock import patch
 
-
 from pokepoke.agents.agent_context import (
     clear_agent_name,
     get_agent_name,

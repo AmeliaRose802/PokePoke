@@ -1,20 +1,20 @@
 """Tests for Copilot model sync parsing and registry updates."""
 
-from datetime import UTC, datetime
 import json
 import subprocess
+from datetime import UTC, datetime
 from unittest.mock import patch
 
-from pokepoke.config import ProjectConfig, ModelSyncConfig
+from pokepoke.config import ModelSyncConfig, ProjectConfig
 from pokepoke.models.model_sync import (
-    parse_copilot_models_output,
-    normalize_model_entry,
-    is_beta_model,
-    update_registry,
-    sync_copilot_models,
-    load_registry,
-    save_registry,
     _run_copilot_models,
+    is_beta_model,
+    load_registry,
+    normalize_model_entry,
+    parse_copilot_models_output,
+    save_registry,
+    sync_copilot_models,
+    update_registry,
 )
 
 
@@ -122,7 +122,7 @@ def test_sync_creates_and_updates_beads(tmp_path):
         {"id": "PokePoke-123", "title": "Beta test Copilot model: claude-opus-4.6", "metadata": {"copilot_model": "claude-opus-4.6"}}
     ]
 
-    def fake_run_bd(args, check=True, timeout=30, cwd=None):  # noqa: ARG001 - signature matches _run_bd
+    def fake_run_bd(args, check=True, timeout=30, cwd=None):
         if args[0] == "list":
             return subprocess.CompletedProcess(args, 0, json.dumps(existing_items), "")
         return subprocess.CompletedProcess(args, 0, "{}", "")
@@ -151,7 +151,7 @@ def test_sync_prunes_unavailable(tmp_path):
         {"id": "PokePoke-999", "title": "Beta test Copilot model: gpt-5.2", "metadata": {"copilot_model": "gpt-5.2"}}
     ]
 
-    def fake_run_bd(args, check=True, timeout=30, cwd=None):  # noqa: ARG001 - signature matches _run_bd
+    def fake_run_bd(args, check=True, timeout=30, cwd=None):
         if args[0] == "list":
             return subprocess.CompletedProcess(args, 0, json.dumps(existing_items), "")
         return subprocess.CompletedProcess(args, 0, "{}", "")

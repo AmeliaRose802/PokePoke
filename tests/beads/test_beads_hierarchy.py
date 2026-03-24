@@ -13,6 +13,7 @@ import pytest
 
 from pokepoke.beads.beads_hierarchy import (
     HUMAN_REQUIRED_LABEL,
+    _get_available_children,
     all_children_complete,
     close_parent_if_complete,
     get_children,
@@ -22,7 +23,6 @@ from pokepoke.beads.beads_hierarchy import (
     is_assigned_to_current_user,
     is_high_conflict_risk,
     resolve_to_leaf_task,
-    _get_available_children,
 )
 from pokepoke.types import BeadsWorkItem, Dependency, IssueWithDependencies
 

@@ -4,6 +4,7 @@ Extracted from orchestrator.py to keep that module under the
 400-line limit enforced by the pre-commit hook.
 """
 import argparse
+import logging
 import os
 import sys
 from pathlib import Path
@@ -11,6 +12,7 @@ from pathlib import Path
 from pokepoke.desktop import terminal_ui
 from pokepoke.orchestration.orchestrator import run_orchestrator
 
+logger = logging.getLogger(__name__)
 
 def main() -> int:
     """Main entry point for PokePoke CLI."""
@@ -45,7 +47,7 @@ def main() -> int:
     if args.repo:
         repo_path = Path(args.repo).resolve()
         if not repo_path.is_dir():
-            print(f"\u274c  --repo path does not exist: {repo_path}", file=sys.stderr)
+            logger.info(f"\u274c  --repo path does not exist: {repo_path}")
             return 1
         os.chdir(repo_path)
     elif getattr(sys, 'frozen', False):
