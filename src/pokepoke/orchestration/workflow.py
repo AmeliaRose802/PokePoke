@@ -37,8 +37,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_MAX_GATE_CRASH_RETRIES = 3  # Retry gate agent up to 3 times on infra crashes
-_MAX_GATE_TIMEOUT_RETRIES = 3  # Retry gate agent up to 3 times on session timeouts
+_MAX_GATE_CRASH_RETRIES = 3  # Retry gate agent up to N times on infra crashes
+_MAX_GATE_TIMEOUT_RETRIES = 3  # Retry gate agent up to N times on session timeouts
+_LOCK_TIMEOUT_PER_AGENT = 120.0  # Seconds of lock timeout budget per parallel agent
 
 
 def process_work_item(  # noqa: C901
@@ -69,7 +70,7 @@ def process_work_item(  # noqa: C901
         _, selected_prompt_template = get_assignment_for_item(item)
         base_agent_id = agent_id or item.id
         backend_provider = config.ai_backend.provider
-        worktree_lock_timeout = max(float(config.command_timeout), 120.0 * max(1, int(config.max_parallel_agents)))
+        worktree_lock_timeout = max(float(config.command_timeout), _LOCK_TIMEOUT_PER_AGENT * max(1, int(config.max_parallel_agents)))
 
         # Set work-item and repo correlation IDs for structured logging
         set_current_work_item_id(item.id)
