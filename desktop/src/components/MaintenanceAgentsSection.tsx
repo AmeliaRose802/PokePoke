@@ -5,6 +5,7 @@
 import { useCallback, useState } from "react";
 
 import type { MaintenanceAgent } from "../types";
+import { DeferredNumberInput } from "./DeferredNumberInput";
 import { KNOWN_MAINTENANCE_AGENTS, KNOWN_MODELS } from "./settingsHelpers";
 
 interface Props {
