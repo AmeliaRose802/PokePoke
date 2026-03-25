@@ -175,14 +175,16 @@ def test_get_config_no_yaml(tmp_path, monkeypatch) -> None:
 
 
 def test_get_config_non_dict_yaml(tmp_path) -> None:
-    """When YAML content is not a dict, config should be empty dict."""
+    """Non-dict YAML is treated as empty config; canonical defaults are applied."""
     api = DesktopAPI()
     (tmp_path / ".pokepoke").mkdir()
     (tmp_path / ".pokepoke" / "config.yaml").write_text("- item\n", encoding="utf-8")
     with patch("pokepoke.config._find_repo_root", return_value=tmp_path):
         result = api.get_config()
     assert result["exists"] is True
-    assert result["config"] == {}
+    # Validated through the canonical path — defaults are filled in
+    assert result["config"]["project_name"] == ""
+    assert "models" in result["config"]
 
 
 def test_save_config_dict(tmp_path) -> None:

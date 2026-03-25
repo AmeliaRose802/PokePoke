@@ -101,8 +101,15 @@ def bd_init(self: DesktopAPI) -> dict[str, Any]:
 
 
 def create_default_config(self: DesktopAPI, config: Any) -> dict[str, Any]:
-    """Create `.pokepoke/config.yaml` with sensible defaults."""
-    from pokepoke.config import DEFAULT_MODEL, FALLBACK_MODEL, reset_config
+    """Create `.pokepoke/config.yaml` with sensible defaults.
+
+    The incoming wizard values are normalised into a config dict and
+    validated through the canonical ``ProjectConfig.from_dict()`` /
+    ``to_dict()`` round-trip so that schema, clamping, and migration
+    logic is applied exactly once, in the same code path used by the
+    CLI loader and the desktop save flow.
+    """
+    from pokepoke.config import DEFAULT_MODEL, FALLBACK_MODEL, ProjectConfig, reset_config
     from pokepoke.utils.project_utils import resolve_git_toplevel
 
     if not HAS_YAML:
@@ -136,12 +143,15 @@ def create_default_config(self: DesktopAPI, config: Any) -> dict[str, Any]:
         },
     }
 
+    validated = ProjectConfig.from_dict(config_dict)
+    canonical = validated.to_dict()
+
     project_root = resolve_git_toplevel(Path.cwd()) or Path.cwd()
     config_path = project_root / ".pokepoke" / "config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
     dumped = yaml.safe_dump(
-        config_dict,
+        canonical,
         sort_keys=False,
         allow_unicode=True,
         default_flow_style=False,
