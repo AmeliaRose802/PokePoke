@@ -327,5 +327,5 @@ def run_iteration_checks(iteration_seconds: float, success: bool) -> None:
         if mq.is_running:
             merge_depth = mq.pending_count
     except Exception:
-        pass
+        logger.debug("Failed to get merge queue depth", exc_info=True)
     mon.check_all(iteration_seconds=iteration_seconds, merge_queue_depth=merge_depth)

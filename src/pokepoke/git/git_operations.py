@@ -226,7 +226,7 @@ def get_default_branch(preferred: str | None = None, fallback: str | None = None
             )
             return preferred
         except subprocess.CalledProcessError:
-            pass
+            logger.debug("Preferred branch %s not found", preferred)
 
     try:
         result = run_git(
@@ -238,7 +238,7 @@ def get_default_branch(preferred: str | None = None, fallback: str | None = None
         if ref.startswith("origin/"):
             return ref.split("/", 1)[1]
     except subprocess.CalledProcessError:
-        pass
+        logger.debug("Failed to get symbolic-ref for origin/HEAD")
 
     try:
         result = run_git(
@@ -250,7 +250,7 @@ def get_default_branch(preferred: str | None = None, fallback: str | None = None
         if branch:
             return branch
     except subprocess.CalledProcessError:
-        pass
+        logger.debug("Failed to get current HEAD branch")
 
     return fallback
 
@@ -311,7 +311,7 @@ def execute_merge_sequence(
             )
             stashed = True
     except subprocess.CalledProcessError:
-        pass  # Stash failed, will try pull anyway
+        logger.debug("Git stash failed, will try pull anyway")
 
     try:
         run_git(["git", "pull", "--rebase", "origin", target_branch],
@@ -373,7 +373,7 @@ def has_commits_ahead(target_branch: str | None = None, cwd: str | None = None) 
         if result.returncode == 0:
             return int(result.stdout.strip())
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError):
-        pass
+        logger.debug("Failed to get commit count", exc_info=True)
     return 0
 
 from pokepoke.prompts.handoff_context import build_handoff_context  # Re-export for backward compat

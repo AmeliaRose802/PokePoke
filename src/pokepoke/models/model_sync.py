@@ -70,7 +70,7 @@ def load_registry(path: Path | None = None) -> dict[str, Any]:
         if isinstance(data, dict) and "models" in data:
             return data
     except json.JSONDecodeError:
-        pass
+        logger.debug("Failed to load model registry", exc_info=True)
     return {"last_sync": None, "models": {}}
 
 
@@ -217,7 +217,7 @@ def _should_skip_sync(sync_cfg: Any, registry: dict[str, Any], item_logger: Any 
                 _log(item_logger, f"ℹ️  Model sync last ran {elapsed_minutes:.1f}m ago; skipping.")
                 return True
         except ValueError:
-            pass
+            logger.debug("Failed to parse last_sync timestamp", exc_info=True)
     return False
 
 

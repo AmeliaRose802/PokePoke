@@ -88,6 +88,7 @@ def _extract_package_resources() -> Path | None:
             shutil.rmtree(temp_dir)
         except Exception:
             # Can't compare — re-extract to be safe
+            logger.debug("Cache freshness check failed, re-extracting", exc_info=True)
             shutil.rmtree(temp_dir, ignore_errors=True)
 
     temp_dir.mkdir(exist_ok=True)
@@ -159,7 +160,7 @@ def find_frontend_dist() -> Path | None:
                 if result:
                     return result
             except (ImportError, AttributeError):
-                pass
+                pass  # pkg_resources unavailable; fall through to dev-mode paths
     except Exception as e:
         logger.error(f"Warning: Failed to load embedded frontend assets: {e}")
 

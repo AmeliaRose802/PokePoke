@@ -13,7 +13,6 @@ from pokepoke.utils.hung_command_detector import HungCommandDetector
 
 logger = logging.getLogger(__name__)
 
-
 class RateLimitError(Exception):
     """Raised when the SDK session hits a rate limit."""
 
@@ -24,7 +23,6 @@ class RateLimitError(Exception):
 DEFAULT_MAX_READ_RETRIES = 3  # After 3 reads with no new output, consider hung
 
 _STREAMING_ATTRS = ("stdout", "stderr", "output", "chunk", "delta", "delta_content", "content", "message", "text")
-
 
 class SessionStats(TypedDict):
     pending_tool_calls: int
@@ -51,7 +49,6 @@ def _iter_streaming_chunks(event_obj: Any) -> list[tuple[str, str]]:
         if isinstance(val, str) and val:
             chunks.append((attr, val))
     return chunks
-
 
 class _EventHandler:
     """Handles SDK session events, updating shared stats and output."""
@@ -274,12 +271,8 @@ class _EventHandler:
         self._stats['last_tool_activity_time'] = time.monotonic()
         logger.info("Turn %d ended (pending=%d)", self._stats['turn_count'], self._stats['pending_tool_calls'])
 
-    def _on_compaction(self, _event: Any) -> None:
-        logger.warning("Session compaction (events=%d, in=%d tok)",
-                       self._stats['event_count'], self._stats['total_input_tokens'])
-
-    def _on_truncation(self, _event: Any) -> None:
-        logger.warning("Session truncation (events=%d, in=%d tok)",
+    def _on_context_reduction(self, _event: Any) -> None:
+        logger.warning("Session context reduction (events=%d, in=%d tok)",
                        self._stats['event_count'], self._stats['total_input_tokens'])
 
     def _on_model_change(self, event: Any) -> None:
@@ -321,9 +314,12 @@ class _EventHandler:
                     logger.info("[SDK] Session confirmed idle - processing complete")
                     self._done.set()
             except asyncio.CancelledError:
-                pass
+                pass  # task cancelled during idle check — expected on shutdown
 
         self._stats['idle_task'] = asyncio.create_task(check_still_idle())
+
+    def _on_noop(self, _event: Any) -> None:
+        """Silently ignore informational SDK events that need no processing."""
 
     def _on_session_end(self, _event: Any) -> None:
         logger.info("[SDK] Agent signaled session complete")
@@ -345,6 +341,7 @@ class _EventHandler:
 
     _DISPATCH: dict[str, Callable[['_EventHandler', Any], None]] = {
         "assistant.message_delta": _on_message_delta,
+        "assistant.streaming_delta": _on_message_delta,
         "assistant.message": _on_message,
         "assistant.turn_start": _on_turn_start,
         "assistant.turn_end": _on_turn_end,
@@ -354,10 +351,14 @@ class _EventHandler:
         "session.idle": _on_session_idle,
         "session.end": _on_session_end,
         "session.error": _on_session_error,
-        "session.compaction_start": _on_compaction,
-        "session.compaction_complete": _on_compaction,
-        "session.truncation": _on_truncation,
+        "session.compaction_start": _on_context_reduction,
+        "session.compaction_complete": _on_context_reduction,
+        "session.truncation": _on_context_reduction,
         "session.model_change": _on_model_change,
+        "session.usage_info": _on_usage,
+        "pending_messages.modified": _on_noop,
+        "unknown": _on_noop,
+        "user.message": _on_noop,
     }
 
 def create_event_handler(

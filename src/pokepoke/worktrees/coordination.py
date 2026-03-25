@@ -88,7 +88,7 @@ def _read_lock_metadata(lock_path: Path) -> dict[str, object] | None:
         if isinstance(data, dict) and "pid" in data:
             return data
     except (OSError, json.JSONDecodeError, ValueError):
-        pass
+        logger.debug("Failed to read lock file %s", lock_path, exc_info=True)
     return None
 
 
@@ -258,7 +258,7 @@ def _load_worktree_metrics() -> dict[str, float]:
             if isinstance(data, dict):
                 return data
     except (json.JSONDecodeError, OSError):
-        pass
+        logger.debug("Failed to load worktree metrics", exc_info=True)
     return dict(_DEFAULT_WORKTREE_METRICS)
 
 
