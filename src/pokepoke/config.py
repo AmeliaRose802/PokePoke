@@ -245,6 +245,7 @@ class ProjectConfig:
     tool_call_timeout: int = 900  # Max seconds for a single tool invocation before killing it
     process_output_timeout: int = 300  # Seconds with no output before treating process as unresponsive
     max_ping_failures: int = 3  # Consecutive ping failures before declaring process dead
+    circuit_breaker_drain_timeout: int = 900  # Max seconds to wait for agents after circuit breaker trips (0 = wait forever)
     assignment: AssignmentConfig = field(default_factory=AssignmentConfig)
     performance_thresholds: PerformanceThresholdsConfig = field(
         default_factory=PerformanceThresholdsConfig,
@@ -261,6 +262,7 @@ class ProjectConfig:
         self.tool_call_timeout = max(60, self.tool_call_timeout)
         self.process_output_timeout = max(30, self.process_output_timeout)
         self.max_ping_failures = max(1, self.max_ping_failures)
+        self.circuit_breaker_drain_timeout = max(0, self.circuit_breaker_drain_timeout)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a canonical dict suitable for YAML/JSON output."""
