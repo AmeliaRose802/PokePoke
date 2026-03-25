@@ -143,7 +143,10 @@ def set_native_window_icon(window: Any, icon_path: str | Path) -> None:
         # custom icon.  Form.Icon alone does not always refresh the taskbar
         # entry; WM_SETICON ensures both title-bar and taskbar are updated.
         try:
-            hwnd = int(form.Handle)
+            handle = form.Handle
+            # form.Handle is a .NET IntPtr which cannot be passed directly
+            # to Python's int(); use ToInt64() when available.
+            hwnd = handle.ToInt64() if hasattr(handle, "ToInt64") else int(handle)
             _apply_taskbar_icon(hwnd, icon_path)
         except Exception as e:
             logger.debug(f"Failed to apply taskbar icon: {e}")
