@@ -635,3 +635,47 @@ def test_tool_start_times_cleared_on_reset() -> None:
     new_done = asyncio.Event()
     handler.reset_for_retry(new_done, [], [])
     assert stats['tool_start_times'] == {}
+
+
+def test_streaming_delta_routes_to_message_delta_handler() -> None:
+    """assistant.streaming_delta should be processed like assistant.message_delta."""
+    done = asyncio.Event()
+    output_lines: list[str] = []
+    errors: list[str] = []
+
+    handler, _ = create_event_handler(done, output_lines, errors)
+
+    handler(_make_event("assistant.streaming_delta", delta_content="hello streaming"))
+    assert "hello streaming" in output_lines
+
+
+def test_session_usage_info_tracks_tokens() -> None:
+    """session.usage_info should update token stats like assistant.usage."""
+    done = asyncio.Event()
+    output_lines: list[str] = []
+    errors: list[str] = []
+
+    handler, stats = create_event_handler(done, output_lines, errors)
+
+    handler(_make_event("session.usage_info", input_tokens=100, output_tokens=50,
+                        cache_read_tokens=10, cache_write_tokens=5))
+    assert stats['total_input_tokens'] == 100
+    assert stats['total_output_tokens'] == 50
+
+
+def test_noop_events_do_not_produce_output() -> None:
+    """Events like pending_messages.modified, unknown, user.message should be silent."""
+    done = asyncio.Event()
+    output_lines: list[str] = []
+    errors: list[str] = []
+
+    handler, stats = create_event_handler(done, output_lines, errors)
+    initial_event_count = stats['event_count']
+
+    for event_type in ("pending_messages.modified", "unknown", "user.message"):
+        handler(_make_event(event_type))
+
+    # Events are counted but produce no output or errors
+    assert stats['event_count'] == initial_event_count + 3
+    assert output_lines == []
+    assert errors == []
