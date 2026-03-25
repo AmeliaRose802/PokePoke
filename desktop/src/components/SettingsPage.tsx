@@ -75,8 +75,8 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
     [markDirty],
   );
 
-  const handleSave = useCallback(async () => {
-    if (!config) return;
+  const handleSave = useCallback(async (): Promise<boolean> => {
+    if (!config) return false;
     setSaving(true);
     const updated: ProjectConfig = {
       ...config,
@@ -108,6 +108,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
     } else {
       setMessage("Save failed");
     }
+    return ok;
   }, [
     config,
     defaultModel,
@@ -217,6 +218,21 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
       markDirty();
     },
     [markDirty],
+  );
+
+  const handlePromptFileClick = useCallback(
+    async (promptName: string) => {
+      if (!onOpenPromptEditor) return;
+      if (dirty) {
+        const ok = await handleSave();
+        if (!ok) {
+          const shouldDiscard = window.confirm("Save failed. Discard changes and open prompt editor?");
+          if (!shouldDiscard) return;
+        }
+      }
+      onOpenPromptEditor(promptName);
+    },
+    [dirty, handleSave, onOpenPromptEditor],
   );
 
   // Filter suggestions: known models not already in the candidate list
@@ -454,7 +470,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
               onUpdate={updateMaintenanceAgent}
               onRemove={removeMaintenanceAgent}
               onAdd={addMaintenanceAgent}
-              onOpenPromptEditor={onOpenPromptEditor}
+              onOpenPromptEditor={handlePromptFileClick}
             />
 
             <SpecialEffectTagsSection />
