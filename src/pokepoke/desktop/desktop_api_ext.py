@@ -107,6 +107,11 @@ def save_config(self: DesktopAPI, config: Any) -> dict[str, Any]:
 
     reset_config()
 
+    # Auto-create prompt files for custom maintenance agents
+    from pokepoke.desktop.desktop_api_prompts import ensure_custom_agent_prompts
+
+    ensure_custom_agent_prompts(canonical)
+
     return {"path": str(config_path), "saved": True}
 
 

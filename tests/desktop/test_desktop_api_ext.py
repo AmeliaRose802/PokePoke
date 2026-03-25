@@ -224,6 +224,156 @@ def test_save_config_no_yaml(monkeypatch) -> None:
         api.save_config({"key": "val"})
 
 
+def test_save_config_creates_custom_agent_prompt_file(tmp_path) -> None:
+    """Test that save_config auto-creates prompt files for custom maintenance agents."""
+    api = DesktopAPI()
+    prompts_dir = tmp_path / ".pokepoke" / "prompts"
+    prompts_dir.mkdir(parents=True)
+
+    config_with_custom_agent = {
+        "project_name": "TestProj",
+        "maintenance": {
+            "agents": [
+                {
+                    "name": "My Custom Agent",
+                    "prompt_file": "my-custom-agent.md",
+                    "frequency": 5,
+                    "custom": True,
+                    "description": "Does custom things",
+                    "enabled": True,
+                }
+            ]
+        }
+    }
+
+    with patch("pokepoke.config._find_repo_root", return_value=tmp_path):
+        result = api.save_config(config_with_custom_agent)
+
+    assert result["saved"] is True
+
+    # Check that the prompt file was created
+    prompt_file = prompts_dir / "my-custom-agent.md"
+    assert prompt_file.exists()
+    content = prompt_file.read_text(encoding="utf-8")
+    assert "# My Custom Agent" in content
+    assert "Does custom things" in content
+    assert "{{item_id}}" in content
+
+
+def test_save_config_does_not_overwrite_existing_prompt(tmp_path) -> None:
+    """Test that save_config doesn't overwrite existing custom agent prompts."""
+    api = DesktopAPI()
+    prompts_dir = tmp_path / ".pokepoke" / "prompts"
+    prompts_dir.mkdir(parents=True)
+
+    # Pre-create a prompt file with custom content
+    prompt_file = prompts_dir / "existing-agent.md"
+    original_content = "# Original Content\nDo not modify this!"
+    prompt_file.write_text(original_content, encoding="utf-8")
+
+    config_with_existing_agent = {
+        "project_name": "TestProj",
+        "maintenance": {
+            "agents": [
+                {
+                    "name": "Existing Agent",
+                    "prompt_file": "existing-agent.md",
+                    "frequency": 3,
+                    "custom": True,
+                    "enabled": True,
+                }
+            ]
+        }
+    }
+
+    with patch("pokepoke.config._find_repo_root", return_value=tmp_path):
+        result = api.save_config(config_with_existing_agent)
+
+    assert result["saved"] is True
+
+    # Verify the original content wasn't modified
+    assert prompt_file.read_text(encoding="utf-8") == original_content
+
+
+def test_save_config_skips_non_custom_agents(tmp_path) -> None:
+    """Test that save_config only creates prompts for custom agents, not built-in ones."""
+    api = DesktopAPI()
+    prompts_dir = tmp_path / ".pokepoke" / "prompts"
+    prompts_dir.mkdir(parents=True)
+
+    config_with_builtin_agent = {
+        "project_name": "TestProj",
+        "maintenance": {
+            "agents": [
+                {
+                    "name": "Tech Debt",
+                    "prompt_file": "tech-debt.md",
+                    "frequency": 5,
+                    "custom": False,  # Not a custom agent
+                    "enabled": True,
+                }
+            ]
+        }
+    }
+
+    with patch("pokepoke.config._find_repo_root", return_value=tmp_path):
+        result = api.save_config(config_with_builtin_agent)
+
+    assert result["saved"] is True
+
+    # Verify no prompt file was created in user directory (builtin uses its own dir)
+    prompt_file = prompts_dir / "tech-debt.md"
+    assert not prompt_file.exists()
+
+
+def test_save_config_handles_prompt_file_without_extension(tmp_path) -> None:
+    """Test that save_config handles prompt files specified without .md extension."""
+    api = DesktopAPI()
+    prompts_dir = tmp_path / ".pokepoke" / "prompts"
+    prompts_dir.mkdir(parents=True)
+
+    config = {
+        "project_name": "TestProj",
+        "maintenance": {
+            "agents": [
+                {
+                    "name": "No Extension Agent",
+                    "prompt_file": "no-extension",  # No .md
+                    "frequency": 5,
+                    "custom": True,
+                    "enabled": True,
+                }
+            ]
+        }
+    }
+
+    with patch("pokepoke.config._find_repo_root", return_value=tmp_path):
+        result = api.save_config(config)
+
+    assert result["saved"] is True
+
+    # Check that the prompt file was created with .md extension
+    prompt_file = prompts_dir / "no-extension.md"
+    assert prompt_file.exists()
+
+
+def test_save_config_handles_empty_maintenance_agents(tmp_path) -> None:
+    """Test that save_config works when there are no maintenance agents."""
+    api = DesktopAPI()
+
+    config = {
+        "project_name": "TestProj",
+        "maintenance": {
+            "agents": []
+        }
+    }
+
+    with patch("pokepoke.config._find_repo_root", return_value=tmp_path):
+        result = api.save_config(config)
+
+    assert result["saved"] is True
+
+
 # ── Prompt delegation ────────────────────────────────────────────────────
 
 
