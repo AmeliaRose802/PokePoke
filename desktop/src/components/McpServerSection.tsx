@@ -1,8 +1,8 @@
 /**
  * MCP Server configuration section for the Settings page.
  *
- * Renders a toggle for mcp.enabled, and conditionally shows
- * text inputs for mcp.server_name and mcp.restart_script.
+ * Renders a toggle for MCP enabled, and conditionally shows
+ * text inputs for server name and restart script.
  */
 
 import type { McpServerConfig } from "../types";
@@ -17,57 +17,50 @@ export function McpServerSection({ mcpConfig, onChange }: Props) {
 
   return (
     <div className="settings-section">
-      <h3 className="settings-section-title">🔌 MCP Server</h3>
+      <h3 className="settings-section-title">🖧 MCP Server</h3>
 
-      {/* MCP Enabled Toggle */}
       <div className="settings-field">
-        <div className="mcp-toggle-row">
-          <label className="settings-label" htmlFor="mcp-enabled">
-            Enable MCP Server
-          </label>
-          <label className="agent-toggle">
-            <input
-              id="mcp-enabled"
-              type="checkbox"
-              checked={enabled}
-              onChange={(e) => onChange({ enabled: e.target.checked })}
-            />
-            <span className="toggle-slider"></span>
-          </label>
+        <label className="settings-label" htmlFor="mcp-enabled">
+          Enable MCP server
+        </label>
+        <div className="settings-checkbox-row">
+          <input
+            id="mcp-enabled"
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => onChange({ enabled: e.target.checked })}
+          />
+          <span className="settings-hint">Controls MCP server integration and restart script usage.</span>
         </div>
-        <span className="settings-hint">Restart an MCP server between agent runs</span>
       </div>
 
       {enabled && (
         <>
-          {/* Server Name */}
           <div className="settings-field">
-            <label className="settings-label" htmlFor="mcp-server-name">
-              Server Name
+            <label className="settings-label" htmlFor="mcp-name">
+              MCP server name (optional)
             </label>
             <input
-              id="mcp-server-name"
+              id="mcp-name"
               className="settings-input"
               value={name}
               onChange={(e) => onChange({ name: e.target.value })}
               placeholder="e.g. My MCP Server"
             />
-            <span className="settings-hint">Display name for the MCP server</span>
+            <span className="settings-hint">Friendly display name for the MCP server.</span>
           </div>
-
-          {/* Restart Script */}
           <div className="settings-field">
             <label className="settings-label" htmlFor="mcp-restart-script">
-              Restart Script
+              Restart script (optional)
             </label>
             <input
               id="mcp-restart-script"
-              className="settings-input file-path-input"
+              className="settings-input"
               value={restart_script}
               onChange={(e) => onChange({ restart_script: e.target.value })}
-              placeholder="e.g. scripts/Restart-MCPServer.ps1"
+              placeholder="scripts/Restart-MCPServer.ps1"
             />
-            <span className="settings-hint">Path to the script that restarts the MCP server</span>
+            <span className="settings-hint">Path to restart the MCP server after configuration changes.</span>
           </div>
         </>
       )}
