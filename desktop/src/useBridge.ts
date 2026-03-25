@@ -5,6 +5,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import {
+  AgentInfoSchema,
+  AppStateSchema,
+  ConfigResponseSchema,
+  LogEntrySchema,
+  ModelHistoryEntrySchema,
+  PromptDetailSchema,
+  PromptInfoSchema,
+  safeValidatePayload,
+  validatePayload,
+} from "./schemas";
 import type {
   AgentInfo,
   ConfigResponse,
@@ -209,12 +220,13 @@ export function useBridge(): BridgeState {
 
   const listPrompts = useCallback(async (): Promise<PromptInfo[]> => {
     if (!window.pywebview?.api) return [];
-    return window.pywebview.api.list_prompts();
+    const raw = await window.pywebview.api.list_prompts();
+    return raw.map((p, idx) => validatePayload(PromptInfoSchema, p, `listPrompts[${idx}]`));
   }, []);
 
   const getPrompt = useCallback(async (name: string): Promise<PromptDetail | null> => {
     if (!window.pywebview?.api) return null;
-    return window.pywebview.api.get_prompt(name);
+    return validatePayload(PromptDetailSchema, await window.pywebview.api.get_prompt(name), `getPrompt(${name})`);
   }, []);
 
   const savePrompt = useCallback(async (name: string, content: string): Promise<boolean> => {
@@ -231,7 +243,7 @@ export function useBridge(): BridgeState {
 
   const getConfig = useCallback(async (): Promise<ConfigResponse | null> => {
     if (!window.pywebview?.api) return null;
-    return window.pywebview.api.get_config();
+    return validatePayload(ConfigResponseSchema, await window.pywebview.api.get_config(), "getConfig");
   }, []);
 
   const saveConfig = useCallback(async (config: ProjectConfig): Promise<boolean> => {
@@ -243,7 +255,8 @@ export function useBridge(): BridgeState {
   const getModelHistory = useCallback(async (limit = 200): Promise<ModelHistoryEntry[]> => {
     if (!window.pywebview?.api) return [];
     try {
-      return await window.pywebview.api.get_model_history(limit);
+      const raw = await window.pywebview.api.get_model_history(limit);
+      return raw.map((e, i) => validatePayload(ModelHistoryEntrySchema, e, `getModelHistory[${i}]`));
     } catch {
       return [];
     }
@@ -294,7 +307,8 @@ export function useBridge(): BridgeState {
   const getAgentDetail = useCallback(async (agentId: string): Promise<AgentInfo | null> => {
     if (!window.pywebview?.api) return null;
     try {
-      return await window.pywebview.api.get_agent_detail(agentId);
+      const raw = await window.pywebview.api.get_agent_detail(agentId);
+      return raw === null ? null : validatePayload(AgentInfoSchema, raw, `getAgentDetail(${agentId})`);
     } catch {
       return null;
     }
@@ -362,10 +376,8 @@ export function useBridge(): BridgeState {
     }
 
     async function loadInitialState(api: PyWebViewAPI): Promise<void> {
-      // Use retry with backoff for the initial state load
-      const state = await retryWithBackoff(async () => {
-        return await api.get_state();
-      });
+      const rawState = await retryWithBackoff(async () => await api.get_state());
+      const state = validatePayload(AppStateSchema, rawState, "loadInitialState");
 
       if (state.work_item) setWorkItem(state.work_item);
       if (state.agent_name) setAgentName(state.agent_name);
@@ -379,11 +391,8 @@ export function useBridge(): BridgeState {
       setCurrentSessionId(state.current_session_id ?? null);
       setLogsDir(state.logs_dir ?? null);
 
-      // Load initial logs with retry
-      const allLogs = await retryWithBackoff(async () => {
-        return await api.get_all_logs();
-      });
-      appendLogs(allLogs);
+      const rawLogs = await retryWithBackoff(async () => await api.get_all_logs());
+      appendLogs(rawLogs.map((log, i) => validatePayload(LogEntrySchema, log, `initialLogs[${i}]`)));
     }
 
     async function start() {
@@ -401,13 +410,27 @@ export function useBridge(): BridgeState {
         // Don't return here - still start the polling timer for potential recovery
       }
 
-      // Poll for incremental updates - now with resilience to transient failures
+      // Poll for incremental updates with resilience to transient failures
       timer = setInterval(async () => {
         if (stopped) return;
         try {
-          // Single IPC call returns state + new logs (halves round-trips)
-          const state = await api.get_state();
-          appendLogs(state.new_logs ?? []);
+          const rawState = await api.get_state();
+          const state = safeValidatePayload(AppStateSchema, rawState, "pollState");
+          
+          if (!state) {
+            consecutiveFailures++;
+            if (consecutiveFailures >= POLL_RESILIENCE_CONFIG.MAX_CONSECUTIVE_FAILURES) {
+              setConnectionStatus("disconnected");
+            }
+            return;
+          }
+
+          // Validate new logs, fallback to raw if validation fails (better than losing logs)
+          const validatedLogs = (state.new_logs ?? []).map((log, i) => 
+            safeValidatePayload(LogEntrySchema, log, `newLogs[${i}]`) ?? log
+          );
+          appendLogs(validatedLogs);
+          
           setIfChanged(setWorkItem)(state.work_item);
           setIfChanged(setAgentName)(state.agent_name);
           setIfChanged(setRepositoryName)(state.repository_name);
@@ -420,18 +443,13 @@ export function useBridge(): BridgeState {
           setCurrentSessionId(state.current_session_id ?? null);
           setIfChanged(setLogsDir)(state.logs_dir ?? null);
 
-          // Reset consecutive failures on success
           consecutiveFailures = 0;
           setConnectionStatus("connected");
         } catch {
           consecutiveFailures++;
-
-          // Only set disconnected after multiple consecutive failures
           if (consecutiveFailures >= POLL_RESILIENCE_CONFIG.MAX_CONSECUTIVE_FAILURES) {
             setConnectionStatus("disconnected");
           }
-          // If we haven't hit the threshold yet, maintain current connection status
-          // This prevents flapping between connected/disconnected on transient issues
         }
       }, POLL_INTERVAL_MS);
     }
