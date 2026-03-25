@@ -250,6 +250,33 @@ PokePoke tracks per-model performance and uses the data to inform model selectio
 
 **Limitation:** Weighted selection requires enough history to be meaningful. Early runs are effectively random draws from the candidate pool.
 
+### Desktop Bridge Contract Validation
+
+The desktop frontend (TypeScript + React + pywebview) communicates with the Python orchestrator through an in-process bridge. To prevent silent UI failures from payload shape drift, all bridge payloads are runtime-validated with Zod schemas.
+
+**Architecture:**
+
+```
+Python DesktopAPI     pywebview bridge      TypeScript useBridge
+dict[str, Any]   →    JSON IPC         →    Zod validation
+                                                    ↓
+                                            Typed React state
+```
+
+**Key benefits:**
+
+- **Fail-fast with actionable errors** — Contract violations surface immediately at the boundary with clear messages like `"stats.elapsed_time: expected number, received string"` instead of crashing deep in rendering code.
+- **AI-safe contracts** — Changes to either Python or TypeScript side that break the contract are caught at build time (TypeScript) or runtime (Zod validation).
+- **Graceful degradation** — Non-critical paths use safe validation that logs warnings rather than crashing the UI.
+
+**Implementation:**
+
+- `desktop/src/schemas.ts` — Zod schema definitions for all bridge payloads
+- `desktop/src/useBridge.ts` — Validation integrated at all API call sites
+- `desktop/src/schemas.test.ts` — 32 tests covering valid/invalid payloads
+
+See [docs/bridge_contract_validation.md](docs/bridge_contract_validation.md) for detailed usage and maintenance guide.
+
 ### Memory Model: Beads as Shared Store
 
 Agents share no Python-level state. All coordination runs through two channels:
