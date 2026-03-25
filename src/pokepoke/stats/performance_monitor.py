@@ -5,8 +5,6 @@ when metrics exceed safe operating bounds.  Tracks alerts over time
 so the orchestrator can surface persistent degradation.
 """
 
-from __future__ import annotations
-
 import logging
 import threading
 import time

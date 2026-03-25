@@ -4,8 +4,6 @@ Individual check functions used by PreflightChecker to validate
 environment readiness before work batch processing.
 """
 
-from __future__ import annotations
-
 import logging
 import shutil
 import subprocess

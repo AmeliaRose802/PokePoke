@@ -4,8 +4,6 @@ Provides OS-kernel-enforced file locks stored in .pokepoke/locks/.
 Locks auto-release on process crash since they are backed by filelock.FileLock.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import os

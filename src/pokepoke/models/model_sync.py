@@ -1,7 +1,5 @@
 """Copilot model discovery sync and beads integration."""
 
-from __future__ import annotations
-
 import json
 import logging
 import subprocess

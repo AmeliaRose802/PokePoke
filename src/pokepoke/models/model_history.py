@@ -5,8 +5,6 @@ JSON object per completed work item/model pair. This is used for detailed
 model performance analysis and routing.
 """
 
-from __future__ import annotations
-
 import json
 import threading
 from datetime import UTC, datetime

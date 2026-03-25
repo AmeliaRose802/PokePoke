@@ -5,8 +5,6 @@ cleanup-capable agent attempts to fix uncommitted changes at a time, while
 other schedulers can wait until the repository is ready.
 """
 
-from __future__ import annotations
-
 import logging
 import time
 from collections.abc import Callable, Generator, Iterable

@@ -8,8 +8,6 @@ This module provides a small, thread-safe bridge so those components can
 update the live stats object (which is already internally locked).
 """
 
-from __future__ import annotations
-
 import threading
 
 from pokepoke.types import SessionStats

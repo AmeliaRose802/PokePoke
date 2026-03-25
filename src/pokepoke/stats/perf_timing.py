@@ -21,8 +21,6 @@ logger = logging.getLogger(__name__)
     logger.info(registry.percentile("worktree.create", 95))
 """
 
-from __future__ import annotations
-
 import functools
 import threading
 import time

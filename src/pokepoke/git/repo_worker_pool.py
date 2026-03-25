@@ -6,8 +6,6 @@ ready queue the pool dynamically reallocates idle slots to repos that still
 have work.
 """
 
-from __future__ import annotations
-
 import logging
 import threading
 from dataclasses import dataclass

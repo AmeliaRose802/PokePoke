@@ -5,8 +5,6 @@ including wait durations, timeout counts, stale-lock clearances, and a
 histogram of acquisition times.
 """
 
-from __future__ import annotations
-
 import json
 import threading
 from typing import Any

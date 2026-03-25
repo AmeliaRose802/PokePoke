@@ -1,7 +1,5 @@
 """Thread-local context for attributing metrics to an agent type, repo, and work item."""
 
-from __future__ import annotations
-
 import threading
 import time
 from collections.abc import Iterator

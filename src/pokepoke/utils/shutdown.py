@@ -20,8 +20,6 @@ Signal safety:
   and ``except KeyboardInterrupt`` blocks.
 """
 
-from __future__ import annotations
-
 import _thread
 import concurrent.futures
 import logging

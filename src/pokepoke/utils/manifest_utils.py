@@ -6,8 +6,6 @@ eliminates the copy-paste duplication by providing a single implementation
 with consistent error handling and atomic writes.
 """
 
-from __future__ import annotations
-
 import contextlib
 import json
 import logging

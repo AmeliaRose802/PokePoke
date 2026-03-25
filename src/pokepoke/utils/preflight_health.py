@@ -10,8 +10,6 @@ caused silent failures with 0 agent requests by implementing proactive health ga
 Check implementations live in preflight_checks.py and repair logic in preflight_repair.py.
 """
 
-from __future__ import annotations
-
 import logging
 import time
 from dataclasses import dataclass, field

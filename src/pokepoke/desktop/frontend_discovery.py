@@ -7,8 +7,6 @@ This module handles finding React frontend assets in different deployment scenar
 - Bundled mode: Uses assets extracted from PyInstaller bundle
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import shutil

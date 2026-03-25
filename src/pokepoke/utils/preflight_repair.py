@@ -5,8 +5,6 @@ during pre-flight health checks, such as dirty git state, orphaned
 worktrees, and stale lock files.
 """
 
-from __future__ import annotations
-
 import logging
 import shutil
 import subprocess

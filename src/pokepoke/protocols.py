@@ -6,8 +6,6 @@ functions.  Default implementations delegate to the existing module-level
 helpers.
 """
 
-from __future__ import annotations
-
 import subprocess
 from typing import Protocol
 

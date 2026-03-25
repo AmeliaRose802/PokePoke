@@ -19,8 +19,6 @@ This module provides two workarounds:
    correct icon.
 """
 
-from __future__ import annotations
-
 import logging
 import sys
 from pathlib import Path

@@ -1,7 +1,5 @@
 """Pluggable AI backend registry and adapters."""
 
-from __future__ import annotations
-
 import logging
 import os
 import shutil
