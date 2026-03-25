@@ -6,6 +6,7 @@
 
 import { useCallback } from "react";
 
+import { SetupStatusSchema, validatePayload } from "./schemas";
 import type { SetupConfigPayload, SetupStatus } from "./types";
 
 export interface SetupBridgeMethods {
@@ -30,7 +31,8 @@ export function useSetupBridge(): SetupBridgeMethods {
     if (!window.pywebview?.api) {
       throw new Error("pywebview API not available");
     }
-    return window.pywebview.api.check_setup_status();
+    const raw = await window.pywebview.api.check_setup_status();
+    return validatePayload(SetupStatusSchema, raw, "checkSetupStatus");
   }, []);
 
   const gitInit = useCallback(async (defaultBranch?: string) => {
