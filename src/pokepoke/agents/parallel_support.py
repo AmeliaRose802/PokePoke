@@ -65,7 +65,6 @@ def finalize_workers(
         cancelled = sum(1 for fut in list(futures.keys()) if fut.cancel())
         run_logger.log_orchestrator(f"Cancelled {cancelled} workers; timeout waiting", level="WARNING")
         timeout_occurred = True
-        # Drain orphaned futures so record_fn is called and stats are accurate
         _drain_orphaned_futures(futures, session_stats, start_time, run_logger, record_fn)
     run_logger.log_orchestrator("Workers completed")
     kill_orphaned_copilot_processes(expected_count=0)
@@ -112,15 +111,38 @@ def drain_circuit_breaker(
     mode_name: str,
 ) -> int:
     """Drain remaining futures after circuit breaker trips. Returns updated total_requests."""
+    from pokepoke.config import get_config
     total_requests, _any, _succ, _fail = collect_fn(
         futures, failed_claim_ids, total_requests, session_stats, run_logger, record_fn)
+    if not futures:
+        return total_requests
+    drain_timeout = get_config().circuit_breaker_drain_timeout
     run_logger.log_orchestrator(f"Circuit breaker: draining {len(futures)} remaining agent(s)")
+    if drain_timeout > 0:
+        run_logger.log_orchestrator(f"Circuit breaker: drain timeout set to {drain_timeout}s")
     terminal_ui.ui.update_header(
         "PokePoke", f"{mode_name} Mode", f"Draining {len(futures)} agents (circuit breaker)")
-    for _ in range(10):
-        if is_shutting_down() or not futures:
+    start_time = time.time()
+    while futures:
+        if is_shutting_down():
+            run_logger.log_orchestrator("Circuit breaker: shutdown signal received during drain")
             break
-        time.sleep(0.5)
+        if drain_timeout > 0 and (time.time() - start_time) >= drain_timeout:
+            run_logger.log_orchestrator(
+                f"Circuit breaker: drain timeout ({drain_timeout}s) exceeded with "
+                f"{len(futures)} agent(s) still running — forcibly terminating",
+                level="WARNING")
+            _drain_orphaned_futures(futures, session_stats, start_time, run_logger, record_fn)
+            break
+        total_requests, _any, _succ, _fail = collect_fn(
+            futures, failed_claim_ids, total_requests, session_stats, run_logger, record_fn)
+        if not futures:
+            run_logger.log_orchestrator("Circuit breaker: all remaining agents finished")
+            break
+        sleep_remaining = 7.0
+        while sleep_remaining > 0 and futures and not is_shutting_down():
+            time.sleep(min(0.5, sleep_remaining))
+            sleep_remaining -= 0.5
     return total_requests
 
 def _should_skip_item(
@@ -156,10 +178,8 @@ def dispatch_items(
     process_item_fn: Any,
 ) -> int:
     """Select, claim, and submit work items. Returns updated worker_counter."""
-    # Late import from pokepoke.agents.parallel so test monkey-patches work correctly
     from pokepoke.agents.agent_context import get_agent_name
     from pokepoke.agents.parallel import assign_and_sync_item, select_multiple_items, should_stop_after_current
-
     if (
         slots <= 0
         or should_stop_after_current()
@@ -167,8 +187,6 @@ def dispatch_items(
         or consecutive_failures >= max_consecutive_failures
     ):
         return worker_counter
-
-    # High-conflict items must run solo — don't dispatch anything while one is active
     if any(is_high_conflict_risk(item) for item in futures.values()):
         run_logger.log_orchestrator("High-conflict item active — deferring new dispatches")
         return worker_counter
@@ -238,7 +256,6 @@ def dispatch_items(
 
     return worker_counter
 
-
 def run_preflight_and_repo_checks(
     main_repo_path: Any,
     run_logger: RunLogger,
@@ -252,7 +269,6 @@ def run_preflight_and_repo_checks(
         from pokepoke.git.repo_check import check_and_commit_main_repo as check_and_commit_main_repo_fn
     if get_ready_work_items_fn is None:
         from pokepoke.beads.beads import get_ready_work_items as get_ready_work_items_fn
-
     run_logger.log_polling("Running pre-flight health checks")
     should_continue, is_critical = handle_preflight_checks(main_repo_path, run_logger)
     if not should_continue:
@@ -265,34 +281,27 @@ def run_preflight_and_repo_checks(
                 )
         return False, consecutive_preflight_failures, []
     consecutive_preflight_failures = 0
-
     run_logger.log_polling("Checking main repository status")
     if not check_and_commit_main_repo_fn(main_repo_path, run_logger):
         run_logger.log_orchestrator("Main repo check failed", level="ERROR")
         return False, consecutive_preflight_failures, []
-
     run_logger.log_polling("Fetching ready work from beads")
     try:
         ready_items = get_ready_work_items_fn()
     except Exception as e:
         run_logger.log_orchestrator(f"Failed to fetch ready items: {e}", level="ERROR")
         ready_items = []
-
-    # Pick up in_progress items orphaned from a previous crashed run.
     try:
         from pokepoke.beads.beads_query import get_in_progress_items
         in_progress = get_in_progress_items()
         if in_progress:
             ready_ids = {item.id for item in ready_items}
-            resumed = [item for item in in_progress if item.id not in ready_ids]
+            resumed = [it for it in in_progress if it.id not in ready_ids]
             if resumed:
-                run_logger.log_polling(
-                    f"Resuming {len(resumed)} in-progress item(s) from previous run"
-                )
+                run_logger.log_polling(f"Resuming {len(resumed)} in-progress item(s)")
                 ready_items = resumed + ready_items
     except Exception as e:
         run_logger.log_orchestrator(f"Failed to fetch in-progress items: {e}", level="WARNING")
-
     return True, consecutive_preflight_failures, ready_items
 
 
@@ -312,11 +321,9 @@ def check_loop_exit(
     get_ready_work_items_fn: Any = None,
 ) -> str | None:
     """Decide whether the main loop should exit, continue idling, or keep running."""
-    # Late import from pokepoke.agents.parallel so test monkey-patches work correctly
     from pokepoke.agents.parallel import cancel_stop_after_current, should_stop_after_current
     if get_ready_work_items_fn is None:
         from pokepoke.agents.parallel import get_ready_work_items as get_ready_work_items_fn
-
     if should_stop_after_current() and not futures:
         cancel_stop_after_current()
         terminal_ui.ui.stop_and_capture()
@@ -350,7 +357,6 @@ def check_loop_exit(
         finalize_fn(session_stats, start_time, items_completed, total_requests, run_logger)
         return "break-empty"
 
-    # Work is available — if we were idle, log the transition
     run_logger.exit_idle()
     return None
 
@@ -367,14 +373,13 @@ def update_circuit_breaker(
     elif batch_successes > 0:
         consecutive_failures = 0
 
-    tripped = False
-    if consecutive_failures >= max_consecutive_failures:
+    tripped = consecutive_failures >= max_consecutive_failures
+    if tripped:
         run_logger.log_orchestrator(
             f"Circuit breaker: {consecutive_failures} consecutive failures — "
             f"stopping dispatch, draining {len(futures)} remaining agent(s)",
             level="ERROR",
         )
-        tripped = True
     return consecutive_failures, tripped
 
 def compute_slots(
@@ -383,11 +388,9 @@ def compute_slots(
 ) -> tuple[set[str], int, int]:
     """Compute available dispatch slots with memory backpressure."""
     from pokepoke.agents.parallel import get_effective_max_agents
-
     current_active = {i.id for i in futures.values()}
     current_max = get_effective_max_agents()
     slots = current_max - len(futures)
-
     slots, avail_mb = apply_memory_backpressure(slots)
     if avail_mb > 0 and slots == 0 and current_max - len(futures) > 0:
         run_logger.log_orchestrator(f"Memory low ({avail_mb}MB) — blocking agents", level="WARNING")

@@ -576,6 +576,107 @@ class TestDrainCircuitBreaker:
         )
         assert result == 5
 
+    @patch("pokepoke.agents.parallel_support._drain_orphaned_futures")
+    @patch("pokepoke.agents.parallel_support.time.sleep")
+    @patch("pokepoke.agents.parallel_support.time.time")
+    @patch("pokepoke.agents.parallel_support.is_shutting_down", return_value=False)
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
+    @patch("pokepoke.config.get_config")
+    def test_timeout_triggers_orphan_drain(self, mock_config, mock_tui, mock_shutdown,
+                                           mock_time, mock_sleep, mock_drain):
+        """When drain timeout expires, _drain_orphaned_futures is called."""
+        cfg = MagicMock()
+        cfg.circuit_breaker_drain_timeout = 60
+        mock_config.return_value = cfg
+        # First call: initial collect_fn (futures remain), then time checks
+        # time() returns: start_time=0, then elapsed=61 (exceeds 60s timeout)
+        mock_time.side_effect = [0.0, 61.0]
+        item = _make_item("timeout1")
+        fut = concurrent.futures.Future()
+        futures = {fut: item}
+        collect_fn = Mock(return_value=(7, False, 0, 0))
+        run_logger = MagicMock()
+        record_fn = Mock()
+        result = drain_circuit_breaker(
+            futures, set(), 7, SessionStats(agent_stats=AgentStats()),
+            run_logger, record_fn, collect_fn, "Auto",
+        )
+        assert result == 7
+        mock_drain.assert_called_once()
+        # Verify timeout warning was logged
+        log_calls = [str(c) for c in run_logger.log_orchestrator.call_args_list]
+        assert any("drain timeout" in c and "WARNING" in c for c in log_calls)
+
+    @patch("pokepoke.agents.parallel_support.time.sleep")
+    @patch("pokepoke.agents.parallel_support.time.time")
+    @patch("pokepoke.agents.parallel_support.is_shutting_down", return_value=False)
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
+    @patch("pokepoke.config.get_config")
+    def test_all_futures_complete_exits_normally(self, mock_config, mock_tui,
+                                                  mock_shutdown, mock_time, mock_sleep):
+        """When collect_fn clears all futures, drain exits without timeout."""
+        cfg = MagicMock()
+        cfg.circuit_breaker_drain_timeout = 900
+        mock_config.return_value = cfg
+        mock_time.return_value = 0.0
+        item = _make_item("done1")
+        fut = concurrent.futures.Future()
+        futures = {fut: item}
+        call_count = [0]
+
+        def collect_clears_on_second(futs, *args):
+            call_count[0] += 1
+            # First call (pre-loop) leaves futures; second call (in loop) clears them
+            if call_count[0] >= 2:
+                futs.clear()
+            return (10, call_count[0] >= 2, 1 if call_count[0] >= 2 else 0, 0)
+        collect_fn = Mock(side_effect=collect_clears_on_second)
+        run_logger = MagicMock()
+        result = drain_circuit_breaker(
+            futures, set(), 10, SessionStats(agent_stats=AgentStats()),
+            run_logger, Mock(), collect_fn, "Auto",
+        )
+        assert result == 10
+        log_calls = [str(c) for c in run_logger.log_orchestrator.call_args_list]
+        assert any("all remaining agents finished" in c for c in log_calls)
+
+    @patch("pokepoke.agents.parallel_support._drain_orphaned_futures")
+    @patch("pokepoke.agents.parallel_support.time.sleep")
+    @patch("pokepoke.agents.parallel_support.time.time")
+    @patch("pokepoke.agents.parallel_support.is_shutting_down", return_value=False)
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
+    @patch("pokepoke.config.get_config")
+    def test_zero_timeout_waits_indefinitely(self, mock_config, mock_tui, mock_shutdown,
+                                              mock_time, mock_sleep, mock_drain):
+        """When drain_timeout is 0, drain never forces termination (waits for completion)."""
+        cfg = MagicMock()
+        cfg.circuit_breaker_drain_timeout = 0
+        mock_config.return_value = cfg
+        # Simulate passage of a long time — no timeout enforced when drain_timeout=0
+        # time.time() is called for start_time + each loop iteration
+        time_values = [0.0] + [float(i * 100) for i in range(1, 10)]
+        mock_time.side_effect = time_values
+        item = _make_item("wait1")
+        fut = concurrent.futures.Future()
+        futures = {fut: item}
+        call_count = [0]
+
+        def collect_eventually_clears(futs, *args):
+            call_count[0] += 1
+            # First call is pre-loop; loop calls start at count 2
+            if call_count[0] >= 4:
+                futs.clear()
+            return (5, call_count[0] >= 4, 1 if call_count[0] >= 4 else 0, 0)
+        collect_fn = Mock(side_effect=collect_eventually_clears)
+        run_logger = MagicMock()
+        result = drain_circuit_breaker(
+            futures, set(), 5, SessionStats(agent_stats=AgentStats()),
+            run_logger, Mock(), collect_fn, "Auto",
+        )
+        assert result == 5
+        # _drain_orphaned_futures should NOT have been called (no timeout forced)
+        mock_drain.assert_not_called()
+
 
 # ── dispatch_items ───────────────────────────────────────────────────
 
