@@ -4,7 +4,7 @@ Loads project-specific settings from .pokepoke/config.yaml, allowing PokePoke
 to be used generically on any project without hardcoded values.
 """
 import logging
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -261,6 +261,10 @@ class ProjectConfig:
         self.tool_call_timeout = max(60, self.tool_call_timeout)
         self.process_output_timeout = max(30, self.process_output_timeout)
         self.max_ping_failures = max(1, self.max_ping_failures)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to a canonical dict suitable for YAML/JSON output."""
+        return asdict(self)
 
     @staticmethod
     def from_dict(data: dict[str, Any]) -> 'ProjectConfig':

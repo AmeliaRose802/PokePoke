@@ -47,8 +47,8 @@ def _discover_log_roots() -> list[Path]:
 
 
 def get_config(self: DesktopAPI) -> dict[str, Any]:
-    """Load the project config file as a JSON-serializable dict."""
-    from pokepoke.config import _find_repo_root
+    """Load and validate project config as a JSON-serializable dict."""
+    from pokepoke.config import ProjectConfig, _find_repo_root, _load_config_file
 
     config_path = _find_repo_root() / ".pokepoke" / "config.yaml"
     if not config_path.exists():
@@ -59,22 +59,18 @@ def get_config(self: DesktopAPI) -> dict[str, Any]:
             "PyYAML is required to load .yaml config files. Install it with: pip install pyyaml"
         )
 
-    raw = config_path.read_text(encoding="utf-8")
-    data = yaml.safe_load(raw)
+    raw_data = _load_config_file(config_path)
+    validated = ProjectConfig.from_dict(raw_data)
     return {
         "path": str(config_path),
-        "config": data if isinstance(data, dict) else {},
+        "config": validated.to_dict(),
         "exists": True,
     }
 
 
 def save_config(self: DesktopAPI, config: Any) -> dict[str, Any]:
-    """Persist a new project config to `.pokepoke/config.yaml`.
-
-    Args:
-        config: Typically a JS object passed via pywebview (dict-like).
-    """
-    from pokepoke.config import _find_repo_root, reset_config
+    """Validate and persist project config to `.pokepoke/config.yaml`."""
+    from pokepoke.config import ProjectConfig, _find_repo_root, reset_config
 
     if not HAS_YAML:
         raise ImportError(
@@ -91,11 +87,14 @@ def save_config(self: DesktopAPI, config: Any) -> dict[str, Any]:
     else:
         raise ValueError("Config must be a dict or YAML string")
 
+    validated = ProjectConfig.from_dict(config_dict)
+    canonical = validated.to_dict()
+
     config_path = _find_repo_root() / ".pokepoke" / "config.yaml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
     dumped = yaml.safe_dump(
-        config_dict,
+        canonical,
         sort_keys=False,
         allow_unicode=True,
         default_flow_style=False,
