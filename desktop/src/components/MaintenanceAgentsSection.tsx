@@ -109,13 +109,12 @@ export function MaintenanceAgentsSection({ agents, onUpdate, onRemove, onAdd, on
               <div className="agent-details">
                 <div className="agent-field">
                   <label className="settings-label">Run every N work items</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="100"
+                  <DeferredNumberInput
+                    min={1}
+                    max={100}
                     className="settings-input number-input"
                     value={agent.frequency}
-                    onChange={(e) => onUpdate(index, { frequency: parseInt(e.target.value) || 1 })}
+                    onChange={(frequency) => onUpdate(index, { frequency })}
                   />
                 </div>
                 <div className="agent-field">
@@ -216,14 +215,13 @@ export function MaintenanceAgentsSection({ agents, onUpdate, onRemove, onAdd, on
           </div>
           <div className="agent-field">
             <label className="settings-label">Frequency (every N work items)</label>
-            <input
-              type="number"
-              min="1"
-              max="100"
+            <DeferredNumberInput
+              min={1}
+              max={100}
               className="settings-input number-input"
               value={draft.frequency}
               data-testid="agent-frequency-input"
-              onChange={(e) => setDraft((d) => ({ ...d, frequency: parseInt(e.target.value) || 1 }))}
+              onChange={(frequency) => setDraft((d) => ({ ...d, frequency }))}
             />
           </div>
           <div className="agent-field">
