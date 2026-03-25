@@ -57,6 +57,34 @@ def check_beads_available() -> bool:
     return True
 
 
+def _run_bd_command(
+    cmd: list[str],
+    repo_path: Path,
+    timeout: int,
+    error_context: str,
+) -> subprocess.CompletedProcess[str] | None:
+    """Run a bd subprocess command with standard timeout/error handling.
+
+    Returns the CompletedProcess on success, or None if an exception occurred.
+    """
+    try:
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            cwd=str(repo_path),
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        logger.error(f"\nError: '{' '.join(cmd)}' timed out ({error_context}).")
+        return None
+    except Exception as e:
+        logger.error(f"\nError: {error_context}: {e}")
+        return None
+
+
 def initialize_beads_repo(repo_path: Path) -> bool:
     """Initialize beads in the given repository directory."""
     if not shutil.which('bd'):
@@ -65,71 +93,32 @@ def initialize_beads_repo(repo_path: Path) -> bool:
         return False
 
     # Already initialized?
-    try:
-        info_result = subprocess.run(
-            ['bd', 'info', '--json'],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            cwd=str(repo_path),
-            timeout=BD_INFO_TIMEOUT,
-        )
-        if info_result.returncode == 0:
-            return True
-    except subprocess.TimeoutExpired:
-        logger.error("\nError: 'bd info' timed out. Beads may not be configured correctly.")
+    result = _run_bd_command(['bd', 'info', '--json'], repo_path, BD_INFO_TIMEOUT, "Failed to check beads status")
+    if result is None:
         return False
-    except Exception as e:
-        logger.error(f"\nError: Failed to check beads status: {e}")
-        return False
+    if result.returncode == 0:
+        return True
 
     # Initialize
-    try:
-        init_result = subprocess.run(
-            ['bd', 'init', '--quiet'],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            cwd=str(repo_path),
-            timeout=BD_INIT_TIMEOUT,
-        )
-        if init_result.returncode != 0:
-            logger.error(f"\nError: Failed to initialize beads in: {repo_path}")
-            details = (init_result.stderr or init_result.stdout or "").strip()
-            if details:
-                logger.info(details)
-            logger.info("\nTry running manually:")
-            logger.info("   bd init")
-            return False
-    except subprocess.TimeoutExpired:
-        logger.error("\nError: 'bd init' timed out.")
+    result = _run_bd_command(['bd', 'init', '--quiet'], repo_path, BD_INIT_TIMEOUT, "Failed to run 'bd init'")
+    if result is None:
         return False
-    except Exception as e:
-        logger.error(f"\nError: Failed to run 'bd init': {e}")
+    if result.returncode != 0:
+        logger.error(f"\nError: Failed to initialize beads in: {repo_path}")
+        details = (result.stderr or result.stdout or "").strip()
+        if details:
+            logger.info(details)
+        logger.info("\nTry running manually:")
+        logger.info("   bd init")
         return False
 
     # Verify
-    try:
-        verify_result = subprocess.run(
-            ['bd', 'info', '--json'],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            cwd=str(repo_path),
-            timeout=BD_INFO_TIMEOUT,
-        )
-        if verify_result.returncode != 0:
-            logger.error("\nError: Beads initialization did not complete successfully.")
-            logger.info("   'bd info' still fails after initialization.")
-            return False
-    except subprocess.TimeoutExpired:
-        logger.error("\nError: 'bd info' timed out after initialization.")
+    result = _run_bd_command(['bd', 'info', '--json'], repo_path, BD_INFO_TIMEOUT, "Failed to verify beads initialization")
+    if result is None:
         return False
-    except Exception as e:
-        logger.error(f"\nError: Failed to verify beads initialization: {e}")
+    if result.returncode != 0:
+        logger.error("\nError: Beads initialization did not complete successfully.")
+        logger.info("   'bd info' still fails after initialization.")
         return False
 
     return True
