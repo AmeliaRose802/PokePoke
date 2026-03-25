@@ -223,7 +223,7 @@ async def _await_completion(
                 done.set()
                 break
         except Exception:
-            pass
+            logger.debug("Failed to check client state during heartbeat", exc_info=True)
 
         now = time.monotonic()
 
@@ -251,6 +251,7 @@ async def _await_completion(
                 ping_ok = True
                 consecutive_ping_failures = 0
             except Exception:
+                logger.debug("SDK ping failed", exc_info=True)
                 consecutive_ping_failures += 1
             logger.info(
                 "SDK heartbeat: ping=%s, event_gap=%.0fs, pending=%d, "

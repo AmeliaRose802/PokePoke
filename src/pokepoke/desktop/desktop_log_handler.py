@@ -61,4 +61,4 @@ class DesktopLogHandler(logging.Handler):
                         style = self._get_style()
                 self._api.push_log(msg, target, style)
         except Exception:
-            self.handleError(record)
+            self.handleError(record)  # delegates to stdlib logging error handler

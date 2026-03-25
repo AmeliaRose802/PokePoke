@@ -286,6 +286,7 @@ def is_process_running(pid: int) -> bool:
             lines = result.stdout.strip().split('\n')
             return len(lines) > 1
         except Exception:
+            logger.debug("Failed to check if process %d exists", pid, exc_info=True)
             return False
     else:
         # Unix/Linux implementation

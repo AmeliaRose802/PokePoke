@@ -5,12 +5,15 @@ These are mixed in by DesktopAPI at import time.
 """
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pokepoke.desktop.desktop_api import DesktopAPI
+
+logger = logging.getLogger(__name__)
 
 from pokepoke.agents.agent_types import iter_agent_types
 
@@ -201,6 +204,7 @@ def get_merge_queue_stats(self: DesktopAPI) -> dict[str, Any]:
         summary["is_running"] = mq.is_running
         return summary
     except Exception:
+        logger.debug("Failed to get merge queue stats", exc_info=True)
         return {}
 
 
@@ -234,7 +238,7 @@ def get_performance_metrics(self: DesktopAPI) -> dict[str, Any]:
         merge_queue["current_queue_depth"] = mq.pending_count
         merge_queue["is_running"] = mq.is_running
     except Exception:
-        pass
+        logger.debug("Failed to get merge queue data", exc_info=True)
 
     # Lock contention
     lock_contention = _get_lock()

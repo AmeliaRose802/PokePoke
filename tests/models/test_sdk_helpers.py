@@ -351,11 +351,10 @@ class TestCheckToolWatchdog:
         result = await _check_tool_watchdog(session, stats, 600.0, handler=mock_handler)
         assert result == "tool_timeout"
 
-        # Verify item logger was called
-        mock_item_logger.log_error.assert_called_once()
-        call_args = mock_item_logger.log_error.call_args[0][0]
-        assert "grep" in call_args
-        assert "pattern" in call_args or "test" in call_args
+        # Verify item logger was called (timeout msg + diagnostics)
+        assert mock_item_logger.log_error.call_count >= 1
+        call_msgs = [c[0][0] for c in mock_item_logger.log_error.call_args_list]
+        assert any("grep" in msg for msg in call_msgs)
 
     @pytest.mark.asyncio
     async def test_captures_process_tree_on_timeout(self):

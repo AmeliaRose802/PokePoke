@@ -314,7 +314,7 @@ class _EventHandler:
                     logger.info("[SDK] Session confirmed idle - processing complete")
                     self._done.set()
             except asyncio.CancelledError:
-                pass
+                pass  # task cancelled during idle check — expected on shutdown
 
         self._stats['idle_task'] = asyncio.create_task(check_still_idle())
 

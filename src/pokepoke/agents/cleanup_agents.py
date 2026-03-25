@@ -131,8 +131,7 @@ def get_pokepoke_prompts_dir() -> Path:
 
     raise FileNotFoundError(
         f"PokePoke prompts directory not found (searched up from {Path(__file__).parent}). "
-        f"Make sure you have the .pokepoke/prompts/ directory in your PokePoke installation."
-    )
+        f"Make sure .pokepoke/prompts/ exists in your PokePoke installation.")
 
 
 def load_prompt_file(filename: str) -> str | None:
@@ -157,6 +156,7 @@ def _git_output(args: list[str], cwd: str | None) -> str | None:
         r = run_git(args, timeout=10, cwd=cwd, check=False)
         return r.stdout.strip() if r.returncode == 0 else None
     except Exception:
+        logger.debug("Git command failed: %s", args, exc_info=True)
         return None
 
 
