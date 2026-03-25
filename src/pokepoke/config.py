@@ -50,6 +50,8 @@ class MaintenanceAgentConfig:
     model: str | None = None
     enabled: bool = True
     conflicts_with: list[str] = field(default_factory=list)
+    custom: bool = False  # True if this is a user-created custom agent
+    description: str = ""  # Optional description of the agent's purpose
 @dataclass
 class MaintenanceConfig:
     """Maintenance agent scheduling configuration."""
