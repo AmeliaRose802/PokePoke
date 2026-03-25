@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import type { ConfigResponse, MaintenanceAgent, McpServerConfig, ModelsConfig, ProjectConfig } from "../types";
 import { MaintenanceAgentsSection } from "./MaintenanceAgentsSection";
+import { McpServerSection } from "./McpServerSection";
 import { isAbTestingEnabled, KNOWN_MODELS } from "./settingsHelpers";
 import { SpecialEffectTagsSection } from "./SpecialEffectTagsSection";
 
@@ -182,6 +183,16 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
     [abTestingEnabled, markDirty],
   );
 
+  const addAllCandidates = useCallback(() => {
+    if (!abTestingEnabled) return;
+    setCandidateModels((prev) => {
+      const existing = new Set(prev);
+      const toAdd = KNOWN_MODELS.filter((m) => !existing.has(m));
+      return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+    });
+    markDirty();
+  }, [abTestingEnabled, markDirty]);
+
   const handleChipKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (!abTestingEnabled) return;
@@ -335,7 +346,14 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
 
               {/* Candidate Models (tag chips) */}
               <div className="settings-field">
-                <label className="settings-label">A/B Candidate Models</label>
+                <div className="settings-label-row">
+                  <label className="settings-label">A/B Candidate Models</label>
+                  {abTestingEnabled && candidateModels.length < KNOWN_MODELS.length && (
+                    <button type="button" className="add-all-btn" onClick={addAllCandidates}>
+                      Add All
+                    </button>
+                  )}
+                </div>
                 <div
                   className={`chip-container ${!abTestingEnabled ? "chip-container-disabled" : ""}`}
                   aria-disabled={!abTestingEnabled}
@@ -405,65 +423,15 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
               </div>
             </div>
 
-            {/* Section: MCP Server */}
-            <div className="settings-section">
-              <h3 className="settings-section-title">🖧 MCP Server</h3>
-
-              <div className="settings-field">
-                <label className="settings-label" htmlFor="mcp-enabled">
-                  Enable MCP server
-                </label>
-                <div className="settings-checkbox-row">
-                  <input
-                    id="mcp-enabled"
-                    type="checkbox"
-                    checked={mcpEnabled}
-                    onChange={(e) => {
-                      setMcpEnabled(e.target.checked);
-                      markDirty();
-                    }}
-                  />
-                  <span className="settings-hint">Controls MCP server integration and restart script usage.</span>
-                </div>
-              </div>
-
-              {mcpEnabled && (
-                <>
-                  <div className="settings-field">
-                    <label className="settings-label" htmlFor="mcp-name">
-                      MCP server name (optional)
-                    </label>
-                    <input
-                      id="mcp-name"
-                      className="settings-input"
-                      value={mcpName}
-                      onChange={(e) => {
-                        setMcpName(e.target.value);
-                        markDirty();
-                      }}
-                      placeholder="e.g. My MCP Server"
-                    />
-                    <span className="settings-hint">Friendly display name for the MCP server.</span>
-                  </div>
-                  <div className="settings-field">
-                    <label className="settings-label" htmlFor="mcp-restart-script">
-                      Restart script (optional)
-                    </label>
-                    <input
-                      id="mcp-restart-script"
-                      className="settings-input"
-                      value={mcpRestartScript}
-                      onChange={(e) => {
-                        setMcpRestartScript(e.target.value);
-                        markDirty();
-                      }}
-                      placeholder="scripts/Restart-MCPServer.ps1"
-                    />
-                    <span className="settings-hint">Path to restart the MCP server after configuration changes.</span>
-                  </div>
-                </>
-              )}
-            </div>
+            <McpServerSection
+              mcpConfig={{ enabled: mcpEnabled, name: mcpName, restart_script: mcpRestartScript }}
+              onChange={(updates) => {
+                if (updates.enabled !== undefined) setMcpEnabled(updates.enabled);
+                if (updates.name !== undefined) setMcpName(updates.name);
+                if (updates.restart_script !== undefined) setMcpRestartScript(updates.restart_script);
+                markDirty();
+              }}
+            />
 
             <MaintenanceAgentsSection
               agents={maintenanceAgents}

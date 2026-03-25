@@ -245,6 +245,68 @@ describe("SettingsPage", () => {
     expect(chips.length).toBe(1);
   });
 
+  it("should show Add All button when A/B testing is enabled and not all models added", async () => {
+    render(<SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Loading configuration…")).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("button", { name: "Add All" })).toBeInTheDocument();
+  });
+
+  it("should add all known models when Add All is clicked", async () => {
+    const user = userEvent.setup();
+    render(<SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Loading configuration…")).not.toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Add All" }));
+
+    // All KNOWN_MODELS should appear as chips
+    expect(screen.getByText("claude-opus-4.5")).toBeInTheDocument();
+    expect(screen.getByText("claude-opus-4.6")).toBeInTheDocument();
+    expect(screen.getByText("claude-sonnet-4")).toBeInTheDocument();
+    expect(screen.getByText("gpt-5")).toBeInTheDocument();
+    expect(screen.getByText("gpt-5.2-codex")).toBeInTheDocument();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  });
+
+  it("should hide Add All button when all models are already added", async () => {
+    const user = userEvent.setup();
+    render(<SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Loading configuration…")).not.toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Add All" }));
+
+    // Add All button should disappear since all models are now present
+    expect(screen.queryByRole("button", { name: "Add All" })).not.toBeInTheDocument();
+  });
+
+  it("should not show Add All button when A/B testing is disabled", async () => {
+    const disabledAbConfig: ConfigResponse = {
+      ...defaultConfigResponse,
+      config: {
+        ...defaultConfig,
+        models: { ...defaultConfig.models, ab_testing_enabled: false, candidate_models: [] },
+      },
+    };
+    mockGetConfig.mockResolvedValue(disabledAbConfig);
+
+    render(<SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Loading configuration…")).not.toBeInTheDocument();
+    });
+
+    expect(screen.queryByRole("button", { name: "Add All" })).not.toBeInTheDocument();
+  });
+
   it("should display maintenance agents", async () => {
     render(<SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />);
 
