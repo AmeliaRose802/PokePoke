@@ -22,6 +22,8 @@ except ImportError:
 
 import json
 
+import pokepoke.constants as _c
+
 # Default model identifiers (single source of truth)
 DEFAULT_MODEL = "claude-opus-4.6"
 FALLBACK_MODEL = "claude-sonnet-4.5"
@@ -128,25 +130,25 @@ class GitConfig:
 class PreflightHealthConfig:
     """Pre-flight health check configuration."""
     enabled: bool = True
-    min_disk_space_gb: float = 1.0
-    lock_timeout_seconds: float = 30.0
-    worktree_test_timeout: float = 60.0
-    max_orphan_worktrees: int = 10
-    git_operation_timeout: float = 30.0
+    min_disk_space_gb: float = _c.DEFAULT_MIN_DISK_SPACE_GB
+    lock_timeout_seconds: float = _c.DEFAULT_LOCK_TIMEOUT_SECONDS
+    worktree_test_timeout: float = _c.DEFAULT_WORKTREE_TEST_TIMEOUT
+    max_orphan_worktrees: int = _c.DEFAULT_MAX_ORPHAN_WORKTREES
+    git_operation_timeout: float = _c.DEFAULT_GIT_OPERATION_TIMEOUT
     enable_self_repair: bool = True
-    max_repair_attempts: int = 3
+    max_repair_attempts: int = _c.DEFAULT_MAX_REPAIR_ATTEMPTS
     fail_on_environmental_errors: bool = True
     fail_on_critical_errors: bool = True
     graceful_shutdown_on_failure: bool = True
 
     def __post_init__(self) -> None:
         """Clamp values to valid ranges."""
-        self.min_disk_space_gb = max(0.1, self.min_disk_space_gb)
-        self.lock_timeout_seconds = max(5.0, self.lock_timeout_seconds)
-        self.worktree_test_timeout = max(10.0, self.worktree_test_timeout)
-        self.max_orphan_worktrees = max(0, self.max_orphan_worktrees)
-        self.git_operation_timeout = max(5.0, self.git_operation_timeout)
-        self.max_repair_attempts = max(1, self.max_repair_attempts)
+        self.min_disk_space_gb = max(_c.MIN_DISK_SPACE_GB, self.min_disk_space_gb)
+        self.lock_timeout_seconds = max(_c.MIN_LOCK_TIMEOUT_SECONDS, self.lock_timeout_seconds)
+        self.worktree_test_timeout = max(_c.MIN_WORKTREE_TEST_TIMEOUT, self.worktree_test_timeout)
+        self.max_orphan_worktrees = max(_c.MIN_ORPHAN_WORKTREES, self.max_orphan_worktrees)
+        self.git_operation_timeout = max(_c.MIN_GIT_OPERATION_TIMEOUT, self.git_operation_timeout)
+        self.max_repair_attempts = max(_c.MIN_REPAIR_ATTEMPTS, self.max_repair_attempts)
 
 
 @dataclass
@@ -208,18 +210,18 @@ class RepoConfig:
 class PerformanceThresholdsConfig:
     """Configurable thresholds for the PerformanceMonitor."""
     enabled: bool = True
-    max_merge_queue_depth: int = 5
-    max_lock_wait_seconds: float = 30.0
-    max_iteration_seconds: float = 30.0
-    min_memory_mb: float = 256.0
-    min_success_rate: float = 0.5
+    max_merge_queue_depth: int = _c.DEFAULT_MAX_MERGE_QUEUE_DEPTH
+    max_lock_wait_seconds: float = _c.DEFAULT_MAX_LOCK_WAIT_SECONDS
+    max_iteration_seconds: float = _c.DEFAULT_MAX_ITERATION_SECONDS
+    min_memory_mb: float = _c.DEFAULT_MIN_MEMORY_MB
+    min_success_rate: float = _c.DEFAULT_MIN_SUCCESS_RATE
 
     def __post_init__(self) -> None:
         """Clamp values to valid ranges."""
-        self.max_merge_queue_depth = max(1, self.max_merge_queue_depth)
-        self.max_lock_wait_seconds = max(1.0, self.max_lock_wait_seconds)
-        self.max_iteration_seconds = max(1.0, self.max_iteration_seconds)
-        self.min_memory_mb = max(32.0, self.min_memory_mb)
+        self.max_merge_queue_depth = max(_c.MIN_MERGE_QUEUE_DEPTH, self.max_merge_queue_depth)
+        self.max_lock_wait_seconds = max(_c.MIN_LOCK_WAIT_SECONDS, self.max_lock_wait_seconds)
+        self.max_iteration_seconds = max(_c.MIN_ITERATION_SECONDS, self.max_iteration_seconds)
+        self.min_memory_mb = max(_c.MIN_MEMORY_MB, self.min_memory_mb)
         self.min_success_rate = max(0.0, min(1.0, self.min_success_rate))
 
 
@@ -236,15 +238,15 @@ class ProjectConfig:
     preflight_health: PreflightHealthConfig = field(default_factory=PreflightHealthConfig)
     test_data: dict[str, str] = field(default_factory=dict)
     work_artifacts_dir: str | None = None
-    max_parallel_agents: int = 1
-    command_timeout: int = 300  # Default 5 minutes for long-running commands
+    max_parallel_agents: int = _c.DEFAULT_MAX_PARALLEL_AGENTS
+    command_timeout: int = _c.DEFAULT_COMMAND_TIMEOUT
     gate_agent_enabled: bool = True
-    max_copilot_failure_retries: int = 2  # Max retries when Copilot session fails (0 = no retry)
-    idle_timeout_seconds: int = 90  # Seconds to wait before confirming a session is idle
-    session_inactivity_timeout: int = 900  # Seconds with no SDK events before treating session as dead
-    tool_call_timeout: int = 900  # Max seconds for a single tool invocation before killing it
-    process_output_timeout: int = 300  # Seconds with no output before treating process as unresponsive
-    max_ping_failures: int = 3  # Consecutive ping failures before declaring process dead
+    max_copilot_failure_retries: int = _c.DEFAULT_MAX_COPILOT_FAILURE_RETRIES
+    idle_timeout_seconds: int = _c.DEFAULT_IDLE_TIMEOUT_SECONDS
+    session_inactivity_timeout: int = _c.DEFAULT_SESSION_INACTIVITY_TIMEOUT
+    tool_call_timeout: int = _c.DEFAULT_TOOL_CALL_TIMEOUT
+    process_output_timeout: int = _c.DEFAULT_PROCESS_OUTPUT_TIMEOUT
+    max_ping_failures: int = _c.DEFAULT_MAX_PING_FAILURES
     assignment: AssignmentConfig = field(default_factory=AssignmentConfig)
     performance_thresholds: PerformanceThresholdsConfig = field(
         default_factory=PerformanceThresholdsConfig,
@@ -253,14 +255,14 @@ class ProjectConfig:
 
     def __post_init__(self) -> None:
         """Clamp values to valid ranges."""
-        self.max_parallel_agents = max(1, self.max_parallel_agents)
-        self.command_timeout = max(30, self.command_timeout)
+        self.max_parallel_agents = max(_c.MIN_MAX_PARALLEL_AGENTS, self.max_parallel_agents)
+        self.command_timeout = max(_c.MIN_COMMAND_TIMEOUT, self.command_timeout)
         self.max_copilot_failure_retries = max(0, self.max_copilot_failure_retries)
-        self.idle_timeout_seconds = max(10, self.idle_timeout_seconds)
-        self.session_inactivity_timeout = max(60, self.session_inactivity_timeout)
-        self.tool_call_timeout = max(60, self.tool_call_timeout)
-        self.process_output_timeout = max(30, self.process_output_timeout)
-        self.max_ping_failures = max(1, self.max_ping_failures)
+        self.idle_timeout_seconds = max(_c.MIN_IDLE_TIMEOUT_SECONDS, self.idle_timeout_seconds)
+        self.session_inactivity_timeout = max(_c.MIN_SESSION_INACTIVITY_TIMEOUT, self.session_inactivity_timeout)
+        self.tool_call_timeout = max(_c.MIN_TOOL_CALL_TIMEOUT, self.tool_call_timeout)
+        self.process_output_timeout = max(_c.MIN_PROCESS_OUTPUT_TIMEOUT, self.process_output_timeout)
+        self.max_ping_failures = max(_c.MIN_MAX_PING_FAILURES, self.max_ping_failures)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a canonical dict suitable for YAML/JSON output."""

@@ -33,6 +33,12 @@ logger = logging.getLogger(__name__)
 # Queue polling interval (seconds) - how often the worker checks for shutdown
 _QUEUE_POLL_INTERVAL = 1.0
 
+# Git operation timeouts (seconds) used during merge/rebase operations
+_GIT_FETCH_TIMEOUT = 60  # Timeout for git fetch during rebase
+_GIT_REBASE_TIMEOUT = 120  # Timeout for git rebase operation
+_MERGE_QUEUE_SHUTDOWN_TIMEOUT = 30.0  # Default timeout when shutting down the queue
+_DOUBLE_REBASE_SETTLE_DELAY = 1.0  # Pause between double-rebase on high-conflict items
+_RESET_SHUTDOWN_TIMEOUT = 5.0  # Timeout when resetting the singleton in tests
 
 class MergeStatus(Enum):
     """Result status for a merge request."""
@@ -138,7 +144,7 @@ class MergeQueue:
             # Send sentinel to unblock worker if waiting on queue.get()
             self._queue.put(None)
 
-    def shutdown(self, timeout: float = 30.0) -> None:
+    def shutdown(self, timeout: float = _MERGE_QUEUE_SHUTDOWN_TIMEOUT) -> None:
         """Signal the worker to stop and wait for it to finish.
 
         Drains any remaining items in the queue before stopping.
@@ -237,7 +243,7 @@ class MergeQueue:
                 dr_start = time.monotonic()
                 second_ok = _rebase_worktree(worktree_path, target_branch=target_branch)
                 rebase_ok = second_ok and rebase_ok
-                time.sleep(1.0)
+                time.sleep(_DOUBLE_REBASE_SETTLE_DELAY)
                 self._record_rebase(second_ok)
                 with self._stats_lock:
                     self._stats.high_conflict_merges += 1
@@ -355,10 +361,10 @@ def _rebase_worktree(worktree_path: Path, target_branch: str | None = None) -> b
     try:
         with timed_block("git.fetch"):
             run_git(["git", "fetch", "origin", target_branch],
-                           cwd=str(worktree_path), timeout=60)
+                           cwd=str(worktree_path), timeout=_GIT_FETCH_TIMEOUT)
         with timed_block("git.rebase"):
             run_git(["git", "rebase", f"origin/{target_branch}"],
-                           cwd=str(worktree_path), timeout=120)
+                           cwd=str(worktree_path), timeout=_GIT_REBASE_TIMEOUT)
         logger.info("Rebased worktree %s onto origin/%s successfully", worktree_path, target_branch)
         return True
     except subprocess.CalledProcessError as exc:
@@ -390,5 +396,5 @@ def reset_merge_queue() -> None:
     global _merge_queue
     with _singleton_lock:
         if _merge_queue is not None:
-            _merge_queue.shutdown(timeout=5.0)
+            _merge_queue.shutdown(timeout=_RESET_SHUTDOWN_TIMEOUT)
         _merge_queue = None
