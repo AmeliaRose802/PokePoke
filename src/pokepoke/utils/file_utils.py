@@ -1,7 +1,5 @@
 """Shared file-system utilities for atomic writes on Windows."""
 
-from __future__ import annotations
-
 import os
 import time
 from pathlib import Path

@@ -9,8 +9,6 @@ Strategy:
 2. Backfill from completed items (assume every completed item was also created)
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import subprocess

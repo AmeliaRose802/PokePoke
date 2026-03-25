@@ -1,7 +1,5 @@
 """Project-level validation utilities for directory/repo checks."""
 
-from __future__ import annotations
-
 import subprocess
 from pathlib import Path
 

@@ -3,8 +3,6 @@
 Centralizes magic values that were previously scattered across many modules.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 # ── Directory paths ──────────────────────────────────────────────────────────

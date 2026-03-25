@@ -3,8 +3,6 @@
 This is kept separate from parallel.py to keep file size under the repo limit.
 """
 
-from __future__ import annotations
-
 import threading
 
 _lock = threading.Lock()
