@@ -143,8 +143,26 @@ class WorkItemResult:
     gate_agent_runs: int = 0
     model_completion: ModelCompletionRecord | None = None
 
+class _AgentRunCountsMixin:
+    """Shared agent-run-count accessors for frozen and mutable stats."""
+
+    agent_run_counts: dict[str, int]
+
+    def get_agent_run_count(self, agent_type: str) -> int:
+        """Return the recorded run count for the requested agent (slug or display)."""
+        key = agent_type if agent_type in AGENT_TYPES else resolve_agent_type(agent_type).key
+        return self.agent_run_counts.get(key, 0)
+
+    def __getattr__(self, name: str) -> Any:
+        if name.endswith("_agent_runs"):
+            key = name[: -len("_agent_runs")]
+            if key in AGENT_TYPES:
+                return self.agent_run_counts.get(key, 0)
+        raise AttributeError(f"{self.__class__.__name__!s} object has no attribute {name!r}")
+
+
 @dataclass(frozen=True)
-class SessionStatsSnapshot:
+class SessionStatsSnapshot(_AgentRunCountsMixin):
     """Frozen snapshot of session stats for UI display."""
     agent_stats: AgentStats
     items_completed: int = 0
@@ -163,20 +181,8 @@ class SessionStatsSnapshot:
     model_completions: tuple[ModelCompletionRecord, ...] = ()
     merge_queue_stats: MergeQueueStats = field(default_factory=MergeQueueStats)
 
-    def get_agent_run_count(self, agent_type: str) -> int:
-        """Return the recorded run count for the requested agent (slug or display)."""
-        key = agent_type if agent_type in AGENT_TYPES else resolve_agent_type(agent_type).key
-        return self.agent_run_counts.get(key, 0)
-
-    def __getattr__(self, name: str) -> Any:
-        if name.endswith("_agent_runs"):
-            key = name[: -len("_agent_runs")]
-            if key in AGENT_TYPES:
-                return self.agent_run_counts.get(key, 0)
-        raise AttributeError(f"{self.__class__.__name__!s} object has no attribute {name!r}")
-
 @dataclass
-class SessionStats:
+class SessionStats(_AgentRunCountsMixin):
     """Combined session statistics including agent stats and run counts."""
     agent_stats: AgentStats
 
@@ -262,11 +268,6 @@ class SessionStats:
         with self._lock:
             self.agent_run_counts[agent.key] = self.agent_run_counts.get(agent.key, 0) + count
 
-    def get_agent_run_count(self, agent_type: str) -> int:
-        """Return the recorded run count for the requested agent (slug or display)."""
-        key = agent_type if agent_type in AGENT_TYPES else resolve_agent_type(agent_type).key
-        return self.agent_run_counts.get(key, 0)
-
     def record_agent_elapsed_time(self, agent_type: str, elapsed_seconds: float) -> None:
         """Accumulate elapsed wall-clock seconds for an agent type."""
         if elapsed_seconds <= 0:
@@ -343,13 +344,6 @@ class SessionStats:
                 model_completions=tuple(replace(mc) for mc in self.model_completions),
                 merge_queue_stats=self.merge_queue_stats.copy(),
             )
-
-    def __getattr__(self, name: str) -> Any:
-        if name.endswith("_agent_runs"):
-            key = name[: -len("_agent_runs")]
-            if key in AGENT_TYPES:
-                return self.agent_run_counts.get(key, 0)
-        raise AttributeError(f"{self.__class__.__name__!s} object has no attribute {name!r}")
 
 _SESSION_STATS_INIT = SessionStats.__init__
 
