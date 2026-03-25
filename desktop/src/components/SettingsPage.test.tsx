@@ -347,6 +347,7 @@ describe("SettingsPage", () => {
     const frequencyInput = screen.getByDisplayValue("5");
     await user.clear(frequencyInput);
     await user.type(frequencyInput, "10");
+    await user.tab(); // blur to commit deferred value
 
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
   });
