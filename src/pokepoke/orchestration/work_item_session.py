@@ -172,10 +172,10 @@ class WorkItemSession:
 
         1. ``write_journal(UNWINDING)``
         2. ``abort_any_in_progress_merge()``
-        3. ``remove_worktree(force=True)``
-        4. ``delete_branch()``
-        5. ``unassign_beads_item()``
-        6. If **all** steps succeeded → ``delete_journal()``
+        3. Worktree and branch are **preserved** so the next retry can
+           resume with the same working directory and git history.
+        4. ``unassign_beads_item()``
+        5. If **all** steps succeeded → ``delete_journal()``
            Else → ``write_journal(ABANDONED)`` (leaves journal for
            :class:`SessionReconciler`)
 
@@ -200,19 +200,11 @@ class WorkItemSession:
             logger.error("Failed to abort in-progress merge for %s: %s", self.item_id, exc)
             all_ok = False
 
-        # Step 3 — Remove worktree.
-        try:
-            self._remove_worktree()
-        except Exception as exc:
-            logger.error("Failed to remove worktree for %s: %s", self.item_id, exc)
-            all_ok = False
-
-        # Step 4 — Delete branch.
-        try:
-            self._delete_branch()
-        except Exception as exc:
-            logger.error("Failed to delete branch for %s: %s", self.item_id, exc)
-            all_ok = False
+        # Steps 3-4 skipped: preserve worktree and branch for next retry
+        # so the agent can resume with the same working directory and
+        # any partial commits already on the branch.
+        if self.worktree_path:
+            logger.info("Preserving worktree for %s at %s (will be reused on retry)", self.item_id, self.worktree_path)
 
         # Step 5 — Unassign beads item.
         try:

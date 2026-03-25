@@ -44,7 +44,7 @@ _MAX_GATE_TIMEOUT_RETRIES = 3  # Retry gate agent up to 3 times on session timeo
 def process_work_item(  # noqa: C901
     item: BeadsWorkItem,
     interactive: bool,
-    timeout_hours: float = 0.5,
+    timeout_hours: float = 0,
     run_beta_test: bool = False,
     run_logger: 'RunLogger | None' = None,
     max_timeout_restarts: int = 3,
@@ -81,7 +81,8 @@ def process_work_item(  # noqa: C901
             work_item_id=item.id, work_item_title=item.title, agent_type="work")
 
         logger.info(f"\n🚀 Processing work item: {item.id} — {item.title}")
-        logger.info(f"   🤖 Model: {selected_model} | 🧠 Backend: {backend_provider} | ⏱️  Timeout: {timeout_hours}h\n")
+        timeout_label = f"{timeout_hours}h" if timeout_hours > 0 else "unlimited"
+        logger.info(f"   🤖 Model: {selected_model} | 🧠 Backend: {backend_provider} | ⏱️  Timeout: {timeout_label}\n")
 
         item_logger = run_logger.start_item_log(item.id, item.title) if run_logger else None
 
@@ -140,7 +141,7 @@ def process_work_item(  # noqa: C901
         while not is_shutting_down():
             # Check timeout before invoking Copilot
             elapsed = time.time() - start_time
-            if elapsed >= timeout_seconds:
+            if timeout_seconds > 0 and elapsed >= timeout_seconds:
                 timeout_restart_count += 1
                 if timeout_restart_count > max_timeout_restarts:
                     logger.info(f"\n\u23f1\ufe0f  TIMEOUT: Exceeded max restarts ({max_timeout_restarts}), failing {item.id}")
@@ -153,7 +154,7 @@ def process_work_item(  # noqa: C901
                 start_time = time.time()
                 elapsed = 0
 
-            remaining_timeout = timeout_seconds - elapsed
+            remaining_timeout = (timeout_seconds - elapsed) if timeout_seconds > 0 else None
 
             # Append feedback if retrying
             if last_feedback:

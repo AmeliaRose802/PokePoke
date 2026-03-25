@@ -177,7 +177,7 @@ class TestCleanupAllSucceed:
                 assert phase_arg != SessionPhase.ABANDONED
 
     def test_unwind_order(self) -> None:
-        """Steps must run in order: journal → merge abort → worktree → branch → unassign."""
+        """Steps must run in order: journal → merge abort → unassign (worktree/branch preserved)."""
         call_order: list[str] = []
 
         with _patch_all_helpers() as m:
@@ -198,9 +198,11 @@ class TestCleanupAllSucceed:
             session = _make_session()
             session.cleanup_on_failure()
 
-        # Verify ordering
+        # Verify ordering — worktree and branch are preserved for retry reuse
         assert call_order[0] == f"journal:{SessionPhase.UNWINDING}"
-        assert call_order.index("remove_worktree") < call_order.index("unassign")
+        assert "remove_worktree" not in call_order  # worktree preserved
+        assert "branch_check" not in call_order     # branch preserved
+        assert "unassign" in call_order
         assert "delete_journal" in call_order
 
 
@@ -212,17 +214,14 @@ class TestCleanupAllSucceed:
 class TestCleanupPartialFailure:
     """When any step fails, journal should be written as ABANDONED."""
 
-    def test_worktree_removal_fails_writes_abandoned(self) -> None:
+    def test_worktree_preserved_on_failure(self) -> None:
+        """Worktree is never removed on failure — preserved for retry reuse."""
         with _patch_all_helpers() as m:
-            m["cleanup_worktree"].return_value = False
-            # _remove_worktree raises RuntimeError when cleanup_worktree returns False
             session = _make_session()
             session.cleanup_on_failure()
 
-            # ABANDONED should be the last journal write
-            last_write = m["write_journal"].call_args_list[-1]
-            phase = last_write.kwargs.get("phase")
-            assert phase == SessionPhase.ABANDONED
+            # Worktree should NOT be cleaned up
+            m["cleanup_worktree"].assert_not_called()
 
     def test_unassign_fails_writes_abandoned(self) -> None:
         with _patch_all_helpers() as m:
@@ -247,29 +246,28 @@ class TestCleanupPartialFailure:
             phase = last_write.kwargs.get("phase")
             assert phase == SessionPhase.ABANDONED
 
-    def test_branch_delete_fails_writes_abandoned(self) -> None:
+    def test_branch_preserved_on_failure(self) -> None:
+        """Branch is never deleted on failure — preserved for retry reuse."""
         with _patch_all_helpers() as m:
             m["branch_exists"].return_value = True
-            m["subprocess_run"].side_effect = RuntimeError("branch -D failed")
             session = _make_session()
             session.cleanup_on_failure()
 
-            last_write = m["write_journal"].call_args_list[-1]
-            phase = last_write.kwargs.get("phase")
-            assert phase == SessionPhase.ABANDONED
+            # Branch delete should NOT be called
+            m["subprocess_run"].assert_not_called()
 
     def test_journal_write_fails_still_continues(self) -> None:
         """Even if writing the UNWINDING journal fails, remaining steps run."""
         with _patch_all_helpers() as m:
             m["write_journal"].side_effect = OSError("disk full")
-            m["cleanup_worktree"].return_value = True
             m["unassign_item"].return_value = True
 
             session = _make_session()
             session.cleanup_on_failure()
 
-            # Despite journal failure, cleanup and unassign should be attempted
-            m["cleanup_worktree"].assert_called_once()
+            # Despite journal failure, unassign should be attempted
+            # (worktree/branch are preserved, not cleaned up)
+            m["cleanup_worktree"].assert_not_called()
             m["unassign_item"].assert_called_once()
 
     def test_all_steps_fail_writes_abandoned(self) -> None:
@@ -307,16 +305,16 @@ class TestCleanupPartialFailure:
 class TestCleanupErrorLogging:
     """All step failures must be logged at ERROR level."""
 
-    def test_worktree_failure_logged_at_error(self, caplog: pytest.LogCaptureFixture) -> None:
-        with _patch_all_helpers() as m:
-            m["cleanup_worktree"].return_value = False
+    def test_worktree_preserved_logged_at_info(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Worktree preservation should be logged at INFO level."""
+        with _patch_all_helpers():
             session = _make_session()
-            with caplog.at_level(logging.ERROR, logger="pokepoke.orchestration.work_item_session"):
+            with caplog.at_level(logging.INFO, logger="pokepoke.orchestration.work_item_session"):
                 session.cleanup_on_failure()
 
-            error_msgs = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
-            assert any("worktree" in msg.lower() for msg in error_msgs), (
-                f"Expected ERROR log about worktree failure, got: {error_msgs}"
+            info_msgs = [r.message for r in caplog.records if r.levelno == logging.INFO]
+            assert any("preserving worktree" in msg.lower() for msg in info_msgs), (
+                f"Expected INFO log about preserving worktree, got: {info_msgs}"
             )
 
     def test_unassign_failure_logged_at_error(self, caplog: pytest.LogCaptureFixture) -> None:
@@ -331,18 +329,16 @@ class TestCleanupErrorLogging:
                 f"Expected ERROR log about unassign failure, got: {error_msgs}"
             )
 
-    def test_branch_delete_failure_logged_at_error(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_branch_preserved_not_deleted(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Branch should not be deleted — preserved for retry reuse."""
         with _patch_all_helpers() as m:
             m["branch_exists"].return_value = True
-            m["subprocess_run"].side_effect = RuntimeError("branch -D failed")
             session = _make_session()
-            with caplog.at_level(logging.ERROR, logger="pokepoke.orchestration.work_item_session"):
+            with caplog.at_level(logging.INFO, logger="pokepoke.orchestration.work_item_session"):
                 session.cleanup_on_failure()
 
-            error_msgs = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
-            assert any("branch" in msg.lower() for msg in error_msgs), (
-                f"Expected ERROR log about branch delete failure, got: {error_msgs}"
-            )
+            # No branch deletion should be attempted
+            m["subprocess_run"].assert_not_called()
 
     def test_journal_write_failure_logged_at_error(self, caplog: pytest.LogCaptureFixture) -> None:
         with _patch_all_helpers() as m:
@@ -397,13 +393,13 @@ class TestCleanupEdgeCases:
     def test_cleanup_on_failure_can_be_called_multiple_times(self) -> None:
         """Cleanup should be idempotent — calling it twice should not crash."""
         with _patch_all_helpers() as m:
-            m["cleanup_worktree"].return_value = True
             m["unassign_item"].return_value = True
             session = _make_session()
             session.cleanup_on_failure()
             session.cleanup_on_failure()
 
-            assert m["cleanup_worktree"].call_count == 2
+            # Worktree preserved, not cleaned up
+            m["cleanup_worktree"].assert_not_called()
             assert m["unassign_item"].call_count == 2
 
 
@@ -417,7 +413,6 @@ class TestContextManagerIntegration:
 
     def test_exception_triggers_cleanup(self) -> None:
         with _patch_all_helpers() as m:
-            m["cleanup_worktree"].return_value = True
             m["unassign_item"].return_value = True
 
             session = _make_session()
@@ -431,7 +426,8 @@ class TestContextManagerIntegration:
                     session.__exit__(*sys.exc_info())
                     raise
 
-            m["cleanup_worktree"].assert_called_once()
+            # Worktree preserved, not cleaned up
+            m["cleanup_worktree"].assert_not_called()
             m["unassign_item"].assert_called_once()
 
     def test_no_exception_skips_cleanup(self) -> None:

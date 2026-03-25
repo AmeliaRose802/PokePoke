@@ -216,7 +216,7 @@ class TestProcessWorkItem:
     @patch('pokepoke.orchestration.workflow.invoke_copilot')
     @patch('pokepoke.orchestration.workflow.assign_and_sync_item', return_value=True)
     @patch('pokepoke.orchestration.workflow.create_worktree')
-    def test_process_work_item_cleans_worktree_on_unhandled_exception(
+    def test_process_work_item_preserves_worktree_on_unhandled_exception(
         self,
         mock_create_wt: Mock,
         mock_assign: Mock,
@@ -225,7 +225,7 @@ class TestProcessWorkItem:
         mock_subprocess: Mock,
         mock_gate_agent: Mock
     ) -> None:
-        """Test that worktree is cleaned up when an unhandled exception occurs."""
+        """Test that worktree is preserved when an unhandled exception occurs."""
         item = BeadsWorkItem(
             id="task-1",
             title="Task",
@@ -255,8 +255,8 @@ class TestProcessWorkItem:
         with contextlib.suppress(RuntimeError):
             process_work_item(item, interactive=False)
 
-        # Worktree cleanup should have been called in the finally block
-        mock_cleanup.assert_called_with("task-1", force=True)
+        # Worktree should NOT be cleaned up — preserved for retry reuse
+        mock_cleanup.assert_not_called()
 
 
 class TestRunOrchestrator:

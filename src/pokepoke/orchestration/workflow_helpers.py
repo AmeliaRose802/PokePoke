@@ -266,7 +266,7 @@ def run_cleanup_with_timeout(
 
     while result.success and has_uncommitted_changes(cwd=cwd):
         elapsed = time.time() - start_time
-        if elapsed >= timeout_seconds:
+        if timeout_seconds > 0 and elapsed >= timeout_seconds:
             logger.info(f"\n⏱️  TIMEOUT: Execution exceeded {timeout_hours} hours during cleanup")
             logger.info(f"   Restarting item {item.id} in same worktree...\n")
             return False, cleanup_agent_runs
