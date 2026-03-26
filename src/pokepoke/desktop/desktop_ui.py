@@ -57,7 +57,7 @@ class DesktopUI:
             self._api, self._target_buffer, self._buffer_lock,
             lambda: self._current_style,
         )
-        self._log_handler.setLevel(logging.DEBUG)
+        self._log_handler.setLevel(logging.INFO)
 
     @property
     def is_running(self) -> bool:
