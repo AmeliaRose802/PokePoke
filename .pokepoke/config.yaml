@@ -8,3 +8,39 @@ git:
   default_branch: master
 mcp_server:
   enabled: false
+maintenance:
+  agents:
+    - name: Tech Debt
+      prompt_file: tech-debt.md
+      frequency: 5
+      needs_worktree: false
+    - name: Janitor
+      prompt_file: janitor.md
+      frequency: 2
+      needs_worktree: true
+      merge_changes: true
+    - name: Backlog Cleanup
+      prompt_file: backlog-cleanup.md
+      frequency: 7
+      needs_worktree: true
+      merge_changes: false
+    - name: Beta Tester
+      prompt_file: beta-tester.md
+      frequency: 3
+      needs_worktree: true
+      merge_changes: false
+      enabled: false
+    - name: Code Review
+      prompt_file: code-reviewer.md
+      frequency: 5
+      needs_worktree: false
+      model: gpt-5.1-codex
+    - name: Worktree Cleanup
+      prompt_file: worktree-cleanup.md
+      frequency: 4
+      needs_worktree: false
+    - name: Model Sync
+      prompt_file: ""
+      frequency: 1
+      needs_worktree: false
+      merge_changes: false
