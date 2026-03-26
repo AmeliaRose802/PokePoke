@@ -201,7 +201,10 @@ def process_work_item(  # noqa: C901
             if current_stats:
                 accumulated_stats.accumulate(current_stats)
 
-            is_process_crash = result.error and "process died" in result.error.lower()
+            is_process_crash = result.error and (
+                "process died" in result.error.lower()
+                or "exited unexpectedly" in result.error.lower()
+            )
             if is_process_crash:
                 process_crashed_this_session = True
 
@@ -250,7 +253,6 @@ def process_work_item(  # noqa: C901
                 _log_failure(run_logger, item_logger, request_count)
                 return _fail_result(request_count=request_count, stats=accumulated_stats,
                                     cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs)
-
 
             if process_crashed_this_session:
                 logger.warning("\n⏭️  Skipping Gate Agent — CLI process crashed, work may be incomplete")
@@ -373,7 +375,6 @@ def process_work_item(  # noqa: C901
         if _session is not None and not is_shutting_down():
             _session.cleanup_on_failure()
         unregister_agent()
-
 
 def _setup_worktree(
     item: BeadsWorkItem, lock_timeout: float = 300.0,

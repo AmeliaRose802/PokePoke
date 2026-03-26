@@ -1022,6 +1022,38 @@ class TestProcessWorkItem:
             # Gate agent should NOT have been called (process crashed on first attempt)
             assert mocks['gate'].call_count == 0
 
+    def test_sdk_exception_crash_skips_gate_agent(self) -> None:
+        """Test that gate agent is skipped for SDK exceptions with 'exited unexpectedly' pattern."""
+        item = make_work_item()
+
+        with make_process_item_mocks(
+            uncommitted=True,
+            include_config=True, include_session_cleanup=True,
+            include_cleanup_worktree=True,
+            max_copilot_failure_retries=2,
+        ) as mocks:
+            # First attempt: SDK exception with CLI process crash
+            # Second attempt: succeeds
+            mocks['invoke'].side_effect = [
+                CopilotResult(
+                    work_item_id="task-1", success=False,
+                    error="SDK exception: CLI process exited unexpectedly",
+                    attempt_count=1,
+                ),
+                CopilotResult(
+                    work_item_id="task-1", success=True,
+                    output="Fixed on retry", attempt_count=1,
+                ),
+            ]
+
+            result = process_work_item(item, interactive=True)
+
+            # Should succeed (retry worked)
+            assert result.success is True
+            assert result.request_count == 2
+            # Gate agent should NOT have been called (process crashed on first attempt)
+            assert mocks['gate'].call_count == 0
+
     def test_gate_agent_retry_loop(self) -> None:
         """Test gate agent rejection triggers retry loop."""
         item = make_work_item()
