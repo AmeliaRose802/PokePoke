@@ -605,7 +605,7 @@ class TestAwaitCompletionPingLiveness:
     """Tests for _await_completion consecutive ping failure detection."""
 
     @pytest.mark.asyncio
-    @patch('pokepoke.models.sdk_helpers._HB_INTERVAL', 0.1)
+    @patch('pokepoke.models.sdk_await._HB_INTERVAL', 0.1)
     async def test_consecutive_ping_failures_trigger_process_dead(self):
         """When ping fails max_ping_failures times in a row, returns 'process_dead'."""
         from pokepoke.models.sdk_helpers import _await_completion
@@ -638,7 +638,7 @@ class TestAwaitCompletionPingLiveness:
         session.abort.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch('pokepoke.models.sdk_helpers._HB_INTERVAL', 0.1)
+    @patch('pokepoke.models.sdk_await._HB_INTERVAL', 0.1)
     async def test_ping_success_resets_failure_count(self):
         """A successful ping resets the consecutive failure counter."""
         from pokepoke.models.sdk_helpers import _await_completion
@@ -674,7 +674,7 @@ class TestAwaitCompletionPingLiveness:
         session.abort.assert_not_called()
 
     @pytest.mark.asyncio
-    @patch('pokepoke.models.sdk_helpers._HB_INTERVAL', 0.1)
+    @patch('pokepoke.models.sdk_await._HB_INTERVAL', 0.1)
     async def test_process_dead_abort_failure_still_returns(self):
         """If session.abort() raises during process death, still returns 'process_dead'."""
         from pokepoke.models.sdk_helpers import _await_completion
@@ -702,12 +702,117 @@ class TestAwaitCompletionPingLiveness:
 
         assert result == "process_dead"
 
+    @pytest.mark.asyncio
+    @patch('pokepoke.models.sdk_await._HB_INTERVAL', 0.1)
+    async def test_ping_fails_with_pending_tools_but_process_exited_zero_treats_as_completion(self):
+        """When pings fail, work was done, pending_tool_calls>0 but process exited 0, treat as completion."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        client.ping = AsyncMock(side_effect=OSError(22, "Invalid argument"))
+
+        # Simulate a process that exited cleanly
+        mock_process = MagicMock()
+        mock_process.returncode = 0
+        mock_process.poll.return_value = 0
+        client._process = mock_process
+
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic() - 100,
+            'event_count': 50,
+            'last_tool_activity_time': time.monotonic() - 10,
+            'pending_tool_calls': 1,  # Stale pending tool call
+            'tool_start_times': {},
+            'turn_count': 3,  # Work was done
+        }
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=9999,
+            max_ping_failures=1,
+        )
+
+        assert result is None  # Normal completion, not process_dead
+        session.abort.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch('pokepoke.models.sdk_await._HB_INTERVAL', 0.1)
+    async def test_ping_fails_with_pending_tools_and_process_exited_nonzero_is_process_dead(self):
+        """When pings fail, work was done, pending_tool_calls>0 and process exited non-zero, declare dead."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        client.ping = AsyncMock(side_effect=OSError(22, "Invalid argument"))
+
+        # Simulate a process that crashed
+        mock_process = MagicMock()
+        mock_process.returncode = 1
+        mock_process.poll.return_value = 1
+        client._process = mock_process
+
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic() - 100,
+            'event_count': 50,
+            'last_tool_activity_time': 0.0,
+            'pending_tool_calls': 1,
+            'tool_start_times': {},
+            'turn_count': 3,
+        }
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=9999,
+            max_ping_failures=1,
+        )
+
+        assert result == "process_dead"
+        session.abort.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('pokepoke.models.sdk_await._HB_INTERVAL', 0.1)
+    async def test_ping_fails_work_done_no_pending_no_process_attr_treats_as_completion(self):
+        """When pings fail, work done, no pending, no _process attr — still treats as completion."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock(spec=[])  # No _process attribute
+        client.get_state = MagicMock(return_value="running")
+        client.ping = AsyncMock(side_effect=Exception("connection refused"))
+
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic() - 100,
+            'event_count': 50,
+            'last_tool_activity_time': 0.0,
+            'pending_tool_calls': 0,
+            'tool_start_times': {},
+            'turn_count': 5,
+        }
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=9999,
+            max_ping_failures=1,
+        )
+
+        assert result is None  # Normal completion
+        session.abort.assert_not_called()
+
 
 class TestAwaitCompletionProcessOutputTimeout:
     """Tests for _await_completion process output timeout."""
 
     @pytest.mark.asyncio
-    @patch('pokepoke.models.sdk_helpers._HB_INTERVAL', 0.1)
+    @patch('pokepoke.models.sdk_await._HB_INTERVAL', 0.1)
     async def test_output_timeout_with_ping_failure_triggers_process_dead(self):
         """No events for process_output_timeout AND ping fails -> process_dead."""
         from pokepoke.models.sdk_helpers import _await_completion
@@ -737,7 +842,7 @@ class TestAwaitCompletionProcessOutputTimeout:
         session.abort.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch('pokepoke.models.sdk_helpers._HB_INTERVAL', 0.1)
+    @patch('pokepoke.models.sdk_await._HB_INTERVAL', 0.1)
     async def test_output_timeout_suppressed_when_ping_succeeds(self):
         """Even if no events for process_output_timeout, ping success means alive."""
         from pokepoke.models.sdk_helpers import _await_completion
@@ -771,7 +876,7 @@ class TestAwaitCompletionProcessOutputTimeout:
         assert result is None  # Normal completion, NOT process_dead
 
     @pytest.mark.asyncio
-    @patch('pokepoke.models.sdk_helpers._HB_INTERVAL', 0.1)
+    @patch('pokepoke.models.sdk_await._HB_INTERVAL', 0.1)
     async def test_output_timeout_suppressed_with_pending_tools(self):
         """When tools are pending, process output timeout does not fire."""
         from pokepoke.models.sdk_helpers import _await_completion
@@ -805,7 +910,7 @@ class TestAwaitCompletionProcessOutputTimeout:
         assert result is None  # Should not fire with pending tools
 
     @pytest.mark.asyncio
-    @patch('pokepoke.models.sdk_helpers._HB_INTERVAL', 0.1)
+    @patch('pokepoke.models.sdk_await._HB_INTERVAL', 0.1)
     async def test_output_timeout_disabled_when_zero(self):
         """When process_output_timeout=0, the check is disabled."""
         from pokepoke.models.sdk_helpers import _await_completion

@@ -1208,8 +1208,9 @@ class TestInvokeCopilotSDKAsync:
 
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     @patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=True)
+    @patch('pokepoke.models.sdk_await.is_shutting_down', return_value=True)
     @patch('pokepoke.models.copilot_sdk.is_shutting_down', return_value=True)
-    async def test_invoke_copilot_sdk_shutdown_during_wait(self, mock_shutting_down, mock_shutting_down_helpers, mock_client_class, sample_work_item):
+    async def test_invoke_copilot_sdk_shutdown_during_wait(self, mock_shutting_down, mock_shutting_down_await, mock_shutting_down_helpers, mock_client_class, sample_work_item):
         """Test SDK handles shutdown signal during wait loop."""
         from pokepoke.models.copilot_sdk import invoke_copilot_sdk
 
@@ -1946,7 +1947,7 @@ class TestAwaitCompletionAbortOSError:
 
         done = asyncio.Event()
 
-        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=True):
+        with patch('pokepoke.models.sdk_await.is_shutting_down', return_value=True):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=300.0,
@@ -1967,7 +1968,7 @@ class TestAwaitCompletionAbortOSError:
 
         done = asyncio.Event()
 
-        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=False):
+        with patch('pokepoke.models.sdk_await.is_shutting_down', return_value=False):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=0.0,  # Immediate timeout
@@ -1995,7 +1996,7 @@ class TestAwaitCompletionAbortOSError:
             'last_tool_activity_time': time.monotonic() - 700,
         }
 
-        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=False):
+        with patch('pokepoke.models.sdk_await.is_shutting_down', return_value=False):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=300.0,
@@ -2018,7 +2019,7 @@ class TestAwaitCompletionAbortOSError:
 
         done = asyncio.Event()
 
-        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=True):
+        with patch('pokepoke.models.sdk_await.is_shutting_down', return_value=True):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=300.0,
@@ -2039,7 +2040,7 @@ class TestAwaitCompletionAbortOSError:
 
         done = asyncio.Event()
 
-        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=False):
+        with patch('pokepoke.models.sdk_await.is_shutting_down', return_value=False):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=0.0,  # Immediate timeout
@@ -2074,7 +2075,7 @@ class TestAwaitCompletionAbortOSError:
 
         # Use a very short max_timeout so the loop terminates via timeout
         # rather than inactivity — proving inactivity was skipped.
-        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=False):
+        with patch('pokepoke.models.sdk_await.is_shutting_down', return_value=False):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=0.0,
@@ -2103,7 +2104,7 @@ class TestAwaitCompletionAbortOSError:
             'pending_tool_calls': 0,
         }
 
-        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=False):
+        with patch('pokepoke.models.sdk_await.is_shutting_down', return_value=False):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=300.0,
@@ -2132,7 +2133,7 @@ class TestAwaitCompletionAbortOSError:
             'tool_start_times': {'tool-abc': time.monotonic() - 700},
         }
 
-        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=False):
+        with patch('pokepoke.models.sdk_await.is_shutting_down', return_value=False):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=300.0,
@@ -2163,7 +2164,7 @@ class TestAwaitCompletionAbortOSError:
             'tool_start_times': {'tool-abc': time.monotonic() - 10},
         }
 
-        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=False):
+        with patch('pokepoke.models.sdk_await.is_shutting_down', return_value=False):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=0.0,
@@ -2196,7 +2197,7 @@ class TestAwaitCompletionAbortOSError:
             'tool_start_times': {'tool-xyz': time.monotonic() - 700},
         }
 
-        with patch('pokepoke.models.sdk_helpers.is_shutting_down', return_value=False):
+        with patch('pokepoke.models.sdk_await.is_shutting_down', return_value=False):
             result = await _await_completion(
                 mock_session, mock_client, done,
                 max_timeout=300.0,

@@ -134,6 +134,7 @@ max-statements = 50
     "PERF102", # Tests: allow dict iterator patterns
 ]
 "src/pokepoke/models/sdk_helpers.py" = ["C901"]  # Complex timeout logic
+"src/pokepoke/models/sdk_await.py" = ["C901"]  # Complex timeout logic (extracted from sdk_helpers)
 
 # Mypy type checking configuration
 [tool.mypy]
