@@ -6,8 +6,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
-  AgentInfoSchema,
   AppStateSchema,
+  AvailableModelsResponseSchema,
   ConfigResponseSchema,
   LogEntrySchema,
   ModelHistoryEntrySchema,
@@ -18,6 +18,7 @@ import {
 } from "./schemas";
 import type {
   AgentInfo,
+  AvailableModelsResponse,
   ConfigResponse,
   ConnectionStatus,
   LogEntry,
@@ -32,6 +33,7 @@ import type {
   SetupStatus,
   WorkItem,
 } from "./types";
+import { useAgentBridge } from "./useAgentBridge";
 import type { SetupBridgeMethods } from "./useSetupBridge";
 import { useSetupBridge } from "./useSetupBridge";
 
@@ -114,6 +116,7 @@ interface PyWebViewAPI {
   spawn_agent(): Promise<{ success: boolean; at_limit: boolean; active: number; max: number }>;
   add_work_item_label(item_id: string, label: string): Promise<{ item_id: string; label: string; labels: string[] }>;
   remove_work_item_label(item_id: string, label: string): Promise<{ item_id: string; label: string; labels: string[] }>;
+  get_available_models(): Promise<AvailableModelsResponse>;
 
   // First-time setup wizard API
   check_setup_status(): Promise<SetupStatus>;
@@ -177,6 +180,7 @@ export interface BridgeStateBase {
   resetPrompt: (name: string) => Promise<boolean>;
   getConfig: () => Promise<ConfigResponse | null>;
   saveConfig: (config: ProjectConfig) => Promise<boolean>;
+  getAvailableModels: () => Promise<AvailableModelsResponse | null>;
   getModelHistory: (limit?: number) => Promise<ModelHistoryEntry[]>;
   requestStopAfterCurrent: () => Promise<void>;
   cancelStopAfterCurrent: () => Promise<void>;
@@ -252,6 +256,19 @@ export function useBridge(): BridgeState {
     return result.saved;
   }, []);
 
+  const getAvailableModels = useCallback(async (): Promise<AvailableModelsResponse | null> => {
+    if (!window.pywebview?.api) return null;
+    try {
+      return validatePayload(
+        AvailableModelsResponseSchema,
+        await window.pywebview.api.get_available_models(),
+        "getAvailableModels",
+      );
+    } catch {
+      return null;
+    }
+  }, []);
+
   const getModelHistory = useCallback(async (limit = 200): Promise<ModelHistoryEntry[]> => {
     if (!window.pywebview?.api) return [];
     try {
@@ -304,44 +321,8 @@ export function useBridge(): BridgeState {
     [workItem],
   );
 
-  const getAgentDetail = useCallback(async (agentId: string): Promise<AgentInfo | null> => {
-    if (!window.pywebview?.api) return null;
-    try {
-      const raw = await window.pywebview.api.get_agent_detail(agentId);
-      return raw === null ? null : validatePayload(AgentInfoSchema, raw, `getAgentDetail(${agentId})`);
-    } catch {
-      return null;
-    }
-  }, []);
-
-  const pauseAgent = useCallback(async (agentId: string): Promise<boolean> => {
-    if (!window.pywebview?.api) return false;
-    try {
-      const result = await window.pywebview.api.pause_agent(agentId);
-      return result.paused;
-    } catch {
-      return false;
-    }
-  }, []);
-
-  const resumeAgent = useCallback(async (agentId: string): Promise<boolean> => {
-    if (!window.pywebview?.api) return false;
-    try {
-      const result = await window.pywebview.api.resume_agent(agentId);
-      return result.resumed;
-    } catch {
-      return false;
-    }
-  }, []);
-
-  const spawnAgent = useCallback(async () => {
-    if (!window.pywebview?.api) return null;
-    try {
-      return await window.pywebview.api.spawn_agent();
-    } catch {
-      return null;
-    }
-  }, []);
+  // Agent management bridge (extracted to useAgentBridge.ts)
+  const agentBridge = useAgentBridge();
 
   // Setup wizard bridge (extracted to useSetupBridge.ts)
   const setupBridge = useSetupBridge();
@@ -484,16 +465,13 @@ export function useBridge(): BridgeState {
     resetPrompt,
     getConfig,
     saveConfig,
+    getAvailableModels,
     getModelHistory,
     requestStopAfterCurrent,
     cancelStopAfterCurrent,
     addWorkItemLabel,
     removeWorkItemLabel,
-    getAgentDetail,
-    pauseAgent,
-    resumeAgent,
-    spawnAgent,
-
+    ...agentBridge,
     ...setupBridge,
   };
 }

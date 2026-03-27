@@ -6,7 +6,7 @@ import { useCallback, useState } from "react";
 
 import type { MaintenanceAgent } from "../types";
 import { DeferredNumberInput } from "./DeferredNumberInput";
-import { KNOWN_MAINTENANCE_AGENTS, KNOWN_MODELS } from "./settingsHelpers";
+import { FALLBACK_KNOWN_MODELS, KNOWN_MAINTENANCE_AGENTS } from "./settingsHelpers";
 
 interface Props {
   agents: MaintenanceAgent[];
@@ -14,6 +14,7 @@ interface Props {
   onRemove: (index: number) => void;
   onAdd: (agent: MaintenanceAgent) => void;
   onOpenPromptEditor?: (promptName: string) => void;
+  availableModels?: string[];
 }
 
 const EMPTY_CUSTOM: MaintenanceAgent = {
@@ -27,7 +28,8 @@ const EMPTY_CUSTOM: MaintenanceAgent = {
   description: "",
 };
 
-export function MaintenanceAgentsSection({ agents, onUpdate, onRemove, onAdd, onOpenPromptEditor }: Props) {
+export function MaintenanceAgentsSection({ agents, onUpdate, onRemove, onAdd, onOpenPromptEditor, availableModels }: Props) {
+  const modelList = availableModels ?? FALLBACK_KNOWN_MODELS;
   const [selectedToAdd, setSelectedToAdd] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState<MaintenanceAgent>({ ...EMPTY_CUSTOM });
@@ -127,7 +129,7 @@ export function MaintenanceAgentsSection({ agents, onUpdate, onRemove, onAdd, on
                     placeholder="Use default model"
                   />
                   <datalist id="model-override-suggestions">
-                    {KNOWN_MODELS.map((m) => (
+                    {modelList.map((m) => (
                       <option key={m} value={m} />
                     ))}
                   </datalist>

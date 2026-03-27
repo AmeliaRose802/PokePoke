@@ -211,6 +211,13 @@ export const UpdateCheckResultSchema = z.object({
   error: z.string().optional(),
 });
 
+/** Response from get_available_models API */
+export const AvailableModelsResponseSchema = z.object({
+  models: z.array(z.string()),
+  last_sync: z.string().nullable(),
+  removed_from_config: z.array(z.string()),
+});
+
 /** All-time per-model performance summary from persistent storage */
 export const ModelPerformanceSummarySchema = z.object({
   total_items_attempted: z.number(),

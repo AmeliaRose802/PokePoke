@@ -3292,6 +3292,11 @@
   color: var(--accent-error);
 }
 
+.dismiss-btn {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
 .chip-input {
   flex: 1;
   min-width: 120px;

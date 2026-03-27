@@ -9,11 +9,16 @@ from pathlib import Path
 from typing import Any
 
 from pokepoke.beads.beads_management import run_bd_sync_with_retry
-from pokepoke.beads.beads_query import _get_main_repo_root, _parse_beads_json, _run_bd
+from pokepoke.beads.beads_query import _get_main_repo_root
 from pokepoke.config import get_config
+from pokepoke.models.model_sync_beads import (
+    _find_model_items,
+    _list_existing_model_items,
+    _prune_unavailable_models,
+    _sync_beads_items,
+)
 from pokepoke.models.model_sync_parsing import (
     CopilotModelSnapshot,
-    is_beta_model,
     normalize_model_entry,
     parse_copilot_models_output,
 )
@@ -78,6 +83,24 @@ def save_registry(data: dict[str, Any], path: Path | None = None) -> None:
     registry_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
+def get_available_model_names(registry_path: Path | None = None) -> list[str]:
+    """Return sorted list of model names currently marked available in the registry."""
+    registry = load_registry(path=registry_path)
+    models = registry.get("models", {})
+    return sorted(
+        name
+        for name, entry in models.items()
+        if isinstance(entry, dict) and entry.get("available") is True
+    )
+
+
+def get_registry_last_sync(registry_path: Path | None = None) -> str | None:
+    """Return the ISO timestamp of the last model sync, or None."""
+    registry = load_registry(path=registry_path)
+    last_sync = registry.get("last_sync")
+    return last_sync if isinstance(last_sync, str) else None
+
+
 def update_registry(
     models: list[CopilotModelSnapshot],
     registry: dict[str, Any],
@@ -122,82 +145,6 @@ def update_registry(
     return registry, newly_available, became_unavailable
 
 
-def _build_issue_title(model_name: str) -> str:
-    return f"Beta test Copilot model: {model_name}"
-
-
-def _build_issue_description(model: CopilotModelSnapshot, discovered_at: str) -> str:
-    lines = [
-        "## Copilot Model Beta",
-        "",
-        f"**Model:** {model.name}",
-        f"**Discovered:** {discovered_at}",
-    ]
-    if model.status:
-        lines.append(f"**Status:** {model.status}")
-    if model.version:
-        lines.append(f"**Version:** {model.version}")
-    if model.context_window:
-        lines.append(f"**Context window:** {model.context_window:,} tokens")
-    if model.capabilities:
-        lines.append(f"**Capabilities:** {', '.join(model.capabilities)}")
-    if model.tags:
-        lines.append(f"**Tags:** {', '.join(model.tags)}")
-    if model.pricing:
-        lines.append(f"**Pricing:** {json.dumps(model.pricing, ensure_ascii=False)}")
-    lines.extend([
-        "",
-        "## Beta Testing",
-        "- Validate model availability in Copilot",
-        "- Exercise core workflows and report regressions",
-        "- Update notes with findings",
-    ])
-    return "\n".join(lines)
-
-
-def _build_model_metadata(model: CopilotModelSnapshot, discovered_at: str, last_seen: str) -> dict[str, Any]:
-    return {
-        "copilot_model": model.name,
-        "model_sync": {
-            "discovered_at": discovered_at,
-            "last_seen": last_seen,
-            "status": model.status,
-            "capabilities": model.capabilities,
-            "context_window": model.context_window,
-            "pricing": model.pricing,
-            "version": model.version,
-            "tags": model.tags,
-            "source": "copilot",
-        },
-    }
-
-
-def _list_existing_model_items(cwd: str | None = None) -> list[dict[str, Any]]:
-    result = _run_bd(["list", "--json"], check=False, cwd=cwd)
-    if result.returncode != 0 or not result.stdout:
-        return []
-    data = _parse_beads_json(result.stdout)
-    if not isinstance(data, list):
-        return []
-    return [item for item in data if isinstance(item, dict)]
-
-
-def _find_model_items(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    model_items: dict[str, dict[str, Any]] = {}
-    for item in items:
-        metadata = item.get("metadata")
-        model_name = None
-        if isinstance(metadata, dict):
-            model_name = metadata.get("copilot_model")
-        if not model_name:
-            title = str(item.get("title", ""))
-            if title.startswith("Beta test Copilot model: "):
-                model_name = title.replace("Beta test Copilot model: ", "", 1).strip()
-        if model_name:
-            model_items[str(model_name)] = item
-    return model_items
-
-
 def _should_skip_sync(sync_cfg: Any, registry: dict[str, Any], item_logger: Any | None) -> bool:
     """Check if sync should be skipped due to config or recent run."""
     if not sync_cfg.enabled:
@@ -236,94 +183,74 @@ def _fetch_and_normalize_models(
     return models
 
 
-def _sync_beads_items(
-    models: list[CopilotModelSnapshot],
-    sync_cfg: Any,
-    existing_items: dict[str, dict[str, Any]],
-    now: datetime,
-    cwd: str | None,
-    item_logger: Any | None,
-) -> tuple[list[str], list[str]]:
-    """Create or update beads items for models. Returns (created, updated) lists."""
-    created: list[str] = []
-    updated: list[str] = []
-
-    for model in models:
-        if sync_cfg.beta_only and not is_beta_model(model, sync_cfg.include_preview):
-            continue
-
-        title = _build_issue_title(model.name)
-        discovered_at = now.isoformat()
-        metadata = _build_model_metadata(model, discovered_at, discovered_at)
-        description = _build_issue_description(model, discovered_at)
-        existing = existing_items.get(model.name)
-        labels = ",".join(sync_cfg.labels)
-
-        if existing is None:
-            cmd = [
-                "create", title,
-                "--type", sync_cfg.issue_type,
-                "--priority", str(sync_cfg.priority),
-                "--description", description,
-                "--metadata", json.dumps(metadata, ensure_ascii=False),
-                "--json",
-            ]
-            if labels:
-                cmd.extend(["--labels", labels])
-            result = _run_bd(cmd, check=False, cwd=cwd)
-            if result.returncode == 0:
-                created.append(model.name)
-            else:
-                _log(item_logger, f"⚠️  Failed to create beads item for {model.name}: {result.stderr.strip()}")
-        else:
-            item_id = existing.get("id")
-            if not item_id:
-                continue
-            cmd = [
-                "update", str(item_id),
-                "--metadata", json.dumps(metadata, ensure_ascii=False),
-                "--description", description,
-            ]
-            result = _run_bd(cmd, check=False, cwd=cwd)
-            if result.returncode == 0:
-                updated.append(model.name)
-            else:
-                _log(item_logger, f"⚠️  Failed to update beads item {item_id} for {model.name}: {result.stderr.strip()}")
-
-    return created, updated
-
-
-def _prune_unavailable_models(
-    removed_models: set[str],
-    existing_items: dict[str, dict[str, Any]],
-    cwd: str | None,
-    item_logger: Any | None,
+def prune_unavailable_from_config(
+    registry_path: Path | None = None,
+    item_logger: Any | None = None,
 ) -> list[str]:
-    """Close beads items for models that are no longer available."""
-    closed: list[str] = []
-    for model_name in removed_models:
-        item = existing_items.get(model_name)
-        if not item:
-            continue
-        item_id = item.get("id")
-        if not item_id:
-            continue
-        result = _run_bd(["close", str(item_id), "--reason", "Model no longer available"], check=False, cwd=cwd)
-        if result.returncode == 0:
-            closed.append(model_name)
-        else:
-            _log(item_logger, f"⚠️  Failed to close beads item {item_id} for {model_name}: {result.stderr.strip()}")
-    return closed
+    """Remove unavailable models from the saved project config.
+
+    Checks ``candidate_models`` against the model registry and removes any
+    that are no longer available.  Persists the updated config and returns
+    the list of model names that were removed.
+    """
+    available = set(get_available_model_names(registry_path=registry_path))
+    if not available:
+        return []
+
+    from pokepoke.config import (
+        ProjectConfig,
+        _find_repo_root,
+        _load_config_file,
+        reset_config,
+    )
+
+    config_path = _find_repo_root() / ".pokepoke" / "config.yaml"
+    if not config_path.exists():
+        return []
+
+    try:
+        import yaml  # type: ignore[import-untyped]
+    except ImportError:
+        return []
+
+    raw_data = _load_config_file(config_path)
+    validated = ProjectConfig.from_dict(raw_data)
+
+    candidates = validated.models.candidate_models
+    if not candidates:
+        return []
+
+    pruned = [m for m in candidates if m not in available]
+    if not pruned:
+        return []
+
+    validated.models.candidate_models = [m for m in candidates if m in available]
+
+    canonical = validated.to_dict()
+    dumped = yaml.safe_dump(canonical, sort_keys=False, allow_unicode=True, default_flow_style=False)
+    if not dumped.endswith("\n"):
+        dumped += "\n"
+    config_path.write_text(dumped, encoding="utf-8")
+    reset_config()
+
+    for model_name in pruned:
+        _log(item_logger, f"🗑️  Removed unavailable model '{model_name}' from config")
+    return pruned
 
 
-def sync_copilot_models(item_logger: Any | None = None) -> AgentStats | None:
-    """Sync Copilot models into beads and update local registry."""
+def sync_copilot_models(item_logger: Any | None = None, force: bool = False) -> AgentStats | None:
+    """Sync Copilot models into beads and update local registry.
+
+    Args:
+        item_logger: Optional logger for output messages
+        force: If True, skip the interval check and always run the sync
+    """
     config = get_config()
     sync_cfg = config.model_sync
     start_time = time.time()
 
     registry = load_registry()
-    if _should_skip_sync(sync_cfg, registry, item_logger):
+    if not force and _should_skip_sync(sync_cfg, registry, item_logger):
         return AgentStats()
 
     models = _fetch_and_normalize_models(config.ai_backend.copilot_cli_path, config.command_timeout, item_logger)
@@ -347,6 +274,9 @@ def sync_copilot_models(item_logger: Any | None = None) -> AgentStats | None:
     if sync_cfg.prune_unavailable and removed_models:
         closed = _prune_unavailable_models(removed_models, existing_items, cwd, item_logger)
 
+    # Auto-prune unavailable models from saved config
+    config_pruned = prune_unavailable_from_config(item_logger=item_logger)
+
     if created or updated or closed:
         run_bd_sync_with_retry()
 
@@ -356,7 +286,9 @@ def sync_copilot_models(item_logger: Any | None = None) -> AgentStats | None:
         _log(item_logger, f"♻️  Updated model metadata: {', '.join(updated)}")
     if closed:
         _log(item_logger, f"🧹 Closed unavailable models: {', '.join(closed)}")
-    if not created and not updated and not closed:
+    if config_pruned:
+        _log(item_logger, f"🗑️  Pruned from config: {', '.join(config_pruned)}")
+    if not created and not updated and not closed and not config_pruned:
         _log(item_logger, "✅ Model sync complete (no changes).")
 
     elapsed = time.time() - start_time

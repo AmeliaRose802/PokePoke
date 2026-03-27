@@ -51,9 +51,18 @@ export const KNOWN_MAINTENANCE_AGENTS: MaintenanceAgent[] = [
     needs_worktree: false,
     enabled: true,
   },
+  {
+    name: "Model Sync",
+    prompt_file: "",
+    frequency: 1,
+    needs_worktree: false,
+    merge_changes: false,
+    enabled: true,
+  },
 ];
 
-export const KNOWN_MODELS = [
+/** Hardcoded fallback used when the SDK model registry is unavailable. */
+export const FALLBACK_KNOWN_MODELS = [
   "claude-opus-4.5",
   "claude-opus-4.6",
   "claude-sonnet-4",
@@ -67,6 +76,21 @@ export const KNOWN_MODELS = [
   "gpt-5.2",
   "gpt-5.2-codex",
 ];
+
+/**
+ * @deprecated Use `FALLBACK_KNOWN_MODELS` or dynamic models from the SDK registry.
+ */
+export const KNOWN_MODELS = FALLBACK_KNOWN_MODELS;
+
+/**
+ * Merge SDK-discovered models with the hardcoded fallback list.
+ * SDK models take priority; fallback fills in when no SDK data is available.
+ */
+export function mergeModelLists(sdkModels: string[]): string[] {
+  if (sdkModels.length === 0) return [...FALLBACK_KNOWN_MODELS];
+  const merged = new Set(sdkModels);
+  return [...merged].sort();
+}
 
 export const isAbTestingEnabled = (models?: { ab_testing_enabled?: boolean; candidate_models?: string[] }): boolean => {
   if (!models) return false;

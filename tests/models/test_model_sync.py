@@ -8,13 +8,18 @@ from unittest.mock import patch
 from pokepoke.config import ModelSyncConfig, ProjectConfig
 from pokepoke.models.model_sync import (
     _run_copilot_models,
-    is_beta_model,
+    get_available_model_names,
+    get_registry_last_sync,
     load_registry,
-    normalize_model_entry,
-    parse_copilot_models_output,
+    prune_unavailable_from_config,
     save_registry,
     sync_copilot_models,
     update_registry,
+)
+from pokepoke.models.model_sync_parsing import (
+    is_beta_model,
+    normalize_model_entry,
+    parse_copilot_models_output,
 )
 
 
@@ -83,6 +88,26 @@ def test_sync_skips_recent_run():
         mock_models.assert_not_called()
 
 
+def test_sync_force_ignores_interval():
+    """Test that force=True bypasses interval check and always runs sync."""
+    config = ProjectConfig()
+    config.model_sync = ModelSyncConfig(interval_minutes=60)
+    recent = datetime.now(UTC).isoformat()
+    mock_model = {"name": "gpt-5.2", "status": "ga"}
+
+    with patch("pokepoke.models.model_sync.get_config", return_value=config), \
+            patch("pokepoke.models.model_sync.load_registry", return_value={"last_sync": recent, "models": {}}), \
+            patch("pokepoke.models.model_sync._run_copilot_models", return_value=[mock_model]), \
+            patch("pokepoke.models.model_sync.save_registry"), \
+            patch("pokepoke.models.model_sync._get_main_repo_root", return_value=None), \
+            patch("pokepoke.models.model_sync._list_existing_model_items", return_value=[]), \
+            patch("pokepoke.models.model_sync.run_bd_sync_with_retry"):
+        result = sync_copilot_models(force=True)
+        assert result is not None
+        # Should have called Copilot CLI despite recent sync
+        assert result.wall_duration is not None
+
+
 def test_sync_no_models_returns_none():
     config = ProjectConfig()
     config.model_sync = ModelSyncConfig()
@@ -132,7 +157,7 @@ def test_sync_creates_and_updates_beads(tmp_path):
                 {"name": "gpt-5.2", "status": "beta"},
                 {"name": "claude-opus-4.6", "status": "ga"},
             ]), \
-            patch("pokepoke.models.model_sync._run_bd", side_effect=fake_run_bd) as mock_bd, \
+            patch("pokepoke.models.model_sync_beads._run_bd", side_effect=fake_run_bd) as mock_bd, \
             patch("pokepoke.models.model_sync._get_main_repo_root", return_value=tmp_path), \
             patch("pokepoke.models.model_sync.REGISTRY_PATH", tmp_path / "model_registry.json"), \
             patch("pokepoke.models.model_sync.run_bd_sync_with_retry") as mock_sync:
@@ -166,9 +191,133 @@ def test_sync_prunes_unavailable(tmp_path):
             patch("pokepoke.models.model_sync._run_copilot_models", return_value=[
                 {"name": "claude-opus-4.6", "status": "ga"}
             ]), \
-            patch("pokepoke.models.model_sync._run_bd", side_effect=fake_run_bd) as mock_bd, \
+            patch("pokepoke.models.model_sync_beads._run_bd", side_effect=fake_run_bd) as mock_bd, \
             patch("pokepoke.models.model_sync._get_main_repo_root", return_value=tmp_path), \
             patch("pokepoke.models.model_sync.REGISTRY_PATH", registry_path):
         result = sync_copilot_models()
         assert result is not None
         assert any(call.args[0][0] == "close" for call in mock_bd.call_args_list)
+
+
+def test_get_available_model_names(tmp_path):
+    """get_available_model_names returns only models marked available."""
+    registry_path = tmp_path / "registry.json"
+    registry_path.write_text(json.dumps({
+        "last_sync": "2026-03-25T00:00:00+00:00",
+        "models": {
+            "gpt-5.2": {"available": True, "name": "gpt-5.2"},
+            "claude-opus-4.6": {"available": True, "name": "claude-opus-4.6"},
+            "old-model": {"available": False, "name": "old-model"},
+        },
+    }))
+    names = get_available_model_names(registry_path=registry_path)
+    assert names == ["claude-opus-4.6", "gpt-5.2"]
+
+
+def test_get_available_model_names_empty_registry(tmp_path):
+    """Returns empty list when no registry exists."""
+    names = get_available_model_names(registry_path=tmp_path / "missing.json")
+    assert names == []
+
+
+def test_get_registry_last_sync(tmp_path):
+    """get_registry_last_sync returns the timestamp from registry."""
+    registry_path = tmp_path / "registry.json"
+    ts = "2026-03-25T12:00:00+00:00"
+    registry_path.write_text(json.dumps({"last_sync": ts, "models": {}}))
+    assert get_registry_last_sync(registry_path=registry_path) == ts
+
+
+def test_get_registry_last_sync_missing(tmp_path):
+    """Returns None when registry doesn't exist."""
+    assert get_registry_last_sync(registry_path=tmp_path / "missing.json") is None
+
+
+def test_prune_unavailable_from_config(tmp_path):
+    """prune_unavailable_from_config removes stale models and saves config."""
+    # Set up registry with only claude-opus-4.6 available
+    registry_path = tmp_path / "registry.json"
+    registry_path.write_text(json.dumps({
+        "last_sync": "2026-03-25T00:00:00+00:00",
+        "models": {
+            "claude-opus-4.6": {"available": True},
+            "gpt-5": {"available": True},
+        },
+    }))
+
+    # Set up config with a stale model
+    config_path = tmp_path / ".pokepoke" / "config.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    import yaml
+    config_data = {
+        "models": {
+            "default": "claude-opus-4.6",
+            "fallback": "gpt-5",
+            "candidate_models": ["claude-opus-4.6", "gpt-5", "stale-model"],
+        },
+    }
+    config_path.write_text(yaml.safe_dump(config_data))
+
+    with patch("pokepoke.models.model_sync.REGISTRY_PATH", registry_path), \
+            patch("pokepoke.config._find_repo_root", return_value=tmp_path):
+        removed = prune_unavailable_from_config(registry_path=registry_path)
+
+    assert removed == ["stale-model"]
+
+    # Verify config was updated
+    updated = yaml.safe_load(config_path.read_text())
+    assert "stale-model" not in updated["models"]["candidate_models"]
+    assert "claude-opus-4.6" in updated["models"]["candidate_models"]
+    assert "gpt-5" in updated["models"]["candidate_models"]
+
+
+def test_prune_unavailable_from_config_no_stale(tmp_path):
+    """No pruning when all candidates are available."""
+    registry_path = tmp_path / "registry.json"
+    registry_path.write_text(json.dumps({
+        "last_sync": "2026-03-25T00:00:00+00:00",
+        "models": {
+            "claude-opus-4.6": {"available": True},
+            "gpt-5": {"available": True},
+        },
+    }))
+
+    config_path = tmp_path / ".pokepoke" / "config.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    import yaml
+    config_data = {
+        "models": {
+            "candidate_models": ["claude-opus-4.6", "gpt-5"],
+        },
+    }
+    config_path.write_text(yaml.safe_dump(config_data))
+
+    with patch("pokepoke.models.model_sync.REGISTRY_PATH", registry_path), \
+            patch("pokepoke.config._find_repo_root", return_value=tmp_path):
+        removed = prune_unavailable_from_config(registry_path=registry_path)
+
+    assert removed == []
+
+
+def test_prune_unavailable_from_config_no_candidates(tmp_path):
+    """No pruning when config has no candidate_models."""
+    registry_path = tmp_path / "registry.json"
+    registry_path.write_text(json.dumps({
+        "last_sync": "2026-03-25T00:00:00+00:00",
+        "models": {"claude-opus-4.6": {"available": True}},
+    }))
+
+    config_path = tmp_path / ".pokepoke" / "config.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    import yaml
+    config_data = {"models": {"default": "claude-opus-4.6"}}
+    config_path.write_text(yaml.safe_dump(config_data))
+
+    with patch("pokepoke.models.model_sync.REGISTRY_PATH", registry_path), \
+            patch("pokepoke.config._find_repo_root", return_value=tmp_path):
+        removed = prune_unavailable_from_config(registry_path=registry_path)
+
+    assert removed == []
