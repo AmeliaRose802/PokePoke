@@ -147,8 +147,8 @@ def _find_test_files_for_staged(
     _map_source_to_tests(staged_source, repo_root, test_files)
 
     if not test_files:
-        print("[scope] No matching test files found — skipping tests (coverage gate will catch gaps)")
-        return [], False
+        print("[scope] No matching test files found — falling back to full test suite")
+        return [], True
 
     return sorted(test_files), False
 

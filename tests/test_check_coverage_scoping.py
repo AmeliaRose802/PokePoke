@@ -97,21 +97,8 @@ class TestConftestScoping:
 class TestNoTestFallback:
     """Tests for the no-test-files-found case."""
 
-    def test_no_mapping_does_not_run_full_suite(self, fake_repo):
-        """When no test mapping is found, should NOT fall back to full suite."""
-        staged = ["src/pokepoke/helpers.py"]
-        with patch.object(_mod, "_get_staged_files", return_value=[
-            "src/pokepoke/helpers.py"
-        ]):
-            _test_files, _run_full = _find_test_files_for_staged(staged, fake_repo)
-
-        # No test_helpers.py exists at the expected location...
-        # Actually, tests/utils/test_helpers.py exists, so it should be found
-        # Let's test with a module that has no test file at all
-        pass
-
-    def test_unmapped_module_returns_empty(self, fake_repo):
-        """Module with no test file should return empty, not full suite."""
+    def test_no_mapping_falls_back_to_full_suite(self, fake_repo):
+        """When no test mapping is found, should fall back to full suite."""
         staged = ["src/pokepoke/unmapped_module.py"]
         (fake_repo / "src" / "pokepoke" / "unmapped_module.py").write_text("")
         with patch.object(_mod, "_get_staged_files", return_value=[
@@ -119,7 +106,19 @@ class TestNoTestFallback:
         ]):
             test_files, run_full = _find_test_files_for_staged(staged, fake_repo)
 
-        assert not run_full
+        assert run_full
+        assert test_files == []
+
+    def test_unmapped_module_signals_full_suite(self, fake_repo):
+        """Module with no test file should signal full suite run."""
+        staged = ["src/pokepoke/another_unmapped.py"]
+        (fake_repo / "src" / "pokepoke" / "another_unmapped.py").write_text("")
+        with patch.object(_mod, "_get_staged_files", return_value=[
+            "src/pokepoke/another_unmapped.py"
+        ]):
+            test_files, run_full = _find_test_files_for_staged(staged, fake_repo)
+
+        assert run_full
         assert test_files == []
 
 
