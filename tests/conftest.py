@@ -141,9 +141,9 @@ class _PrintHandler(_logging.Handler):
             # Strip surrogate characters that crash xdist worker serialization
             msg = msg.encode("utf-8", errors="replace").decode("utf-8")
             if record.levelno >= _logging.WARNING:
-                print(msg, file=sys.stderr)
+                print(msg, file=sys.stderr)  # noqa: T201 - intentional: bridges logger→capsys
             else:
-                print(msg)
+                print(msg)  # noqa: T201 - intentional: bridges logger→capsys
         except Exception:
             self.handleError(record)
 

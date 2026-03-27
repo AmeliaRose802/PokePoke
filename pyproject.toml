@@ -126,7 +126,6 @@ max-statements = 50
 "tests/**/*" = [
     "C901",    # Tests: allow complex functions
     "S",       # Tests: allow security/bandit warnings
-    "T20",     # Tests: allow print statements
     "RUF005",# Tests: allow list concatenation (clearer in test setup)
     # "RUF006",  # Tests: allow asyncio dangling tasks (test patterns) - REMOVED: fixing violations
     "RUF015",  # Tests: allow iterable allocation patterns
