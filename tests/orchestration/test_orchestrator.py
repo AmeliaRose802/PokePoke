@@ -458,7 +458,7 @@ class TestRunOrchestratorContinuousMode:
             include_sleep=True, include_maintenance=True,
         ) as mocks:
             mocks['get_items'].side_effect = [[items[i]] for i in range(10)] + [[]]
-            mocks['select'].side_effect = items[:10] + [None]
+            mocks['select'].side_effect = [*items[:10], None]
             mocks['process'].return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
 
             result = run_orchestrator(interactive=False, continuous=True)

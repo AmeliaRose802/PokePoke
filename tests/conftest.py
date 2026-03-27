@@ -372,7 +372,7 @@ def _block_real_bd_subprocess(request, monkeypatch):
     import subprocess as _sp
 
     def _blocked(args, **kw):
-        return _sp.CompletedProcess(["bd"] + list(args), 1, "", "blocked by test fixture")
+        return _sp.CompletedProcess(["bd", *list(args)], 1, "", "blocked by test fixture")
 
     monkeypatch.setattr("pokepoke.beads.beads_query._run_bd", _blocked, raising=False)
     monkeypatch.setattr("pokepoke.beads.beads_management._run_bd", _blocked, raising=False)
