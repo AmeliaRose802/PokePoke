@@ -19,9 +19,7 @@ class RateLimitError(Exception):
     def __init__(self, message: str = "Rate limit exceeded") -> None:
         super().__init__(message)
 
-# Default hung command detection settings
-DEFAULT_MAX_READ_RETRIES = 3  # After 3 reads with no new output, consider hung
-
+DEFAULT_MAX_READ_RETRIES = 3
 _STREAMING_ATTRS = ("stdout", "stderr", "output", "chunk", "delta", "delta_content", "content", "message", "text")
 
 class SessionStats(TypedDict):
@@ -346,6 +344,7 @@ class _EventHandler:
         "assistant.turn_start": _on_turn_start,
         "assistant.turn_end": _on_turn_end,
         "assistant.usage": _on_usage,
+        "assistant.reasoning_delta": _on_noop,
         "tool.execution_start": _on_tool_start,
         "tool.execution_complete": _on_tool_complete,
         "session.idle": _on_session_idle,
@@ -357,6 +356,7 @@ class _EventHandler:
         "session.model_change": _on_model_change,
         "session.usage_info": _on_usage,
         "pending_messages.modified": _on_noop,
+        "permission.completed": _on_noop,
         "unknown": _on_noop,
         "user.message": _on_noop,
     }
