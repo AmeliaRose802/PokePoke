@@ -384,7 +384,7 @@ class TestAwaitCompletionInactivity:
         async def _set_done():
             await asyncio.sleep(0.05)
             done.set()
-        asyncio.create_task(_set_done())
+        _background_task = asyncio.create_task(_set_done())  # noqa: RUF006
 
         result = await _await_completion(
             session, client, done, max_timeout=3600,
@@ -414,7 +414,7 @@ class TestAwaitCompletionInactivity:
         async def _set_done():
             await asyncio.sleep(0.05)
             done.set()
-        asyncio.create_task(_set_done())
+        _background_task = asyncio.create_task(_set_done())  # noqa: RUF006
 
         result = await _await_completion(
             session, client, done, max_timeout=3600,
@@ -442,7 +442,7 @@ class TestAwaitCompletionInactivity:
         async def _set_done():
             await asyncio.sleep(0.05)
             done.set()
-        asyncio.create_task(_set_done())
+        _background_task = asyncio.create_task(_set_done())  # noqa: RUF006
 
         result = await _await_completion(
             session, client, done, max_timeout=3600,
@@ -464,7 +464,7 @@ class TestAwaitCompletionInactivity:
         async def _set_done():
             await asyncio.sleep(0.05)
             done.set()
-        asyncio.create_task(_set_done())
+        _background_task = asyncio.create_task(_set_done())  # noqa: RUF006
 
         result = await _await_completion(
             session, client, done, max_timeout=3600,
@@ -662,7 +662,7 @@ class TestAwaitCompletionPingLiveness:
         async def _set_done():
             await asyncio.sleep(0.05)
             done.set()
-        asyncio.create_task(_set_done())
+        _background_task = asyncio.create_task(_set_done())  # noqa: RUF006
 
         result = await _await_completion(
             session, client, done, max_timeout=3600,
@@ -903,7 +903,7 @@ class TestAwaitCompletionProcessOutputTimeout:
         async def _set_done():
             await asyncio.sleep(0.05)
             done.set()
-        asyncio.create_task(_set_done())
+        _background_task = asyncio.create_task(_set_done())  # noqa: RUF006
 
         result = await _await_completion(
             session, client, done, max_timeout=3600,
@@ -937,7 +937,7 @@ class TestAwaitCompletionProcessOutputTimeout:
         async def _set_done():
             await asyncio.sleep(0.05)
             done.set()
-        asyncio.create_task(_set_done())
+        _background_task = asyncio.create_task(_set_done())  # noqa: RUF006
 
         result = await _await_completion(
             session, client, done, max_timeout=3600,
@@ -971,7 +971,7 @@ class TestAwaitCompletionProcessOutputTimeout:
         async def _set_done():
             await asyncio.sleep(0.05)
             done.set()
-        asyncio.create_task(_set_done())
+        _background_task = asyncio.create_task(_set_done())  # noqa: RUF006
 
         result = await _await_completion(
             session, client, done, max_timeout=3600,

@@ -229,7 +229,7 @@ class TestInvokeCopilotSDKAsync:
                     event.type.value = "session.end"
                     event.data = MagicMock()
                     stored_handler(event)
-            asyncio.create_task(trigger_completion())
+            _background_task = asyncio.create_task(trigger_completion())  # noqa: RUF006
         mock_session.send = mock_send
         mock_session.destroy = AsyncMock()
 
@@ -288,7 +288,7 @@ class TestInvokeCopilotSDKAsync:
                     event.type.value = "session.end"
                     event.data = MagicMock()
                     stored_handler(event)
-            asyncio.create_task(send_events())
+            _background_task = asyncio.create_task(send_events())  # noqa: RUF006
 
         mock_session.send = mock_send
         mock_session.destroy = AsyncMock()
@@ -342,7 +342,7 @@ class TestInvokeCopilotSDKAsync:
                     event.type.value = "session.end"
                     event.data = MagicMock()
                     stored_handler(event)
-            asyncio.create_task(send_events())
+            _background_task = asyncio.create_task(send_events())  # noqa: RUF006
 
         mock_session.send = mock_send
         mock_session.destroy = AsyncMock()
@@ -393,7 +393,7 @@ class TestInvokeCopilotSDKAsync:
                     event.type.value = "session.end"
                     event.data = MagicMock()
                     stored_handler(event)
-            asyncio.create_task(send_events())
+            _background_task = asyncio.create_task(send_events())  # noqa: RUF006
 
         mock_session.send = mock_send
         mock_session.destroy = AsyncMock()
@@ -450,7 +450,7 @@ class TestInvokeCopilotSDKAsync:
                     event.type.value = "session.end"
                     event.data = MagicMock()
                     stored_handler(event)
-            asyncio.create_task(send_events())
+            _background_task = asyncio.create_task(send_events())  # noqa: RUF006
 
         mock_session.send = mock_send
         mock_session.destroy = AsyncMock()
@@ -494,7 +494,7 @@ class TestInvokeCopilotSDKAsync:
                     event.type.value = "session.error"
                     event.data = MagicMock(message="Test error message")
                     stored_handler(event)
-            asyncio.create_task(send_events())
+            _background_task = asyncio.create_task(send_events())  # noqa: RUF006
 
         mock_session.send = mock_send
         mock_session.destroy = AsyncMock()
@@ -800,7 +800,7 @@ class TestInvokeCopilotSDKAsync:
                     event = MagicMock()
                     event.type.value = "session.end"
                     stored_handler(event)
-            asyncio.create_task(send_events())
+            _background_task = asyncio.create_task(send_events())  # noqa: RUF006
 
         mock_session.send = mock_send
         mock_session.destroy = AsyncMock()
@@ -862,7 +862,7 @@ class TestInvokeCopilotSDKAsync:
                     event = MagicMock()
                     event.type.value = "session.end"
                     stored_handler(event)
-            asyncio.create_task(send_events())
+            _background_task = asyncio.create_task(send_events())  # noqa: RUF006
 
         mock_session.send = mock_send
         mock_session.destroy = AsyncMock()
@@ -949,7 +949,7 @@ class TestInvokeCopilotSDKAsync:
                     event = MagicMock()
                     event.type.value = "session.end"
                     stored_handler(event)
-            asyncio.create_task(send_events())
+            _background_task = asyncio.create_task(send_events())  # noqa: RUF006
 
         mock_session.send = mock_send
         mock_session.destroy = AsyncMock()
@@ -1010,7 +1010,7 @@ class TestInvokeCopilotSDKAsync:
                     event = MagicMock()
                     event.type.value = "session.end"
                     stored_handler(event)
-            asyncio.create_task(send_events())
+            _background_task = asyncio.create_task(send_events())  # noqa: RUF006
 
         mock_session.send = mock_send
         mock_session.destroy = AsyncMock()
@@ -1070,7 +1070,7 @@ class TestInvokeCopilotSDKAsync:
                     event = MagicMock()
                     event.type.value = "session.end"
                     stored_handler(event)
-            asyncio.create_task(send_events())
+            _background_task = asyncio.create_task(send_events())  # noqa: RUF006
         mock_session.send = mock_send
         mock_session.destroy = AsyncMock()
 
@@ -1112,7 +1112,7 @@ class TestInvokeCopilotSDKAsync:
                     event = MagicMock()
                     event.type.value = "session.end"
                     stored_handler(event)
-            asyncio.create_task(send_events())
+            _background_task = asyncio.create_task(send_events())  # noqa: RUF006
         mock_session.send = mock_send
         mock_session.destroy = AsyncMock()
 
@@ -1195,7 +1195,7 @@ class TestInvokeCopilotSDKAsync:
                     event = MagicMock()
                     event.type.value = "session.end"
                     stored_handler(event)
-            asyncio.create_task(send_events())
+            _background_task = asyncio.create_task(send_events())  # noqa: RUF006
         mock_session.send = mock_send
         mock_session.destroy = AsyncMock()
 
@@ -1278,7 +1278,7 @@ class TestInvokeCopilotSDKAsync:
                     event = MagicMock()
                     event.type.value = "session.end"
                     stored_handler(event)
-            asyncio.create_task(send_events())
+            _background_task = asyncio.create_task(send_events())  # noqa: RUF006
         mock_session.send = mock_send
         mock_session.destroy = AsyncMock()
 
@@ -1385,7 +1385,7 @@ class TestInvokeCopilotSDKAsync:
                     event = MagicMock()
                     event.type.value = "session.end"
                     stored_handler(event)
-            asyncio.create_task(trigger_idle())
+            _background_task = asyncio.create_task(trigger_idle())  # noqa: RUF006
         mock_session.send = mock_send
         mock_session.destroy = AsyncMock()
 
@@ -1591,7 +1591,7 @@ class TestRateLimitFallback:
                             event.type.value = "session.end"
                             event.data = MagicMock()
                             stored_handler(event)
-                asyncio.create_task(send_events())
+                _background_task = asyncio.create_task(send_events())  # noqa: RUF006
 
             mock_session.send = mock_send
             return mock_session
@@ -1656,7 +1656,7 @@ class TestRateLimitFallback:
                             event.type.value = "session.end"
                             event.data = MagicMock()
                             stored_handler(event)
-                asyncio.create_task(send_events())
+                _background_task = asyncio.create_task(send_events())  # noqa: RUF006
 
             mock_session.send = mock_send
             return mock_session
@@ -1728,7 +1728,7 @@ class TestRateLimitFallback:
                             event.type.value = "session.end"
                             event.data = MagicMock()
                             stored_handler(event)
-                asyncio.create_task(send_events())
+                _background_task = asyncio.create_task(send_events())  # noqa: RUF006
 
             mock_session.send = mock_send
             return mock_session
@@ -1784,7 +1784,7 @@ class TestRateLimitFallback:
                             message="rate limit exceeded"
                         )
                         stored_handler(event)
-                asyncio.create_task(send_events())
+                _background_task = asyncio.create_task(send_events())  # noqa: RUF006
 
             mock_session.send = mock_send
             return mock_session
@@ -1855,7 +1855,7 @@ class TestRateLimitFallback:
                             event.type.value = "session.end"
                             event.data = MagicMock()
                             stored_handler(event)
-                asyncio.create_task(send_events())
+                _background_task = asyncio.create_task(send_events())  # noqa: RUF006
 
             mock_session.send = mock_send
             return mock_session
@@ -1911,7 +1911,7 @@ class TestRateLimitFallback:
                             message="rate limit exceeded"
                         )
                         stored_handler(event)
-                asyncio.create_task(send_events())
+                _background_task = asyncio.create_task(send_events())  # noqa: RUF006
 
             mock_session.send = mock_send
             return mock_session
