@@ -12,6 +12,10 @@ from pokepoke.agents.parallel_runtime import (
     compute_effective_max_agents,
     set_runtime_parallel_limits,
 )
+from pokepoke.agents.parallel_worker_pool import (
+    ParallelWorkerPool,
+    collect_done_futures,
+)
 from pokepoke.beads.beads import (
     assign_and_sync_item,
     get_ready_work_items,
@@ -150,69 +154,10 @@ def _parallel_process_item(
         clear_agent_name()
         semaphore.release()
 
-def _collect_done_futures(
-    futures: dict[_Future, BeadsWorkItem],
-    failed_claim_ids: set[str],
-    total_requests: int,
-    session_stats: SessionStats,
-    run_logger: RunLogger,
-    record_fn: Any,
-) -> tuple[int, bool, int, int]:
-    """Collect completed futures and record results.
-    Returns (total_requests, any_success, success_count, failure_count).
-    """
-    done_futs: set[_Future] = set()
-    for fut in list(futures):
-        if fut.done():
-            done_futs.add(fut)
-
-    if not done_futs and futures:
-        done_batch, _ = concurrent.futures.wait(
-            futures, timeout=2.0, return_when=concurrent.futures.FIRST_COMPLETED,
-        )
-        done_futs.update(done_batch)
-        # Second sweep: catch futures that completed while wait() was running.
-        # Without this, concurrent completions are missed and slots = 1 not N.
-        for fut in list(futures):
-            if fut.done():
-                done_futs.add(fut)
-
-    if done_futs:
-        run_logger.log_orchestrator(
-            f"Agent lifecycle: collected {len(done_futs)} agent(s); "
-            f"{len(futures) - len(done_futs)} remain active"
-        )
-
-    any_success = False
-    success_count = 0
-    failure_count = 0
-    for fut in done_futs:
-        item = futures.pop(fut)
-        was_exception = False
-        try:
-            result = fut.result()
-        except Exception as exc:
-            logger.error(f"\n❌ Agent for {item.id} raised: {exc}")
-            run_logger.log_orchestrator(f"Agent error for {item.id}: {exc}", level="ERROR")
-            result = WorkItemResult(success=False, request_count=0)
-            was_exception = True
-        # Only blacklist explicit claim failures, not exception-crashed workers.
-        if not result.success and result.request_count == 0 and not was_exception:
-            failed_claim_ids.add(item.id)
-        if result.success:
-            failed_claim_ids.discard(item.id)
-            any_success = True
-            success_count += 1
-        else:
-            failure_count += 1
-        total_requests += result.request_count
-        try:
-            record_fn(item, result, session_stats, run_logger)
-        except Exception as exc:
-            logger.warning(f"record_fn raised for {item.id}: {exc}", exc_info=True)
-            run_logger.log_orchestrator(f"Error recording result for {item.id}: {exc}", level="ERROR")
-
-    return total_requests, any_success, success_count, failure_count
+# Backward-compatible alias – logic now lives in parallel_worker_pool.py.
+# Tests and parallel_support.py reference this name via
+# ``@patch("pokepoke.agents.parallel._collect_done_futures")``.
+_collect_done_futures = collect_done_futures
 
 @dataclass
 class _LoopState:
@@ -340,13 +285,8 @@ def run_parallel_loop(
     pool_size = min(effective_parallel, _DEFAULT_PARALLEL_CEILING)
     if effective_parallel > _DEFAULT_PARALLEL_CEILING:
         logger.warning("max_parallel_agents (%d) exceeds ceiling (%d); clamping pool", effective_parallel, _DEFAULT_PARALLEL_CEILING)
-    semaphore = threading.Semaphore(pool_size)
-    futures: dict[_Future, BeadsWorkItem] = {}
-    executor = concurrent.futures.ThreadPoolExecutor(
-        max_workers=pool_size,
-        thread_name_prefix="pokepoke-agent",
-    )
-    set_executor(executor)
+    pool = ParallelWorkerPool(pool_size)
+    set_executor(pool.executor)
     set_runtime_parallel_limits(effective_parallel, cli_override, baseline=_get_dynamic_max_agents() if cli_override else None)
 
     state = _LoopState()
@@ -354,19 +294,19 @@ def run_parallel_loop(
     try:
         while not is_shutting_down():
             if state.circuit_breaker_tripped:
-                if _handle_circuit_breaker_drain(state, futures, failed_claim_ids, session_stats, run_logger, record_fn, mode_name):
+                if _handle_circuit_breaker_drain(state, pool.futures, failed_claim_ids, session_stats, run_logger, record_fn, mode_name):
                     break
                 continue
             result = _run_loop_iteration(
-                state, futures, failed_claim_ids, session_stats, run_logger,
-                record_fn, finalize_fn, semaphore, executor,
+                state, pool.futures, failed_claim_ids, session_stats, run_logger,
+                record_fn, finalize_fn, pool.semaphore, pool.executor,
                 main_repo_path, start_time, continuous, mode_name,
             )
             if result == "break":
                 break
             if result == "continue":
                 continue
-            terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", f"{len(futures)} agents active")
+            terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", f"{pool.active_count} agents active")
             for _ in range(10):
                 if is_shutting_down() or _spawn_wakeup.is_set():
                     break
@@ -374,8 +314,8 @@ def run_parallel_loop(
             _spawn_wakeup.clear()
 
     finally:
-        state.total_requests, timeout_occurred = _finalize_workers(futures, session_stats, start_time, state.total_requests, run_logger, record_fn)
-        executor.shutdown(wait=True, cancel_futures=timeout_occurred)
+        state.total_requests, timeout_occurred = _finalize_workers(pool.futures, session_stats, start_time, state.total_requests, run_logger, record_fn)
+        pool.shutdown(wait=True, cancel_futures=timeout_occurred)
         set_executor(None)
         clear_runtime_parallel_limits()
         if not state.finalized:
