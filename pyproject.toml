@@ -100,7 +100,6 @@ ignore = [
     "PLR0915", # Too many statements - requires refactoring
     "PLR2004", # Magic value used in comparison - too noisy for existing codebase
     "S603",    # subprocess without shell=True - expected for CLI orchestrator
-    "S607",    # Start process with partial path - expected for CLI invocations (git, bd, etc.)
     "S101",    # assert - used for internal invariants, not security-sensitive
     "S110",    # try-except-pass - intentional in graceful-degradation patterns
     "S310",    # suspicious-url-open-usage - false positive for controlled URLs
@@ -125,10 +124,11 @@ max-statements = 50
 ]
 "tests/**/*" = [
     "C901",    # Tests: allow complex functions
-    "S",       # Tests: allow security/bandit warnings
+    "S101",    # Tests: allow assert statements (inherent to test framework)
+    "S108",    # Tests: allow hardcoded temp paths for test fixtures
+    "S607",    # Tests: allow partial executable paths in test scenarios
     "RUF015",  # Tests: allow iterable allocation patterns
     "PERF401", # Tests: allow manual list comprehension
-    "PERF102", # Tests: allow dict iterator patterns
 ]
 "src/pokepoke/models/sdk_helpers.py" = ["C901"]  # Complex timeout logic
 "src/pokepoke/models/sdk_await.py" = ["C901"]  # Complex timeout logic (extracted from sdk_helpers)

@@ -129,7 +129,7 @@ class TestCreateWorktreeIntegration:
         mock_run.side_effect = error
 
         # Execute and verify
-        with pytest.raises(RuntimeError, match="Base branch .* does not exist"):
+        with pytest.raises(RuntimeError, match=r"Base branch .* does not exist"):
             create_worktree('test-999')
 
     @patch('pokepoke.worktrees.worktrees.list_worktrees')

@@ -178,7 +178,7 @@ class TestCopilotClientNone:
     @patch('pokepoke.models.copilot_sdk._HAS_COPILOT', False)
     def test_invoke_sync_raises_when_sdk_missing(self, sample_work_item):
         """Test that invoke_copilot_sdk_sync raises ImportError when SDK not installed."""
-        with pytest.raises(ImportError, match="copilot.*SDK.*not installed"):
+        with pytest.raises(ImportError, match=r"copilot.*SDK.*not installed"):
             invoke_copilot_sdk_sync(
                 work_item=sample_work_item,
                 prompt="test prompt",
