@@ -685,4 +685,158 @@ describe("SettingsPage", () => {
 
     expect(mockOpenPromptEditor).toHaveBeenCalledWith("janitor.md");
   });
+
+  describe("dynamic model discovery", () => {
+    const mockGetAvailableModels = vi.fn();
+
+    it("should use SDK-discovered models for autocomplete suggestions", async () => {
+      mockGetAvailableModels.mockResolvedValue({
+        models: ["sdk-model-a", "sdk-model-b"],
+        last_sync: "2026-03-25T00:00:00Z",
+        removed_from_config: [],
+      });
+
+      render(
+        <SettingsPage
+          getConfig={mockGetConfig}
+          saveConfig={mockSaveConfig}
+          getAvailableModels={mockGetAvailableModels}
+          onClose={mockOnClose}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText("Loading configuration…")).not.toBeInTheDocument();
+      });
+
+      expect(mockGetAvailableModels).toHaveBeenCalledTimes(1);
+
+      // Check that sdk models appear in the datalists
+      const defaultModelSuggestions = document.getElementById("default-model-suggestions") as HTMLDataListElement;
+      expect(defaultModelSuggestions).toBeTruthy();
+      const optionValues = Array.from(defaultModelSuggestions.querySelectorAll("option")).map((o) => o.value);
+      expect(optionValues).toContain("sdk-model-a");
+      expect(optionValues).toContain("sdk-model-b");
+    });
+
+    it("should show notification when models are pruned from config", async () => {
+      mockGetAvailableModels.mockResolvedValue({
+        models: ["claude-opus-4.6"],
+        last_sync: "2026-03-25T00:00:00Z",
+        removed_from_config: ["stale-model-1", "stale-model-2"],
+      });
+
+      render(
+        <SettingsPage
+          getConfig={mockGetConfig}
+          saveConfig={mockSaveConfig}
+          getAvailableModels={mockGetAvailableModels}
+          onClose={mockOnClose}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText("Loading configuration…")).not.toBeInTheDocument();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole("alert")).toBeInTheDocument();
+      });
+      expect(screen.getByText(/stale-model-1, stale-model-2/)).toBeInTheDocument();
+    });
+
+    it("should dismiss the pruned models notification", async () => {
+      const user = userEvent.setup();
+      mockGetAvailableModels.mockResolvedValue({
+        models: ["claude-opus-4.6"],
+        last_sync: "2026-03-25T00:00:00Z",
+        removed_from_config: ["stale-model"],
+      });
+
+      render(
+        <SettingsPage
+          getConfig={mockGetConfig}
+          saveConfig={mockSaveConfig}
+          getAvailableModels={mockGetAvailableModels}
+          onClose={mockOnClose}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole("alert")).toBeInTheDocument();
+      });
+
+      const dismissBtn = screen.getByLabelText("Dismiss notification");
+      await user.click(dismissBtn);
+
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("should fall back to hardcoded models when SDK returns empty list", async () => {
+      mockGetAvailableModels.mockResolvedValue({
+        models: [],
+        last_sync: null,
+        removed_from_config: [],
+      });
+
+      render(
+        <SettingsPage
+          getConfig={mockGetConfig}
+          saveConfig={mockSaveConfig}
+          getAvailableModels={mockGetAvailableModels}
+          onClose={mockOnClose}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText("Loading configuration…")).not.toBeInTheDocument();
+      });
+
+      // Should still have fallback models in datalist
+      const defaultModelSuggestions = document.getElementById("default-model-suggestions") as HTMLDataListElement;
+      expect(defaultModelSuggestions).toBeTruthy();
+      const optionValues = Array.from(defaultModelSuggestions.querySelectorAll("option")).map((o) => o.value);
+      expect(optionValues.length).toBeGreaterThan(0);
+      expect(optionValues).toContain("claude-opus-4.6");
+    });
+
+    it("should work without getAvailableModels prop", async () => {
+      render(
+        <SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />,
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText("Loading configuration…")).not.toBeInTheDocument();
+      });
+
+      // Should use fallback models
+      const defaultModelSuggestions = document.getElementById("default-model-suggestions") as HTMLDataListElement;
+      expect(defaultModelSuggestions).toBeTruthy();
+      const optionValues = Array.from(defaultModelSuggestions.querySelectorAll("option")).map((o) => o.value);
+      expect(optionValues).toContain("claude-opus-4.6");
+    });
+
+    it("should gracefully handle getAvailableModels failure", async () => {
+      mockGetAvailableModels.mockResolvedValue(null);
+
+      render(
+        <SettingsPage
+          getConfig={mockGetConfig}
+          saveConfig={mockSaveConfig}
+          getAvailableModels={mockGetAvailableModels}
+          onClose={mockOnClose}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText("Loading configuration…")).not.toBeInTheDocument();
+      });
+
+      // Should still have fallback models
+      const defaultModelSuggestions = document.getElementById("default-model-suggestions") as HTMLDataListElement;
+      expect(defaultModelSuggestions).toBeTruthy();
+      const optionValues = Array.from(defaultModelSuggestions.querySelectorAll("option")).map((o) => o.value);
+      expect(optionValues.length).toBeGreaterThan(0);
+    });
+  });
 });

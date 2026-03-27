@@ -183,6 +183,15 @@ def _setup_orchestrator(
         if beta_stats:
             session_stats.record_agent_stats(beta_stats)
         logger.info("✅ Beta Tester completed\n")
+
+    # Sync models from Copilot SDK at startup
+    try:
+        from pokepoke.models.model_sync import sync_copilot_models
+        if stats := sync_copilot_models(force=True):
+            session_stats.record_agent_stats(stats)
+    except Exception as e:
+        logger.warning(f"⚠️  Model sync failed (will use cached registry): {e}")
+
     # Resolve effective parallelism: CLI arg > config > 1
     cfg = load_config()
     effective_parallel = max(1, max_parallel_agents if max_parallel_agents > 1 else cfg.max_parallel_agents)

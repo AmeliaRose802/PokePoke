@@ -25,6 +25,7 @@ from pokepoke.utils.shutdown import (
 
 from . import desktop_api_agents as _agents
 from . import desktop_api_ext as _ext
+from . import desktop_api_models as _models
 from . import desktop_api_session as _session
 from . import desktop_api_setup as _setup
 from . import desktop_api_stats as _stats
@@ -163,6 +164,7 @@ class DesktopAPI:
         with self._lock:
             return self._serialize_live_stats()
     get_config, save_config = _ext.get_config, _ext.save_config
+    get_available_models = _models.get_available_models
 
     # ─── Python → State: Called by the orchestrator ───────────────────
     def push_log(

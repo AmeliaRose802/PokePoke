@@ -320,6 +320,7 @@ function App() {
         <SettingsPage
           getConfig={bridge.getConfig}
           saveConfig={bridge.saveConfig}
+          getAvailableModels={bridge.getAvailableModels}
           onClose={() => setShowSettings(false)}
           onOpenPromptEditor={handleOpenPromptEditor}
         />

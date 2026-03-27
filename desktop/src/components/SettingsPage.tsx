@@ -2,19 +2,28 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import type { ConfigResponse, MaintenanceAgent, McpServerConfig, ModelsConfig, ProjectConfig } from "../types";
+import type {
+  AvailableModelsResponse,
+  ConfigResponse,
+  MaintenanceAgent,
+  McpServerConfig,
+  ModelsConfig,
+  ProjectConfig,
+} from "../types";
 import { MaintenanceAgentsSection } from "./MaintenanceAgentsSection";
-import { isAbTestingEnabled, KNOWN_MODELS } from "./settingsHelpers";
+import { ModelConfigSection } from "./ModelConfigSection";
+import { FALLBACK_KNOWN_MODELS, isAbTestingEnabled, mergeModelLists } from "./settingsHelpers";
 import { SpecialEffectTagsSection } from "./SpecialEffectTagsSection";
 
 interface Props {
   getConfig: () => Promise<ConfigResponse | null>;
   saveConfig: (config: ProjectConfig) => Promise<boolean>;
+  getAvailableModels?: () => Promise<AvailableModelsResponse | null>;
   onClose: () => void;
   onOpenPromptEditor?: (promptName: string) => void;
 }
 
-export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEditor }: Props) {
+export function SettingsPage({ getConfig, saveConfig, getAvailableModels, onClose, onOpenPromptEditor }: Props) {
   const [config, setConfig] = useState<ProjectConfig | null>(null);
   const [defaultModel, setDefaultModel] = useState("");
   const [fallbackModel, setFallbackModel] = useState("");
@@ -30,6 +39,8 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [availableModels, setAvailableModels] = useState<string[]>(FALLBACK_KNOWN_MODELS);
+  const [removedFromConfig, setRemovedFromConfig] = useState<string[]>([]);
 
   // Load config on mount
   useEffect(() => {
@@ -57,10 +68,20 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
         setMaintenanceAgents(maintenance.agents);
       }
     });
+    // Fetch available models from SDK registry
+    if (getAvailableModels) {
+      getAvailableModels().then((resp) => {
+        if (!active || !resp) return;
+        setAvailableModels(mergeModelLists(resp.models));
+        if (resp.removed_from_config.length > 0) {
+          setRemovedFromConfig(resp.removed_from_config);
+        }
+      });
+    }
     return () => {
       active = false;
     };
-  }, [getConfig]);
+  }, [getConfig, getAvailableModels]);
 
   const markDirty = useCallback(() => {
     setDirty(true);
@@ -235,11 +256,6 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
     [dirty, handleSave, onOpenPromptEditor],
   );
 
-  // Filter suggestions: known models not already in the candidate list
-  const suggestions = KNOWN_MODELS.filter(
-    (m) => !candidateModels.includes(m) && m.toLowerCase().includes(chipInput.toLowerCase()),
-  );
-
   return (
     <div className="settings-overlay">
       <div className="settings-panel">
@@ -253,132 +269,41 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
 
         {dirty && <div className="settings-unsaved-banner">⚠️ You have unsaved changes</div>}
 
+        {removedFromConfig.length > 0 && (
+          <div className="settings-unsaved-banner" role="alert">
+            ⚠️ The following models were removed from your config because they are no longer available:{" "}
+            <strong>{removedFromConfig.join(", ")}</strong>
+            <button
+              className="chip-remove dismiss-btn"
+              onClick={() => setRemovedFromConfig([])}
+              aria-label="Dismiss notification"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {loading ? (
           <div className="settings-loading">Loading configuration…</div>
         ) : !config ? (
           <div className="settings-loading">Could not load configuration.</div>
         ) : (
           <div className="settings-body">
-            {/* Section: Model Configuration */}
-            <div className="settings-section">
-              <h3 className="settings-section-title">🐍 Model Configuration</h3>
-
-              {/* A/B Testing toggle */}
-              <div className="settings-field">
-                <label className="settings-label" htmlFor="ab-testing-mode">
-                  Enable A/B testing mode
-                </label>
-                <div className="settings-checkbox-row">
-                  <input
-                    id="ab-testing-mode"
-                    type="checkbox"
-                    checked={abTestingEnabled}
-                    onChange={(e) => handleAbToggle(e.target.checked)}
-                  />
-                  <span className="settings-hint">
-                    Switch between single-model (Default/Fallback) and rotating candidate models.
-                  </span>
-                </div>
-              </div>
-
-              {/* Default Model */}
-              <div className="settings-field">
-                <label className="settings-label" htmlFor="default-model">
-                  Default Model
-                </label>
-                <input
-                  id="default-model"
-                  className="settings-input"
-                  list="default-model-suggestions"
-                  value={defaultModel}
-                  disabled={abTestingEnabled}
-                  onChange={(e) => {
-                    setDefaultModel(e.target.value);
-                    markDirty();
-                  }}
-                  placeholder="e.g. claude-sonnet-4.5"
-                />
-                <datalist id="default-model-suggestions">
-                  {KNOWN_MODELS.map((m) => (
-                    <option key={m} value={m} />
-                  ))}
-                </datalist>
-                <span className="settings-hint">
-                  {abTestingEnabled ? "Ignored while A/B testing is active" : "Primary model for agent tasks"}
-                </span>
-              </div>
-
-              {/* Fallback Model */}
-              <div className="settings-field">
-                <label className="settings-label" htmlFor="fallback-model">
-                  Fallback Model
-                </label>
-                <input
-                  id="fallback-model"
-                  className="settings-input"
-                  list="fallback-model-suggestions"
-                  value={fallbackModel}
-                  disabled={abTestingEnabled}
-                  onChange={(e) => {
-                    setFallbackModel(e.target.value);
-                    markDirty();
-                  }}
-                  placeholder="e.g. claude-sonnet-4"
-                />
-                <datalist id="fallback-model-suggestions">
-                  {KNOWN_MODELS.map((m) => (
-                    <option key={m} value={m} />
-                  ))}
-                </datalist>
-                <span className="settings-hint">Used when the default model is unavailable</span>
-              </div>
-
-              {/* Candidate Models (tag chips) */}
-              <div className="settings-field">
-                <label className="settings-label">A/B Candidate Models</label>
-                <div
-                  className={`chip-container ${!abTestingEnabled ? "chip-container-disabled" : ""}`}
-                  aria-disabled={!abTestingEnabled}
-                >
-                  {candidateModels.map((m) => (
-                    <span key={m} className="chip">
-                      {m}
-                      <button
-                        className="chip-remove"
-                        onClick={() => removeChip(m)}
-                        disabled={!abTestingEnabled}
-                        aria-label={`Remove ${m}`}
-                      >
-                        ✕
-                      </button>
-                    </span>
-                  ))}
-                  {abTestingEnabled && (
-                    <input
-                      className="chip-input"
-                      value={chipInput}
-                      onChange={(e) => setChipInput(e.target.value)}
-                      onKeyDown={handleChipKeyDown}
-                      onBlur={() => {
-                        if (chipInput.trim()) addChip(chipInput);
-                      }}
-                      placeholder={candidateModels.length === 0 ? "Type model name and press Enter" : "Add model…"}
-                      list="chip-suggestions"
-                    />
-                  )}
-                  <datalist id="chip-suggestions">
-                    {suggestions.map((m) => (
-                      <option key={m} value={m} />
-                    ))}
-                  </datalist>
-                </div>
-                <span className="settings-hint">
-                  {abTestingEnabled
-                    ? "Models to rotate through for A/B performance testing"
-                    : "Enable A/B testing to configure candidate models"}
-                </span>
-              </div>
-            </div>
+            <ModelConfigSection
+              abTestingEnabled={abTestingEnabled}
+              onAbToggle={handleAbToggle}
+              defaultModel={defaultModel}
+              onDefaultModelChange={(v) => { setDefaultModel(v); markDirty(); }}
+              fallbackModel={fallbackModel}
+              onFallbackModelChange={(v) => { setFallbackModel(v); markDirty(); }}
+              candidateModels={candidateModels}
+              chipInput={chipInput}
+              onChipInputChange={setChipInput}
+              onAddChip={addChip}
+              onRemoveChip={removeChip}
+              onChipKeyDown={handleChipKeyDown}
+              availableModels={availableModels}
+            />
 
             {/* Section: Orchestrator */}
             <div className="settings-section">
@@ -471,6 +396,7 @@ export function SettingsPage({ getConfig, saveConfig, onClose, onOpenPromptEdito
               onRemove={removeMaintenanceAgent}
               onAdd={addMaintenanceAgent}
               onOpenPromptEditor={handlePromptFileClick}
+              availableModels={availableModels}
             />
 
             <SpecialEffectTagsSection />

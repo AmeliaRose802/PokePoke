@@ -210,6 +210,13 @@ export interface UpdateCheckResult {
   error?: string;
 }
 
+/** Response from get_available_models API */
+export interface AvailableModelsResponse {
+  models: string[];
+  last_sync: string | null;
+  removed_from_config: string[];
+}
+
 /** All-time per-model performance summary from persistent storage */
 export interface ModelPerformanceSummary {
   total_items_attempted: number;

@@ -492,6 +492,39 @@ class TestSetupOrchestrator:
             )
         assert ctx.effective_parallel == 1
 
+    @patch("pokepoke.orchestration.orchestrator.register_shutdown_handlers")
+    @patch("pokepoke.orchestration.orchestrator.terminal_ui")
+    @patch("pokepoke.orchestration.orchestrator.set_terminal_banner")
+    @patch("pokepoke.orchestration.orchestrator.initialize_agent_name", return_value="test-agent")
+    @patch("pokepoke.orchestration.orchestrator.load_config")
+    @patch("pokepoke.orchestration.orchestrator.get_beads_stats", return_value=BeadsStats())
+    @patch("pokepoke.orchestration.orchestrator.get_failed_unassign_count", return_value=0)
+    @patch("pokepoke.models.model_sync.sync_copilot_models")
+    def test_syncs_models_at_startup(
+        self, mock_sync, mock_unassign_count, mock_beads_stats, mock_config,
+        mock_init, mock_banner, mock_ui, mock_register,
+    ):
+        """Test that model sync is called with force=True at startup."""
+        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
+        mock_sync.return_value = AgentStats(wall_duration=1.5)
+
+        with (
+            patch("pokepoke.orchestration.orchestrator.backfill_from_beads_db",
+                  return_value={"backfilled": 0}),
+            patch("pokepoke.orchestration.orchestrator._get_beads_summary",
+                  return_value={"total_created": 0, "total_completed": 0}),
+        ):
+            ctx = _setup_orchestrator(
+                interactive=False, continuous=False,
+                run_beta_first=False, agent_name_override=None,
+                max_parallel_agents=1,
+            )
+
+        # Verify model sync was called with force=True
+        mock_sync.assert_called_once_with(force=True)
+        # Verify stats were recorded
+        assert ctx.session_stats.agent_stats.wall_duration >= 1.5
+
 
 # ── _run_preflight ─────────────────────────────────────────────────
 
