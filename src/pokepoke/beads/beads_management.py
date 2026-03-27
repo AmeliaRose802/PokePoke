@@ -256,11 +256,16 @@ def increment_total_attempts(item_id: str) -> bool:
         True if successful, False otherwise.
     """
     try:
-        current_attempts = get_total_attempts(item_id)
-        new_attempts = current_attempts + 1
-
-        metadata_json = json.dumps({'total_attempts': new_attempts})
-        _run_bd(['update', item_id, '--metadata', metadata_json])
+        new_attempts = get_total_attempts(item_id) + 1
+        # Preserve existing metadata fields while updating total_attempts
+        data = _parse_beads_json(_run_bd(['show', item_id, '--json'], check=False).stdout)
+        if data is None:
+            logger.warning(f"Failed to fetch item {item_id} for metadata update")
+            return False
+        item = data[0] if isinstance(data, list) else data
+        metadata = item.get('metadata', {}) if isinstance(item.get('metadata'), dict) else {}
+        metadata['total_attempts'] = new_attempts
+        _run_bd(['update', item_id, '--metadata', json.dumps(metadata)])
         logger.info(f"Incremented total_attempts for {item_id} to {new_attempts}")
         return True
     except (subprocess.CalledProcessError, json.JSONDecodeError, ValueError, TypeError):
