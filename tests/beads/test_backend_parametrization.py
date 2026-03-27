@@ -53,7 +53,7 @@ class TestBackendParametrization:
                 }
             ]
             return subprocess.CompletedProcess(
-                [get_active_backend().binary] + args, 0, stdout=json.dumps(payload)
+                [get_active_backend().binary, *args], 0, stdout=json.dumps(payload)
             )
 
         monkeypatch.setattr(beads_query, "_run_bd", mock_run_bd)
@@ -74,7 +74,7 @@ class TestBackendParametrization:
         def mock_run_bd(args, **kwargs):
             # Simulate what subprocess.run would return
             return subprocess.CompletedProcess(
-                [expected_binary] + args, 0, stdout="[]"
+                [expected_binary, *args], 0, stdout="[]"
             )
 
         monkeypatch.setattr(beads_query, "_run_bd", mock_run_bd)
@@ -112,7 +112,7 @@ class TestDirectParametrization:
             def mock_run_bd(args, **kwargs):
                 calls.append(get_active_backend().binary)
                 return subprocess.CompletedProcess(
-                    [get_active_backend().binary] + args, 0, stdout="[]"
+                    [get_active_backend().binary, *args], 0, stdout="[]"
                 )
 
             monkeypatch.setattr(beads_query, "_run_bd", mock_run_bd)
