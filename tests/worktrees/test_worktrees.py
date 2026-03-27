@@ -330,20 +330,21 @@ class TestCreateWorktree:
              patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='master'), \
              patch('builtins.print') as mock_print:
 
-            # Mock git rev-parse --is-inside-work-tree to return true
-            mock_run_git.return_value = Mock(stdout="true\n", returncode=0)
+            # Mock git commands: rev-parse and branch --show-current
+            mock_run_git.side_effect = [
+                Mock(stdout="true\n", returncode=0),  # rev-parse
+                Mock(stdout="task/incredible_icm-42\n", returncode=0),  # branch --show-current
+            ]
 
             result = create_worktree('incredible_icm-42')
 
             assert result == existing_path.resolve()
             assert mock_print.called
             assert 'Reusing existing worktree directory' in mock_print.call_args[0][0]
-            mock_run_git.assert_called_once_with(
-                ["git", "rev-parse", "--is-inside-work-tree"],
-                cwd=str(existing_path.resolve()),
-                timeout=10,
-                check=False,
-            )
+            # Verify both git calls were made
+            assert mock_run_git.call_count == 2
+            assert mock_run_git.call_args_list[0][0][0] == ["git", "rev-parse", "--is-inside-work-tree"]
+            assert mock_run_git.call_args_list[1][0][0] == ["git", "branch", "--show-current"]
 
     def test_create_worktree_directory_exists_invalid(self):
         """Test when worktree directory exists but is not a valid git worktree."""
@@ -2203,12 +2204,16 @@ class TestValidateWorktreeIntegrity:
         wt_dir.mkdir()
         (wt_dir / "file.txt").touch()
 
-        # Mock subprocess.run to simulate git rev-parse returning "true"
+        # Mock subprocess.run to simulate git commands: rev-parse and branch --show-current
         with patch("pokepoke.worktrees.worktrees.subprocess.run") as mock_run:
-            mock_run.return_value = Mock(returncode=0, stdout="true\n", stderr="")
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout="true\n", stderr=""),  # rev-parse
+                Mock(returncode=0, stdout="task/test-item\n", stderr=""),  # branch --show-current
+            ]
             _validate_worktree_integrity(wt_dir, "test-item")
 
-        mock_run.assert_called_once()
+        # Verify both git commands were called
+        assert mock_run.call_count == 2
 
     def test_git_not_work_tree_raises(self, tmp_path: Path) -> None:
         """Raises RuntimeError if git doesn't recognize directory as work tree."""
