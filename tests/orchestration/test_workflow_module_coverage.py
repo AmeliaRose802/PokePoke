@@ -303,7 +303,7 @@ class TestProcessWorkItemCopilotTimeoutWithResume:
                 return (True, "timeout feedback")
             return (False, "")
         monkeypatch.setattr("pokepoke.orchestration.workflow._maybe_retry_copilot", fake_maybe_retry)
-        monkeypatch.setattr("pokepoke.orchestration.workflow._apply_gate_feedback", lambda fb, acc, it: (acc + [fb], it + 1))
+        monkeypatch.setattr("pokepoke.orchestration.workflow._apply_gate_feedback", lambda fb, acc, it: ([*acc, fb], it + 1))
         monkeypatch.setattr(
             "pokepoke.orchestration.workflow._finalize_item_result",
             lambda *a, **kw: (WorkItemResult(success=True, request_count=2), True),
@@ -375,7 +375,7 @@ class TestProcessWorkItemGateAgentEnabled:
         monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow.run_cleanup_with_timeout", lambda *a, **kw: (True, 0))
-        monkeypatch.setattr("pokepoke.orchestration.workflow._apply_gate_feedback", lambda fb, acc, it: (acc + [fb], it + 1))
+        monkeypatch.setattr("pokepoke.orchestration.workflow._apply_gate_feedback", lambda fb, acc, it: ([*acc, fb], it + 1))
 
         gate_call = {"n": 0}
         def fake_gate(*a, **kw):
@@ -491,7 +491,7 @@ class TestProcessWorkItemCopilotRetryOnFailure:
                 return (True, "retry feedback")
             return (False, "")
         monkeypatch.setattr("pokepoke.orchestration.workflow._maybe_retry_copilot", fake_maybe_retry)
-        monkeypatch.setattr("pokepoke.orchestration.workflow._apply_gate_feedback", lambda fb, acc, it: (acc + [fb], it + 1))
+        monkeypatch.setattr("pokepoke.orchestration.workflow._apply_gate_feedback", lambda fb, acc, it: ([*acc, fb], it + 1))
         monkeypatch.setattr(
             "pokepoke.orchestration.workflow._finalize_item_result",
             lambda *a, **kw: (WorkItemResult(success=True, request_count=2), True),
@@ -521,7 +521,7 @@ class TestProcessWorkItemCopilotRetryOnFailure:
                 return (True, "try again")
             return (False, "")
         monkeypatch.setattr("pokepoke.orchestration.workflow._maybe_retry_copilot", fake_retry)
-        monkeypatch.setattr("pokepoke.orchestration.workflow._apply_gate_feedback", lambda fb, acc, it: (acc + [fb], it + 1))
+        monkeypatch.setattr("pokepoke.orchestration.workflow._apply_gate_feedback", lambda fb, acc, it: ([*acc, fb], it + 1))
         monkeypatch.setattr(
             "pokepoke.orchestration.workflow._finalize_item_result",
             lambda *a, **kw: (WorkItemResult(success=False, request_count=2), True),
@@ -617,7 +617,7 @@ class TestProcessWorkItemFeedbackPaths:
         monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow.run_cleanup_with_timeout", lambda *a, **kw: (True, 0))
-        monkeypatch.setattr("pokepoke.orchestration.workflow._apply_gate_feedback", lambda fb, acc, it: (acc + [fb], it + 1))
+        monkeypatch.setattr("pokepoke.orchestration.workflow._apply_gate_feedback", lambda fb, acc, it: ([*acc, fb], it + 1))
 
         gate_n = {"n": 0}
         def fake_gate(*a, **kw):
@@ -649,7 +649,7 @@ class TestProcessWorkItemFeedbackPaths:
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow.run_cleanup_with_timeout", lambda *a, **kw: (True, 0))
         monkeypatch.setattr("pokepoke.orchestration.workflow._maybe_retry_copilot", lambda *a, **kw: (True, "timeout fb"))
-        monkeypatch.setattr("pokepoke.orchestration.workflow._apply_gate_feedback", lambda fb, acc, it: (acc + [fb], it + 1))
+        monkeypatch.setattr("pokepoke.orchestration.workflow._apply_gate_feedback", lambda fb, acc, it: ([*acc, fb], it + 1))
 
         # After retry succeeds, mock finalize
         def fake_finalize(*a, **kw):
