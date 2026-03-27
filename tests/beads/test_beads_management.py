@@ -730,6 +730,25 @@ class TestIncrementTotalAttempts:
         assert '"total_attempts": 3' in call_args[-1]
 
     @patch("pokepoke.beads.beads_management._run_bd")
+    @patch("pokepoke.beads.beads_management.get_total_attempts", return_value=2)
+    def test_increments_and_preserves_other_metadata(self, mock_get: Mock, mock_run_bd: Mock) -> None:
+        from pokepoke.beads.beads_management import increment_total_attempts
+        mock_run_bd.return_value = Mock(stdout='[{"metadata": {"total_attempts": 2, "gate_rejection_count": 3}}]')
+        result = increment_total_attempts("item-1")
+        assert result is True
+        update_call = mock_run_bd.call_args_list[-1][0][0]
+        assert 'update' in update_call
+        assert '"total_attempts": 3' in update_call[-1]
+        assert '"gate_rejection_count": 3' in update_call[-1]
+
+    @patch("pokepoke.beads.beads_management._run_bd")
+    @patch("pokepoke.beads.beads_management.get_total_attempts", return_value=0)
+    def test_returns_false_when_show_fails(self, mock_get: Mock, mock_run_bd: Mock) -> None:
+        from pokepoke.beads.beads_management import increment_total_attempts
+        mock_run_bd.return_value = Mock(stdout='not json')
+        assert increment_total_attempts("item-1") is False
+
+    @patch("pokepoke.beads.beads_management._run_bd")
     @patch("pokepoke.beads.beads_management.get_total_attempts", return_value=0)
     def test_returns_false_on_error(self, mock_get: Mock, mock_run_bd: Mock) -> None:
         from pokepoke.beads.beads_management import increment_total_attempts
