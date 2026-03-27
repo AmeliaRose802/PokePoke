@@ -146,11 +146,10 @@ def update_registry(
 
 
 def _should_skip_sync(sync_cfg: Any, registry: dict[str, Any], item_logger: Any | None) -> bool:
-    """Check if sync should be skipped due to config or recent run."""
-    if not sync_cfg.enabled:
-        _log(item_logger, "ℹ️  Model sync disabled in config; skipping.")
-        return True
+    """Check if sync should be skipped due to recent run (interval check only).
 
+    Note: The enabled check is now handled at the start of sync_copilot_models.
+    """
     last_sync = registry.get("last_sync")
     if isinstance(last_sync, str):
         try:
@@ -248,6 +247,11 @@ def sync_copilot_models(item_logger: Any | None = None, force: bool = False) -> 
     config = get_config()
     sync_cfg = config.model_sync
     start_time = time.time()
+
+    # Always honor the enabled flag, even when forcing
+    if not sync_cfg.enabled:
+        _log(item_logger, "ℹ️  Model sync disabled in config; skipping.")
+        return AgentStats()
 
     registry = load_registry()
     if not force and _should_skip_sync(sync_cfg, registry, item_logger):

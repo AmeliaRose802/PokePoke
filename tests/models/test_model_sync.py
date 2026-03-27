@@ -108,6 +108,28 @@ def test_sync_force_ignores_interval():
         assert result.wall_duration is not None
 
 
+def test_sync_disabled_skips_even_when_forced():
+    """When model_sync.enabled is False, sync_copilot_models must skip even with force=True."""
+    config = ProjectConfig()
+    config.model_sync = ModelSyncConfig(enabled=False)
+    with patch("pokepoke.models.model_sync.get_config", return_value=config), \
+            patch("pokepoke.models.model_sync._run_copilot_models") as mock_models:
+        result = sync_copilot_models(force=True)
+        assert result is not None
+        mock_models.assert_not_called()
+
+
+def test_sync_disabled_skips_without_force():
+    """When model_sync.enabled is False, sync_copilot_models must skip in normal mode."""
+    config = ProjectConfig()
+    config.model_sync = ModelSyncConfig(enabled=False)
+    with patch("pokepoke.models.model_sync.get_config", return_value=config), \
+            patch("pokepoke.models.model_sync._run_copilot_models") as mock_models:
+        result = sync_copilot_models()
+        assert result is not None
+        mock_models.assert_not_called()
+
+
 def test_sync_no_models_returns_none():
     config = ProjectConfig()
     config.model_sync = ModelSyncConfig()
