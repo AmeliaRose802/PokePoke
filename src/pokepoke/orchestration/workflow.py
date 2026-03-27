@@ -9,6 +9,7 @@ from pokepoke.agents.agent_runner import run_gate_agent  # re-exported via workf
 from pokepoke.beads.beads import add_comment, assign_and_sync_item
 from pokepoke.config import get_config
 from pokepoke.desktop import terminal_ui
+from pokepoke.git.git_helpers import verify_worktree_branch
 from pokepoke.models.ai_backends import invoke_copilot
 from pokepoke.models.copilot_sdk import build_prompt_from_work_item
 from pokepoke.models.model_selection import get_assignment_for_item, select_model_for_item
@@ -60,9 +61,7 @@ def process_work_item(  # noqa: C901
     try:
         start_time = time.time()
         timeout_seconds = timeout_hours * 3600
-        request_count = 0
-        cleanup_agent_runs = 0
-        gate_agent_runs = 0
+        request_count = cleanup_agent_runs = gate_agent_runs = 0
         config = get_config()
         selected_model = select_model_for_item(item)
         _, selected_prompt_template = get_assignment_for_item(item)
@@ -79,8 +78,7 @@ def process_work_item(  # noqa: C901
             work_item_id=item.id, work_item_title=item.title, agent_type="work")
 
         logger.info(f"\n🚀 Processing work item: {item.id} — {item.title}")
-        timeout_label = f"{timeout_hours}h" if timeout_hours > 0 else "unlimited"
-        logger.info(f"   🤖 Model: {selected_model} | 🧠 Backend: {backend_provider} | ⏱️  Timeout: {timeout_label}\n")
+        logger.info(f"   🤖 Model: {selected_model} | 🧠 Backend: {backend_provider} | ⏱️  Timeout: {f'{timeout_hours}h' if timeout_hours > 0 else 'unlimited'}\n")
 
         item_logger = run_logger.start_item_log(item.id, item.title) if run_logger else None
 
@@ -119,7 +117,6 @@ def process_work_item(  # noqa: C901
         _session.worktree_path = str(worktree_path)
         _session._worktree_created = True
         _session._branch_created = True
-
         pokepoke_root = Path(repo_path) if repo_path else Path.cwd()
         worktree_cwd = str(worktree_path)
         logger.info(f"   Working directory: {worktree_cwd}\n")
@@ -198,44 +195,13 @@ def process_work_item(  # noqa: C901
                     work_item_id=item.id, work_item_title=item.title, agent_type="work",
                     agent_prompt=work_prompt, resume_in_place=resume_in_place)
 
-                # Pre-invocation guard: Verify worktree is on expected branch before launching agent
-                # Only run if worktree directory actually exists (skip during unit tests with mocked paths)
-                from pokepoke.git.git_helpers import run_git as _run_git_check
-                from pokepoke.git.git_operations import sanitize_branch_name
-                from pokepoke.utils.constants import BRANCH_PREFIX
-
-                if Path(worktree_cwd).exists():
-                    sanitized_id = sanitize_branch_name(item.id)
-                    expected_branch = f"{BRANCH_PREFIX}{sanitized_id}"
-
-                    try:
-                        branch_check = _run_git_check(
-                            ["git", "branch", "--show-current"],
-                            cwd=worktree_cwd,
-                            timeout=10,
-                            check=False,
-                        )
-                        if branch_check.returncode == 0:
-                            current_branch = branch_check.stdout.strip()
-                            if current_branch != expected_branch:
-                                error_msg = (
-                                    f"FATAL: Worktree for {item.id} is on wrong branch '{current_branch}' "
-                                    f"(expected '{expected_branch}'). Refusing to invoke agent. "
-                                    "This prevents committing to the default branch."
-                                )
-                                logger.error(f"\n❌ {error_msg}")
-                                _log_failure(run_logger, item_logger, request_count)
-                                terminal_ui.ui.set_current_agent(None)
-                                return _fail_result(request_count=request_count, stats=accumulated_stats,
-                                                  cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs)
-                    except Exception as e:
-                        error_msg = f"FATAL: Failed to verify worktree branch: {e}"
-                        logger.error(f"\n❌ {error_msg}")
-                        _log_failure(run_logger, item_logger, request_count)
-                        terminal_ui.ui.set_current_agent(None)
-                        return _fail_result(request_count=request_count, stats=accumulated_stats,
-                                          cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs)
-
+                branch_error = verify_worktree_branch(item.id, worktree_cwd)
+                if branch_error:
+                    logger.error(f"\n❌ {branch_error}")
+                    _log_failure(run_logger, item_logger, request_count)
+                    terminal_ui.ui.set_current_agent(None)
+                    return _fail_result(request_count=request_count, stats=accumulated_stats,
+                                      cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs)
                 with terminal_ui.ui.agent_output_for(agent_id):
                     result = invoke_copilot(
                         item, prompt=work_prompt, timeout=remaining_timeout,
@@ -248,18 +214,14 @@ def process_work_item(  # noqa: C901
                 accumulated_stats.accumulate(current_stats)
 
             is_process_crash = result.error and (
-                "process died" in result.error.lower()
-                or "exited unexpectedly" in result.error.lower()
-            )
+                "process died" in result.error.lower() or "exited unexpectedly" in result.error.lower())
             if is_process_crash:
                 process_crashed_this_session = True
 
             if not result.success:
                 copilot_failure_count += 1
-                is_timeout_failure = (
-                    result.error and ("timeout" in result.error.lower()
-                                      or "inactivity" in result.error.lower())
-                )
+                is_timeout_failure = result.error and (
+                    "timeout" in result.error.lower() or "inactivity" in result.error.lower())
                 if is_timeout_failure and result.session_id:
                     resume_session_id = result.session_id
                     resume_output_summary = result.last_output_summary
@@ -289,9 +251,8 @@ def process_work_item(  # noqa: C901
                 break
 
             cleanup_success, cleanup_runs = run_cleanup_with_timeout(
-                item, result, pokepoke_root, start_time, timeout_seconds, timeout_hours, worktree_cwd,
-                parent_agent_id=base_agent_id,
-            )
+                item, result, pokepoke_root, start_time, timeout_seconds, timeout_hours,
+                worktree_cwd, parent_agent_id=base_agent_id)
             cleanup_agent_runs += cleanup_runs
 
             if not cleanup_success:
@@ -421,11 +382,9 @@ def process_work_item(  # noqa: C901
                 break
 
         final_result, finalized = _finalize_item_result(
-            result, item, worktree_path, selected_model, start_time,
-            request_count, accumulated_stats, cleanup_agent_runs, gate_agent_runs,
-            gate_success, run_logger, item_logger, base_agent_id, run_beta_test,
-            repo_path=repo_path,
-        )
+            result, item, worktree_path, selected_model, start_time, request_count,
+            accumulated_stats, cleanup_agent_runs, gate_agent_runs, gate_success,
+            run_logger, item_logger, base_agent_id, run_beta_test, repo_path=repo_path)
         if finalized:
             _session = None  # Finalization succeeded — skip cleanup
         return final_result

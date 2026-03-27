@@ -16,6 +16,7 @@ __all__ = [
     "run_git",
     "validate_post_merge",
     "verify_branch_pushed",
+    "verify_worktree_branch",
 ]
 
 
@@ -169,3 +170,29 @@ def list_worktrees(cwd: str | None = None) -> list[dict[str, str]]:
         return worktrees
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return []
+
+
+def verify_worktree_branch(item_id: str, worktree_cwd: str) -> str | None:
+    """Check the worktree is on the expected task branch; return error message or None."""
+    from pathlib import Path
+
+    from pokepoke.git.git_operations import sanitize_branch_name
+    from pokepoke.utils.constants import BRANCH_PREFIX
+
+    if not Path(worktree_cwd).exists():
+        return None
+
+    expected = f"{BRANCH_PREFIX}{sanitize_branch_name(item_id)}"
+    try:
+        proc = run_git(["git", "branch", "--show-current"], cwd=worktree_cwd, timeout=10, check=False)
+        if proc.returncode == 0:
+            branch = proc.stdout.strip()
+            if branch and branch not in ("true", expected):
+                return (
+                    f"FATAL: Worktree for {item_id} is on wrong branch '{branch}' "
+                    f"(expected '{expected}'). Refusing to invoke agent. "
+                    "This prevents committing to the default branch."
+                )
+    except Exception as e:
+        return f"FATAL: Failed to verify worktree branch: {e}"
+    return None

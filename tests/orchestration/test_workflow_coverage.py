@@ -4,6 +4,7 @@ Exercises real code paths in workflow.py, mocking only external I/O
 boundaries (copilot invocation, beads CLI, git operations, filesystem).
 """
 
+import subprocess
 import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -33,6 +34,16 @@ from pokepoke.types import (
 def _item(id: str = "wf-1", desc: str | None = "desc") -> BeadsWorkItem:
     return BeadsWorkItem(id=id, title=f"Item {id}", status="ready",
                          priority=1, issue_type="task", description=desc)
+
+
+def _branch_ok(branch: str = "task/wf-1") -> subprocess.CompletedProcess[str]:
+    """Fake result for the pre-invocation branch guard."""
+    return subprocess.CompletedProcess(
+        args=["git", "branch", "--show-current"],
+        returncode=0,
+        stdout=branch,
+        stderr="",
+    )
 
 
 # ── _fail_result ───────────────────────────────────────────────────
@@ -245,6 +256,7 @@ class TestProcessWorkItem:
         result = process_work_item(_item(), interactive=False)
         assert result.success is False
 
+    @patch("pokepoke.git.git_helpers.run_git", return_value=_branch_ok())
     @patch("pokepoke.orchestration.workflow.unregister_agent")
     @patch("pokepoke.orchestration.workflow.register_agent")
     @patch("pokepoke.orchestration.workflow.cleanup_worktree")
@@ -261,16 +273,16 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.orchestration.workflow.create_worktree")
+    @patch("pokepoke.orchestration.workflow.setup_worktree")
     @patch("pokepoke.orchestration.workflow.is_shutting_down", return_value=False)
     def test_successful_processing_no_gate(
-        self, mock_shutdown, mock_create, mock_assign, mock_agent_name,
+        self, mock_shutdown, mock_setup, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
         mock_model, mock_config, mock_prompt, mock_copilot,
         mock_ahead, mock_uncommitted, mock_finalize, mock_cleanup,
-        mock_register, mock_unregister, tmp_path,
+        mock_register, mock_unregister, mock_run_git, tmp_path,
     ):
-        mock_create.return_value = tmp_path / "worktree"
+        mock_setup.return_value = tmp_path / "worktree"
         (tmp_path / "worktree").mkdir()
         mock_config.return_value = MagicMock(
             command_timeout=300, max_parallel_agents=1,
@@ -286,6 +298,7 @@ class TestProcessWorkItem:
         assert result.request_count == 1
         mock_finalize.assert_called_once()
 
+    @patch("pokepoke.git.git_helpers.run_git", return_value=_branch_ok())
     @patch("pokepoke.orchestration.workflow.unregister_agent")
     @patch("pokepoke.orchestration.workflow.register_agent")
     @patch.object(WorkItemSession, "cleanup_on_failure")
@@ -302,16 +315,16 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.orchestration.workflow.create_worktree")
+    @patch("pokepoke.orchestration.workflow.setup_worktree")
     @patch("pokepoke.orchestration.workflow.is_shutting_down", return_value=False)
     def test_copilot_failure(
-        self, mock_shutdown, mock_create, mock_assign, mock_agent_name,
+        self, mock_shutdown, mock_setup, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
         mock_model, mock_config, mock_prompt, mock_copilot,
         mock_ahead, mock_uncommitted, mock_cleanup, mock_session_cleanup,
-        mock_register, mock_unregister, tmp_path,
+        mock_register, mock_unregister, mock_run_git, tmp_path,
     ):
-        mock_create.return_value = tmp_path / "worktree"
+        mock_setup.return_value = tmp_path / "worktree"
         (tmp_path / "worktree").mkdir()
         mock_config.return_value = MagicMock(
             command_timeout=300, max_parallel_agents=1,
@@ -327,6 +340,7 @@ class TestProcessWorkItem:
         assert result.request_count == 1
         mock_session_cleanup.assert_called()
 
+    @patch("pokepoke.git.git_helpers.run_git", return_value=_branch_ok())
     @patch("pokepoke.orchestration.workflow.unregister_agent")
     @patch("pokepoke.orchestration.workflow.register_agent")
     @patch("pokepoke.orchestration.workflow.cleanup_worktree")
@@ -345,17 +359,17 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.orchestration.workflow.create_worktree")
+    @patch("pokepoke.orchestration.workflow.setup_worktree")
     @patch("pokepoke.orchestration.workflow.is_shutting_down", return_value=False)
     def test_gate_agent_pass(
-        self, mock_shutdown, mock_create, mock_assign, mock_agent_name,
+        self, mock_shutdown, mock_setup, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
         mock_model, mock_config, mock_prompt, mock_copilot,
         mock_ahead, mock_uncommitted, mock_gate, mock_comment,
         mock_finalize, mock_cleanup,
-        mock_register, mock_unregister, tmp_path,
+        mock_register, mock_unregister, mock_run_git, tmp_path,
     ):
-        mock_create.return_value = tmp_path / "worktree"
+        mock_setup.return_value = tmp_path / "worktree"
         (tmp_path / "worktree").mkdir()
         mock_config.return_value = MagicMock(
             command_timeout=300, max_parallel_agents=1,
@@ -371,6 +385,7 @@ class TestProcessWorkItem:
         assert result.success is True
         assert result.gate_agent_runs == 1
 
+    @patch("pokepoke.git.git_helpers.run_git", return_value=_branch_ok())
     @patch("pokepoke.orchestration.workflow.unregister_agent")
     @patch("pokepoke.orchestration.workflow.register_agent")
     @patch("pokepoke.orchestration.workflow.cleanup_worktree")
@@ -389,18 +404,18 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.orchestration.workflow.create_worktree")
+    @patch("pokepoke.orchestration.workflow.setup_worktree")
     @patch("pokepoke.orchestration.workflow.is_shutting_down")
     def test_gate_reject_then_pass(
-        self, mock_shutdown, mock_create, mock_assign, mock_agent_name,
+        self, mock_shutdown, mock_setup, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
         mock_model, mock_config, mock_prompt, mock_copilot,
         mock_ahead, mock_uncommitted, mock_gate, mock_comment,
         mock_finalize, mock_cleanup,
-        mock_register, mock_unregister, tmp_path,
+        mock_register, mock_unregister, mock_run_git, tmp_path,
     ):
         mock_shutdown.return_value = False
-        mock_create.return_value = tmp_path / "worktree"
+        mock_setup.return_value = tmp_path / "worktree"
         (tmp_path / "worktree").mkdir()
         mock_config.return_value = MagicMock(
             command_timeout=300, max_parallel_agents=1,
@@ -482,6 +497,7 @@ class TestProcessWorkItem:
         assert result.success is False
         assert result.request_count == 0
 
+    @patch("pokepoke.git.git_helpers.run_git", return_value=_branch_ok())
     @patch("pokepoke.orchestration.workflow.unregister_agent")
     @patch("pokepoke.orchestration.workflow.register_agent")
     @patch("pokepoke.orchestration.workflow.cleanup_worktree")
@@ -500,19 +516,19 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.orchestration.workflow.create_worktree")
+    @patch("pokepoke.orchestration.workflow.setup_worktree")
     @patch("pokepoke.orchestration.workflow.is_shutting_down")
     def test_retry_routes_output_to_retry_card(
-        self, mock_shutdown, mock_create, mock_assign, mock_agent_name,
+        self, mock_shutdown, mock_setup, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
         mock_model, mock_config, mock_prompt, mock_copilot,
         mock_ahead, mock_uncommitted, mock_gate, mock_comment,
         mock_finalize, mock_cleanup,
-        mock_register, mock_unregister, tmp_path,
+        mock_register, mock_unregister, mock_run_git, tmp_path,
     ):
         """Retry iterations must wrap invoke_copilot in agent_output_for with the retry agent_id."""
         mock_shutdown.return_value = False
-        mock_create.return_value = tmp_path / "worktree"
+        mock_setup.return_value = tmp_path / "worktree"
         (tmp_path / "worktree").mkdir()
         mock_config.return_value = MagicMock(
             command_timeout=300, max_parallel_agents=1,
