@@ -130,7 +130,6 @@ max-statements = 50
     "RUF005",# Tests: allow list concatenation (clearer in test setup)
     # "RUF006",  # Tests: allow asyncio dangling tasks (test patterns) - REMOVED: fixing violations
     "RUF015",  # Tests: allow iterable allocation patterns
-    "RUF043",  # Tests: allow pytest.raises ambiguous pattern
     "N802",    # Tests: allow non-lowercase function names (test naming)
     "PERF401", # Tests: allow manual list comprehension
     "PERF102", # Tests: allow dict iterator patterns
