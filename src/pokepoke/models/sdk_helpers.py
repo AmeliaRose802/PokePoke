@@ -132,7 +132,10 @@ def _check_abort_result(
     return None
 
 
-# Re-export await/watchdog helpers (extracted to sdk_await.py)
+# Re-export await/watchdog helpers (extracted to sdk_watchdog.py via sdk_await.py)
+from pokepoke.models.sdk_await import (
+    SDKWatchdog as SDKWatchdog,
+)
 from pokepoke.models.sdk_await import (
     _await_completion as _await_completion,
 )
