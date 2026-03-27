@@ -114,9 +114,9 @@ class TestRunGateAgent:
             labels=["test"]
         )
 
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
-    @patch('pokepoke.agents.agent_runner.PromptService')
+    @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
+    @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
+    @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_successful_verification_json(
         self,
         mock_service_cls: Mock,
@@ -148,9 +148,9 @@ class TestRunGateAgent:
         assert crashed is False
         mock_invoke.assert_called_once_with(work_item, prompt="Gate prompt", deny_write=True, cwd=None, model=None, item_logger=None, session_id=None, is_resume=False)
 
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
-    @patch('pokepoke.agents.agent_runner.PromptService')
+    @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
+    @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
+    @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_failed_verification_json(
         self,
         mock_service_cls: Mock,
@@ -178,9 +178,9 @@ class TestRunGateAgent:
         assert "3 tests failed" in reason
         assert crashed is False
 
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
-    @patch('pokepoke.agents.agent_runner.PromptService')
+    @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
+    @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
+    @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_successful_verification_text_fallback(
         self,
         mock_service_cls: Mock,
@@ -206,9 +206,9 @@ class TestRunGateAgent:
         assert success is True
         assert "text match" in reason
 
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
-    @patch('pokepoke.agents.agent_runner.PromptService')
+    @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
+    @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
+    @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_new_work_verified_text_fallback(
         self,
         mock_service_cls: Mock,
@@ -234,9 +234,9 @@ class TestRunGateAgent:
         assert success is True
         assert "text match" in reason
 
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
-    @patch('pokepoke.agents.agent_runner.PromptService')
+    @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
+    @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
+    @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_multiline_json_with_nested_objects(
         self,
         mock_service_cls: Mock,
@@ -278,8 +278,8 @@ class TestRunGateAgent:
         assert "new_work_verified" in reason
         assert "All verification steps passed" in reason
 
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
-    @patch('pokepoke.agents.agent_runner.PromptService')
+    @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
+    @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_copilot_invocation_failure(
         self,
         mock_service_cls: Mock,
@@ -305,8 +305,8 @@ class TestRunGateAgent:
         assert "execution failed" in reason
         assert crashed is True
 
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
-    @patch('pokepoke.agents.agent_runner.PromptService')
+    @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
+    @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_timeout_detected_as_timeout_not_crash(
         self,
         mock_service_cls: Mock,
@@ -341,8 +341,8 @@ class TestRunGateAgent:
         assert success is False
         assert crashed is False
 
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
-    @patch('pokepoke.agents.agent_runner.PromptService')
+    @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
+    @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_non_timeout_failure_is_crash(
         self,
         mock_service_cls: Mock,
@@ -369,8 +369,8 @@ class TestRunGateAgent:
         assert result.is_timeout is False
         assert result.crashed is True
 
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
-    @patch('pokepoke.agents.agent_runner.PromptService')
+    @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
+    @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_resume_uses_gate_resume_prompt(
         self,
         mock_service_cls: Mock,
@@ -397,7 +397,7 @@ class TestRunGateAgent:
         assert call_kwargs[1].get('session_id') == "sess-abc"
         assert call_kwargs[1].get('is_resume') is True
 
-    @patch('pokepoke.agents.agent_runner.PromptService')
+    @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_prompt_render_failure(
         self,
         mock_service_cls: Mock,
@@ -415,8 +415,8 @@ class TestRunGateAgent:
         assert stats is None
         assert crashed is True
 
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
-    @patch('pokepoke.agents.agent_runner.PromptService')
+    @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
+    @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_no_explicit_approval(
         self,
         mock_service_cls: Mock,
@@ -440,9 +440,9 @@ class TestRunGateAgent:
         assert success is False
         assert "did not explicitly approve" in reason
 
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
-    @patch('pokepoke.agents.agent_runner.PromptService')
+    @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
+    @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
+    @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_work_already_complete(
         self,
         mock_service_cls: Mock,
@@ -472,10 +472,10 @@ class TestRunGateAgent:
         assert "Fix already exists on main" in reason
         assert "Close as already-resolved" in reason
 
-    @patch('pokepoke.agents.agent_runner.select_gate_model')
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
-    @patch('pokepoke.agents.agent_runner.PromptService')
+    @patch('pokepoke.agents.gate_agent_executor.select_gate_model')
+    @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
+    @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
+    @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_gate_agent_uses_different_model(
         self,
         mock_service_cls: Mock,
@@ -518,9 +518,9 @@ class TestRunGateAgent:
             is_resume=False,
         )
 
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
-    @patch('pokepoke.agents.agent_runner.PromptService')
+    @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
+    @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
+    @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_handoff_context_passed_to_prompt(
         self,
         mock_service_cls: Mock,
@@ -550,9 +550,9 @@ class TestRunGateAgent:
         template_vars = call_args[0][1]
         assert template_vars["handoff_context"] == handoff
 
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
-    @patch('pokepoke.agents.agent_runner.PromptService')
+    @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
+    @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
+    @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_handoff_context_defaults_to_empty(
         self,
         mock_service_cls: Mock,
@@ -579,10 +579,10 @@ class TestRunGateAgent:
         template_vars = call_args[0][1]
         assert template_vars["handoff_context"] == ""
 
-    @patch('pokepoke.agents.agent_runner.get_default_branch', return_value='main')
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
-    @patch('pokepoke.agents.agent_runner.PromptService')
+    @patch('pokepoke.agents.gate_agent_executor.get_default_branch', return_value='main')
+    @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
+    @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
+    @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_default_branch_passed_to_template(
         self,
         mock_service_cls: Mock,
@@ -1944,9 +1944,9 @@ class TestGateAgentJsonDecodeError:
             status="in_progress", priority=1, issue_type="bug", labels=["test"]
         )
 
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
-    @patch('pokepoke.agents.agent_runner.PromptService')
+    @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
+    @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
+    @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_invalid_json_falls_back_to_text(
         self, mock_service_cls: Mock, mock_invoke: Mock, mock_parse: Mock,
         work_item: BeadsWorkItem
@@ -2078,10 +2078,10 @@ class TestWorktreeAgentFinallyCleanupException:
 class TestGateAgentWithAgentId:
     """Test gate agent pushes agent status when agent_id is provided (line 88)."""
 
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
-    @patch('pokepoke.agents.agent_runner.PromptService')
-    @patch('pokepoke.agents.agent_runner.terminal_ui')
+    @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
+    @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
+    @patch('pokepoke.agents.gate_agent_executor.PromptService')
+    @patch('pokepoke.agents.gate_agent_executor.terminal_ui')
     def test_gate_agent_pushes_status_with_agent_id(
         self, mock_terminal_ui: Mock, mock_service_cls: Mock,
         mock_invoke: Mock, mock_parse: Mock,
