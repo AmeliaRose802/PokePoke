@@ -101,22 +101,15 @@ def process_work_item(  # noqa: C901
             logger.error(f"❌ Failed to assign work item {item.id}")
             _log_failure(run_logger, item_logger)
             return _fail_result()
-        _session = WorkItemSession(
-            item_id=item.id,
-            agent_name=get_agent_name(default="pokepoke"),
-        )
+        _session = WorkItemSession(item_id=item.id, agent_name=get_agent_name(default="pokepoke"))
         _session._assigned = True
-        worktree_path = _setup_worktree(
-            item, lock_timeout=worktree_lock_timeout,
-            run_logger=run_logger, item_logger=item_logger,
-            repo_path=repo_path,
-        )
+        worktree_path = _setup_worktree(item, lock_timeout=worktree_lock_timeout,
+            run_logger=run_logger, item_logger=item_logger, repo_path=repo_path)
 
         if worktree_path is None:
             logger.error(f"↩️  Returning {item.id} to queue (unassigning due to worktree failure)...")
             _log_failure(run_logger, item_logger)
             return _fail_result()
-        # Update session with acquired worktree resources
         _session.worktree_path = str(worktree_path)
         _session._worktree_created = True
         _session._branch_created = True
@@ -133,9 +126,9 @@ def process_work_item(  # noqa: C901
         copilot_failure_count = 0
         last_retry_was_gate_feedback = False
         current_work_agent_id = base_agent_id
-        # Session resume state: track session_id and output from timed-out sessions
         resume_session_id: str | None = None
         resume_output_summary: str | None = None
+        process_crashed_this_session = False  # Track crashes to skip gate validation
         result = CopilotResult(work_item_id=item.id, success=False,
             error="Session aborted due to application shutdown", attempt_count=0)
 
@@ -208,9 +201,15 @@ def process_work_item(  # noqa: C901
             if current_stats:
                 accumulated_stats.accumulate(current_stats)
 
+            is_process_crash = result.error and (
+                "process died" in result.error.lower()
+                or "exited unexpectedly" in result.error.lower()
+            )
+            if is_process_crash:
+                process_crashed_this_session = True
+
             if not result.success:
                 copilot_failure_count += 1
-                # Capture session state for potential resume on timeout/inactivity
                 is_timeout_failure = (
                     result.error and ("timeout" in result.error.lower()
                                       or "inactivity" in result.error.lower())
@@ -220,9 +219,12 @@ def process_work_item(  # noqa: C901
                     resume_output_summary = result.last_output_summary
                     logger.info(f"\n📎 Session state saved for resume (session: {resume_session_id})")
                 else:
-                    # Non-timeout failure: clear resume state for a fresh start
                     resume_session_id = None
                     resume_output_summary = None
+
+                if is_process_crash:
+                    logger.warning(f"\n⚠️  CLI process crashed: {result.error} — gate check will be skipped")
+
                 retry, feedback = _maybe_retry_copilot(
                     result, copilot_failure_count, config.max_copilot_failure_retries, run_logger, item.id)
                 if retry:
@@ -233,15 +235,13 @@ def process_work_item(  # noqa: C901
 
             _log_commit_status(worktree_cwd)
 
-            # Check if the agent already closed the beads item (self-merge).
-            # If so, skip cleanup and gate agents — the work is done.
+            # Skip cleanup/gate if agent already closed the beads item (self-merge)
             from pokepoke.beads.reconciliation import is_beads_item_closed
             if is_beads_item_closed(item.id):
                 logger.warning("\n✅ Agent already closed beads item — skipping cleanup and gate checks")
                 gate_success = True
                 break
 
-            # Run cleanup loop with timeout checking
             cleanup_success, cleanup_runs = run_cleanup_with_timeout(
                 item, result, pokepoke_root, start_time, timeout_seconds, timeout_hours, worktree_cwd,
                 parent_agent_id=base_agent_id,
@@ -249,14 +249,16 @@ def process_work_item(  # noqa: C901
             cleanup_agent_runs += cleanup_runs
 
             if not cleanup_success:
-                # Cleanup failed (e.g. timeout), consider item failed or retry?
-                # For now, if cleanup fails, we fail the cycle.
                 result.success = False
                 _log_failure(run_logger, item_logger, request_count)
                 return _fail_result(request_count=request_count, stats=accumulated_stats,
                                     cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs)
 
-            # --- GATE AGENT CHECK ---
+            if process_crashed_this_session:
+                logger.warning("\n⏭️  Skipping Gate Agent — CLI process crashed, work may be incomplete")
+                gate_success = True
+                break
+
             if not config.gate_agent_enabled:
                 logger.warning("\n⏭️  Gate Agent disabled via config — skipping verification")
                 gate_success = True
@@ -370,7 +372,6 @@ def process_work_item(  # noqa: C901
     finally:
         set_current_work_item_id(None)
         set_current_repo_name(None)
-        # Cleanup via WorkItemSession if finalization did not succeed
         if _session is not None and not is_shutting_down():
             _session.cleanup_on_failure()
         unregister_agent()
@@ -396,5 +397,4 @@ def _setup_worktree(
         if item_logger:
             item_logger.log_error(error_msg)
         return None
-
 
