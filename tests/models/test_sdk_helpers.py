@@ -367,7 +367,7 @@ class TestCheckToolWatchdog:
         }
         mock_handler._item_logger = None
 
-        with patch("pokepoke.models.sdk_await._log_process_tree_snapshot") as mock_snapshot:
+        with patch("pokepoke.models.sdk_watchdog._log_process_tree_snapshot") as mock_snapshot:
             result = await _check_tool_watchdog(session, stats, 600.0, handler=mock_handler)
             assert result == "tool_timeout"
             mock_snapshot.assert_called_once()
