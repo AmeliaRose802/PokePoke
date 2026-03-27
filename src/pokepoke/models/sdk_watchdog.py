@@ -121,7 +121,7 @@ class SDKWatchdog:
             except Exception:
                 logger.debug("Failed to check process exit code", exc_info=True)
 
-            if has_done_work and (no_pending or process_exited_ok):
+            if has_done_work and no_pending and process_exited_ok:
                 logger.warning(
                     "Pings failing but session completed (turns=%d, pending=%d, "
                     "process_exited_ok=%s) - treating as normal completion",

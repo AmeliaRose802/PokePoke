@@ -704,8 +704,8 @@ class TestAwaitCompletionPingLiveness:
 
     @pytest.mark.asyncio
     @patch('pokepoke.models.sdk_watchdog._HB_INTERVAL', 0.1)
-    async def test_ping_fails_with_pending_tools_but_process_exited_zero_treats_as_completion(self):
-        """When pings fail, work was done, pending_tool_calls>0 but process exited 0, treat as completion."""
+    async def test_ping_fails_with_pending_tools_but_process_exited_zero_is_process_dead(self):
+        """When pings fail, work done, pending_tool_calls>0, process exited 0 — stale pending tools means process_dead."""
         from pokepoke.models.sdk_helpers import _await_completion
 
         session = AsyncMock()
@@ -736,8 +736,10 @@ class TestAwaitCompletionPingLiveness:
             max_ping_failures=1,
         )
 
-        assert result is None  # Normal completion, not process_dead
-        session.abort.assert_not_called()
+        # With AND logic, all three conditions (work done, no pending, clean exit)
+        # must hold. Stale pending tools indicate abnormal state → process_dead.
+        assert result == "process_dead"
+        session.abort.assert_called_once()
 
     @pytest.mark.asyncio
     @patch('pokepoke.models.sdk_watchdog._HB_INTERVAL', 0.1)
@@ -778,8 +780,8 @@ class TestAwaitCompletionPingLiveness:
 
     @pytest.mark.asyncio
     @patch('pokepoke.models.sdk_watchdog._HB_INTERVAL', 0.1)
-    async def test_ping_fails_work_done_no_pending_no_process_attr_treats_as_completion(self):
-        """When pings fail, work done, no pending, no _process attr — still treats as completion."""
+    async def test_ping_fails_work_done_no_pending_no_process_attr_is_process_dead(self):
+        """When pings fail, work done, no pending, no _process attr — cannot verify clean exit, so process_dead."""
         from pokepoke.models.sdk_helpers import _await_completion
 
         session = AsyncMock()
@@ -804,8 +806,45 @@ class TestAwaitCompletionPingLiveness:
             max_ping_failures=1,
         )
 
-        assert result is None  # Normal completion
-        session.abort.assert_not_called()
+        assert result == "process_dead"
+        session.abort.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('pokepoke.models.sdk_watchdog._HB_INTERVAL', 0.1)
+    async def test_crashed_process_no_pending_not_treated_as_completion(self):
+        """When process crashed (exit 1), work done, no pending — must NOT treat as completion."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        client.ping = AsyncMock(side_effect=OSError(22, "Invalid argument"))
+
+        # Simulate a crashed process
+        mock_process = MagicMock()
+        mock_process.returncode = 1
+        mock_process.poll.return_value = 1
+        client._process = mock_process
+
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic() - 100,
+            'event_count': 50,
+            'last_tool_activity_time': 0.0,
+            'pending_tool_calls': 0,  # No pending — this was the bug trigger
+            'tool_start_times': {},
+            'turn_count': 3,  # Work was done
+        }
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=9999,
+            max_ping_failures=1,
+        )
+
+        assert result == "process_dead"
+        session.abort.assert_called_once()
 
 
 class TestAwaitCompletionProcessOutputTimeout:
@@ -942,6 +981,353 @@ class TestAwaitCompletionProcessOutputTimeout:
         )
 
         assert result is None  # Should not fire when disabled
+
+
+class TestCheckToolWatchdog:
+    """Tests for _check_tool_watchdog function."""
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_stats(self):
+        """Returns None when stats is None."""
+        from pokepoke.models.sdk_await import _check_tool_watchdog
+        session = AsyncMock()
+        result = await _check_tool_watchdog(session, stats=None, tool_call_timeout=600)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_timeout_disabled(self):
+        """Returns None when tool_call_timeout <= 0."""
+        from pokepoke.models.sdk_await import _check_tool_watchdog
+        session = AsyncMock()
+        stats: dict = {'tool_start_times': {'t1': time.monotonic()}}
+        result = await _check_tool_watchdog(session, stats=stats, tool_call_timeout=0)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_no_active_tools(self):
+        """Returns None when tool_start_times is empty."""
+        from pokepoke.models.sdk_await import _check_tool_watchdog
+        session = AsyncMock()
+        stats: dict = {'tool_start_times': {}}
+        result = await _check_tool_watchdog(session, stats=stats, tool_call_timeout=600)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_tool_timeout_triggers_abort(self):
+        """When a tool exceeds timeout, aborts and returns 'tool_timeout'."""
+        from pokepoke.models.sdk_await import _check_tool_watchdog
+        session = AsyncMock()
+        handler = MagicMock()
+        handler._pending_tools = {
+            'tool-1': {'name': 'run_tests', 'args': {'path': '/src'}},
+        }
+        handler._item_logger = MagicMock()
+        stats: dict = {
+            'tool_start_times': {'tool-1': time.monotonic() - 700},
+        }
+        result = await _check_tool_watchdog(
+            session, stats=stats, tool_call_timeout=600, handler=handler,
+        )
+        assert result == "tool_timeout"
+        session.abort.assert_called_once()
+        assert handler._item_logger.log_error.call_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_tool_timeout_abort_failure_still_returns(self):
+        """If session.abort raises during tool timeout, still returns 'tool_timeout'."""
+        from pokepoke.models.sdk_await import _check_tool_watchdog
+        session = AsyncMock()
+        session.abort.side_effect = Exception("abort failed")
+        stats: dict = {
+            'tool_start_times': {'tool-1': time.monotonic() - 700},
+        }
+        result = await _check_tool_watchdog(
+            session, stats=stats, tool_call_timeout=600,
+        )
+        assert result == "tool_timeout"
+
+    @pytest.mark.asyncio
+    async def test_tool_not_yet_timed_out(self):
+        """When tool is within timeout, returns None."""
+        from pokepoke.models.sdk_await import _check_tool_watchdog
+        session = AsyncMock()
+        stats: dict = {
+            'tool_start_times': {'tool-1': time.monotonic()},
+        }
+        result = await _check_tool_watchdog(
+            session, stats=stats, tool_call_timeout=600,
+        )
+        assert result is None
+
+
+class TestAwaitCompletionShutdown:
+    """Tests for shutdown detection in _await_completion."""
+
+    @pytest.mark.asyncio
+    @patch('pokepoke.models.sdk_watchdog.is_shutting_down', return_value=True)
+    async def test_shutdown_returns_shutdown(self, mock_shutdown):
+        """When is_shutting_down() is True, returns 'shutdown'."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic(),
+            'event_count': 5,
+            'last_tool_activity_time': time.monotonic(),
+            'pending_tool_calls': 0,
+            'tool_start_times': {},
+        }
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=9999,
+        )
+
+        assert result == "shutdown"
+        session.abort.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('pokepoke.models.sdk_watchdog.is_shutting_down', return_value=True)
+    async def test_shutdown_abort_failure_still_returns(self, mock_shutdown):
+        """If session.abort raises during shutdown, still returns 'shutdown'."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        session.abort.side_effect = OSError("abort failed")
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic(),
+            'event_count': 5,
+            'last_tool_activity_time': time.monotonic(),
+            'pending_tool_calls': 0,
+            'tool_start_times': {},
+        }
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=9999,
+        )
+
+        assert result == "shutdown"
+
+
+class TestAwaitCompletionClientState:
+    """Tests for client state detection in _await_completion."""
+
+    @pytest.mark.asyncio
+    async def test_disconnected_client_forces_completion(self):
+        """When client state is 'disconnected', forces completion."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "disconnected"
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic(),
+            'event_count': 5,
+            'last_tool_activity_time': time.monotonic(),
+            'pending_tool_calls': 0,
+            'tool_start_times': {},
+        }
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=9999,
+        )
+
+        assert result is None
+        assert done.is_set()
+
+    @pytest.mark.asyncio
+    async def test_error_client_state_forces_completion(self):
+        """When client state is 'error', forces completion."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "error"
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic(),
+            'event_count': 5,
+            'last_tool_activity_time': time.monotonic(),
+            'pending_tool_calls': 0,
+            'tool_start_times': {},
+        }
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=9999,
+        )
+
+        assert result is None
+        assert done.is_set()
+
+    @pytest.mark.asyncio
+    async def test_get_state_exception_continues_loop(self):
+        """When get_state raises, the loop continues gracefully."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        # First call raises, second returns disconnected to end the test
+        client.get_state.side_effect = [Exception("state error"), "disconnected"]
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic(),
+            'event_count': 5,
+            'last_tool_activity_time': time.monotonic(),
+            'pending_tool_calls': 0,
+            'tool_start_times': {},
+        }
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=9999,
+        )
+
+        assert result is None
+
+
+class TestAwaitCompletionTimeout:
+    """Tests for max_timeout in _await_completion."""
+
+    @pytest.mark.asyncio
+    async def test_timeout_returns_timeout(self):
+        """When max_timeout expires, returns 'timeout'."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic(),
+            'event_count': 5,
+            'last_tool_activity_time': time.monotonic(),
+            'pending_tool_calls': 0,
+            'tool_start_times': {},
+        }
+
+        result = await _await_completion(
+            session, client, done, max_timeout=0.01,
+            stats=stats, inactivity_timeout=9999,
+        )
+
+        assert result == "timeout"
+        session.abort.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_timeout_abort_failure_still_returns(self):
+        """If session.abort raises during timeout, still returns 'timeout'."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        session.abort.side_effect = OSError("abort failed")
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic(),
+            'event_count': 5,
+            'last_tool_activity_time': time.monotonic(),
+            'pending_tool_calls': 0,
+            'tool_start_times': {},
+        }
+
+        result = await _await_completion(
+            session, client, done, max_timeout=0.01,
+            stats=stats, inactivity_timeout=9999,
+        )
+
+        assert result == "timeout"
+
+
+class TestAwaitCompletionNormalCompletion:
+    """Tests for normal completion path (all AND conditions met)."""
+
+    @pytest.mark.asyncio
+    @patch('pokepoke.models.sdk_watchdog._HB_INTERVAL', 0.1)
+    async def test_work_done_no_pending_clean_exit_is_normal_completion(self):
+        """When work done, no pending, process exited 0 → normal completion (not process_dead)."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        client.ping = AsyncMock(side_effect=OSError(22, "Invalid argument"))
+
+        mock_process = MagicMock()
+        mock_process.returncode = 0
+        mock_process.poll.return_value = 0
+        client._process = mock_process
+
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic() - 100,
+            'event_count': 50,
+            'last_tool_activity_time': 0.0,
+            'pending_tool_calls': 0,
+            'tool_start_times': {},
+            'turn_count': 3,
+        }
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=9999,
+            max_ping_failures=1,
+        )
+
+        assert result is None
+        session.abort.assert_not_called()
+
+
+class TestAwaitCompletionEventGapLogging:
+    """Tests for event gap diagnostic logging."""
+
+    @pytest.mark.asyncio
+    @patch('pokepoke.models.sdk_watchdog._HB_INTERVAL', 0.1)
+    async def test_event_gap_logging_fires_for_large_gaps(self):
+        """When event gap exceeds 60s, diagnostic logging fires."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        # End after 2 iterations via disconnected state
+        client.get_state.side_effect = ["running", "disconnected"]
+        client.ping = AsyncMock()
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic() - 120,
+            'event_count': 5,
+            'last_tool_activity_time': time.monotonic(),
+            'pending_tool_calls': 1,
+            'tool_start_times': {},
+            'turn_count': 2,
+        }
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=9999,
+            max_ping_failures=999,
+        )
+
+        assert result is None
 
 
 class TestProcessLivenessConfig:
