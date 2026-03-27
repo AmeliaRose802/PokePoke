@@ -16,9 +16,24 @@ from .beads_query import _parse_beads_json, _run_bd
 
 logger = logging.getLogger(__name__)
 
+# Re-exports for backward compatibility
+from .beads_metadata import (
+    get_gate_rejection_count,
+    get_total_attempts,
+    increment_gate_rejection_count,
+    increment_total_attempts,
+)
+from .sync_strategy import (
+    _is_transient_jsonl_sync_error as _is_transient_jsonl_sync_error,
+)
 
-# Re-export for backward compatibility (moved to sync_strategy module).
-from .sync_strategy import _is_transient_jsonl_sync_error as _is_transient_jsonl_sync_error
+__all__ = [
+    'get_gate_rejection_count',
+    'get_total_attempts',
+    'increment_gate_rejection_count',
+    'increment_total_attempts',
+    '_is_transient_jsonl_sync_error',
+]
 
 
 def run_bd_sync_with_retry(
@@ -225,98 +240,6 @@ def add_comment(item_id: str, comment: str) -> bool:
     except subprocess.CalledProcessError as e:
         logger.error(f"⚠️  Failed to add comment to {item_id}: {e.stderr}")
         return False
-
-
-def get_total_attempts(item_id: str) -> int:
-    """Get the total attempts counter for a work item.
-
-    Returns:
-        The total number of attempts, or 0 if not tracked.
-    """
-    try:
-        result = _run_bd(['show', item_id, '--json'], check=False)
-        data = _parse_beads_json(result.stdout)
-        if data is None:
-            return 0
-
-        item = data[0] if isinstance(data, list) else data
-        metadata = item.get('metadata')
-        if metadata and isinstance(metadata, dict):
-            return int(metadata.get('total_attempts', 0))
-        return 0
-    except (subprocess.CalledProcessError, json.JSONDecodeError, ValueError, TypeError):
-        logger.warning(f"Failed to get total_attempts for {item_id}, defaulting to 0")
-        return 0
-
-
-def increment_total_attempts(item_id: str) -> bool:
-    """Increment the total attempts counter for a work item.
-
-    Returns:
-        True if successful, False otherwise.
-    """
-    try:
-        new_attempts = get_total_attempts(item_id) + 1
-        # Preserve existing metadata fields while updating total_attempts
-        data = _parse_beads_json(_run_bd(['show', item_id, '--json'], check=False).stdout)
-        if data is None:
-            logger.warning(f"Failed to fetch item {item_id} for metadata update")
-            return False
-        item = data[0] if isinstance(data, list) else data
-        metadata = item.get('metadata', {}) if isinstance(item.get('metadata'), dict) else {}
-        metadata['total_attempts'] = new_attempts
-        _run_bd(['update', item_id, '--metadata', json.dumps(metadata)])
-        logger.info(f"Incremented total_attempts for {item_id} to {new_attempts}")
-        return True
-    except (subprocess.CalledProcessError, json.JSONDecodeError, ValueError, TypeError):
-        logger.warning(f"Failed to increment total_attempts for {item_id}")
-        return False
-
-
-def get_gate_rejection_count(item_id: str) -> int:
-    """Get the gate rejection counter for a work item."""
-    try:
-        result = _run_bd(['show', item_id, '--json'], check=False)
-        data = _parse_beads_json(result.stdout)
-        if data is None:
-            return 0
-
-        item = data[0] if isinstance(data, list) else data
-        metadata = item.get('metadata')
-        if metadata and isinstance(metadata, dict):
-            return int(metadata.get('gate_rejection_count', 0))
-        return 0
-    except (subprocess.CalledProcessError, json.JSONDecodeError, ValueError, TypeError):
-        logger.warning(f"Failed to get gate_rejection_count for {item_id}, defaulting to 0")
-        return 0
-
-
-def increment_gate_rejection_count(item_id: str) -> int:
-    """Increment the gate rejection counter for a work item. Returns new count or -1 on failure."""
-    try:
-        current_count = get_gate_rejection_count(item_id)
-        new_count = current_count + 1
-
-        # Preserve existing metadata fields while updating gate_rejection_count
-        result = _run_bd(['show', item_id, '--json'], check=False)
-        data = _parse_beads_json(result.stdout)
-        if data is None:
-            logger.warning(f"Failed to fetch item {item_id} for metadata update")
-            return -1
-
-        item = data[0] if isinstance(data, list) else data
-        metadata = item.get('metadata', {})
-        if not isinstance(metadata, dict):
-            metadata = {}
-
-        metadata['gate_rejection_count'] = new_count
-        metadata_json = json.dumps(metadata)
-        _run_bd(['update', item_id, '--metadata', metadata_json])
-        logger.info(f"Incremented gate_rejection_count for {item_id} to {new_count}")
-        return new_count
-    except (subprocess.CalledProcessError, json.JSONDecodeError, ValueError, TypeError) as e:
-        logger.warning(f"Failed to increment gate_rejection_count for {item_id}: {e}")
-        return -1
 
 
 def _resolve_with_timeout(
