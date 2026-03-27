@@ -2193,7 +2193,7 @@ class TestValidateWorktreeIntegrity:
 
         empty_dir = tmp_path / "empty-worktree"
         empty_dir.mkdir()
-        with pytest.raises(RuntimeError, match="empty.*0 files"):
+        with pytest.raises(RuntimeError, match=r"empty.*0 files"):
             _validate_worktree_integrity(empty_dir, "test-item")
 
     def test_valid_directory_passes(self, tmp_path: Path) -> None:

@@ -524,7 +524,7 @@ class TestWorktreeIsolationPerRepo:
         assert len(set(worktree_paths)) == 3
 
         # Worktrees are under their respective repos
-        for _name, dirs in repos.items():
+        for dirs in repos.values():
             assert str(dirs["worktree"]).startswith(str(dirs["repo"]))
 
 

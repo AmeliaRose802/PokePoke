@@ -225,7 +225,7 @@ class TestCreateWorktree:
 
         mock_lock.return_value = TimeoutContext()
 
-        with pytest.raises(RuntimeError, match="file lock|Timed out"):
+        with pytest.raises(RuntimeError, match=r"file lock|Timed out"):
             create_worktree('task-123')
 
     @patch('pokepoke.worktrees.worktrees.get_default_branch')
