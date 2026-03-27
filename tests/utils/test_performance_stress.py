@@ -571,7 +571,7 @@ class TestPreflightDurationBudget:
 
         config = {"min_disk_space_gb": 1.0}
         t0 = time.monotonic()
-        errors, warnings = check_disk_space(tmp_path, config)
+        _errors, _warnings = check_disk_space(tmp_path, config)
         elapsed = time.monotonic() - t0
 
         assert elapsed < 1.0, f"Disk space check took {elapsed:.3f}s"
@@ -582,7 +582,7 @@ class TestPreflightDurationBudget:
 
         config = {"enable_self_repair": True}
         t0 = time.monotonic()
-        errors, warnings = check_lock_availability(tmp_path, config)
+        _errors, _warnings = check_lock_availability(tmp_path, config)
         elapsed = time.monotonic() - t0
 
         assert elapsed < 1.0, f"Lock check took {elapsed:.3f}s"
@@ -597,7 +597,7 @@ class TestPreflightDurationBudget:
 
         with patch("pokepoke.utils.preflight_checks.has_uncommitted_changes", return_value=False):
             t0 = time.monotonic()
-            errors, warnings = check_git_status(tmp_path, config)
+            errors, _warnings = check_git_status(tmp_path, config)
             elapsed = time.monotonic() - t0
 
         assert elapsed < 0.5, f"Mocked git status check took {elapsed:.3f}s"

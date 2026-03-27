@@ -302,7 +302,7 @@ class TestGetAssignmentForItem:
             ),
         ])
         mock_config.return_value = cfg
-        model, prompt = get_assignment_for_item(_make_item("x", issue_type="bug"))
+        model, _prompt = get_assignment_for_item(_make_item("x", issue_type="bug"))
         assert model == "claude-sonnet-4.5"
 
     @patch('pokepoke.models.model_selection.get_config')

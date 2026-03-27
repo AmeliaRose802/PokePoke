@@ -127,8 +127,7 @@ max-statements = 50
     "C901",    # Tests: allow complex functions
     "S",       # Tests: allow security/bandit warnings
     "T20",     # Tests: allow print statements
-    "RUF059",  # Tests: allow unused unpacked variables (common in test assertions)
-    "RUF005",  # Tests: allow list concatenation (clearer in test setup)
+    "RUF005",# Tests: allow list concatenation (clearer in test setup)
     "RUF006",  # Tests: allow asyncio dangling tasks (test patterns)
     "RUF015",  # Tests: allow iterable allocation patterns
     "RUF043",  # Tests: allow pytest.raises ambiguous pattern

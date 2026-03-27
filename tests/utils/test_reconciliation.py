@@ -408,7 +408,7 @@ class TestReconcileCompletedItem:
         self, mock_closed, mock_commits, mock_wt_commits, mock_wt
     ):
         item = _item()
-        reconciled, evidence = reconcile_completed_item(item, None, None)
+        reconciled, _evidence = reconcile_completed_item(item, None, None)
         assert reconciled is True
 
     @patch("pokepoke.beads.reconciliation.is_worktree_cleaned", return_value=False)
@@ -435,5 +435,5 @@ class TestReconcileCompletedItem:
     ):
         """Worktree cleaned alone is not sufficient evidence."""
         item = _item()
-        reconciled, evidence = reconcile_completed_item(item, Path("/wt"), None)
+        reconciled, _evidence = reconcile_completed_item(item, Path("/wt"), None)
         assert reconciled is False

@@ -968,7 +968,7 @@ class TestContinuousModeLoopBack:
         # Manually call _collect_done_futures with the exploding record_fn.
         # It must NOT raise, it must swallow the exception and log it.
         futures: dict[concurrent.futures.Future, BeadsWorkItem] = {fut: item}
-        total, any_ok, successes, failures = _collect_done_futures(
+        total, _any_ok, _successes, _failures = _collect_done_futures(
             futures, set(), 0, stats, logger, exploding_record_fn,
         )
 
@@ -998,7 +998,7 @@ class TestCollectDoneFuturesWait:
             stats = SessionStats(agent_stats=AgentStats())
             record_fn = Mock()
 
-            total, any_ok, successes, failures = _collect_done_futures(
+            _total, any_ok, _successes, _failures = _collect_done_futures(
                 futures, failed, 0, stats, Mock(), record_fn,
             )
 
@@ -1373,7 +1373,7 @@ class TestParallelReplenishmentBug:
             record_fn = Mock()
 
             from pokepoke.agents.parallel import _collect_done_futures
-            total, any_ok, successes, failures = _collect_done_futures(
+            _total, any_ok, successes, failures = _collect_done_futures(
                 futures_dict, failed, 0, stats, Mock(), record_fn,
             )
 

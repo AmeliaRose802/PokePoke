@@ -430,7 +430,7 @@ class TestFinalizeWorkers:
         stats = SessionStats(agent_stats=AgentStats())
         run_logger = MagicMock()
         record_fn = Mock()
-        total, timeout = finalize_workers(futures, stats, time.time(), 0, run_logger, record_fn)
+        _total, timeout = finalize_workers(futures, stats, time.time(), 0, run_logger, record_fn)
         assert timeout is True
         mock_drain.assert_called_once()
 
@@ -1201,7 +1201,7 @@ class TestRunPreflightAndRepoChecks:
     @patch("pokepoke.agents.parallel_support.handle_preflight_checks", return_value=(False, False))
     def test_non_critical_preflight_failure(self, _preflight):
         run_logger = MagicMock()
-        ok, failures, result = run_preflight_and_repo_checks(
+        ok, failures, _result = run_preflight_and_repo_checks(
             "/repo", run_logger, 1, 5, Mock(), Mock(),
         )
         assert ok is False
@@ -1211,7 +1211,7 @@ class TestRunPreflightAndRepoChecks:
     def test_repo_check_failure(self, _preflight):
         run_logger = MagicMock()
         repo_fn = Mock(return_value=False)
-        ok, failures, result = run_preflight_and_repo_checks(
+        ok, _failures, result = run_preflight_and_repo_checks(
             "/repo", run_logger, 0, 5, repo_fn, Mock(),
         )
         assert ok is False
@@ -1222,7 +1222,7 @@ class TestRunPreflightAndRepoChecks:
         run_logger = MagicMock()
         repo_fn = Mock(return_value=True)
         ready_fn = Mock(side_effect=RuntimeError("beads down"))
-        ok, failures, result = run_preflight_and_repo_checks(
+        ok, _failures, result = run_preflight_and_repo_checks(
             "/repo", run_logger, 0, 5, repo_fn, ready_fn,
         )
         assert ok is True
@@ -1374,7 +1374,7 @@ class TestComputeSlots:
         fut = concurrent.futures.Future()
         futures = {fut: item}
         run_logger = MagicMock()
-        active, slots, avail_mb = compute_slots(futures, run_logger)
+        _active, slots, avail_mb = compute_slots(futures, run_logger)
         assert slots == 0
         assert avail_mb == 500
 
@@ -1383,6 +1383,6 @@ class TestComputeSlots:
     def test_memory_pressure_reduces_slots(self, _max, _mem):
         """Memory pressure: backpressure returns fewer slots than available."""
         run_logger = MagicMock()
-        active, slots, avail_mb = compute_slots({}, run_logger)
+        _active, slots, avail_mb = compute_slots({}, run_logger)
         assert slots == 1
         assert avail_mb == 2000

@@ -86,7 +86,7 @@ class TestVerifyMainRepoClean:
             returncode=0
         )
 
-        is_clean, output, non_beads_changes = verify_main_repo_clean()
+        is_clean, _output, non_beads_changes = verify_main_repo_clean()
 
         assert is_clean is False
         assert len(non_beads_changes) == 1
@@ -108,7 +108,7 @@ class TestVerifyMainRepoClean:
             returncode=0
         )
 
-        is_clean, output, non_beads_changes = verify_main_repo_clean()
+        is_clean, _output, non_beads_changes = verify_main_repo_clean()
 
         assert is_clean is False
         assert len(non_beads_changes) == 2
@@ -339,7 +339,7 @@ class TestCommitAllChanges:
         """Test commit with default message."""
         mock_run.return_value = Mock(returncode=0, stderr="")
 
-        success, error_msg = commit_all_changes()
+        success, _error_msg = commit_all_changes()
 
         assert success is True
         # Check default message was used
@@ -448,7 +448,7 @@ class TestCommitAllChanges:
         """Test that default (tracked_only=False) uses git add -A."""
         mock_run.return_value = Mock(returncode=0, stderr="")
 
-        success, error_msg = commit_all_changes("Test commit")
+        success, _error_msg = commit_all_changes("Test commit")
 
         assert success is True
         mock_run.assert_any_call(
@@ -915,7 +915,7 @@ class TestExecuteMergeSequenceAdditional:
             raise AssertionError(f"Unexpected: {cmd}")
 
         mock_run.side_effect = side_effect
-        success, message, unmerged = execute_merge_sequence("feature", "main")
+        success, message, _unmerged = execute_merge_sequence("feature", "main")
         assert success is False
         assert "Merge failed" in message
 
@@ -938,7 +938,7 @@ class TestExecuteMergeSequenceAdditional:
             raise AssertionError(f"Unexpected: {cmd}")
 
         mock_run.side_effect = side_effect
-        success, message, unmerged = execute_merge_sequence("feature", "main")
+        success, _message, _unmerged = execute_merge_sequence("feature", "main")
         assert success is True
 
 
@@ -969,7 +969,7 @@ class TestExecuteMergeSequenceRollback:
             raise AssertionError(f"Unexpected: {cmd}")
 
         mock_run.side_effect = side_effect
-        success, message, unmerged = execute_merge_sequence("feature", "main")
+        success, message, _unmerged = execute_merge_sequence("feature", "main")
 
         assert success is False
         assert "conflict" in message.lower()
@@ -999,7 +999,7 @@ class TestExecuteMergeSequenceRollback:
             raise AssertionError(f"Unexpected: {cmd}")
 
         mock_run.side_effect = side_effect
-        success, message, unmerged = execute_merge_sequence("feature", "main")
+        success, _message, _unmerged = execute_merge_sequence("feature", "main")
 
         assert success is False
         assert not abort_called, "git merge --abort should NOT be called when no merge in progress"
@@ -1053,7 +1053,7 @@ class TestExecuteMergeSequenceRollback:
             raise AssertionError(f"Unexpected: {cmd}")
 
         mock_run.side_effect = side_effect
-        success, message, unmerged = execute_merge_sequence("feature", "main")
+        success, message, _unmerged = execute_merge_sequence("feature", "main")
 
         assert success is False
         assert "Failed to pull with rebase" in message
@@ -1078,7 +1078,7 @@ class TestExecuteMergeSequenceRollback:
             raise AssertionError(f"Unexpected: {cmd}")
 
         mock_run.side_effect = side_effect
-        success, message, unmerged = execute_merge_sequence("feature", "main")
+        success, message, _unmerged = execute_merge_sequence("feature", "main")
 
         assert success is False
         assert "Failed to pull with rebase" in message
@@ -1142,7 +1142,7 @@ class TestExecuteMergeSequenceTimeoutExpired:
             raise AssertionError(f"Unexpected: {cmd}")
 
         mock_run.side_effect = side_effect
-        success, message, unmerged = execute_merge_sequence("feature", "main")
+        success, message, _unmerged = execute_merge_sequence("feature", "main")
         assert success is False
         assert "timed out" in message
         mock_restore.assert_not_called()

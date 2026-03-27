@@ -262,7 +262,7 @@ class TestMaybeRetryCopilot:
 
     def test_no_retry_when_rate_limited(self):
         result = CopilotResult(work_item_id="x", success=False, is_rate_limited=True)
-        should, feedback = _maybe_retry_copilot(result, failure_count=1, max_retries=3, run_logger=None, item_id="x")
+        should, _feedback = _maybe_retry_copilot(result, failure_count=1, max_retries=3, run_logger=None, item_id="x")
         assert should is False
 
     @patch("builtins.print")
@@ -326,7 +326,7 @@ class TestPreLoopValidate:
     @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=True)
     def test_non_interactive_success(self, mock_assign, mock_setup, sample_item):
         mock_setup.return_value = Path("/wt/item-42")
-        early, assigned, wt_path, root, wt_cwd = _pre_loop_validate(
+        early, assigned, wt_path, _root, wt_cwd = _pre_loop_validate(
             sample_item, interactive=False, worktree_lock_timeout=60.0,
             run_logger=None, item_logger=None,
         )
@@ -337,7 +337,7 @@ class TestPreLoopValidate:
 
     @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=False)
     def test_assignment_failure(self, mock_assign, sample_item, capsys):
-        early, assigned, wt_path, _, _ = _pre_loop_validate(
+        early, assigned, _wt_path, _, _ = _pre_loop_validate(
             sample_item, interactive=False, worktree_lock_timeout=60.0,
             run_logger=None, item_logger=None,
         )
@@ -376,7 +376,7 @@ class TestPreLoopValidate:
     @patch("builtins.input", return_value="")
     def test_interactive_accept_empty(self, mock_input, mock_setup, mock_assign, mock_tui, sample_item):
         mock_setup.return_value = Path("/wt/item-42")
-        early, assigned, wt_path, _, _ = _pre_loop_validate(
+        early, assigned, _wt_path, _, _ = _pre_loop_validate(
             sample_item, interactive=True, worktree_lock_timeout=60.0,
             run_logger=None, item_logger=None,
         )
@@ -643,7 +643,7 @@ class TestFinalizeItemResult:
     @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.workflow_helpers.finalize_work_item", return_value=True)
     def test_success_with_loggers(self, mock_fin, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats, mock_run_logger, mock_item_logger):
-        wr, ok = _finalize_item_result(
+        wr, _ok = _finalize_item_result(
             result=CopilotResult(work_item_id="item-42", success=True),
             item=sample_item,
             worktree_path=Path("/wt"),

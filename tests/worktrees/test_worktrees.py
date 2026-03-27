@@ -925,7 +925,7 @@ class TestMergeWorktree:
 
             mock_run.side_effect = run_side_effect
 
-            success, unmerged_files = merge_worktree('incredible_icm-42')
+            success, _unmerged_files = merge_worktree('incredible_icm-42')
 
             assert success is False
             # unmerged_files might be empty on general merge failure
@@ -1877,7 +1877,7 @@ class TestMergeWorktreeRollback:
 
             mock_run_git.side_effect = run_git_side_effect
 
-            success, unmerged = merge_worktree('test-item')
+            success, _unmerged = merge_worktree('test-item')
 
             assert success is False
             assert reset_called, "git reset --hard HEAD~1 should have been called on push failure"
@@ -1903,7 +1903,7 @@ class TestMergeWorktreeRollback:
             mock_run_git.side_effect = run_git_side_effect
 
             # Should not raise, even though both push and reset fail
-            success, unmerged = merge_worktree('test-item')
+            success, _unmerged = merge_worktree('test-item')
             assert success is False
 
     def test_post_merge_validation_failure_triggers_reset_hard(self):
@@ -1927,7 +1927,7 @@ class TestMergeWorktreeRollback:
 
             mock_run_git.side_effect = run_git_side_effect
 
-            success, unmerged = merge_worktree('test-item')
+            success, _unmerged = merge_worktree('test-item')
 
             assert success is False
             assert reset_called, "git reset --hard HEAD~1 should have been called on validation failure"
@@ -1953,7 +1953,7 @@ class TestMergeWorktreeRollback:
 
             mock_run_git.side_effect = run_git_side_effect
 
-            success, unmerged = merge_worktree('test-item')
+            success, _unmerged = merge_worktree('test-item')
 
             assert success is False
             assert reset_called, "git reset --hard HEAD~1 should have been called on validation exception"

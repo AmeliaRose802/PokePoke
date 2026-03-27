@@ -301,7 +301,7 @@ def test_session_error_rate_limit_triggers_fallback(capsys) -> None:
     output_lines: list[str] = []
     errors: list[str] = []
 
-    handler, stats = create_event_handler(done, output_lines, errors)
+    handler, _stats = create_event_handler(done, output_lines, errors)
     handler(_make_event("session.error", message="rate limit exceeded"))
 
     # Rate-limit error should set done and flag rate_limit_detected, without appending to errors
@@ -482,7 +482,7 @@ def test_idle_with_zero_pending_sets_done_after_confirm() -> None:
         output_lines: list[str] = []
         errors: list[str] = []
 
-        handler, stats = create_event_handler(
+        handler, _stats = create_event_handler(
             done, output_lines, errors, idle_timeout=0.05,
         )
 
@@ -536,7 +536,7 @@ def test_session_end_sets_done_immediately() -> None:
     output_lines: list[str] = []
     errors: list[str] = []
 
-    handler, stats = create_event_handler(done, output_lines, errors)
+    handler, _stats = create_event_handler(done, output_lines, errors)
     assert not done.is_set()
 
     handler(_make_event("session.end"))
@@ -549,7 +549,7 @@ def test_session_end_after_tool_activity_sets_done() -> None:
     output_lines: list[str] = []
     errors: list[str] = []
 
-    handler, stats = create_event_handler(done, output_lines, errors)
+    handler, _stats = create_event_handler(done, output_lines, errors)
 
     # Simulate tool activity
     handler(_make_event("tool.execution_start", tool_name="powershell",
