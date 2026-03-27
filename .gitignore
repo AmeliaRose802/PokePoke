@@ -2,6 +2,7 @@ node_modules/
 dist/
 coverage/
 *.log
+*.patch
 .DS_Store
 .env
 .vscode/settings.json
