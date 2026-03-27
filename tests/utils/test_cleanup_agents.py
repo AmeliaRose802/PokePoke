@@ -64,7 +64,7 @@ class TestCleanupAgents:
         """Test getting git context when commands fail."""
         mock_run.side_effect = Exception("Git error")
 
-        cwd, branch, is_worktree = _get_current_git_context()
+        _cwd, branch, is_worktree = _get_current_git_context()
 
         assert branch == "unknown"
         assert is_worktree is False
@@ -101,7 +101,7 @@ class TestCleanupAgents:
             labels=["test"]
         )
 
-        success, stats = invoke_cleanup_agent(item)
+        success, _stats = invoke_cleanup_agent(item)
 
         assert success is True
         mock_invoke.assert_called_once()
@@ -198,7 +198,7 @@ class TestCleanupAgents:
             status="in_progress"
         )
 
-        success, stats = invoke_merge_conflict_cleanup_agent(item, "Merge error")
+        success, _stats = invoke_merge_conflict_cleanup_agent(item, "Merge error")
 
         assert success is True
         mock_invoke.assert_called_once()
@@ -220,7 +220,7 @@ class TestCleanupAgents:
         mock_invoke_cleanup.return_value = (True, None)
 
         item = BeadsWorkItem(id="1", title="T", description="D", status="open", priority=1, issue_type="task")
-        success, stats = invoke_merge_conflict_cleanup_agent(item, "Error")
+        success, _stats = invoke_merge_conflict_cleanup_agent(item, "Error")
 
         assert success is True
         mock_invoke_cleanup.assert_called_once()
@@ -577,7 +577,7 @@ class TestMergeWaitLogic:
         )
 
         with patch('pokepoke.agents.cleanup_agents.time.sleep'):
-            success, stats = invoke_cleanup_agent(item, wait_for_merge=True)
+            success, _stats = invoke_cleanup_agent(item, wait_for_merge=True)
 
         assert success is True
 
@@ -604,7 +604,7 @@ class TestMergeWaitLogic:
         )
 
         with patch('pokepoke.agents.cleanup_agents.time.sleep'):
-            success, stats = invoke_cleanup_agent(item, wait_for_merge=True)
+            success, _stats = invoke_cleanup_agent(item, wait_for_merge=True)
 
         assert success is True
 
@@ -628,7 +628,7 @@ class TestMergeWaitLogic:
             status="in_progress", priority=1, issue_type="task"
         )
 
-        success, stats = invoke_cleanup_agent(item, wait_for_merge=False)
+        success, _stats = invoke_cleanup_agent(item, wait_for_merge=False)
 
         assert success is True
         mock_merge_active.assert_not_called()
@@ -659,7 +659,7 @@ class TestMergeWaitLogic:
         )
 
         with patch('pokepoke.agents.cleanup_agents.time.sleep'):
-            success, stats = invoke_merge_conflict_cleanup_agent(
+            success, _stats = invoke_merge_conflict_cleanup_agent(
                 item, "Merge error", wait_for_merge=True
             )
 
@@ -690,7 +690,7 @@ class TestMergeWaitLogic:
         )
 
         with patch('pokepoke.agents.cleanup_agents.time.sleep'):
-            success, stats = invoke_merge_conflict_cleanup_agent(
+            success, _stats = invoke_merge_conflict_cleanup_agent(
                 item, "Merge error", wait_for_merge=True
             )
 
@@ -720,7 +720,7 @@ class TestMergeWaitLogic:
             status="in_progress", priority=1, issue_type="task"
         )
 
-        success, stats = invoke_merge_conflict_cleanup_agent(
+        success, _stats = invoke_merge_conflict_cleanup_agent(
             item, "Merge error",
             unmerged_files=["f1.py", "f2.py", "f3.py", "f4.py", "f5.py", "f6.py"],
             wait_for_merge=False,
@@ -756,7 +756,7 @@ class TestCleanupAgentTimeout:
             issue_type="task", priority=1, status="in_progress", labels=["test"]
         )
 
-        success, stats = invoke_cleanup_agent(item)
+        success, _stats = invoke_cleanup_agent(item)
 
         assert success is True
         mock_invoke.assert_called_once()
@@ -788,7 +788,7 @@ class TestCleanupAgentTimeout:
             status="in_progress", priority=1, issue_type="task"
         )
 
-        success, stats = invoke_merge_conflict_cleanup_agent(
+        success, _stats = invoke_merge_conflict_cleanup_agent(
             item, "Merge error", wait_for_merge=False
         )
 
@@ -820,7 +820,7 @@ class TestCleanupAgentTimeout:
             work_item_id="task-1", success=True, output="", attempt_count=1
         )
 
-        success, cleanup_runs = run_cleanup_loop(item, result)
+        success, _cleanup_runs = run_cleanup_loop(item, result)
 
         assert success is False
         assert "aggregate timeout" in result.error.lower()

@@ -151,7 +151,7 @@ class TestPreflightChecker:
         subprocess.run(['git', 'add', 'dirty_file.txt'], cwd=str(temp_repo), check=True, capture_output=True)
 
         checker = PreflightChecker(temp_repo, health_config)
-        errors, warnings = checker._check_git_status()
+        errors, _warnings = checker._check_git_status()
 
         # Should detect uncommitted changes
         assert len(errors) == 1
@@ -162,7 +162,7 @@ class TestPreflightChecker:
         with tempfile.TemporaryDirectory() as temp_dir:
             non_git_path = Path(temp_dir)
             checker = PreflightChecker(non_git_path, health_config)
-            errors, warnings = checker._check_git_status()
+            errors, _warnings = checker._check_git_status()
 
             assert len(errors) == 1
             assert errors[0].check_name == 'git_status_check'
@@ -186,14 +186,14 @@ class TestPreflightChecker:
             return result
 
         with patch('subprocess.run', side_effect=mock_subprocess_run):
-            errors, warnings = checker._check_worktree_creation()
+            errors, _warnings = checker._check_worktree_creation()
 
         # Should succeed
         assert len(errors) == 0
 
     def test_disk_space_check(self, temp_repo, health_config):
         checker = PreflightChecker(temp_repo, health_config)
-        errors, warnings = checker._check_disk_space()
+        errors, _warnings = checker._check_disk_space()
 
         # Should pass with very low threshold
         assert len(errors) == 0
@@ -203,7 +203,7 @@ class TestPreflightChecker:
         health_config['min_disk_space_gb'] = 999999999.0
 
         checker = PreflightChecker(temp_repo, health_config)
-        errors, warnings = checker._check_disk_space()
+        errors, _warnings = checker._check_disk_space()
 
         assert len(errors) == 1
         assert errors[0].check_name == 'disk_space_check'
@@ -211,14 +211,14 @@ class TestPreflightChecker:
 
     def test_lock_availability_check_no_locks(self, temp_repo, health_config):
         checker = PreflightChecker(temp_repo, health_config)
-        errors, warnings = checker._check_lock_availability()
+        errors, _warnings = checker._check_lock_availability()
 
         # Should pass when no locks exist
         assert len(errors) == 0
 
     def test_repository_integrity_check_clean(self, temp_repo, health_config):
         checker = PreflightChecker(temp_repo, health_config)
-        errors, warnings = checker._check_repository_integrity()
+        errors, _warnings = checker._check_repository_integrity()
 
         # Should pass in clean repo
         assert len(errors) == 0
@@ -230,7 +230,7 @@ class TestPreflightChecker:
             (worktrees_dir / f'orphan-{i}').mkdir()
 
         checker = PreflightChecker(temp_repo, health_config)
-        errors, warnings = checker._check_repository_integrity()
+        errors, _warnings = checker._check_repository_integrity()
 
         assert len(errors) == 1
         assert errors[0].check_name == 'repository_integrity_check'
@@ -515,7 +515,7 @@ class TestGitStatusEdgeCases:
 
         with patch('pokepoke.utils.preflight_checks.has_uncommitted_changes', return_value=True), \
              patch('subprocess.run', side_effect=subprocess.CalledProcessError(1, 'git', stderr='bad')):
-            errors, warnings = checker._check_git_status()
+            errors, _warnings = checker._check_git_status()
 
         assert len(errors) == 1
         assert errors[0].severity == ErrorSeverity.ENVIRONMENTAL
@@ -527,7 +527,7 @@ class TestGitStatusEdgeCases:
 
         with patch('pokepoke.utils.preflight_checks.has_uncommitted_changes', return_value=True), \
              patch('subprocess.run', side_effect=subprocess.TimeoutExpired('git', 10)):
-            errors, warnings = checker._check_git_status()
+            errors, _warnings = checker._check_git_status()
 
         assert len(errors) == 1
         assert errors[0].severity == ErrorSeverity.ENVIRONMENTAL
@@ -560,7 +560,7 @@ class TestWorktreeCreationEdgeCases:
         # Mock subprocess to succeed but don't create the directory
         mock_result = MagicMock(returncode=0, stdout='', stderr='')
         with patch('subprocess.run', return_value=mock_result):
-            errors, warnings = checker._check_worktree_creation()
+            errors, _warnings = checker._check_worktree_creation()
 
         assert len(errors) == 1
         assert 'not created' in errors[0].message.lower()
@@ -570,7 +570,7 @@ class TestWorktreeCreationEdgeCases:
         checker = PreflightChecker(temp_repo, health_config)
 
         with patch('subprocess.run', side_effect=subprocess.CalledProcessError(1, 'git', stderr='fatal error')):
-            errors, warnings = checker._check_worktree_creation()
+            errors, _warnings = checker._check_worktree_creation()
 
         assert len(errors) == 1
         assert 'Failed to create test worktree' in errors[0].message
@@ -580,7 +580,7 @@ class TestWorktreeCreationEdgeCases:
         checker = PreflightChecker(temp_repo, health_config)
 
         with patch('subprocess.run', side_effect=subprocess.TimeoutExpired('git', 10)):
-            errors, warnings = checker._check_worktree_creation()
+            errors, _warnings = checker._check_worktree_creation()
 
         assert len(errors) == 1
         assert 'timed out' in errors[0].message.lower()
@@ -611,7 +611,7 @@ class TestLockAvailabilityEdgeCases:
         lock_file.write_text(str(os.getpid()))  # Current PID = active
 
         checker = PreflightChecker(temp_repo, health_config)
-        errors, warnings = checker._check_lock_availability()
+        errors, _warnings = checker._check_lock_availability()
 
         assert len(errors) == 1
         assert errors[0].check_name == 'lock_availability_check'
@@ -714,7 +714,7 @@ class TestRepairEdgeCases:
         checker = PreflightChecker(temp_repo, health_config)
 
         with patch('shutil.disk_usage', side_effect=OSError('disk error')):
-            errors, warnings = checker._check_disk_space()
+            errors, _warnings = checker._check_disk_space()
 
         assert len(errors) == 1
         assert 'Failed to check disk space' in errors[0].message

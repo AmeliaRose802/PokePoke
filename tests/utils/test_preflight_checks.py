@@ -50,7 +50,7 @@ class TestCheckGitStatus:
              patch("pokepoke.utils.preflight_checks.categorize_git_changes", return_value={
                  "other": [], "beads": [], "worktree": [], "untracked": ["new_file.py"],
              }):
-            errors, warnings = check_git_status(fake_repo, health_config)
+            errors, _warnings = check_git_status(fake_repo, health_config)
         status_errors = [e for e in errors if e.check_name == "git_status_check"]
         assert len(status_errors) == 1
         assert "1 files" in status_errors[0].message
@@ -68,7 +68,7 @@ class TestCheckGitStatus:
 
     def test_no_uncommitted_changes(self, fake_repo, health_config):
         with patch("pokepoke.utils.preflight_checks.has_uncommitted_changes", return_value=False):
-            errors, warnings = check_git_status(fake_repo, health_config)
+            errors, _warnings = check_git_status(fake_repo, health_config)
         assert len(errors) == 0
 
     def test_not_a_git_repo(self, tmp_path, health_config):
@@ -112,7 +112,7 @@ class TestCheckWorktreeCreation:
             # Pre-create the directory the function expects to find
             wt_dir = fake_repo / "worktrees" / "test-health-check-abcd1234"
             wt_dir.mkdir(parents=True)
-            errors, warnings = check_worktree_creation(fake_repo, health_config)
+            errors, _warnings = check_worktree_creation(fake_repo, health_config)
         assert len(errors) == 0
 
     def test_creation_fails(self, fake_repo, health_config):
@@ -134,7 +134,7 @@ class TestCheckWorktreeCreation:
 
 class TestCheckLockAvailability:
     def test_no_locks(self, fake_repo, health_config):
-        errors, warnings = check_lock_availability(fake_repo, health_config)
+        errors, _warnings = check_lock_availability(fake_repo, health_config)
         assert len(errors) == 0
 
     def test_stale_lock_warning(self, fake_repo, health_config):
@@ -143,7 +143,7 @@ class TestCheckLockAvailability:
         lock_file = lock_dir / "orchestrator.lock"
         lock_file.write_text("12345")
         with patch("pokepoke.utils.preflight_checks.is_lock_stale", return_value=(True, {"reason": "old"})):
-            errors, warnings = check_lock_availability(fake_repo, health_config)
+            _errors, warnings = check_lock_availability(fake_repo, health_config)
         assert any("Stale lock" in w for w in warnings)
 
     def test_active_lock_error(self, fake_repo, health_config):
@@ -193,7 +193,7 @@ class TestCheckDiskSpace:
 class TestCheckRepositoryIntegrity:
     def test_no_worktrees_dir(self, fake_repo, health_config):
         with patch("pokepoke.utils.preflight_checks.list_worktrees", return_value=[]):
-            errors, warnings = check_repository_integrity(fake_repo, health_config)
+            errors, _warnings = check_repository_integrity(fake_repo, health_config)
         assert len(errors) == 0
 
     def test_orphaned_worktrees_warning(self, fake_repo, health_config):
@@ -239,11 +239,11 @@ class TestIsLockStale:
         lock = tmp_path / "test.lock"
         lock.write_text("99999")
         with patch("pokepoke.utils.preflight_checks.is_process_running", return_value=True):
-            stale, details = is_lock_stale(lock)
+            stale, _details = is_lock_stale(lock)
         assert stale is False
 
     def test_lock_without_pid(self, tmp_path):
         lock = tmp_path / "test.lock"
         lock.write_text("not-a-pid")
-        stale, details = is_lock_stale(lock)
+        _stale, details = is_lock_stale(lock)
         assert details["reason"] == "cannot_determine"

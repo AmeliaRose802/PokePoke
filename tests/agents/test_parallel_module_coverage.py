@@ -447,7 +447,7 @@ class TestCollectDoneFutures:
         futures = {fut: item}
         failed_ids: set[str] = set()
 
-        total, any_ok, sc, fc = _collect_done_futures(
+        _total, any_ok, _sc, fc = _collect_done_futures(
             futures, failed_ids, 0, _make_session_stats(), _make_run_logger(), Mock(),
         )
         assert any_ok is False
@@ -481,7 +481,7 @@ class TestCollectDoneFutures:
         bad_record = Mock(side_effect=ValueError("recording failed"))
 
         # Should not raise
-        total, any_ok, sc, fc = _collect_done_futures(
+        _total, any_ok, sc, _fc = _collect_done_futures(
             futures, set(), 0, _make_session_stats(), _make_run_logger(), bad_record,
         )
         assert any_ok is True
@@ -499,7 +499,7 @@ class TestCollectDoneFutures:
         time.sleep(0.15)
         futures = {fut: item}
 
-        total, any_ok, sc, fc = _collect_done_futures(
+        _total, any_ok, _sc, _fc = _collect_done_futures(
             futures, set(), 0, _make_session_stats(), _make_run_logger(), Mock(),
         )
         assert any_ok is True

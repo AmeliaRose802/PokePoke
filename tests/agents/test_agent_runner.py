@@ -171,7 +171,7 @@ class TestRunGateAgent:
         )
         mock_parse.return_value = None
 
-        success, reason, stats, crashed = run_gate_agent(work_item)
+        success, reason, _stats, crashed = run_gate_agent(work_item)
 
         assert success is False
         assert "Tests failed" in reason
@@ -201,7 +201,7 @@ class TestRunGateAgent:
         )
         mock_parse.return_value = None
 
-        success, reason, stats, crashed = run_gate_agent(work_item)
+        success, reason, _stats, _crashed = run_gate_agent(work_item)
 
         assert success is True
         assert "text match" in reason
@@ -229,7 +229,7 @@ class TestRunGateAgent:
         )
         mock_parse.return_value = None
 
-        success, reason, stats, crashed = run_gate_agent(work_item)
+        success, reason, _stats, _crashed = run_gate_agent(work_item)
 
         assert success is True
         assert "text match" in reason
@@ -272,7 +272,7 @@ class TestRunGateAgent:
         )
         mock_parse.return_value = None
 
-        success, reason, stats, crashed = run_gate_agent(work_item)
+        success, reason, _stats, _crashed = run_gate_agent(work_item)
 
         assert success is True
         assert "new_work_verified" in reason
@@ -299,7 +299,7 @@ class TestRunGateAgent:
             attempt_count=1
         )
 
-        success, reason, stats, crashed = run_gate_agent(work_item)
+        success, reason, _stats, crashed = run_gate_agent(work_item)
 
         assert success is False
         assert "execution failed" in reason
@@ -337,7 +337,7 @@ class TestRunGateAgent:
         assert result.session_id == "sess-abc"
         assert result.last_output_summary == "Running tests..."
         # Backward-compatible unpacking still works
-        success, reason, stats, crashed = result
+        success, _reason, _stats, crashed = result
         assert success is False
         assert crashed is False
 
@@ -435,7 +435,7 @@ class TestRunGateAgent:
             attempt_count=1
         )
 
-        success, reason, stats, crashed = run_gate_agent(work_item)
+        success, reason, _stats, _crashed = run_gate_agent(work_item)
 
         assert success is False
         assert "did not explicitly approve" in reason
@@ -465,7 +465,7 @@ class TestRunGateAgent:
         )
         mock_parse.return_value = None
 
-        success, reason, stats, crashed = run_gate_agent(work_item)
+        success, reason, _stats, _crashed = run_gate_agent(work_item)
 
         assert success is True
         assert "work_already_complete" in reason
@@ -501,7 +501,7 @@ class TestRunGateAgent:
         mock_parse.return_value = None
 
         # Call with work_model parameter
-        success, reason, stats, crashed = run_gate_agent(work_item, work_model="claude-opus-4.6")
+        success, _reason, _stats, _crashed = run_gate_agent(work_item, work_model="claude-opus-4.6")
 
         assert success is True
         # Verify select_gate_model was called with work model
@@ -542,7 +542,7 @@ class TestRunGateAgent:
         mock_parse.return_value = None
 
         handoff = "## Work Agent Handoff Context\n### Changed Files\nM\tsrc/foo.py"
-        success, reason, stats, crashed = run_gate_agent(work_item, handoff_context=handoff)
+        success, _reason, _stats, _crashed = run_gate_agent(work_item, handoff_context=handoff)
 
         assert success is True
         # Verify handoff_context was included in template variables
@@ -1364,7 +1364,7 @@ class TestRunBetaTester:
         assert stats.wall_duration == 10.0
         mock_worktree_agent.assert_called_once()
         # Verify call args have merge_changes=False
-        args, kwargs = mock_worktree_agent.call_args
+        _args, kwargs = mock_worktree_agent.call_args
         assert kwargs.get('merge_changes') is False
         mock_run.assert_called()  # Restart script
 
@@ -1961,7 +1961,7 @@ class TestGateAgentJsonDecodeError:
             attempt_count=1
         )
         mock_parse.return_value = None
-        success, reason, stats, crashed = run_gate_agent(work_item)
+        success, reason, _stats, _crashed = run_gate_agent(work_item)
         assert success is False
         assert "did not explicitly approve" in reason
 
@@ -2103,7 +2103,7 @@ class TestGateAgentWithAgentId:
         )
         mock_parse.return_value = None
 
-        success, reason, stats, crashed = run_gate_agent(
+        success, _reason, _stats, _crashed = run_gate_agent(
             work_item, agent_id="gate-123", parent_agent_id="parent-1",
         )
 

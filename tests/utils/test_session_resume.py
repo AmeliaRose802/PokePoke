@@ -155,7 +155,7 @@ class TestGateAgentResult:
         assert result.session_id == "sess-123"
         assert result.last_output_summary == "test output"
         # Tuple unpacking ignores timeout fields
-        success, reason, stats, crashed = result
+        success, _reason, _stats, crashed = result
         assert success is False
         assert crashed is False
 

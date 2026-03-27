@@ -145,7 +145,7 @@ class TestAbortMerge:
         """Test with explicit repo path."""
         mock_run.return_value = Mock(returncode=0)
 
-        success, error = abort_merge(repo_path=Path("/some/path"))
+        success, _error = abort_merge(repo_path=Path("/some/path"))
 
         assert success is True
         call_args = mock_run.call_args[0][0]

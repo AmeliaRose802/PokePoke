@@ -164,7 +164,7 @@ class TestCollectDoneFutures:
         stats = SessionStats(agent_stats=AgentStats())
         logger = MagicMock()
 
-        total, any_success, _s, _f = _collect_done_futures(
+        _total, any_success, _s, _f = _collect_done_futures(
             futures, set(), 0, stats, logger, record_fn,
         )
         assert any_success is False
@@ -214,7 +214,7 @@ class TestCollectDoneFutures:
         logger = MagicMock()
 
         # Should not raise despite record_fn failure
-        total, any_success, _s, _f = _collect_done_futures(
+        _total, any_success, _s, _f = _collect_done_futures(
             futures, set(), 0, stats, logger, record_fn,
         )
         assert any_success is True
@@ -253,7 +253,7 @@ class TestFinalizeWorkers:
         logger = MagicMock()
         record_fn = MagicMock()
 
-        total, timeout = _finalize_workers(futures, stats, 0.0, 0, logger, record_fn)
+        total, _timeout = _finalize_workers(futures, stats, 0.0, 0, logger, record_fn)
         assert total == 0  # Failed result has request_count=0
         record_fn.assert_called_once()
 

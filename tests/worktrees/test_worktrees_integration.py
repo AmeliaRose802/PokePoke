@@ -383,7 +383,7 @@ class TestMergeWorktreeIntegration:
         mock_run.return_value = Mock(returncode=0)
         mock_is_merged.return_value = True
 
-        success, conflicts = merge_worktree('test-123', cleanup=False)
+        success, _conflicts = merge_worktree('test-123', cleanup=False)
 
         assert success is True
         mock_cleanup.assert_not_called()

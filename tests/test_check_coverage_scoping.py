@@ -103,7 +103,7 @@ class TestNoTestFallback:
         with patch.object(_mod, "_get_staged_files", return_value=[
             "src/pokepoke/helpers.py"
         ]):
-            test_files, run_full = _find_test_files_for_staged(staged, fake_repo)
+            _test_files, _run_full = _find_test_files_for_staged(staged, fake_repo)
 
         # No test_helpers.py exists at the expected location...
         # Actually, tests/utils/test_helpers.py exists, so it should be found

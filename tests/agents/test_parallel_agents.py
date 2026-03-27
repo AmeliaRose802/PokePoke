@@ -421,7 +421,7 @@ class TestCollectDoneFuturesRecording:
         logger = MagicMock(spec=RunLogger)
         record_fn = MagicMock()
 
-        total, any_success, _s, _f = _collect_done_futures(
+        _total, any_success, _s, _f = _collect_done_futures(
             futures, failed, 0, stats, logger, record_fn,
         )
 

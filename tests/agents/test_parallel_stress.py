@@ -306,7 +306,7 @@ class TestCircuitBreakerConcurrentFailures:
 
             failed_ids: set[str] = set()
             record_fn = Mock()
-            total, any_ok, successes, failures = _collect_done_futures(
+            _total, any_ok, successes, failures = _collect_done_futures(
                 futures, failed_ids, 0, stats, Mock(), record_fn,
             )
 
@@ -372,7 +372,7 @@ class TestFailedClaimIdsConcurrency:
                 futures_dict[fut] = item
 
             failed_ids: set[str] = set()
-            _total, any_ok, successes, failures = _collect_done_futures(
+            _total, _any_ok, successes, failures = _collect_done_futures(
                 futures_dict, failed_ids, 0, stats, Mock(), Mock(),
             )
 
@@ -538,7 +538,7 @@ class TestCollectDoneFuturesConcurrent:
             concurrent.futures.wait(futures.keys())
 
             failed_ids: set[str] = set()
-            total, any_ok, successes, failures = _collect_done_futures(
+            _total, any_ok, successes, failures = _collect_done_futures(
                 futures, failed_ids, 0, stats, Mock(), Mock(),
             )
 
@@ -564,7 +564,7 @@ class TestCollectDoneFuturesConcurrent:
                 futures[pool.submit(_staggered, i)] = _make_item(f"stag-{i}")
             concurrent.futures.wait(futures.keys())
 
-            total, any_ok, successes, failures = _collect_done_futures(
+            total, _any_ok, successes, failures = _collect_done_futures(
                 futures, set(), 0, stats, Mock(), Mock(),
             )
 
@@ -742,7 +742,7 @@ class TestComputeSlotsConcurrency:
 
         def _worker() -> None:
             barrier.wait()
-            active, slots, mem = compute_slots({}, Mock())
+            _active, slots, _mem = compute_slots({}, Mock())
             if slots < 0:
                 errors.append(f"Negative slots: {slots}")
             if slots > 6:

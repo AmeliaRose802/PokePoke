@@ -182,7 +182,7 @@ class TestRunCleanupWithTimeout:
         item = _item()
         result_obj = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1)
 
-        success, runs = run_cleanup_with_timeout(
+        _success, runs = run_cleanup_with_timeout(
             item, result_obj, Path("."), time.time(), 7200, 2.0,
         )
         # When cleanup fails, result.success is still True (the CopilotResult),
@@ -549,7 +549,7 @@ class TestPreLoopValidate:
     @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
     @patch("builtins.input", return_value="n")
     def test_interactive_user_declines(self, mock_input, mock_tui):
-        result, was_assigned, wt, root, cwd = _pre_loop_validate(
+        result, was_assigned, _wt, _root, _cwd = _pre_loop_validate(
             _item(), interactive=True, worktree_lock_timeout=10,
             run_logger=None, item_logger=None,
         )
@@ -563,7 +563,7 @@ class TestPreLoopValidate:
     @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=False)
     @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
     def test_assign_failure(self, mock_tui, mock_assign, mock_setup):
-        result, was_assigned, wt, root, cwd = _pre_loop_validate(
+        result, was_assigned, _wt, _root, _cwd = _pre_loop_validate(
             _item(), interactive=False, worktree_lock_timeout=10,
             run_logger=None, item_logger=None,
         )
@@ -576,7 +576,7 @@ class TestPreLoopValidate:
     @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=True)
     @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
     def test_worktree_setup_failure(self, mock_tui, mock_assign, mock_setup):
-        result, was_assigned, wt, root, cwd = _pre_loop_validate(
+        result, was_assigned, _wt, _root, _cwd = _pre_loop_validate(
             _item(), interactive=False, worktree_lock_timeout=10,
             run_logger=None, item_logger=None,
         )
@@ -715,7 +715,7 @@ class TestFinalizeItemResult:
         run_logger = MagicMock()
         item_logger = MagicMock()
         result = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1)
-        wir, success = _finalize_item_result(
+        _wir, success = _finalize_item_result(
             result=result,
             item=_item(),
             worktree_path=tmp_path,

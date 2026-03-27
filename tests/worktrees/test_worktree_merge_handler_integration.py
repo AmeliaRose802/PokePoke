@@ -84,7 +84,7 @@ class TestPerformWorktreeMergeIntegration:
         worktree_path = Path('C:/repos/worktrees/task-test-456')
 
         with patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree', return_value=(True, [])):
-            success, cleaned = perform_worktree_merge(
+            success, _cleaned = perform_worktree_merge(
                 item_id=agent_item.id,
                 item=agent_item,
                 worktree_path=worktree_path,
@@ -151,7 +151,7 @@ class TestPerformWorktreeMergeIntegration:
         agent_item = _make_test_item('test-conflicts')
         worktree_path = Path('C:/repos/worktrees/task-test-conflicts')
 
-        success, cleaned = perform_worktree_merge(
+        success, _cleaned = perform_worktree_merge(
             item_id=agent_item.id,
             item=agent_item,
             worktree_path=worktree_path,
@@ -360,7 +360,7 @@ class TestMergeSequenceErrorRecovery:
         agent_item = _make_test_item('test-retry')
         worktree_path = Path('C:/repos/worktrees/task-test-retry')
 
-        success, cleaned = perform_worktree_merge(
+        success, _cleaned = perform_worktree_merge(
             item_id=agent_item.id,
             item=agent_item,
             worktree_path=worktree_path,
@@ -392,7 +392,7 @@ class TestMergeSequenceErrorRecovery:
         worktree_path = Path('C:/repos/worktrees/task-test-no-retry')
 
         with patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree') as mock_merge:
-            success, cleaned = perform_worktree_merge(
+            success, _cleaned = perform_worktree_merge(
                 item_id=agent_item.id,
                 item=agent_item,
                 worktree_path=worktree_path,
