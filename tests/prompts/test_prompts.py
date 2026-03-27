@@ -495,3 +495,68 @@ def test_default_prompts_dir_uses_repo_root(monkeypatch, tmp_path):
     assert service.prompts_dir == user_dir
     assert result["saved"]
     assert (user_dir / "test.md").read_text(encoding="utf-8") == "override"
+
+# ── Code Review Prompt Content Tests ─────────────────────────────────────
+
+
+def test_code_reviewer_prompt_has_mandatory_filing_section():
+    """Code reviewer prompt must contain MANDATORY FILING REQUIREMENTS section."""
+    service = PromptService()
+    content = service.load_prompt("code-reviewer")
+
+    assert "MANDATORY FILING REQUIREMENTS" in content
+    assert "🚨 CRITICAL:" in content
+
+
+def test_code_reviewer_prompt_requires_high_severity_filing():
+    """Code reviewer prompt must mandate filing HIGH severity issues."""
+    service = PromptService()
+    content = service.load_prompt("code-reviewer")
+
+    # Must contain explicit language requiring HIGH severity filing
+    assert "HIGH severity (P0/P1) findings MUST ALWAYS be filed" in content
+    assert "NO EXCEPTIONS" in content
+
+    # Should forbid dismissing HIGH severity issues
+    assert "CANNOT dismiss HIGH severity findings" in content or \
+           "cannot dismiss HIGH severity findings" in content
+
+
+def test_code_reviewer_prompt_has_severity_classification():
+    """Code reviewer prompt must require severity classification."""
+    service = PromptService()
+    content = service.load_prompt("code-reviewer")
+
+    assert "Classify Severity" in content or "classify severity" in content
+    assert "HIGH (P0/P1)" in content
+    assert "MEDIUM (P2)" in content
+    assert "LOW (P3)" in content
+
+
+def test_code_reviewer_prompt_has_summary_requirements():
+    """Code reviewer prompt must specify summary requirements."""
+    service = PromptService()
+    content = service.load_prompt("code-reviewer")
+
+    assert "Summary Requirements" in content or "summary MUST" in content.lower()
+    # Must forbid saying "no significant issues" when HIGH severity found
+    assert "Never say" in content or "NEVER say" in content
+
+
+def test_code_reviewer_builtin_matches_user_version():
+    """Built-in code-reviewer.md must have same mandatory requirements as user version."""
+    service = PromptService()
+
+    # Load from user dir
+    user_content = (service.prompts_dir / "code-reviewer.md").read_text(encoding="utf-8")
+
+    # Load from builtin dir
+    builtin_content = (service.builtin_dir / "code-reviewer.md").read_text(encoding="utf-8")
+
+    # Both should have the critical mandatory filing section
+    assert "MANDATORY FILING REQUIREMENTS" in user_content
+    assert "MANDATORY FILING REQUIREMENTS" in builtin_content
+
+    # Both should require HIGH severity filing
+    assert "HIGH severity (P0/P1) findings MUST ALWAYS be filed" in user_content
+    assert "HIGH severity (P0/P1) findings MUST ALWAYS be filed" in builtin_content
