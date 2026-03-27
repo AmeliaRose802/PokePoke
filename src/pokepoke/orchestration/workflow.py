@@ -197,6 +197,45 @@ def process_work_item(  # noqa: C901
                     parent_agent_id=parent_for_status,
                     work_item_id=item.id, work_item_title=item.title, agent_type="work",
                     agent_prompt=work_prompt, resume_in_place=resume_in_place)
+
+                # Pre-invocation guard: Verify worktree is on expected branch before launching agent
+                # Only run if worktree directory actually exists (skip during unit tests with mocked paths)
+                from pokepoke.git.git_helpers import run_git as _run_git_check
+                from pokepoke.git.git_operations import sanitize_branch_name
+                from pokepoke.utils.constants import BRANCH_PREFIX
+
+                if Path(worktree_cwd).exists():
+                    sanitized_id = sanitize_branch_name(item.id)
+                    expected_branch = f"{BRANCH_PREFIX}{sanitized_id}"
+
+                    try:
+                        branch_check = _run_git_check(
+                            ["git", "branch", "--show-current"],
+                            cwd=worktree_cwd,
+                            timeout=10,
+                            check=False,
+                        )
+                        if branch_check.returncode == 0:
+                            current_branch = branch_check.stdout.strip()
+                            if current_branch != expected_branch:
+                                error_msg = (
+                                    f"FATAL: Worktree for {item.id} is on wrong branch '{current_branch}' "
+                                    f"(expected '{expected_branch}'). Refusing to invoke agent. "
+                                    "This prevents committing to the default branch."
+                                )
+                                logger.error(f"\n❌ {error_msg}")
+                                _log_failure(run_logger, item_logger, request_count)
+                                terminal_ui.ui.set_current_agent(None)
+                                return _fail_result(request_count=request_count, stats=accumulated_stats,
+                                                  cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs)
+                    except Exception as e:
+                        error_msg = f"FATAL: Failed to verify worktree branch: {e}"
+                        logger.error(f"\n❌ {error_msg}")
+                        _log_failure(run_logger, item_logger, request_count)
+                        terminal_ui.ui.set_current_agent(None)
+                        return _fail_result(request_count=request_count, stats=accumulated_stats,
+                                          cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs)
+
                 with terminal_ui.ui.agent_output_for(agent_id):
                     result = invoke_copilot(
                         item, prompt=work_prompt, timeout=remaining_timeout,

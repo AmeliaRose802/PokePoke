@@ -34,11 +34,35 @@ logger = logging.getLogger(__name__)
 
 
 def _find_existing_worktree(worktree_path: Path, branch_name: str, item_id: str, repo_path: str | None = None) -> Path | None:
-    """Check if a worktree for this item already exists and return its path."""
+    """Check if a worktree for this item already exists and return its path.
+
+    Also verifies the worktree is on the expected branch.
+    """
     existing_worktrees = list_worktrees(cwd=repo_path)
     for wt in existing_worktrees:
         wt_path = Path(wt.get("path", ""))
         if wt_path == worktree_path.resolve() or wt.get("branch", "").endswith(branch_name):
+            # Verify the worktree is actually on the expected branch
+            # Only check if the directory actually exists (skip check during testing with mocks)
+            if wt_path.exists():
+                try:
+                    result = _run_git(
+                        ["git", "branch", "--show-current"],
+                        cwd=str(wt_path),
+                        timeout=10,
+                        check=False,
+                    )
+                    if result.returncode == 0:
+                        current_branch = result.stdout.strip()
+                        if current_branch != branch_name:
+                            logger.warning(
+                                f"Existing worktree at {wt_path} is on wrong branch '{current_branch}' "
+                                f"(expected '{branch_name}'). Ignoring this worktree."
+                            )
+                            continue
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                    logger.warning(f"Failed to verify branch for worktree at {wt_path}: {e}")
+                    continue
             return wt_path
     return None
 
@@ -65,6 +89,44 @@ def _check_existing_directory(worktree_path: Path, repo_path: str | None = None)
         pass
 
     if is_valid_worktree:
+        # Additional check: verify it's on the expected branch
+        from pokepoke.utils.constants import BRANCH_PREFIX
+
+        # Extract item_id from the path (task-{item_id})
+        dir_name = worktree_path.name
+        if dir_name.startswith(WORKTREE_TASK_PREFIX):
+            sanitized_id = dir_name[len(WORKTREE_TASK_PREFIX):]
+            expected_branch = f"{BRANCH_PREFIX}{sanitized_id}"
+
+            try:
+                branch_result = _run_git(
+                    ["git", "branch", "--show-current"],
+                    cwd=str(worktree_path),
+                    timeout=10,
+                    check=False,
+                )
+                if branch_result.returncode == 0:
+                    current_branch = branch_result.stdout.strip()
+                    # Only enforce branch check if we got a valid-looking branch name
+                    # (contains slash or starts with expected prefix, and isn't a git status like "true")
+                    if (current_branch and (
+                        "/" in current_branch or
+                        current_branch.startswith(BRANCH_PREFIX) or
+                        current_branch.startswith("refs/")
+                    ) and current_branch != expected_branch):
+                        logger.warning(
+                            f"Directory {worktree_path} is on wrong branch '{current_branch}' "
+                            f"(expected '{expected_branch}'). Removing it."
+                        )
+                        logger.info(f"   🧹  Removing worktree with wrong branch at {worktree_path}")
+                        if not force_remove_directory(worktree_path):
+                            raise RuntimeError(f"Failed to remove worktree with wrong branch {worktree_path}")
+                        with contextlib.suppress(Exception):
+                            _run_git(["git", "worktree", "prune"], cwd=repo_path)
+                        return None
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                logger.warning(f"Failed to verify branch for worktree at {worktree_path}: {e}")
+
         logger.info(f"Directory {worktree_path} is a valid worktree, reusing it")
         logger.info(f"   ♻️  Reusing existing worktree directory at {worktree_path}")
         return worktree_path

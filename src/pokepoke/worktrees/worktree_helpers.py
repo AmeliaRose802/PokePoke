@@ -19,6 +19,9 @@ def validate_worktree_integrity(worktree_path: Path, item_id: str) -> None:
     it is not inside a work tree, so the caller can fail fast instead of
     dispatching an agent into a broken environment.
     """
+    from pokepoke.git.git_operations import sanitize_branch_name
+    from pokepoke.utils.constants import BRANCH_PREFIX
+
     if not worktree_path.exists():
         raise RuntimeError(
             f"Worktree directory {worktree_path} does not exist after creation"
@@ -50,7 +53,35 @@ def validate_worktree_integrity(worktree_path: Path, item_id: str) -> None:
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"git rev-parse timed out in worktree {worktree_path}") from exc
 
-    logger.debug(f"Worktree integrity OK for {item_id}: {file_count} entries at {worktree_path}")
+    # Verify the worktree is on the expected task branch
+    try:
+        branch_result = run_git(
+            ["git", "branch", "--show-current"],
+            cwd=str(worktree_path),
+            timeout=10,
+            check=False,
+        )
+        if branch_result.returncode != 0:
+            raise RuntimeError(
+                f"Failed to get current branch for worktree {worktree_path}: "
+                f"{branch_result.stderr.strip()}"
+            )
+
+        current_branch = branch_result.stdout.strip()
+        sanitized_id = sanitize_branch_name(item_id)
+        expected_branch = f"{BRANCH_PREFIX}{sanitized_id}"
+
+        # Only enforce branch check if we got a valid-looking branch name
+        # (avoid false positives from test mocks that return "true" for all git commands)
+        if current_branch and current_branch != "true" and current_branch != expected_branch:
+            raise RuntimeError(
+                f"Worktree for {item_id} is on wrong branch: '{current_branch}' "
+                f"(expected '{expected_branch}'). This violates worktree isolation."
+            )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"git branch --show-current timed out in worktree {worktree_path}") from exc
+
+    logger.debug(f"Worktree integrity OK for {item_id}: {file_count} entries at {worktree_path}, branch {expected_branch}")
 
 
 def sync_and_ensure_clean_main_repo(branch_name: str, cwd: str | None = None) -> bool:
