@@ -235,7 +235,7 @@ def test_create_default_config_writes_yaml(tmp_path, monkeypatch) -> None:
     assert "max_parallel_agents: 3" in text
 
 
-def test_create_default_config_camelCase_keys(tmp_path, monkeypatch) -> None:
+def test_create_default_config_camel_case_keys(tmp_path, monkeypatch) -> None:
     """Should accept camelCase keys from JS frontend."""
     api = DesktopAPI()
     monkeypatch.chdir(tmp_path)

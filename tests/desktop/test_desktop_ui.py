@@ -645,8 +645,10 @@ def _build_stub_edge_module(tmp_path, module_suffix, *, private_mode=True):
             self.CoreWebView2 = core
             self.disposed = False
 
-        def Dispose(self):
+        def dispose(self):
             self.disposed = True
+
+        Dispose = dispose  # .NET interop name used by production code
 
     base_dir = tmp_path / module_suffix
 
@@ -663,7 +665,7 @@ def _build_stub_edge_module(tmp_path, module_suffix, *, private_mode=True):
         last_proc = None
 
         @staticmethod
-        def GetProcessById(pid):
+        def get_process_by_id(pid):
             proc = SimpleNamespace(pid=pid, waited=False, timeout=None)
 
             def _wait(timeout):
@@ -673,6 +675,8 @@ def _build_stub_edge_module(tmp_path, module_suffix, *, private_mode=True):
             proc.WaitForExit = _wait
             _ProcessAPI.last_proc = proc
             return proc
+
+        GetProcessById = get_process_by_id  # .NET interop name used by production code
 
     convert = SimpleNamespace(ToInt32=lambda value: int(value) if value is not None else 0)
 
