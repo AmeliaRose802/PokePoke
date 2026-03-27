@@ -103,7 +103,12 @@ class HungCommandDetector:
         if state.consecutive_empty_reads >= self.max_retries:
             is_hung = True
             reason = f"No new output after {state.consecutive_empty_reads} consecutive read_powershell calls"
-        elif state.total_wait_seconds >= self.cumulative_timeout:
+        elif (state.total_wait_seconds >= self.cumulative_timeout
+              and state.consecutive_empty_reads > 0):
+            # Only flag cumulative timeout when output has stopped changing.
+            # If the command is still producing new output (e.g. git commit
+            # with pre-commit hooks running tests), it is making progress
+            # and should not be flagged as hung.
             is_hung = True
             reason = f"Command has been running for {state.total_wait_seconds:.0f}s (timeout: {self.cumulative_timeout:.0f}s)"
 

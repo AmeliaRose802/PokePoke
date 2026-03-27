@@ -1,8 +1,4 @@
-"""Project configuration system for PokePoke.
-
-Loads project-specific settings from .pokepoke/config.yaml, allowing PokePoke
-to be used generically on any project without hardcoded values.
-"""
+"""Project configuration system for PokePoke."""
 import logging
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -240,6 +236,7 @@ class ProjectConfig:
     max_parallel_agents: int = _c.DEFAULT_MAX_PARALLEL_AGENTS
     command_timeout: int = _c.DEFAULT_COMMAND_TIMEOUT
     gate_agent_enabled: bool = True
+    max_gate_rejections_per_item: int = 3  # Max gate rejections before abandoning item
     max_copilot_failure_retries: int = _c.DEFAULT_MAX_COPILOT_FAILURE_RETRIES
     idle_timeout_seconds: int = _c.DEFAULT_IDLE_TIMEOUT_SECONDS
     session_inactivity_timeout: int = _c.DEFAULT_SESSION_INACTIVITY_TIMEOUT
@@ -257,6 +254,7 @@ class ProjectConfig:
         """Clamp values to valid ranges."""
         self.max_parallel_agents = max(_c.MIN_MAX_PARALLEL_AGENTS, self.max_parallel_agents)
         self.command_timeout = max(_c.MIN_COMMAND_TIMEOUT, self.command_timeout)
+        self.max_gate_rejections_per_item = max(1, self.max_gate_rejections_per_item)
         self.max_copilot_failure_retries = max(0, self.max_copilot_failure_retries)
         self.idle_timeout_seconds = max(_c.MIN_IDLE_TIMEOUT_SECONDS, self.idle_timeout_seconds)
         self.session_inactivity_timeout = max(_c.MIN_SESSION_INACTIVITY_TIMEOUT, self.session_inactivity_timeout)

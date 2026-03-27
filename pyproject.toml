@@ -120,6 +120,9 @@ max-complexity = 15
 max-statements = 50
 
 [tool.ruff.lint.per-file-ignores]
+".githooks/**" = [
+    "T20",     # Standalone scripts: print() is the correct output mechanism
+]
 "tests/**/*" = [
     "C901",    # Tests: allow complex functions
     "S",       # Tests: allow security/bandit warnings

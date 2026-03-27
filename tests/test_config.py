@@ -441,14 +441,14 @@ class TestCommandTimeout:
     """Tests for command_timeout configuration."""
 
     def test_default_value(self):
-        """Test that command_timeout has a default value of 300."""
+        """Test that command_timeout has a default value of 600."""
         config = ProjectConfig()
-        assert config.command_timeout == 300
+        assert config.command_timeout == 600
 
     def test_from_dict_default(self):
-        """Test that command_timeout defaults to 300 when not specified."""
+        """Test that command_timeout defaults to 600 when not specified."""
         config = ProjectConfig.from_dict({})
-        assert config.command_timeout == 300
+        assert config.command_timeout == 600
 
     def test_from_dict_custom_value(self):
         """Test that command_timeout can be set via config dict."""
@@ -473,14 +473,14 @@ class TestToolCallTimeout:
     """Tests for tool_call_timeout configuration."""
 
     def test_default_value(self):
-        """Test that tool_call_timeout defaults to 900."""
+        """Test that tool_call_timeout defaults to 1800."""
         config = ProjectConfig()
-        assert config.tool_call_timeout == 900
+        assert config.tool_call_timeout == 1800
 
     def test_from_dict_default(self):
-        """Test that tool_call_timeout defaults to 900 when not specified."""
+        """Test that tool_call_timeout defaults to 1800 when not specified."""
         config = ProjectConfig.from_dict({})
-        assert config.tool_call_timeout == 900
+        assert config.tool_call_timeout == 1800
 
     def test_from_dict_custom_value(self):
         """Test that tool_call_timeout can be set via config dict."""
@@ -582,7 +582,7 @@ class TestUnknownKeyDetection:
         assert "unrecognized configuration key" in caplog.text.lower()
         assert "comand_timeout" in caplog.text
         # The valid default is used since the typo key is skipped
-        assert config.command_timeout == 300
+        assert config.command_timeout == 600
 
     def test_typo_in_nested_key_warns_and_skips(self, caplog):
         """A typo in nested config should warn but load the rest."""

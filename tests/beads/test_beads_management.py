@@ -737,6 +737,65 @@ class TestIncrementTotalAttempts:
         assert increment_total_attempts("item-1") is False
 
 
+class TestGetGateRejectionCount:
+    """Tests for get_gate_rejection_count."""
+
+    @patch("pokepoke.beads.beads_management._run_bd")
+    def test_returns_count_from_metadata(self, mock_run_bd: Mock) -> None:
+        from pokepoke.beads.beads_management import get_gate_rejection_count
+        mock_run_bd.return_value = Mock(stdout='[{"metadata": {"gate_rejection_count": 2}}]')
+        assert get_gate_rejection_count("item-1") == 2
+
+    @patch("pokepoke.beads.beads_management._run_bd")
+    def test_returns_zero_when_no_metadata(self, mock_run_bd: Mock) -> None:
+        from pokepoke.beads.beads_management import get_gate_rejection_count
+        mock_run_bd.return_value = Mock(stdout='[{"id": "item-1"}]')
+        assert get_gate_rejection_count("item-1") == 0
+
+    @patch("pokepoke.beads.beads_management._run_bd")
+    def test_returns_zero_on_parse_error(self, mock_run_bd: Mock) -> None:
+        from pokepoke.beads.beads_management import get_gate_rejection_count
+        mock_run_bd.return_value = Mock(stdout="not json")
+        assert get_gate_rejection_count("item-1") == 0
+
+    @patch("pokepoke.beads.beads_management._run_bd")
+    def test_returns_zero_on_exception(self, mock_run_bd: Mock) -> None:
+        from pokepoke.beads.beads_management import get_gate_rejection_count
+        mock_run_bd.side_effect = subprocess.CalledProcessError(1, "bd")
+        assert get_gate_rejection_count("item-1") == 0
+
+
+class TestIncrementGateRejectionCount:
+    """Tests for increment_gate_rejection_count."""
+
+    @patch("pokepoke.beads.beads_management._run_bd")
+    @patch("pokepoke.beads.beads_management.get_gate_rejection_count", return_value=1)
+    def test_increments_and_preserves_other_metadata(self, mock_get: Mock, mock_run_bd: Mock) -> None:
+        from pokepoke.beads.beads_management import increment_gate_rejection_count
+        mock_run_bd.return_value = Mock(stdout='[{"metadata": {"total_attempts": 5, "gate_rejection_count": 1}}]')
+        result = increment_gate_rejection_count("item-1")
+        assert result == 2
+        update_call = mock_run_bd.call_args_list[-1][0][0]
+        assert 'update' in update_call
+        assert '"gate_rejection_count": 2' in update_call[-1]
+        assert '"total_attempts": 5' in update_call[-1]
+
+    @patch("pokepoke.beads.beads_management._run_bd")
+    @patch("pokepoke.beads.beads_management.get_gate_rejection_count", return_value=0)
+    def test_creates_new_count_from_zero(self, mock_get: Mock, mock_run_bd: Mock) -> None:
+        from pokepoke.beads.beads_management import increment_gate_rejection_count
+        mock_run_bd.return_value = Mock(stdout='[{"metadata": {}}]')
+        result = increment_gate_rejection_count("item-1")
+        assert result == 1
+
+    @patch("pokepoke.beads.beads_management._run_bd")
+    @patch("pokepoke.beads.beads_management.get_gate_rejection_count", return_value=2)
+    def test_returns_negative_one_on_error(self, mock_get: Mock, mock_run_bd: Mock) -> None:
+        from pokepoke.beads.beads_management import increment_gate_rejection_count
+        mock_run_bd.side_effect = subprocess.CalledProcessError(1, "bd")
+        assert increment_gate_rejection_count("item-1") == -1
+
+
 class TestSelectNextHierarchicalItem:
     """Tests for select_next_hierarchical_item."""
 

@@ -1,5 +1,4 @@
 """Workflow management for work item selection and processing."""
-
 import logging
 import time
 from pathlib import Path
@@ -25,6 +24,7 @@ from pokepoke.orchestration.workflow_helpers import (
     _log_failure,
     _maybe_retry_copilot,
     run_cleanup_with_timeout,
+    setup_worktree,
 )
 from pokepoke.protocols import BeadsClient
 from pokepoke.stats.metrics_context import set_current_repo_name, set_current_work_item_id
@@ -33,14 +33,13 @@ from pokepoke.utils.shutdown import is_shutting_down, register_agent, unregister
 from pokepoke.worktrees.worktrees import cleanup_worktree, create_worktree  # noqa: F401 — kept for test patching
 
 if TYPE_CHECKING:
-    from pokepoke.utils.logging_utils import ItemLogger, RunLogger
+    from pokepoke.utils.logging_utils import RunLogger
 
 logger = logging.getLogger(__name__)
 
-_MAX_GATE_CRASH_RETRIES = 3  # Retry gate agent up to N times on infra crashes
-_MAX_GATE_TIMEOUT_RETRIES = 3  # Retry gate agent up to N times on session timeouts
-_LOCK_TIMEOUT_PER_AGENT = 120.0  # Seconds of lock timeout budget per parallel agent
-
+_MAX_GATE_CRASH_RETRIES = 3
+_MAX_GATE_TIMEOUT_RETRIES = 3
+_LOCK_TIMEOUT_PER_AGENT = 120.0
 
 def process_work_item(  # noqa: C901
     item: BeadsWorkItem,
@@ -54,7 +53,6 @@ def process_work_item(  # noqa: C901
     beads_client: BeadsClient | None = None,
 ) -> WorkItemResult:
     """Process a single work item with timeout protection."""
-    # Register this agent for shutdown coordination
     register_agent()
     _assign = beads_client.assign_and_sync_item if beads_client else assign_and_sync_item
     _comment = beads_client.add_comment if beads_client else add_comment
@@ -72,7 +70,6 @@ def process_work_item(  # noqa: C901
         backend_provider = config.ai_backend.provider
         worktree_lock_timeout = max(float(config.command_timeout), _LOCK_TIMEOUT_PER_AGENT * max(1, int(config.max_parallel_agents)))
 
-        # Set work-item and repo correlation IDs for structured logging
         set_current_work_item_id(item.id)
         repo_name = Path(repo_path).name if repo_path else Path.cwd().name
         set_current_repo_name(repo_name)
@@ -86,6 +83,15 @@ def process_work_item(  # noqa: C901
         logger.info(f"   🤖 Model: {selected_model} | 🧠 Backend: {backend_provider} | ⏱️  Timeout: {timeout_label}\n")
 
         item_logger = run_logger.start_item_log(item.id, item.title) if run_logger else None
+
+        from pokepoke.beads.beads_management import get_gate_rejection_count
+        existing_rejection_count = get_gate_rejection_count(item.id)
+        max_gate_rejections = config.max_gate_rejections_per_item
+        if existing_rejection_count >= max_gate_rejections:
+            logger.error(f"\n\u274c Item {item.id} has {existing_rejection_count} gate rejections (cap: {max_gate_rejections}). Refusing to process.")
+            _comment(item.id, f"\u26d4 Refusing to process: {existing_rejection_count} gate rejections (cap: {max_gate_rejections}). Requires manual review.")
+            _log_failure(run_logger, item_logger)
+            return _fail_result()
 
         if interactive:
             terminal_ui.ui.stop()
@@ -103,7 +109,7 @@ def process_work_item(  # noqa: C901
             return _fail_result()
         _session = WorkItemSession(item_id=item.id, agent_name=get_agent_name(default="pokepoke"))
         _session._assigned = True
-        worktree_path = _setup_worktree(item, lock_timeout=worktree_lock_timeout,
+        worktree_path = setup_worktree(item, lock_timeout=worktree_lock_timeout,
             run_logger=run_logger, item_logger=item_logger, repo_path=repo_path)
 
         if worktree_path is None:
@@ -124,6 +130,7 @@ def process_work_item(  # noqa: C901
         timeout_restart_count = 0
         work_agent_iteration = 1
         copilot_failure_count = 0
+        gate_rejection_count = existing_rejection_count
         last_retry_was_gate_feedback = False
         current_work_agent_id = base_agent_id
         resume_session_id: str | None = None
@@ -349,11 +356,26 @@ def process_work_item(  # noqa: C901
                 logger.info("\n✅ Gate Agent signed off!")
                 break
             elif not gate_crashed and not gate_timed_out:
-                # Genuine code rejection — restart work agent with feedback
+                # Genuine code rejection — increment persistent counter and check cap
+                from pokepoke.beads.beads_management import increment_gate_rejection_count
+                new_count = increment_gate_rejection_count(item.id)
+                if new_count < 0:
+                    gate_rejection_count += 1
+                    new_count = gate_rejection_count
+                else:
+                    gate_rejection_count = new_count
+                logger.error(f"\n❌ Gate Agent rejected ({gate_rejection_count}/{max_gate_rejections}): {gate_reason}")
+                _comment(item.id, f"Gate Agent Rejection ({gate_rejection_count}/{max_gate_rejections}):\n{gate_reason}")
+                if gate_rejection_count >= max_gate_rejections:
+                    logger.error(f"\n❌ Exceeded max gate rejections ({gate_rejection_count}/{max_gate_rejections}) for {item.id}")
+                    _comment(item.id, f"Abandoned after {gate_rejection_count} gate rejections (cap: {max_gate_rejections}). Last rejection:\n{gate_reason}")
+                    result.success = False
+                    result.error = f"Exceeded max gate rejections ({max_gate_rejections})"
+                    _log_failure(run_logger, item_logger, request_count)
+                    break
+                # Restart work agent with feedback
                 resume_session_id = None
                 resume_output_summary = None
-                logger.error(f"\n❌ Gate Agent rejected: {gate_reason}")
-                _comment(item.id, f"Gate Agent Rejection:\n{gate_reason}")
                 last_feedback = gate_reason
                 last_retry_was_gate_feedback = True  # Gate rejection → new card
             else:
@@ -375,26 +397,4 @@ def process_work_item(  # noqa: C901
         if _session is not None and not is_shutting_down():
             _session.cleanup_on_failure()
         unregister_agent()
-
-def _setup_worktree(
-    item: BeadsWorkItem, lock_timeout: float = 300.0,
-    run_logger: 'RunLogger | None' = None, item_logger: 'ItemLogger | None' = None,
-    repo_path: str | None = None,
-) -> Path | None:
-    """Create worktree, logging errors to both file logs and UI."""
-    logger.info(f"\n🌳 Creating worktree for {item.id}...")
-    try:
-        worktree_path = create_worktree(item.id, lock_timeout=lock_timeout, repo_path=repo_path)
-        logger.info(f"   Created at: {worktree_path}")
-        return worktree_path
-    except Exception as e:
-        error_msg = f"Failed to create worktree for {item.id}: {e}"
-        logger.error(f"\n❌ {error_msg}")
-        logger.error(error_msg)
-        if run_logger:
-            run_logger.log_orchestrator(error_msg, level="ERROR")
-        if item_logger:
-            item_logger.log_error(error_msg)
-        return None
-
 

@@ -37,21 +37,7 @@ def run_bd_sync_with_retry(
 
 
 def is_item_claimable(item_id: str) -> bool:
-    """Quick check if an item is still claimable (unassigned).
-
-    This is a non-locking check used for pre-filtering items before dispatch.
-    It catches obvious cases where an item was already claimed by another agent.
-
-    Note: This is not atomic. Use within assign_and_sync_item's lock for
-    guarantees. This function is meant for quick pre-checks to avoid
-    submitting obviously-taken items to worker threads.
-
-    Args:
-        item_id: The item ID to check.
-
-    Returns:
-        True if item appears unassigned, False if assigned or error querying.
-    """
+    """Quick non-locking check if an item is still claimable (unassigned)."""
     try:
         result = _run_bd(['show', item_id, '--json'])
         data = _parse_beads_json(result.stdout)
@@ -77,10 +63,7 @@ def _rollback_assignment(item_id: str, reason: str) -> None:
 
 
 def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
-    """Assign a work item to an agent and sync to prevent parallel conflicts.
-
-    Verifies the item is claimable before assigning. Returns True on success.
-    """
+    """Assign a work item to an agent and sync to prevent parallel conflicts."""
     if agent_name is None:
         agent_name = get_agent_name()
 
@@ -96,24 +79,15 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
             try:
                 result = _run_bd(['show', item_id, '--json'])
 
-                # Parse current item state
                 data = _parse_beads_json(result.stdout)
                 if data is not None:
                     current_item = data[0] if isinstance(data, list) else data
-
-                    # CRITICAL: Check 'assignee' field, NOT 'owner' field!
-                    # - assignee: The specific agent currently working on it (pokepoke_agent_123)
-                    # - owner: The human user who owns it (e.g., user@example.com)
                     current_assignee = current_item.get('assignee', '')
                     current_status = str(current_item.get('status', '') or '')
 
-                    # Check if already assigned to another agent
                     if current_assignee:
                         is_ours = (current_assignee.lower() == agent_name.lower())
-
                         if not is_ours:
-                            # Allow reclaiming items from previous PokePoke runs
-                            # that were orphaned when the orchestrator was killed.
                             is_pokepoke_orphan = current_assignee.lower().startswith("pokepoke_")
                             if is_pokepoke_orphan:
                                 logger.info(
@@ -124,9 +98,6 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
                                 logger.warning(f"⚠️  RACE CONDITION DETECTED: {item_id} already assigned to {current_assignee}")
                                 return False
 
-                        # If the item is already ours and in progress, this is a
-                        # no-op claim (common when the orchestrator claims in the
-                        # main thread before dispatching a worker).
                         if current_status.lower() == STATUS_IN_PROGRESS:
                             logger.info("ℹ️  %s already assigned to %s and %s — skipping bd update", item_id, agent_name, STATUS_IN_PROGRESS)
                             return True
@@ -188,17 +159,7 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
 
 
 def unassign_item(item_id: str) -> bool:
-    """Unassign a work item and reset its status to 'open' so other agents can claim it.
-
-    Should be called when a post-assignment step (e.g. worktree creation) fails and
-    the item needs to be returned to the ready queue.
-
-    Args:
-        item_id: The item ID to unassign.
-
-    Returns:
-        True if the item was successfully returned to 'open', False otherwise.
-    """
+    """Unassign a work item and reset its status to 'open'."""
     agent_name = get_agent_name()
     # Try resetting status and clearing the assignee in one command.
     # NOTE: The valid beads status is 'open' (not 'new'). The bd CLI may
@@ -305,6 +266,52 @@ def increment_total_attempts(item_id: str) -> bool:
     except (subprocess.CalledProcessError, json.JSONDecodeError, ValueError, TypeError):
         logger.warning(f"Failed to increment total_attempts for {item_id}")
         return False
+
+
+def get_gate_rejection_count(item_id: str) -> int:
+    """Get the gate rejection counter for a work item."""
+    try:
+        result = _run_bd(['show', item_id, '--json'], check=False)
+        data = _parse_beads_json(result.stdout)
+        if data is None:
+            return 0
+
+        item = data[0] if isinstance(data, list) else data
+        metadata = item.get('metadata')
+        if metadata and isinstance(metadata, dict):
+            return int(metadata.get('gate_rejection_count', 0))
+        return 0
+    except (subprocess.CalledProcessError, json.JSONDecodeError, ValueError, TypeError):
+        logger.warning(f"Failed to get gate_rejection_count for {item_id}, defaulting to 0")
+        return 0
+
+
+def increment_gate_rejection_count(item_id: str) -> int:
+    """Increment the gate rejection counter for a work item. Returns new count or -1 on failure."""
+    try:
+        current_count = get_gate_rejection_count(item_id)
+        new_count = current_count + 1
+
+        # Preserve existing metadata fields while updating gate_rejection_count
+        result = _run_bd(['show', item_id, '--json'], check=False)
+        data = _parse_beads_json(result.stdout)
+        if data is None:
+            logger.warning(f"Failed to fetch item {item_id} for metadata update")
+            return -1
+
+        item = data[0] if isinstance(data, list) else data
+        metadata = item.get('metadata', {})
+        if not isinstance(metadata, dict):
+            metadata = {}
+
+        metadata['gate_rejection_count'] = new_count
+        metadata_json = json.dumps(metadata)
+        _run_bd(['update', item_id, '--metadata', metadata_json])
+        logger.info(f"Incremented gate_rejection_count for {item_id} to {new_count}")
+        return new_count
+    except (subprocess.CalledProcessError, json.JSONDecodeError, ValueError, TypeError) as e:
+        logger.warning(f"Failed to increment gate_rejection_count for {item_id}: {e}")
+        return -1
 
 
 def _resolve_with_timeout(

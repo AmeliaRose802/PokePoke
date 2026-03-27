@@ -124,20 +124,38 @@ class TestHungCommandDetector:
         assert "HUNG COMMAND DETECTED" in msg
         assert "shell-1" in msg
 
-    def test_hung_after_cumulative_timeout(self):
-        """Test command is hung after cumulative timeout exceeded."""
+    def test_hung_after_cumulative_timeout_with_stale_output(self):
+        """Test command is hung after cumulative timeout when output is stale."""
         detector = HungCommandDetector(max_retries=999, cumulative_timeout=100)
 
-        # First read - 60s, not hung
+        # First read - 60s, output, not hung
         is_hung, msg = detector.record_read_powershell("shell-1", 60, "output")
         assert not is_hung
 
-        # Second read - 60s more = 120s total, exceeds 100s timeout
-        is_hung, msg = detector.record_read_powershell("shell-1", 60, "more output")
+        # Second read - 60s more = 120s total, same output (stale)
+        is_hung, msg = detector.record_read_powershell("shell-1", 60, "output")
         assert is_hung
         assert msg is not None
         assert "HUNG COMMAND DETECTED" in msg
         assert "120s" in msg or "120" in msg
+
+    def test_not_hung_cumulative_timeout_with_active_output(self):
+        """Test command is NOT hung after cumulative timeout if output keeps changing.
+
+        This prevents killing git commit during pre-commit hooks that are
+        actively producing test output (the root cause of PokePoke-b9sg).
+        """
+        detector = HungCommandDetector(max_retries=999, cumulative_timeout=100)
+
+        # Reads with changing output each time — command is making progress
+        is_hung, _ = detector.record_read_powershell("shell-1", 60, "test 1 passed")
+        assert not is_hung
+
+        is_hung, _ = detector.record_read_powershell("shell-1", 60, "test 2 passed")
+        assert not is_hung  # 120s > 100s timeout, but output is changing
+
+        is_hung, _ = detector.record_read_powershell("shell-1", 60, "test 3 passed")
+        assert not is_hung  # 180s, still progressing
 
     def test_consecutive_empty_resets_on_new_output(self):
         """Test that consecutive empty count resets when output changes."""
@@ -342,16 +360,16 @@ class TestHungCommandDetectorIntegration:
         assert detector.get_state("shell-1") is None
 
     def test_timeout_triggers_before_max_retries(self):
-        """Test that timeout can trigger before max retries."""
+        """Test that timeout triggers before max retries when output is stale."""
         detector = HungCommandDetector(max_retries=10, cumulative_timeout=150)
 
-        # Long delays that exceed timeout before retry count
-        is_hung, _ = detector.record_read_powershell("shell-1", 60, "output 1")
+        # Long delays with stale (repeated) output
+        is_hung, _ = detector.record_read_powershell("shell-1", 60, "same output")
         assert not is_hung  # 60s total
 
-        is_hung, _ = detector.record_read_powershell("shell-1", 60, "output 2")
-        assert not is_hung  # 120s total
+        is_hung, _ = detector.record_read_powershell("shell-1", 60, "same output")
+        assert not is_hung  # 120s total, but only 1 empty read
 
-        is_hung, msg = detector.record_read_powershell("shell-1", 60, "output 3")
-        assert is_hung  # 180s > 150s timeout
+        is_hung, msg = detector.record_read_powershell("shell-1", 60, "same output")
+        assert is_hung  # 180s > 150s timeout AND consecutive_empty_reads > 0
         assert "180s" in msg or "180" in msg

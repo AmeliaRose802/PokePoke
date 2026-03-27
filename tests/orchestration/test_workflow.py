@@ -7,8 +7,8 @@ from unittest.mock import Mock, patch
 from pokepoke.orchestration.work_item_selection import autonomous_selection, interactive_selection
 from pokepoke.orchestration.work_item_session import WorkItemSession
 from pokepoke.orchestration.workflow import process_work_item, select_work_item
-from pokepoke.orchestration.workflow_helpers import _setup_worktree
 from pokepoke.orchestration.workflow_helpers import run_cleanup_with_timeout as _run_cleanup_with_timeout
+from pokepoke.orchestration.workflow_helpers import setup_worktree
 from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult, GateAgentResult
 from pokepoke.worktrees.worktree_finalization import (
     check_and_merge_worktree,
@@ -271,7 +271,7 @@ class TestAutonomousSelection:
 
 
 class TestSetupWorktree:
-    """Test _setup_worktree function."""
+    """Test setup_worktree function."""
 
     @patch('pokepoke.orchestration.workflow_helpers.create_worktree')
     def test_successful_setup(self, mock_create: Mock) -> None:
@@ -286,7 +286,7 @@ class TestSetupWorktree:
         )
         mock_create.return_value = Path("/fake/worktree")
 
-        result = _setup_worktree(item)
+        result = setup_worktree(item)
 
         assert result is not None
         assert result == Path("/fake/worktree")
@@ -305,7 +305,7 @@ class TestSetupWorktree:
         )
         mock_create.return_value = Path("/fake/worktree")
 
-        result = _setup_worktree(item, lock_timeout=600.0, repo_path=None)
+        result = setup_worktree(item, lock_timeout=600.0, repo_path=None)
 
         assert result is not None
         assert result == Path("/fake/worktree")
@@ -324,7 +324,7 @@ class TestSetupWorktree:
         )
         mock_create.side_effect = Exception("Failed to create worktree")
 
-        result = _setup_worktree(item)
+        result = setup_worktree(item)
 
         assert result is None
 
@@ -1223,9 +1223,9 @@ class TestProcessWorkItemCoordination:
         The lock is now acquired inside create_worktree via with_worktree_lock,
         not as a wrapper around the entire setup block.
 
-        _setup_worktree catches exceptions and returns None, so we simulate
+        setup_worktree catches exceptions and returns None, so we simulate
         that behavior here by returning None (as if the lock timeout happened
-        and _setup_worktree caught the exception).
+        and setup_worktree caught the exception).
         """
         item = make_work_item(id="task-lock", title="Lock Task")
 
@@ -1415,19 +1415,19 @@ class TestWorktreeLockTimeout:
 
     @patch.object(WorkItemSession, 'cleanup_on_failure')
     @patch('pokepoke.orchestration.workflow.assign_and_sync_item', return_value=True)
-    @patch('pokepoke.orchestration.workflow._setup_worktree', return_value=None)
+    @patch('pokepoke.orchestration.workflow.setup_worktree', return_value=None)
     @patch('time.time', return_value=0.0)
-    def test_setup_worktree_called_with_scaled_timeout(
+    def testsetup_worktree_called_with_scaled_timeout(
         self,
         mock_time: Mock,
         mock_setup: Mock,
         mock_assign: Mock,
         mock_session_cleanup: Mock,
     ) -> None:
-        """process_work_item passes scaled lock_timeout to _setup_worktree.
+        """process_work_item passes scaled lock_timeout to setup_worktree.
 
         The worktree lock is now acquired inside create_worktree, and the
-        timeout is passed via _setup_worktree's lock_timeout parameter.
+        timeout is passed via setup_worktree's lock_timeout parameter.
         """
         from pokepoke.config import ProjectConfig
 
@@ -1447,7 +1447,7 @@ class TestWorktreeLockTimeout:
         with patch('pokepoke.orchestration.workflow.get_config', return_value=cfg):
             process_work_item(item, interactive=False)
 
-        # _setup_worktree should have been called with lock_timeout=1200.0 (max(300, 120*10))
+        # setup_worktree should have been called with lock_timeout=1200.0 (max(300, 120*10))
         mock_setup.assert_called_once()
         call_kwargs = mock_setup.call_args
         timeout_used = call_kwargs[1]['lock_timeout'] if call_kwargs[1] else call_kwargs[0][1]

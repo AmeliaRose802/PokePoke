@@ -18,8 +18,8 @@ from pokepoke.orchestration.workflow_helpers import (
     _maybe_retry_copilot,
     _pre_loop_validate,
     _run_gate_check,
-    _setup_worktree,
     run_cleanup_with_timeout,
+    setup_worktree,
 )
 from pokepoke.types import (
     AgentStats,
@@ -107,25 +107,25 @@ class TestLogFailure:
         _log_failure(None, None, 0)  # Should not raise
 
 
-# ── _setup_worktree ────────────────────────────────────────────────
+# ── setup_worktree ────────────────────────────────────────────────
 
 class TestSetupWorktree:
     @patch("pokepoke.orchestration.workflow_helpers.create_worktree")
     def test_success(self, mock_create, tmp_path):
         mock_create.return_value = tmp_path / "worktree"
-        result = _setup_worktree(_item())
+        result = setup_worktree(_item())
         assert result == tmp_path / "worktree"
 
     @patch("pokepoke.orchestration.workflow_helpers.create_worktree", side_effect=RuntimeError("git failed"))
     def test_failure_returns_none(self, mock_create):
-        result = _setup_worktree(_item())
+        result = setup_worktree(_item())
         assert result is None
 
     @patch("pokepoke.orchestration.workflow_helpers.create_worktree", side_effect=RuntimeError("git failed"))
     def test_failure_logs_error(self, mock_create):
         run_logger = MagicMock()
         item_logger = MagicMock()
-        result = _setup_worktree(_item(), run_logger=run_logger, item_logger=item_logger)
+        result = setup_worktree(_item(), run_logger=run_logger, item_logger=item_logger)
         assert result is None
         run_logger.log_orchestrator.assert_called_once()
         item_logger.log_error.assert_called_once()
@@ -211,7 +211,7 @@ class TestProcessWorkItem:
                             mock_register, mock_unregister):
         mock_config.return_value = MagicMock(
             command_timeout=300, max_parallel_agents=1,
-            gate_agent_enabled=True, max_copilot_failure_retries=0,
+            gate_agent_enabled=True, max_copilot_failure_retries=0, max_gate_rejections_per_item=3,
             ai_backend=MagicMock(provider="copilot"),
         )
         result = process_work_item(_item(), interactive=False)
@@ -230,19 +230,18 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.orchestration.workflow.create_worktree", return_value=None)
-    def test_worktree_failure(self, mock_create, mock_assign, mock_agent_name,
+    @patch("pokepoke.orchestration.workflow.setup_worktree", return_value=None)
+    def test_worktree_failure(self, mock_setup, mock_assign, mock_agent_name,
                               mock_banner_fmt, mock_set_banner, mock_ui,
                               mock_assignment, mock_model, mock_config,
                               mock_cleanup, mock_session_cleanup,
                               mock_register, mock_unregister):
         mock_config.return_value = MagicMock(
             command_timeout=300, max_parallel_agents=1,
-            gate_agent_enabled=True, max_copilot_failure_retries=0,
+            gate_agent_enabled=True, max_copilot_failure_retries=0, max_gate_rejections_per_item=3,
             ai_backend=MagicMock(provider="copilot"),
         )
-        # create_worktree returns None -> _setup_worktree catches exception and returns None
-        mock_create.side_effect = RuntimeError("worktree failed")
+        # setup_worktree returns None -> signals worktree creation failed
         result = process_work_item(_item(), interactive=False)
         assert result.success is False
 
@@ -275,7 +274,7 @@ class TestProcessWorkItem:
         (tmp_path / "worktree").mkdir()
         mock_config.return_value = MagicMock(
             command_timeout=300, max_parallel_agents=1,
-            gate_agent_enabled=False, max_copilot_failure_retries=0,
+            gate_agent_enabled=False, max_copilot_failure_retries=0, max_gate_rejections_per_item=3,
             ai_backend=MagicMock(provider="copilot"),
         )
         mock_copilot.return_value = CopilotResult(
@@ -316,7 +315,7 @@ class TestProcessWorkItem:
         (tmp_path / "worktree").mkdir()
         mock_config.return_value = MagicMock(
             command_timeout=300, max_parallel_agents=1,
-            gate_agent_enabled=False, max_copilot_failure_retries=0,
+            gate_agent_enabled=False, max_copilot_failure_retries=0, max_gate_rejections_per_item=3,
             ai_backend=MagicMock(provider="copilot"),
         )
         mock_copilot.return_value = CopilotResult(
@@ -360,7 +359,7 @@ class TestProcessWorkItem:
         (tmp_path / "worktree").mkdir()
         mock_config.return_value = MagicMock(
             command_timeout=300, max_parallel_agents=1,
-            gate_agent_enabled=True, max_copilot_failure_retries=0,
+            gate_agent_enabled=True, max_copilot_failure_retries=0, max_gate_rejections_per_item=3,
             ai_backend=MagicMock(provider="copilot"),
         )
         mock_copilot.return_value = CopilotResult(
@@ -405,7 +404,7 @@ class TestProcessWorkItem:
         (tmp_path / "worktree").mkdir()
         mock_config.return_value = MagicMock(
             command_timeout=300, max_parallel_agents=1,
-            gate_agent_enabled=True, max_copilot_failure_retries=0,
+            gate_agent_enabled=True, max_copilot_failure_retries=0, max_gate_rejections_per_item=3,
             ai_backend=MagicMock(provider="copilot"),
         )
         # First copilot call -> gate rejects; second copilot call -> gate passes
@@ -446,7 +445,7 @@ class TestProcessWorkItem:
         (tmp_path / "worktree").mkdir()
         mock_config.return_value = MagicMock(
             command_timeout=300, max_parallel_agents=1,
-            gate_agent_enabled=True, max_copilot_failure_retries=0,
+            gate_agent_enabled=True, max_copilot_failure_retries=0, max_gate_rejections_per_item=3,
             ai_backend=MagicMock(provider="copilot"),
         )
         result = process_work_item(_item(), interactive=False)
@@ -476,7 +475,7 @@ class TestProcessWorkItem:
         (tmp_path / "worktree").mkdir()
         mock_config.return_value = MagicMock(
             command_timeout=300, max_parallel_agents=1,
-            gate_agent_enabled=True, max_copilot_failure_retries=0,
+            gate_agent_enabled=True, max_copilot_failure_retries=0, max_gate_rejections_per_item=3,
             ai_backend=MagicMock(provider="copilot"),
         )
         result = process_work_item(_item(), interactive=True)
@@ -517,7 +516,7 @@ class TestProcessWorkItem:
         (tmp_path / "worktree").mkdir()
         mock_config.return_value = MagicMock(
             command_timeout=300, max_parallel_agents=1,
-            gate_agent_enabled=True, max_copilot_failure_retries=0,
+            gate_agent_enabled=True, max_copilot_failure_retries=0, max_gate_rejections_per_item=3,
             ai_backend=MagicMock(provider="copilot"),
         )
         mock_copilot.side_effect = [
@@ -560,7 +559,7 @@ class TestPreLoopValidate:
         mock_tui.ui.stop.assert_called_once()
         mock_tui.ui.start.assert_called_once()
 
-    @patch("pokepoke.orchestration.workflow_helpers._setup_worktree")
+    @patch("pokepoke.orchestration.workflow_helpers.setup_worktree")
     @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=False)
     @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
     def test_assign_failure(self, mock_tui, mock_assign, mock_setup):
@@ -573,7 +572,7 @@ class TestPreLoopValidate:
         assert was_assigned is False
         mock_setup.assert_not_called()
 
-    @patch("pokepoke.orchestration.workflow_helpers._setup_worktree", return_value=None)
+    @patch("pokepoke.orchestration.workflow_helpers.setup_worktree", return_value=None)
     @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=True)
     @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
     def test_worktree_setup_failure(self, mock_tui, mock_assign, mock_setup):

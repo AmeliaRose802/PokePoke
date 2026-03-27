@@ -139,11 +139,13 @@ class WorkflowHarness:
             command_timeout=60,
             max_parallel_agents=2,
             gate_agent_enabled=True,
+            max_gate_rejections_per_item=3,
         )
         monkeypatch.setattr(workflow, "get_config", lambda: config)
 
         monkeypatch.setattr(workflow, "assign_and_sync_item", self._assign_and_sync)
-        monkeypatch.setattr(workflow, "create_worktree", self._create_worktree)
+        monkeypatch.setattr("pokepoke.beads.beads_management.get_gate_rejection_count", lambda *_a, **_k: 0)
+        monkeypatch.setattr(workflow_helpers, "create_worktree", self._create_worktree)
         monkeypatch.setattr(workflow, "cleanup_worktree", self._cleanup_worktree)
         monkeypatch.setattr(workflow, "invoke_copilot", self._invoke_copilot)
         monkeypatch.setattr(workflow, "run_gate_agent", self._run_gate_agent)
@@ -284,7 +286,7 @@ def test_process_work_item_gate_rejection_retries_with_feedback(workflow_harness
     assert result.request_count == 2
     assert result.cleanup_agent_runs == 2
     assert result.gate_agent_runs == 2
-    assert workflow_harness.comments == [("work-456", "Gate Agent Rejection:\nNeeds additional tests")]
+    assert workflow_harness.comments == [("work-456", "Gate Agent Rejection (1/3):\nNeeds additional tests")]
     # Description must NOT be mutated — feedback goes via prompt, not description
     assert item.description == "Work item description"
     # Second prompt call should include retry feedback

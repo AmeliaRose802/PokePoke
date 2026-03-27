@@ -1,6 +1,6 @@
 """Comprehensive tests for workflow.py targeting 80%+ line coverage.
 
-Exercises process_work_item and _setup_worktree through multiple scenarios,
+Exercises process_work_item and setup_worktree through multiple scenarios,
 mocking ALL external dependencies to isolate workflow logic.
 """
 
@@ -10,7 +10,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pokepoke.orchestration.workflow import _setup_worktree, process_work_item
+from pokepoke.orchestration.workflow import process_work_item
+from pokepoke.orchestration.workflow_helpers import setup_worktree
 from pokepoke.types import (
     AgentStats,
     BeadsWorkItem,
@@ -64,6 +65,7 @@ def _mock_workflow_deps(monkeypatch):
     mock_cfg.gate_agent_enabled = False
     mock_cfg.command_timeout = 120
     mock_cfg.max_copilot_failure_retries = 0
+    mock_cfg.max_gate_rejections_per_item = 3
     mock_cfg.ai_backend.provider = "copilot-cli"
 
     monkeypatch.setattr("pokepoke.orchestration.workflow.get_config", lambda: mock_cfg)
@@ -96,38 +98,38 @@ def _mock_workflow_deps(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# _setup_worktree tests
+# setup_worktree tests
 # ---------------------------------------------------------------------------
 
 class TestSetupWorktree:
     def test_success_returns_path(self):
         wt = Path("/tmp/worktree")
-        with patch("pokepoke.orchestration.workflow.create_worktree", return_value=wt):
-            result = _setup_worktree(_item())
+        with patch("pokepoke.orchestration.workflow_helpers.create_worktree", return_value=wt):
+            result = setup_worktree(_item())
         assert result == wt
 
     def test_failure_returns_none(self):
-        with patch("pokepoke.orchestration.workflow.create_worktree", side_effect=Exception("git error")):
-            result = _setup_worktree(_item())
+        with patch("pokepoke.orchestration.workflow_helpers.create_worktree", side_effect=Exception("git error")):
+            result = setup_worktree(_item())
         assert result is None
 
     def test_failure_logs_to_run_logger(self):
         rl = MagicMock()
         il = MagicMock()
-        with patch("pokepoke.orchestration.workflow.create_worktree", side_effect=RuntimeError("lock")):
-            result = _setup_worktree(_item(), run_logger=rl, item_logger=il)
+        with patch("pokepoke.orchestration.workflow_helpers.create_worktree", side_effect=RuntimeError("lock")):
+            result = setup_worktree(_item(), run_logger=rl, item_logger=il)
         assert result is None
         rl.log_orchestrator.assert_called_once()
         il.log_error.assert_called_once()
 
     def test_custom_lock_timeout_forwarded(self):
-        with patch("pokepoke.orchestration.workflow.create_worktree", return_value=Path("/w")) as mock_cw:
-            _setup_worktree(_item(), lock_timeout=999.0)
+        with patch("pokepoke.orchestration.workflow_helpers.create_worktree", return_value=Path("/w")) as mock_cw:
+            setup_worktree(_item(), lock_timeout=999.0)
         mock_cw.assert_called_once_with(_item().id, lock_timeout=999.0, repo_path=None)
 
     def test_repo_path_forwarded(self):
-        with patch("pokepoke.orchestration.workflow.create_worktree", return_value=Path("/w")) as mock_cw:
-            _setup_worktree(_item(), repo_path="/custom/repo")
+        with patch("pokepoke.orchestration.workflow_helpers.create_worktree", return_value=Path("/w")) as mock_cw:
+            setup_worktree(_item(), repo_path="/custom/repo")
         mock_cw.assert_called_once_with(_item().id, lock_timeout=300.0, repo_path="/custom/repo")
 
 
@@ -145,19 +147,19 @@ class TestProcessWorkItemClaimFailure:
 
     def test_claim_failure_skips_worktree(self, monkeypatch):
         monkeypatch.setattr("pokepoke.orchestration.workflow.assign_and_sync_item", lambda *a, **kw: False)
-        with patch("pokepoke.orchestration.workflow._setup_worktree") as mock_sw:
+        with patch("pokepoke.orchestration.workflow.setup_worktree") as mock_sw:
             result = process_work_item(_item(), interactive=False)
         mock_sw.assert_not_called()
         assert result.success is False
 
 
 class TestProcessWorkItemWorktreeFailure:
-    """_setup_worktree returns None → immediate fail."""
+    """setup_worktree returns None → immediate fail."""
 
     def test_worktree_failure(self, monkeypatch):
         def _fail(*a, **kw):
             raise Exception("git fail")
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", _fail)
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", _fail)
         result = process_work_item(_item(), interactive=False)
         assert result.success is False
 
@@ -175,7 +177,7 @@ class TestProcessWorkItemCopilotSuccessGateDisabled:
     """Copilot succeeds, gate agent disabled → success path."""
 
     def test_success_gate_disabled(self, monkeypatch):
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
         monkeypatch.setattr("pokepoke.orchestration.workflow.invoke_copilot", lambda *a, **kw: _ok_copilot())
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow.run_cleanup_with_timeout", lambda *a, **kw: (True, 1))
@@ -191,7 +193,7 @@ class TestProcessWorkItemCopilotSuccessGateDisabled:
     def test_success_with_stats_accumulation(self, monkeypatch):
         """Verify stats from copilot result are accumulated."""
         stats = AgentStats(input_tokens=50, output_tokens=25)
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
         monkeypatch.setattr("pokepoke.orchestration.workflow.invoke_copilot", lambda *a, **kw: _ok_copilot(stats=stats))
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow.run_cleanup_with_timeout", lambda *a, **kw: (True, 0))
@@ -208,7 +210,7 @@ class TestProcessWorkItemCopilotFailureNoRetry:
     """Copilot fails, max_copilot_failure_retries=0 → break immediately."""
 
     def test_copilot_fail_no_retry(self, monkeypatch):
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
         monkeypatch.setattr("pokepoke.orchestration.workflow.invoke_copilot", lambda *a, **kw: _fail_copilot())
         monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow._maybe_retry_copilot", lambda *a, **kw: (False, ""))
@@ -224,7 +226,7 @@ class TestProcessWorkItemShutdownDuringLoop:
     """is_shutting_down returns True on first iteration → loop exits."""
 
     def test_shutdown_exits_loop(self, monkeypatch):
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
         monkeypatch.setattr("pokepoke.orchestration.workflow.is_shutting_down", lambda: True)
         monkeypatch.setattr(
             "pokepoke.orchestration.workflow._finalize_item_result",
@@ -239,7 +241,7 @@ class TestProcessWorkItemTimeoutRestart:
 
     def test_timeout_max_restarts_exceeded(self, monkeypatch, _mock_workflow_deps):
         _mock_workflow_deps.max_copilot_failure_retries = 0
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
         # Make time.time() return values so elapsed always exceeds timeout
         call_count = {"n": 0}
         def fake_time():
@@ -256,7 +258,7 @@ class TestProcessWorkItemTimeoutRestart:
     def test_timeout_restarts_then_succeeds(self, monkeypatch, _mock_workflow_deps):
         """Timeout fires once, restart resets timer, then copilot succeeds."""
         _mock_workflow_deps.max_copilot_failure_retries = 0
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
 
         # First time.time() is start_time (0), second causes timeout,
         # third is reset start_time, fourth is within budget
@@ -280,7 +282,7 @@ class TestProcessWorkItemCopilotTimeoutWithResume:
 
     def test_timeout_then_resume_then_success(self, monkeypatch, _mock_workflow_deps):
         _mock_workflow_deps.max_copilot_failure_retries = 2
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
 
         call_count = {"n": 0}
         def fake_invoke(*a, **kw):
@@ -314,7 +316,7 @@ class TestProcessWorkItemCleanupFailure:
     """run_cleanup_with_timeout returns (False, n) → immediate fail."""
 
     def test_cleanup_failure(self, monkeypatch):
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
         monkeypatch.setattr("pokepoke.orchestration.workflow.invoke_copilot", lambda *a, **kw: _ok_copilot())
         monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
@@ -328,7 +330,7 @@ class TestProcessWorkItemBeadsItemAlreadyClosed:
     """is_beads_item_closed returns True → skip gate, succeed."""
 
     def test_already_closed(self, monkeypatch):
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
         monkeypatch.setattr("pokepoke.orchestration.workflow.invoke_copilot", lambda *a, **kw: _ok_copilot())
         monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
@@ -346,7 +348,7 @@ class TestProcessWorkItemGateAgentEnabled:
 
     def test_gate_passes(self, monkeypatch, _mock_workflow_deps):
         _mock_workflow_deps.gate_agent_enabled = True
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
         monkeypatch.setattr("pokepoke.orchestration.workflow.invoke_copilot", lambda *a, **kw: _ok_copilot())
         monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
@@ -363,7 +365,7 @@ class TestProcessWorkItemGateAgentEnabled:
     def test_gate_rejects_then_work_agent_retries(self, monkeypatch, _mock_workflow_deps):
         """Gate rejects → feedback loop, then shutdown stops the loop."""
         _mock_workflow_deps.gate_agent_enabled = True
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
 
         invoke_count = {"n": 0}
         def fake_invoke(*a, **kw):
@@ -393,7 +395,7 @@ class TestProcessWorkItemGateAgentEnabled:
     def test_gate_crashes_retries_then_raises(self, monkeypatch, _mock_workflow_deps):
         """Gate crashes 3 times → exception propagates."""
         _mock_workflow_deps.gate_agent_enabled = True
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
         monkeypatch.setattr("pokepoke.orchestration.workflow.invoke_copilot", lambda *a, **kw: _ok_copilot())
         monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
@@ -407,7 +409,7 @@ class TestProcessWorkItemGateAgentEnabled:
     def test_gate_timeout_retries_then_gives_up(self, monkeypatch, _mock_workflow_deps):
         """Gate times out 3 times → breaks out of gate loop."""
         _mock_workflow_deps.gate_agent_enabled = True
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
         monkeypatch.setattr("pokepoke.orchestration.workflow.invoke_copilot", lambda *a, **kw: _ok_copilot())
         monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
@@ -427,7 +429,7 @@ class TestProcessWorkItemGateAgentEnabled:
     def test_gate_crashed_flag_retries(self, monkeypatch, _mock_workflow_deps):
         """Gate returns crashed=True via result flag → retries then gives up."""
         _mock_workflow_deps.gate_agent_enabled = True
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
         monkeypatch.setattr("pokepoke.orchestration.workflow.invoke_copilot", lambda *a, **kw: _ok_copilot())
         monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
@@ -448,7 +450,7 @@ class TestProcessWorkItemFinalizationNotComplete:
     """_finalize_item_result returns finalized=False → session cleanup runs."""
 
     def test_session_cleanup_on_failed_finalize(self, monkeypatch):
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
         monkeypatch.setattr("pokepoke.orchestration.workflow.invoke_copilot", lambda *a, **kw: _ok_copilot())
         monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
@@ -469,7 +471,7 @@ class TestProcessWorkItemCopilotRetryOnFailure:
 
     def test_copilot_retries_then_succeeds(self, monkeypatch, _mock_workflow_deps):
         _mock_workflow_deps.max_copilot_failure_retries = 2
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
 
         call_count = {"n": 0}
         def fake_invoke(*a, **kw):
@@ -501,7 +503,7 @@ class TestProcessWorkItemCopilotRetryOnFailure:
     def test_non_timeout_failure_clears_resume_state(self, monkeypatch, _mock_workflow_deps):
         """Non-timeout failure clears resume_session_id."""
         _mock_workflow_deps.max_copilot_failure_retries = 1
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
         # First: timeout failure with session, second: non-timeout failure
         call_n = {"n": 0}
         def fake_invoke(*a, **kw):
@@ -532,7 +534,7 @@ class TestProcessWorkItemRepoPath:
     """Verify repo_path argument flows through correctly."""
 
     def test_repo_path_used(self, monkeypatch):
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
         monkeypatch.setattr("pokepoke.orchestration.workflow.invoke_copilot", lambda *a, **kw: _ok_copilot())
         monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
@@ -553,7 +555,7 @@ class TestProcessWorkItemRunLogger:
         item_logger = MagicMock()
         run_logger.start_item_log.return_value = item_logger
 
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
         monkeypatch.setattr("pokepoke.orchestration.workflow.invoke_copilot", lambda *a, **kw: _ok_copilot())
         monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
@@ -572,7 +574,7 @@ class TestProcessWorkItemInteractiveConfirm:
 
     def test_user_confirms_with_y(self, monkeypatch):
         monkeypatch.setattr("builtins.input", lambda _: "y")
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
         monkeypatch.setattr("pokepoke.orchestration.workflow.invoke_copilot", lambda *a, **kw: _ok_copilot())
         monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
@@ -586,7 +588,7 @@ class TestProcessWorkItemInteractiveConfirm:
 
     def test_user_confirms_with_empty(self, monkeypatch):
         monkeypatch.setattr("builtins.input", lambda _: "")
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
         monkeypatch.setattr("pokepoke.orchestration.workflow.invoke_copilot", lambda *a, **kw: _ok_copilot())
         monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
@@ -605,7 +607,7 @@ class TestProcessWorkItemFeedbackPaths:
     def test_gate_feedback_prints_restart(self, monkeypatch, _mock_workflow_deps):
         """After gate rejection, last_retry_was_gate_feedback=True → 'Restarting' path."""
         _mock_workflow_deps.gate_agent_enabled = True
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
 
         invoke_n = {"n": 0}
         def fake_invoke(*a, **kw):
@@ -634,7 +636,7 @@ class TestProcessWorkItemFeedbackPaths:
     def test_timeout_feedback_prints_resuming(self, monkeypatch, _mock_workflow_deps):
         """After timeout retry, last_retry_was_gate_feedback=False → 'Resuming' path."""
         _mock_workflow_deps.max_copilot_failure_retries = 1
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
 
         n = {"n": 0}
         def fake_invoke(*a, **kw):
@@ -671,7 +673,7 @@ class TestProcessWorkItemGateResumeInPlace:
 
     def test_gate_timeout_with_session_id_resumes(self, monkeypatch, _mock_workflow_deps):
         _mock_workflow_deps.gate_agent_enabled = True
-        monkeypatch.setattr("pokepoke.orchestration.workflow.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
         monkeypatch.setattr("pokepoke.orchestration.workflow.invoke_copilot", lambda *a, **kw: _ok_copilot())
         monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)

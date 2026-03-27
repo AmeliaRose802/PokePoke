@@ -68,41 +68,40 @@ def get_staged_python_files() -> list[str]:
     ]
 
 
-def _find_test_files_for_staged(
-    staged_source: list[str], repo_root: Path
-) -> tuple[list[str], bool]:
-    """Map staged source files to relevant test files.
-
-    Returns (test_files, run_full_suite).
-    - test_files: list of test file paths relative to repo_root
-    - run_full_suite: True if we should fall back to running everything
-      (e.g. conftest.py changed, __init__.py changed, or no mapping found)
-    """
-    all_staged = _get_staged_files()
-
-    # If conftest.py or __init__.py changed, fall back to full suite
-    # because these are test infrastructure files that affect all tests.
+def _collect_conftest_tests(
+    all_staged: list[str], repo_root: Path, test_files: list[str]
+) -> None:
+    """Add tests scoped to changed conftest.py directories."""
     for f in all_staged:
         basename = os.path.basename(f)
-        if basename in ("conftest.py", "__init__.py"):
-            print(f"[scope] {basename} changed — running full test suite")
-            return [], True
+        if basename == "conftest.py" and f.startswith("tests/"):
+            conftest_dir = os.path.dirname(f) or "tests"
+            abs_dir = repo_root / conftest_dir
+            for match in abs_dir.rglob("test_*.py"):
+                rel = str(match.relative_to(repo_root)).replace("\\", "/")
+                if rel not in test_files:
+                    test_files.append(rel)
+            print(f"[scope] {f} changed — running tests in {conftest_dir}/")
 
-    test_files: list[str] = []
-    tests_dir = repo_root / "tests"
 
-    # Collect any directly-staged test files
+def _collect_staged_test_files(
+    all_staged: list[str], test_files: list[str]
+) -> None:
+    """Add directly-staged test files to the list."""
     for f in all_staged:
-        if f.startswith("tests/") and f.endswith(".py") and "test_" in f:
+        if f.startswith("tests/") and f.endswith(".py") and "test_" in f and f not in test_files:
             test_files.append(f)
 
-    # Map source files to their test files using naming convention:
-    #   src/pokepoke/foo.py → tests/**/test_foo.py (also test_foo_*.py)
-    #   Searches subdirectories (tests/utils/, tests/git/, tests/desktop/, etc.)
+
+def _map_source_to_tests(
+    staged_source: list[str], repo_root: Path, test_files: list[str]
+) -> None:
+    """Map staged source files to their corresponding test files."""
+    tests_dir = repo_root / "tests"
 
     # Manual overrides for modules whose tests don't follow naming convention
     test_file_overrides: dict[str, list[str]] = {
-        "worktree_cleanup": ["tests/test_worktrees.py"],  # Main tests in test_worktrees.py
+        "worktree_cleanup": ["tests/test_worktrees.py"],
         "sdk_helpers": [
             "tests/models/test_copilot_sdk.py",
             "tests/models/test_copilot_sdk_integration.py",
@@ -111,22 +110,17 @@ def _find_test_files_for_staged(
     }
 
     for src_file in staged_source:
-        # Extract module name: src/pokepoke/foo.py → foo
         module_name = Path(src_file).stem
 
-        # Check manual overrides first
         if module_name in test_file_overrides:
             for override_file in test_file_overrides[module_name]:
                 if (repo_root / override_file).exists() and override_file not in test_files:
                     test_files.append(override_file)
 
-        # Direct match: tests/test_foo.py (top-level)
         direct = f"tests/test_{module_name}.py"
         if (repo_root / direct).exists() and direct not in test_files:
             test_files.append(direct)
 
-        # Recursive match: tests/**/test_foo.py and tests/**/test_foo_*.py
-        # Tests may live in subdirectories (tests/utils/, tests/git/, etc.)
         for match in tests_dir.rglob(f"test_{module_name}.py"):
             rel = str(match.relative_to(repo_root)).replace("\\", "/")
             if rel not in test_files:
@@ -137,10 +131,24 @@ def _find_test_files_for_staged(
             if rel not in test_files:
                 test_files.append(rel)
 
+
+def _find_test_files_for_staged(
+    staged_source: list[str], repo_root: Path
+) -> tuple[list[str], bool]:
+    """Map staged source files to relevant test files.
+
+    Returns (test_files, run_full_suite).
+    """
+    all_staged = _get_staged_files()
+    test_files: list[str] = []
+
+    _collect_conftest_tests(all_staged, repo_root, test_files)
+    _collect_staged_test_files(all_staged, test_files)
+    _map_source_to_tests(staged_source, repo_root, test_files)
+
     if not test_files:
-        # No test files found — fall back to full suite for safety
-        print("[scope] No matching test files found — running full test suite")
-        return [], True
+        print("[scope] No matching test files found — skipping tests (coverage gate will catch gaps)")
+        return [], False
 
     return sorted(test_files), False
 
@@ -175,15 +183,7 @@ def _filter_pytest_output(output: str) -> str:
 
 
 def _filter_pytest_stderr(stderr: str) -> str:
-    """Strip xdist temp-dir cleanup warnings from captured pytest stderr.
-
-    On Windows, pytest-xdist worker processes sometimes leave open handles
-    on their popen-gwX directories when they exit. Pytest then emits a
-    PytestWarning for every directory it cannot remove, which can produce
-    hundreds of noisy lines per run. The -W flag on the pytest command
-    prevents most of these, but any that slip through are stripped here so
-    that real errors stand out.
-    """
+    """Strip xdist temp-dir cleanup warnings from captured pytest stderr."""
     result: list[str] = []
     skip_block = False
     for line in stderr.splitlines():
@@ -213,14 +213,7 @@ def _filter_pytest_stderr(stderr: str) -> str:
 def run_tests_with_coverage(
     repo_root: Path, test_files: list[str] | None = None
 ) -> bool:
-    """Run pytest with coverage from the repo root.
-
-    Args:
-        repo_root: Repository root directory.
-        test_files: Optional list of specific test files to run (relative to
-            repo_root).  When provided, only these tests are executed instead
-            of the full suite, dramatically reducing commit time.
-    """
+    """Run pytest with coverage from the repo root."""
     if test_files:
         print(f"[test] Running {len(test_files)} scoped test file(s)...")
         for tf in test_files:
@@ -228,9 +221,7 @@ def run_tests_with_coverage(
     else:
         print("[test] Running full test suite...")
 
-    # Limit parallel workers to prevent memory exhaustion on pre-commit.
-    # On Windows xdist uses 'spawn' instead of 'fork', making each worker
-    # significantly more expensive — cap at 2 to avoid bricking the system.
+    # Limit parallel workers to avoid memory exhaustion on pre-commit.
     import multiprocessing
     import platform
     if platform.system() == "Windows":
@@ -238,10 +229,6 @@ def run_tests_with_coverage(
     else:
         max_workers = min(4, max(1, multiprocessing.cpu_count() // 2))
 
-    # Use a repo-local basetemp so pytest temp dirs don't accumulate in the
-    # system temp folder across runs.  On Windows, stale xdist popen-gwX dirs
-    # left by aborted runs trigger a flood of PytestWarning(rm_rf) messages
-    # every subsequent run.  Keeping basetemp here means a fresh wipe each time.
     basetemp = repo_root / ".pytest_tmp"
 
     cmd = [

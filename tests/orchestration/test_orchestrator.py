@@ -144,7 +144,7 @@ class TestProcessWorkItem:
     @patch('pokepoke.git.git_operations.has_uncommitted_changes')
     @patch('os.chdir')
     @patch('os.getcwd')
-    @patch('pokepoke.orchestration.workflow.create_worktree')
+    @patch('pokepoke.orchestration.workflow.setup_worktree')
     @patch('pokepoke.orchestration.workflow.assign_and_sync_item', return_value=True)
     @patch('pokepoke.orchestration.workflow.invoke_copilot')
     def test_process_work_item_failure(
@@ -215,7 +215,7 @@ class TestProcessWorkItem:
     @patch('pokepoke.worktrees.worktrees.cleanup_worktree')
     @patch('pokepoke.orchestration.workflow.invoke_copilot')
     @patch('pokepoke.orchestration.workflow.assign_and_sync_item', return_value=True)
-    @patch('pokepoke.orchestration.workflow.create_worktree')
+    @patch('pokepoke.orchestration.workflow.setup_worktree')
     def test_process_work_item_preserves_worktree_on_unhandled_exception(
         self,
         mock_create_wt: Mock,

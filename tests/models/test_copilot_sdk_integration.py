@@ -950,7 +950,7 @@ class TestProcessLivenessConfig:
     def test_default_values(self):
         from pokepoke.config import ProjectConfig
         cfg = ProjectConfig()
-        assert cfg.process_output_timeout == 300
+        assert cfg.process_output_timeout == 600
         assert cfg.max_ping_failures == 3
 
     def test_clamped_to_minimum(self):

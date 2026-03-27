@@ -29,6 +29,16 @@ def _mock_is_beads_item_closed():
         yield
 
 
+@pytest.fixture(autouse=True)
+def _mock_gate_rejection_count():
+    """Prevent bd subprocess calls from get_gate_rejection_count in all orchestration tests."""
+    with patch(
+        "pokepoke.beads.beads_management.get_gate_rejection_count",
+        return_value=0,
+    ):
+        yield
+
+
 # ---------------------------------------------------------------------------
 # Patch target constants – single source of truth for module paths.
 # When a function is moved/renamed, update ONE line here.
@@ -56,7 +66,7 @@ _WFH = "pokepoke.orchestration.workflow_helpers"
 PATCH_WF_INVOKE_COPILOT = f"{_WF}.invoke_copilot"
 PATCH_WF_RUN_GATE_AGENT = f"{_WF}.run_gate_agent"
 PATCH_WF_ASSIGN = f"{_WF}.assign_and_sync_item"
-PATCH_WF_SETUP_WORKTREE = f"{_WF}._setup_worktree"
+PATCH_WF_SETUP_WORKTREE = f"{_WF}.setup_worktree"
 PATCH_WF_CLEANUP_WORKTREE = f"{_WF}.cleanup_worktree"
 PATCH_WF_CLEANUP_TIMEOUT = f"{_WF}.run_cleanup_with_timeout"
 PATCH_WF_GET_CONFIG = f"{_WF}.get_config"
@@ -186,6 +196,7 @@ def make_process_item_mocks(
     *,
     copilot_success: bool = True,
     gate_success: bool = True,
+    gate_result: GateAgentResult | None = None,
     assign_ok: bool = True,
     worktree_path: str | Path = "/fake/worktree",
     uncommitted: bool = False,
@@ -238,6 +249,7 @@ def make_process_item_mocks(
             cfg.ai_backend.provider = "copilot"
             cfg.command_timeout = 300
             cfg.max_parallel_agents = 1
+            cfg.max_gate_rejections_per_item = 3
         if include_session_cleanup:
             from pokepoke.orchestration.work_item_session import WorkItemSession
             mocks['session_cleanup'] = stack.enter_context(
@@ -260,10 +272,13 @@ def make_process_item_mocks(
         mocks['finalize'].return_value = finalize_ok
         mocks['beta'].return_value = None
 
-        mocks['gate'].return_value = GateAgentResult(
-            success=gate_success,
-            reason="Gate passed" if gate_success else "Gate failed",
-        )
+        if gate_result is not None:
+            mocks['gate'].return_value = gate_result
+        else:
+            mocks['gate'].return_value = GateAgentResult(
+                success=gate_success,
+                reason="Gate passed" if gate_success else "Gate failed",
+            )
         mocks['invoke'].return_value = CopilotResult(
             work_item_id="task-1",
             success=copilot_success,
@@ -309,7 +324,7 @@ def make_workflow_mocks(
         patch(PATCH_GIT_UNCOMMITTED) as mock_uncommitted,
         patch('os.chdir') as mock_chdir,
         patch('os.getcwd') as mock_getcwd,
-        patch('pokepoke.orchestration.workflow.create_worktree') as mock_create_wt,
+        patch('pokepoke.orchestration.workflow.setup_worktree') as mock_create_wt,
         patch(PATCH_WF_ASSIGN) as mock_assign,
         patch(PATCH_WF_INVOKE_COPILOT) as mock_invoke,
         patch('builtins.input') as mock_input,

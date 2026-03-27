@@ -19,8 +19,8 @@ from pokepoke.orchestration.workflow_helpers import (
     _maybe_retry_copilot,
     _pre_loop_validate,
     _run_gate_check,
-    _setup_worktree,
     run_cleanup_with_timeout,
+    setup_worktree,
 )
 from pokepoke.types import (
     AgentStats,
@@ -286,7 +286,7 @@ class TestMaybeRetryCopilot:
         mock_run_logger.log_orchestrator.assert_called_once()
 
 
-# ── _setup_worktree ─────────────────────────────────────────────────────────
+# ── setup_worktree ─────────────────────────────────────────────────────────
 
 
 class TestSetupWorktree:
@@ -294,7 +294,7 @@ class TestSetupWorktree:
     @patch("pokepoke.orchestration.workflow_helpers.create_worktree")
     def test_success(self, mock_create, mock_print, sample_item):
         mock_create.return_value = Path("/worktrees/item-42")
-        result = _setup_worktree(sample_item)
+        result = setup_worktree(sample_item)
         assert result == Path("/worktrees/item-42")
         mock_create.assert_called_once_with("item-42", lock_timeout=300.0, repo_path=None)
         output = " ".join(str(a) for c in mock_print.call_args_list for a in c.args)
@@ -303,14 +303,14 @@ class TestSetupWorktree:
     @patch("builtins.print")
     @patch("pokepoke.orchestration.workflow_helpers.create_worktree", side_effect=RuntimeError("lock failed"))
     def test_failure_returns_none(self, mock_create, mock_print, sample_item):
-        result = _setup_worktree(sample_item)
+        result = setup_worktree(sample_item)
         assert result is None
         output = " ".join(str(a) for c in mock_print.call_args_list for a in c.args)
         assert "Failed to create worktree" in output
 
     @patch("pokepoke.orchestration.workflow_helpers.create_worktree", side_effect=RuntimeError("boom"))
     def test_failure_logs_to_loggers(self, mock_create, sample_item, mock_run_logger, mock_item_logger):
-        result = _setup_worktree(
+        result = setup_worktree(
             sample_item, run_logger=mock_run_logger, item_logger=mock_item_logger,
         )
         assert result is None
@@ -322,7 +322,7 @@ class TestSetupWorktree:
 
 
 class TestPreLoopValidate:
-    @patch("pokepoke.orchestration.workflow_helpers._setup_worktree")
+    @patch("pokepoke.orchestration.workflow_helpers.setup_worktree")
     @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=True)
     def test_non_interactive_success(self, mock_assign, mock_setup, sample_item):
         mock_setup.return_value = Path("/wt/item-42")
@@ -345,7 +345,7 @@ class TestPreLoopValidate:
         assert early.success is False
         assert assigned is False
 
-    @patch("pokepoke.orchestration.workflow_helpers._setup_worktree", return_value=None)
+    @patch("pokepoke.orchestration.workflow_helpers.setup_worktree", return_value=None)
     @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=True)
     def test_worktree_failure(self, mock_assign, mock_setup, sample_item, capsys):
         early, assigned, wt_path, _, _ = _pre_loop_validate(
@@ -359,7 +359,7 @@ class TestPreLoopValidate:
 
     @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
     @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.orchestration.workflow_helpers._setup_worktree")
+    @patch("pokepoke.orchestration.workflow_helpers.setup_worktree")
     @patch("builtins.input", return_value="n")
     def test_interactive_decline(self, mock_input, mock_setup, mock_assign, mock_tui, sample_item):
         early, assigned, _, _, _ = _pre_loop_validate(
@@ -372,7 +372,7 @@ class TestPreLoopValidate:
 
     @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
     @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.orchestration.workflow_helpers._setup_worktree")
+    @patch("pokepoke.orchestration.workflow_helpers.setup_worktree")
     @patch("builtins.input", return_value="")
     def test_interactive_accept_empty(self, mock_input, mock_setup, mock_assign, mock_tui, sample_item):
         mock_setup.return_value = Path("/wt/item-42")

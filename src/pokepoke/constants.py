@@ -47,12 +47,12 @@ MIN_MEMORY_MB = 32.0  # Absolute minimum memory floor (MB)
 
 # Default values for project-level orchestration settings.
 DEFAULT_MAX_PARALLEL_AGENTS = 1  # Default number of concurrent agents
-DEFAULT_COMMAND_TIMEOUT = 300  # Default timeout for long-running commands (seconds)
+DEFAULT_COMMAND_TIMEOUT = 600  # Default timeout for long-running commands (seconds)
 DEFAULT_MAX_COPILOT_FAILURE_RETRIES = 2  # Default retries when Copilot session fails
 DEFAULT_IDLE_TIMEOUT_SECONDS = 90  # Default seconds before confirming session idle
 DEFAULT_SESSION_INACTIVITY_TIMEOUT = 900  # Default no-SDK-event timeout (seconds)
-DEFAULT_TOOL_CALL_TIMEOUT = 900  # Default max single tool invocation (seconds)
-DEFAULT_PROCESS_OUTPUT_TIMEOUT = 300  # Default no-output timeout (seconds)
+DEFAULT_TOOL_CALL_TIMEOUT = 1800  # Default max single tool invocation (seconds)
+DEFAULT_PROCESS_OUTPUT_TIMEOUT = 600  # Default no-output timeout (seconds)
 DEFAULT_MAX_PING_FAILURES = 3  # Default consecutive ping failures before dead
 DEFAULT_CIRCUIT_BREAKER_DRAIN_TIMEOUT = 900  # Default max wait for agents after circuit breaker trips (seconds, 0 = wait forever)
 

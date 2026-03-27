@@ -74,7 +74,7 @@ def _build_completion_record(
 # ── Worktree + pre-loop setup helpers ────────────────────────────────────────
 
 
-def _setup_worktree(
+def setup_worktree(
     item: BeadsWorkItem, lock_timeout: float = 300.0,
     run_logger: "RunLogger | None" = None, item_logger: "ItemLogger | None" = None,
     repo_path: str | None = None,
@@ -123,7 +123,7 @@ def _pre_loop_validate(
         _log_failure(run_logger, item_logger)
         return _fail_result(), False, None, "", ""
 
-    worktree_path = _setup_worktree(
+    worktree_path = setup_worktree(
         item, lock_timeout=worktree_lock_timeout,
         run_logger=run_logger, item_logger=item_logger,
     )
