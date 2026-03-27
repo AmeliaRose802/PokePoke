@@ -100,6 +100,7 @@ ignore = [
     "PLR0915", # Too many statements - requires refactoring
     "PLR2004", # Magic value used in comparison - too noisy for existing codebase
     "S603",    # subprocess without shell=True - expected for CLI orchestrator
+    "S607",    # subprocess with partial path - expected for CLI orchestrator using git, bd, pwsh, tasklist
     "S101",    # assert - used for internal invariants, not security-sensitive
     "S110",    # try-except-pass - intentional in graceful-degradation patterns
     "S310",    # suspicious-url-open-usage - false positive for controlled URLs
