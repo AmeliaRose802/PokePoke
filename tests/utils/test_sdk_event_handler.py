@@ -672,10 +672,17 @@ def test_noop_events_do_not_produce_output() -> None:
     handler, stats = create_event_handler(done, output_lines, errors)
     initial_event_count = stats['event_count']
 
-    for event_type in ("pending_messages.modified", "unknown", "user.message"):
+    noop_events = (
+        "pending_messages.modified",
+        "unknown",
+        "user.message",
+        "assistant.reasoning_delta",
+        "permission.completed",
+    )
+    for event_type in noop_events:
         handler(_make_event(event_type))
 
     # Events are counted but produce no output or errors
-    assert stats['event_count'] == initial_event_count + 3
+    assert stats['event_count'] == initial_event_count + len(noop_events)
     assert output_lines == []
     assert errors == []
