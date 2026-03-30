@@ -245,6 +245,8 @@ class ProjectConfig:
     process_output_timeout: int = _c.DEFAULT_PROCESS_OUTPUT_TIMEOUT
     max_ping_failures: int = _c.DEFAULT_MAX_PING_FAILURES
     circuit_breaker_drain_timeout: int = _c.DEFAULT_CIRCUIT_BREAKER_DRAIN_TIMEOUT
+    decomposition_enabled: bool = True
+    decomposition_failure_threshold: int = 3
     assignment: AssignmentConfig = field(default_factory=AssignmentConfig)
     performance_thresholds: PerformanceThresholdsConfig = field(
         default_factory=PerformanceThresholdsConfig,
@@ -263,6 +265,7 @@ class ProjectConfig:
         self.process_output_timeout = max(_c.MIN_PROCESS_OUTPUT_TIMEOUT, self.process_output_timeout)
         self.max_ping_failures = max(_c.MIN_MAX_PING_FAILURES, self.max_ping_failures)
         self.circuit_breaker_drain_timeout = max(_c.MIN_CIRCUIT_BREAKER_DRAIN_TIMEOUT, self.circuit_breaker_drain_timeout)
+        self.decomposition_failure_threshold = max(1, self.decomposition_failure_threshold)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a canonical dict suitable for YAML/JSON output."""
@@ -391,9 +394,5 @@ def reset_config() -> None:
 
 
 def get_config() -> ProjectConfig:
-    """Get the current project configuration (cached).
-
-    Returns:
-        Current ProjectConfig instance.
-    """
+    """Get the current project configuration (cached)."""
     return load_config()
