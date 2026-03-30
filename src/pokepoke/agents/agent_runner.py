@@ -15,6 +15,7 @@ from pokepoke.agents.cleanup_agents import (
     run_cleanup_loop,
 )
 from pokepoke.agents.gate_agent_executor import run_gate_agent
+from pokepoke.beads.reconciliation import worktree_branch_has_commits
 from pokepoke.desktop import terminal_ui
 from pokepoke.models.ai_backends import invoke_copilot
 from pokepoke.stats.metrics_context import agent_type_context
@@ -178,6 +179,85 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
         terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed", parent_agent_id=parent_agent_id, agent_type="worktree_cleanup")
         return None
 
+def _reconcile_worktree_branch(
+    agent_id: str,
+    agent_item: BeadsWorkItem,
+    agent_name: str,
+    worktree_path: Path,
+    repo_root: Path,
+    result: CopilotResult,
+    cleanup_parent_id: str,
+) -> AgentStats | None:
+    """Attempt to merge partial work when a worktree branch has commits.
+
+    Called on the failure path of ``_run_worktree_agent`` to rescue valid
+    commits that would otherwise be stranded (e.g. when the SDK session
+    exhausted its turn/token budget but had already committed work).
+
+    Returns ``AgentStats`` (possibly empty) on successful merge, or ``None``
+    if there are no commits to salvage or the merge fails.
+    """
+    try:
+        if not worktree_branch_has_commits(agent_id, repo_root):
+            return None
+    except Exception as exc:
+        logger.debug("Reconciliation check failed for %s: %s", agent_id, exc)
+        return None
+
+    logger.warning(
+        "Reconciliation: %s failed but worktree branch has commits — "
+        "attempting merge of partial work",
+        agent_name,
+    )
+    agent_stats = parse_agent_stats(result.output) if result.output else None
+    merge_success, _worktree_cleaned = handle_worktree_merge(
+        agent_id, agent_item, agent_name, worktree_path, repo_root,
+        agent_stats, parent_agent_id=cleanup_parent_id,
+    )
+    if merge_success:
+        logger.info("Reconciliation: merged partial work from %s", agent_name)
+        return agent_stats if agent_stats is not None else AgentStats()
+    logger.warning("Reconciliation: merge failed for %s", agent_name)
+    return None
+
+
+def _handle_successful_agent(
+    agent_id: str, agent_item: BeadsWorkItem, agent_name: str,
+    worktree_path: Path, repo_root: Path, result: CopilotResult,
+    merge_changes: bool, cleanup_parent_id: str,
+) -> tuple[AgentStats | None, bool, bool]:
+    """Handle the success path for a worktree agent.
+
+    Returns ``(agent_stats, preserve_for_debugging, worktree_cleaned)``.
+    """
+    logger.info("%s agent completed successfully!", agent_name)
+    if not merge_changes:
+        logger.info("Discarding worktree (merge_changes=False)")
+        try:
+            cleanup_worktree(agent_id, force=True)
+            stats = parse_agent_stats(result.output) if result.output else None
+            return stats, False, True
+        except Exception as cleanup_error:
+            logger.warning("Explicit cleanup failed: %s", cleanup_error)
+            add_uncleaned_worktree(
+                agent_id, str(worktree_path),
+                f"Failed explicit cleanup: {cleanup_error}",
+            )
+            return None, True, False
+
+    logger.info("All changes committed and validated")
+    agent_stats = parse_agent_stats(result.output) if result.output else None
+    merge_success, worktree_cleaned = handle_worktree_merge(
+        agent_id, agent_item, agent_name, worktree_path, repo_root,
+        agent_stats, parent_agent_id=cleanup_parent_id,
+    )
+    if not merge_success:
+        _print_preserved_worktree_debug(agent_id, worktree_path, repo_root)
+        return None, True, False
+    logger.info("Merged and cleaned up worktree")
+    return agent_stats, not worktree_cleaned, worktree_cleaned
+
+
 def _run_worktree_agent(
     agent_name: str, agent_id: str, agent_item: BeadsWorkItem, agent_prompt: str, repo_root: Path,
     merge_changes: bool = True, model: str | None = None, item_logger: 'ItemLogger | None' = None,
@@ -227,36 +307,26 @@ def _run_worktree_agent(
         if not cleanup_success:
             result.success = False
         if result.success:
-            logger.info("%s agent completed successfully!", agent_name)
-            if not merge_changes:
-                logger.info("Discarding worktree (merge_changes=False)")
-                try:
-                    cleanup_worktree(agent_id, force=True)
-                    worktree_cleaned = True
-                    preserve_for_debugging = False
-                    return parse_agent_stats(result.output) if result.output else None
-                except Exception as cleanup_error:
-                    logger.warning("Explicit cleanup failed: %s", cleanup_error)
-                    add_uncleaned_worktree(
-                        agent_id,
-                        str(worktree_path),
-                        f"Failed explicit cleanup: {cleanup_error}",
-                    )
-                    return None
-            logger.info("All changes committed and validated")
-            agent_stats = parse_agent_stats(result.output) if result.output else None
-            merge_success, worktree_cleaned = handle_worktree_merge(
-                agent_id, agent_item, agent_name, worktree_path, repo_root, agent_stats,
-                parent_agent_id=cleanup_parent_id
+            agent_stats, preserve_for_debugging, worktree_cleaned = _handle_successful_agent(
+                agent_id, agent_item, agent_name, worktree_path, repo_root,
+                result, merge_changes, cleanup_parent_id,
             )
-            if not merge_success:
-                _print_preserved_worktree_debug(agent_id, worktree_path, repo_root)
-                return None
-            preserve_for_debugging = not worktree_cleaned
-            logger.info("Merged and cleaned up worktree")
             return agent_stats
         else:
             logger.error("%s agent failed: %s", agent_name, result.error)
+            # Reconciliation: merge partial work when the branch has valid
+            # commits despite the session reporting failure (e.g. budget
+            # exhaustion).
+            if merge_changes:
+                reconciled_stats = _reconcile_worktree_branch(
+                    agent_id, agent_item, agent_name, worktree_path,
+                    repo_root, result, cleanup_parent_id,
+                )
+                if reconciled_stats is not None:
+                    agent_stats = reconciled_stats
+                    preserve_for_debugging = False
+                    worktree_cleaned = True
+                    return agent_stats
             _print_preserved_worktree_debug(agent_id, worktree_path, repo_root)
             return None
 
@@ -266,6 +336,22 @@ def _run_worktree_agent(
             exc_info=True,
         )
         logger.error("Unexpected error in %s agent: %s", agent_name, e)
+        # Reconciliation: attempt to salvage commits even after an
+        # unexpected exception.  Use a fallback CopilotResult when
+        # ``result`` was never assigned (exception before inner try).
+        if merge_changes:
+            fallback = CopilotResult(
+                work_item_id=agent_item.id, success=False,
+                output="", error=str(e), attempt_count=0,
+            )
+            reconciled_stats = _reconcile_worktree_branch(
+                agent_id, agent_item, agent_name, worktree_path,
+                repo_root, fallback, cleanup_parent_id,
+            )
+            if reconciled_stats is not None:
+                preserve_for_debugging = False
+                worktree_cleaned = True
+                return reconciled_stats
         _print_preserved_worktree_debug(agent_id, worktree_path, repo_root)
         return None
 

@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from pokepoke.agents.agent_runner import (
+    _reconcile_worktree_branch,
     _run_worktree_agent,
 )
 from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
@@ -103,6 +104,7 @@ class TestRunWorktreeAgent:
 
         assert stats is None
 
+    @patch('pokepoke.agents.agent_runner.worktree_branch_has_commits')
     @patch('pokepoke.agents.agent_runner.cleanup_worktree')
     @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
     @patch('pokepoke.agents.agent_runner.invoke_copilot')
@@ -111,12 +113,14 @@ class TestRunWorktreeAgent:
     @patch('os.chdir')
     def test_invoke_copilot_exception(
         self, mock_chdir: Mock, mock_getcwd: Mock,
-        mock_create: Mock, mock_invoke: Mock, mock_cleanup_loop: Mock, mock_cleanup: Mock
+        mock_create: Mock, mock_invoke: Mock, mock_cleanup_loop: Mock,
+        mock_cleanup: Mock, mock_branch_has_commits: Mock,
     ) -> None:
         """Test exception handling when invoke_copilot raises."""
         mock_create.return_value = Path("/tmp/wt")
         mock_invoke.side_effect = Exception("Boom")
         mock_cleanup_loop.return_value = (False, 0)
+        mock_branch_has_commits.return_value = False
 
         item = BeadsWorkItem(
             id="1", title="T", description="D",
@@ -128,6 +132,7 @@ class TestRunWorktreeAgent:
         assert res is None
         mock_cleanup.assert_not_called()
 
+    @patch('pokepoke.agents.agent_runner.worktree_branch_has_commits')
     @patch('pokepoke.agents.agent_runner.cleanup_worktree')
     @patch('os.chdir')
     @patch('os.getcwd')
@@ -141,9 +146,10 @@ class TestRunWorktreeAgent:
         mock_cleanup_loop: Mock,
         mock_getcwd: Mock,
         mock_chdir: Mock,
-        mock_cleanup: Mock
+        mock_cleanup: Mock,
+        mock_branch_has_commits: Mock,
     ) -> None:
-        """Test worktree agent when agent fails."""
+        """Test worktree agent when agent fails with no commits on branch."""
         agent_item = BeadsWorkItem(
             id="maintenance-test",
             title="Test Maintenance",
@@ -164,6 +170,7 @@ class TestRunWorktreeAgent:
             attempt_count=1
         )
         mock_cleanup_loop.return_value = (True, 0)
+        mock_branch_has_commits.return_value = False
 
         stats = _run_worktree_agent(
             "Test",
@@ -175,6 +182,7 @@ class TestRunWorktreeAgent:
 
         assert stats is None
         mock_cleanup.assert_not_called()
+        mock_branch_has_commits.assert_called_once()
 
     @patch('pokepoke.agents.agent_runner.handle_worktree_merge')
     @patch('pokepoke.agents.agent_runner.invoke_merge_conflict_cleanup_agent')
@@ -580,6 +588,7 @@ class TestWorktreeAgentFinallyCleanupException:
 class TestWorktreeAgentCleanupFailureSetsResultFalse:
     """Test that cleanup failure sets result.success=False (line 344)."""
 
+    @patch('pokepoke.agents.agent_runner.worktree_branch_has_commits')
     @patch('pokepoke.agents.agent_runner.handle_worktree_merge')
     @patch('pokepoke.agents.agent_runner.cleanup_worktree')
     @patch('pokepoke.agents.agent_runner.parse_agent_stats')
@@ -589,6 +598,7 @@ class TestWorktreeAgentCleanupFailureSetsResultFalse:
     def test_cleanup_loop_failure_forces_result_false(
         self, mock_create: Mock, mock_invoke: Mock, mock_cleanup_loop: Mock,
         mock_parse: Mock, mock_cleanup: Mock, mock_handle_merge: Mock,
+        mock_branch_has_commits: Mock,
     ) -> None:
         """If cleanup loop returns success=False, overall result should be False."""
         agent_item = BeadsWorkItem(
@@ -607,6 +617,7 @@ class TestWorktreeAgentCleanupFailureSetsResultFalse:
         mock_parse.return_value = None
         mock_handle_merge.return_value = (False, False)
         mock_cleanup.return_value = True
+        mock_branch_has_commits.return_value = False
 
         _run_worktree_agent(
             "Test", "test-item", agent_item, "Prompt",
@@ -616,3 +627,205 @@ class TestWorktreeAgentCleanupFailureSetsResultFalse:
         # Despite invoke_copilot returning success=True, the cleanup failure
         # should have set result.success=False, so no merge is attempted
         mock_handle_merge.assert_not_called()
+
+
+class TestReconcileWorktreeBranch:
+    """Tests for _reconcile_worktree_branch helper."""
+
+    def _make_item(self, item_id: str = "test-item") -> BeadsWorkItem:
+        return BeadsWorkItem(
+            id=item_id, title="Test", description="Test",
+            status="in_progress", priority=0, issue_type="task",
+            labels=["maintenance"],
+        )
+
+    def _make_result(self, success: bool = False, output: str = "") -> CopilotResult:
+        return CopilotResult(
+            work_item_id="test-item", success=success,
+            output=output, error="budget exhausted" if not success else "",
+            attempt_count=1,
+        )
+
+    @patch('pokepoke.agents.agent_runner.handle_worktree_merge')
+    @patch('pokepoke.agents.agent_runner.worktree_branch_has_commits')
+    def test_no_commits_returns_none(
+        self, mock_has_commits: Mock, mock_merge: Mock,
+    ) -> None:
+        """No commits on branch → returns None without attempting merge."""
+        mock_has_commits.return_value = False
+
+        result = _reconcile_worktree_branch(
+            "agent-1", self._make_item(), "Janitor",
+            Path("/wt"), Path("/repo"), self._make_result(), "parent",
+        )
+
+        assert result is None
+        mock_merge.assert_not_called()
+
+    @patch('pokepoke.agents.agent_runner.handle_worktree_merge')
+    @patch('pokepoke.agents.agent_runner.worktree_branch_has_commits')
+    def test_commits_exist_merge_succeeds(
+        self, mock_has_commits: Mock, mock_merge: Mock,
+    ) -> None:
+        """Commits on branch + merge succeeds → returns AgentStats."""
+        mock_has_commits.return_value = True
+        mock_merge.return_value = (True, True)
+
+        result = _reconcile_worktree_branch(
+            "agent-1", self._make_item(), "Janitor",
+            Path("/wt"), Path("/repo"), self._make_result(), "parent",
+        )
+
+        assert result is not None
+        assert isinstance(result, AgentStats)
+        mock_merge.assert_called_once()
+
+    @patch('pokepoke.agents.agent_runner.handle_worktree_merge')
+    @patch('pokepoke.agents.agent_runner.worktree_branch_has_commits')
+    def test_commits_exist_merge_fails(
+        self, mock_has_commits: Mock, mock_merge: Mock,
+    ) -> None:
+        """Commits on branch but merge fails → returns None."""
+        mock_has_commits.return_value = True
+        mock_merge.return_value = (False, False)
+
+        result = _reconcile_worktree_branch(
+            "agent-1", self._make_item(), "Janitor",
+            Path("/wt"), Path("/repo"), self._make_result(), "parent",
+        )
+
+        assert result is None
+        mock_merge.assert_called_once()
+
+    @patch('pokepoke.agents.agent_runner.handle_worktree_merge')
+    @patch('pokepoke.agents.agent_runner.worktree_branch_has_commits')
+    def test_commits_exist_with_output_parses_stats(
+        self, mock_has_commits: Mock, mock_merge: Mock,
+    ) -> None:
+        """When output contains parseable stats, they are returned."""
+        mock_has_commits.return_value = True
+        mock_merge.return_value = (True, True)
+
+        result_with_output = self._make_result(
+            output='{"wall_duration": 42.0, "input_tokens": 500}'
+        )
+
+        result = _reconcile_worktree_branch(
+            "agent-1", self._make_item(), "Janitor",
+            Path("/wt"), Path("/repo"), result_with_output, "parent",
+        )
+
+        assert result is not None
+
+    @patch('pokepoke.agents.agent_runner.handle_worktree_merge')
+    @patch('pokepoke.agents.agent_runner.worktree_branch_has_commits')
+    def test_branch_check_exception_returns_none(
+        self, mock_has_commits: Mock, mock_merge: Mock,
+    ) -> None:
+        """Exception in worktree_branch_has_commits → returns None safely."""
+        mock_has_commits.side_effect = Exception("git error")
+
+        result = _reconcile_worktree_branch(
+            "agent-1", self._make_item(), "Janitor",
+            Path("/wt"), Path("/repo"), self._make_result(), "parent",
+        )
+
+        assert result is None
+        mock_merge.assert_not_called()
+
+
+class TestWorktreeAgentFailureReconciliation:
+    """Integration tests for reconciliation within _run_worktree_agent."""
+
+    @patch('pokepoke.agents.agent_runner.handle_worktree_merge')
+    @patch('pokepoke.agents.agent_runner.worktree_branch_has_commits')
+    @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
+    @patch('pokepoke.agents.agent_runner.invoke_copilot')
+    @patch('pokepoke.agents.agent_runner.create_worktree')
+    def test_failure_with_commits_merges_partial_work(
+        self, mock_create: Mock, mock_invoke: Mock,
+        mock_cleanup_loop: Mock, mock_branch_has_commits: Mock,
+        mock_merge: Mock,
+    ) -> None:
+        """Agent fails but branch has commits → reconciliation merges them."""
+        agent_item = BeadsWorkItem(
+            id="maint-1", title="Janitor", description="Cleanup",
+            status="in_progress", priority=0, issue_type="task",
+            labels=["maintenance"],
+        )
+        mock_create.return_value = Path("/fake/worktree")
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="maint-1", success=False,
+            output="", error="Budget exhausted", attempt_count=1,
+        )
+        mock_cleanup_loop.return_value = (True, 0)
+        mock_branch_has_commits.return_value = True
+        mock_merge.return_value = (True, True)
+
+        stats = _run_worktree_agent(
+            "Janitor", "maint-1", agent_item, "Prompt", Path("/repo"),
+        )
+
+        assert stats is not None
+        assert isinstance(stats, AgentStats)
+        mock_merge.assert_called_once()
+
+    @patch('pokepoke.agents.agent_runner.handle_worktree_merge')
+    @patch('pokepoke.agents.agent_runner.worktree_branch_has_commits')
+    @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
+    @patch('pokepoke.agents.agent_runner.invoke_copilot')
+    @patch('pokepoke.agents.agent_runner.create_worktree')
+    def test_failure_with_commits_merge_fails_returns_none(
+        self, mock_create: Mock, mock_invoke: Mock,
+        mock_cleanup_loop: Mock, mock_branch_has_commits: Mock,
+        mock_merge: Mock,
+    ) -> None:
+        """Agent fails, branch has commits, but merge also fails → None."""
+        agent_item = BeadsWorkItem(
+            id="maint-1", title="Janitor", description="Cleanup",
+            status="in_progress", priority=0, issue_type="task",
+            labels=["maintenance"],
+        )
+        mock_create.return_value = Path("/fake/worktree")
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="maint-1", success=False,
+            output="", error="Budget exhausted", attempt_count=1,
+        )
+        mock_cleanup_loop.return_value = (True, 0)
+        mock_branch_has_commits.return_value = True
+        mock_merge.return_value = (False, False)
+
+        stats = _run_worktree_agent(
+            "Janitor", "maint-1", agent_item, "Prompt", Path("/repo"),
+        )
+
+        assert stats is None
+
+    @patch('pokepoke.agents.agent_runner.worktree_branch_has_commits')
+    @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
+    @patch('pokepoke.agents.agent_runner.invoke_copilot')
+    @patch('pokepoke.agents.agent_runner.create_worktree')
+    def test_failure_merge_changes_false_skips_reconciliation(
+        self, mock_create: Mock, mock_invoke: Mock,
+        mock_cleanup_loop: Mock, mock_branch_has_commits: Mock,
+    ) -> None:
+        """With merge_changes=False, reconciliation is skipped even if commits exist."""
+        agent_item = BeadsWorkItem(
+            id="maint-1", title="Janitor", description="Cleanup",
+            status="in_progress", priority=0, issue_type="task",
+            labels=["maintenance"],
+        )
+        mock_create.return_value = Path("/fake/worktree")
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="maint-1", success=False,
+            output="", error="Budget exhausted", attempt_count=1,
+        )
+        mock_cleanup_loop.return_value = (True, 0)
+
+        stats = _run_worktree_agent(
+            "Janitor", "maint-1", agent_item, "Prompt",
+            Path("/repo"), merge_changes=False,
+        )
+
+        assert stats is None
+        mock_branch_has_commits.assert_not_called()
