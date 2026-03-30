@@ -2,7 +2,6 @@
 
 import logging
 import os
-import shutil
 import stat
 import subprocess
 import time
@@ -20,28 +19,164 @@ _CLEANUP_RETRY_DELAY_SECONDS = 3.0  # Increased from 2.0 seconds
 _CLEANUP_MAX_DELAY_SECONDS = 30.0  # Cap on exponential backoff
 
 
-def _handle_remove_readonly(func: object, path: str, exc_info: object) -> None:
-    """Error handler for shutil.rmtree that clears read-only flags on Windows."""
-    os.chmod(path, stat.S_IWRITE)
-    func(path)  # type: ignore[operator]
+class SymlinkFoundError(OSError):
+    """Raised when a symlink or junction is found during safe directory removal."""
 
 
-def force_remove_directory(dir_path: Path, *, max_attempts: int | None = None) -> bool:
+class PathBoundaryError(OSError):
+    """Raised when a path escapes the expected worktree boundary."""
+
+
+def _validate_within_worktrees_dir(dir_path: Path, *, repo_root: Path | None = None) -> None:
+    """Validate that *dir_path* resolves inside the expected worktrees directory.
+
+    The expected worktrees directory is determined by:
+    1. Finding the git repository root (or using provided repo_root)
+    2. Checking that the resolved path is under repo_root/worktrees/
+
+    Args:
+        dir_path: Path to validate.
+        repo_root: Optional repository root. If not provided, will be discovered.
+
+    Raises :class:`PathBoundaryError` if the resolved path is not inside the
+    expected worktrees directory.
+    """
+    try:
+        resolved = dir_path.resolve(strict=False)
+    except (OSError, ValueError) as exc:
+        raise PathBoundaryError(
+            f"Cannot resolve path for boundary validation: {dir_path} ({exc})"
+        ) from exc
+
+    # Find the expected worktrees directory at the repository root
+    try:
+        if repo_root is None:
+            from pokepoke.config import _find_repo_root
+            repo_root = _find_repo_root()
+        expected_worktrees_dir = (repo_root / WORKTREE_DIR).resolve(strict=False)
+    except Exception as exc:
+        # If we can't find the repo root, be conservative and reject
+        raise PathBoundaryError(
+            f"Cannot determine repository root for boundary validation: {exc}"
+        ) from exc
+
+    # Check if the resolved path is a child of the expected worktrees directory
+    try:
+        resolved.relative_to(expected_worktrees_dir)
+    except ValueError:
+        raise PathBoundaryError(
+            f"Path {dir_path} (resolved: {resolved}) is not inside the expected "
+            f"worktrees directory ({expected_worktrees_dir}) — refusing to delete"
+        ) from None
+
+
+def _safe_rmtree(dir_path: Path) -> None:
+    """Remove a directory tree without following symlinks or junctions.
+
+    Manually walks the directory tree to avoid following symlinks or junctions.
+    Note: ``os.walk(followlinks=False)`` prevents following symbolic links but
+    NOT NTFS junctions on Windows, so we cannot rely on it.
+
+    Read-only flags are cleared before each removal attempt (Windows ``.git``
+    objects are typically read-only).
+
+    Raises :class:`SymlinkFoundError` if *dir_path* itself is a symlink/junction.
+    """
+    if dir_path.is_symlink() or _is_junction(dir_path):
+        raise SymlinkFoundError(
+            f"Refusing to remove {dir_path}: it is a symlink or junction"
+        )
+
+    def _remove_tree(path: Path) -> None:
+        """Recursively remove directory tree, unlinking symlinks/junctions."""
+        # List directory contents
+        try:
+            entries = list(path.iterdir())
+        except (OSError, PermissionError):
+            # If we can't list the directory, try to make it accessible
+            try:
+                os.chmod(str(path), stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
+                entries = list(path.iterdir())
+            except (OSError, PermissionError):
+                raise
+
+        for entry in entries:
+            if entry.is_symlink() or _is_junction(entry):
+                # Unlink symlink or junction - do NOT traverse
+                os.remove(str(entry))
+            elif entry.is_dir():
+                # Regular directory - recurse into it
+                _remove_tree(entry)
+            else:
+                # Regular file - remove it
+                try:
+                    os.chmod(str(entry), stat.S_IWRITE | stat.S_IREAD)
+                except OSError:
+                    pass
+                os.remove(str(entry))
+
+        # Remove the now-empty directory
+        try:
+            os.chmod(str(path), stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
+        except OSError:
+            pass
+        os.rmdir(str(path))
+
+    _remove_tree(dir_path)
+
+
+def _is_junction(path: Path) -> bool:
+    """Return True if *path* is an NTFS junction point (Windows-only concept)."""
+    try:
+        return bool(path.is_junction())
+    except AttributeError:
+        # Python < 3.12 does not have Path.is_junction
+        try:
+            import ctypes.wintypes  # only available on Windows
+            # Junction points have FILE_ATTRIBUTE_REPARSE_POINT
+            FILE_ATTRIBUTE_REPARSE_POINT = 0x400
+            attrs = ctypes.windll.kernel32.GetFileAttributesW(str(path))
+            if attrs == -1:
+                return False
+            return bool(attrs & FILE_ATTRIBUTE_REPARSE_POINT) and not path.is_symlink()
+        except (AttributeError, ImportError, OSError):
+            return False
+
+
+def force_remove_directory(dir_path: Path, *, max_attempts: int | None = None, repo_root: Path | None = None) -> bool:
     """Force-remove a directory, handling Windows permission issues.
 
     Enhanced retry logic with better error detection and backoff for Windows file locking.
     Returns True if the directory was removed.
 
+    Security: validates that *dir_path* is inside a ``worktrees/`` directory
+    and never follows symlinks or junctions during deletion.
+
     Args:
         dir_path: Directory to remove.
         max_attempts: Maximum removal attempts. Defaults to ``_CLEANUP_MAX_RETRIES``.
             Pass ``1`` for a single non-blocking attempt (fire-and-forget cleanup).
+        repo_root: Optional repository root for boundary validation. If not provided,
+            will be auto-discovered. Primarily for testing.
+
+    Raises:
+        PathBoundaryError: If *dir_path* is not inside a ``worktrees/`` directory.
+        SymlinkFoundError: If *dir_path* itself is a symlink or junction.
     """
     # Import here to avoid circular dependency
     from pokepoke.utils.process_utils import wait_for_process_cleanup
 
     if max_attempts is None:
         max_attempts = _CLEANUP_MAX_RETRIES
+
+    # --- Safety checks (fail loudly, never silently skip) ---
+    _validate_within_worktrees_dir(dir_path, repo_root=repo_root)
+
+    if dir_path.is_symlink() or _is_junction(dir_path):
+        raise SymlinkFoundError(
+            f"Refusing to remove {dir_path}: the worktree path itself "
+            "is a symlink or junction"
+        )
 
     logger.info(f"🔄 Attempting force removal of worktree: {dir_path}")
 
@@ -71,10 +206,10 @@ def force_remove_directory(dir_path: Path, *, max_attempts: int | None = None) -
         except subprocess.TimeoutExpired:
             logger.info(f"   ⏱️ Git worktree remove timed out on attempt {attempt + 1}")
 
-        # Fallback: direct directory removal with enhanced error handling
+        # Fallback: symlink-safe directory removal
         try:
             logger.info("   🔨 Attempting direct directory removal...")
-            shutil.rmtree(str(dir_path), onerror=_handle_remove_readonly)
+            _safe_rmtree(dir_path)
 
             # Clean up git worktree bookkeeping after manual removal
             run_git(

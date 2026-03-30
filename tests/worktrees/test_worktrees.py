@@ -11,7 +11,6 @@ import pytest
 from pokepoke.git.git_helpers import verify_branch_pushed
 from pokepoke.git.git_operations import get_default_branch, get_main_repo_root, is_worktree_clean, sanitize_branch_name
 from pokepoke.worktrees.worktree_cleanup import (
-    _handle_remove_readonly,
     _is_windows_lock_error,
     add_uncleaned_worktree,
     force_remove_directory,
@@ -1224,9 +1223,9 @@ class TestForceRemoveDirectory:
             assert 'task-test' in call_args[4]
 
     def test_force_remove_falls_back_to_shutil(self):
-        """Test fallback to shutil.rmtree when git worktree remove --force fails."""
+        """Test fallback to _safe_rmtree when git worktree remove --force fails."""
         with patch('subprocess.run') as mock_run, \
-             patch('shutil.rmtree') as mock_rmtree:
+             patch('pokepoke.worktrees.worktree_cleanup._safe_rmtree') as mock_safe_rmtree:
 
             def run_side_effect(*args, **kwargs):
                 cmd = args[0]
@@ -1235,17 +1234,17 @@ class TestForceRemoveDirectory:
                 raise subprocess.CalledProcessError(1, cmd, stderr='failed')
 
             mock_run.side_effect = run_side_effect
-            mock_rmtree.return_value = None
+            mock_safe_rmtree.return_value = None
 
-            result = force_remove_directory(Path("worktrees/task-test"))
+            result = force_remove_directory(Path("worktrees/task-test"), repo_root=Path("."))
 
             assert result is True
-            mock_rmtree.assert_called_once()
+            mock_safe_rmtree.assert_called_once()
 
     def test_force_remove_retries_on_permission_error(self):
-        """Test retry logic when both git and shutil fail."""
+        """Test retry logic when both git and _safe_rmtree fail."""
         with patch('subprocess.run') as mock_run, \
-             patch('shutil.rmtree') as mock_rmtree, \
+             patch('pokepoke.worktrees.worktree_cleanup._safe_rmtree') as mock_safe_rmtree, \
              patch('time.sleep') as mock_sleep, \
              patch('pokepoke.utils.process_utils.wait_for_process_cleanup'):
 
@@ -1257,9 +1256,9 @@ class TestForceRemoveDirectory:
 
             mock_run.side_effect = run_side_effect
             # Fail twice, succeed on third attempt
-            mock_rmtree.side_effect = [PermissionError("locked"), PermissionError("locked"), None]
+            mock_safe_rmtree.side_effect = [PermissionError("locked"), PermissionError("locked"), None]
 
-            result = force_remove_directory(Path("worktrees/task-test"))
+            result = force_remove_directory(Path("worktrees/task-test"), repo_root=Path("."))
 
             assert result is True
             assert mock_sleep.call_count == 2
@@ -1267,7 +1266,7 @@ class TestForceRemoveDirectory:
     def test_force_remove_returns_false_after_all_retries_exhausted(self):
         """Test that False is returned when all retries are exhausted."""
         with patch('subprocess.run') as mock_run, \
-             patch('shutil.rmtree') as mock_rmtree, \
+             patch('pokepoke.worktrees.worktree_cleanup._safe_rmtree') as mock_safe_rmtree, \
              patch('time.sleep'):
 
             def run_side_effect(*args, **kwargs):
@@ -1277,20 +1276,12 @@ class TestForceRemoveDirectory:
                 raise subprocess.CalledProcessError(1, cmd, stderr='failed')
 
             mock_run.side_effect = run_side_effect
-            mock_rmtree.side_effect = PermissionError("locked")
+            mock_safe_rmtree.side_effect = PermissionError("locked")
 
-            result = force_remove_directory(Path("worktrees/task-test"))
+            result = force_remove_directory(Path("worktrees/task-test"), repo_root=Path("."))
 
             assert result is False
 
-    def test_handle_remove_readonly(self):
-        """Test that _handle_remove_readonly clears read-only and retries."""
-        with patch('os.chmod') as mock_chmod:
-            mock_func = Mock()
-            _handle_remove_readonly(mock_func, '/some/path', None)
-
-            mock_chmod.assert_called_once_with('/some/path', 0o200)
-            mock_func.assert_called_once_with('/some/path')
 
 
 @pytest.mark.allow_real_bd
@@ -1705,32 +1696,34 @@ class TestForceRemoveTimeoutBranch:
     def test_git_worktree_remove_timeout(self) -> None:
         """TimeoutExpired during git worktree remove should be handled."""
         with patch('subprocess.run') as mock_run, \
-             patch('shutil.rmtree') as mock_rmtree, \
+             patch('pokepoke.worktrees.worktree_cleanup._safe_rmtree') as mock_safe_rmtree, \
              patch('pokepoke.utils.process_utils.wait_for_process_cleanup'), \
-             patch('time.sleep'):
+             patch('time.sleep'), \
+             patch('pokepoke.worktrees.worktree_cleanup._validate_within_worktrees_dir'):
 
             # First call (git worktree remove) times out, second call (rmtree fallback prune) succeeds
             mock_run.side_effect = [
                 subprocess.TimeoutExpired("git", 30),
                 Mock(returncode=0),  # git worktree prune
             ]
-            mock_rmtree.return_value = None
+            mock_safe_rmtree.return_value = None
 
-            result = force_remove_directory(Path("/fake/path"))
+            result = force_remove_directory(Path("/fake/path"), repo_root=Path("/"))
             assert result is True
 
     def test_lock_error_on_direct_removal(self) -> None:
-        """Windows lock error on shutil.rmtree should be reported."""
+        """Windows lock error on _safe_rmtree should be reported."""
         with patch('subprocess.run') as mock_run, \
-             patch('shutil.rmtree') as mock_rmtree, \
+             patch('pokepoke.worktrees.worktree_cleanup._safe_rmtree') as mock_safe_rmtree, \
              patch('pokepoke.utils.process_utils.wait_for_process_cleanup'), \
              patch('time.sleep'), \
-             patch('pokepoke.worktrees.worktree_cleanup._CLEANUP_MAX_RETRIES', 1):
+             patch('pokepoke.worktrees.worktree_cleanup._CLEANUP_MAX_RETRIES', 1), \
+             patch('pokepoke.worktrees.worktree_cleanup._validate_within_worktrees_dir'):
 
             mock_run.side_effect = subprocess.CalledProcessError(1, "git", stderr="other error")
-            mock_rmtree.side_effect = PermissionError("Access is denied")
+            mock_safe_rmtree.side_effect = PermissionError("Access is denied")
 
-            result = force_remove_directory(Path("/fake/path"))
+            result = force_remove_directory(Path("/fake/path"), repo_root=Path("/"))
             assert result is False
 
 
