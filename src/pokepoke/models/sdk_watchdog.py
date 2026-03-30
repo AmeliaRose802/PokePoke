@@ -266,13 +266,27 @@ class SDKWatchdog:
                 gap = now - stats['last_event_time']
                 remaining_wall = deadline - asyncio.get_event_loop().time()
                 ping_ok = False
+                has_pending = stats.get('pending_tool_calls', 0) > 0
                 try:
                     await client.ping()
                     ping_ok = True
                     consecutive_ping_failures = 0
                 except Exception as exc:
                     logger.debug("SDK ping failed: %s: %s", type(exc).__name__, exc)
-                    consecutive_ping_failures += 1
+                    if has_pending:
+                        # Tool calls block the CLI process — ping failures are
+                        # expected while tools run and should not count toward
+                        # the kill threshold.  Check whether the underlying
+                        # process is actually still alive; if it exited, the
+                        # pending count is stale and we should still count.
+                        proc = getattr(client, '_process', None)
+                        process_exited = proc is not None and getattr(proc, 'returncode', None) is not None
+                        if process_exited:
+                            consecutive_ping_failures += 1
+                        else:
+                            logger.debug("Ignoring ping failure: %d tool call(s) pending", stats.get('pending_tool_calls', 0))
+                    else:
+                        consecutive_ping_failures += 1
                 logger.info(
                     "SDK heartbeat: ping=%s, event_gap=%.0fs, pending=%d, "
                     "events_delta=%d (total=%d), turns=%d, remaining=%.0fs, "
