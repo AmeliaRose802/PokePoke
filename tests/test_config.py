@@ -144,7 +144,7 @@ class TestMaintenanceConfig:
 
     def test_code_review_has_model(self):
         config = MaintenanceConfig.defaults()
-        code_review = [a for a in config.agents if a.name == "Code Review"][0]
+        code_review = next(a for a in config.agents if a.name == "Code Review")
         assert code_review.model == "gpt-5.1-codex"
 
 
@@ -405,19 +405,19 @@ class TestMaintenanceAgentDefaults:
 
     def test_janitor_merges(self):
         config = MaintenanceConfig.defaults()
-        janitor = [a for a in config.agents if a.name == "Janitor"][0]
+        janitor = next(a for a in config.agents if a.name == "Janitor")
         assert janitor.merge_changes is True
         assert janitor.needs_worktree is True
 
     def test_beta_tester_discards(self):
         config = MaintenanceConfig.defaults()
-        beta = [a for a in config.agents if a.name == "Beta Tester"][0]
+        beta = next(a for a in config.agents if a.name == "Beta Tester")
         assert beta.merge_changes is False
         assert beta.needs_worktree is True
 
     def test_tech_debt_no_worktree(self):
         config = MaintenanceConfig.defaults()
-        td = [a for a in config.agents if a.name == "Tech Debt"][0]
+        td = next(a for a in config.agents if a.name == "Tech Debt")
         assert td.needs_worktree is False
 
     def test_disabled_agent_from_dict(self):

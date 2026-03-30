@@ -128,7 +128,6 @@ max-statements = 50
     "S101",    # Tests: allow assert statements (inherent to test framework)
     "S108",    # Tests: allow hardcoded temp paths for test fixtures
     "S607",    # Tests: allow partial executable paths in test scenarios
-    "RUF015",  # Tests: allow iterable allocation patterns
     "PERF401", # Tests: allow manual list comprehension
 ]
 "src/pokepoke/models/sdk_await.py" = ["C901"]  # Complex timeout logic (extracted from sdk_helpers)
