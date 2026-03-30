@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pokepoke.desktop.desktop_ui as desktop_ui_module
 import pokepoke.desktop.frontend_discovery as frontend_discovery_module
+import pokepoke.desktop.thread_output_router as thread_output_router_module
 from pokepoke.desktop import pywebview_patches
 from pokepoke.desktop.desktop_ui import DesktopUI, _shutdown_threading_excepthook
 
@@ -135,13 +136,13 @@ class TestDesktopUIOutputRouting:
         """agent_output and orchestrator_output set thread-local target."""
         ui = DesktopUI()
         # Thread-local should not be set initially
-        assert getattr(desktop_ui_module._thread_output, "target", None) is None
+        assert getattr(thread_output_router_module._thread_output, "target", None) is None
         with ui.agent_output():
-            assert getattr(desktop_ui_module._thread_output, "target", None) == "agent"
-        assert getattr(desktop_ui_module._thread_output, "target", None) is None
+            assert getattr(thread_output_router_module._thread_output, "target", None) == "agent"
+        assert getattr(thread_output_router_module._thread_output, "target", None) is None
         with ui.orchestrator_output():
-            assert getattr(desktop_ui_module._thread_output, "target", None) == "orchestrator"
-        assert getattr(desktop_ui_module._thread_output, "target", None) is None
+            assert getattr(thread_output_router_module._thread_output, "target", None) == "orchestrator"
+        assert getattr(thread_output_router_module._thread_output, "target", None) is None
 
     def test_styled_output_context(self) -> None:
         ui = DesktopUI()
@@ -168,13 +169,13 @@ class TestDesktopUIOutputRouting:
     def test_print_redirect_respects_target_and_style(self) -> None:
         ui = DesktopUI()
         ui._api = MagicMock()
-        desktop_ui_module._thread_output.target = "agent"
+        thread_output_router_module._thread_output.target = "agent"
         ui._current_style = "bold red"
         try:
             ui._print_redirect("boom")
             ui._api.push_log.assert_called_once_with("boom", "agent", "bold red")
         finally:
-            desktop_ui_module._thread_output.target = None
+            thread_output_router_module._thread_output.target = None
 
     def test_print_redirect_passes_through_stderr(self) -> None:
         ui = DesktopUI()
@@ -215,20 +216,20 @@ class TestDesktopUIOutputRouting:
     def test_agent_output_for_restores_context(self) -> None:
         """agent_output_for should restore previous agent_id on exit."""
         ui = DesktopUI()
-        assert getattr(desktop_ui_module._thread_output, "agent_id", None) is None
+        assert getattr(thread_output_router_module._thread_output, "agent_id", None) is None
         with ui.agent_output_for("agent-1"):
-            assert desktop_ui_module._thread_output.agent_id == "agent-1"
-        assert getattr(desktop_ui_module._thread_output, "agent_id", None) is None
+            assert thread_output_router_module._thread_output.agent_id == "agent-1"
+        assert getattr(thread_output_router_module._thread_output, "agent_id", None) is None
 
     def test_agent_output_for_nested(self) -> None:
         """Nested agent_output_for should restore correctly."""
         ui = DesktopUI()
         with ui.agent_output_for("outer"):
-            assert desktop_ui_module._thread_output.agent_id == "outer"
+            assert thread_output_router_module._thread_output.agent_id == "outer"
             with ui.agent_output_for("inner"):
-                assert desktop_ui_module._thread_output.agent_id == "inner"
-            assert desktop_ui_module._thread_output.agent_id == "outer"
-        assert getattr(desktop_ui_module._thread_output, "agent_id", None) is None
+                assert thread_output_router_module._thread_output.agent_id == "inner"
+            assert thread_output_router_module._thread_output.agent_id == "outer"
+        assert getattr(thread_output_router_module._thread_output, "agent_id", None) is None
 
     def test_parallel_threads_get_isolated_output(self) -> None:
         """Two threads using agent_output_for should not cross-contaminate."""

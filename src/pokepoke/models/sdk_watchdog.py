@@ -157,7 +157,7 @@ class SDKWatchdog:
 
         Returns (effective_last_activity, has_active_children, child_activity_time).
         """
-        from pokepoke.desktop.desktop_ui import _thread_output
+        from pokepoke.desktop.thread_output_router import _thread_output
 
         has_active_children = False
         child_activity_time: float | None = None

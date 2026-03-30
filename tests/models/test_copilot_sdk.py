@@ -1446,7 +1446,7 @@ class TestBuildTokenUsageCallback:
         callback = _build_token_usage_callback()
         mock_thread = MagicMock()
         mock_thread.agent_id = "agent-1"
-        with patch('pokepoke.desktop.desktop_ui._thread_output', mock_thread):
+        with patch('pokepoke.desktop.thread_output_router._thread_output', mock_thread):
             callback(100, 50)
         mock_ui.ui.push_agent_tokens.assert_called_once_with("agent-1", 100, 50)
 
@@ -1454,7 +1454,7 @@ class TestBuildTokenUsageCallback:
     def test_callback_noop_when_no_agent_id(self, mock_ui):
         callback = _build_token_usage_callback()
         mock_thread = MagicMock(spec=[])  # no agent_id attribute
-        with patch('pokepoke.desktop.desktop_ui._thread_output', mock_thread):
+        with patch('pokepoke.desktop.thread_output_router._thread_output', mock_thread):
             callback(100, 50)
         mock_ui.ui.push_agent_tokens.assert_not_called()
 

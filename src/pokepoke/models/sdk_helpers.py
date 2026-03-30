@@ -40,7 +40,7 @@ def _fail_result(
 def _build_token_usage_callback() -> Callable[[int, int], None]:
     """Create a token-usage callback that pushes live stats to the agent card."""
     def _on_token_usage(input_tokens: int, output_tokens: int) -> None:
-        from pokepoke.desktop.desktop_ui import _thread_output
+        from pokepoke.desktop.thread_output_router import _thread_output
         agent_id: str | None = getattr(_thread_output, "agent_id", None)
         if agent_id:
             terminal_ui.ui.push_agent_tokens(agent_id, input_tokens, output_tokens)
