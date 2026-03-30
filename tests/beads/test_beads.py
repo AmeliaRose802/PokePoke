@@ -24,7 +24,7 @@ class TestBeadsIntegration:
         assert items == []
         mock_run.assert_called_once_with(
             ['ready', '--json'],
-            backend=None
+            check=True, timeout=30, cwd=None, backend=None,
         )
 
     @patch('pokepoke.beads.beads_query._run_bd')
@@ -91,8 +91,8 @@ class TestBeadsIntegration:
 
     @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_ready_work_items_generic_exception(self, mock_run: Mock) -> None:
-        """Test get_ready_work_items handles generic exceptions gracefully."""
-        mock_run.side_effect = RuntimeError("Unexpected error")
+        """Test get_ready_work_items handles OS-level errors gracefully."""
+        mock_run.side_effect = OSError("No such file or directory")
 
         items = get_ready_work_items()
 
@@ -710,7 +710,7 @@ class TestAssignAndSyncItem:
 class TestCloseItem:
     """Test close_item function."""
 
-    @patch('pokepoke.beads.beads_management._run_bd')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_close_item_success(self, mock_run: Mock) -> None:
         """Test successful item closing."""
         from pokepoke.beads.beads import close_item
@@ -721,10 +721,11 @@ class TestCloseItem:
 
         assert result is True
         mock_run.assert_called_once_with(
-            ['close', 'task-1', '--reason', 'Done']
+            ['close', 'task-1', '--reason', 'Done'],
+            check=True, timeout=30, cwd=None, backend=None,
         )
 
-    @patch('pokepoke.beads.beads_management._run_bd')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_close_item_failure(self, mock_run: Mock) -> None:
         """Test close_item returns False on failure."""
         from pokepoke.beads.beads import close_item
@@ -741,7 +742,7 @@ class TestCloseItem:
 class TestAddComment:
     """Test add_comment function."""
 
-    @patch('pokepoke.beads.beads_management._run_bd')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_add_comment_success(self, mock_run: Mock) -> None:
         """Test successful comment addition."""
         from pokepoke.beads.beads import add_comment
@@ -752,10 +753,11 @@ class TestAddComment:
 
         assert result is True
         mock_run.assert_called_once_with(
-            ['comments', 'add', 'task-1', 'Great progress']
+            ['comments', 'add', 'task-1', 'Great progress'],
+            check=True, timeout=30, cwd=None, backend=None,
         )
 
-    @patch('pokepoke.beads.beads_management._run_bd')
+    @patch('pokepoke.beads.beads_query._run_bd')
     def test_add_comment_failure(self, mock_run: Mock) -> None:
         """Test add_comment returns False on failure."""
         from pokepoke.beads.beads import add_comment
