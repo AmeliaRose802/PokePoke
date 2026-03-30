@@ -161,6 +161,63 @@ def test_run_copilot_models_parses_output():
         assert models[0]["name"] == "gpt-5.2"
 
 
+def test_run_copilot_models_logs_nonzero_returncode(caplog):
+    """Non-zero returncode is logged and the command is skipped."""
+    import logging
+
+    fail = subprocess.CompletedProcess(
+        ["copilot", "models", "list", "--json"], 1, "", "auth error"
+    )
+    with patch("pokepoke.models.model_sync.subprocess.run", return_value=fail), \
+            caplog.at_level(logging.DEBUG, logger="pokepoke.models.model_sync"):
+        models = _run_copilot_models("copilot")
+    assert models == []
+    assert any("rc=1" in rec.message for rec in caplog.records)
+    assert any("auth error" in rec.message for rec in caplog.records)
+
+
+def test_run_copilot_models_logs_timeout(caplog):
+    """TimeoutExpired is logged and the command is skipped."""
+    import logging
+
+    with patch(
+        "pokepoke.models.model_sync.subprocess.run",
+        side_effect=subprocess.TimeoutExpired(cmd="copilot", timeout=5),
+    ), caplog.at_level(logging.DEBUG, logger="pokepoke.models.model_sync"):
+        models = _run_copilot_models("copilot", timeout=5)
+    assert models == []
+    assert any("timed out" in rec.message.lower() for rec in caplog.records)
+
+
+def test_run_copilot_models_logs_file_not_found(caplog):
+    """FileNotFoundError is logged and the command is skipped."""
+    import logging
+
+    with patch(
+        "pokepoke.models.model_sync.subprocess.run",
+        side_effect=FileNotFoundError("copilot"),
+    ), caplog.at_level(logging.DEBUG, logger="pokepoke.models.model_sync"):
+        models = _run_copilot_models("copilot")
+    assert models == []
+    assert any("not found" in rec.message.lower() for rec in caplog.records)
+
+
+def test_run_copilot_models_warns_when_all_fail(caplog):
+    """A WARNING is emitted when every command variant fails."""
+    import logging
+
+    fail = subprocess.CompletedProcess(
+        ["copilot", "models", "list", "--json"], 2, "", "server error"
+    )
+    with patch("pokepoke.models.model_sync.subprocess.run", return_value=fail), \
+            caplog.at_level(logging.WARNING, logger="pokepoke.models.model_sync"):
+        models = _run_copilot_models("copilot")
+    assert models == []
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert len(warnings) >= 1
+    assert "all copilot model commands failed" in warnings[0].message.lower()
+
+
 def test_sync_creates_and_updates_beads(tmp_path):
     config = ProjectConfig()
     config.model_sync = ModelSyncConfig(beta_only=False, labels=["model", "beta"])
