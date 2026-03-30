@@ -51,10 +51,11 @@ class TestBuildPromptIntegration:
         call_args = mock_service.load_and_render.call_args
         variables = call_args[0][1]
 
-        # Verify all fields are passed
+        # Verify all fields are passed (description is wrapped with delimiters)
         assert variables['item_id'] == "test-123"
         assert variables['title'] == "Test Title"
-        assert variables['description'] == "Test Description"
+        assert "Test Description" in variables['description']
+        assert "<user_description>" in variables['description']
         assert variables['issue_type'] == "task"
         assert variables['priority'] == 1
         assert variables['labels'] == "bug, urgent"

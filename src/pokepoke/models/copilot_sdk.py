@@ -19,6 +19,7 @@ from pokepoke.prompts.prompts import PromptService
 from pokepoke.types import BeadsWorkItem, CopilotResult, RetryConfig
 from pokepoke.utils.constants import DEFAULT_AGENT_TIMEOUT
 from pokepoke.utils.process_utils import shutdown_copilot_client
+from pokepoke.utils.prompt_sanitizer import sanitize_prompt_input, sanitize_short
 from pokepoke.utils.shutdown import is_shutting_down
 
 from .sdk_event_handler import RateLimitError, create_event_handler
@@ -50,10 +51,8 @@ def build_prompt_from_work_item(
     Args:
         work_item: The work item to build a prompt for.
         template_name: Name of the prompt template to use (default: ``"beads-item"``).
-            Assignment rules may specify a custom template via ``prompt_template``.
         retry_feedback: Optional list of feedback strings from previous gate-agent
-            rejections or copilot failures.  Rendered in a dedicated template section
-            so that the original item description stays unmodified.
+            rejections or copilot failures.
     """
     config = get_config()
     service = PromptService()
@@ -70,11 +69,15 @@ def build_prompt_from_work_item(
         retry_feedback_section = bullets
     variables = {
         "item_id": work_item.id,
-        "title": work_item.title,
-        "description": work_item.description or "",
-        "issue_type": work_item.issue_type,
+        "title": sanitize_short(work_item.title, "title"),
+        "description": sanitize_prompt_input(
+            work_item.description, field_name="description",
+        ),
+        "issue_type": sanitize_short(work_item.issue_type, "issue_type"),
         "priority": work_item.priority,
-        "labels": ", ".join(work_item.labels) if work_item.labels else None,
+        "labels": sanitize_short(
+            ", ".join(work_item.labels) if work_item.labels else None, "labels",
+        ),
         "mcp_enabled": config.mcp_server.enabled,
         "test_data_section": test_data_section,
         "command_timeout": config.command_timeout,

@@ -85,7 +85,9 @@ class TestBuildPromptFromWorkItem:
         assert result == "Prompt"
         call_args = mock_service.load_and_render.call_args
         variables = call_args[0][1]
-        assert variables["labels"] is None
+        # sanitize_prompt_input(None) returns "" — empty string is falsy
+        # so {{#labels}} conditional sections still won't render
+        assert not variables["labels"]
 
     @patch('pokepoke.models.copilot_sdk.PromptService')
     def test_build_prompt_uses_custom_template_name(self, mock_service_class, sample_work_item):
