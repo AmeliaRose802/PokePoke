@@ -11,7 +11,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from pokepoke.beads.beads_query import _filter_to_dataclass, _parse_beads_json, _run_bd
+from pokepoke.beads.beads_query import (
+    BD_CONFIG,
+    BR_CONFIG,
+    CLIBackendConfig,
+    _filter_to_dataclass,
+    _parse_beads_json,
+    _run_bd,
+)
 from pokepoke.config import RepoConfig
 from pokepoke.types import BeadsWorkItem
 
@@ -50,6 +57,14 @@ def _derive_repo_name(repo_config: RepoConfig) -> str:
     return Path(repo_config.path).name or repo_config.path
 
 
+def _get_backend_config(repo_config: RepoConfig) -> CLIBackendConfig:
+    """Convert repo config's backend string to CLIBackendConfig."""
+    backend_str = repo_config.beads_backend.lower()
+    if backend_str == "br":
+        return BR_CONFIG
+    return BD_CONFIG  # Default to bd for any other value
+
+
 def query_repo_ready_items(repo_config: RepoConfig) -> RepoQueryResult:
     """Query the beads ready queue for a single repository.
 
@@ -75,12 +90,16 @@ def query_repo_ready_items(repo_config: RepoConfig) -> RepoQueryResult:
             error=f"Repo path does not exist: {repo_config.path}",
         )
 
+    # Get the appropriate backend config for this repo
+    backend = _get_backend_config(repo_config)
+
     try:
         result = _run_bd(
             ['ready', '--json'],
             check=True,
             timeout=30,
             cwd=str(repo_path),
+            backend=backend,
         )
     except Exception as e:
         logger.warning(
