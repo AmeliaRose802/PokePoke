@@ -58,15 +58,20 @@ def run_maintenance_agent(
         prompts_dir = get_pokepoke_prompts_dir()
         prompt_path = prompts_dir / prompt_file
     except FileNotFoundError as e:
-        logger.error("%s Agent failed to start: %s", agent_name, e)
+        msg = f"{agent_name} Agent failed to start: {e}"
+        logger.error("%s", msg)
         logger.error("The prompts directory is missing. Ensure .pokepoke/prompts/ exists in the PokePoke installation.")
+        if item_logger:
+            item_logger.log_error(msg)
         return None
     if not prompt_path.exists():
-        logger.error(
-            "%s Agent failed to start: prompt file '%s' not found (expected: %s, available: %s)",
-            agent_name, prompt_file, prompt_path,
-            ", ".join(p.name for p in prompts_dir.glob("*.md")),
+        msg = (
+            f"{agent_name} Agent failed to start: prompt file '{prompt_file}' not found "
+            f"(expected: {prompt_path}, available: {', '.join(p.name for p in prompts_dir.glob('*.md'))})"
         )
+        logger.error("%s", msg)
+        if item_logger:
+            item_logger.log_error(msg)
         return None
     agent_prompt = prompt_path.read_text(encoding='utf-8')
     # Use unique ID with timestamp to avoid worktree conflicts
@@ -184,7 +189,10 @@ def _run_worktree_agent(
         worktree_path = create_worktree(agent_id)
         logger.info("Worktree created at: %s", worktree_path)
     except Exception as e:
-        logger.error("Failed to create worktree: %s", e)
+        msg = f"Failed to create worktree for {agent_name}: {e}"
+        logger.error("%s", msg)
+        if item_logger:
+            item_logger.log_error(msg)
         return None
 
     worktree_cwd = str(worktree_path)

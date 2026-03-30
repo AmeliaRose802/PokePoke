@@ -396,6 +396,33 @@ class TestRunAgentWithCoordination:
         )
         run_logger.log_maintenance.assert_any_call("janitor", "Janitor Agent raised exception")
 
+    @patch('pokepoke.maintenance.maintenance_scheduler.set_terminal_banner')
+    @patch('pokepoke.maintenance.maintenance_scheduler.terminal_ui')
+    @patch('pokepoke.maintenance.maintenance_scheduler.run_maintenance_agent')
+    def test_agent_exception_logs_to_maint_logger(self, mock_maintenance, mock_ui, mock_banner):
+        """Regression PokePoke-e0xuy: exceptions must be logged to maint_logger.
+
+        Previously the except clause only logged to run_logger and Python logger,
+        leaving the agent's dedicated log file (e.g. code_review.log) empty.
+        """
+        mock_maintenance.side_effect = RuntimeError("agent crashed hard")
+
+        scheduler = MaintenanceScheduler()
+        agent_cfg = MaintenanceAgentConfig(name="Code Review", prompt_file="code-reviewer.md", frequency=2)
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+        maint_logger = Mock()
+        run_logger.start_maintenance_log.return_value = maint_logger
+
+        scheduler._run_agent_with_coordination("Code Review", agent_cfg, Mock(), session_stats, run_logger)
+
+        # maint_logger must receive error and summary
+        maint_logger.log_error.assert_called_once()
+        error_msg = maint_logger.log_error.call_args[0][0]
+        assert "Code Review" in error_msg
+        assert "agent crashed hard" in error_msg
+        maint_logger.log_summary.assert_called_once_with(False, request_count=0)
+
 
 class TestGlobalScheduler:
     """Test global scheduler singleton."""

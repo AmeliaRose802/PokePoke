@@ -26,6 +26,7 @@ def _mcp_disabled_config() -> Mock:
 class TestRunBetaTester:
     """Test run_beta_tester function."""
 
+    @patch('pokepoke.agents.beta_tester.terminal_ui')
     @patch('pokepoke.agents.beta_tester.get_config')
     @patch('pokepoke.agents.agent_runner._run_worktree_agent')
     @patch('pokepoke.agents.beta_tester.get_pokepoke_prompts_dir')
@@ -39,7 +40,8 @@ class TestRunBetaTester:
         mock_run: Mock,
         mock_get_prompts: Mock,
         mock_worktree_agent: Mock,
-        mock_get_config: Mock
+        mock_get_config: Mock,
+        mock_ui: Mock,
     ) -> None:
         """Test successful beta tester run."""
         mock_get_config.return_value = _mcp_enabled_config()
@@ -76,6 +78,7 @@ class TestRunBetaTester:
         assert kwargs.get('merge_changes') is False
         mock_run.assert_called()  # Restart script
 
+    @patch('pokepoke.agents.beta_tester.terminal_ui')
     @patch('pokepoke.agents.beta_tester.get_config')
     @patch('pokepoke.agents.agent_runner._run_worktree_agent')
     @patch('pokepoke.agents.beta_tester.get_pokepoke_prompts_dir')
@@ -89,7 +92,8 @@ class TestRunBetaTester:
         mock_run: Mock,
         mock_get_prompts: Mock,
         mock_worktree_agent: Mock,
-        mock_get_config: Mock
+        mock_get_config: Mock,
+        mock_ui: Mock,
     ) -> None:
         """Test restart script missing but proceeds."""
         mock_get_config.return_value = _mcp_enabled_config()
@@ -121,6 +125,7 @@ class TestRunBetaTester:
         assert stats is not None # It proceeded!
         mock_run.assert_not_called() # Did not run restart
 
+    @patch('pokepoke.agents.beta_tester.terminal_ui')
     @patch('pokepoke.agents.beta_tester.get_config')
     @patch('pokepoke.agents.beta_tester.get_pokepoke_prompts_dir')
     @patch('pokepoke.agents.beta_tester.subprocess.run')
@@ -130,7 +135,8 @@ class TestRunBetaTester:
         mock_exists: Mock,
         mock_run: Mock,
         mock_get_prompts: Mock,
-        mock_get_config: Mock
+        mock_get_config: Mock,
+        mock_ui: Mock,
     ) -> None:
         """Test prompt file missing returns None."""
         mock_get_config.return_value = _mcp_enabled_config()
@@ -149,6 +155,7 @@ class TestRunBetaTester:
         stats = run_beta_tester()
         assert stats is None
 
+    @patch('pokepoke.agents.beta_tester.terminal_ui')
     @patch('pokepoke.agents.beta_tester.get_config')
     @patch('pokepoke.agents.agent_runner._run_worktree_agent')
     @patch('pokepoke.agents.beta_tester.get_pokepoke_prompts_dir')
@@ -162,7 +169,8 @@ class TestRunBetaTester:
         mock_run: Mock,
         mock_get_prompts: Mock,
         mock_worktree_agent: Mock,
-        mock_get_config: Mock
+        mock_get_config: Mock,
+        mock_ui: Mock,
     ) -> None:
         """Test beta tester returns None on invocation failure."""
         mock_get_config.return_value = _mcp_enabled_config()
@@ -184,6 +192,7 @@ class TestRunBetaTester:
         stats = run_beta_tester()
         assert stats is None
 
+    @patch('pokepoke.agents.beta_tester.terminal_ui')
     @patch('pokepoke.agents.beta_tester.get_config')
     @patch('pokepoke.agents.agent_runner._run_worktree_agent')
     @patch('pokepoke.agents.beta_tester.get_pokepoke_prompts_dir')
@@ -197,7 +206,8 @@ class TestRunBetaTester:
         mock_run: Mock,
         mock_get_prompts: Mock,
         mock_worktree_agent: Mock,
-        mock_get_config: Mock
+        mock_get_config: Mock,
+        mock_ui: Mock,
     ) -> None:
         """Test restart script execution failure but proceeds."""
         mock_get_config.return_value = _mcp_enabled_config()

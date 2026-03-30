@@ -142,3 +142,70 @@ class TestMaintenanceAgentPromptMissing:
         mock_get_dir.return_value = mock_dir
         stats = run_maintenance_agent("TestAgent", "missing.md", needs_worktree=False)
         assert stats is None
+
+
+class TestStartupFailureLogging:
+    """Regression PokePoke-e0xuy: startup failures must log to item_logger."""
+
+    @patch('pokepoke.agents.agent_runner.get_pokepoke_prompts_dir')
+    def test_prompts_dir_not_found_logs_to_item_logger(self, mock_get_dir: Mock) -> None:
+        """When prompts dir is missing, item_logger must receive the error."""
+        mock_get_dir.side_effect = FileNotFoundError("Prompts directory not found")
+        item_logger = Mock()
+
+        stats = run_maintenance_agent("Code Review", "code-reviewer.md", item_logger=item_logger)
+
+        assert stats is None
+        item_logger.log_error.assert_called_once()
+        error_msg = item_logger.log_error.call_args[0][0]
+        assert "Code Review" in error_msg
+        assert "failed to start" in error_msg
+
+    @patch('pokepoke.agents.agent_runner.get_pokepoke_prompts_dir')
+    def test_missing_prompt_file_logs_to_item_logger(self, mock_get_dir: Mock) -> None:
+        """When prompt file doesn't exist, item_logger must receive the error."""
+        fake_dir = Path(__file__).parent
+        mock_get_dir.return_value = fake_dir
+        item_logger = Mock()
+
+        stats = run_maintenance_agent("Tech Debt", "nonexistent.md", item_logger=item_logger)
+
+        assert stats is None
+        item_logger.log_error.assert_called_once()
+        error_msg = item_logger.log_error.call_args[0][0]
+        assert "Tech Debt" in error_msg
+        assert "nonexistent.md" in error_msg
+
+    @patch('pokepoke.agents.agent_runner.get_pokepoke_prompts_dir')
+    def test_no_item_logger_does_not_crash(self, mock_get_dir: Mock) -> None:
+        """Startup failure without item_logger must not raise AttributeError."""
+        mock_get_dir.side_effect = FileNotFoundError("Prompts directory not found")
+
+        stats = run_maintenance_agent("Code Review", "code-reviewer.md", item_logger=None)
+
+        assert stats is None
+
+    @patch('pokepoke.agents.agent_runner.create_worktree')
+    @patch('pathlib.Path.read_text')
+    @patch('pathlib.Path.exists')
+    def test_worktree_creation_failure_logs_to_item_logger(
+        self, mock_exists: Mock, mock_read: Mock, mock_create_wt: Mock
+    ) -> None:
+        """When worktree creation fails, item_logger must receive the error."""
+        mock_exists.return_value = True
+        mock_read.return_value = "Agent instructions"
+        mock_create_wt.side_effect = RuntimeError("git worktree add failed")
+        item_logger = Mock()
+
+        stats = run_maintenance_agent(
+            "Code Review", "code-reviewer.md",
+            repo_root=Path("/fake/repo"),
+            needs_worktree=True,
+            item_logger=item_logger,
+        )
+
+        assert stats is None
+        item_logger.log_error.assert_called_once()
+        error_msg = item_logger.log_error.call_args[0][0]
+        assert "Code Review" in error_msg
+        assert "worktree" in error_msg.lower()
