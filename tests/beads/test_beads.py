@@ -23,7 +23,8 @@ class TestBeadsIntegration:
 
         assert items == []
         mock_run.assert_called_once_with(
-            ['ready', '--json']
+            ['ready', '--json'],
+            backend=None
         )
 
     @patch('pokepoke.beads.beads_query._run_bd')

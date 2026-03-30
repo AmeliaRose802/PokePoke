@@ -28,11 +28,6 @@ _MUTATING_BD_COMMANDS: frozenset[str] = frozenset({
 })
 
 
-# ---------------------------------------------------------------------------
-# Backend configuration
-# ---------------------------------------------------------------------------
-
-
 @dataclasses.dataclass(frozen=True)
 class CLIBackendConfig:
     """Configuration for a beads CLI backend (``bd`` or ``br``).
@@ -80,11 +75,6 @@ def set_active_backend(config: CLIBackendConfig) -> None:
         set_active_sync_strategy(DaemonSync(backend=config))
 
 
-# ---------------------------------------------------------------------------
-# Backend-agnostic subprocess runner
-# ---------------------------------------------------------------------------
-
-
 def _run_cli(
     args: list[str],
     *,
@@ -125,11 +115,14 @@ def _run_bd(
     check: bool = True,
     timeout: int | None = 30,
     cwd: str | None = None,
+    backend: CLIBackendConfig | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """Run a beads CLI command using the active backend."""
+    """Run a beads CLI command using the specified or active backend."""
+    if backend is None:
+        backend = _active_backend
     return _run_cli(
         args,
-        backend=_active_backend,
+        backend=backend,
         check=check,
         timeout=timeout,
         cwd=cwd,
@@ -169,10 +162,10 @@ def _get_main_repo_root() -> Path | None:
         return None
 
 
-def get_ready_work_items() -> list[BeadsWorkItem]:
+def get_ready_work_items(*, backend: CLIBackendConfig | None = None) -> list[BeadsWorkItem]:
     """Query beads for ready work items. Returns empty list on failure."""
     try:
-        result = _run_bd(['ready', '--json'])
+        result = _run_bd(['ready', '--json'], backend=backend)
     except subprocess.CalledProcessError as e:
         logger.warning("⚠️  beads ready command failed (exit code %s)", e.returncode)
         if e.stderr:
@@ -200,7 +193,7 @@ def get_ready_work_items() -> list[BeadsWorkItem]:
         return []
 
 
-def get_in_progress_items() -> list[BeadsWorkItem]:
+def get_in_progress_items(*, backend: CLIBackendConfig | None = None) -> list[BeadsWorkItem]:
     """Query beads for items with ``in_progress`` status.
 
     These are items that were claimed by a previous run but never completed
@@ -208,7 +201,7 @@ def get_in_progress_items() -> list[BeadsWorkItem]:
     ``get_ready_work_items()`` so that existing worktrees are resumed.
     """
     try:
-        result = _run_bd(['list', '--status', 'in_progress', '--json'])
+        result = _run_bd(['list', '--status', 'in_progress', '--json'], backend=backend)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, Exception) as e:
         logger.warning("⚠️  beads in_progress query failed: %s", e)
         return []
@@ -226,7 +219,7 @@ def get_in_progress_items() -> list[BeadsWorkItem]:
         return []
 
 
-def get_issue_dependencies(issue_id: str) -> IssueWithDependencies | None:
+def get_issue_dependencies(issue_id: str, *, backend: CLIBackendConfig | None = None) -> IssueWithDependencies | None:
     """Get detailed issue information including dependencies.
 
     Args:
@@ -236,7 +229,7 @@ def get_issue_dependencies(issue_id: str) -> IssueWithDependencies | None:
         Issue with dependencies, or None if not found.
     """
     try:
-        result = _run_bd(['show', issue_id, '--json'])
+        result = _run_bd(['show', issue_id, '--json'], backend=backend)
     except subprocess.CalledProcessError:
         return None
     except subprocess.TimeoutExpired:
@@ -281,7 +274,7 @@ def get_issue_dependencies(issue_id: str) -> IssueWithDependencies | None:
         return None
 
 
-def has_unmet_blocking_dependencies(item_id: str) -> bool:
+def has_unmet_blocking_dependencies(item_id: str, *, backend: CLIBackendConfig | None = None) -> bool:
     """Check if an item or any of its ancestors has unmet blocking dependencies.
 
     An item should not be worked on if it (or any parent in the hierarchy) has
@@ -295,10 +288,15 @@ def has_unmet_blocking_dependencies(item_id: str) -> bool:
         True if the item or any ancestor has unmet blocking dependencies,
         False otherwise.
     """
-    return _has_unmet_blocking_in_chain(item_id, _visited=set())
+    return _has_unmet_blocking_in_chain(item_id, _visited=set(), backend=backend)
 
 
-def _has_unmet_blocking_in_chain(item_id: str, *, _visited: set[str]) -> bool:
+def _has_unmet_blocking_in_chain(
+    item_id: str,
+    *,
+    _visited: set[str],
+    backend: CLIBackendConfig | None = None
+) -> bool:
     """Walk up the parent chain checking for unmet blocking dependencies.
 
     Args:
@@ -312,7 +310,7 @@ def _has_unmet_blocking_in_chain(item_id: str, *, _visited: set[str]) -> bool:
         return False
     _visited.add(item_id)
 
-    issue = get_issue_dependencies(item_id)
+    issue = get_issue_dependencies(item_id, backend=backend)
     if not issue or not issue.dependencies:
         return False
 
@@ -329,12 +327,12 @@ def _has_unmet_blocking_in_chain(item_id: str, *, _visited: set[str]) -> bool:
         None,
     )
     if parent_dep:
-        return _has_unmet_blocking_in_chain(parent_dep.id, _visited=_visited)
+        return _has_unmet_blocking_in_chain(parent_dep.id, _visited=_visited, backend=backend)
 
     return False
 
 
-def is_beads_item_closed(item_id: str) -> bool:
+def is_beads_item_closed(item_id: str, *, backend: CLIBackendConfig | None = None) -> bool:
     """Check if a beads item is already closed by querying its current status.
 
     Performs a live ``bd show`` to get the freshest status, preventing the
@@ -349,7 +347,7 @@ def is_beads_item_closed(item_id: str) -> bool:
         on errors, so the caller can fall through to normal processing).
     """
     try:
-        result = _run_bd(['show', item_id, '--json'])
+        result = _run_bd(['show', item_id, '--json'], backend=backend)
         data = _parse_beads_json(result.stdout)
         if data is None:
             return False
@@ -362,7 +360,7 @@ def is_beads_item_closed(item_id: str) -> bool:
         return False
 
 
-def get_beads_stats() -> BeadsStats | None:
+def get_beads_stats(*, backend: CLIBackendConfig | None = None) -> BeadsStats | None:
     """Get current beads database statistics.
 
     Runs from the main repository root to ensure beads database is accessible
@@ -376,7 +374,7 @@ def get_beads_stats() -> BeadsStats | None:
         main_repo = _get_main_repo_root()
         cwd = str(main_repo) if main_repo else None
 
-        result = _run_bd(['stats', '--json'], cwd=cwd)
+        result = _run_bd(['stats', '--json'], cwd=cwd, backend=backend)
 
         data = _parse_beads_json(result.stdout)
         if data is None:
