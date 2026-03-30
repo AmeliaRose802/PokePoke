@@ -1,6 +1,7 @@
 """Tests for beads statistics tracking."""
 
 import json
+import subprocess
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -63,7 +64,7 @@ class TestGetBeadsStats:
     @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_beads_stats_command_failure(self, mock_run: Mock, _mock_root: Mock) -> None:
         """Test beads stats returns None on command failure."""
-        mock_run.side_effect = Exception("Command failed")
+        mock_run.side_effect = subprocess.CalledProcessError(1, "bd", stderr="Command failed")
 
         result = get_beads_stats()
 

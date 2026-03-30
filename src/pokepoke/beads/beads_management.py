@@ -13,6 +13,7 @@ from pokepoke.worktrees.coordination import acquire_lock
 
 from .beads_hierarchy import HUMAN_REQUIRED_LABEL, resolve_to_leaf_task
 from .beads_query import _parse_beads_json, _run_bd
+from .cli_retry import _run_bd_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -215,11 +216,11 @@ def close_item(item_id: str, message: str = "Completed") -> bool:
         True if successful, False otherwise.
     """
     try:
-        _run_bd(['close', item_id, '--reason', message])
+        _run_bd_with_retry(['close', item_id, '--reason', message])
         logger.info("✅ Closed %s", item_id)
         return True
-    except subprocess.CalledProcessError as e:
-        logger.error(f"⚠️  Failed to close {item_id}: {e.stderr}")
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+        logger.error("⚠️  Failed to close %s after retries: %s", item_id, e)
         return False
 
 
@@ -234,11 +235,11 @@ def add_comment(item_id: str, comment: str) -> bool:
         True if successful, False otherwise.
     """
     try:
-        _run_bd(['comments', 'add', item_id, comment])
+        _run_bd_with_retry(['comments', 'add', item_id, comment])
         logger.info("💬 Added comment to %s", item_id)
         return True
-    except subprocess.CalledProcessError as e:
-        logger.error(f"⚠️  Failed to add comment to {item_id}: {e.stderr}")
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+        logger.error("⚠️  Failed to add comment to %s after retries: %s", item_id, e)
         return False
 
 

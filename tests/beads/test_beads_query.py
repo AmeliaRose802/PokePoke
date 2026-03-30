@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from pokepoke.beads import beads_query
+from pokepoke.beads import beads_query, cli_retry
 from pokepoke.beads.beads_query import BD_CONFIG, BR_CONFIG, get_active_backend, set_active_backend
 from pokepoke.types import Dependency, IssueWithDependencies
 
@@ -93,7 +93,7 @@ def test_get_beads_stats_parses_summary(monkeypatch: pytest.MonkeyPatch) -> None
 
 def test_get_beads_stats_returns_none_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
     def boom(*_args: object, **_kwargs: object) -> None:
-        raise RuntimeError("bd missing")
+        raise subprocess.CalledProcessError(1, "bd", stderr="stats unavailable")
 
     monkeypatch.setattr(beads_query, "_run_bd", boom)
 
@@ -639,3 +639,284 @@ def test_run_bd_delegates_to_active_backend(monkeypatch: pytest.MonkeyPatch) -> 
         assert captured["args"] == ["ready", "--json"]
     finally:
         beads_query.set_active_backend(original)
+
+
+# ---------------------------------------------------------------------------
+# _is_transient_cli_error tests
+# ---------------------------------------------------------------------------
+
+
+class TestIsTransientCliError:
+    """Tests for the transient-error detection helper."""
+
+    def test_timeout_expired_is_transient(self) -> None:
+        exc = subprocess.TimeoutExpired(cmd="bd", timeout=30)
+        assert cli_retry._is_transient_cli_error(exc) is True
+
+    def test_os_error_is_transient(self) -> None:
+        exc = OSError("Permission denied")
+        assert cli_retry._is_transient_cli_error(exc) is True
+
+    def test_jsonl_lock_error_is_transient(self) -> None:
+        exc = subprocess.CalledProcessError(1, "bd", stderr="Access is denied for .jsonl file")
+        assert cli_retry._is_transient_cli_error(exc) is True
+
+    def test_jsonl_replace_error_is_transient(self) -> None:
+        exc = subprocess.CalledProcessError(1, "bd", stderr="Failed to replace JSONL file")
+        assert cli_retry._is_transient_cli_error(exc) is True
+
+    def test_lock_contention_is_transient(self) -> None:
+        exc = subprocess.CalledProcessError(1, "bd", stderr="could not acquire lock")
+        assert cli_retry._is_transient_cli_error(exc) is True
+
+    def test_daemon_not_ready_is_transient(self) -> None:
+        exc = subprocess.CalledProcessError(1, "bd", stderr="daemon not running, cannot connect")
+        assert cli_retry._is_transient_cli_error(exc) is True
+
+    def test_connection_refused_is_transient(self) -> None:
+        exc = subprocess.CalledProcessError(1, "bd", stderr="Connection refused")
+        assert cli_retry._is_transient_cli_error(exc) is True
+
+    def test_connection_timed_out_is_transient(self) -> None:
+        exc = subprocess.CalledProcessError(1, "bd", stderr="Connection timed out")
+        assert cli_retry._is_transient_cli_error(exc) is True
+
+    def test_non_transient_called_process_error(self) -> None:
+        exc = subprocess.CalledProcessError(1, "bd", stderr="item not found")
+        assert cli_retry._is_transient_cli_error(exc) is False
+
+    def test_non_transient_generic_error(self) -> None:
+        exc = ValueError("unexpected")
+        assert cli_retry._is_transient_cli_error(exc) is False
+
+    def test_called_process_error_with_none_output(self) -> None:
+        exc = subprocess.CalledProcessError(1, "bd")
+        assert cli_retry._is_transient_cli_error(exc) is False
+
+
+# ---------------------------------------------------------------------------
+# _run_bd_with_retry tests
+# ---------------------------------------------------------------------------
+
+
+class TestRunBdWithRetry:
+    """Tests for the retry wrapper around _run_bd."""
+
+    def test_succeeds_on_first_attempt(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        ok = subprocess.CompletedProcess("bd", 0, stdout='{"ok": true}')
+        monkeypatch.setattr(beads_query, "_run_bd", lambda *a, **kw: ok)
+
+        result = cli_retry._run_bd_with_retry(["ready", "--json"])
+        assert result.returncode == 0
+
+    def test_retries_transient_timeout_then_succeeds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ok = subprocess.CompletedProcess("bd", 0, stdout='{"ok": true}')
+        call_count = 0
+
+        def flaky(*_a: object, **_kw: object) -> subprocess.CompletedProcess[str]:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise subprocess.TimeoutExpired(cmd="bd", timeout=30)
+            return ok
+
+        monkeypatch.setattr(beads_query, "_run_bd", flaky)
+        monkeypatch.setattr(cli_retry.time, "sleep", lambda _: None)
+
+        result = cli_retry._run_bd_with_retry(
+            ["ready", "--json"], max_attempts=3, base_delay=0.01,
+        )
+        assert result.returncode == 0
+        assert call_count == 2
+
+    def test_retries_transient_lock_error_then_succeeds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ok = subprocess.CompletedProcess("bd", 0, stdout='[]')
+        call_count = 0
+
+        def flaky(*_a: object, **_kw: object) -> subprocess.CompletedProcess[str]:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise subprocess.CalledProcessError(
+                    1, "bd", stderr="could not acquire lock on file"
+                )
+            return ok
+
+        monkeypatch.setattr(beads_query, "_run_bd", flaky)
+        monkeypatch.setattr(cli_retry.time, "sleep", lambda _: None)
+
+        result = cli_retry._run_bd_with_retry(
+            ["show", "x", "--json"], max_attempts=3, base_delay=0.01,
+        )
+        assert result.returncode == 0
+        assert call_count == 3
+
+    def test_raises_after_exhausting_retries(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        call_count = 0
+
+        def always_timeout(*_a: object, **_kw: object) -> None:
+            nonlocal call_count
+            call_count += 1
+            raise subprocess.TimeoutExpired(cmd="bd", timeout=30)
+
+        monkeypatch.setattr(beads_query, "_run_bd", always_timeout)
+        monkeypatch.setattr(cli_retry.time, "sleep", lambda _: None)
+
+        with pytest.raises(subprocess.TimeoutExpired):
+            cli_retry._run_bd_with_retry(
+                ["ready", "--json"], max_attempts=3, base_delay=0.01,
+            )
+        assert call_count == 3
+
+    def test_non_transient_error_raises_immediately(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        call_count = 0
+
+        def permanent_fail(*_a: object, **_kw: object) -> None:
+            nonlocal call_count
+            call_count += 1
+            raise subprocess.CalledProcessError(1, "bd", stderr="item not found")
+
+        monkeypatch.setattr(beads_query, "_run_bd", permanent_fail)
+        monkeypatch.setattr(cli_retry.time, "sleep", lambda _: None)
+
+        with pytest.raises(subprocess.CalledProcessError):
+            cli_retry._run_bd_with_retry(
+                ["show", "x", "--json"], max_attempts=3, base_delay=0.01,
+            )
+        assert call_count == 1
+
+    def test_exponential_backoff_delays(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        delays: list[float] = []
+        call_count = 0
+
+        def always_timeout(*_a: object, **_kw: object) -> None:
+            nonlocal call_count
+            call_count += 1
+            raise subprocess.TimeoutExpired(cmd="bd", timeout=30)
+
+        monkeypatch.setattr(beads_query, "_run_bd", always_timeout)
+        monkeypatch.setattr(cli_retry.time, "sleep", lambda d: delays.append(d))
+
+        with pytest.raises(subprocess.TimeoutExpired):
+            cli_retry._run_bd_with_retry(
+                ["ready"], max_attempts=4, base_delay=0.5,
+            )
+        # Delays: 0.5, 1.0, 2.0 (3 retries before the 4th fails)
+        assert delays == [0.5, 1.0, 2.0]
+
+
+# ---------------------------------------------------------------------------
+# Retry integration with public query functions
+# ---------------------------------------------------------------------------
+
+
+class TestRetryIntegrationWithQueryFunctions:
+    """Verify that public functions survive transient errors via retry."""
+
+    def test_get_ready_work_items_retries_timeout(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        payload = [{"id": "x", "title": "T", "status": "open",
+                     "priority": 1, "issue_type": "task", "description": "d"}]
+        ok = subprocess.CompletedProcess("bd", 0, stdout=json.dumps(payload))
+        call_count = 0
+
+        def flaky(*_a: object, **_kw: object) -> subprocess.CompletedProcess[str]:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise subprocess.TimeoutExpired(cmd="bd", timeout=30)
+            return ok
+
+        monkeypatch.setattr(beads_query, "_run_bd", flaky)
+        monkeypatch.setattr(cli_retry.time, "sleep", lambda _: None)
+
+        items = beads_query.get_ready_work_items()
+        assert len(items) == 1
+        assert items[0].id == "x"
+        assert call_count == 2
+
+    def test_get_beads_stats_retries_os_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        stats_json = json.dumps({
+            "summary": {
+                "total_issues": 10, "open_issues": 5,
+                "in_progress_issues": 2, "closed_issues": 3,
+                "ready_issues": 4,
+            }
+        })
+        ok = subprocess.CompletedProcess("bd", 0, stdout=stats_json)
+        call_count = 0
+
+        def flaky(*_a: object, **_kw: object) -> subprocess.CompletedProcess[str]:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise OSError("Permission denied")
+            return ok
+
+        monkeypatch.setattr(beads_query, "_run_bd", flaky)
+        monkeypatch.setattr(cli_retry.time, "sleep", lambda _: None)
+        monkeypatch.setattr(beads_query, "_get_main_repo_root", lambda: None)
+
+        stats = beads_query.get_beads_stats()
+        assert stats is not None
+        assert stats.total_issues == 10
+        assert call_count == 2
+
+    def test_get_issue_dependencies_retries_daemon_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        payload = [{"id": "A", "title": "Issue A", "status": "open",
+                     "priority": 1, "issue_type": "task"}]
+        ok = subprocess.CompletedProcess("bd", 0, stdout=json.dumps(payload))
+        call_count = 0
+
+        def flaky(*_a: object, **_kw: object) -> subprocess.CompletedProcess[str]:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise subprocess.CalledProcessError(
+                    1, "bd", stderr="daemon not ready, cannot connect"
+                )
+            return ok
+
+        monkeypatch.setattr(beads_query, "_run_bd", flaky)
+        monkeypatch.setattr(cli_retry.time, "sleep", lambda _: None)
+
+        result = beads_query.get_issue_dependencies("A")
+        assert result is not None
+        assert result.id == "A"
+        assert call_count == 2
+
+    def test_is_beads_item_closed_retries_timeout(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ok = subprocess.CompletedProcess(
+            "bd", 0, stdout=json.dumps([{"status": "closed"}])
+        )
+        call_count = 0
+
+        def flaky(*_a: object, **_kw: object) -> subprocess.CompletedProcess[str]:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise subprocess.TimeoutExpired(cmd="bd", timeout=30)
+            return ok
+
+        monkeypatch.setattr(beads_query, "_run_bd", flaky)
+        monkeypatch.setattr(cli_retry.time, "sleep", lambda _: None)
+
+        assert beads_query.is_beads_item_closed("x") is True
+        assert call_count == 2
