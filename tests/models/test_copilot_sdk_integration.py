@@ -780,6 +780,49 @@ class TestAwaitCompletionPingLiveness:
 
     @pytest.mark.asyncio
     @patch('pokepoke.models.sdk_watchdog._HB_INTERVAL', 0.1)
+    async def test_ping_fails_with_pending_tools_and_live_process_not_counted(self):
+        """Ping failures while tools are actively running should not count toward kill threshold."""
+        from pokepoke.models.sdk_helpers import _await_completion
+
+        session = AsyncMock()
+        client = MagicMock()
+        client.get_state.return_value = "running"
+        client.ping = AsyncMock(side_effect=Exception("connection refused"))
+        # Process is still alive (returncode is None)
+        mock_process = MagicMock()
+        mock_process.returncode = None
+        client._process = mock_process
+
+        done = asyncio.Event()
+
+        stats = {
+            'last_event_time': time.monotonic() - 10,
+            'event_count': 50,
+            'last_tool_activity_time': time.monotonic(),
+            'pending_tool_calls': 1,  # Tool is actively running
+            'tool_start_times': {'tool-1': time.monotonic()},
+            'turn_count': 3,
+        }
+
+        # Let 3 heartbeat cycles pass, then complete normally
+        async def _set_done():
+            await asyncio.sleep(0.5)
+            done.set()
+        _background_task = asyncio.create_task(_set_done())  # noqa: RUF006
+
+        result = await _await_completion(
+            session, client, done, max_timeout=3600,
+            stats=stats, inactivity_timeout=9999,
+            tool_call_timeout=9999,
+            max_ping_failures=1,  # Would kill after 1 failure if counted
+        )
+
+        # Should complete normally — ping failures during tool calls don't count
+        assert result is None
+        session.abort.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch('pokepoke.models.sdk_watchdog._HB_INTERVAL', 0.1)
     async def test_ping_fails_work_done_no_pending_no_process_attr_is_process_dead(self):
         """When pings fail, work done, no pending, no _process attr — cannot verify clean exit, so process_dead."""
         from pokepoke.models.sdk_helpers import _await_completion
