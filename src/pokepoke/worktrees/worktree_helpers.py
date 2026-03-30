@@ -73,7 +73,7 @@ def validate_worktree_integrity(worktree_path: Path, item_id: str) -> None:
 
         # Only enforce branch check if we got a valid-looking branch name
         # (avoid false positives from test mocks that return "true" for all git commands)
-        if current_branch and current_branch != "true" and current_branch != expected_branch:
+        if current_branch and current_branch not in ("true", expected_branch):
             raise RuntimeError(
                 f"Worktree for {item_id} is on wrong branch: '{current_branch}' "
                 f"(expected '{expected_branch}'). This violates worktree isolation."
