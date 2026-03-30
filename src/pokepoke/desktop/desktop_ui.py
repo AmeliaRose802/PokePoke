@@ -15,6 +15,7 @@ from pokepoke.desktop.desktop_log_handler import DesktopLogHandler
 from pokepoke.desktop.frontend_discovery import find_dev_server_url, find_frontend_dist
 from pokepoke.desktop.native_icon import set_app_user_model_id, set_native_window_icon
 from pokepoke.desktop.pywebview_patches import apply_runtime_patches
+from pokepoke.desktop.thread_output_router import ThreadOutputRouter
 from pokepoke.utils.shutdown import is_shutting_down, request_shutdown
 
 logger = logging.getLogger(__name__)
@@ -37,9 +38,6 @@ def _shutdown_threading_excepthook(args: threading.ExceptHookArgs) -> None:
 
 # Saved so we can delegate non-shutdown exceptions.
 _original_excepthook: Callable[..., Any] | None = None
-
-# Thread-local storage for per-thread output routing.
-_thread_output = threading.local()
 
 
 class DesktopUI:
@@ -226,23 +224,23 @@ class DesktopUI:
         flush = kwargs.get("flush", False)
         msg = sep.join(str(arg) for arg in args) + end
         # Resolve per-thread overrides (set by context managers)
-        target: str = getattr(_thread_output, "target", None) or self._target_buffer
-        style: str | None = getattr(_thread_output, "style", None)
+        target: str = ThreadOutputRouter.get_thread_target() or self._target_buffer
+        style: str | None = ThreadOutputRouter.get_thread_style()
         if style is None:
             with self._buffer_lock:
                 style = self._current_style
-        agent_id: str | None = getattr(_thread_output, "agent_id", None)
+        agent_id: str | None = ThreadOutputRouter.get_thread_agent_id()
         # Use per-thread line buffer to avoid interleaving partial lines
         # across parallel agents.  The main thread (no agent_id) still
         # uses the shared instance buffer for backward compatibility.
         if agent_id:
-            line_buf: str = getattr(_thread_output, "line_buffer", "")
+            line_buf: str = ThreadOutputRouter.get_thread_line_buffer()
             line_buf += msg
             while "\n" in line_buf:
                 line, line_buf = line_buf.split("\n", 1)
                 if line:
                     self._api.push_agent_log(agent_id, line)
-            _thread_output.line_buffer = line_buf
+            ThreadOutputRouter.set_thread_line_buffer(line_buf)
         else:
             with self._buffer_lock:
                 self._line_buffer += msg
@@ -273,31 +271,21 @@ class DesktopUI:
 
     @contextmanager
     def orchestrator_output(self) -> Iterator[None]:
-        prev = getattr(_thread_output, "target", None)
-        _thread_output.target = "orchestrator"
-        try:
+        """Route print output on this thread to orchestrator log."""
+        with ThreadOutputRouter.orchestrator_output():
             yield
-        finally:
-            _thread_output.target = prev
 
     @contextmanager
     def agent_output(self) -> Iterator[None]:
-        prev = getattr(_thread_output, "target", None)
-        _thread_output.target = "agent"
-        try:
+        """Route print output on this thread to agent log."""
+        with ThreadOutputRouter.agent_output():
             yield
-        finally:
-            _thread_output.target = prev
 
     @contextmanager
     def agent_output_for(self, agent_id: str) -> Iterator[None]:
         """Route print output on this thread to a specific agent's log buffer."""
-        prev_agent_id = getattr(_thread_output, "agent_id", None)
-        _thread_output.agent_id = agent_id
-        try:
+        with ThreadOutputRouter.agent_output_for(agent_id):
             yield
-        finally:
-            _thread_output.agent_id = prev_agent_id
 
     @contextmanager
     def styled_output(self, style: str) -> Iterator[None]:

@@ -443,7 +443,7 @@ class TestBuildTokenUsageCallback:
     def test_callback_pushes_tokens_when_agent_id_set(self, mock_ui):
         cb = _build_token_usage_callback()
         with patch(
-            "pokepoke.desktop.desktop_ui._thread_output"
+            "pokepoke.desktop.thread_output_router._thread_output"
         ) as mock_thread:
             mock_thread.agent_id = "agent-1"
             cb(100, 50)
@@ -453,7 +453,7 @@ class TestBuildTokenUsageCallback:
     def test_callback_noop_when_no_agent_id(self, mock_ui):
         cb = _build_token_usage_callback()
         with patch(
-            "pokepoke.desktop.desktop_ui._thread_output"
+            "pokepoke.desktop.thread_output_router._thread_output"
         ) as mock_thread:
             mock_thread.agent_id = None
             cb(100, 50)

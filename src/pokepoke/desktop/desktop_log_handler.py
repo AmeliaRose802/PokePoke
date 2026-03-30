@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from pokepoke.desktop.desktop_api import DesktopAPI
 
-# Re-use the thread-local from desktop_ui (set by context managers there).
+# Re-use the thread-local from thread_output_router (set by context managers there).
 # Imported lazily to avoid circular imports at module level.
 _thread_output: threading.local | None = None
 
@@ -16,7 +16,7 @@ _thread_output: threading.local | None = None
 def _get_thread_output() -> threading.local:
     global _thread_output
     if _thread_output is None:
-        from pokepoke.desktop.desktop_ui import _thread_output as _to
+        from pokepoke.desktop.thread_output_router import _thread_output as _to
         _thread_output = _to
     return _thread_output
 
