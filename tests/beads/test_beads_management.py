@@ -646,7 +646,7 @@ class TestUnassignItem:
 class TestCloseItem:
     """Tests for close_item."""
 
-    @patch("pokepoke.beads.beads_management._run_bd")
+    @patch("pokepoke.beads.beads_query._run_bd")
     def test_successful_close(self, mock_run_bd: Mock) -> None:
         from pokepoke.beads.beads_management import close_item
         mock_run_bd.return_value = Mock()
@@ -654,9 +654,12 @@ class TestCloseItem:
         result = close_item("item-1", "Done")
 
         assert result is True
-        mock_run_bd.assert_called_once_with(['close', 'item-1', '--reason', 'Done'])
+        mock_run_bd.assert_called_once_with(
+            ['close', 'item-1', '--reason', 'Done'],
+            check=True, timeout=30, cwd=None, backend=None,
+        )
 
-    @patch("pokepoke.beads.beads_management._run_bd")
+    @patch("pokepoke.beads.beads_query._run_bd")
     def test_returns_false_on_error(self, mock_run_bd: Mock) -> None:
         from pokepoke.beads.beads_management import close_item
         mock_run_bd.side_effect = subprocess.CalledProcessError(1, "bd", stderr="error")
@@ -669,7 +672,7 @@ class TestCloseItem:
 class TestAddComment:
     """Tests for add_comment."""
 
-    @patch("pokepoke.beads.beads_management._run_bd")
+    @patch("pokepoke.beads.beads_query._run_bd")
     def test_successful_comment(self, mock_run_bd: Mock) -> None:
         from pokepoke.beads.beads_management import add_comment
         mock_run_bd.return_value = Mock()
@@ -678,7 +681,7 @@ class TestAddComment:
 
         assert result is True
 
-    @patch("pokepoke.beads.beads_management._run_bd")
+    @patch("pokepoke.beads.beads_query._run_bd")
     def test_returns_false_on_error(self, mock_run_bd: Mock) -> None:
         from pokepoke.beads.beads_management import add_comment
         mock_run_bd.side_effect = subprocess.CalledProcessError(1, "bd", stderr="error")
@@ -943,7 +946,7 @@ class TestBothBackendsManagement:
         finally:
             set_active_backend(original)
 
-    @patch("pokepoke.beads.beads_management._run_bd")
+    @patch("pokepoke.beads.beads_query._run_bd")
     def test_close_item_with_backend(
         self, mock_run_bd: Mock, backend_config
     ) -> None:

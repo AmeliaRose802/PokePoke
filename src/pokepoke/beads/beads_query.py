@@ -129,6 +129,12 @@ def _run_bd(
     )
 
 
+from pokepoke.beads.cli_retry import _is_transient_cli_error, _run_bd_with_retry
+
+# Re-export for external consumers
+__all__ = ['_is_transient_cli_error', '_run_bd_with_retry']
+
+
 def _filter_to_dataclass(cls: type, data: dict[str, Any]) -> Any:
     """Construct a dataclass instance, keeping only fields defined on *cls*."""
     valid = {f.name for f in dataclasses.fields(cls)}
@@ -165,17 +171,14 @@ def _get_main_repo_root() -> Path | None:
 def get_ready_work_items(*, backend: CLIBackendConfig | None = None) -> list[BeadsWorkItem]:
     """Query beads for ready work items. Returns empty list on failure."""
     try:
-        result = _run_bd(['ready', '--json'], backend=backend)
+        result = _run_bd_with_retry(['ready', '--json'], backend=backend)
     except subprocess.CalledProcessError as e:
         logger.warning("⚠️  beads ready command failed (exit code %s)", e.returncode)
         if e.stderr:
             logger.warning("⚠️  Error output: %s", e.stderr.strip())
         return []
-    except subprocess.TimeoutExpired:
-        logger.warning("⚠️  beads ready command timed out")
-        return []
-    except Exception as e:
-        logger.warning("⚠️  unexpected error querying beads: %s", e)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        logger.warning("⚠️  beads ready command failed after retries: %s", e)
         return []
 
     if not result.stdout:
@@ -201,9 +204,9 @@ def get_in_progress_items(*, backend: CLIBackendConfig | None = None) -> list[Be
     ``get_ready_work_items()`` so that existing worktrees are resumed.
     """
     try:
-        result = _run_bd(['list', '--status', 'in_progress', '--json'], backend=backend)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, Exception) as e:
-        logger.warning("⚠️  beads in_progress query failed: %s", e)
+        result = _run_bd_with_retry(['list', '--status', 'in_progress', '--json'], backend=backend)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+        logger.warning("⚠️  beads in_progress query failed after retries: %s", e)
         return []
 
     if not result.stdout:
@@ -229,14 +232,11 @@ def get_issue_dependencies(issue_id: str, *, backend: CLIBackendConfig | None = 
         Issue with dependencies, or None if not found.
     """
     try:
-        result = _run_bd(['show', issue_id, '--json'], backend=backend)
+        result = _run_bd_with_retry(['show', issue_id, '--json'], backend=backend)
     except subprocess.CalledProcessError:
         return None
-    except subprocess.TimeoutExpired:
-        logger.warning("Timed out querying dependencies for %s", issue_id)
-        return None
-    except Exception as e:
-        logger.warning("Unexpected error querying dependencies for %s: %s", issue_id, e)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        logger.warning("Failed querying dependencies for %s after retries: %s", issue_id, e)
         return None
 
     if not result.stdout:
@@ -347,7 +347,7 @@ def is_beads_item_closed(item_id: str, *, backend: CLIBackendConfig | None = Non
         on errors, so the caller can fall through to normal processing).
     """
     try:
-        result = _run_bd(['show', item_id, '--json'], backend=backend)
+        result = _run_bd_with_retry(['show', item_id, '--json'], backend=backend)
         data = _parse_beads_json(result.stdout)
         if data is None:
             return False
@@ -356,7 +356,7 @@ def is_beads_item_closed(item_id: str, *, backend: CLIBackendConfig | None = Non
         status = str(current_item.get('status', '')).lower()
         return status == 'closed'
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
-            json.JSONDecodeError, Exception):
+            OSError, json.JSONDecodeError):
         return False
 
 
@@ -374,7 +374,7 @@ def get_beads_stats(*, backend: CLIBackendConfig | None = None) -> BeadsStats | 
         main_repo = _get_main_repo_root()
         cwd = str(main_repo) if main_repo else None
 
-        result = _run_bd(['stats', '--json'], cwd=cwd, backend=backend)
+        result = _run_bd_with_retry(['stats', '--json'], cwd=cwd, backend=backend)
 
         data = _parse_beads_json(result.stdout)
         if data is None:
@@ -388,6 +388,6 @@ def get_beads_stats(*, backend: CLIBackendConfig | None = None) -> BeadsStats | 
             closed_issues=summary.get('closed_issues', 0),
             ready_issues=summary.get('ready_issues', 0)
         )
-    except Exception as e:
-        logger.warning(f"⚠️  Warning: Failed to get beads stats: {e}")
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+        logger.warning("⚠️  Failed to get beads stats after retries: %s", e)
         return None
