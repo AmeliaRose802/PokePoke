@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import threading
 import time
 from collections.abc import Callable
 from typing import Any, TypedDict
@@ -73,6 +74,7 @@ class _EventHandler:
         self._hung = hung_command_detector
         self._on_token_usage = on_token_usage
         self._pending_tools: dict[str, dict[str, Any]] = {}
+        self._pending_tools_lock = threading.Lock()
         self._received_deltas = False
         self._stale_idle_count = 0
         self._last_idle_pending: int | None = None
@@ -97,8 +99,9 @@ class _EventHandler:
         self._received_deltas = False
         self._stale_idle_count = 0
         self._last_idle_pending = None
-        self._pending_tools.clear()
-        self._stats['tool_start_times'].clear()
+        with self._pending_tools_lock:
+            self._pending_tools.clear()
+            self._stats['tool_start_times'].clear()
 
     def __call__(self, event: Any) -> None:
         event_type = event.type.value if hasattr(event.type, 'value') else str(event.type)
@@ -107,13 +110,10 @@ class _EventHandler:
         self._stats['event_count'] += 1
         self._stats['last_event_time'] = now
 
-        # Log events after long silence to diagnose silent-model failures
         if gap > 30:
-            logger.info(
-                "SDK event '%s' after %.1fs silence (events=%d, pending=%d, turns=%d)",
-                event_type, gap, self._stats['event_count'],
-                self._stats['pending_tool_calls'], self._stats['turn_count'],
-            )
+            logger.info("SDK event '%s' after %.1fs silence (events=%d, pending=%d, turns=%d)",
+                        event_type, gap, self._stats['event_count'],
+                        self._stats['pending_tool_calls'], self._stats['turn_count'])
 
         handler = self._DISPATCH.get(event_type)
         if handler is not None:
@@ -172,8 +172,9 @@ class _EventHandler:
         if self._item_logger:
             self._item_logger.log_tool_call(tool_name, args_str)
         tool_id = getattr(event.data, 'tool_call_id', None) or id(event)
-        self._pending_tools[str(tool_id)] = {'name': tool_name, 'args': tool_args}
-        self._stats['tool_start_times'][str(tool_id)] = time.monotonic()
+        with self._pending_tools_lock:
+            self._pending_tools[str(tool_id)] = {'name': tool_name, 'args': tool_args}
+            self._stats['tool_start_times'][str(tool_id)] = time.monotonic()
         if tool_name == 'powershell':
             shell_id = tool_args.get('shellId')
             if shell_id:
@@ -192,18 +193,16 @@ class _EventHandler:
         result = getattr(event.data, 'result', None)
         success = getattr(event.data, 'success', True)
         tool_id = getattr(event.data, 'tool_call_id', None)
-        tool_info = self._pending_tools.pop(str(tool_id), {}) if tool_id else {}
-        start_time = self._stats['tool_start_times'].pop(str(tool_id), None)
+        with self._pending_tools_lock:
+            tool_info = self._pending_tools.pop(str(tool_id), {}) if tool_id else {}
+            start_time = self._stats['tool_start_times'].pop(str(tool_id), None)
         tool_args = tool_info.get('args', {})
 
-        # Log tool latency for diagnostics (tools > 10s are noteworthy)
         if start_time is not None:
             latency = time.monotonic() - start_time
             if latency >= 10.0:
-                logger.info(
-                    "TOOL_LATENCY: %s latency=%.1fs success=%s args=%s",
-                    tool_name, latency, success, str(tool_args)[:200],
-                )
+                logger.info("TOOL_LATENCY: %s latency=%.1fs success=%s args=%s",
+                            tool_name, latency, success, str(tool_args)[:200])
 
         if not result:
             return
@@ -292,13 +291,13 @@ class _EventHandler:
             self._stale_idle_count = 1
             self._last_idle_pending = self._stats['pending_tool_calls']
         if self._stale_idle_count >= self._MAX_STALE_IDLES:
-            logger.warning(f"[SDK] Session idle with {self._stats['pending_tool_calls']} stale pending tool(s) "
-                  f"(idle x{self._stale_idle_count}) - forcing completion (process likely exited)")
+            logger.warning("[SDK] Session idle with %d stale pending tool(s) (idle x%d) - forcing completion",
+                          self._stats['pending_tool_calls'], self._stale_idle_count)
             self._stats['pending_tool_calls'] = 0
             self._done.set()
         else:
-            logger.info(f"[SDK] Session idle but {self._stats['pending_tool_calls']} tool(s) still executing "
-                  f"(stale idle {self._stale_idle_count}/{self._MAX_STALE_IDLES}) - continuing...")
+            logger.info("[SDK] Session idle but %d tool(s) still executing (stale %d/%d) - continuing...",
+                       self._stats['pending_tool_calls'], self._stale_idle_count, self._MAX_STALE_IDLES)
 
     def _schedule_idle_completion(self) -> None:
         self._stale_idle_count = 0
