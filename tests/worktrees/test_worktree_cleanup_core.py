@@ -100,7 +100,7 @@ class TestForceRemoveDirectory:
         """Successfully remove using git worktree remove on first try."""
         mock_run.return_value = Mock(returncode=0, stdout='', stderr='')
 
-        result = force_remove_directory(Path('/repo/worktrees/task-1'))
+        result = force_remove_directory(Path('/repo/worktrees/task-1'), repo_root=Path('/repo'))
 
         assert result is True
         # First call should be git worktree remove
@@ -113,17 +113,17 @@ class TestForceRemoveDirectory:
     @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
     @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
     @patch('subprocess.run')
-    @patch('shutil.rmtree')
+    @patch('pokepoke.worktrees.worktree_cleanup._safe_rmtree')
     @patch('builtins.print')
     def test_force_remove_fallback_to_shutil(
         self,
         mock_print,
-        mock_rmtree,
+        mock_safe_rmtree,
         mock_run,
         mock_sleep,
         mock_wait,
     ) -> None:
-        """Fallback to shutil.rmtree when git worktree remove fails."""
+        """Fallback to _safe_rmtree when git worktree remove fails."""
         # First subprocess.run (git worktree remove) fails
         # Second subprocess.run (git worktree prune) succeeds
         def run_side_effect(cmd, **kwargs):
@@ -133,20 +133,20 @@ class TestForceRemoveDirectory:
 
         mock_run.side_effect = run_side_effect
 
-        result = force_remove_directory(Path('/repo/worktrees/task-1'))
+        result = force_remove_directory(Path('/repo/worktrees/task-1'), repo_root=Path('/repo'))
 
         assert result is True
-        mock_rmtree.assert_called_once()
+        mock_safe_rmtree.assert_called_once()
 
     @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
     @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
     @patch('subprocess.run')
-    @patch('shutil.rmtree')
+    @patch('pokepoke.worktrees.worktree_cleanup._safe_rmtree')
     @patch('builtins.print')
     def test_force_remove_retries_on_windows_lock(
         self,
         mock_print,
-        mock_rmtree,
+        mock_safe_rmtree,
         mock_run,
         mock_sleep,
         mock_wait,
@@ -165,9 +165,9 @@ class TestForceRemoveDirectory:
 
         mock_run.side_effect = run_side_effect
         # Shutil always fails to simulate the need for retry
-        mock_rmtree.side_effect = PermissionError('[WinError 32] being used by another process')
+        mock_safe_rmtree.side_effect = PermissionError('[WinError 32] being used by another process')
 
-        result = force_remove_directory(Path('/repo/worktrees/task-1'))
+        result = force_remove_directory(Path('/repo/worktrees/task-1'), repo_root=Path('/repo'))
 
         # Should eventually succeed on one of the retries
         # (or return False if all retries fail)
@@ -180,12 +180,12 @@ class TestForceRemoveDirectory:
     @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
     @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
     @patch('subprocess.run')
-    @patch('shutil.rmtree')
+    @patch('pokepoke.worktrees.worktree_cleanup._safe_rmtree')
     @patch('builtins.print')
     def test_force_remove_max_retries_exceeded(
         self,
         mock_print,
-        mock_rmtree,
+        mock_safe_rmtree,
         mock_run,
         mock_sleep,
         mock_wait,
@@ -195,9 +195,9 @@ class TestForceRemoveDirectory:
         mock_run.side_effect = subprocess.CalledProcessError(
             1, 'git', stderr='[WinError 32] being used by another process'
         )
-        mock_rmtree.side_effect = PermissionError('[WinError 32] being used by another process')
+        mock_safe_rmtree.side_effect = PermissionError('[WinError 32] being used by another process')
 
-        result = force_remove_directory(Path('/repo/worktrees/task-1'))
+        result = force_remove_directory(Path('/repo/worktrees/task-1'), repo_root=Path('/repo'))
 
         assert result is False
 
@@ -215,7 +215,7 @@ class TestForceRemoveDirectory:
         """Handle subprocess timeout during removal."""
         mock_run.side_effect = subprocess.TimeoutExpired(cmd='git', timeout=30)
 
-        force_remove_directory(Path('/repo/worktrees/task-1'))
+        force_remove_directory(Path('/repo/worktrees/task-1'), repo_root=Path('/repo'))
 
         # Should retry after timeout
         assert mock_wait.call_count >= 1
@@ -223,12 +223,12 @@ class TestForceRemoveDirectory:
     @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
     @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
     @patch('subprocess.run')
-    @patch('shutil.rmtree')
+    @patch('pokepoke.worktrees.worktree_cleanup._safe_rmtree')
     @patch('builtins.print')
     def test_force_remove_exponential_backoff(
         self,
         mock_print,
-        mock_rmtree,
+        mock_safe_rmtree,
         mock_run,
         mock_sleep,
         mock_wait,
@@ -247,13 +247,13 @@ class TestForceRemoveDirectory:
         mock_run.side_effect = run_side_effect
 
         # Shutil fails on first two attempts, succeeds on third
-        mock_rmtree.side_effect = [
+        mock_safe_rmtree.side_effect = [
             PermissionError('[WinError 32] The process cannot access the file'),
             PermissionError('[WinError 32] The process cannot access the file'),
             None,  # Success on third attempt
         ]
 
-        force_remove_directory(Path('/repo/worktrees/task-1'))
+        force_remove_directory(Path('/repo/worktrees/task-1'), repo_root=Path('/repo'))
 
         # Sleep is called before each retry (not before first attempt)
         # So if we retry twice, sleep should be called at least 2 times
@@ -273,7 +273,7 @@ class TestForceRemoveDirectory:
         """Don't wait or sleep on first attempt."""
         mock_run.return_value = Mock(returncode=0, stdout='', stderr='')
 
-        force_remove_directory(Path('/repo/worktrees/task-1'))
+        force_remove_directory(Path('/repo/worktrees/task-1'), repo_root=Path('/repo'))
 
         # Should not wait before first attempt
         mock_wait.assert_not_called()
@@ -281,12 +281,12 @@ class TestForceRemoveDirectory:
     @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
     @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
     @patch('subprocess.run')
-    @patch('shutil.rmtree')
+    @patch('pokepoke.worktrees.worktree_cleanup._safe_rmtree')
     @patch('builtins.print')
     def test_max_attempts_one_no_retry(
         self,
         mock_print,
-        mock_rmtree,
+        mock_safe_rmtree,
         mock_run,
         mock_sleep,
         mock_wait,
@@ -295,9 +295,9 @@ class TestForceRemoveDirectory:
         mock_run.side_effect = subprocess.CalledProcessError(
             1, 'git', stderr='[WinError 32] being used by another process'
         )
-        mock_rmtree.side_effect = PermissionError('[WinError 32] being used')
+        mock_safe_rmtree.side_effect = PermissionError('[WinError 32] being used')
 
-        result = force_remove_directory(Path('/repo/worktrees/task-1'), max_attempts=1)
+        result = force_remove_directory(Path('/repo/worktrees/task-1'), max_attempts=1, repo_root=Path('/repo'))
 
         assert result is False
         mock_sleep.assert_not_called()
@@ -325,7 +325,7 @@ class TestForceRemoveDirectory:
 
         mock_run.side_effect = run_side_effect
 
-        result = force_remove_directory(Path('/repo/worktrees/task-1'), max_attempts=2)
+        result = force_remove_directory(Path('/repo/worktrees/task-1'), max_attempts=2, repo_root=Path('/repo'))
 
         assert result is True
         # Sleep called once (before second attempt)
@@ -509,12 +509,12 @@ class TestWindowsLockErrorHandling:
     @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
     @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
     @patch('subprocess.run')
-    @patch('shutil.rmtree')
+    @patch('pokepoke.worktrees.worktree_cleanup._safe_rmtree')
     @patch('builtins.print')
     def test_detects_and_retries_on_lock_in_stderr(
         self,
         mock_print,
-        mock_rmtree,
+        mock_safe_rmtree,
         mock_run,
         mock_sleep,
         mock_wait,
@@ -531,19 +531,19 @@ class TestWindowsLockErrorHandling:
 
         mock_run.side_effect = run_side_effect
 
-        result = force_remove_directory(Path('/repo/worktrees/task-1'))
+        result = force_remove_directory(Path('/repo/worktrees/task-1'), repo_root=Path('/repo'))
 
         assert result is True
 
     @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
     @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
     @patch('subprocess.run')
-    @patch('shutil.rmtree')
+    @patch('pokepoke.worktrees.worktree_cleanup._safe_rmtree')
     @patch('builtins.print')
     def test_detects_and_retries_on_lock_in_oserror(
         self,
         mock_print,
-        mock_rmtree,
+        mock_safe_rmtree,
         mock_run,
         mock_sleep,
         mock_wait,
@@ -559,12 +559,12 @@ class TestWindowsLockErrorHandling:
         mock_run.side_effect = run_side_effect
 
         # First and second attempts fail, third succeeds
-        mock_rmtree.side_effect = [
+        mock_safe_rmtree.side_effect = [
             PermissionError(lock_error_msg),
             PermissionError(lock_error_msg),
             None,  # Success on third try
         ]
 
-        result = force_remove_directory(Path('/repo/worktrees/task-1'))
+        result = force_remove_directory(Path('/repo/worktrees/task-1'), repo_root=Path('/repo'))
 
         assert result is True
