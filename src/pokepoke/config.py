@@ -196,6 +196,7 @@ class RepoConfig:
     beads_db_path: str | None = None  # Explicit beads DB path; auto-discovered when None
     copilot_instructions_path: str | None = None  # Custom copilot instructions file
     quality_gate_overrides: QualityGateOverrides | None = None
+    beads_backend: str = "bd"  # CLI backend to use: "bd" (Python) or "br" (Rust)
 
     def __post_init__(self) -> None:
         """Clamp values to valid ranges."""

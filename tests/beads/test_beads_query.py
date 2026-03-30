@@ -70,7 +70,7 @@ def test_get_issue_dependencies_returns_structured(monkeypatch: pytest.MonkeyPat
 def test_has_unmet_blocking_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
     deps = [Dependency(id="d1", title="", issue_type="task", dependency_type="blocks", status="open")]
     issue = IssueWithDependencies(id="A", title="", status="open", priority=1, issue_type="task", dependencies=deps)
-    monkeypatch.setattr(beads_query, "get_issue_dependencies", lambda _item_id: issue)
+    monkeypatch.setattr(beads_query, "get_issue_dependencies", lambda _item_id, **kwargs: issue)
 
     assert beads_query.has_unmet_blocking_dependencies("A") is True
 
