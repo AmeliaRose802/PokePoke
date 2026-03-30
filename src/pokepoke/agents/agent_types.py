@@ -77,6 +77,11 @@ AGENT_TYPES: dict[str, AgentTypeDefinition] = {
         display_name="Model Sync",
         emoji="🔄",
     ),
+    "decomposition": AgentTypeDefinition(
+        key="decomposition",
+        display_name="Decomposition",
+        emoji="🔀",
+    ),
 }
 
 
