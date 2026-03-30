@@ -44,7 +44,9 @@ def _run_copilot_models(cli_path: str, timeout: int = 30) -> list[dict[str, Any]
         [cli_path, "models", "list", "--format", "json"],
         [cli_path, "models", "list"],
     ]
+    last_error: str | None = None
     for cmd in commands:
+        cmd_str = " ".join(cmd)
         try:
             result = subprocess.run(
                 cmd,
@@ -54,13 +56,27 @@ def _run_copilot_models(cli_path: str, timeout: int = 30) -> list[dict[str, Any]
                 errors="replace",
                 timeout=timeout,
             )
-        except (subprocess.TimeoutExpired, FileNotFoundError):
+        except subprocess.TimeoutExpired:
+            last_error = f"Command timed out after {timeout}s: {cmd_str}"
+            logger.debug(last_error)
+            continue
+        except FileNotFoundError:
+            last_error = f"CLI not found: {cmd_str}"
+            logger.debug(last_error)
             continue
         if result.returncode != 0:
+            stderr_snippet = (result.stderr or "").strip()[:200]
+            last_error = (
+                f"Command failed (rc={result.returncode}): {cmd_str}"
+                + (f" — {stderr_snippet}" if stderr_snippet else "")
+            )
+            logger.debug(last_error)
             continue
         models = parse_copilot_models_output(result.stdout)
         if models:
             return models
+    if last_error:
+        logger.warning("All Copilot model commands failed. Last error: %s", last_error)
     return []
 
 
