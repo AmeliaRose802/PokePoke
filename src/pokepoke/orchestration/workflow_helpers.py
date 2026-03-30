@@ -73,7 +73,6 @@ def _build_completion_record(
 
 # ── Worktree + pre-loop setup helpers ────────────────────────────────────────
 
-
 def setup_worktree(
     item: BeadsWorkItem, lock_timeout: float = 300.0,
     run_logger: "RunLogger | None" = None, item_logger: "ItemLogger | None" = None,
@@ -250,6 +249,24 @@ def _maybe_retry_copilot(
             f"Copilot failure on attempt {failure_count} for {item_id}, retrying with feedback{resume_note}",
         )
     return True, f"[Copilot failure] {feedback}"
+
+# ── Decomposition helper ─────────────────────────────────────────────────────
+
+
+def _maybe_decompose(
+    item: BeadsWorkItem, copilot_failure_count: int,
+    gate_rejection_count: int, config: object,
+) -> None:
+    """Check if a repeatedly failing item should be decomposed into sub-tasks."""
+    from pokepoke.agents.decomposition_agent import run_decomposition, should_decompose
+    total_failures = copilot_failure_count + gate_rejection_count
+    threshold = int(getattr(config, 'decomposition_failure_threshold', 3))
+    enabled = bool(getattr(config, 'decomposition_enabled', True))
+    if should_decompose(item, total_failures, threshold, enabled):
+        decomp_result = run_decomposition(item, total_failures)
+        if decomp_result.success:
+            logger.info("\n🔀 Item %s decomposed into %d sub-tasks",
+                        item.id, len(decomp_result.child_ids))
 
 
 # ── Cleanup helper (moved from workflow.py) ───────────────────────────────────

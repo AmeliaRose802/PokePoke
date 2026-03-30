@@ -23,6 +23,7 @@ from pokepoke.orchestration.workflow_helpers import (
     _finalize_item_result,
     _log_commit_status,
     _log_failure,
+    _maybe_decompose,
     _maybe_retry_copilot,
     run_cleanup_with_timeout,
     setup_worktree,
@@ -38,8 +39,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_MAX_GATE_CRASH_RETRIES = 3
-_MAX_GATE_TIMEOUT_RETRIES = 3
+_MAX_GATE_CRASH_RETRIES = _MAX_GATE_TIMEOUT_RETRIES = 3
 _LOCK_TIMEOUT_PER_AGENT = 120.0
 
 def process_work_item(  # noqa: C901
@@ -124,15 +124,14 @@ def process_work_item(  # noqa: C901
         accumulated_feedback: list[str] = []
         accumulated_stats = AgentStats()
         gate_success = False
-        timeout_restart_count = 0
+        timeout_restart_count = copilot_failure_count = 0
         work_agent_iteration = 1
-        copilot_failure_count = 0
         gate_rejection_count = existing_rejection_count
         last_retry_was_gate_feedback = False
         current_work_agent_id = base_agent_id
         resume_session_id: str | None = None
         resume_output_summary: str | None = None
-        process_crashed_this_session = False  # Track crashes to skip gate validation
+        process_crashed_this_session = False
         result = CopilotResult(work_item_id=item.id, success=False,
             error="Session aborted due to application shutdown", attempt_count=0)
 
@@ -239,6 +238,8 @@ def process_work_item(  # noqa: C901
                     last_feedback = feedback
                     last_retry_was_gate_feedback = False  # Not a gate rejection
                     continue
+
+                _maybe_decompose(item, copilot_failure_count, gate_rejection_count, config)
                 break
 
             _log_commit_status(worktree_cwd)
@@ -369,6 +370,7 @@ def process_work_item(  # noqa: C901
                 if gate_rejection_count >= max_gate_rejections:
                     logger.error(f"\n❌ Exceeded max gate rejections ({gate_rejection_count}/{max_gate_rejections}) for {item.id}")
                     _comment(item.id, f"Abandoned after {gate_rejection_count} gate rejections (cap: {max_gate_rejections}). Last rejection:\n{gate_reason}")
+                    _maybe_decompose(item, copilot_failure_count, gate_rejection_count, config)
                     result.success = False
                     result.error = f"Exceeded max gate rejections ({max_gate_rejections})"
                     _log_failure(run_logger, item_logger, request_count)
