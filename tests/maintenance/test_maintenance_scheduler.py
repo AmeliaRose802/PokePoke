@@ -181,8 +181,119 @@ class TestMaintenanceScheduler:
         # Must be called exactly once — not once per agent
         mock_wait.assert_called_once()
 
+    @patch("pokepoke.maintenance.maintenance_scheduler.terminal_ui")
+    @patch("pokepoke.maintenance.maintenance_scheduler.get_config")
+    def test_maybe_run_maintenance_stops_mid_loop_on_shutdown(self, mock_config, mock_terminal_ui):
+        """Test that agent dispatch stops when shutdown is requested mid-loop."""
+        mock_terminal_ui.ui.is_agent_paused.return_value = False
+        config = ProjectConfig()
+        config.maintenance = MaintenanceConfig(agents=[
+            MaintenanceAgentConfig(name="Tech Debt", prompt_file="tech-debt.md", frequency=2, enabled=True),
+            MaintenanceAgentConfig(name="Code Review", prompt_file="code-review.md", frequency=2, enabled=True),
+        ])
+        mock_config.return_value = config
+        scheduler = MaintenanceScheduler()
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
 
-class TestSingletonCoordination:
+        with (
+            patch.object(scheduler, '_maybe_run_agent') as mock_run,
+            patch("pokepoke.utils.shutdown.is_shutting_down", return_value=True),
+            patch("pokepoke.utils.shutdown.should_stop_after_current", return_value=False),
+        ):
+            scheduler.maybe_run_maintenance(2, session_stats, run_logger)
+            mock_run.assert_not_called()
+
+    @patch("pokepoke.maintenance.maintenance_scheduler.terminal_ui")
+    @patch("pokepoke.maintenance.maintenance_scheduler.get_config")
+    def test_maybe_run_maintenance_stops_mid_loop_on_stop_after_current(self, mock_config, mock_terminal_ui):
+        """Test that agent dispatch stops when stop-after-current is requested mid-loop."""
+        mock_terminal_ui.ui.is_agent_paused.return_value = False
+        config = ProjectConfig()
+        config.maintenance = MaintenanceConfig(agents=[
+            MaintenanceAgentConfig(name="Tech Debt", prompt_file="tech-debt.md", frequency=2, enabled=True),
+            MaintenanceAgentConfig(name="Code Review", prompt_file="code-review.md", frequency=2, enabled=True),
+        ])
+        mock_config.return_value = config
+        scheduler = MaintenanceScheduler()
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        with (
+            patch.object(scheduler, '_maybe_run_agent') as mock_run,
+            patch("pokepoke.utils.shutdown.is_shutting_down", return_value=False),
+            patch("pokepoke.utils.shutdown.should_stop_after_current", return_value=True),
+        ):
+            scheduler.maybe_run_maintenance(2, session_stats, run_logger)
+            mock_run.assert_not_called()
+    @patch('pokepoke.utils.shutdown.is_shutting_down', return_value=True)
+    @patch('pokepoke.utils.shutdown.should_stop_after_current', return_value=False)
+    def test_maybe_run_agent_skips_when_shutting_down(self, _mock_stop, _mock_shutdown):
+        """Test that _maybe_run_agent skips when orchestrator is shutting down."""
+        scheduler = MaintenanceScheduler()
+        agent_cfg = MaintenanceAgentConfig(name="Tech Debt", prompt_file="tech-debt.md", frequency=2)
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        with patch.object(scheduler, '_run_agent_with_coordination') as mock_run:
+            scheduler._maybe_run_agent("Tech Debt", agent_cfg, Mock(), session_stats, run_logger)
+            mock_run.assert_not_called()
+
+        run_logger.log_maintenance.assert_called_with(
+            "tech_debt", "Skipping Tech Debt Agent - orchestrator is stopping"
+        )
+
+    @patch('pokepoke.utils.shutdown.is_shutting_down', return_value=False)
+    @patch('pokepoke.utils.shutdown.should_stop_after_current', return_value=True)
+    def test_maybe_run_agent_skips_when_stop_after_current(self, _mock_stop, _mock_shutdown):
+        """Test that _maybe_run_agent skips when stop-after-current is requested."""
+        scheduler = MaintenanceScheduler()
+        agent_cfg = MaintenanceAgentConfig(name="Janitor", prompt_file="janitor.md", frequency=2)
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        with patch.object(scheduler, '_run_with_singleton_guard') as mock_run:
+            scheduler._maybe_run_agent("Janitor", agent_cfg, Mock(), session_stats, run_logger)
+            mock_run.assert_not_called()
+
+        run_logger.log_maintenance.assert_called_with(
+            "janitor", "Skipping Janitor Agent - orchestrator is stopping"
+        )
+
+    @patch('pokepoke.utils.shutdown.is_shutting_down', return_value=True)
+    @patch('pokepoke.utils.shutdown.should_stop_after_current', return_value=False)
+    def test_run_agent_with_coordination_skips_when_shutting_down(self, _mock_stop, _mock_shutdown):
+        """Test that _run_agent_with_coordination skips when orchestrator is shutting down."""
+        scheduler = MaintenanceScheduler()
+        agent_cfg = MaintenanceAgentConfig(name="Tech Debt", prompt_file="tech-debt.md", frequency=2)
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        with patch('pokepoke.maintenance.maintenance_scheduler.run_maintenance_agent') as mock_agent:
+            scheduler._run_agent_with_coordination("Tech Debt", agent_cfg, Mock(), session_stats, run_logger)
+            mock_agent.assert_not_called()
+
+        run_logger.log_maintenance.assert_called_with(
+            "tech_debt", "Skipping Tech Debt Agent - orchestrator is stopping"
+        )
+
+    @patch('pokepoke.utils.shutdown.is_shutting_down', return_value=False)
+    @patch('pokepoke.utils.shutdown.should_stop_after_current', return_value=True)
+    def test_run_agent_with_coordination_skips_when_stop_after_current(self, _mock_stop, _mock_shutdown):
+        """Test that _run_agent_with_coordination skips when stop-after-current is requested."""
+        scheduler = MaintenanceScheduler()
+        agent_cfg = MaintenanceAgentConfig(name="Janitor", prompt_file="janitor.md", frequency=2)
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        with patch('pokepoke.maintenance.maintenance_scheduler._run_special_agent') as mock_agent:
+            scheduler._run_agent_with_coordination("Janitor", agent_cfg, Mock(), session_stats, run_logger)
+            mock_agent.assert_not_called()
+
+        run_logger.log_maintenance.assert_called_with(
+            "janitor", "Skipping Janitor Agent - orchestrator is stopping"
+        )
+
     """Test singleton coordination logic."""
 
     @patch('pokepoke.maintenance.maintenance_scheduler.try_lock')
@@ -456,9 +567,10 @@ class TestBackwardCompatibility:
 
         mock_scheduler.maybe_run_maintenance.assert_called_once_with(5, session_stats, run_logger, repo_id=None)
 
+    @patch('pokepoke.utils.shutdown.is_shutting_down', return_value=False)
     @patch('pokepoke.utils.shutdown.should_stop_after_current', return_value=True)
     @patch('pokepoke.maintenance.maintenance_scheduler.get_maintenance_scheduler')
-    def test_run_periodic_maintenance_skips_when_stop_requested(self, mock_get_scheduler, _mock_stop):
+    def test_run_periodic_maintenance_skips_when_stop_requested(self, mock_get_scheduler, _mock_stop, _mock_shutdown):
         """Test that maintenance is skipped when stop-after-current is requested."""
         mock_scheduler = Mock()
         mock_get_scheduler.return_value = mock_scheduler
@@ -470,7 +582,25 @@ class TestBackwardCompatibility:
 
         mock_scheduler.maybe_run_maintenance.assert_not_called()
         run_logger.log_orchestrator.assert_called_with(
-            "Skipping maintenance - stop after current item requested"
+            "Skipping maintenance - orchestrator is stopping"
+        )
+
+    @patch('pokepoke.utils.shutdown.is_shutting_down', return_value=True)
+    @patch('pokepoke.utils.shutdown.should_stop_after_current', return_value=False)
+    @patch('pokepoke.maintenance.maintenance_scheduler.get_maintenance_scheduler')
+    def test_run_periodic_maintenance_skips_when_shutting_down(self, mock_get_scheduler, _mock_stop, _mock_shutdown):
+        """Test that maintenance is skipped when shutdown has been requested."""
+        mock_scheduler = Mock()
+        mock_get_scheduler.return_value = mock_scheduler
+
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        run_periodic_maintenance(5, session_stats, run_logger)
+
+        mock_scheduler.maybe_run_maintenance.assert_not_called()
+        run_logger.log_orchestrator.assert_called_with(
+            "Skipping maintenance - orchestrator is stopping"
         )
 
 
