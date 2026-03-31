@@ -48,7 +48,7 @@ class TestSubprocessEncodingConfig:
         assert kwargs['encoding'] == 'utf-8'
         assert kwargs['errors'] == 'replace'
 
-    @patch('pokepoke.beads.beads_item_stats_backfill.subprocess.run')
+    @patch('pokepoke.beads.beads_query.subprocess.run')
     def test_get_all_beads_items_uses_utf8_with_replace(self, mock_run):
         """beads_item_stats_backfill._get_all_beads_items uses encoding='utf-8' and errors='replace'."""
         mock_run.return_value = MagicMock(stdout='[]')
@@ -96,7 +96,7 @@ class TestUnicodeOutputHandling:
         result = check_copilot_processes()
         assert result == 1
 
-    @patch('pokepoke.beads.beads_item_stats_backfill.subprocess.run')
+    @patch('pokepoke.beads.beads_item_stats_backfill._run_bd_with_retry')
     def test_emoji_in_beads_output(self, mock_run):
         """beads JSON output with emoji titles parses correctly."""
         items = [{"id": "PK-1", "title": "Fix 🚀 rocket bug", "status": "open"}]
@@ -107,7 +107,7 @@ class TestUnicodeOutputHandling:
         assert len(result) == 1
         assert "\U0001f680" in result[0]["title"]
 
-    @patch('pokepoke.beads.beads_item_stats_backfill.subprocess.run')
+    @patch('pokepoke.beads.beads_item_stats_backfill._run_bd_with_retry')
     def test_cjk_characters_in_beads_output(self, mock_run):
         """CJK characters in beads output parse correctly."""
         items = [{"id": "PK-2", "title": "\u4fee\u590d\u4e2d\u6587\u95ee\u9898", "status": "open"}]
@@ -118,7 +118,7 @@ class TestUnicodeOutputHandling:
         assert len(result) == 1
         assert result[0]["title"] == "\u4fee\u590d\u4e2d\u6587\u95ee\u9898"
 
-    @patch('pokepoke.beads.beads_item_stats_backfill.subprocess.run')
+    @patch('pokepoke.beads.beads_item_stats_backfill._run_bd_with_retry')
     def test_replacement_char_in_beads_output(self, mock_run):
         """U+FFFD replacement characters (from errors='replace') in output don't crash JSON parsing."""
         # Simulate what errors='replace' produces for invalid bytes
@@ -241,7 +241,7 @@ class TestNoneAndEmptyOutputHandling:
         from pokepoke.beads.beads_query import _parse_beads_json
         assert _parse_beads_json("Warning: something went wrong\nNote: try again") is None
 
-    @patch('pokepoke.beads.beads_item_stats_backfill.subprocess.run')
+    @patch('pokepoke.beads.beads_item_stats_backfill._run_bd_with_retry')
     def test_get_all_beads_items_returns_empty_on_non_list_json(self, mock_run):
         """_get_all_beads_items returns [] when JSON output is not a list."""
         mock_run.return_value = MagicMock(stdout='{"not": "a list"}')
@@ -250,7 +250,7 @@ class TestNoneAndEmptyOutputHandling:
         result = _get_all_beads_items()
         assert result == []
 
-    @patch('pokepoke.beads.beads_item_stats_backfill.subprocess.run')
+    @patch('pokepoke.beads.beads_item_stats_backfill._run_bd_with_retry')
     def test_get_all_beads_items_returns_empty_on_invalid_json(self, mock_run):
         """_get_all_beads_items returns [] when output is not valid JSON."""
         mock_run.return_value = MagicMock(stdout='not json at all \ufffd\ufffd')
@@ -259,7 +259,7 @@ class TestNoneAndEmptyOutputHandling:
         result = _get_all_beads_items()
         assert result == []
 
-    @patch('pokepoke.beads.beads_item_stats_backfill.subprocess.run')
+    @patch('pokepoke.beads.beads_item_stats_backfill._run_bd_with_retry')
     def test_get_all_beads_items_returns_empty_on_empty_stdout(self, mock_run):
         """_get_all_beads_items returns [] when stdout is empty."""
         mock_run.return_value = MagicMock(stdout='')

@@ -31,50 +31,52 @@ def _item(id: str = "TEST-1") -> BeadsWorkItem:
 
 
 class TestIsBeadsItemClosed:
-    @patch("pokepoke.beads.reconciliation.subprocess.run")
+    @patch("pokepoke.beads.reconciliation._run_bd_with_retry")
     def test_returns_true_when_status_closed(self, mock_run):
         mock_run.return_value = MagicMock(
             stdout=json.dumps([{"id": "X-1", "status": "closed"}]),
         )
         assert is_beads_item_closed("X-1") is True
 
-    @patch("pokepoke.beads.reconciliation.subprocess.run")
+    @patch("pokepoke.beads.reconciliation._run_bd_with_retry")
     def test_returns_true_when_status_completed(self, mock_run):
         mock_run.return_value = MagicMock(
             stdout=json.dumps([{"id": "X-1", "status": "Completed"}]),
         )
         assert is_beads_item_closed("X-1") is True
 
-    @patch("pokepoke.beads.reconciliation.subprocess.run")
+    @patch("pokepoke.beads.reconciliation._run_bd_with_retry")
     def test_returns_false_when_status_ready(self, mock_run):
         mock_run.return_value = MagicMock(
             stdout=json.dumps([{"id": "X-1", "status": "ready"}]),
         )
         assert is_beads_item_closed("X-1") is False
 
-    @patch("pokepoke.beads.reconciliation.subprocess.run")
+    @patch("pokepoke.beads.reconciliation._run_bd_with_retry")
     def test_returns_false_when_empty_list(self, mock_run):
         mock_run.return_value = MagicMock(stdout="[]")
         assert is_beads_item_closed("X-1") is False
 
-    @patch("pokepoke.beads.reconciliation.subprocess.run")
+    @patch("pokepoke.beads.reconciliation._run_bd_with_retry")
     def test_returns_false_when_no_status_key(self, mock_run):
         mock_run.return_value = MagicMock(
             stdout=json.dumps([{"id": "X-1"}]),
         )
         assert is_beads_item_closed("X-1") is False
 
-    @patch("pokepoke.beads.reconciliation.subprocess.run")
+    @patch("pokepoke.beads.reconciliation._run_bd_with_retry")
     def test_returns_false_on_empty_stdout(self, mock_run):
         mock_run.return_value = MagicMock(stdout="")
         assert is_beads_item_closed("X-1") is False
 
-    @patch("pokepoke.beads.reconciliation.subprocess.run")
+    @patch("pokepoke.beads.reconciliation._run_bd_with_retry")
     def test_passes_correct_args(self, mock_run):
         mock_run.return_value = MagicMock(stdout="[]")
         is_beads_item_closed("my-item-42")
-        args = mock_run.call_args
-        assert args[0][0] == ["bd", "show", "my-item-42", "--json"]
+        mock_run.assert_called_once_with(
+            ["show", "my-item-42", "--json"],
+            timeout=30,
+        )
 
 
 # ── default_branch_has_merge_commit ───────────────────────────────

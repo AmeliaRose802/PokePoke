@@ -420,7 +420,7 @@ def test_add_work_item_label_success(monkeypatch) -> None:
     api = DesktopAPI()
     api.push_work_item("PK-1", "T", "open", ["urgent"])
     mock_run = Mock(returncode=0, stdout="{}", stderr="")
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext.subprocess.run", lambda *a, **kw: mock_run)
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._run_bd_with_retry", lambda *a, **kw: mock_run)
     result = api.add_work_item_label("PK-1", "human-required")
     assert result["success"] is True
     assert "human-required" in result["labels"]
@@ -430,7 +430,7 @@ def test_remove_work_item_label_success(monkeypatch) -> None:
     api = DesktopAPI()
     api.push_work_item("PK-1", "T", "open", ["urgent", "x"])
     mock_run = Mock(returncode=0, stdout="{}", stderr="")
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext.subprocess.run", lambda *a, **kw: mock_run)
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._run_bd_with_retry", lambda *a, **kw: mock_run)
     result = api.remove_work_item_label("PK-1", "urgent")
     assert result["success"] is True
     assert "urgent" not in result["labels"]
@@ -455,7 +455,7 @@ def test_add_label_called_process_error(monkeypatch) -> None:
     def _raise(*a, **kw):
         raise subprocess.CalledProcessError(1, "bd", stderr="network down")
 
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext.subprocess.run", _raise)
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._run_bd_with_retry", _raise)
     result = api.add_work_item_label("PK-1", "b")
     assert result["success"] is False
     assert "network down" in result["error"]
@@ -468,7 +468,7 @@ def test_add_label_called_process_error_no_stderr(monkeypatch) -> None:
     def _raise(*a, **kw):
         raise subprocess.CalledProcessError(42, "bd", stderr="")
 
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext.subprocess.run", _raise)
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._run_bd_with_retry", _raise)
     result = api.add_work_item_label("PK-1", "b")
     assert result["success"] is False
     assert "exit code 42" in result["error"]
@@ -481,7 +481,7 @@ def test_remove_label_timeout(monkeypatch) -> None:
     def _timeout(*a, **kw):
         raise subprocess.TimeoutExpired(cmd="bd", timeout=30, stderr="timed")
 
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext.subprocess.run", _timeout)
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._run_bd_with_retry", _timeout)
     result = api.remove_work_item_label("PK-1", "a")
     assert result["success"] is False
     assert "timed out" in result["error"]
@@ -494,7 +494,7 @@ def test_mutate_label_os_error(monkeypatch) -> None:
     def _raise(*a, **kw):
         raise OSError("bd not found")
 
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext.subprocess.run", _raise)
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._run_bd_with_retry", _raise)
     result = api.add_work_item_label("PK-1", "x")
     assert result["success"] is False
     assert "bd not found" in result["error"]

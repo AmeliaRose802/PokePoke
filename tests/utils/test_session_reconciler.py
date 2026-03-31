@@ -352,7 +352,7 @@ class TestHelpers:
             "assignee": "test-agent",
         }])
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("pokepoke.stats.session_reconciler._run_bd_with_retry", return_value=mock_result):
             assert _should_unassign("ITEM-1", "test-agent") is True
 
     def test_should_unassign_false_wrong_assignee(self) -> None:
@@ -363,7 +363,7 @@ class TestHelpers:
             "assignee": "other-agent",
         }])
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("pokepoke.stats.session_reconciler._run_bd_with_retry", return_value=mock_result):
             assert _should_unassign("ITEM-1", "test-agent") is False
 
     def test_should_unassign_false_not_in_progress(self) -> None:
@@ -374,19 +374,19 @@ class TestHelpers:
             "assignee": "test-agent",
         }])
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("pokepoke.stats.session_reconciler._run_bd_with_retry", return_value=mock_result):
             assert _should_unassign("ITEM-1", "test-agent") is False
 
     def test_should_unassign_handles_exception(self) -> None:
         """_should_unassign returns False on subprocess failure."""
-        with patch("subprocess.run", side_effect=Exception("boom")):
+        with patch("pokepoke.stats.session_reconciler._run_bd_with_retry", side_effect=Exception("boom")):
             assert _should_unassign("ITEM-1", "test-agent") is False
 
     def test_should_unassign_empty_items(self) -> None:
         """_should_unassign returns False when bd show returns empty list."""
         mock_result = MagicMock()
         mock_result.stdout = "[]"
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("pokepoke.stats.session_reconciler._run_bd_with_retry", return_value=mock_result):
             assert _should_unassign("ITEM-1", "test-agent") is False
 
     def test_session_age_naive_timestamp(self) -> None:

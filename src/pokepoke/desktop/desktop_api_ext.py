@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 from contextlib import suppress
 
+from pokepoke.beads.beads_query import _run_bd_with_retry
 from pokepoke.desktop.desktop_api_utils import HAS_YAML, coerce_process_output
 
 with suppress(ImportError):
@@ -219,18 +220,9 @@ def _mutate_work_item_label(
     action: Literal["add", "remove"],
 ) -> dict[str, Any]:
     flag = "--add-label" if action == "add" else "--remove-label"
-    command = ["bd", "update", item_id, flag, label, "--json"]
+    command = ["update", item_id, flag, label, "--json"]
     try:
-        from pokepoke.worktrees.coordination import beads_db_lock
-        with beads_db_lock(timeout=60.0):
-            subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                check=True,
-                timeout=30,
-            )
+        _run_bd_with_retry(command, timeout=30)
     except subprocess.TimeoutExpired as exc:
         logger.warning(
             "Label %s for %s timed out after %ss",

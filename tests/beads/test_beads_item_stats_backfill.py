@@ -26,7 +26,7 @@ def test_determine_agent_type_unknown():
     assert _determine_agent_type("system") == "unknown"
 
 
-@patch("pokepoke.beads.beads_item_stats_backfill.subprocess.run")
+@patch("pokepoke.beads.beads_item_stats_backfill._run_bd_with_retry")
 def test_get_all_beads_items_success(mock_run):
     """Test fetching beads items successfully."""
     mock_run.return_value = MagicMock(
@@ -42,17 +42,12 @@ def test_get_all_beads_items_success(mock_run):
     assert items[0]["id"] == "PokePoke-123"
     assert items[1]["id"] == "PokePoke-456"
     mock_run.assert_called_once_with(
-        ["bd", "list", "--json"],
-        capture_output=True,
-        text=True,
-        encoding='utf-8',
-        errors='replace',
-        check=True,
+        ["list", "--json"],
         timeout=30,
     )
 
 
-@patch("pokepoke.beads.beads_item_stats_backfill.subprocess.run")
+@patch("pokepoke.beads.beads_item_stats_backfill._run_bd_with_retry")
 def test_get_all_beads_items_failure(mock_run):
     """Test handling of beads fetch failure."""
     mock_run.side_effect = subprocess.CalledProcessError(1, "bd list")
@@ -62,7 +57,7 @@ def test_get_all_beads_items_failure(mock_run):
     assert items == []
 
 
-@patch("pokepoke.beads.beads_item_stats_backfill.subprocess.run")
+@patch("pokepoke.beads.beads_item_stats_backfill._run_bd_with_retry")
 def test_get_all_beads_items_timeout(mock_run):
     """Test handling of beads fetch timeout."""
     mock_run.side_effect = subprocess.TimeoutExpired("bd list", 30)

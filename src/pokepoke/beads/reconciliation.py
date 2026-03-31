@@ -13,6 +13,7 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pokepoke.beads.beads_query import _run_bd_with_retry
 from pokepoke.git.git_helpers import run_git
 from pokepoke.git.git_operations import get_default_branch, list_worktrees, sanitize_branch_name
 from pokepoke.utils.constants import BRANCH_PREFIX, WORKTREE_DIR, WORKTREE_TASK_PREFIX
@@ -27,11 +28,9 @@ logger = logging.getLogger(__name__)
 def is_beads_item_closed(item_id: str) -> bool:
     """Return True if the beads item is already closed or completed."""
     try:
-        result = subprocess.run(
-            ["bd", "show", item_id, "--json"],
-            capture_output=True, text=True,
-            encoding="utf-8", errors="replace",
-            check=True, timeout=30,
+        result = _run_bd_with_retry(
+            ["show", item_id, "--json"],
+            timeout=30,
         )
         items = json.loads(result.stdout or "[]")
         if not items:
