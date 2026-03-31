@@ -14,7 +14,7 @@ import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    pass
+    from pokepoke.beads.beads_query import CLIBackendConfig
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ def _run_bd_with_retry(
     check: bool = True,
     timeout: int | None = 30,
     cwd: str | None = None,
-    backend: object | None = None,
+    backend: CLIBackendConfig | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run a beads CLI command with retry and exponential backoff.
 

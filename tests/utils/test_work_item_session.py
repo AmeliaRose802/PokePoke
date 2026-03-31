@@ -402,6 +402,51 @@ class TestCleanupEdgeCases:
             m["cleanup_worktree"].assert_not_called()
             assert m["unassign_item"].call_count == 2
 
+    def test_empty_worktree_path_skips_merge_abort(self) -> None:
+        """When worktree_path is empty, merge abort should not target cwd."""
+        with _patch_all_helpers() as m:
+            session = _make_session(worktree_path="")
+            session._worktree_created = True
+            session.cleanup_on_failure()
+
+            # is_merge_in_progress should NOT be called — empty path must be skipped
+            m["is_merge"].assert_not_called()
+            m["subprocess_run"].assert_not_called()
+
+    def test_not_assigned_skips_unassign(self) -> None:
+        """When _assigned is False, cleanup should skip unassignment."""
+        with _patch_all_helpers() as m:
+            session = _make_session()
+            session._assigned = False
+            session.cleanup_on_failure()
+
+            m["unassign_item"].assert_not_called()
+
+    def test_no_worktree_created_skips_merge_abort(self) -> None:
+        """When _worktree_created is False, cleanup should skip merge abort."""
+        with _patch_all_helpers() as m:
+            m["is_merge"].return_value = True
+            session = _make_session(worktree_path="/tmp/wt/task-test-item")
+            session._worktree_created = False
+            session.cleanup_on_failure()
+
+            # Merge abort should be skipped since worktree was never created
+            m["is_merge"].assert_not_called()
+            m["subprocess_run"].assert_not_called()
+
+    def test_partial_init_cleanup_only_unassigns(self) -> None:
+        """Session with only _assigned=True should only unassign, not touch worktree."""
+        with _patch_all_helpers() as m:
+            session = _make_session(worktree_path="")
+            session._assigned = True
+            session._worktree_created = False
+            session._branch_created = False
+            session.cleanup_on_failure()
+
+            # Should unassign but not try to abort merge
+            m["unassign_item"].assert_called_once()
+            m["is_merge"].assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # __exit__ used as context manager
