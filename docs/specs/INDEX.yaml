@@ -1,0 +1,20 @@
+# Spec Registry Index
+# This file is the canonical catalog and only discovery entry point for specs.
+# Agents MUST consult this index BEFORE exploring code.
+# Sort alphabetically by path; update after every spec create/update/rename/delete.
+
+specs:
+  - path: docs/specs/agent-registry.md
+    description: Agent discovery and registration system enabling dynamic loading and type-safe spawning of task, cleanup, and decomposition agents.
+
+  - path: docs/specs/beads-integration.md
+    description: Beads issue tracker integration providing task querying, status updates, and sync-strategy selection for bd and br CLI backends.
+
+  - path: docs/specs/orchestration-workflow.md
+    description: Main autonomous workflow loop coordinating work item selection, agent execution, validation, and retry with corrective feedback.
+
+  - path: docs/specs/validation-gates.md
+    description: Pre-commit quality gates and validation engine enforcing tests, coverage, linting, and build checks before work completion.
+
+  - path: docs/specs/worktree-management.md
+    description: Git worktree isolation system for parallel task execution with automatic creation, cleanup, and merge handling.
