@@ -160,7 +160,7 @@ class TestWorkflowCleanupException:
                 copilot_success=False,
                 include_cleanup_worktree=True, include_session_cleanup=True,
             ) as mocks,
-            patch('pokepoke.beads.beads_management.unassign_item', return_value=True) as mock_unassign,
+            patch('pokepoke.beads.beads_recovery.unassign_with_retry', return_value=True) as mock_unassign,
         ):
             # Allow cleanup_on_failure to call through to real method
             mocks['session_cleanup'].side_effect = lambda: mock_unassign(item.id)
@@ -180,10 +180,10 @@ class TestWorkflowCleanupException:
             include_cleanup_worktree=True, include_session_cleanup=True,
         ) as mocks:
             # Make cleanup raise an exception to simulate unassign failure
-            mocks['session_cleanup'].side_effect = RuntimeError("unassign_item returned False")
+            mocks['session_cleanup'].side_effect = RuntimeError("unassign_with_retry exhausted")
 
             # Should re-raise the exception
-            with pytest.raises(RuntimeError, match="unassign_item returned False"):
+            with pytest.raises(RuntimeError, match="unassign_with_retry exhausted"):
                 process_work_item(item, interactive=False)
 
 

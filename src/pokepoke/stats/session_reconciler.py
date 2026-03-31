@@ -102,10 +102,10 @@ def _should_unassign(item_id: str, agent_name: str) -> bool:
 
 
 def _unassign_item(item_id: str) -> bool:
-    """Unassign a beads item so it returns to the ready queue."""
+    """Unassign a beads item so it returns to the ready queue (with retry)."""
     try:
-        from pokepoke.beads.beads_management import unassign_item
-        return unassign_item(item_id)
+        from pokepoke.beads.beads_recovery import unassign_with_retry
+        return unassign_with_retry(item_id)
     except Exception as exc:
         logger.error("Failed to unassign item %s: %s", item_id, exc)
         return False
