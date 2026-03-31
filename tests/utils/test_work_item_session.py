@@ -78,7 +78,7 @@ def _patch_all_helpers():
             mocks["branch_exists"] = p.start()
             patches["branch_exists"] = p
 
-            p = patch("pokepoke.beads.beads_management.unassign_item", return_value=True)
+            p = patch("pokepoke.beads.beads_recovery.unassign_with_retry", return_value=True)
             mocks["unassign_item"] = p.start()
             patches["unassign_item"] = p
 
@@ -88,11 +88,6 @@ def _patch_all_helpers():
                 p.stop()
 
     return _ctx()
-
-
-# ---------------------------------------------------------------------------
-# __exit__: success path (no-op)
-# ---------------------------------------------------------------------------
 
 
 class TestExitSuccessPath:
@@ -524,7 +519,7 @@ def _patch_enter_helpers():
             mocks["branch_exists"] = p.start()
             patches["branch_exists"] = p
 
-            p = patch("pokepoke.beads.beads_management.unassign_item", return_value=True)
+            p = patch("pokepoke.beads.beads_recovery.unassign_with_retry", return_value=True)
             mocks["unassign_item"] = p.start()
             patches["unassign_item"] = p
 
@@ -779,7 +774,7 @@ class TestUnassignBeadsItemHelper:
     """Tests for _unassign_beads_item internal helper (Unassign Ex validation)."""
 
     def test_unassign_success(self) -> None:
-        """_unassign_beads_item succeeds when unassign_item returns True."""
+        """_unassign_beads_item succeeds when unassign_with_retry returns True."""
         with _patch_all_helpers() as m:
             m["unassign_item"].return_value = True
             session = _make_session(item_id="task-unassign-ex")
@@ -788,15 +783,15 @@ class TestUnassignBeadsItemHelper:
             m["unassign_item"].assert_called_once_with("task-unassign-ex")
 
     def test_unassign_failure_raises_runtime_error(self) -> None:
-        """_unassign_beads_item raises RuntimeError when unassign_item returns False."""
+        """_unassign_beads_item raises RuntimeError when unassign_with_retry returns False."""
         with _patch_all_helpers() as m:
             m["unassign_item"].return_value = False
             session = _make_session(item_id="task-unassign-ex")
-            with pytest.raises(RuntimeError, match="unassign_item returned False for task-unassign-ex"):
+            with pytest.raises(RuntimeError, match="unassign_with_retry exhausted for task-unassign-ex"):
                 session._unassign_beads_item()
 
     def test_unassign_exception_propagates(self) -> None:
-        """Exceptions from unassign_item propagate to caller."""
+        """Exceptions from unassign_with_retry propagate to caller."""
         with _patch_all_helpers() as m:
             m["unassign_item"].side_effect = ConnectionError("beads service unavailable")
             session = _make_session(item_id="task-unassign-ex")
@@ -804,7 +799,7 @@ class TestUnassignBeadsItemHelper:
                 session._unassign_beads_item()
 
     def test_unassign_called_with_correct_item_id(self) -> None:
-        """Validates that unassign_item is called with the correct item_id."""
+        """Validates that unassign_with_retry is called with the correct item_id."""
         with _patch_all_helpers() as m:
             m["unassign_item"].return_value = True
             session = _make_session(item_id="my-special-task")

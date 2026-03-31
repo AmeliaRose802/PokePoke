@@ -72,11 +72,11 @@ def is_item_claimable(item_id: str) -> bool:
 
 
 def _rollback_assignment(item_id: str, reason: str) -> None:
-    """Best-effort rollback: unassign item, or persist to manifest for startup recovery."""
+    """Best-effort rollback: unassign item with retry, or persist to manifest for startup recovery."""
     logger.warning("↩️  Rolling back assignment for %s: %s", item_id, reason)
-    if not unassign_item(item_id):
-        from .beads_recovery import _add_failed_unassign  # late import: circular dep
-        _add_failed_unassign(item_id, f"rollback failed: {reason}")
+    from .beads_recovery import unassign_with_retry  # late import: circular dep
+    if not unassign_with_retry(item_id):
+        logger.error("All retry attempts exhausted for rollback of %s: %s", item_id, reason)
 
 
 def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:

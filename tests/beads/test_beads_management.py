@@ -562,8 +562,8 @@ class TestAssignAndSyncItem:
 class TestRollbackAssignment:
     """Tests for _rollback_assignment."""
 
-    @patch("pokepoke.beads.beads_management.unassign_item")
-    def test_calls_unassign(self, mock_unassign: Mock) -> None:
+    @patch("pokepoke.beads.beads_recovery.unassign_with_retry")
+    def test_calls_unassign_with_retry(self, mock_unassign: Mock) -> None:
         from pokepoke.beads.beads_management import _rollback_assignment
         mock_unassign.return_value = True
 
@@ -571,10 +571,9 @@ class TestRollbackAssignment:
 
         mock_unassign.assert_called_once_with("item-1")
 
-    @patch("pokepoke.beads.beads_recovery._add_failed_unassign")
-    @patch("pokepoke.beads.beads_management.unassign_item")
-    def test_persists_to_manifest_when_unassign_fails(
-        self, mock_unassign: Mock, mock_add_failed: Mock
+    @patch("pokepoke.beads.beads_recovery.unassign_with_retry")
+    def test_logs_error_when_all_retries_exhausted(
+        self, mock_unassign: Mock,
     ) -> None:
         from pokepoke.beads.beads_management import _rollback_assignment
         mock_unassign.return_value = False
@@ -582,7 +581,6 @@ class TestRollbackAssignment:
         _rollback_assignment("item-1", "verify failed")
 
         mock_unassign.assert_called_once_with("item-1")
-        mock_add_failed.assert_called_once_with("item-1", "rollback failed: verify failed")
 
 
 class TestUnassignItem:
