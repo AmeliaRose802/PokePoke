@@ -31,6 +31,8 @@ TEMPLATE_VARIABLES: dict[str, str] = {
     "errors": "Formatted error list from previous attempt",
     "mcp_enabled": "Boolean to show MCP server section",
     "test_data_section": "Rendered test data for the prompt",
+    "command_timeout": "Command execution timeout in seconds",
+    "retry_feedback": "Formatted error list from previous attempt",
 }
 
 _TEMPLATE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")

@@ -261,7 +261,7 @@ async def invoke_copilot_sdk(
 
         for attempt in range(max_attempts):
             session_config = _build_session_config(
-                current_model, deny_write, session_id=session_id,
+                current_model, deny_write, session_id=session_id, item_logger=item_logger,
             )
             logger.info(f"[SDK] Using model: {current_model}")
             if is_resume:

@@ -46,13 +46,25 @@ Long-running commands can hang indefinitely, wasting time. Follow these rules:
    ```
    This helps identify the specific hanging test by stopping on first failure with a shorter timeout.
 
-4. **If a command appears stuck:**
+4. **NEVER use Select-Object -First/-Last:**
+   These flags can hang PowerShell pipelines. Use safe alternatives instead:
+   ```powershell
+   Get-Content file.txt -Head 10
+   Get-Content file.txt -Tail 5
+   $lines = Get-Content file.txt
+   $lines[0..9]
+   ```
+
+5. **If a command appears stuck:**
    - After 2-3 `read_powershell` calls with no new output, the command is likely hung
    - Use `stop_powershell` to kill the hung process
    - Retry with a timeout flag or run targeted tests instead
 
-5. **For builds/installs:**
+6. **For builds/installs:**
    Use reasonable initial_wait values and be prepared to stop if hung.
+
+7. **When writing tests that touch subprocess/git/filesystem:**
+   Use mocks or explicit timeouts. Avoid integration tests that run real operations without timeouts.
 
 
 **Additional Context:**

@@ -26,3 +26,30 @@ Please implement this task according to the project guidelines and best practice
 
 Work independently and autonomously. Report completion when done.
 
+## Avoiding Hung Commands
+
+**Command Timeout: {{command_timeout}} seconds**
+
+1. **Always use timeouts for pytest:**
+   ```powershell
+   pytest --timeout={{command_timeout}}
+   ```
+2. **For targeted tests, still use --timeout:**
+   ```powershell
+   pytest tests/test_specific_module.py --timeout={{command_timeout}}
+   ```
+3. **NEVER use Select-Object -First/-Last:**
+   These flags can hang PowerShell pipelines. Use safe alternatives instead:
+   ```powershell
+   Get-Content file.txt -Head 10
+   Get-Content file.txt -Tail 5
+   $lines = Get-Content file.txt
+   $lines[0..9]
+   ```
+4. **If a command appears stuck:**
+   - After 2-3 `read_powershell` calls with no new output, the command is likely hung
+   - Use `stop_powershell` to kill the hung process
+   - Retry with a timeout flag or run targeted tests instead
+5. **When writing tests that touch subprocess/git/filesystem:**
+   Use mocks or explicit timeouts. Avoid integration tests that run real operations without timeouts.
+

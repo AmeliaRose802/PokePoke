@@ -3,22 +3,30 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+_PERMISSION_RESULT_CLS: type | None = None
+try:
+    from copilot.types import PermissionRequestResult
+    _PERMISSION_RESULT_CLS = PermissionRequestResult
+except ImportError:
+    _PERMISSION_RESULT_CLS = None
+
 try:
     from copilot import PermissionHandler
     _approve_all: Any = PermissionHandler.approve_all
 except (ImportError, AttributeError):
     # SDK v0.1.0+ on Python 3.13: PermissionHandler is a type alias,
     # not a class with approve_all. Build an inline approval handler.
-    try:
-        from copilot.types import PermissionRequestResult
+    if _PERMISSION_RESULT_CLS is not None:
         def _approve_all(req: Any, _ctx: Any = None) -> Any:
-            return PermissionRequestResult(kind="approved", rules=[])
-    except ImportError:
+            assert _PERMISSION_RESULT_CLS is not None
+            return _PERMISSION_RESULT_CLS(kind="approved", rules=[])
+    else:
         _approve_all = None
 
 from pokepoke.desktop import terminal_ui
 from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
 from pokepoke.utils.shutdown import is_shutting_down
+from pokepoke.utils.tool_command_validator import validate_tool_request
 
 from .sdk_event_handler import SessionStats
 
@@ -85,13 +93,60 @@ def _build_copilot_result(
         session_id=session_id,
     )
 
+def _build_permission_handler(item_logger: Any | None = None) -> Callable[[Any, Any], Any] | None:
+    """Build a permission handler that rejects unsafe tool commands."""
+    if _approve_all is None and _PERMISSION_RESULT_CLS is None:
+        return None
+
+    def _extract_tool_request(req: Any) -> tuple[str | None, Any]:
+        if isinstance(req, dict):
+            tool_name = req.get("tool_name") or req.get("tool")
+            tool_args = req.get("args") or req.get("arguments")
+            full_command = req.get("full_command_text")
+        else:
+            tool_name = getattr(req, "tool_name", None) or getattr(req, "tool", None)
+            tool_args = getattr(req, "args", None) or getattr(req, "arguments", None)
+            full_command = getattr(req, "full_command_text", None)
+
+        if tool_args is None and full_command:
+            if not tool_name:
+                tool_name = "powershell"
+            tool_args = {"command": full_command}
+
+        return tool_name, tool_args
+
+    def handler(req: Any, ctx: Any = None) -> Any:
+        tool_name, tool_args = _extract_tool_request(req)
+        violation = validate_tool_request(tool_name, tool_args)
+        if violation:
+            message = f"Denied tool request: {violation}"
+            logger.warning(message)
+            if item_logger:
+                item_logger.log_error(message)
+            if _PERMISSION_RESULT_CLS is not None:
+                return _PERMISSION_RESULT_CLS(
+                    kind="denied-by-rules",
+                    rules=[],
+                    feedback=violation,
+                    message=message,
+                )
+            return _approve_all(req, ctx) if _approve_all is not None else None
+        return _approve_all(req, ctx) if _approve_all is not None else None
+
+    return handler
+
+
 def _build_session_config(
-    model: str, deny_write: bool, session_id: str | None = None,
+    model: str,
+    deny_write: bool,
+    session_id: str | None = None,
+    item_logger: Any | None = None,
 ) -> dict[str, Any]:
     """Build the SDK session configuration dict."""
     config: dict[str, Any] = {"model": model, "streaming": True}
-    if _approve_all is not None:
-        config["on_permission_request"] = _approve_all
+    permission_handler = _build_permission_handler(item_logger)
+    if permission_handler is not None:
+        config["on_permission_request"] = permission_handler
     if deny_write:
         config["excluded_tools"] = ["write", "edit"]
     if session_id:
