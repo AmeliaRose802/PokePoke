@@ -142,6 +142,7 @@ class WorkItemResult:
     cleanup_agent_runs: int = 0
     gate_agent_runs: int = 0
     model_completion: ModelCompletionRecord | None = None
+    failure_reason: str | None = None
 
 class _AgentRunCountsMixin:
     """Shared agent-run-count accessors for frozen and mutable stats."""

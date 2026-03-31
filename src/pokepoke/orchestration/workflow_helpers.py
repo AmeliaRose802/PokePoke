@@ -21,9 +21,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-
 # ── Small utility helpers (moved from workflow.py) ──────────────────────────
-
 
 def _log_failure(
     run_logger: "RunLogger | None",
@@ -44,12 +42,13 @@ def _fail_result(
     cleanup_agent_runs: int = 0,
     gate_agent_runs: int = 0,
     model_completion: ModelCompletionRecord | None = None,
+    failure_reason: str | None = None,
 ) -> WorkItemResult:
     """Create a failed WorkItemResult."""
     return WorkItemResult(
         success=False, request_count=request_count, stats=stats,
         cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
-        model_completion=model_completion,
+        model_completion=model_completion, failure_reason=failure_reason,
     )
 
 
@@ -87,7 +86,6 @@ def setup_worktree(
     except Exception as e:
         error_msg = f"Failed to create worktree for {item.id}: {e}"
         logger.error(f"\n\u274c {error_msg}")
-        logger.error(error_msg)
         if run_logger:
             run_logger.log_orchestrator(error_msg, level="ERROR")
         if item_logger:
@@ -382,10 +380,12 @@ def _finalize_item_result(
         ), True
 
     set_terminal_banner(format_work_item_banner(item.id, item.title, "Failed"))
-    logger.error(f"\n❌ Failed to complete work item: {result.error}")
+    failure_reason = result.error or "Unknown failure"
+    logger.error(f"\n❌ Failed to complete work item: {failure_reason}")
 
-    # Preserve worktree so agent work is not lost — it can be
-    # manually inspected, resumed, or merged later.
+    from pokepoke.beads.beads_management import fail_task
+    fail_task(item.id, failure_reason)
+
     logger.warning(f"\n⚠️  Preserving worktree for {item.id} (work may be recoverable)")
     _log_failure(run_logger, item_logger, request_count)
     terminal_ui.ui.set_current_agent(None)
@@ -396,5 +396,5 @@ def _finalize_item_result(
     return _fail_result(
         request_count=request_count, cleanup_agent_runs=cleanup_agent_runs,
         gate_agent_runs=gate_agent_runs, model_completion=model_completion,
-        stats=accumulated_stats,
+        stats=accumulated_stats, failure_reason=failure_reason,
     ), False

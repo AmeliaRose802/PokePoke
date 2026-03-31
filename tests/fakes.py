@@ -151,6 +151,7 @@ class FakeBeadsClient:
         self._comments: dict[str, list[str]] = {}
         self._attempt_counts: dict[str, int] = {}
         self._failed_unassigns: dict[str, str] = {}
+        self._failure_reasons: dict[str, str] = {}
 
     # -- helpers -----------------------------------------------------------
 
@@ -257,6 +258,16 @@ class FakeBeadsClient:
         self._attempt_counts[item_id] = self._attempt_counts.get(item_id, 0) + 1
         return True
 
+    def fail_task(
+        self, item_id: str, reason: str, agent_type: str = "work"
+    ) -> bool:
+        self.calls.append(_BeadsCall("fail_task", (item_id, reason), {"agent_type": agent_type}))
+        if "fail_task" in self.fail_methods:
+            return False
+        self._comments.setdefault(item_id, []).append(f"❌ Agent failure: {reason}")
+        self._failure_reasons[item_id] = reason
+        return True
+
     def retry_failed_unassigns(self) -> int:
         self.calls.append(_BeadsCall("retry_failed_unassigns", ()))
         recovered = len(self._failed_unassigns)
@@ -308,3 +319,4 @@ class FakeBeadsClient:
         self._comments.clear()
         self._attempt_counts.clear()
         self._failed_unassigns.clear()
+        self._failure_reasons.clear()

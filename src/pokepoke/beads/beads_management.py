@@ -29,6 +29,7 @@ from .sync_strategy import (
 )
 
 __all__ = [
+    'fail_task',
     'get_gate_rejection_count',
     'get_total_attempts',
     'increment_gate_rejection_count',
@@ -222,6 +223,35 @@ def close_item(item_id: str, message: str = "Completed") -> bool:
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
         logger.error("⚠️  Failed to close %s after retries: %s", item_id, e)
         return False
+
+
+def fail_task(item_id: str, reason: str, agent_type: str = "work") -> bool:
+    """Record a task failure: add comment and track in stats.
+
+    Consolidates failure bookkeeping so callers don't have to remember
+    each step individually.  Does NOT unassign the item — that remains
+    the caller's responsibility (via WorkItemSession or unassign_item).
+
+    Args:
+        item_id: The beads item that failed.
+        reason: Human-readable explanation of why the task failed.
+        agent_type: Agent type for stats tracking (e.g. "work", "gate").
+
+    Returns:
+        True if the comment was persisted, False on error.
+    """
+    from .beads_item_stats_store import record_item_failed
+
+    truncated = reason[:500] if reason else "Unknown failure"
+    comment_ok = add_comment(item_id, f"❌ Agent failure: {truncated}")
+
+    try:
+        record_item_failed(item_id, agent_type=agent_type)
+    except Exception as exc:
+        logger.warning("Failed to record failure stats for %s: %s", item_id, exc)
+
+    logger.info("📝 Recorded failure for %s: %s", item_id, truncated[:80])
+    return comment_ok
 
 
 def add_comment(item_id: str, comment: str) -> bool:

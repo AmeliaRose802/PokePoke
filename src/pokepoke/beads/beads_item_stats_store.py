@@ -43,7 +43,7 @@ STATS_FILE = Path(".pokepoke") / "beads_item_stats.json"
 _thread_lock = threading.Lock()
 _STATS_FILE_LOCK = "beads-item-stats-file"
 
-EventType = Literal["created", "completed"]
+EventType = Literal["created", "completed", "failed"]
 
 
 def _now_iso() -> str:
@@ -56,6 +56,7 @@ def _empty_store() -> dict[str, Any]:
         "summary": {
             "total_created": 0,
             "total_completed": 0,
+            "total_failed": 0,
             "net_delta": 0,
             "by_agent_type": {},
             "last_updated": "",
@@ -68,9 +69,12 @@ def _rebuild_summary(log: list[dict[str, Any]]) -> dict[str, Any]:
 
     Counts unique items (deduplicates by item_id + event type to prevent
     duplicate event recording from inflating counts).
+    Failed events are NOT deduplicated — each attempt is counted so the
+    total reflects the real number of failures across retries.
     """
     created_items: set[str] = set()
     completed_items: set[str] = set()
+    total_failed = 0
     by_agent: dict[str, dict[str, int]] = {}
 
     for entry in log:
@@ -82,7 +86,7 @@ def _rebuild_summary(log: list[dict[str, Any]]) -> dict[str, Any]:
             continue
 
         if agent not in by_agent:
-            by_agent[agent] = {"created": 0, "completed": 0}
+            by_agent[agent] = {"created": 0, "completed": 0, "failed": 0}
 
         if event == "created" and item_id not in created_items:
             created_items.add(item_id)
@@ -90,6 +94,9 @@ def _rebuild_summary(log: list[dict[str, Any]]) -> dict[str, Any]:
         elif event == "completed" and item_id not in completed_items:
             completed_items.add(item_id)
             by_agent[agent]["completed"] += 1
+        elif event == "failed":
+            total_failed += 1
+            by_agent[agent]["failed"] += 1
 
     total_created = len(created_items)
     total_completed = len(completed_items)
@@ -98,15 +105,18 @@ def _rebuild_summary(log: list[dict[str, Any]]) -> dict[str, Any]:
     for agent, counts in by_agent.items():
         created = int(counts.get("created", 0))
         completed = int(counts.get("completed", 0))
+        failed = int(counts.get("failed", 0))
         by_agent_out[agent] = {
             "created": created,
             "completed": completed,
+            "failed": failed,
             "net_delta": created - completed,
         }
 
     return {
         "total_created": total_created,
         "total_completed": total_completed,
+        "total_failed": total_failed,
         "net_delta": total_created - total_completed,
         "by_agent_type": by_agent_out,
         "last_updated": _now_iso(),
@@ -208,6 +218,17 @@ def record_item_completed(
     repo_name: str = "",
 ) -> dict[str, Any]:
     return record_event("completed", item_id, agent_type, path=path, repo_name=repo_name)
+
+
+def record_item_failed(
+    item_id: str,
+    agent_type: str = "unknown",
+    *,
+    path: Path | None = None,
+    repo_name: str = "",
+) -> dict[str, Any]:
+    """Record that an item processing attempt failed."""
+    return record_event("failed", item_id, agent_type, path=path, repo_name=repo_name)
 
 
 def get_summary(path: Path | None = None) -> dict[str, Any]:

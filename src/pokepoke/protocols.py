@@ -95,6 +95,10 @@ class BeadsClient(Protocol):
 
     def increment_total_attempts(self, item_id: str) -> bool: ...
 
+    def fail_task(
+        self, item_id: str, reason: str, agent_type: str = "work"
+    ) -> bool: ...
+
     def retry_failed_unassigns(self) -> int: ...
 
     def get_failed_unassign_count(self) -> int: ...
@@ -170,6 +174,13 @@ class DefaultBeadsClient:
         from pokepoke.beads.beads_management import increment_total_attempts
 
         return increment_total_attempts(item_id)
+
+    def fail_task(
+        self, item_id: str, reason: str, agent_type: str = "work"
+    ) -> bool:
+        from pokepoke.beads.beads_management import fail_task
+
+        return fail_task(item_id, reason, agent_type=agent_type)
 
     def retry_failed_unassigns(self) -> int:
         from pokepoke.beads.beads_recovery import retry_failed_unassigns

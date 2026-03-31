@@ -86,34 +86,34 @@ def process_work_item(  # noqa: C901
         existing_rejection_count = get_gate_rejection_count(item.id)
         max_gate_rejections = config.max_gate_rejections_per_item
         if existing_rejection_count >= max_gate_rejections:
+            reason = f"Exceeded gate rejection cap ({existing_rejection_count}/{max_gate_rejections})"
             logger.error(f"\n\u274c Item {item.id} has {existing_rejection_count} gate rejections (cap: {max_gate_rejections}). Refusing to process.")
-            _comment(item.id, f"\u26d4 Refusing to process: {existing_rejection_count} gate rejections (cap: {max_gate_rejections}). Requires manual review.")
+            _comment(item.id, f"\u26d4 Refusing to process: {reason}. Requires manual review.")
             _log_failure(run_logger, item_logger)
-            return _fail_result()
+            return _fail_result(failure_reason=reason)
 
         if interactive:
             terminal_ui.ui.stop()
             confirm = input("Proceed with this item? [Y/n]: ").strip().lower()
             terminal_ui.ui.start()
             if confirm and confirm != 'y':
-                logger.warning("⏭️  Skipped.")
                 _log_failure(run_logger, item_logger)
-                return _fail_result()
+                return _fail_result(failure_reason="Skipped by user")
 
         logger.info("\n\U0001f512 Claiming work item...")
         if not _assign(item.id):
             logger.error(f"❌ Failed to assign work item {item.id}")
             _log_failure(run_logger, item_logger)
-            return _fail_result()
+            return _fail_result(failure_reason="Failed to assign work item")
         _session = WorkItemSession(item_id=item.id, agent_name=get_agent_name(default="pokepoke"))
         _session._assigned = True
         worktree_path = setup_worktree(item, lock_timeout=worktree_lock_timeout,
             run_logger=run_logger, item_logger=item_logger, repo_path=repo_path)
 
         if worktree_path is None:
-            logger.error(f"↩️  Returning {item.id} to queue (unassigning due to worktree failure)...")
+            logger.error(f"↩️  Returning {item.id} to queue (worktree creation failed)")
             _log_failure(run_logger, item_logger)
-            return _fail_result()
+            return _fail_result(failure_reason="Failed to create worktree")
         _session.worktree_path = str(worktree_path)
         _session._worktree_created = True
         _session._branch_created = True
@@ -136,17 +136,15 @@ def process_work_item(  # noqa: C901
             error="Session aborted due to application shutdown", attempt_count=0)
 
         while not is_shutting_down():
-            # Check timeout before invoking Copilot
             elapsed = time.time() - start_time
             if timeout_seconds > 0 and elapsed >= timeout_seconds:
                 timeout_restart_count += 1
                 if timeout_restart_count > max_timeout_restarts:
-                    logger.info(f"\n\u23f1\ufe0f  TIMEOUT: Exceeded max restarts ({max_timeout_restarts}), failing {item.id}")
                     _log_failure(run_logger, item_logger, request_count)
-                    logger.info(f"\n\u26a0\ufe0f  Preserving worktree for {item.id} (work may be recoverable)")
                     terminal_ui.ui.set_current_agent(None)
                     return _fail_result(request_count=request_count, stats=accumulated_stats,
-                                        cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs)
+                                        cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
+                                        failure_reason=f"Exceeded max timeout restarts ({max_timeout_restarts})")
                 logger.info(f"\n\u23f1\ufe0f  TIMEOUT: Restarting {item.id} (attempt {timeout_restart_count}/{max_timeout_restarts})")
                 start_time = time.time()
                 elapsed = 0
@@ -200,7 +198,8 @@ def process_work_item(  # noqa: C901
                     _log_failure(run_logger, item_logger, request_count)
                     terminal_ui.ui.set_current_agent(None)
                     return _fail_result(request_count=request_count, stats=accumulated_stats,
-                                      cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs)
+                                      cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
+                                      failure_reason=branch_error)
                 with terminal_ui.ui.agent_output_for(agent_id):
                     result = invoke_copilot(
                         item, prompt=work_prompt, timeout=remaining_timeout,
@@ -260,7 +259,8 @@ def process_work_item(  # noqa: C901
                 result.success = False
                 _log_failure(run_logger, item_logger, request_count)
                 return _fail_result(request_count=request_count, stats=accumulated_stats,
-                                    cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs)
+                                    cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
+                                    failure_reason="Cleanup agent failed to resolve uncommitted changes")
 
             if process_crashed_this_session:
                 logger.warning("\n⏭️  Skipping Gate Agent — CLI process crashed, work may be incomplete")

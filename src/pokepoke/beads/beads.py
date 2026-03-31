@@ -30,6 +30,7 @@ from .beads_management import (
     add_comment,
     assign_and_sync_item,
     close_item,
+    fail_task,
     get_total_attempts,
     increment_total_attempts,
     is_item_claimable,
@@ -77,6 +78,7 @@ __all__ = [
 
     # Management operations
     'close_item',
+    'fail_task',
     'select_next_hierarchical_item',
     'is_item_claimable',
     'assign_and_sync_item',
