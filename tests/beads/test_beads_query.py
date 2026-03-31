@@ -35,13 +35,69 @@ def test_get_ready_work_items_parses_results(monkeypatch: pytest.MonkeyPatch) ->
     assert items[0].id == "x"
 
 
-def test_get_ready_work_items_handles_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_ready_work_items_returns_none_on_subprocess_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that subprocess errors return None (signaling error) not [] (signaling no work)."""
     def boom(*_args: object, **_kwargs: object) -> None:
         raise subprocess.CalledProcessError(1, "bd")
 
     monkeypatch.setattr(beads_query, "_run_bd", boom)
 
-    assert beads_query.get_ready_work_items() == []
+    assert beads_query.get_ready_work_items() is None
+
+
+def test_get_ready_work_items_returns_none_on_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that timeout returns None to signal error condition."""
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise subprocess.TimeoutExpired("bd", 30)
+
+    monkeypatch.setattr(beads_query, "_run_bd", boom)
+
+    assert beads_query.get_ready_work_items() is None
+
+
+def test_get_ready_work_items_returns_none_on_json_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that JSON parse errors return None to signal error condition."""
+    mock_process = subprocess.CompletedProcess("bd", 0, stdout="not valid json {{{")
+    monkeypatch.setattr(beads_query, "_run_bd", lambda *args, **kwargs: mock_process)
+
+    assert beads_query.get_ready_work_items() is None
+
+
+def test_get_ready_work_items_returns_none_on_beads_error_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that beads error response returns None to signal error condition."""
+    error_payload = {"error": "Database corrupted"}
+    mock_process = subprocess.CompletedProcess("bd", 0, stdout=json.dumps(error_payload))
+    monkeypatch.setattr(beads_query, "_run_bd", lambda *args, **kwargs: mock_process)
+
+    assert beads_query.get_ready_work_items() is None
+
+
+def test_get_ready_work_items_returns_empty_list_on_empty_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that empty stdout (no items) returns [] not None."""
+    mock_process = subprocess.CompletedProcess("bd", 0, stdout="")
+    monkeypatch.setattr(beads_query, "_run_bd", lambda *args, **kwargs: mock_process)
+
+    result = beads_query.get_ready_work_items()
+    assert result == []
+
+
+def test_get_ready_work_items_returns_empty_list_on_empty_array(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that empty array response returns [] (no work available)."""
+    mock_process = subprocess.CompletedProcess("bd", 0, stdout="[]")
+    monkeypatch.setattr(beads_query, "_run_bd", lambda *args, **kwargs: mock_process)
+
+    result = beads_query.get_ready_work_items()
+    assert result == []
+
+
+def test_get_in_progress_items_returns_none_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that in_progress query returns None on error."""
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise subprocess.CalledProcessError(1, "bd")
+
+    monkeypatch.setattr(beads_query, "_run_bd", boom)
+
+    assert beads_query.get_in_progress_items() is None
 
 
 def test_get_issue_dependencies_returns_structured(monkeypatch: pytest.MonkeyPatch) -> None:

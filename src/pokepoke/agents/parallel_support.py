@@ -257,11 +257,8 @@ def dispatch_items(
     return worker_counter
 
 def run_preflight_and_repo_checks(
-    main_repo_path: Any,
-    run_logger: RunLogger,
-    consecutive_preflight_failures: int,
-    max_preflight_failures: int,
-    check_and_commit_main_repo_fn: Any = None,
+    main_repo_path: Any, run_logger: RunLogger, consecutive_preflight_failures: int,
+    max_preflight_failures: int, check_and_commit_main_repo_fn: Any = None,
     get_ready_work_items_fn: Any = None,
 ) -> tuple[bool, int, list[BeadsWorkItem]]:
     """Run pre-flight health checks, repo status check, and fetch ready items."""
@@ -276,9 +273,7 @@ def run_preflight_and_repo_checks(
             consecutive_preflight_failures += 1
             if consecutive_preflight_failures >= max_preflight_failures:
                 run_logger.log_orchestrator(
-                    f"Shutting down after {consecutive_preflight_failures} preflight failures",
-                    level="ERROR",
-                )
+                    f"Shutting down after {consecutive_preflight_failures} preflight failures", level="ERROR")
         return False, consecutive_preflight_failures, []
     consecutive_preflight_failures = 0
     run_logger.log_polling("Checking main repository status")
@@ -290,7 +285,10 @@ def run_preflight_and_repo_checks(
         ready_items = get_ready_work_items_fn()
     except Exception as e:
         run_logger.log_orchestrator(f"Failed to fetch ready items: {e}", level="ERROR")
-        ready_items = []
+        ready_items = None
+    if ready_items is None:
+        run_logger.log_orchestrator("Failed to query beads for work items - system error", level="ERROR")
+        return False, consecutive_preflight_failures, []
     try:
         from pokepoke.beads.beads_query import get_in_progress_items
         in_progress = get_in_progress_items()

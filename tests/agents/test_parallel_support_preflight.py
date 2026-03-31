@@ -253,6 +253,9 @@ class TestPreflightRateLimiting:
     @patch("pokepoke.config.get_config")
     def test_warning_includes_error_details(self, mock_get_config, mock_run):
         """The log message includes specific error details, not just counts."""
+        # Reset rate limiting state to ensure first call is logged
+        reset_preflight_rate_limit()
+
         cfg = MagicMock()
         cfg.preflight_health.enabled = True
         cfg.preflight_health.fail_on_critical_errors = True
@@ -289,9 +292,10 @@ class TestPreflightRateLimiting:
         ]
         assert len(first_warning_calls) > 0
         # The warning message should contain the error signature
+        # Message is passed as positional arg (call[0][0]), not keyword arg
         found_detail = False
         for call in first_warning_calls:
-            msg = call[1].get("message", "")
+            msg = call[0][0] if call[0] else ""
             if "disk_space: Only 500MB free" in msg:
                 found_detail = True
                 break

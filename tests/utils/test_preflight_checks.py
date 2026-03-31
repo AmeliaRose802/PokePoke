@@ -8,6 +8,7 @@ import pytest
 
 from pokepoke.utils.preflight_checks import (
     ErrorSeverity,
+    check_beads_health,
     check_disk_space,
     check_git_status,
     check_lock_availability,
@@ -247,3 +248,39 @@ class TestIsLockStale:
         lock.write_text("not-a-pid")
         _stale, details = is_lock_stale(lock)
         assert details["reason"] == "cannot_determine"
+
+
+# ── check_beads_health ──────────────────────────────────────────────
+
+
+class TestCheckBeadsHealth:
+    """Tests for the check_beads_health function."""
+
+    def test_healthy_beads_returns_no_errors(self, fake_repo, health_config):
+        """Test that successful beads query returns no errors."""
+        from pokepoke.types import BeadsStats
+
+        mock_stats = BeadsStats(
+            total_issues=10, open_issues=5, in_progress_issues=2,
+            closed_issues=3, ready_issues=4
+        )
+        with patch("pokepoke.beads.beads_query.get_beads_stats", return_value=mock_stats):
+            errors, warnings = check_beads_health(fake_repo, health_config)
+        assert len(errors) == 0
+        assert len(warnings) == 0
+
+    def test_beads_returns_none_signals_error(self, fake_repo, health_config):
+        """Test that None from get_beads_stats signals environmental error."""
+        with patch("pokepoke.beads.beads_query.get_beads_stats", return_value=None):
+            errors, _ = check_beads_health(fake_repo, health_config)
+        assert len(errors) == 1
+        assert errors[0].check_name == "beads_health_check"
+        assert errors[0].severity == ErrorSeverity.ENVIRONMENTAL
+
+    def test_beads_exception_signals_error(self, fake_repo, health_config):
+        """Test that exception from get_beads_stats signals environmental error."""
+        with patch("pokepoke.beads.beads_query.get_beads_stats", side_effect=RuntimeError("beads broken")):
+            errors, _ = check_beads_health(fake_repo, health_config)
+        assert len(errors) == 1
+        assert "beads broken" in errors[0].message
+        assert errors[0].severity == ErrorSeverity.ENVIRONMENTAL

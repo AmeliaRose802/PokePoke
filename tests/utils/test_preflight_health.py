@@ -415,9 +415,17 @@ class TestIntegrationScenarios:
 
     def test_full_health_check_clean_environment(self, temp_repo, health_config):
         """Test health checks in a clean environment."""
+        from pokepoke.types import BeadsStats
+
         checker = PreflightChecker(temp_repo, health_config)
         # Mock worktree creation to avoid flaky git operations under parallel xdist
-        with patch.object(checker, '_check_worktree_creation', return_value=([], [])):
+        # Mock beads health check since beads is not available in test environment
+        mock_stats = BeadsStats(
+            total_issues=10, open_issues=5, in_progress_issues=2,
+            closed_issues=3, ready_issues=4
+        )
+        with patch.object(checker, '_check_worktree_creation', return_value=([], [])), \
+             patch('pokepoke.beads.beads_query.get_beads_stats', return_value=mock_stats):
             result = checker.run_all_checks()
 
         assert result.passed

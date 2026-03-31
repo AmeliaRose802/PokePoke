@@ -350,3 +350,43 @@ def is_lock_stale(lock_path: Path) -> tuple[bool, dict[str, Any]]:
     except OSError as e:
         details['error'] = str(e)
         return False, details
+
+
+def check_beads_health(
+    repo_path: Path, config: dict[str, Any]
+) -> tuple[list[HealthCheckError], list[str]]:
+    """Check that the beads issue tracker is operational.
+
+    Runs ``bd stats --json`` to verify beads can execute and return valid data.
+    This catches broken installations, corrupted databases, and network failures.
+    """
+    errors: list[HealthCheckError] = []
+    warnings: list[str] = []
+
+    with timed_block("preflight.beads_health"):
+        try:
+            from pokepoke.beads.beads_query import get_beads_stats
+
+            stats = get_beads_stats()
+            if stats is None:
+                errors.append(HealthCheckError(
+                    check_name='beads_health_check',
+                    message="Failed to query beads database - check beads installation",
+                    severity=ErrorSeverity.ENVIRONMENTAL,
+                    details={'error': 'get_beads_stats returned None'}
+                ))
+            else:
+                # Successful query - optionally log summary
+                logger.debug(
+                    "Beads health OK: %d open, %d ready, %d total items",
+                    stats.open_issues, stats.ready_issues, stats.total_issues
+                )
+        except Exception as e:
+            errors.append(HealthCheckError(
+                check_name='beads_health_check',
+                message=f"Beads health check failed: {e!s}",
+                severity=ErrorSeverity.ENVIRONMENTAL,
+                details={'exception': str(e)}
+            ))
+
+    return errors, warnings
