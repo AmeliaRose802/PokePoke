@@ -1,0 +1,316 @@
+"""Tests for gate agent executor - JSON parsing, timeout detection, result building."""
+
+import json
+from unittest.mock import Mock, patch
+
+from pokepoke.agents.gate_agent_executor import run_gate_agent
+from pokepoke.types import BeadsWorkItem
+
+
+def _make_item(**kwargs):
+    defaults = dict(id="item-1", title="Test", status="in_progress", priority=1, issue_type="task")
+    defaults.update(kwargs)
+    return BeadsWorkItem(**defaults)
+
+
+def _mock_invoke_result(success=True, output="", error=None, session_id=None, last_output_summary=None):
+    r = Mock()
+    r.success = success
+    r.output = output
+    r.error = error
+    r.session_id = session_id
+    r.last_output_summary = last_output_summary
+    return r
+
+
+# ---------------------------------------------------------------------------
+# Gate JSON parsing
+# ---------------------------------------------------------------------------
+
+class TestGateAgentJsonParsing:
+    """Tests for JSON verdict extraction from gate agent output."""
+
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_success_json_verdict(self, mock_ui, mock_branch, mock_model, mock_invoke):
+        verdict = json.dumps({"status": "success", "message": "All tests pass"})
+        output = f"Some preamble\n```json\n{verdict}\n```\nMore text"
+        mock_invoke.return_value = _mock_invoke_result(success=True, output=output)
+
+        result = run_gate_agent(_make_item())
+
+        assert result.success is True
+        assert "All tests pass" in result.reason
+
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_failure_json_verdict(self, mock_ui, mock_branch, mock_model, mock_invoke):
+        verdict = json.dumps({"status": "failure", "reason": "Tests fail", "details": "3 errors"})
+        output = f"```json\n{verdict}\n```"
+        mock_invoke.return_value = _mock_invoke_result(success=True, output=output)
+
+        result = run_gate_agent(_make_item())
+
+        assert result.success is False
+        assert "Tests fail" in result.reason
+        assert "3 errors" in result.reason
+
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_success_with_reason_and_recommendation(self, mock_ui, mock_branch, mock_model, mock_invoke):
+        verdict = json.dumps({
+            "status": "success", "message": "Verified",
+            "reason": "All checks passed", "recommendation": "Ship it",
+        })
+        output = f"```json\n{verdict}\n```"
+        mock_invoke.return_value = _mock_invoke_result(success=True, output=output)
+
+        result = run_gate_agent(_make_item())
+
+        assert result.success is True
+        assert "All checks passed" in result.reason
+        assert "Ship it" in result.reason
+
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_multiple_json_blocks_uses_last(self, mock_ui, mock_branch, mock_model, mock_invoke):
+        """When multiple JSON blocks exist, the last one with a status key is used."""
+        block1 = json.dumps({"status": "failure", "reason": "Early check"})
+        block2 = json.dumps({"status": "success", "message": "Final verdict"})
+        output = f"```json\n{block1}\n```\nMore text\n```json\n{block2}\n```"
+        mock_invoke.return_value = _mock_invoke_result(success=True, output=output)
+
+        result = run_gate_agent(_make_item())
+
+        assert result.success is True
+        assert "Final verdict" in result.reason
+
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_case_insensitive_json_fence(self, mock_ui, mock_branch, mock_model, mock_invoke):
+        """JSON fence with mixed case (```JSON) should still be parsed."""
+        verdict = json.dumps({"status": "success", "message": "ok"})
+        output = f"```JSON\n{verdict}\n```"
+        mock_invoke.return_value = _mock_invoke_result(success=True, output=output)
+
+        result = run_gate_agent(_make_item())
+
+        assert result.success is True
+
+
+# ---------------------------------------------------------------------------
+# Text-match fallback
+# ---------------------------------------------------------------------------
+
+class TestGateAgentTextFallback:
+    """Tests for text-based success detection when no JSON verdict present."""
+
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_verification_successful_text_match(self, mock_ui, mock_branch, mock_model, mock_invoke):
+        output = "The fix looks good. VERIFICATION SUCCESSFUL."
+        mock_invoke.return_value = _mock_invoke_result(success=True, output=output)
+
+        result = run_gate_agent(_make_item())
+
+        assert result.success is True
+        assert "text match" in result.reason
+
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_new_work_verified_text_match(self, mock_ui, mock_branch, mock_model, mock_invoke):
+        output = "Changes look correct. NEW_WORK_VERIFIED"
+        mock_invoke.return_value = _mock_invoke_result(success=True, output=output)
+
+        result = run_gate_agent(_make_item())
+
+        assert result.success is True
+
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_no_approval_gives_failure(self, mock_ui, mock_branch, mock_model, mock_invoke):
+        output = "I looked at the code but I'm not sure it's correct."
+        mock_invoke.return_value = _mock_invoke_result(success=True, output=output)
+
+        result = run_gate_agent(_make_item())
+
+        assert result.success is False
+        assert "did not explicitly approve" in result.reason
+
+
+# ---------------------------------------------------------------------------
+# Execution failures and timeouts
+# ---------------------------------------------------------------------------
+
+class TestGateAgentFailures:
+    """Tests for gate agent execution failures and timeouts."""
+
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_execution_failure_marked_as_crash(self, mock_ui, mock_branch, mock_model, mock_invoke):
+        mock_invoke.return_value = _mock_invoke_result(success=False, error="Process exited with code 1")
+
+        result = run_gate_agent(_make_item())
+
+        assert result.success is False
+        assert result.crashed is True
+        assert result.is_timeout is False
+
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_timeout_error_detected(self, mock_ui, mock_branch, mock_model, mock_invoke):
+        mock_invoke.return_value = _mock_invoke_result(success=False, error="Session timeout reached")
+
+        result = run_gate_agent(_make_item())
+
+        assert result.success is False
+        assert result.is_timeout is True
+        assert result.crashed is False
+
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_inactivity_timeout_detected(self, mock_ui, mock_branch, mock_model, mock_invoke):
+        mock_invoke.return_value = _mock_invoke_result(success=False, error="Terminated due to inactivity")
+
+        result = run_gate_agent(_make_item())
+
+        assert result.success is False
+        assert result.is_timeout is True
+        assert result.crashed is False
+
+    @patch("pokepoke.agents.gate_agent_executor.PromptService")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_prompt_render_failure(self, mock_ui, mock_branch, mock_model, mock_prompt_svc):
+        mock_prompt_svc.return_value.load_and_render.side_effect = RuntimeError("Template not found")
+
+        result = run_gate_agent(_make_item())
+
+        assert result.success is False
+        assert result.crashed is True
+        assert "Failed to render prompt" in result.reason
+
+
+# ---------------------------------------------------------------------------
+# Stats and session_id propagation
+# ---------------------------------------------------------------------------
+
+class TestGateAgentResultMetadata:
+    """Tests for stats parsing and session_id in gate results."""
+
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_stats_parsed_from_output(self, mock_ui, mock_branch, mock_model, mock_invoke):
+        output = (
+            "Total duration (wall): 20.5s\n"
+            "Total code changes: 10 lines added, 3 lines removed\n"
+            '```json\n{"status":"success","message":"ok"}\n```'
+        )
+        mock_invoke.return_value = _mock_invoke_result(success=True, output=output)
+
+        result = run_gate_agent(_make_item())
+
+        assert result.stats is not None
+        assert result.stats.wall_duration == 20.5
+        assert result.stats.lines_added == 10
+
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_session_id_propagated(self, mock_ui, mock_branch, mock_model, mock_invoke):
+        verdict = json.dumps({"status": "success", "message": "ok"})
+        output = f"```json\n{verdict}\n```"
+        mock_invoke.return_value = _mock_invoke_result(
+            success=True, output=output,
+            session_id="sess-abc", last_output_summary="summary text",
+        )
+
+        result = run_gate_agent(_make_item())
+
+        assert result.session_id == "sess-abc"
+        assert result.last_output_summary == "summary text"
+
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_no_stats_when_no_output(self, mock_ui, mock_branch, mock_model, mock_invoke):
+        mock_invoke.return_value = _mock_invoke_result(success=True, output="")
+
+        result = run_gate_agent(_make_item())
+
+        assert result.stats is None
+
+
+# ---------------------------------------------------------------------------
+# Gate model selection and recording
+# ---------------------------------------------------------------------------
+
+class TestGateModelRecording:
+    """Tests for gate model recording via record_gate_check."""
+
+    @patch("pokepoke.agents.gate_agent_executor.record_gate_check")
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value="claude-3")
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_records_gate_check_on_success(self, mock_ui, mock_branch, mock_model, mock_invoke, mock_record):
+        verdict = json.dumps({"status": "success", "message": "ok"})
+        output = f"```json\n{verdict}\n```"
+        mock_invoke.return_value = _mock_invoke_result(success=True, output=output)
+
+        run_gate_agent(_make_item(), work_model="gpt-4")
+
+        mock_record.assert_called_once_with("claude-3", "item-1", True)
+
+    @patch("pokepoke.agents.gate_agent_executor.record_gate_check")
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value="claude-3")
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_records_gate_check_on_failure(self, mock_ui, mock_branch, mock_model, mock_invoke, mock_record):
+        verdict = json.dumps({"status": "failure", "reason": "Bad code"})
+        output = f"```json\n{verdict}\n```"
+        mock_invoke.return_value = _mock_invoke_result(success=True, output=output)
+
+        run_gate_agent(_make_item(), work_model="gpt-4")
+
+        mock_record.assert_called_once_with("claude-3", "item-1", False)
+
+    @patch("pokepoke.agents.gate_agent_executor.record_gate_check")
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value="claude-3")
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_no_recording_on_crash(self, mock_ui, mock_branch, mock_model, mock_invoke, mock_record):
+        mock_invoke.return_value = _mock_invoke_result(success=False, error="Process killed")
+
+        run_gate_agent(_make_item(), work_model="gpt-4")
+
+        mock_record.assert_not_called()
