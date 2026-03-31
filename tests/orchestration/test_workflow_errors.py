@@ -150,3 +150,38 @@ class TestWorkflowCleanupException:
 
             assert result.success is False
             mocks['session_cleanup'].assert_called_once()
+
+    def test_unassign_called_in_cleanup_sequence(self) -> None:
+        """Verifies that unassign is called as part of cleanup on failure."""
+        item = make_work_item(id="task-unassign-ex", title="Unassign Ex")
+
+        with (
+            make_process_item_mocks(
+                copilot_success=False,
+                include_cleanup_worktree=True, include_session_cleanup=True,
+            ) as mocks,
+            patch('pokepoke.beads.beads_management.unassign_item', return_value=True) as mock_unassign,
+        ):
+            # Allow cleanup_on_failure to call through to real method
+            mocks['session_cleanup'].side_effect = lambda: mock_unassign(item.id)
+
+            result = process_work_item(item, interactive=False)
+
+            assert result.success is False
+            # Verify cleanup was called
+            mocks['session_cleanup'].assert_called_once()
+
+    def test_unassign_exception_logged_during_cleanup(self) -> None:
+        """When unassign fails during cleanup, error is logged but doesn't crash."""
+        item = make_work_item(id="task-unassign-ex", title="Unassign Ex")
+
+        with make_process_item_mocks(
+            copilot_success=False,
+            include_cleanup_worktree=True, include_session_cleanup=True,
+        ) as mocks:
+            # Make cleanup raise an exception to simulate unassign failure
+            mocks['session_cleanup'].side_effect = RuntimeError("unassign_item returned False")
+
+            # Should re-raise the exception
+            with pytest.raises(RuntimeError, match="unassign_item returned False"):
+                process_work_item(item, interactive=False)
