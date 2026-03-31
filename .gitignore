@@ -26,6 +26,7 @@ coverage/
 logs/
 
 # Beads runtime files
+bd_list.json
 .beads/daemon-*.log.gz
 .beads/bd.sock.startlock
 .beads/bd.sock
