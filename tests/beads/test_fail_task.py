@@ -128,6 +128,20 @@ class TestFailTask:
             fail_task("PP-1", "gate rejected", agent_type="gate")
             mock_record.assert_called_once_with("failed", "PP-1", "gate", path=None, repo_name="")
 
+    def test_default_agent_type_is_work(self) -> None:
+        with patch("pokepoke.beads.beads_management.add_comment", return_value=True), \
+             patch("pokepoke.beads.beads_item_stats_store.record_event") as mock_record:
+            fail_task("PP-1", "some error")
+            mock_record.assert_called_once_with("failed", "PP-1", "work", path=None, repo_name="")
+
+    def test_handles_none_reason(self) -> None:
+        """None reason (even though type says str) should be handled gracefully."""
+        with patch("pokepoke.beads.beads_management.add_comment", return_value=True) as mock_comment, \
+             patch("pokepoke.beads.beads_item_stats_store.record_event"):
+            fail_task("PP-1", None)  # type: ignore[arg-type]
+            comment_text = mock_comment.call_args[0][1]
+            assert "Unknown failure" in comment_text
+
 
 # ── WorkItemResult.failure_reason tests ─────────────────────────────
 

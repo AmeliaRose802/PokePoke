@@ -133,6 +133,20 @@ class TestDefaultBeadsClient:
         mock.assert_called_once_with("item-1")
         assert result is True
 
+    def test_fail_task_delegates(self) -> None:
+        client = DefaultBeadsClient()
+        with patch("pokepoke.beads.beads_management.fail_task", return_value=True) as mock:
+            result = client.fail_task("item-1", "agent crashed", agent_type="gate")
+        mock.assert_called_once_with("item-1", "agent crashed", agent_type="gate")
+        assert result is True
+
+    def test_fail_task_delegates_default_agent_type(self) -> None:
+        client = DefaultBeadsClient()
+        with patch("pokepoke.beads.beads_management.fail_task", return_value=False) as mock:
+            result = client.fail_task("item-1", "timeout")
+        mock.assert_called_once_with("item-1", "timeout", agent_type="work")
+        assert result is False
+
     def test_retry_failed_unassigns_delegates(self) -> None:
         client = DefaultBeadsClient()
         with patch("pokepoke.beads.beads_recovery.retry_failed_unassigns", return_value=2) as mock:
