@@ -171,10 +171,10 @@ class WorkItemSession:
         continues so that every resource gets a cleanup attempt):
 
         1. ``write_journal(UNWINDING)``
-        2. ``abort_any_in_progress_merge()``
+        2. ``abort_any_in_progress_merge()`` (only if worktree was created)
         3. Worktree and branch are **preserved** so the next retry can
            resume with the same working directory and git history.
-        4. ``unassign_beads_item()``
+        4. ``unassign_beads_item()`` (only if item was assigned)
         5. If **all** steps succeeded → ``delete_journal()``
            Else → ``write_journal(ABANDONED)`` (leaves journal for
            :class:`SessionReconciler`)
@@ -193,12 +193,13 @@ class WorkItemSession:
             logger.error("Failed to write UNWINDING journal for %s: %s", self.item_id, exc)
             all_ok = False
 
-        # Step 2 — Abort any in-progress merge.
-        try:
-            self._abort_any_in_progress_merge()
-        except Exception as exc:
-            logger.error("Failed to abort in-progress merge for %s: %s", self.item_id, exc)
-            all_ok = False
+        # Step 2 — Abort any in-progress merge (only if worktree exists).
+        if self._worktree_created:
+            try:
+                self._abort_any_in_progress_merge()
+            except Exception as exc:
+                logger.error("Failed to abort in-progress merge for %s: %s", self.item_id, exc)
+                all_ok = False
 
         # Steps 3-4 skipped: preserve worktree and branch for next retry
         # so the agent can resume with the same working directory and
@@ -206,12 +207,13 @@ class WorkItemSession:
         if self.worktree_path:
             logger.info("Preserving worktree for %s at %s (will be reused on retry)", self.item_id, self.worktree_path)
 
-        # Step 5 — Unassign beads item.
-        try:
-            self._unassign_beads_item()
-        except Exception as exc:
-            logger.error("Failed to unassign beads item %s: %s", self.item_id, exc)
-            all_ok = False
+        # Step 5 — Unassign beads item (only if it was assigned).
+        if self._assigned:
+            try:
+                self._unassign_beads_item()
+            except Exception as exc:
+                logger.error("Failed to unassign beads item %s: %s", self.item_id, exc)
+                all_ok = False
 
         # Step 6 — Final journal disposition.
         if all_ok:
@@ -242,6 +244,8 @@ class WorkItemSession:
 
     def _abort_any_in_progress_merge(self) -> None:
         """Abort a merge if one is in progress in the worktree directory."""
+        if not self.worktree_path:
+            return
         wt = Path(self.worktree_path)
         if not wt.exists():
             return
