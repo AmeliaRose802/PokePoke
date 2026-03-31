@@ -185,3 +185,96 @@ class TestWorkflowCleanupException:
             # Should re-raise the exception
             with pytest.raises(RuntimeError, match="unassign_item returned False"):
                 process_work_item(item, interactive=False)
+
+
+class TestWorkflowCleanupSkippedOnShutdown:
+    """When is_shutting_down() returns True, cleanup_on_failure must be skipped."""
+
+    def test_cleanup_skipped_when_shutting_down(self) -> None:
+        """Covers workflow.py line 397: is_shutting_down() → skip cleanup."""
+        item = make_work_item(id="task-shutdown", title="Shutdown Task")
+
+        with make_process_item_mocks(
+            copilot_success=False,
+            include_cleanup_worktree=True, include_session_cleanup=True,
+        ) as mocks:
+            call_count = [0]
+
+            def shutdown_side_effect():
+                call_count[0] += 1
+                # Return True only on the last call (the finally block check).
+                # We need the while-loop calls to return False so processing
+                # proceeds, and the second loop iteration to return True so
+                # we exit the loop, then True again in finally.
+                if call_count[0] <= 1:
+                    return False  # Enter the while loop
+                return True  # Exit loop + skip cleanup in finally
+
+            with patch("pokepoke.orchestration.workflow.is_shutting_down",
+                       side_effect=shutdown_side_effect):
+                result = process_work_item(item, interactive=False)
+
+            assert result.success is False
+            mocks['session_cleanup'].assert_not_called()
+
+
+class TestWorkflowCleanupSessionNone:
+    """When _session is None (early failure), cleanup is not attempted."""
+
+    def test_no_cleanup_when_assignment_fails(self) -> None:
+        """Covers workflow.py line 397: _session is None when assign fails."""
+        item = make_work_item(id="task-no-assign", title="No Assign Task")
+
+        with make_process_item_mocks(
+            assign_ok=False,
+            include_session_cleanup=True,
+        ) as mocks:
+            result = process_work_item(item, interactive=False)
+
+            assert result.success is False
+            # _session was never created, so cleanup should not be called
+            mocks['session_cleanup'].assert_not_called()
+
+
+class TestWorkflowFinallyAlwaysRunsStateCleanup:
+    """set_current_work_item_id(None) and set_current_repo_name(None) always run."""
+
+    def test_state_cleared_on_work_agent_failure(self) -> None:
+        """Even when work agent fails, metric context is cleared."""
+        item = make_work_item(id="task-state-clear", title="State Clear Task")
+
+        with (
+            make_process_item_mocks(
+                copilot_success=False,
+                include_cleanup_worktree=True, include_session_cleanup=True,
+            ),
+            patch("pokepoke.orchestration.workflow.set_current_work_item_id") as mock_set_item,
+            patch("pokepoke.orchestration.workflow.set_current_repo_name") as mock_set_repo,
+        ):
+            process_work_item(item, interactive=False)
+
+            # Should be called with item.id first, then None in finally
+            set_none_calls = [c for c in mock_set_item.call_args_list if c.args == (None,)]
+            assert len(set_none_calls) >= 1, "set_current_work_item_id(None) not called in finally"
+            repo_none_calls = [c for c in mock_set_repo.call_args_list if c.args == (None,)]
+            assert len(repo_none_calls) >= 1, "set_current_repo_name(None) not called in finally"
+
+    def test_state_cleared_on_exception(self) -> None:
+        """Even when an exception propagates, metric context is cleared."""
+        item = make_work_item(id="task-state-exc", title="State Exception Task")
+
+        with (
+            make_process_item_mocks(
+                include_cleanup_worktree=True, include_session_cleanup=True,
+            ) as mocks,
+            patch("pokepoke.orchestration.workflow.set_current_work_item_id") as mock_set_item,
+            patch("pokepoke.orchestration.workflow.set_current_repo_name") as mock_set_repo,
+        ):
+            mocks['invoke'].side_effect = RuntimeError("catastrophic failure")
+            with pytest.raises(RuntimeError, match="catastrophic failure"):
+                process_work_item(item, interactive=False)
+
+            set_none_calls = [c for c in mock_set_item.call_args_list if c.args == (None,)]
+            assert len(set_none_calls) >= 1, "set_current_work_item_id(None) not called after exception"
+            repo_none_calls = [c for c in mock_set_repo.call_args_list if c.args == (None,)]
+            assert len(repo_none_calls) >= 1, "set_current_repo_name(None) not called after exception"
