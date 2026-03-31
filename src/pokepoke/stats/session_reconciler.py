@@ -12,6 +12,7 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
+from pokepoke.beads.beads_query import _run_bd_with_retry
 from pokepoke.git.git_helpers import run_git
 from pokepoke.stats.session_journal import (
     SessionJournal,
@@ -83,11 +84,9 @@ def _delete_branch(branch_name: str) -> bool:
 def _should_unassign(item_id: str, agent_name: str) -> bool:
     """Check if the beads item is in_progress and assigned to the given agent."""
     try:
-        result = subprocess.run(
-            ["bd", "show", item_id, "--json"],
-            capture_output=True, text=True,
-            encoding="utf-8", errors="replace",
-            check=True, timeout=30,
+        result = _run_bd_with_retry(
+            ["show", item_id, "--json"],
+            timeout=30,
         )
         items = json.loads(result.stdout or "[]")
         if not items:

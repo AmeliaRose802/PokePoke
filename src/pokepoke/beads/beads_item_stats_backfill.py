@@ -16,19 +16,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from pokepoke.beads.beads_query import _run_bd_with_retry
+
 logger = logging.getLogger(__name__)
 
 
 def _get_all_beads_items() -> list[dict[str, Any]]:
     """Fetch all items from beads database using bd list --json."""
     try:
-        result = subprocess.run(
-            ["bd", "list", "--json"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            check=True,
+        result = _run_bd_with_retry(
+            ["list", "--json"],
             timeout=30,
         )
         if not result.stdout:

@@ -5,6 +5,7 @@ import logging
 import subprocess
 from pathlib import Path
 
+from pokepoke.beads.beads_query import _run_bd_with_retry
 from pokepoke.beads.beads_hierarchy import close_parent_if_complete, get_parent_id
 from pokepoke.beads.beads_management import close_item
 from pokepoke.git.git_helpers import run_git
@@ -138,14 +139,9 @@ def close_work_item_and_parents(item: BeadsWorkItem) -> None:
 
     logger.info(f"\n🔍 Checking if agent closed beads item {item.id}...")
     try:
-        check_result = subprocess.run(
-            ["bd", "show", item.id, "--json"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            check=True,
-            timeout=30
+        check_result = _run_bd_with_retry(
+            ["show", item.id, "--json"],
+            timeout=30,
         )
         # bd show --json returns a list, not a dict - get first element
         items_data = json.loads(check_result.stdout)
