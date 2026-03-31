@@ -642,6 +642,49 @@ class TestUnassignItem:
         assert result is True
         assert mock_run_bd.call_count == 2
 
+    @patch("pokepoke.beads.beads_management.run_bd_sync_with_retry")
+    @patch("pokepoke.beads.beads_management._run_bd")
+    def test_detects_stderr_error_in_fallback_attempt(self, mock_run_bd: Mock, mock_sync: Mock) -> None:
+        """Fallback also checks stderr for validation errors."""
+        from pokepoke.beads.beads_management import unassign_item
+        mock_run_bd.side_effect = [
+            subprocess.CalledProcessError(1, "bd", stderr="invalid option"),  # first try fails
+            Mock(stderr='Error: invalid field value'),  # fallback has stderr error
+        ]
+        mock_sync.return_value = Mock(returncode=0)
+
+        result = unassign_item("item-1")
+
+        assert result is False
+        assert mock_run_bd.call_count == 2
+
+    @patch("pokepoke.beads.beads_management.run_bd_sync_with_retry")
+    @patch("pokepoke.beads.beads_management._run_bd")
+    def test_logs_warning_when_sync_fails(self, mock_run_bd: Mock, mock_sync: Mock) -> None:
+        """When sync fails after successful unassign, logs warning but returns True."""
+        from pokepoke.beads.beads_management import unassign_item
+        mock_run_bd.return_value = Mock(stderr='')
+        mock_sync.return_value = Mock(returncode=1)
+
+        result = unassign_item("item-1")
+
+        assert result is True
+        mock_sync.assert_called_once()
+
+    @patch("pokepoke.beads.beads_management.run_bd_sync_with_retry")
+    @patch("pokepoke.beads.beads_management._run_bd")
+    def test_unassign_with_different_item_ids(self, mock_run_bd: Mock, mock_sync: Mock) -> None:
+        """Validates unassign works with various item ID formats."""
+        from pokepoke.beads.beads_management import unassign_item
+        mock_run_bd.return_value = Mock(stderr='')
+        mock_sync.return_value = Mock(returncode=0)
+
+        for item_id in ["task-123", "PokePoke-p7oyy", "bug-fix-auth", "feature/new-api"]:
+            result = unassign_item(item_id)
+            assert result is True
+
+        assert mock_run_bd.call_count == 4
+
 
 class TestCloseItem:
     """Tests for close_item."""
