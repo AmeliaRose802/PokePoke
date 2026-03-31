@@ -576,3 +576,155 @@ class TestEnterFailureAndRollback:
 
             error_msgs = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
             assert any("rollback" in msg.lower() for msg in error_msgs)
+
+    def test_rollback_worktree_removal_failure_logs_error(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Covers lines 112-116: worktree removal fails during rollback."""
+        with _patch_enter_helpers() as m:
+            # Step 2 fails, triggering rollback that includes worktree removal
+            m["create_worktree"].return_value = Path("/tmp/wt/test")
+            # We need __enter__ to succeed through assign+create_worktree, then fail later
+            # Instead, simulate: assign succeeds, create_worktree succeeds, but then
+            # write_journal for ACTIVE phase fails
+            call_count = [0]
+            original_return = m["write_journal"].return_value
+
+            def write_journal_side_effect(**kwargs):
+                call_count[0] += 1
+                # Fail on the 3rd call (ACTIVE phase)
+                if call_count[0] == 3:
+                    raise RuntimeError("journal write failed")
+                return original_return
+
+            m["write_journal"].side_effect = write_journal_side_effect
+            m["cleanup_worktree"].side_effect = RuntimeError("worktree cleanup failed")
+
+            session = WorkItemSession(item_id="test-1", agent_name="agent")
+            with caplog.at_level(logging.ERROR, logger="pokepoke.orchestration.work_item_session"), \
+                    pytest.raises(RuntimeError, match="journal write failed"):
+                session.__enter__()
+
+            error_msgs = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
+            assert any("worktree" in msg.lower() for msg in error_msgs)
+
+    def test_rollback_branch_deletion_failure_logs_error(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Covers lines 119-123: branch deletion fails during rollback."""
+        with _patch_enter_helpers() as m:
+            call_count = [0]
+            original_return = m["write_journal"].return_value
+
+            def write_journal_side_effect(**kwargs):
+                call_count[0] += 1
+                if call_count[0] == 3:
+                    raise RuntimeError("journal write failed")
+                return original_return
+
+            m["write_journal"].side_effect = write_journal_side_effect
+            m["branch_exists"].return_value = True
+            m["cleanup_worktree"].return_value = True
+            # Patch run_git to fail for branch deletion in rollback
+            with patch("pokepoke.orchestration.work_item_session.run_git",
+                       side_effect=RuntimeError("branch delete failed")):
+                session = WorkItemSession(item_id="test-1", agent_name="agent")
+                with caplog.at_level(logging.ERROR, logger="pokepoke.orchestration.work_item_session"), \
+                        pytest.raises(RuntimeError, match="journal write failed"):
+                    session.__enter__()
+
+            error_msgs = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
+            assert any("branch" in msg.lower() for msg in error_msgs)
+
+    def test_rollback_journal_deletion_failure_logs_error(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Covers lines 134-135: journal deletion fails during rollback."""
+        with _patch_enter_helpers() as m:
+            m["assign"].return_value = False  # Fails at step 1
+            m["delete_journal"].side_effect = RuntimeError("journal delete failed")
+
+            session = WorkItemSession(item_id="test-1", agent_name="agent")
+            with caplog.at_level(logging.ERROR, logger="pokepoke.orchestration.work_item_session"), \
+                    pytest.raises(RuntimeError, match="Failed to assign"):
+                session.__enter__()
+
+            error_msgs = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
+            assert any("journal" in msg.lower() for msg in error_msgs)
+
+
+class TestCleanupDeleteJournalFailure:
+    """Test cleanup_on_failure when delete_journal fails on success path."""
+
+    def test_delete_journal_failure_on_success_path(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Covers lines 220-221: delete_journal raises during successful cleanup."""
+        with _patch_all_helpers() as m:
+            m["unassign_item"].return_value = True
+            m["delete_journal"].side_effect = RuntimeError("journal delete failed")
+
+            session = _make_session()
+            with caplog.at_level(logging.ERROR, logger="pokepoke.orchestration.work_item_session"):
+                session.cleanup_on_failure()
+
+            error_msgs = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
+            assert any("journal" in msg.lower() for msg in error_msgs)
+
+
+class TestAbortMergeInProgress:
+    """Tests for _abort_any_in_progress_merge."""
+
+    def test_aborts_merge_when_in_progress(self, tmp_path: Path) -> None:
+        """Covers line 253: runs git merge --abort when merge is in progress."""
+        with _patch_all_helpers() as m:
+            m["is_merge"].return_value = True
+            session = _make_session(worktree_path=str(tmp_path))
+            session.cleanup_on_failure()
+
+            m["subprocess_run"].assert_called_once()
+            call_args = m["subprocess_run"].call_args
+            assert "merge" in call_args[0][0]
+            assert "--abort" in call_args[0][0]
+
+
+class TestRemoveWorktreeHelper:
+    """Tests for _remove_worktree internal helper."""
+
+    def test_remove_worktree_calls_cleanup(self) -> None:
+        """Covers lines 257-262: _remove_worktree delegates to cleanup_worktree."""
+        with _patch_all_helpers() as m:
+            m["cleanup_worktree"].return_value = True
+            session = _make_session()
+            session._remove_worktree()
+            m["cleanup_worktree"].assert_called_once_with(session.item_id, force=True)
+
+    def test_remove_worktree_empty_path_noop(self) -> None:
+        """_remove_worktree is a no-op when worktree_path is empty."""
+        with _patch_all_helpers() as m:
+            session = _make_session(worktree_path="")
+            session._remove_worktree()
+            m["cleanup_worktree"].assert_not_called()
+
+    def test_remove_worktree_raises_on_failure(self) -> None:
+        """_remove_worktree raises when cleanup_worktree returns False."""
+        with _patch_all_helpers() as m:
+            m["cleanup_worktree"].return_value = False
+            session = _make_session()
+            with pytest.raises(RuntimeError, match="cleanup_worktree returned False"):
+                session._remove_worktree()
+
+
+class TestDeleteBranchHelper:
+    """Tests for _delete_branch internal helper."""
+
+    def test_delete_branch_when_exists(self) -> None:
+        """Covers lines 266-272: branch exists and gets deleted."""
+        with _patch_all_helpers() as m:
+            m["branch_exists"].return_value = True
+            session = _make_session()
+            session._delete_branch()
+            m["subprocess_run"].assert_called_once()
+            call_args = m["subprocess_run"].call_args
+            assert "branch" in call_args[0][0]
+            assert "-D" in call_args[0][0]
+
+    def test_delete_branch_skips_when_not_exists(self) -> None:
+        """Branch that doesn't exist is silently skipped."""
+        with _patch_all_helpers() as m:
+            m["branch_exists"].return_value = False
+            session = _make_session()
+            session._delete_branch()
+            m["subprocess_run"].assert_not_called()
