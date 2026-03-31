@@ -2,45 +2,138 @@ project_name: ExampleProject
 models:
   default: claude-opus-4.6
   fallback: claude-sonnet-4.5
-  ab_testing_enabled: false
-max_parallel_agents: 8
-git:
-  default_branch: master
-mcp_server:
-  enabled: false
+  candidate_models:
+  - claude-opus-4.5
+  - gpt-5.2-codex
+ai_backend:
+  provider: copilot
+  copilot_cli_path: copilot.cmd
+  claude_code_cli_path: claude
 maintenance:
   agents:
-    - name: Tech Debt
-      prompt_file: tech-debt.md
-      frequency: 5
-      needs_worktree: false
-    - name: Janitor
-      prompt_file: janitor.md
-      frequency: 2
-      needs_worktree: true
-      merge_changes: true
-    - name: Backlog Cleanup
-      prompt_file: backlog-cleanup.md
-      frequency: 7
-      needs_worktree: true
-      merge_changes: false
-    - name: Beta Tester
-      prompt_file: beta-tester.md
-      frequency: 3
-      needs_worktree: true
-      merge_changes: false
-      enabled: false
-    - name: Code Review
-      prompt_file: code-reviewer.md
-      frequency: 5
-      needs_worktree: false
-      model: gpt-5.1-codex
-    - name: Worktree Cleanup
-      prompt_file: worktree-cleanup.md
-      frequency: 4
-      needs_worktree: false
-    - name: Model Sync
-      prompt_file: ""
-      frequency: 1
-      needs_worktree: false
-      merge_changes: false
+  - name: Tech Debt
+    prompt_file: tech-debt.md
+    frequency: 5
+    needs_worktree: false
+    merge_changes: true
+    model: null
+    enabled: true
+    conflicts_with: []
+    custom: false
+    description: ''
+  - name: Janitor
+    prompt_file: janitor.md
+    frequency: 2
+    needs_worktree: true
+    merge_changes: true
+    model: null
+    enabled: true
+    conflicts_with: []
+    custom: false
+    description: ''
+  - name: Backlog Cleanup
+    prompt_file: backlog-cleanup.md
+    frequency: 7
+    needs_worktree: true
+    merge_changes: false
+    model: null
+    enabled: true
+    conflicts_with: []
+    custom: false
+    description: ''
+  - name: Beta Tester
+    prompt_file: beta-tester.md
+    frequency: 3
+    needs_worktree: true
+    merge_changes: false
+    model: null
+    enabled: false
+    conflicts_with: []
+    custom: false
+    description: ''
+  - name: Code Review
+    prompt_file: code-reviewer.md
+    frequency: 5
+    needs_worktree: false
+    merge_changes: true
+    model: gpt-5.1-codex
+    enabled: true
+    conflicts_with: []
+    custom: false
+    description: ''
+  - name: Worktree Cleanup
+    prompt_file: worktree-cleanup.md
+    frequency: 4
+    needs_worktree: false
+    merge_changes: true
+    model: null
+    enabled: true
+    conflicts_with: []
+    custom: false
+    description: ''
+  - name: Model Sync
+    prompt_file: ''
+    frequency: 1
+    needs_worktree: false
+    merge_changes: false
+    model: null
+    enabled: true
+    conflicts_with: []
+    custom: false
+    description: ''
+model_sync:
+  enabled: true
+  interval_minutes: 60
+  beta_only: true
+  include_preview: true
+  prune_unavailable: false
+  create_beads_items: true
+  issue_type: task
+  priority: 2
+  labels:
+  - model
+  - beta
+  - copilot
+mcp_server:
+  enabled: false
+  restart_script: null
+  name: null
+git:
+  default_branch: master
+  fallback_branch: master
+preflight_health:
+  enabled: true
+  min_disk_space_gb: 1.0
+  lock_timeout_seconds: 30.0
+  worktree_test_timeout: 60.0
+  max_orphan_worktrees: 10
+  git_operation_timeout: 30.0
+  enable_self_repair: true
+  max_repair_attempts: 3
+  fail_on_environmental_errors: true
+  fail_on_critical_errors: true
+  graceful_shutdown_on_failure: true
+test_data: {}
+work_artifacts_dir: null
+max_parallel_agents: 8
+command_timeout: 600
+gate_agent_enabled: true
+max_gate_rejections_per_item: 3
+max_copilot_failure_retries: 2
+idle_timeout_seconds: 90
+session_inactivity_timeout: 900
+tool_call_timeout: 1800
+process_output_timeout: 600
+max_ping_failures: 3
+circuit_breaker_drain_timeout: 900
+assignment:
+  rules: []
+  fallback: weighted
+performance_thresholds:
+  enabled: true
+  max_merge_queue_depth: 5
+  max_lock_wait_seconds: 30.0
+  max_iteration_seconds: 30.0
+  min_memory_mb: 256.0
+  min_success_rate: 0.5
+repos: []
