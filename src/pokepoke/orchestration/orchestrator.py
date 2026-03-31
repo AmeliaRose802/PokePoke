@@ -50,19 +50,16 @@ from pokepoke.utils.signal_handlers import register_shutdown_handlers, unregiste
 
 logger = logging.getLogger(__name__)
 
-def _finalize_session(
-    session_stats: SessionStats, start_time: float,
-    items_completed: int, total_requests: int, run_logger: RunLogger,
-) -> None:
+def _finalize_session(session_stats: SessionStats, start_time: float, items_completed: int,
+                      total_requests: int, run_logger: RunLogger) -> None:
     """Collect ending stats, print summary, and clean up UI."""
     end_time = time.time()
-    terminal_ui.ui.set_session_end_time(end_time)  # Stop desktop UI clock
+    terminal_ui.ui.set_session_end_time(end_time)
     try:
         session_stats.set_ending_beads_stats(None if is_shutting_down() else get_beads_stats())
     except KeyboardInterrupt:
         logger.warning("⚠️  Stats collection interrupted, skipping...")
         session_stats.set_ending_beads_stats(None)
-    # Capture merge queue performance metrics
     with contextlib.suppress(Exception):
         mq = get_merge_queue()
         session_stats.record_merge_queue_stats(mq.stats)
@@ -73,7 +70,9 @@ def _finalize_session(
     set_current_session_stats(None)
     clear_terminal_banner()
 
-def _record_item_result(selected_item: BeadsWorkItem, result: WorkItemResult, session_stats: SessionStats, run_logger: RunLogger) -> tuple[bool, int]:
+
+def _record_item_result(selected_item: BeadsWorkItem, result: WorkItemResult,
+                        session_stats: SessionStats, run_logger: RunLogger) -> tuple[bool, int]:
     """Record the result of processing a single work item."""
     if result.request_count > 1:
         session_stats.record_retries(result.request_count - 1)
@@ -92,12 +91,15 @@ def _record_item_result(selected_item: BeadsWorkItem, result: WorkItemResult, se
     if result.success:
         items_completed = session_stats.record_completion(selected_item, agent_type="work")
         beads_summary = record_item_completed(selected_item.id, agent_type="work")
-        session_stats.set_lifetime_beads_item_totals(created=int(beads_summary.get("total_created", 0)), completed=int(beads_summary.get("total_completed", 0)))
-        total_persistent_count = increment_items_completed(repo_id=str(Path.cwd()))
-        logger.info(f"\n📈 Items completed this session: {items_completed}\n📈 Total items completed (lifetime): {total_persistent_count}\n📈 Beads created (lifetime): {session_stats.lifetime_items_created}\n📈 Beads net delta (lifetime): {session_stats.lifetime_items_created - session_stats.lifetime_items_completed:+d}")
+        session_stats.set_lifetime_beads_item_totals(
+            created=int(beads_summary.get("total_created", 0)),
+            completed=int(beads_summary.get("total_completed", 0)))
+        total_count = increment_items_completed(repo_id=str(Path.cwd()))
+        logger.info(f"\n📈 Items completed this session: {items_completed}\n📈 Total (lifetime): {total_count}\n📈 Beads created (lifetime): {session_stats.lifetime_items_created}")
         run_logger.log_orchestrator(f"Items completed this session: {items_completed}")
-        run_periodic_maintenance(total_persistent_count, session_stats, run_logger, repo_id=str(Path.cwd()))
+        run_periodic_maintenance(total_count, session_stats, run_logger, repo_id=str(Path.cwd()))
     return result.success, session_stats.items_completed
+
 
 @dataclass
 class _OrchestratorContext:
@@ -118,16 +120,12 @@ class _OrchestratorContext:
 
     def finalize(self) -> None:
         """Shorthand to finalize session with current context state."""
-        _finalize_session(
-            self.session_stats, self.start_time,
-            self.items_completed, self.total_requests, self.run_logger,
-        )
+        _finalize_session(self.session_stats, self.start_time, self.items_completed,
+                          self.total_requests, self.run_logger)
 
-def _setup_orchestrator(
-    interactive: bool, continuous: bool,
-    run_beta_first: bool, agent_name_override: str | None,
-    max_parallel_agents: int,
-) -> _OrchestratorContext:
+
+def _setup_orchestrator(interactive: bool, continuous: bool, run_beta_first: bool,
+                        agent_name_override: str | None, max_parallel_agents: int) -> _OrchestratorContext:
     """Initialize agent identity, logging, signal handlers, beads recovery, and config."""
     agent_name = initialize_agent_name(custom_name=agent_name_override)
     os.environ['AGENT_NAME'] = agent_name
@@ -137,7 +135,6 @@ def _setup_orchestrator(
     logger.info("=" * 50)
     set_terminal_banner(f"PokePoke {mode_name} - {agent_name}")
     terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", agent_name)
-
     run_logger = RunLogger()
     run_dir = run_logger.get_run_dir()
     configure_logging(run_dir / 'debug.log')
@@ -152,7 +149,6 @@ def _setup_orchestrator(
     start_time = time.time()
     session_stats = SessionStats(agent_stats=AgentStats())
     set_current_session_stats(session_stats)
-
     # Backfill missing beads item creation events for Desktop UI accuracy
     try:
         backfill_result = backfill_from_beads_db(silent=True)
@@ -162,9 +158,7 @@ def _setup_orchestrator(
         logger.warning(f"Failed to backfill beads item stats: {e}")
     s = _get_beads_summary()
     session_stats.set_lifetime_beads_item_totals(
-        created=int(s.get("total_created", 0)),
-        completed=int(s.get("total_completed", 0)),
-    )
+        created=int(s.get("total_created", 0)), completed=int(s.get("total_completed", 0)))
     # Recover any items that failed to unassign in previous runs
     stuck_count = get_failed_unassign_count()
     if stuck_count > 0:
@@ -201,28 +195,43 @@ def _setup_orchestrator(
     if effective_parallel > 1:
         logger.info(f"🔀 Parallel mode: up to {effective_parallel} concurrent agents")
         run_logger.log_orchestrator(f"Parallel mode enabled: max_parallel_agents={effective_parallel}")
-
     return _OrchestratorContext(
         agent_name=agent_name, mode_name=mode_name, run_logger=run_logger,
-        main_repo_path=main_repo_path, start_time=start_time,
-        session_stats=session_stats, failed_claim_ids=set(), cfg=cfg,
-        effective_parallel=effective_parallel, interactive=interactive,
-        continuous=continuous,
-    )
+        main_repo_path=main_repo_path, start_time=start_time, session_stats=session_stats,
+        failed_claim_ids=set(), cfg=cfg, effective_parallel=effective_parallel,
+        interactive=interactive, continuous=continuous)
+
 
 def _run_preflight(ctx: _OrchestratorContext) -> int | None:
     """Run pre-flight health checks. Returns exit code to stop, or None to continue."""
     logger.info("\n🔍 Running pre-flight health checks...")
     ctx.run_logger.log_polling("Running pre-flight health checks")
-
-    should_continue, _is_critical = handle_preflight_checks(
-        ctx.main_repo_path, ctx.run_logger, cfg=ctx.cfg,
-    )
+    should_continue, _is_critical = handle_preflight_checks(ctx.main_repo_path, ctx.run_logger, cfg=ctx.cfg)
     if not should_continue:
         terminal_ui.ui.stop_and_capture()
         ctx.finalize()
         return 1
     return None
+
+
+def _fetch_work_items(ctx: _OrchestratorContext) -> tuple[int | None, list[BeadsWorkItem]]:
+    """Fetch ready work items. Returns (exit_code, items) - exit_code is set if we should stop."""
+    logger.info("\n🔍 Checking main repository status...")
+    ctx.run_logger.log_polling("Checking main repository status")
+    if not check_and_commit_main_repo(ctx.main_repo_path, ctx.run_logger):
+        ctx.run_logger.log_orchestrator("Main repo check failed", level="ERROR")
+        return 1, []
+    logger.info("\nFetching ready work from beads...")
+    ctx.run_logger.log_polling("Fetching ready work from beads")
+    ready_items = get_ready_work_items()
+    if ready_items is None:
+        terminal_ui.ui.stop_and_capture()
+        logger.error("\n❌ Failed to query beads. Check beads installation/database.")
+        ctx.run_logger.log_orchestrator("Failed to query beads - system error", level="ERROR")
+        ctx.finalize()
+        return 1, []
+    return None, ready_items
+
 
 def _run_main_loop(ctx: _OrchestratorContext) -> int:
     """Sequential work-selection and dispatch loop. Returns process exit code."""
@@ -231,14 +240,9 @@ def _run_main_loop(ctx: _OrchestratorContext) -> int:
         exit_code = _run_preflight(ctx)
         if exit_code is not None:
             return exit_code
-        logger.info("\n\ud83d\udd0d Checking main repository status...")
-        ctx.run_logger.log_polling("Checking main repository status")
-        if not check_and_commit_main_repo(ctx.main_repo_path, ctx.run_logger):
-            ctx.run_logger.log_orchestrator("Main repo check failed", level="ERROR")
-            return 1
-        logger.info("\nFetching ready work from beads...")
-        ctx.run_logger.log_polling("Fetching ready work from beads")
-        ready_items = get_ready_work_items()
+        exit_code, ready_items = _fetch_work_items(ctx)
+        if exit_code is not None:
+            return exit_code
         if ctx.interactive:
             terminal_ui.ui.stop()
         selected_item = select_work_item(ready_items, ctx.interactive, skip_ids=ctx.failed_claim_ids)
@@ -273,22 +277,17 @@ def _run_main_loop(ctx: _OrchestratorContext) -> int:
             terminal_ui.ui.push_agent_status(
                 agent_id, display_name, iteration=1,
                 status="success" if success else "failed",
-                work_item_id=selected_item.id, work_item_title=selected_item.title,
-                agent_type="work",
-            )
+                work_item_id=selected_item.id, work_item_title=selected_item.title, agent_type="work")
         if not wi_result.success and wi_result.request_count == 0:
             ctx.failed_claim_ids.add(selected_item.id)
             ctx.run_logger.log_orchestrator(
-                f"Item {selected_item.id} failed to claim, added to skip list "
-                f"({len(ctx.failed_claim_ids)} skipped)",
-            )
+                f"Item {selected_item.id} failed to claim, added to skip list ({len(ctx.failed_claim_ids)} skipped)")
         elif wi_result.success:
             ctx.failed_claim_ids.clear()
         ctx.total_requests += wi_result.request_count
         _record_item_result(selected_item, wi_result, ctx.session_stats, ctx.run_logger)
         ctx.items_completed = ctx.session_stats.items_completed
         terminal_ui.ui.update_stats(ctx.session_stats, time.time() - ctx.start_time)
-        # Performance threshold checks
         run_iteration_checks(time.monotonic() - iter_start, wi_result.success)
         if should_stop_after_current():
             cancel_stop_after_current()
@@ -301,7 +300,6 @@ def _run_main_loop(ctx: _OrchestratorContext) -> int:
             terminal_ui.ui.stop_and_capture()
             ctx.finalize()
             return 0 if success else 1
-
         if ctx.interactive:
             set_terminal_banner(f"PokePoke {ctx.mode_name} - {ctx.agent_name}")
             terminal_ui.ui.update_header("PokePoke", f"{ctx.mode_name} Mode", "Waiting...")

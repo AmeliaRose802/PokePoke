@@ -19,6 +19,7 @@ from typing import Any
 from pokepoke.utils.preflight_checks import (
     ErrorSeverity,
     HealthCheckError,
+    check_beads_health,
     check_disk_space,
     check_git_status,
     check_lock_availability,
@@ -119,6 +120,7 @@ class PreflightChecker:
             ('lock_availability_check', self._check_lock_availability),
             ('disk_space_check', self._check_disk_space),
             ('repository_integrity_check', self._check_repository_integrity),
+            ('beads_health_check', self._check_beads_health),
         ]
 
         logger.info(f"Starting pre-flight health checks in {self.repo_path}")
@@ -182,6 +184,10 @@ class PreflightChecker:
     def _check_repository_integrity(self) -> tuple[list[HealthCheckError], list[str]]:
         """Delegate to check_repository_integrity."""
         return check_repository_integrity(self.repo_path, self.config)
+
+    def _check_beads_health(self) -> tuple[list[HealthCheckError], list[str]]:
+        """Delegate to check_beads_health."""
+        return check_beads_health(self.repo_path, self.config)
 
     def _is_lock_stale(self, lock_path: Path) -> tuple[bool, dict[str, Any]]:
         """Delegate to is_lock_stale."""

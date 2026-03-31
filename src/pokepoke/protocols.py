@@ -67,7 +67,7 @@ class DefaultGitClient:
 class BeadsClient(Protocol):
     """Structural interface for beads issue-tracker operations."""
 
-    def get_ready_work_items(self) -> list[BeadsWorkItem]: ...
+    def get_ready_work_items(self) -> list[BeadsWorkItem] | None: ...
 
     def assign_and_sync_item(
         self, item_id: str, agent_name: str | None = None
@@ -114,7 +114,7 @@ class BeadsClient(Protocol):
 class DefaultBeadsClient:
     """Default :class:`BeadsClient` that delegates to module-level helpers."""
 
-    def get_ready_work_items(self) -> list[BeadsWorkItem]:
+    def get_ready_work_items(self) -> list[BeadsWorkItem] | None:
         from pokepoke.beads.beads_query import get_ready_work_items
 
         return get_ready_work_items()

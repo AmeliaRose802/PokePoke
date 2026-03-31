@@ -72,14 +72,27 @@ class TestRunPreflightAndRepoChecks:
         assert result == []
 
     @patch("pokepoke.agents.parallel_support.handle_preflight_checks", return_value=(True, False))
-    def test_ready_items_exception_returns_empty(self, _preflight):
+    def test_ready_items_exception_returns_failure(self, _preflight):
+        """Test that exception from get_ready_work_items returns failure (ok=False)."""
         run_logger = MagicMock()
         repo_fn = Mock(return_value=True)
         ready_fn = Mock(side_effect=RuntimeError("beads down"))
         ok, _failures, result = run_preflight_and_repo_checks(
             "/repo", run_logger, 0, 5, repo_fn, ready_fn,
         )
-        assert ok is True
+        assert ok is False  # beads failure is now an error, not treated as "no work"
+        assert result == []
+
+    @patch("pokepoke.agents.parallel_support.handle_preflight_checks", return_value=(True, False))
+    def test_ready_items_returns_none_signals_failure(self, _preflight):
+        """Test that None from get_ready_work_items signals system error."""
+        run_logger = MagicMock()
+        repo_fn = Mock(return_value=True)
+        ready_fn = Mock(return_value=None)
+        ok, _failures, result = run_preflight_and_repo_checks(
+            "/repo", run_logger, 0, 5, repo_fn, ready_fn,
+        )
+        assert ok is False  # None signals system error
         assert result == []
 
 

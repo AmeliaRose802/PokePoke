@@ -168,50 +168,50 @@ def _get_main_repo_root() -> Path | None:
         return None
 
 
-def get_ready_work_items(*, backend: CLIBackendConfig | None = None) -> list[BeadsWorkItem]:
-    """Query beads for ready work items. Returns empty list on failure."""
+def get_ready_work_items(*, backend: CLIBackendConfig | None = None) -> list[BeadsWorkItem] | None:
+    """Query beads for ready work items.
+
+    Returns:
+        List of ready work items on success (may be empty if no work available).
+        None if beads query failed (subprocess error, timeout, parse failure).
+    """
     try:
         result = _run_bd_with_retry(['ready', '--json'], backend=backend)
     except subprocess.CalledProcessError as e:
         logger.warning("⚠️  beads ready command failed (exit code %s)", e.returncode)
         if e.stderr:
             logger.warning("⚠️  Error output: %s", e.stderr.strip())
-        return []
+        return None
     except (subprocess.TimeoutExpired, OSError) as e:
         logger.warning("⚠️  beads ready command failed after retries: %s", e)
-        return []
-
+        return None
     if not result.stdout:
         return []
-
     try:
         items_data = _parse_beads_json(result.stdout)
-        if not items_data or isinstance(items_data, dict):
-            if isinstance(items_data, dict) and 'error' in items_data:
+        if items_data is None:
+            logger.warning("⚠️  beads returned non-JSON output")
+            return None
+        if isinstance(items_data, dict):
+            if 'error' in items_data:
                 logger.warning("⚠️  beads returned error: %s", items_data['error'].split('\n')[0])
-            return []
-        return [_filter_to_dataclass(BeadsWorkItem, item) for item in items_data]
+                return None
+            return []  # Dict without error key - treat as empty
+        return [_filter_to_dataclass(BeadsWorkItem, item) for item in items_data] if items_data else []
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         logger.warning(f"⚠️  Warning: failed to parse beads output: {e}")
-        return []
+        return None
 
 
-def get_in_progress_items(*, backend: CLIBackendConfig | None = None) -> list[BeadsWorkItem]:
-    """Query beads for items with ``in_progress`` status.
-
-    These are items that were claimed by a previous run but never completed
-    (e.g. the orchestrator was killed).  The caller can merge them with
-    ``get_ready_work_items()`` so that existing worktrees are resumed.
-    """
+def get_in_progress_items(*, backend: CLIBackendConfig | None = None) -> list[BeadsWorkItem] | None:
+    """Query beads for in_progress items. Returns None on error, list on success."""
     try:
         result = _run_bd_with_retry(['list', '--status', 'in_progress', '--json'], backend=backend)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
         logger.warning("⚠️  beads in_progress query failed after retries: %s", e)
-        return []
-
+        return None
     if not result.stdout:
         return []
-
     try:
         items_data = _parse_beads_json(result.stdout)
         if not items_data or isinstance(items_data, dict):
@@ -219,18 +219,11 @@ def get_in_progress_items(*, backend: CLIBackendConfig | None = None) -> list[Be
         return [_filter_to_dataclass(BeadsWorkItem, item) for item in items_data]
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         logger.warning("⚠️  failed to parse in_progress output: %s", e)
-        return []
+        return None
 
 
 def get_issue_dependencies(issue_id: str, *, backend: CLIBackendConfig | None = None) -> IssueWithDependencies | None:
-    """Get detailed issue information including dependencies.
-
-    Args:
-        issue_id: The issue ID to query.
-
-    Returns:
-        Issue with dependencies, or None if not found.
-    """
+    """Get detailed issue information including dependencies."""
     try:
         result = _run_bd_with_retry(['show', issue_id, '--json'], backend=backend)
     except subprocess.CalledProcessError:
@@ -238,10 +231,8 @@ def get_issue_dependencies(issue_id: str, *, backend: CLIBackendConfig | None = 
     except (subprocess.TimeoutExpired, OSError) as e:
         logger.warning("Failed querying dependencies for %s after retries: %s", issue_id, e)
         return None
-
     if not result.stdout:
         return None
-
     try:
         issues_data = _parse_beads_json(result.stdout)
         if not issues_data:
