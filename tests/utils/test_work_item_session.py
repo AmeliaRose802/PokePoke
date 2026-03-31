@@ -819,3 +819,164 @@ class TestUnassignBeadsItemHelper:
             session.cleanup_on_failure()
             # Verify unassign was called as part of cleanup
             m["unassign_item"].assert_called_once_with("task-cleanup-test")
+
+
+# ---------------------------------------------------------------------------
+# cleanup_on_failure: never-raises guarantee
+# ---------------------------------------------------------------------------
+
+
+class TestCleanupNeverRaises:
+    """cleanup_on_failure must never propagate exceptions to its caller."""
+
+    def test_never_raises_when_all_steps_throw(self) -> None:
+        """Even if every internal step raises, cleanup_on_failure completes silently."""
+        with _patch_all_helpers() as m:
+            m["write_journal"].side_effect = OSError("disk full")
+            m["is_merge"].side_effect = RuntimeError("merge check crashed")
+            m["unassign_item"].side_effect = ConnectionError("service down")
+            m["delete_journal"].side_effect = PermissionError("locked")
+
+            session = _make_session()
+            # Must not raise
+            session.cleanup_on_failure()
+
+    def test_never_raises_when_unassign_raises(self) -> None:
+        """Unassign exception is caught; cleanup completes."""
+        with _patch_all_helpers() as m:
+            m["unassign_item"].side_effect = RuntimeError("unassign exploded")
+
+            session = _make_session()
+            session.cleanup_on_failure()  # Must not raise
+
+    def test_never_raises_when_abandoned_journal_fails(self) -> None:
+        """If ABANDONED journal write fails, exception is swallowed."""
+        with _patch_all_helpers() as m:
+            # Make unassign fail so the ABANDONED path is taken
+            m["unassign_item"].side_effect = RuntimeError("unassign broke")
+            # First call (UNWINDING) succeeds, second call (ABANDONED) fails
+            m["write_journal"].side_effect = [
+                Path("/j.json"),       # UNWINDING succeeds
+                OSError("disk full"),  # ABANDONED fails
+            ]
+
+            session = _make_session()
+            session.cleanup_on_failure()  # Must not raise
+
+
+# ---------------------------------------------------------------------------
+# cleanup_on_failure: ABANDONED journal write failure logging
+# ---------------------------------------------------------------------------
+
+
+class TestAbandonedJournalWriteFailure:
+    """When the ABANDONED journal write itself fails, error is logged."""
+
+    def test_abandoned_write_failure_logged_at_error(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Covers line 228: ABANDONED journal write fails after partial unwind."""
+        with _patch_all_helpers() as m:
+            m["unassign_item"].side_effect = RuntimeError("unassign failed")
+            m["write_journal"].side_effect = [
+                Path("/j.json"),       # UNWINDING
+                OSError("disk full"),  # ABANDONED
+            ]
+
+            session = _make_session()
+            with caplog.at_level(logging.ERROR, logger="pokepoke.orchestration.work_item_session"):
+                session.cleanup_on_failure()
+
+            error_msgs = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
+            assert any("abandoned" in msg.lower() for msg in error_msgs), (
+                f"Expected ERROR log about ABANDONED journal failure, got: {error_msgs}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# _abort_any_in_progress_merge: no-merge-in-progress early return
+# ---------------------------------------------------------------------------
+
+
+class TestAbortMergeNoMergeInProgress:
+    """When the worktree path exists but no merge is in progress, early return."""
+
+    def test_no_merge_skips_abort(self, tmp_path: Path) -> None:
+        """Covers line 253: path exists, no merge → early return without run_git."""
+        with _patch_all_helpers() as m:
+            m["is_merge"].return_value = False
+            session = _make_session(worktree_path=str(tmp_path))
+            session.cleanup_on_failure()
+
+            # is_merge_in_progress was checked
+            m["is_merge"].assert_called_once()
+            # But merge --abort was NOT called
+            m["subprocess_run"].assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _rollback_enter: all rollback steps fail simultaneously
+# ---------------------------------------------------------------------------
+
+
+class TestRollbackEnterAllFail:
+    """When all rollback steps fail during __enter__, errors are logged but
+    the original exception still propagates."""
+
+    def test_all_rollback_steps_fail(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Worktree removal, branch deletion, unassign, and journal delete all fail."""
+        with _patch_enter_helpers() as m:
+            call_count = [0]
+            original_return = m["write_journal"].return_value
+
+            def write_journal_side_effect(**kwargs):
+                call_count[0] += 1
+                if call_count[0] == 3:  # ACTIVE phase
+                    raise RuntimeError("journal write failed")
+                return original_return
+
+            m["write_journal"].side_effect = write_journal_side_effect
+            m["cleanup_worktree"].side_effect = RuntimeError("worktree cleanup failed")
+            m["branch_exists"].return_value = True
+            m["unassign_item"].side_effect = RuntimeError("unassign failed")
+            m["delete_journal"].side_effect = RuntimeError("journal delete failed")
+
+            with patch("pokepoke.orchestration.work_item_session.run_git",
+                       side_effect=RuntimeError("branch delete failed")):
+                session = WorkItemSession(item_id="test-1", agent_name="agent")
+                with caplog.at_level(logging.ERROR, logger="pokepoke.orchestration.work_item_session"), \
+                        pytest.raises(RuntimeError, match="journal write failed"):
+                    session.__enter__()
+
+            error_msgs = [r.message for r in caplog.records if r.levelno >= logging.ERROR]
+            # All rollback failures should be logged
+            assert any("worktree" in msg.lower() for msg in error_msgs)
+            assert any("branch" in msg.lower() for msg in error_msgs)
+            assert any("unassign" in msg.lower() for msg in error_msgs)
+            assert any("journal" in msg.lower() for msg in error_msgs)
+
+
+# ---------------------------------------------------------------------------
+# __exit__: cleanup_on_failure raises → original exception is replaced
+# ---------------------------------------------------------------------------
+
+
+class TestExitCleanupRaises:
+    """When cleanup_on_failure raises during __exit__, the cleanup exception
+    replaces the original exception (Python semantics for exceptions in
+    except/finally blocks)."""
+
+    def test_cleanup_exception_replaces_original(self) -> None:
+        """The cleanup exception propagates, replacing the original."""
+        session = _make_session()
+        with (
+            patch.object(session, "cleanup_on_failure",
+                         side_effect=RuntimeError("cleanup boom")),
+            pytest.raises(RuntimeError, match="cleanup boom"),
+        ):
+            session.__exit__(ValueError, ValueError("original"), None)
+
+    def test_exit_still_returns_false_concept(self) -> None:
+        """__exit__ is designed to never suppress — returns False."""
+        session = _make_session()
+        with patch.object(session, "cleanup_on_failure"):
+            result = session.__exit__(RuntimeError, RuntimeError("x"), None)
+            assert result is False
