@@ -249,12 +249,11 @@ class SDKWatchdog:
         diag_task: asyncio.Task[None] | None = None
         if stats is not None:
             diag_log_path = resolve_diagnostics_log_path(handler)
-            if diag_log_path:
-                diag_task = asyncio.create_task(
-                    periodic_diagnostics_loop(
-                        stats, handler, diag_log_path, diag_stop,
-                    )
+            diag_task = asyncio.create_task(
+                periodic_diagnostics_loop(
+                    stats, handler, diag_log_path, diag_stop,
                 )
+            )
 
         try:
             return await SDKWatchdog._poll_loop(

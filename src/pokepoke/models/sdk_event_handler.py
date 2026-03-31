@@ -12,6 +12,8 @@ from pokepoke.config import FALLBACK_MODEL, get_config
 from pokepoke.desktop import terminal_ui
 from pokepoke.utils.hung_command_detector import HungCommandDetector
 
+from .sdk_event_handler_utils import iter_streaming_chunks, record_tool_output
+
 logger = logging.getLogger(__name__)
 
 class RateLimitError(Exception):
@@ -21,7 +23,6 @@ class RateLimitError(Exception):
         super().__init__(message)
 
 DEFAULT_MAX_READ_RETRIES = 3
-_STREAMING_ATTRS = ("stdout", "stderr", "output", "chunk", "delta", "delta_content", "content", "message", "text")
 
 class SessionStats(TypedDict):
     pending_tool_calls: int
@@ -35,19 +36,9 @@ class SessionStats(TypedDict):
     last_event_time: float
     event_count: int
     last_tool_activity_time: float
+    last_tool_output_time: float
+    last_tool_output: str | None
     tool_start_times: dict[str, float]
-
-def _iter_streaming_chunks(event_obj: Any) -> list[tuple[str, str]]:
-    """Extract text chunks from tool streaming/progress events."""
-    data = getattr(event_obj, "data", None)
-    if data is None:
-        return []
-    chunks: list[tuple[str, str]] = []
-    for attr in _STREAMING_ATTRS:
-        val = getattr(data, attr, None)
-        if isinstance(val, str) and val:
-            chunks.append((attr, val))
-    return chunks
 
 class _EventHandler:
     """Handles SDK session events, updating shared stats and output."""
@@ -102,6 +93,8 @@ class _EventHandler:
         with self._pending_tools_lock:
             self._pending_tools.clear()
             self._stats['tool_start_times'].clear()
+        self._stats['last_tool_output_time'] = 0.0
+        self._stats['last_tool_output'] = None
 
     def __call__(self, event: Any) -> None:
         event_type = event.type.value if hasattr(event.type, 'value') else str(event.type)
@@ -212,6 +205,7 @@ class _EventHandler:
         self._output_lines.append(f"[Result] {result_content}\n")
         if self._item_logger:
             self._item_logger.log_tool_call(tool_name, '', result=result_content, success=success)
+        record_tool_output(self._stats, result_content)
         self._check_hung_command(tool_name, tool_args, result_content)
         self._check_beads_creation(tool_name, tool_args or arguments, result_content, success)
 
@@ -239,7 +233,7 @@ class _EventHandler:
                 record_items_created(created)
 
     def _on_tool_streaming(self, event: Any) -> None:
-        stream_chunks = _iter_streaming_chunks(event)
+        stream_chunks = iter_streaming_chunks(event)
         if not stream_chunks:
             return
         for source, text in stream_chunks:
@@ -248,6 +242,7 @@ class _EventHandler:
             self._output_lines.append(text)
             if self._item_logger:
                 self._item_logger.log_copilot_output(text)
+            record_tool_output(self._stats, text)
 
     def _on_usage(self, event: Any) -> None:
         terminal_ui.ui.set_style(None)
@@ -389,6 +384,8 @@ def create_event_handler(
         'last_event_time': time.monotonic(),
         'event_count': 0,
         'last_tool_activity_time': 0.0,
+        'last_tool_output_time': 0.0,
+        'last_tool_output': None,
         'tool_start_times': {},
     }
 

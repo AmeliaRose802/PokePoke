@@ -58,6 +58,14 @@ VERIFY that the work item has been completed successfully and meets all quality 
    - **IF AGENT FAILED TO DO WORK:** Output "VERIFICATION FAILED" and explain what needs to be done
    - **IF ITEM IS STALE/DUPLICATE:** Output "VERIFICATION SUCCESSFUL" with reason "no_longer_needed"
 
+## Avoiding Hung Commands
+
+**Command Timeout: {{command_timeout}} seconds**
+
+- If you run pytest, always include `--timeout={{command_timeout}}`
+- NEVER use `Select-Object -First` or `Select-Object -Last` in PowerShell pipelines
+- Prefer targeted tests with explicit timeouts if you need to validate behavior
+
 **Output Format:**
 You must end your response with one of these JSON blocks:
 

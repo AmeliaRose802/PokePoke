@@ -4,6 +4,7 @@ import logging
 import re
 from typing import TYPE_CHECKING
 
+from pokepoke.config import get_config
 from pokepoke.desktop import terminal_ui
 from pokepoke.git.git_operations import get_default_branch
 from pokepoke.models.ai_backends import invoke_copilot
@@ -52,12 +53,14 @@ def run_gate_agent(
     else:
         service = PromptService()
         try:
+            config = get_config()
             final_prompt = service.load_and_render("gate-agent", {
                 "item_id": item.id,
                 "title": item.title,
                 "description": item.description or "",
                 "handoff_context": handoff_context or "",
                 "default_branch": get_default_branch(),
+                "command_timeout": config.command_timeout,
             })
         except Exception as e:
             return GateAgentResult(

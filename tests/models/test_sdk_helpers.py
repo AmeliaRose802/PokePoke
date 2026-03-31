@@ -9,7 +9,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from pokepoke.models import sdk_helpers
 from pokepoke.models.sdk_helpers import (
+    _build_permission_handler,
     _build_token_usage_callback,
     _check_abort_result,
     _check_tool_watchdog,
@@ -458,3 +460,24 @@ class TestBuildTokenUsageCallback:
             mock_thread.agent_id = None
             cb(100, 50)
             mock_ui.ui.push_agent_tokens.assert_not_called()
+
+
+class TestPermissionHandler:
+    def test_denies_select_object_first_last(self):
+        handler = _build_permission_handler()
+        if handler is None:
+            assert sdk_helpers._PERMISSION_RESULT_CLS is None
+            assert sdk_helpers._approve_all is None
+            return
+
+        from copilot.generated.session_events import PermissionRequest, PermissionRequestKind
+
+        req = PermissionRequest(
+            kind=PermissionRequestKind.SHELL,
+            tool_name="powershell",
+            args={"command": "Get-Content foo.txt | Select-Object -First 5"},
+        )
+
+        result = handler(req, None)
+        kind = getattr(result, "kind", None)
+        assert kind == "denied-by-rules"

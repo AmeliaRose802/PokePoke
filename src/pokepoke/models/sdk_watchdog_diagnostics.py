@@ -29,7 +29,7 @@ def resolve_diagnostics_log_path(handler: Any) -> Path | None:
 async def periodic_diagnostics_loop(
     stats: SessionStats,
     handler: Any,
-    diag_log_path: Path,
+    diag_log_path: Path | None,
     stop_event: asyncio.Event,
 ) -> None:
     """Background task: snapshot the process tree every 60s while tools are active."""
@@ -46,6 +46,14 @@ async def periodic_diagnostics_loop(
 
         now = time.monotonic()
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        last_output = stats.get("last_tool_output")
+        last_output_time = stats.get("last_tool_output_time", 0.0)
+        output_age = None
+        if last_output and last_output_time:
+            output_age = max(0.0, now - float(last_output_time))
+            last_output = " ".join(str(last_output).split())
+            if len(last_output) > 200:
+                last_output = last_output[:200] + "..."
         for tool_id, start_time in list(tool_times.items()):
             elapsed = now - start_time
             tool_name = "unknown"
@@ -59,15 +67,27 @@ async def periodic_diagnostics_loop(
                 f"[{ts}] SNAPSHOT tool_id={tool_id} tool={tool_name} "
                 f"elapsed={elapsed:.0f}s"
             )
-            logger.info("PERIODIC_DIAG: %s", header)
+            if output_age is not None and last_output:
+                logger.info(
+                    "PERIODIC_DIAG: %s last_output_age=%.0fs last_output='%s'",
+                    header, output_age, last_output,
+                )
+            else:
+                logger.info("PERIODIC_DIAG: %s", header)
 
             # Capture the process tree via the existing utility
             _log_process_tree_snapshot(tool_name, args_str, elapsed, handler)
 
             # Append to dedicated diagnostics log
+            if diag_log_path is None:
+                continue
             try:
                 with open(diag_log_path, 'a', encoding='utf-8') as f:
                     f.write(f"{header}\n")
-                    f.write(f"  args: {args_str}\n\n")
+                    f.write(f"  args: {args_str}\n")
+                    if output_age is not None and last_output:
+                        f.write(f"  last_output_age: {output_age:.0f}s\n")
+                        f.write(f"  last_output: {last_output}\n")
+                    f.write("\n")
             except Exception as e:
                 logger.debug("Failed to write to diagnostics log: %s", e)
