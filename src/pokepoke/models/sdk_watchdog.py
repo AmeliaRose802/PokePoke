@@ -1,5 +1,6 @@
 """SDKWatchdog class for monitoring Copilot SDK session health."""
 import asyncio
+import contextlib
 import logging
 import time
 from typing import Any
@@ -9,6 +10,7 @@ from pokepoke.utils.process_utils import log_process_tree_snapshot as _log_proce
 from pokepoke.utils.shutdown import is_shutting_down
 
 from .sdk_event_handler import SessionStats
+from .sdk_watchdog_diagnostics import periodic_diagnostics_loop, resolve_diagnostics_log_path
 
 logger = logging.getLogger(__name__)
 
@@ -220,7 +222,7 @@ class SDKWatchdog:
         return False
 
     @staticmethod
-    async def await_completion(  # noqa: C901
+    async def await_completion(
         session: Any, client: Any, done: asyncio.Event,
         max_timeout: float,
         stats: SessionStats | None = None,
@@ -241,6 +243,50 @@ class SDKWatchdog:
         last_hb_events = stats.get('event_count', 0) if stats else 0
         consecutive_ping_failures = 0
         last_event_gap_log = time.monotonic()
+
+        # Start periodic process tree snapshot background task
+        diag_stop = asyncio.Event()
+        diag_task: asyncio.Task[None] | None = None
+        if stats is not None:
+            diag_log_path = resolve_diagnostics_log_path(handler)
+            if diag_log_path:
+                diag_task = asyncio.create_task(
+                    periodic_diagnostics_loop(
+                        stats, handler, diag_log_path, diag_stop,
+                    )
+                )
+
+        try:
+            return await SDKWatchdog._poll_loop(
+                session, client, done, deadline, max_timeout,
+                stats, inactivity_timeout, tool_call_timeout,
+                handler, process_output_timeout, max_ping_failures,
+                last_hb, last_hb_events, consecutive_ping_failures,
+                last_event_gap_log,
+            )
+        finally:
+            diag_stop.set()
+            if diag_task is not None:
+                diag_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await diag_task
+
+    @staticmethod
+    async def _poll_loop(  # noqa: C901
+        session: Any, client: Any, done: asyncio.Event,
+        deadline: float, max_timeout: float,
+        stats: SessionStats | None,
+        inactivity_timeout: float,
+        tool_call_timeout: float,
+        handler: Any,
+        process_output_timeout: float,
+        max_ping_failures: int,
+        last_hb: float,
+        last_hb_events: int,
+        consecutive_ping_failures: int,
+        last_event_gap_log: float,
+    ) -> str | None:
+        """Inner polling loop extracted to allow try/finally cleanup in await_completion."""
 
         while not done.is_set():
             if is_shutting_down():
@@ -310,21 +356,9 @@ class SDKWatchdog:
                     break
 
             # Detect dead sessions: no SDK events for inactivity_timeout seconds.
-            # Skip when tools are actively running — the SDK doesn't emit
-            # streaming events while a subprocess (e.g. git commit with
-            # pre-commit hooks) executes, so silence is expected.  The
-            # per-item hard deadline (max_timeout) protects against truly
-            # stuck sessions.
-            #
-            # Grace period after tool completion: If a tool just finished
-            # (last_tool_activity_time is recent), give the session 60s to emit
-            # the next SDK event before declaring it dead. This prevents killing
-            # sessions immediately after long tool calls complete.
-            #
-            # Child agent consideration: If this agent has active child agents
-            # (e.g., spawned via task tool), check their activity timestamps
-            # as well. A parent agent may appear idle while child agents are
-            # actively working.
+            # Skip when tools are actively running or in grace period after tool
+            # completion.  The per-item hard deadline protects against stuck sessions.
+            # Also considers child agent activity timestamps.
             if stats is not None:
                 inactivity_detected = await SDKWatchdog._check_inactivity(
                     stats, inactivity_timeout, session
@@ -353,31 +387,5 @@ class SDKWatchdog:
 
 
 # Re-export as module-level functions for backward compatibility
-async def _check_tool_watchdog(
-    session: Any, stats: SessionStats | None, tool_call_timeout: float,
-    handler: Any = None,
-) -> str | None:
-    """Check if any tool call exceeds the watchdog timeout. Returns 'tool_timeout' or None."""
-    return await SDKWatchdog.check_tool_watchdog(session, stats, tool_call_timeout, handler)
-
-
-async def _await_completion(
-    session: Any, client: Any, done: asyncio.Event,
-    max_timeout: float,
-    stats: SessionStats | None = None,
-    inactivity_timeout: float = 600.0,
-    tool_call_timeout: float = 600.0,
-    handler: Any = None,
-    process_output_timeout: float = 300.0,
-    max_ping_failures: int = 3,
-) -> str | None:
-    """Poll until the session finishes or an abort condition is met.
-
-    Returns ``None`` on normal completion, or a reason string
-    (``"shutdown"``, ``"timeout"``, ``"inactivity"``, ``"tool_timeout"``,
-    ``"process_dead"``) on abort.
-    """
-    return await SDKWatchdog.await_completion(
-        session, client, done, max_timeout, stats, inactivity_timeout,
-        tool_call_timeout, handler, process_output_timeout, max_ping_failures,
-    )
+_check_tool_watchdog = SDKWatchdog.check_tool_watchdog
+_await_completion = SDKWatchdog.await_completion
