@@ -25,8 +25,13 @@ from pokepoke.maintenance.maintenance import _run_special_agent
 from pokepoke.maintenance.maintenance_state import record_maintenance_run
 from pokepoke.types import SessionStats
 from pokepoke.utils.logging_utils import RunLogger
-from pokepoke.utils.shutdown import get_active_agent_count
+from pokepoke.utils.shutdown import get_active_agent_count, is_shutting_down, should_stop_after_current
 from pokepoke.worktrees.coordination import try_lock
+
+
+def _is_stopping() -> bool:
+    """Check if the orchestrator is shutting down or stop-after-current is set."""
+    return is_shutting_down() or should_stop_after_current()
 
 # Agents that require singleton guard (modify shared state or produce duplicates)
 _SINGLETON_AGENTS: set[str] = {
@@ -88,6 +93,27 @@ class MaintenanceScheduler:
         with self._running_agents_lock:
             return self._running_agents.copy()
 
+    @staticmethod
+    def _collect_due_agents(
+        items_completed: int,
+        agents: list[MaintenanceAgentConfig],
+        run_logger: RunLogger,
+    ) -> list[MaintenanceAgentConfig]:
+        """Return the subset of *agents* that are due to run this cycle."""
+        due: list[MaintenanceAgentConfig] = []
+        for agent_cfg in agents:
+            if not agent_cfg.enabled or agent_cfg.frequency <= 0:
+                continue
+            if items_completed % agent_cfg.frequency != 0:
+                continue
+            log_key = agent_cfg.name.lower().replace(" ", "_")
+            agent_id = f"maintenance-{log_key}"
+            if terminal_ui.ui.is_agent_paused(agent_id) is True:
+                run_logger.log_maintenance(log_key, f"Skipping {agent_cfg.name} Agent - paused by user")
+                continue
+            due.append(agent_cfg)
+        return due
+
     def maybe_run_maintenance(
         self,
         items_completed: int,
@@ -105,6 +131,9 @@ class MaintenanceScheduler:
                      When provided, frequency checks and file locks are scoped
                      to this repo so maintenance on one repo cannot block others.
         """
+        if _is_stopping():
+            return
+
         pokepoke_repo = Path.cwd()
 
         if items_completed == 0:
@@ -120,26 +149,7 @@ class MaintenanceScheduler:
             logger.warning("SessionReconciler failed: %s", exc, exc_info=True)
 
         config = get_config()
-        agents = config.maintenance.agents
-
-        # Collect agents that are due to run this cycle.
-        due_agents: list[MaintenanceAgentConfig] = []
-        for agent_cfg in agents:
-            if not agent_cfg.enabled:
-                continue
-            if agent_cfg.frequency <= 0:
-                continue
-            if items_completed % agent_cfg.frequency != 0:
-                continue
-
-            # Check if agent is paused in the UI
-            log_key = agent_cfg.name.lower().replace(" ", "_")
-            agent_id = f"maintenance-{log_key}"
-            if terminal_ui.ui.is_agent_paused(agent_id) is True:
-                run_logger.log_maintenance(log_key, f"Skipping {agent_cfg.name} Agent - paused by user")
-                continue
-
-            due_agents.append(agent_cfg)
+        due_agents = self._collect_due_agents(items_completed, config.maintenance.agents, run_logger)
 
         if not due_agents:
             return
@@ -163,7 +173,16 @@ class MaintenanceScheduler:
             )
             return
 
+        from pokepoke.utils.shutdown import is_shutting_down, should_stop_after_current
+
         for agent_cfg in due_agents:
+            if is_shutting_down() or should_stop_after_current():
+                run_logger.log_maintenance(
+                    "maintenance",
+                    f"Stopping maintenance early - orchestrator is stopping "
+                    f"({len(due_agents) - due_agents.index(agent_cfg)} agent(s) skipped)",
+                )
+                break
             self._maybe_run_agent(agent_cfg.name, agent_cfg, pokepoke_repo, session_stats, run_logger, repo_id=repo_id)
 
         # Record that a maintenance pass was executed for this repo
@@ -179,17 +198,12 @@ class MaintenanceScheduler:
         run_logger: RunLogger,
         repo_id: str | None = None,
     ) -> None:
-        """Try to run a single maintenance agent with appropriate locking.
-
-        Args:
-            agent_name: Name of the agent to run
-            agent_cfg: Agent configuration
-            pokepoke_repo: Repository path
-            session_stats: Session statistics to update
-            run_logger: Logger for maintenance events
-            repo_id: Optional repository identifier for per-repo lock scoping
-        """
+        """Try to run a single maintenance agent with appropriate locking."""
+        from pokepoke.utils.shutdown import is_shutting_down, should_stop_after_current
         log_key = agent_name.lower().replace(" ", "_")
+        if is_shutting_down() or should_stop_after_current():
+            run_logger.log_maintenance(log_key, f"Skipping {agent_name} Agent - orchestrator is stopping")
+            return
 
         # Defer singleton agents when other agents are actively processing
         # (e.g. retrying after gate failures) to avoid interfering with
@@ -227,19 +241,11 @@ class MaintenanceScheduler:
         self._run_with_singleton_guard(agent_name, agent_cfg, pokepoke_repo, session_stats, run_logger, repo_id=repo_id)
 
     def _run_with_singleton_guard(
-        self,
-        agent_name: str,
-        agent_cfg: MaintenanceAgentConfig,
-        pokepoke_repo: Path,
-        session_stats: SessionStats,
-        run_logger: RunLogger,
-        repo_id: str | None = None,
+        self, agent_name: str, agent_cfg: MaintenanceAgentConfig,
+        pokepoke_repo: Path, session_stats: SessionStats,
+        run_logger: RunLogger, repo_id: str | None = None,
     ) -> None:
-        """Run an agent with both thread and file lock singleton protection.
-
-        When *repo_id* is provided the file lock name includes the repo so
-        that maintenance on different repos can proceed in parallel.
-        """
+        """Run an agent with both thread and file lock singleton protection."""
         log_key = agent_name.lower().replace(" ", "_")
         file_lock = None
 
@@ -277,16 +283,12 @@ class MaintenanceScheduler:
             thread_lock.release()
 
     def _run_agent_with_coordination(self, agent_name: str, agent_cfg: MaintenanceAgentConfig, pokepoke_repo: Path, session_stats: SessionStats, run_logger: RunLogger) -> None:
-        """Run a maintenance agent and handle statistics coordination.
-
-        Args:
-            agent_name: Name of the agent to run
-            agent_cfg: Agent configuration
-            pokepoke_repo: Repository path
-            session_stats: Session statistics to update
-            run_logger: Logger for maintenance events
-        """
+        """Run a maintenance agent and handle statistics coordination."""
+        from pokepoke.utils.shutdown import is_shutting_down, should_stop_after_current
         log_key = agent_name.lower().replace(" ", "_")
+        if is_shutting_down() or should_stop_after_current():
+            run_logger.log_maintenance(log_key, f"Skipping {agent_name} Agent - orchestrator is stopping")
+            return
 
         # Register maintenance agent in the Agents panel
         agent_id = f"maintenance-{log_key}"
@@ -383,9 +385,9 @@ def run_periodic_maintenance(
         run_logger: Logger for maintenance events
         repo_id: Optional repository identifier for per-repo scheduling
     """
-    from pokepoke.utils.shutdown import should_stop_after_current
-    if should_stop_after_current():
-        run_logger.log_orchestrator("Skipping maintenance - stop after current item requested")
+    from pokepoke.utils.shutdown import is_shutting_down, should_stop_after_current
+    if should_stop_after_current() or is_shutting_down():
+        run_logger.log_orchestrator("Skipping maintenance - orchestrator is stopping")
         return
 
     scheduler = get_maintenance_scheduler()
