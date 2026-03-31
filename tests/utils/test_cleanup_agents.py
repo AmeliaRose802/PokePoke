@@ -7,11 +7,15 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from pokepoke.agents.cleanup_agents import (
+    _apply_base_template_vars,
+    _build_work_item_context,
     _get_current_git_context,
+    _git_output,
     aggregate_cleanup_stats,
     get_pokepoke_prompts_dir,
     invoke_cleanup_agent,
     invoke_merge_conflict_cleanup_agent,
+    load_prompt_file,
     run_cleanup_loop,
 )
 from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
@@ -922,3 +926,215 @@ class TestWorktreeCleanupPromptSafety:
         prompt_passed = call_args[1].get('agent_prompt') or call_args[0][2]
         assert str(os.getpid()) in prompt_passed, "Orchestrator PID must be injected into cleanup prompt"
         assert "DO NOT TOUCH" in prompt_passed
+
+
+class TestApplyBaseTemplateVars:
+    """Tests for _apply_base_template_vars helper."""
+
+    def test_replaces_all_placeholders(self) -> None:
+        template = "dir={cwd} branch={branch} wt={is_worktree}"
+        result = _apply_base_template_vars(template, "/my/dir", "feature-x", True)
+        assert result == "dir=/my/dir branch=feature-x wt=True"
+
+    def test_handles_false_worktree(self) -> None:
+        template = "{is_worktree}"
+        result = _apply_base_template_vars(template, "/d", "main", False)
+        assert result == "False"
+
+    def test_no_placeholders_returns_unchanged(self) -> None:
+        template = "No placeholders here"
+        result = _apply_base_template_vars(template, "/d", "b", True)
+        assert result == "No placeholders here"
+
+    def test_multiple_occurrences_replaced(self) -> None:
+        template = "{cwd} then {cwd} again"
+        result = _apply_base_template_vars(template, "/x", "b", False)
+        assert result == "/x then /x again"
+
+
+class TestBuildWorkItemContext:
+    """Tests for _build_work_item_context helper."""
+
+    def test_basic_context_fields(self) -> None:
+        item = BeadsWorkItem(
+            id="task-1", title="Fix Bug", description="Fix the bug",
+            status="open", priority=2, issue_type="bug",
+        )
+        context = _build_work_item_context(item, "Work Item")
+        assert "**ID:** task-1" in context
+        assert "**Title:** Fix Bug" in context
+        assert "**Type:** bug" in context
+        assert "**Priority:** 2" in context
+        assert "Fix the bug" in context
+        assert "# Work Item" in context
+
+    def test_labels_included(self) -> None:
+        item = BeadsWorkItem(
+            id="t-1", title="T", description="D",
+            status="open", priority=1, issue_type="task",
+            labels=["cleanup", "automated"],
+        )
+        context = _build_work_item_context(item, "Heading")
+        assert "cleanup, automated" in context
+
+    def test_no_labels_omits_section(self) -> None:
+        item = BeadsWorkItem(
+            id="t-1", title="T", description="D",
+            status="open", priority=1, issue_type="task",
+        )
+        context = _build_work_item_context(item, "Heading")
+        assert "**Labels:**" not in context
+
+    def test_ephemeral_adds_warning(self) -> None:
+        item = BeadsWorkItem(
+            id="t-1", title="T", description="D",
+            status="open", priority=1, issue_type="task",
+            is_ephemeral=True,
+        )
+        context = _build_work_item_context(item, "Heading")
+        assert "does NOT exist in the beads database" in context
+        assert "Do NOT run any `bd` commands" in context
+
+    def test_extra_text_appended(self) -> None:
+        item = BeadsWorkItem(
+            id="t-1", title="T", description="D",
+            status="open", priority=1, issue_type="task",
+        )
+        context = _build_work_item_context(item, "H", extra="\n**Extra:** data\n")
+        assert "**Extra:** data" in context
+
+
+class TestLoadPromptFile:
+    """Tests for load_prompt_file helper."""
+
+    def test_returns_content_when_file_exists(self, tmp_path: Path) -> None:
+        prompt_file = tmp_path / "prompts" / "test.md"
+        prompt_file.parent.mkdir(parents=True)
+        prompt_file.write_text("Hello prompt", encoding="utf-8")
+
+        with patch("pokepoke.agents.cleanup_agents.get_pokepoke_prompts_dir", return_value=prompt_file.parent):
+            result = load_prompt_file("test.md")
+        assert result == "Hello prompt"
+
+    def test_returns_none_when_dir_not_found(self) -> None:
+        with patch("pokepoke.agents.cleanup_agents.get_pokepoke_prompts_dir",
+                    side_effect=FileNotFoundError("no dir")):
+            result = load_prompt_file("missing.md")
+        assert result is None
+
+    def test_returns_none_when_file_missing_in_dir(self, tmp_path: Path) -> None:
+        """Prompt directory exists but the specific file does not."""
+        with patch("pokepoke.agents.cleanup_agents.get_pokepoke_prompts_dir", return_value=tmp_path):
+            result = load_prompt_file("nonexistent.md")
+        assert result is None
+
+
+class TestGitOutput:
+    """Tests for _git_output helper."""
+
+    @patch("pokepoke.agents.cleanup_agents.run_git")
+    def test_returns_stdout_on_success(self, mock_run: Mock) -> None:
+        mock_run.return_value = Mock(returncode=0, stdout="  main  ")
+        result = _git_output(["git", "branch", "--show-current"], None)
+        assert result == "main"
+
+    @patch("pokepoke.agents.cleanup_agents.run_git")
+    def test_returns_none_on_nonzero_exit(self, mock_run: Mock) -> None:
+        mock_run.return_value = Mock(returncode=1, stdout="error")
+        result = _git_output(["git", "bad-cmd"], None)
+        assert result is None
+
+    @patch("pokepoke.agents.cleanup_agents.run_git")
+    def test_returns_none_on_exception(self, mock_run: Mock) -> None:
+        mock_run.side_effect = Exception("git not found")
+        result = _git_output(["git", "status"], None)
+        assert result is None
+
+    @patch("pokepoke.agents.cleanup_agents.run_git")
+    def test_passes_cwd(self, mock_run: Mock) -> None:
+        mock_run.return_value = Mock(returncode=0, stdout="ok")
+        _git_output(["git", "status"], "/my/cwd")
+        mock_run.assert_called_once_with(["git", "status"], timeout=10, cwd="/my/cwd", check=False)
+
+
+class TestRunCleanupLoopMultipleAttempts:
+    """Test multi-iteration cleanup loop behavior."""
+
+    @patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent')
+    @patch('pokepoke.agents.cleanup_agents.commit_all_changes')
+    @patch('pokepoke.agents.cleanup_agents.verify_main_repo_clean')
+    def test_commit_succeeds_on_second_attempt_after_cleanup(
+        self, mock_verify: Mock, mock_commit: Mock, mock_invoke: Mock
+    ) -> None:
+        """Cleanup agent fixes the issue and second commit attempt succeeds."""
+        item = BeadsWorkItem(
+            id="task-1", title="Test", description="",
+            status="in_progress", priority=1, issue_type="task"
+        )
+        result = CopilotResult(
+            work_item_id="task-1", success=True, output="", attempt_count=1
+        )
+
+        # Initial: dirty, after cleanup: still dirty, loop re-checks and commits
+        mock_verify.side_effect = [
+            (False, " M file.py\n", [" M file.py"]),
+            (False, " M file.py\n", [" M file.py"]),
+        ]
+        mock_commit.side_effect = [
+            (False, "Tests failed"),
+            (True, ""),
+        ]
+        mock_invoke.return_value = (True, None)
+
+        success, cleanup_runs = run_cleanup_loop(item, result)
+
+        assert success is True
+        assert cleanup_runs == 1
+        assert mock_commit.call_count == 2
+
+    @patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent')
+    @patch('pokepoke.agents.cleanup_agents.commit_all_changes')
+    @patch('pokepoke.agents.cleanup_agents.verify_main_repo_clean')
+    def test_result_not_success_skips_loop(
+        self, mock_verify: Mock, mock_commit: Mock, mock_invoke: Mock
+    ) -> None:
+        """When result.success is False, cleanup loop should not enter the while."""
+        item = BeadsWorkItem(
+            id="task-1", title="Test", description="",
+            status="in_progress", priority=1, issue_type="task"
+        )
+        result = CopilotResult(
+            work_item_id="task-1", success=False, output="", attempt_count=1
+        )
+
+        mock_verify.return_value = (False, " M file.py\n", [" M file.py"])
+
+        success, cleanup_runs = run_cleanup_loop(item, result)
+
+        assert success is False
+        assert cleanup_runs == 0
+        mock_commit.assert_not_called()
+
+    @patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent')
+    @patch('pokepoke.agents.cleanup_agents.commit_all_changes')
+    @patch('pokepoke.agents.cleanup_agents.verify_main_repo_clean')
+    def test_file_paths_extracted_for_cleanup_agent(
+        self, mock_verify: Mock, mock_commit: Mock, mock_invoke: Mock
+    ) -> None:
+        """Verify file paths are correctly extracted from git status output."""
+        item = BeadsWorkItem(
+            id="task-1", title="Test", description="",
+            status="in_progress", priority=1, issue_type="task"
+        )
+        result = CopilotResult(
+            work_item_id="task-1", success=True, output="", attempt_count=1
+        )
+
+        mock_verify.return_value = (False, " M src/foo.py\n", [" M src/foo.py"])
+        mock_commit.return_value = (False, "Tests failed")
+        mock_invoke.return_value = (False, None)
+
+        run_cleanup_loop(item, result)
+
+        call_kwargs = mock_invoke.call_args[1]
+        assert call_kwargs['modified_files'] == ["src/foo.py"]
