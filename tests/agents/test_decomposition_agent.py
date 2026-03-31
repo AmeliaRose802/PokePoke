@@ -362,6 +362,32 @@ class TestUpdateParentMetadata:
         assert metadata["decomposed"] is True
 
     @patch(f"{_DECOMP}._run_bd")
+    def test_adds_decomposition_label_when_missing(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = subprocess.CompletedProcess(
+            ["bd"], 0,
+            stdout='[{"id": "parent-1", "labels": ["priority:1"], "metadata": {}}]',
+            stderr="",
+        )
+        _update_parent_metadata("parent-1", ["child-1"])
+        update_call = mock_run.call_args_list[1]
+        update_args = update_call[0][0]
+        assert "--add-label" in update_args
+        label_idx = update_args.index("--add-label") + 1
+        assert update_args[label_idx] == "auto-decomposed"
+
+    @patch(f"{_DECOMP}._run_bd")
+    def test_skips_label_add_when_already_present(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = subprocess.CompletedProcess(
+            ["bd"], 0,
+            stdout='[{"id": "parent-1", "labels": ["auto-decomposed"], "metadata": {}}]',
+            stderr="",
+        )
+        _update_parent_metadata("parent-1", ["child-1"])
+        update_call = mock_run.call_args_list[1]
+        update_args = update_call[0][0]
+        assert "--add-label" not in update_args
+
+    @patch(f"{_DECOMP}._run_bd")
     def test_returns_false_on_show_failure(self, mock_run: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(
             ["bd"], 0, stdout="", stderr=""

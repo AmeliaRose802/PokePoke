@@ -204,15 +204,20 @@ def _update_parent_metadata(parent_id: str, child_ids: list[str]) -> bool:
         metadata = item.get("metadata", {})
         if not isinstance(metadata, dict):
             metadata = {}
+        labels = item.get("labels") or []
+        if not isinstance(labels, list):
+            labels = []
 
         metadata["decomposed"] = True
         metadata["decomposition_child_ids"] = child_ids
 
-        _run_bd([
+        cmd = [
             "update", parent_id,
             "--metadata", json.dumps(metadata),
-            "--labels", DECOMPOSITION_LABEL,
-        ])
+        ]
+        if DECOMPOSITION_LABEL not in labels:
+            cmd.extend(["--add-label", DECOMPOSITION_LABEL])
+        _run_bd(cmd)
         return True
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, Exception) as e:
         logger.warning("Failed to update parent metadata for %s: %s", parent_id, e)
