@@ -728,3 +728,49 @@ class TestDeleteBranchHelper:
             session = _make_session()
             session._delete_branch()
             m["subprocess_run"].assert_not_called()
+
+
+class TestUnassignBeadsItemHelper:
+    """Tests for _unassign_beads_item internal helper (Unassign Ex validation)."""
+
+    def test_unassign_success(self) -> None:
+        """_unassign_beads_item succeeds when unassign_item returns True."""
+        with _patch_all_helpers() as m:
+            m["unassign_item"].return_value = True
+            session = _make_session(item_id="task-unassign-ex")
+            # Should not raise
+            session._unassign_beads_item()
+            m["unassign_item"].assert_called_once_with("task-unassign-ex")
+
+    def test_unassign_failure_raises_runtime_error(self) -> None:
+        """_unassign_beads_item raises RuntimeError when unassign_item returns False."""
+        with _patch_all_helpers() as m:
+            m["unassign_item"].return_value = False
+            session = _make_session(item_id="task-unassign-ex")
+            with pytest.raises(RuntimeError, match="unassign_item returned False for task-unassign-ex"):
+                session._unassign_beads_item()
+
+    def test_unassign_exception_propagates(self) -> None:
+        """Exceptions from unassign_item propagate to caller."""
+        with _patch_all_helpers() as m:
+            m["unassign_item"].side_effect = ConnectionError("beads service unavailable")
+            session = _make_session(item_id="task-unassign-ex")
+            with pytest.raises(ConnectionError, match="beads service unavailable"):
+                session._unassign_beads_item()
+
+    def test_unassign_called_with_correct_item_id(self) -> None:
+        """Validates that unassign_item is called with the correct item_id."""
+        with _patch_all_helpers() as m:
+            m["unassign_item"].return_value = True
+            session = _make_session(item_id="my-special-task")
+            session._unassign_beads_item()
+            m["unassign_item"].assert_called_once_with("my-special-task")
+
+    def test_unassign_integrates_with_cleanup_on_failure(self) -> None:
+        """Verifies _unassign_beads_item is called during cleanup_on_failure."""
+        with _patch_all_helpers() as m:
+            m["unassign_item"].return_value = True
+            session = _make_session(item_id="task-cleanup-test")
+            session.cleanup_on_failure()
+            # Verify unassign was called as part of cleanup
+            m["unassign_item"].assert_called_once_with("task-cleanup-test")
