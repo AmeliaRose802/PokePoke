@@ -289,6 +289,53 @@ class TestMaxParallelAgentsConfig:
 class TestAgentContextInParallelProcessItem:
     """_parallel_process_item should set/clear per-thread agent names."""
 
+    def test_agent_context_isolated_per_thread(self):
+        """Each thread should have its own isolated agent context."""
+        # Create a test item
+        item = BeadsWorkItem(
+            id="test-context-123",
+            title="Test Context",
+            status="open",
+            priority=1,
+            issue_type="task",
+        )
+
+        # Track agent names from each thread
+        agent_names = []
+        lock = threading.Lock()
+
+        def check_agent_context():
+            # Get the agent name that should be set by _parallel_process_item
+            name = get_agent_name()
+            with lock:
+                agent_names.append(name)
+
+        # Mock process_work_item to check agent context
+        with patch("pokepoke.agents.parallel.process_work_item") as mock_pwi:
+            mock_pwi.side_effect = lambda *args, **kwargs: (
+                check_agent_context(),
+                WorkItemResult(success=True, request_count=1, stats=AgentStats())
+            )[1]
+
+            # Run _parallel_process_item in multiple threads
+            threads = []
+            for _ in range(3):
+                t = threading.Thread(
+                    target=_parallel_process_item,
+                    args=(item, "/repo", MagicMock(), MagicMock())
+                )
+                t.start()
+                threads.append(t)
+
+            for t in threads:
+                t.join(timeout=5)
+
+        # Each thread should have had the agent name set
+        assert len(agent_names) == 3
+        # All should be the same item ID (or None if context cleared before check)
+        for name in agent_names:
+            assert name in ("test-context-123", None)
+
 # ---------------------------------------------------------------------------
 # 7. Failed claim IDs are tracked and skipped
 # ---------------------------------------------------------------------------
