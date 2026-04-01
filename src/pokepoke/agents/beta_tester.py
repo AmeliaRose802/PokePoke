@@ -35,7 +35,21 @@ def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | No
             logger.info("\n🔄 Restarting MCP server...")
             try:
                 package_root = Path(__file__).resolve().parent.parent.parent
-                restart_script = package_root / config.mcp_server.restart_script
+                package_root_resolved = package_root.resolve(strict=False)
+
+                restart_candidate = (package_root / config.mcp_server.restart_script).resolve(strict=False)
+                if not restart_candidate.is_relative_to(package_root_resolved):
+                    raise ValueError(
+                        f"Resolved restart script path '{restart_candidate}' escapes package root '{package_root_resolved}'"
+                    )
+
+                restart_script = restart_candidate
+                if restart_script.exists():
+                    restart_script = restart_script.resolve(strict=True)
+                    if not restart_script.is_relative_to(package_root_resolved):
+                        raise ValueError(
+                            f"Resolved restart script path '{restart_script}' escapes package root '{package_root_resolved}'"
+                        )
 
                 if not restart_script.exists():
                     logger.warning(f"⚠️  Restart script not found at {restart_script}")

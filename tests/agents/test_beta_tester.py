@@ -1,5 +1,6 @@
 """Tests for beta_tester agent internals."""
 
+import logging
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -190,6 +191,36 @@ class TestRunBetaTesterMcpRestart:
         result = run_beta_tester(repo_root=tmp_path)
 
         assert result is not None
+
+    @patch(f"{_AR}._run_worktree_agent", return_value=AgentStats())
+    @patch(f"{_AR}._generate_unique_agent_id", return_value="beta-test-009")
+    @patch(f"{_BT}.get_pokepoke_prompts_dir")
+    @patch(f"{_BT}.terminal_ui")
+    @patch(f"{_BT}.subprocess")
+    @patch(f"{_BT}.get_config")
+    def test_mcp_restart_rejects_path_traversal(self, mock_config, mock_subprocess,
+                                                mock_ui, mock_prompts_dir,
+                                                mock_gen_id, mock_run_agent, tmp_path,
+                                                caplog):
+        """Path traversal in restart_script is rejected and not executed."""
+        import subprocess as real_subprocess
+
+        import pokepoke.agents.beta_tester as bt_mod
+        cfg = _make_config(restart_script="../evil.ps1")
+        mock_config.return_value = cfg
+        mock_subprocess.TimeoutExpired = real_subprocess.TimeoutExpired
+        mock_prompts_dir.return_value = _setup_prompt(tmp_path)
+
+        caplog.set_level(logging.WARNING)
+        result = bt_mod.run_beta_tester(repo_root=tmp_path)
+
+        assert result is not None
+        mock_subprocess.run.assert_not_called()
+        assert any(
+            "escapes package root" in record.getMessage()
+            for record in caplog.records
+            if record.levelno >= logging.WARNING
+        )
 
 
 class TestRunBetaTesterMcpDisabled:
