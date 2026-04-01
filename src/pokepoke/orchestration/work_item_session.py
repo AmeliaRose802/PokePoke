@@ -194,7 +194,9 @@ class WorkItemSession:
             all_ok = False
 
         # Step 2 — Abort any in-progress merge (only if worktree exists).
-        if self._worktree_created:
+        # Guard on worktree_path (not _worktree_created) so resumed sessions
+        # that reuse an existing worktree still get stale MERGE_HEAD cleaned up.
+        if self.worktree_path:
             try:
                 self._abort_any_in_progress_merge()
             except Exception as exc:
