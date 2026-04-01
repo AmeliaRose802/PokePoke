@@ -1,16 +1,20 @@
 """Tests for the project configuration system."""
 
 import json
+import logging
 from unittest.mock import patch
 
 import pytest
 
 from pokepoke.config import (
+    ConfigError,
     GitConfig,
     MaintenanceAgentConfig,
     MaintenanceConfig,
     ModelConfig,
     ModelSyncConfig,
+    PerformanceThresholdsConfig,
+    PreflightHealthConfig,
     ProjectConfig,
     QualityGateOverrides,
     RepoConfig,
@@ -177,23 +181,42 @@ class TestWarmSessionConfig:
         assert config.refresh_on_merge is False
         assert config.pool_size_per_label == 3
 
-    def test_max_age_hours_clamped(self):
-        # Too low
-        config = WarmSessionConfig(max_age_hours=0.1)
+    def test_max_age_hours_clamped(self, caplog):
+        # Too low — should warn and clamp
+        with caplog.at_level(logging.WARNING, logger="pokepoke.config"):
+            config = WarmSessionConfig(max_age_hours=0.1)
         assert config.max_age_hours == 0.5  # min is 0.5
+        assert "max_age_hours" in caplog.text
+        assert "coercing" in caplog.text
 
-        # Too high
-        config = WarmSessionConfig(max_age_hours=48.0)
+        caplog.clear()
+        # Too high — should warn and clamp
+        with caplog.at_level(logging.WARNING, logger="pokepoke.config"):
+            config = WarmSessionConfig(max_age_hours=48.0)
         assert config.max_age_hours == 24.0  # max is 24.0
+        assert "max_age_hours" in caplog.text
 
-    def test_pool_size_clamped(self):
-        # Too low
-        config = WarmSessionConfig(pool_size_per_label=0)
+    def test_max_age_hours_negative_raises(self):
+        with pytest.raises(ConfigError, match="negative value"):
+            WarmSessionConfig(max_age_hours=-1.0)
+
+    def test_pool_size_clamped(self, caplog):
+        # Too low — should warn and clamp
+        with caplog.at_level(logging.WARNING, logger="pokepoke.config"):
+            config = WarmSessionConfig(pool_size_per_label=0)
         assert config.pool_size_per_label == 1  # min is 1
+        assert "pool_size_per_label" in caplog.text
 
-        # Too high
-        config = WarmSessionConfig(pool_size_per_label=10)
+        caplog.clear()
+        # Too high — should warn and clamp
+        with caplog.at_level(logging.WARNING, logger="pokepoke.config"):
+            config = WarmSessionConfig(pool_size_per_label=10)
         assert config.pool_size_per_label == 5  # max is 5
+        assert "pool_size_per_label" in caplog.text
+
+    def test_pool_size_negative_raises(self):
+        with pytest.raises(ConfigError, match="negative value"):
+            WarmSessionConfig(pool_size_per_label=-1)
 
 
 class TestGitConfig:
@@ -504,17 +527,27 @@ class TestCommandTimeout:
         config = ProjectConfig.from_dict(data)
         assert config.command_timeout == 600
 
-    def test_from_dict_minimum_enforcement(self):
-        """Test that command_timeout enforces minimum of 30 seconds."""
+    def test_from_dict_minimum_enforcement(self, caplog):
+        """Test that command_timeout enforces minimum of 30 seconds with warning."""
         data = {"command_timeout": 10}  # Below minimum
-        config = ProjectConfig.from_dict(data)
+        with caplog.at_level(logging.WARNING, logger="pokepoke.config"):
+            config = ProjectConfig.from_dict(data)
         assert config.command_timeout == 30  # Should be clamped to minimum
+        assert "command_timeout" in caplog.text
+        assert "coercing" in caplog.text
 
-    def test_from_dict_zero_clamped(self):
-        """Test that zero command_timeout is clamped to minimum."""
+    def test_from_dict_zero_clamped(self, caplog):
+        """Test that zero command_timeout is clamped to minimum with warning."""
         data = {"command_timeout": 0}
-        config = ProjectConfig.from_dict(data)
+        with caplog.at_level(logging.WARNING, logger="pokepoke.config"):
+            config = ProjectConfig.from_dict(data)
         assert config.command_timeout == 30
+        assert "command_timeout" in caplog.text
+
+    def test_from_dict_negative_raises(self):
+        """Test that negative command_timeout raises ConfigError."""
+        with pytest.raises(ConfigError, match="negative value"):
+            ProjectConfig.from_dict({"command_timeout": -10})
 
 
 class TestToolCallTimeout:
@@ -536,17 +569,26 @@ class TestToolCallTimeout:
         config = ProjectConfig.from_dict(data)
         assert config.tool_call_timeout == 900
 
-    def test_from_dict_minimum_enforcement(self):
-        """Test that tool_call_timeout enforces minimum of 60 seconds."""
+    def test_from_dict_minimum_enforcement(self, caplog):
+        """Test that tool_call_timeout enforces minimum of 60 seconds with warning."""
         data = {"tool_call_timeout": 10}
-        config = ProjectConfig.from_dict(data)
+        with caplog.at_level(logging.WARNING, logger="pokepoke.config"):
+            config = ProjectConfig.from_dict(data)
         assert config.tool_call_timeout == 60
+        assert "tool_call_timeout" in caplog.text
 
-    def test_from_dict_zero_clamped(self):
-        """Test that zero tool_call_timeout is clamped to minimum."""
+    def test_from_dict_zero_clamped(self, caplog):
+        """Test that zero tool_call_timeout is clamped to minimum with warning."""
         data = {"tool_call_timeout": 0}
-        config = ProjectConfig.from_dict(data)
+        with caplog.at_level(logging.WARNING, logger="pokepoke.config"):
+            config = ProjectConfig.from_dict(data)
         assert config.tool_call_timeout == 60
+        assert "tool_call_timeout" in caplog.text
+
+    def test_from_dict_negative_raises(self):
+        """Test that negative tool_call_timeout raises ConfigError."""
+        with pytest.raises(ConfigError, match="negative value"):
+            ProjectConfig.from_dict({"tool_call_timeout": -100})
 
 
 class TestAssignmentConfig:
@@ -723,10 +765,10 @@ class TestMaxCopilotFailureRetries:
         config = ProjectConfig.from_dict({"max_copilot_failure_retries": 0})
         assert config.max_copilot_failure_retries == 0
 
-    def test_negative_clamped_to_zero(self):
-        """Negative values are clamped to 0 (no retry) by __post_init__."""
-        config = ProjectConfig.from_dict({"max_copilot_failure_retries": -3})
-        assert config.max_copilot_failure_retries == 0
+    def test_negative_raises_config_error(self):
+        """Negative values raise ConfigError instead of silently clamping."""
+        with pytest.raises(ConfigError, match="negative value"):
+            ProjectConfig.from_dict({"max_copilot_failure_retries": -3})
 
 
 class TestQualityGateOverrides:
@@ -751,17 +793,25 @@ class TestQualityGateOverrides:
         assert qg.allow_skipped_tests is True
         assert qg.extra_checks == ["mypy", "ruff"]
 
-    def test_coverage_threshold_clamped_high(self):
-        qg = QualityGateOverrides(coverage_threshold=150.0)
+    def test_coverage_threshold_clamped_high(self, caplog):
+        with caplog.at_level(logging.WARNING, logger="pokepoke.config"):
+            qg = QualityGateOverrides(coverage_threshold=150.0)
         assert qg.coverage_threshold == 100.0
+        assert "coverage_threshold" in caplog.text
 
-    def test_coverage_threshold_clamped_low(self):
-        qg = QualityGateOverrides(coverage_threshold=-10.0)
-        assert qg.coverage_threshold == 0.0
+    def test_coverage_threshold_negative_raises(self):
+        with pytest.raises(ConfigError, match="negative value"):
+            QualityGateOverrides(coverage_threshold=-10.0)
 
-    def test_max_file_length_clamped(self):
-        qg = QualityGateOverrides(max_file_length=0)
+    def test_max_file_length_clamped(self, caplog):
+        with caplog.at_level(logging.WARNING, logger="pokepoke.config"):
+            qg = QualityGateOverrides(max_file_length=0)
         assert qg.max_file_length == 1
+        assert "max_file_length" in caplog.text
+
+    def test_max_file_length_negative_raises(self):
+        with pytest.raises(ConfigError, match="negative value"):
+            QualityGateOverrides(max_file_length=-5)
 
     def test_none_values_not_clamped(self):
         """None values should remain None (inherit global defaults)."""
@@ -1073,3 +1123,86 @@ class TestConfigThreadSafety:
             t.join(timeout=30)
 
         assert not errors, f"Thread-safety errors: {errors}"
+
+
+class TestConfigValidationWarnings:
+    """Tests that config validation logs warnings on coercion and raises on invalid values."""
+
+    def test_preflight_health_coercion_warns(self, caplog):
+        """PreflightHealthConfig warns when clamping below-minimum positive values."""
+        with caplog.at_level(logging.WARNING, logger="pokepoke.config"):
+            cfg = PreflightHealthConfig(lock_timeout_seconds=0.1)
+        assert cfg.lock_timeout_seconds == 5.0
+        assert "lock_timeout_seconds" in caplog.text
+        assert "coercing" in caplog.text
+
+    def test_preflight_health_negative_raises(self):
+        """PreflightHealthConfig raises ConfigError for negative timeouts."""
+        with pytest.raises(ConfigError, match="negative value"):
+            PreflightHealthConfig(lock_timeout_seconds=-1.0)
+        with pytest.raises(ConfigError, match="negative value"):
+            PreflightHealthConfig(min_disk_space_gb=-0.5)
+        with pytest.raises(ConfigError, match="negative value"):
+            PreflightHealthConfig(git_operation_timeout=-10.0)
+        with pytest.raises(ConfigError, match="negative value"):
+            PreflightHealthConfig(max_repair_attempts=-1)
+        with pytest.raises(ConfigError, match="negative value"):
+            PreflightHealthConfig(max_orphan_worktrees=-1)
+
+    def test_preflight_health_valid_values_no_warning(self, caplog):
+        """PreflightHealthConfig does not warn for in-range values."""
+        with caplog.at_level(logging.WARNING, logger="pokepoke.config"):
+            cfg = PreflightHealthConfig(lock_timeout_seconds=30.0)
+        assert cfg.lock_timeout_seconds == 30.0
+        assert "lock_timeout_seconds" not in caplog.text
+
+    def test_performance_thresholds_coercion_warns(self, caplog):
+        """PerformanceThresholdsConfig warns when clamping values."""
+        with caplog.at_level(logging.WARNING, logger="pokepoke.config"):
+            cfg = PerformanceThresholdsConfig(min_success_rate=2.0)
+        assert cfg.min_success_rate == 1.0
+        assert "min_success_rate" in caplog.text
+
+    def test_performance_thresholds_negative_raises(self):
+        """PerformanceThresholdsConfig raises ConfigError for negative values."""
+        with pytest.raises(ConfigError, match="negative value"):
+            PerformanceThresholdsConfig(max_merge_queue_depth=-1)
+        with pytest.raises(ConfigError, match="negative value"):
+            PerformanceThresholdsConfig(min_memory_mb=-100.0)
+        with pytest.raises(ConfigError, match="negative value"):
+            PerformanceThresholdsConfig(min_success_rate=-0.1)
+
+    def test_repo_config_negative_raises(self):
+        """RepoConfig raises ConfigError for negative values."""
+        with pytest.raises(ConfigError, match="negative value"):
+            RepoConfig(priority_weight=-1)
+        with pytest.raises(ConfigError, match="negative value"):
+            RepoConfig(max_workers=-1)
+
+    def test_repo_config_coercion_warns(self, caplog):
+        """RepoConfig warns when clamping below-minimum values."""
+        with caplog.at_level(logging.WARNING, logger="pokepoke.config"):
+            cfg = RepoConfig(priority_weight=0)
+        assert cfg.priority_weight == 1
+        assert "priority_weight" in caplog.text
+
+    def test_project_config_negative_raises(self):
+        """ProjectConfig raises ConfigError for negative values across fields."""
+        with pytest.raises(ConfigError, match="negative value"):
+            ProjectConfig(max_parallel_agents=-1)
+        with pytest.raises(ConfigError, match="negative value"):
+            ProjectConfig(idle_timeout_seconds=-5)
+        with pytest.raises(ConfigError, match="negative value"):
+            ProjectConfig(decomposition_failure_threshold=-1)
+        with pytest.raises(ConfigError, match="negative value"):
+            ProjectConfig(stale_worktree_commit_threshold=-1)
+        with pytest.raises(ConfigError, match="negative value"):
+            ProjectConfig(circuit_breaker_drain_timeout=-1)
+
+    def test_project_config_coercion_warns(self, caplog):
+        """ProjectConfig warns when clamping below-minimum positive values."""
+        with caplog.at_level(logging.WARNING, logger="pokepoke.config"):
+            cfg = ProjectConfig(idle_timeout_seconds=1)
+        assert cfg.idle_timeout_seconds == 10  # MIN_IDLE_TIMEOUT_SECONDS
+        assert "idle_timeout_seconds" in caplog.text
+        assert "coercing" in caplog.text

@@ -7,6 +7,8 @@ from typing import Any
 
 import dacite
 
+from pokepoke.config_validation import ConfigError  # noqa: F401
+from pokepoke.config_validation import clamp_with_warning as _clamp
 from pokepoke.models.model_sync_config import ModelSyncConfig, parse_model_sync_config
 
 logger = logging.getLogger(__name__)
@@ -145,13 +147,13 @@ class PreflightHealthConfig:
     graceful_shutdown_on_failure: bool = True
 
     def __post_init__(self) -> None:
-        """Clamp values to valid ranges."""
-        self.min_disk_space_gb = max(_c.MIN_DISK_SPACE_GB, self.min_disk_space_gb)
-        self.lock_timeout_seconds = max(_c.MIN_LOCK_TIMEOUT_SECONDS, self.lock_timeout_seconds)
-        self.worktree_test_timeout = max(_c.MIN_WORKTREE_TEST_TIMEOUT, self.worktree_test_timeout)
-        self.max_orphan_worktrees = max(_c.MIN_ORPHAN_WORKTREES, self.max_orphan_worktrees)
-        self.git_operation_timeout = max(_c.MIN_GIT_OPERATION_TIMEOUT, self.git_operation_timeout)
-        self.max_repair_attempts = max(_c.MIN_REPAIR_ATTEMPTS, self.max_repair_attempts)
+        _cls = "PreflightHealthConfig"
+        self.min_disk_space_gb = _clamp(_cls, "min_disk_space_gb", self.min_disk_space_gb, minimum=_c.MIN_DISK_SPACE_GB)
+        self.lock_timeout_seconds = _clamp(_cls, "lock_timeout_seconds", self.lock_timeout_seconds, minimum=_c.MIN_LOCK_TIMEOUT_SECONDS)
+        self.worktree_test_timeout = _clamp(_cls, "worktree_test_timeout", self.worktree_test_timeout, minimum=_c.MIN_WORKTREE_TEST_TIMEOUT)
+        self.max_orphan_worktrees = _clamp(_cls, "max_orphan_worktrees", self.max_orphan_worktrees, minimum=_c.MIN_ORPHAN_WORKTREES)
+        self.git_operation_timeout = _clamp(_cls, "git_operation_timeout", self.git_operation_timeout, minimum=_c.MIN_GIT_OPERATION_TIMEOUT)
+        self.max_repair_attempts = _clamp(_cls, "max_repair_attempts", self.max_repair_attempts, minimum=_c.MIN_REPAIR_ATTEMPTS)
 
 @dataclass
 class AssignmentRuleMatch:
@@ -192,10 +194,9 @@ class WarmSessionConfig:
     pool_size_per_label: int = 1
 
     def __post_init__(self) -> None:
-        """Clamp values to valid ranges."""
-        self.max_age_hours = max(0.5, min(24.0, self.max_age_hours))
-        self.pool_size_per_label = max(1, min(5, self.pool_size_per_label))
-
+        _cls = "WarmSessionConfig"
+        self.max_age_hours = _clamp(_cls, "max_age_hours", self.max_age_hours, minimum=0.5, maximum=24.0)
+        self.pool_size_per_label = _clamp(_cls, "pool_size_per_label", self.pool_size_per_label, minimum=1, maximum=5)
 
 @dataclass
 class QualityGateOverrides:
@@ -206,11 +207,11 @@ class QualityGateOverrides:
     extra_checks: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
+        _cls = "QualityGateOverrides"
         if self.coverage_threshold is not None:
-            self.coverage_threshold = max(0.0, min(100.0, self.coverage_threshold))
+            self.coverage_threshold = _clamp(_cls, "coverage_threshold", self.coverage_threshold, minimum=0.0, maximum=100.0)
         if self.max_file_length is not None:
-            self.max_file_length = max(1, self.max_file_length)
-
+            self.max_file_length = _clamp(_cls, "max_file_length", self.max_file_length, minimum=1)
 
 @dataclass
 class RepoConfig:
@@ -225,9 +226,9 @@ class RepoConfig:
     beads_backend: str = "bd"  # CLI backend to use: "bd" (Python) or "br" (Rust)
 
     def __post_init__(self) -> None:
-        """Clamp values to valid ranges."""
-        self.priority_weight = max(1, self.priority_weight)
-        self.max_workers = max(0, self.max_workers)
+        _cls = "RepoConfig"
+        self.priority_weight = _clamp(_cls, "priority_weight", self.priority_weight, minimum=1)
+        self.max_workers = _clamp(_cls, "max_workers", self.max_workers, minimum=0)
 
 @dataclass
 class PerformanceThresholdsConfig:
@@ -240,20 +241,16 @@ class PerformanceThresholdsConfig:
     min_success_rate: float = _c.DEFAULT_MIN_SUCCESS_RATE
 
     def __post_init__(self) -> None:
-        """Clamp values to valid ranges."""
-        self.max_merge_queue_depth = max(_c.MIN_MERGE_QUEUE_DEPTH, self.max_merge_queue_depth)
-        self.max_lock_wait_seconds = max(_c.MIN_LOCK_WAIT_SECONDS, self.max_lock_wait_seconds)
-        self.max_iteration_seconds = max(_c.MIN_ITERATION_SECONDS, self.max_iteration_seconds)
-        self.min_memory_mb = max(_c.MIN_MEMORY_MB, self.min_memory_mb)
-        self.min_success_rate = max(0.0, min(1.0, self.min_success_rate))
+        _cls = "PerformanceThresholdsConfig"
+        self.max_merge_queue_depth = _clamp(_cls, "max_merge_queue_depth", self.max_merge_queue_depth, minimum=_c.MIN_MERGE_QUEUE_DEPTH)
+        self.max_lock_wait_seconds = _clamp(_cls, "max_lock_wait_seconds", self.max_lock_wait_seconds, minimum=_c.MIN_LOCK_WAIT_SECONDS)
+        self.max_iteration_seconds = _clamp(_cls, "max_iteration_seconds", self.max_iteration_seconds, minimum=_c.MIN_ITERATION_SECONDS)
+        self.min_memory_mb = _clamp(_cls, "min_memory_mb", self.min_memory_mb, minimum=_c.MIN_MEMORY_MB)
+        self.min_success_rate = _clamp(_cls, "min_success_rate", self.min_success_rate, minimum=0.0, maximum=1.0)
 
 @dataclass
 class EconomyModeConfig:
-    """Economy mode configuration for routing tasks to appropriate models based on complexity.
-
-    When enabled, routes simple tasks to cheaper/faster models and complex tasks to
-    premium models based on complexity tags in work item labels.
-    """
+    """Economy mode: route tasks to models based on complexity tags in labels."""
     enabled: bool = False
     simple_model: str = "claude-sonnet-4.5"      # Cheapest/fastest for simple tasks
     medium_model: str = "claude-opus-4.5"        # Mid-tier for medium complexity
@@ -308,19 +305,19 @@ class ProjectConfig:
     stale_worktree_commit_threshold: int = 20
 
     def __post_init__(self) -> None:
-        """Clamp values to valid ranges."""
-        self.max_parallel_agents = max(_c.MIN_MAX_PARALLEL_AGENTS, self.max_parallel_agents)
-        self.command_timeout = max(_c.MIN_COMMAND_TIMEOUT, self.command_timeout)
-        self.max_gate_rejections_per_item = max(1, self.max_gate_rejections_per_item)
-        self.max_copilot_failure_retries = max(0, self.max_copilot_failure_retries)
-        self.idle_timeout_seconds = max(_c.MIN_IDLE_TIMEOUT_SECONDS, self.idle_timeout_seconds)
-        self.session_inactivity_timeout = max(_c.MIN_SESSION_INACTIVITY_TIMEOUT, self.session_inactivity_timeout)
-        self.tool_call_timeout = max(_c.MIN_TOOL_CALL_TIMEOUT, self.tool_call_timeout)
-        self.process_output_timeout = max(_c.MIN_PROCESS_OUTPUT_TIMEOUT, self.process_output_timeout)
-        self.max_ping_failures = max(_c.MIN_MAX_PING_FAILURES, self.max_ping_failures)
-        self.circuit_breaker_drain_timeout = max(_c.MIN_CIRCUIT_BREAKER_DRAIN_TIMEOUT, self.circuit_breaker_drain_timeout)
-        self.decomposition_failure_threshold = max(1, self.decomposition_failure_threshold)
-        self.stale_worktree_commit_threshold = max(1, self.stale_worktree_commit_threshold)
+        _cls = "ProjectConfig"
+        self.max_parallel_agents = _clamp(_cls, "max_parallel_agents", self.max_parallel_agents, minimum=_c.MIN_MAX_PARALLEL_AGENTS)
+        self.command_timeout = _clamp(_cls, "command_timeout", self.command_timeout, minimum=_c.MIN_COMMAND_TIMEOUT)
+        self.max_gate_rejections_per_item = _clamp(_cls, "max_gate_rejections_per_item", self.max_gate_rejections_per_item, minimum=1)
+        self.max_copilot_failure_retries = _clamp(_cls, "max_copilot_failure_retries", self.max_copilot_failure_retries, minimum=0)
+        self.idle_timeout_seconds = _clamp(_cls, "idle_timeout_seconds", self.idle_timeout_seconds, minimum=_c.MIN_IDLE_TIMEOUT_SECONDS)
+        self.session_inactivity_timeout = _clamp(_cls, "session_inactivity_timeout", self.session_inactivity_timeout, minimum=_c.MIN_SESSION_INACTIVITY_TIMEOUT)
+        self.tool_call_timeout = _clamp(_cls, "tool_call_timeout", self.tool_call_timeout, minimum=_c.MIN_TOOL_CALL_TIMEOUT)
+        self.process_output_timeout = _clamp(_cls, "process_output_timeout", self.process_output_timeout, minimum=_c.MIN_PROCESS_OUTPUT_TIMEOUT)
+        self.max_ping_failures = _clamp(_cls, "max_ping_failures", self.max_ping_failures, minimum=_c.MIN_MAX_PING_FAILURES)
+        self.circuit_breaker_drain_timeout = _clamp(_cls, "circuit_breaker_drain_timeout", self.circuit_breaker_drain_timeout, minimum=_c.MIN_CIRCUIT_BREAKER_DRAIN_TIMEOUT)
+        self.decomposition_failure_threshold = _clamp(_cls, "decomposition_failure_threshold", self.decomposition_failure_threshold, minimum=1)
+        self.stale_worktree_commit_threshold = _clamp(_cls, "stale_worktree_commit_threshold", self.stale_worktree_commit_threshold, minimum=1)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a canonical dict suitable for YAML/JSON output."""
@@ -367,7 +364,6 @@ class ProjectConfig:
                 config=dacite.Config(strict=False, cast=cast_types),
             )
 
-
 def _find_repo_root() -> Path:
     """Find the repository root by walking up from cwd."""
     current = Path.cwd().resolve()
@@ -396,7 +392,6 @@ def _load_config_file(config_path: Path) -> dict[str, Any]:
         return data if isinstance(data, dict) else {}
 
     raise ValueError(f"Unsupported config file format: {config_path.suffix}")
-
 
 # Module-level cached config with thread-safe access
 _cached_config: ProjectConfig | None = None
@@ -450,10 +445,7 @@ def load_config(config_path: Path | None = None) -> ProjectConfig:
 
 
 def reset_config() -> None:
-    """Reset the cached configuration (useful for testing).
-
-    Thread-safe: acquires ``_config_lock`` before clearing the cache.
-    """
+    """Reset the cached configuration. Thread-safe."""
     global _cached_config
     with _config_lock:
         _cached_config = None

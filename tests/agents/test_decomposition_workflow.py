@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from pokepoke.orchestration.workflow import process_work_item
 from pokepoke.orchestration.workflow_helpers import _maybe_decompose
 from pokepoke.types import CopilotResult, GateAgentResult
@@ -144,10 +146,10 @@ class TestConfigDefaults:
         config = ProjectConfig(decomposition_failure_threshold=0)
         assert config.decomposition_failure_threshold == 1
 
-    def test_threshold_clamped_negative(self) -> None:
-        from pokepoke.config import ProjectConfig
-        config = ProjectConfig(decomposition_failure_threshold=-5)
-        assert config.decomposition_failure_threshold == 1
+    def test_threshold_negative_raises(self) -> None:
+        from pokepoke.config import ConfigError, ProjectConfig
+        with pytest.raises(ConfigError, match="negative value"):
+            ProjectConfig(decomposition_failure_threshold=-5)
 
 
 class TestAgentTypeRegistered:
