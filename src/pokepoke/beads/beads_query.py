@@ -156,7 +156,11 @@ def _parse_beads_json(output: str, extra_prefixes: tuple[str, ...] = ()) -> Any:
     if json_start is None:
         return None
     json_text = '\n'.join(filtered_lines[json_start:])
-    return json.loads(json_text)
+    try:
+        return json.loads(json_text)
+    except json.JSONDecodeError:
+        logger.debug("Malformed JSON from beads CLI: %s", json_text[:200])
+        return None
 
 
 def _get_main_repo_root() -> Path | None:
