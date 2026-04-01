@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import concurrent.futures
-import contextlib
 import logging
 import threading
 import time
@@ -105,10 +104,18 @@ def _drain_orphaned_futures(
     for fut, item in orphaned:
         result = WorkItemResult(success=False, request_count=0)
         if fut.done():
-            with contextlib.suppress(Exception):
+            try:
                 result = fut.result(timeout=0)
-        with contextlib.suppress(Exception):
+            except Exception as e:
+                run_logger.log_orchestrator(
+                    f"Failed to retrieve result for {item.id}: {e}", level="WARNING"
+                )
+        try:
             record_fn(item, result, session_stats, run_logger)
+        except Exception as e:
+            run_logger.log_orchestrator(
+                f"Failed to record result for {item.id}: {e}", level="WARNING"
+            )
         _safe_unassign(item.id, run_logger, "orphan")
         terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
 
