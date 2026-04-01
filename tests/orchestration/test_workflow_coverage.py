@@ -317,8 +317,9 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
     @patch("pokepoke.orchestration.workflow.setup_worktree")
     @patch("pokepoke.orchestration.workflow.is_shutting_down", return_value=False)
+    @patch("pokepoke.orchestration.workflow._maybe_decompose")
     def test_copilot_failure(
-        self, mock_shutdown, mock_setup, mock_assign, mock_agent_name,
+        self, mock_decompose, mock_shutdown, mock_setup, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
         mock_model, mock_config, mock_prompt, mock_copilot,
         mock_ahead, mock_uncommitted, mock_cleanup, mock_session_cleanup,
