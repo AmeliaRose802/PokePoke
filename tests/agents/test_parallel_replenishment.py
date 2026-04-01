@@ -16,6 +16,18 @@ from pokepoke.agents.parallel import _collect_done_futures, run_parallel_loop
 from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats, WorkItemResult
 
 
+def _make_shutdown_sequence(false_count: int = 50):
+    """Create infinite shutdown sequence to prevent StopIteration."""
+    counter = [0]
+
+    def _shutdown_check():
+        counter[0] += 1
+        return counter[0] > false_count
+    return _shutdown_check
+
+
+
+
 def _make_item(item_id: str = "t1") -> BeadsWorkItem:
     return BeadsWorkItem(
         id=item_id, title=f"Title-{item_id}", status="open",
@@ -87,8 +99,8 @@ class TestParallelReplenishmentBug:
 
         mock_collect.side_effect = collect_side
         mock_sel.side_effect = [items[:10], items[10:20]]
-        # 2 full iterations (each: 1 while check + up to 10 inner sleep checks)
-        mock_shut.side_effect = [False] * 22 + [True] * 5
+        # Use infinite sequence to prevent StopIteration on mock exhaustion
+        mock_shut.side_effect = _make_shutdown_sequence(false_count=22)
         mock_pwi.return_value = WorkItemResult(success=False, request_count=0, stats=AgentStats())
 
         stats = SessionStats(agent_stats=AgentStats())
@@ -143,7 +155,7 @@ class TestParallelReplenishmentBug:
 
         mock_collect.side_effect = collect_side
         mock_sel.side_effect = [items[:10], items[10:20]]
-        mock_shut.side_effect = [False] * 22 + [True] * 5
+        mock_shut.side_effect = _make_shutdown_sequence(false_count=22)
         mock_pwi.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
 
         stats = SessionStats(agent_stats=AgentStats())
@@ -203,9 +215,8 @@ class TestParallelReplenishmentBug:
 
         mock_collect.side_effect = collect_side
         mock_sel.side_effect = [items[:2], items[2:3]]
-        # Provide enough values: the wait loop (lines 358-362) calls
-        # is_shutting_down() up to 10 times per iteration.
-        mock_shut.side_effect = [False] * 22 + [True] * 5
+        # Use infinite sequence to prevent StopIteration on mock exhaustion
+        mock_shut.side_effect = _make_shutdown_sequence(false_count=22)
         mock_pwi.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
 
         stats = SessionStats(agent_stats=AgentStats())
@@ -337,7 +348,7 @@ class TestParallelReplenishmentBug:
 
         mock_collect.side_effect = collect_side
         mock_sel.return_value = items[:2]
-        mock_shut.side_effect = [False] * 50 + [True] * 5
+        mock_shut.side_effect = _make_shutdown_sequence(false_count=50)
         mock_pwi.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
 
         stats = SessionStats(agent_stats=AgentStats())

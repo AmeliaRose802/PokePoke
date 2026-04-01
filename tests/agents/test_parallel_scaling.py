@@ -19,6 +19,16 @@ from pokepoke.agents.parallel import run_parallel_loop
 from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats, WorkItemResult
 
 
+def _make_shutdown_sequence(false_count: int = 50):
+    """Create infinite shutdown sequence to prevent StopIteration."""
+    counter = [0]
+
+    def _shutdown_check():
+        counter[0] += 1
+        return counter[0] > false_count
+    return _shutdown_check
+
+
 def _make_item(item_id: str = "t1") -> BeadsWorkItem:
     return BeadsWorkItem(
         id=item_id, title=f"Title-{item_id}", status="open",
@@ -84,8 +94,8 @@ class TestRunParallelLoopScaling:
         mock_collect.side_effect = collect_side
         mock_sel.side_effect = [items[:3], [], items[3:6], []]
 
-        # Enough False for 2 full iterations (1 while + 10 sleep each) + shutdown
-        mock_shut.side_effect = [False] * 22 + [True] * 5
+        # Use infinite sequence to prevent StopIteration on mock exhaustion
+        mock_shut.side_effect = _make_shutdown_sequence(false_count=22)
 
         stats = SessionStats(agent_stats=AgentStats())
         run_parallel_loop(
@@ -106,7 +116,7 @@ class TestRunParallelLoopScaling:
     @patch("pokepoke.agents.parallel.time.sleep")
     @patch("pokepoke.agents.parallel.terminal_ui")
     @patch("pokepoke.agents.parallel.set_executor")
-    @patch("pokepoke.agents.parallel.is_shutting_down", side_effect=([False] + ([False] * 10) + [True]))
+    @patch("pokepoke.agents.parallel.is_shutting_down")
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items")
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
@@ -118,6 +128,7 @@ class TestRunParallelLoopScaling:
     ) -> None:
         """Regression (PokePoke-snio): CLI --max-agents must not be capped by config."""
         mock_ready.return_value = [_make_item(f"c{i}") for i in range(10)]
+        mock_shut.side_effect = _make_shutdown_sequence(false_count=12)
 
         stats = SessionStats(agent_stats=AgentStats())
         run_parallel_loop(
@@ -253,7 +264,7 @@ class TestRunParallelLoopScaling:
         dynamic_values = iter([2, 4])
         mock_sel.side_effect = [items[:2], [], items[2:6], []]
 
-        mock_shut.side_effect = [False] * 22 + [True] * 5
+        mock_shut.side_effect = _make_shutdown_sequence(false_count=22)
 
         with patch("pokepoke.agents.parallel._get_dynamic_max_agents", side_effect=dynamic_values):
             stats = SessionStats(agent_stats=AgentStats())
