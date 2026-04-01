@@ -35,6 +35,14 @@ interface TagSeriesData {
   totalPoints: number;
 }
 
+// Chart layout constants
+const CHART = {
+  LEFT_MARGIN: 12, // Space for Y-axis labels
+  RIGHT_MARGIN: 2,
+  TOP_MARGIN: 6,
+  BOTTOM_MARGIN: 4,
+};
+
 export function CompletionTimeChart({ data, emptyLabel }: CompletionTimeChartProps) {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const hasData = Object.values(data).some((series) => series.length > 0);
@@ -98,9 +106,24 @@ export function CompletionTimeChart({ data, emptyLabel }: CompletionTimeChartPro
     })
     .join("\n");
 
+  // Chart area bounds
+  const chartLeft = CHART.LEFT_MARGIN;
+  const chartRight = 100 - CHART.RIGHT_MARGIN;
+  const chartWidth = chartRight - chartLeft;
+  const seriesHeight = 25;
+  const totalHeight = visibleSeries.length * seriesHeight + CHART.TOP_MARGIN + CHART.BOTTOM_MARGIN;
+
+  // Generate dynamic CSS for X-axis label positions
+  const xLabelStyles = labels
+    .map((_, index) => {
+      const leftPos = chartLeft + (labels.length === 1 ? chartWidth / 2 : (index / (labels.length - 1)) * chartWidth);
+      return `.ct-x-label-${index} { left: ${leftPos}%; }`;
+    })
+    .join("\n");
+
   return (
     <div>
-      <style>{tagStyleRules}</style>
+      <style>{tagStyleRules + "\n" + xLabelStyles}</style>
       {/* Tag cloud for filtering */}
       <div className="tag-cloud" role="listbox" aria-label="Filter by tag">
         {sortedTags.map((series, idx) => {
@@ -131,32 +154,66 @@ export function CompletionTimeChart({ data, emptyLabel }: CompletionTimeChartPro
 
       {/* Chart lines */}
       <div className="completion-time-chart">
-        <svg viewBox={`0 0 100 ${visibleSeries.length * 30 + 10}`} preserveAspectRatio="none">
+        <svg viewBox={`0 0 100 ${totalHeight}`} preserveAspectRatio="xMidYMid meet">
           {visibleSeries.map((typeSeries, typeIndex) => {
-            const yOffset = typeIndex * 30 + 15;
+            const yBaseline = CHART.TOP_MARGIN + typeIndex * seriesHeight + seriesHeight * 0.7;
             const points = typeSeries.values.map((value, index) => {
-              const x = labels.length === 1 ? 50 : (index / (labels.length - 1)) * 100;
-              const normalized = overallMax === 0 ? 0 : (value / overallMax) * 20;
-              const y = yOffset - normalized;
-              return `${x},${y}`;
+              const x =
+                labels.length === 1 ? chartLeft + chartWidth / 2 : chartLeft + (index / (labels.length - 1)) * chartWidth;
+              const normalized = overallMax === 0 ? 0 : (value / overallMax) * (seriesHeight * 0.6);
+              const y = yBaseline - normalized;
+              return { x, y, value };
             });
+
+            const polylinePoints = points.map((p) => `${p.x},${p.y}`).join(" ");
 
             return (
               <g key={typeSeries.type}>
-                <polyline fill="none" stroke={typeSeries.color} strokeWidth="1.5" points={points.join(" ")} />
-                {typeSeries.values.map((value, index) => (
-                  <circle
-                    key={index}
-                    cx={labels.length === 1 ? 50 : (index / (labels.length - 1)) * 100}
-                    cy={yOffset - (overallMax === 0 ? 0 : (value / overallMax) * 20)}
-                    r="0.8"
-                    fill={typeSeries.color}
-                  />
+                {/* Tag label on Y-axis */}
+                <text
+                  x={chartLeft - 1}
+                  y={yBaseline - seriesHeight * 0.25}
+                  className="completion-time-y-label"
+                >
+                  {typeSeries.type.length > 8 ? typeSeries.type.slice(0, 7) + "…" : typeSeries.type}
+                </text>
+
+                {/* Baseline reference line */}
+                <line
+                  x1={chartLeft}
+                  y1={yBaseline}
+                  x2={chartRight}
+                  y2={yBaseline}
+                  className="completion-time-baseline"
+                />
+
+                {/* Data line */}
+                <polyline fill="none" stroke={typeSeries.color} strokeWidth="1.2" points={polylinePoints} />
+
+                {/* Data points with annotations */}
+                {points.map((point, index) => (
+                  <g key={index}>
+                    <circle cx={point.x} cy={point.y} r="1" fill={typeSeries.color} />
+                    {point.value > 0 && (
+                      <text x={point.x} y={point.y - 2} className="completion-time-annotation">
+                        {formatDurationShort(point.value)}
+                      </text>
+                    )}
+                  </g>
                 ))}
               </g>
             );
           })}
         </svg>
+
+        {/* X-axis labels (dates) below the chart */}
+        <div className="completion-time-x-axis">
+          {labels.map((label, index) => (
+            <span key={label} className={`completion-time-x-label ct-x-label-${index}`}>
+              {label}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );
