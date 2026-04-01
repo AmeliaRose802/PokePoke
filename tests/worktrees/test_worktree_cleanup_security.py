@@ -73,7 +73,7 @@ class TestValidateWithinWorktreesDir:
         # 'worktrees' as a parent directory (since it's a file)
         # However, this may not trigger an error if resolve() handles it gracefully
         # The real security check happens at the directory traversal level
-        
+
         # This test is actually checking an edge case that may not be exploitable
         # Skip it as the real protection is in the symlink checks
         pytest.skip("Edge case: 'worktrees' as file is caught by directory traversal, not path validation")
@@ -468,7 +468,7 @@ class TestForceRemoveDirectorySecurity:
             if 'worktree' in cmd and 'remove' in cmd:
                 raise subprocess.CalledProcessError(1, "git", stderr="failed")
             return Mock(returncode=0, stdout='', stderr='')
-        
+
         mock_run.side_effect = run_side_effect
 
         # The removal should succeed via _safe_rmtree even though git fails
@@ -543,7 +543,7 @@ class TestAttackVectorPrevention:
             if 'worktree' in cmd and 'remove' in cmd:
                 raise subprocess.CalledProcessError(1, "git")
             return Mock(returncode=0, stdout='', stderr='')
-        
+
         mock_run.side_effect = run_side_effect
 
         # Remove the malicious worktree
@@ -586,7 +586,7 @@ class TestAttackVectorPrevention:
                 if 'worktree' in cmd and 'remove' in cmd:
                     raise subprocess.CalledProcessError(1, "git")
                 return Mock(returncode=0, stdout='', stderr='')
-            
+
             with patch("pokepoke.git.git_helpers.subprocess.run", side_effect=run_side_effect):
                 force_remove_directory(malicious_task, repo_root=tmp_path)
 
@@ -644,7 +644,7 @@ class TestAttackVectorPrevention:
             if 'worktree' in cmd and 'remove' in cmd:
                 raise subprocess.CalledProcessError(1, "git")
             return Mock(returncode=0, stdout='', stderr='')
-        
+
         with patch("pokepoke.git.git_helpers.subprocess.run", side_effect=run_side_effect):
             force_remove_directory(task_dir, repo_root=tmp_path)
 

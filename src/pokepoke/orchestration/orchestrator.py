@@ -186,6 +186,19 @@ def _setup_orchestrator(interactive: bool, continuous: bool, run_beta_first: boo
     except Exception as e:
         logger.warning(f"⚠️  Model sync failed (will use cached registry): {e}")
 
+    # Warm up session pool for configured labels (background, non-blocking)
+    try:
+        from pokepoke.models.warm_session_pool import get_warm_session_pool
+        pool = get_warm_session_pool()
+        if pool.enabled:
+            labels = pool.configured_labels
+            logger.info(f"🔥 Warm session pool enabled for labels: {', '.join(labels)}")
+            run_logger.log_orchestrator(f"Warm session pool enabled: {labels}")
+            # Note: Actual warm-up is deferred to first dispatch to avoid blocking startup
+            # Sessions are warmed on-demand when a matching work item is dispatched
+    except Exception as e:
+        logger.warning(f"⚠️  Warm session pool initialization failed: {e}")
+
     # Resolve effective parallelism: CLI arg > config > 1
     cfg = load_config()
     effective_parallel = max(1, max_parallel_agents if max_parallel_agents > 1 else cfg.max_parallel_agents)

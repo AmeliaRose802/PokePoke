@@ -201,6 +201,74 @@ def _resolve_prompt(
     return build_prompt_from_work_item(work_item, template_name or "beads-item")
 
 
+async def _try_get_warm_session_id_async(
+    work_item: BeadsWorkItem,
+    session_id: str | None,
+    is_resume: bool,
+    use_warm_session: bool,
+    cwd: str | None = None,
+) -> str | None:
+    """Try to find or create a matching warm session ID for the work item.
+
+    Returns the warm session ID if found/created and applicable, otherwise returns
+    the original session_id unchanged.
+    """
+    if not use_warm_session or session_id is not None or is_resume or work_item.is_ephemeral:
+        return session_id
+
+    try:
+        from pokepoke.models.warm_session_pool import get_warm_session_pool
+        pool = get_warm_session_pool()
+        if pool.enabled and work_item.labels:
+            # First, check for existing warm session
+            warm_session = pool.get_warm_session(work_item.labels)
+            if warm_session:
+                logger.info(f"[SDK] Using warm session for labels {work_item.labels}: {warm_session.session_id}")
+                return warm_session.session_id
+
+            # No existing session found - try to warm one on-demand
+            for label in work_item.labels:
+                if label.lower() in [config_label.lower() for config_label in pool.configured_labels]:
+                    logger.info(f"[SDK] No warm session found for '{label}', creating on-demand...")
+                    from pokepoke.models.warm_session_service import warm_session_for_label
+                    warm_session = await warm_session_for_label(label, cwd=cwd, timeout=120.0)
+                    if warm_session:
+                        logger.info(f"[SDK] Created warm session for '{label}': {warm_session.session_id}")
+                        return warm_session.session_id
+                    break  # Only try one label for on-demand warming
+    except Exception as e:
+        logger.debug(f"Warm session lookup/creation failed (will use cold start): {e}")
+
+    return session_id
+
+
+def _try_get_warm_session_id(
+    work_item: BeadsWorkItem,
+    session_id: str | None,
+    is_resume: bool,
+    use_warm_session: bool,
+) -> str | None:
+    """Synchronous wrapper for warm session lookup (existing sessions only).
+
+    This is a fallback for sync contexts that can't do async warming.
+    """
+    if not use_warm_session or session_id is not None or is_resume or work_item.is_ephemeral:
+        return session_id
+
+    try:
+        from pokepoke.models.warm_session_pool import get_warm_session_pool
+        pool = get_warm_session_pool()
+        if pool.enabled and work_item.labels:
+            warm_session = pool.get_warm_session(work_item.labels)
+            if warm_session:
+                logger.info(f"[SDK] Using warm session for labels {work_item.labels}: {warm_session.session_id}")
+                return warm_session.session_id
+    except Exception as e:
+        logger.debug(f"Warm session lookup failed (will use cold start): {e}")
+
+    return session_id
+
+
 async def invoke_copilot_sdk(
     work_item: BeadsWorkItem,
     prompt: str | None = None,
@@ -214,6 +282,7 @@ async def invoke_copilot_sdk(
     template_name: str | None = None,
     session_id: str | None = None,
     is_resume: bool = False,
+    use_warm_session: bool = True,
 ) -> CopilotResult:
     """Invoke GitHub Copilot using the SDK. Falls back to Sonnet on rate limit.
 
@@ -224,7 +293,13 @@ async def invoke_copilot_sdk(
         is_resume: When ``True``, the invocation is a resume after timeout.
             A shorter resume-oriented prompt is sent instead of the full
             template.
+        use_warm_session: When ``True`` (default), check for a matching warm
+            session before starting cold. Set to ``False`` for retries or
+            when a specific session_id is provided.
     """
+    # Check for a warm session match if enabled and not resuming
+    session_id = await _try_get_warm_session_id_async(work_item, session_id, is_resume, use_warm_session, cwd)
+
     final_prompt = _resolve_prompt(work_item, prompt, template_name, is_resume, session_id)
 
     # Generate a stable session_id for this work item if none provided
@@ -382,6 +457,7 @@ def invoke_copilot_sdk_sync(
     template_name: str | None = None,
     session_id: str | None = None,
     is_resume: bool = False,
+    use_warm_session: bool = True,
 ) -> CopilotResult:
     """Synchronous wrapper around invoke_copilot_sdk."""
     return asyncio.run(invoke_copilot_sdk(
@@ -396,4 +472,5 @@ def invoke_copilot_sdk_sync(
         template_name=template_name,
         session_id=session_id,
         is_resume=is_resume,
+        use_warm_session=use_warm_session,
     ))

@@ -2,15 +2,7 @@ project_name: ExampleProject
 models:
   default: claude-opus-4.6
   fallback: claude-sonnet-4.5
-  candidate_models:
-  - claude-opus-4.5
-  - gpt-5.2-codex
-  - claude-opus-4.6
-  - gemini-3-pro
-  - gpt-5.1-codex-max
-  - claude-sonnet-4.5
-  - claude-sonnet-4
-  - gpt-5.2
+  candidate_models: []
 ai_backend:
   provider: copilot
   copilot_cli_path: copilot.cmd
@@ -119,6 +111,13 @@ preflight_health:
   fail_on_environmental_errors: true
   fail_on_critical_errors: true
   graceful_shutdown_on_failure: true
+warm_sessions:
+  enabled: false
+  labels: []
+  max_age_hours: 4.0
+  exploration_prompt_template: warm-session-explore
+  refresh_on_merge: true
+  pool_size_per_label: 1
 test_data: {}
 work_artifacts_dir: null
 max_parallel_agents: 8
