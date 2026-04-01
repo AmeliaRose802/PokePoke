@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import builtins
 import logging
-import os
 import sys
 import threading
 from collections.abc import Callable, Iterator
@@ -12,10 +11,9 @@ from typing import TYPE_CHECKING, Any
 
 from pokepoke.desktop.desktop_api import DesktopAPI
 from pokepoke.desktop.desktop_log_handler import DesktopLogHandler
-from pokepoke.desktop.frontend_discovery import find_dev_server_url, find_frontend_dist
-from pokepoke.desktop.native_icon import set_app_user_model_id, set_native_window_icon
 from pokepoke.desktop.pywebview_patches import apply_runtime_patches
 from pokepoke.desktop.thread_output_router import ThreadOutputRouter
+from pokepoke.desktop.window_manager import DesktopWindowManager
 from pokepoke.utils.shutdown import is_shutting_down, request_shutdown
 
 logger = logging.getLogger(__name__)
@@ -67,7 +65,6 @@ class DesktopUI:
 
     def run_with_orchestrator(self, orchestrator_func: Callable[[], int]) -> int:
         """Run orchestrator on a background thread while pywebview runs on the main thread."""
-        import webview
         apply_runtime_patches()
         # Install a threading excepthook that suppresses UnicodeDecodeError
         # during shutdown (the Copilot SDK subprocess can emit non-UTF-8
@@ -83,23 +80,20 @@ class DesktopUI:
                 "🖥️  PokePoke Desktop started (pywebview native window)",
                 "orchestrator",
             )
-            # Find the frontend — prefer Vite dev server for hot reload
-            dev_url = find_dev_server_url()
-            if dev_url:
+            # Resolve frontend via DesktopWindowManager
+            wm = DesktopWindowManager()
+            frontend = wm.resolve_frontend()
+            if frontend is None:
+                builtins.print = self._original_print
+                logger.error("❌ Desktop frontend not built. Run:")
+                logger.info("   cd desktop && npm install && npm run build")
+                return 1
+            window_url, is_dev_mode = frontend
+            if is_dev_mode:
                 self._api.push_log(
-                    f"🔥 Hot reload enabled — loading from {dev_url}",
+                    f"🔥 Hot reload enabled — loading from {window_url}",
                     "orchestrator",
                 )
-                window_url = dev_url
-                dist_dir = find_frontend_dist()  # still needed for icon
-            else:
-                dist_dir = find_frontend_dist()
-                if dist_dir is None:
-                    builtins.print = self._original_print
-                    logger.error("❌ Desktop frontend not built. Run:")
-                    logger.info("   cd desktop && npm install && npm run build")
-                    return 1
-                window_url = str(dist_dir / "index.html")
             # Result container for the orchestrator thread
             exit_code_box: list[int] = [0]
             def run_orchestrator() -> None:
@@ -122,41 +116,20 @@ class DesktopUI:
             )
             orchestrator_started = False
             # Create native window pointing at the built React app
-            icon_path = dist_dir / "pokepoke.ico" if dist_dir else None
+            window = wm.create_window(window_url, self._api)
             def on_window_loaded() -> None:
                 """Called after the webview window is ready."""
                 nonlocal orchestrator_started
-                # pywebview's icon parameter only works on GTK/QT — on Windows
-                # the WinForms backend extracts the icon from sys.executable
-                # (python.exe → Python logo).  Override it via the native form.
-                if icon_path is not None:
-                    set_native_window_icon(window, icon_path)
+                wm.apply_window_icon(window)
                 self._api.set_window(window)
                 orch_thread.start()
                 orchestrator_started = True
-            window_kwargs: dict[str, Any] = {
-                "title": "PokePoke - Autonomous Workflow Manager",
-                "url": window_url,
-                "js_api": self._api,
-                "width": 1280,
-                "height": 800,
-                "min_size": (900, 600),
-                "text_select": True,
-            }
-            # Register the App User Model ID before creating the window so that
-            # Windows associates the taskbar button with this app identity and
-            # displays the PokePoke icon instead of the python.exe icon.
-            set_app_user_model_id()
-            window = webview.create_window(**window_kwargs)
             # Run pywebview on the main thread (blocks until window closes)
-            start_kwargs: dict[str, Any] = {
-                "func": on_window_loaded,
-                "debug": dev_url is not None or os.environ.get("POKEPOKE_DEBUG", "").lower() in ("1", "true"),
-            }
-            if icon_path and icon_path.exists():
-                start_kwargs["icon"] = str(icon_path)
             try:
-                webview.start(**start_kwargs)
+                wm.start_event_loop(
+                    on_loaded=on_window_loaded,
+                    debug=wm.is_debug_requested(is_dev_mode),
+                )
             except Exception as e:
                 # pywebview can throw during teardown on window-close (WinForms
                 # backend uses a blocking Join). Treat this as a clean close
