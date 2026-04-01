@@ -1,7 +1,27 @@
 # Start MCP Server as a persistent background service
-# Usage: .\Start-MCPServer.ps1
+# Usage: .\Start-MCPServer.ps1 [-ServerPath <path>]
 
-$serverPath = "c:\Users\ameliapayne\icm_queue_c#\start-mcp-server.ps1"
+param(
+    [string]$ServerPath
+)
+
+# Resolve server path: parameter > environment variable > error
+if (-not $ServerPath) {
+    $ServerPath = $env:MCP_SERVER_PATH
+}
+
+if (-not $ServerPath) {
+    Write-Host "✗ Server path not specified." -ForegroundColor Red
+    Write-Host "  Set MCP_SERVER_PATH environment variable or use -ServerPath parameter" -ForegroundColor Yellow
+    exit 1
+}
+
+if (-not (Test-Path $ServerPath)) {
+    Write-Host "✗ Server script not found: $ServerPath" -ForegroundColor Red
+    exit 1
+}
+
+$serverPath = $ServerPath
 $pidFile = "$PSScriptRoot\mcp-server.pid"
 $logFile = "$PSScriptRoot\mcp-server.log"
 
