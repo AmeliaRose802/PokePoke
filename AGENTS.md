@@ -8,12 +8,15 @@ Run `bd onboard` (or `br onboard`) to get started.
 
 ```bash
 # Default backend (bd)
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --status in_progress  # Claim work
-bd close <id>         # Complete work
-bd sync               # Sync with git
+bd ready                    # Find available work
+bd show <id>                # View issue details
+bd list --deps <id>         # Check dependencies
+bd list --label <label>     # Find related items by label
+bd sync                     # Sync with git
 ```
+
+> **Note:** Agents should not run `bd update`/`bd close` for orchestrated work items.
+> The orchestrator owns lifecycle transitions (claim/close/unassign).
 
 > **Note:** All `bd` commands work identically with `br`. PokePoke selects the
 > active backend automatically based on configuration (see README.md).

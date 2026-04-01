@@ -44,7 +44,7 @@ If modifying the MCP server or using tools:
 4. Ensure all quality gates pass (linting, type checking, etc.)
 5. Commit changes with descriptive conventional commit messages
 6. **Push your commits** - Run `git push`; the orchestrator handles merging afterward
-7. **Close the beads item** - Run `bd close {{id}} --reason "<completion reason>"`, then `bd sync` to sync beads changes
+7. **Do NOT change beads state** - Do NOT run `bd close`, `bd update`, or `bd sync` (the orchestrator owns lifecycle)
 8. DO NOT bypass pre-commit hooks with --no-verify
 9. DO NOT modify quality gate scripts in .githooks/
 
@@ -53,12 +53,11 @@ If modifying the MCP server or using tools:
 - Uses beads for issue tracking, TypeScript/Node.js stack
 - Quality gates are strictly enforced via pre-commit hooks
 - All changes must pass tests, coverage, and quality checks
-- The orchestrator will verify closure and handle it if you miss this step
+- The orchestrator owns all beads lifecycle transitions (claim/close/unassign)
 
 Work independently and complete the task. When finished:
-1. Push your commits so the orchestrator can merge
-2. Close the beads item with an appropriate reason
-3. Report:
+1. Push your commits so the orchestrator can merge/close the item
+2. Report:
    [OK] What was implemented
    [OK] Test coverage added
    [OK] Any blockers or dependencies discovered
