@@ -34,7 +34,7 @@ if (-not (Test-Path $stagedUtils)) {
 }
 . $stagedUtils
 
-# Count lines in a file
+# Count non-empty lines in a file
 function Get-FileLineCount {
     param([string]$FilePath)
     
@@ -44,7 +44,13 @@ function Get-FileLineCount {
     
     try {
         $lines = Get-Content $FilePath -ErrorAction Stop
-        return $lines.Count
+        if ($null -eq $lines) {
+            return 0
+        }
+        
+        # Count only non-empty lines (lines that are not null/empty/whitespace-only)
+        $nonEmptyLines = $lines | Where-Object { $_ -and $_.Trim() -ne "" }
+        return $nonEmptyLines.Count
     }
     catch {
         Write-Warning "Could not read file: $FilePath"
