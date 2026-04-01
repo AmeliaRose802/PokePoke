@@ -7,6 +7,7 @@ import os
 import subprocess
 import threading
 import time
+from collections.abc import Generator
 from typing import Any
 
 from pokepoke.stats.perf_timing import timed_block
@@ -31,6 +32,93 @@ _MEMORY_PRESSURE_THRESHOLD_MB = 2048  # Throttle new agents when <2 GB free
 _MEMORY_CRITICAL_THRESHOLD_MB = 1024  # Block new agents when <1 GB free
 _MEMORY_CACHE_TTL = 10.0  # seconds between memory checks
 _memory_cache: tuple[float, int] | None = None  # (timestamp, available_mb)
+
+
+class ActivePidRegistry:
+    """Thread-safe registry of PIDs belonging to active copilot workers.
+
+    Workers register their copilot process PID after spawning and deregister
+    on teardown.  The orphan killer uses this set to decide which copilot.exe
+    processes are legitimate and which are zombies.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._pids: set[int] = set()
+
+    def register(self, pid: int) -> None:
+        """Mark *pid* as an active worker-owned copilot process."""
+        with self._lock:
+            self._pids.add(pid)
+        logger.debug("ActivePidRegistry: registered PID %d", pid)
+
+    def deregister(self, pid: int) -> None:
+        """Remove *pid* from the active set (worker finished or crashed)."""
+        with self._lock:
+            self._pids.discard(pid)
+        logger.debug("ActivePidRegistry: deregistered PID %d", pid)
+
+    @property
+    def active_pids(self) -> frozenset[int]:
+        """Snapshot of currently registered PIDs."""
+        with self._lock:
+            return frozenset(self._pids)
+
+    @contextlib.contextmanager
+    def tracked(self, pid: int) -> Generator[None, None, None]:
+        """Context manager: register on entry, deregister on exit."""
+        self.register(pid)
+        try:
+            yield
+        finally:
+            self.deregister(pid)
+
+    def clear(self) -> None:
+        """Remove all registered PIDs (for testing or reset)."""
+        with self._lock:
+            self._pids.clear()
+
+
+# Module-level singleton
+_active_pid_registry = ActivePidRegistry()
+
+
+def get_active_pid_registry() -> ActivePidRegistry:
+    """Return the module-level ActivePidRegistry singleton."""
+    return _active_pid_registry
+
+
+def extract_client_pid(client: Any) -> int | None:
+    """Try to extract the copilot subprocess PID from the SDK client.
+
+    The SDK stores the spawned process as ``client._process``.  We access
+    it defensively so that SDK version changes don't crash the caller.
+    """
+    try:
+        proc = getattr(client, '_process', None)
+        if proc is not None and hasattr(proc, 'pid'):
+            return proc.pid  # type: ignore[no-any-return]
+    except Exception:
+        pass
+    return None
+
+
+def register_client_pid(client: Any, registry: ActivePidRegistry) -> int | None:
+    """Extract the copilot subprocess PID and register it in the registry.
+
+    Returns the PID if successfully extracted, or None.
+    """
+    pid = extract_client_pid(client)
+    if pid is not None:
+        registry.register(pid)
+        logger.debug("Registered copilot PID %d", pid)
+    return pid
+
+
+def deregister_client_pid(pid: int | None, registry: ActivePidRegistry) -> None:
+    """Deregister a copilot PID if one was registered."""
+    if pid is not None:
+        registry.deregister(pid)
 
 
 def get_available_memory_mb() -> int:
@@ -94,19 +182,29 @@ def is_memory_critical() -> bool:
     return available < _MEMORY_CRITICAL_THRESHOLD_MB
 
 
-def kill_orphaned_copilot_processes(expected_count: int = 0) -> int:
-    """Kill Copilot processes that exceed the expected active count.
+def kill_orphaned_copilot_processes(
+    active_pids: frozenset[int] | set[int] | None = None,
+) -> int:
+    """Kill copilot.exe processes that are NOT owned by an active worker.
+
+    Instead of counting system-wide processes and killing by lowest PID
+    (which is unsafe during parallel retries), this function consults the
+    :class:`ActivePidRegistry` to determine which PIDs are legitimate and
+    only terminates the rest.
 
     Args:
-        expected_count: Number of Copilot processes that should be alive
-            (i.e. one per active agent). Processes above this count are
-            considered orphans and terminated.
+        active_pids: Explicit set of PIDs to protect.  When ``None``
+            (the default), the module-level ``ActivePidRegistry`` is
+            consulted automatically.
 
     Returns:
         Number of processes killed.
     """
     if os.name != 'nt':
         return 0
+
+    if active_pids is None:
+        active_pids = _active_pid_registry.active_pids
 
     try:
         result = subprocess.run(
@@ -119,23 +217,21 @@ def kill_orphaned_copilot_processes(expected_count: int = 0) -> int:
             return 0  # No copilot processes at all
 
         # Parse PIDs from CSV: "copilot.exe","12345",...
-        pids: list[int] = []
+        all_pids: list[int] = []
         for line in lines[1:]:
             parts = line.strip().strip('"').split('","')
             if len(parts) >= 2:
                 try:
-                    pids.append(int(parts[1]))
+                    all_pids.append(int(parts[1]))
                 except ValueError:
                     continue
 
-        excess = len(pids) - expected_count
-        if excess <= 0:
+        orphan_pids = [p for p in all_pids if p not in active_pids]
+        if not orphan_pids:
             return 0
 
-        # Kill oldest (lowest PID) first — they're most likely orphans
-        pids.sort()
         killed = 0
-        for pid in pids[:excess]:
+        for pid in orphan_pids:
             try:
                 subprocess.run(
                     ['taskkill', '/F', '/T', '/PID', str(pid)],
@@ -146,7 +242,10 @@ def kill_orphaned_copilot_processes(expected_count: int = 0) -> int:
                 logger.warning(f"Failed to kill copilot PID {pid}: {e}")
 
         if killed > 0:
-            logger.info(f"Killed {killed} orphaned Copilot process(es)")
+            logger.info(
+                f"Killed {killed} orphaned Copilot process(es) "
+                f"(protected {len(active_pids)} active)"
+            )
             # Invalidate cache after killing processes
             global _copilot_process_cache
             with _cache_lock:
@@ -325,7 +424,16 @@ def wait_for_process_cleanup(max_wait: float = 3.0) -> None:
 
 
 async def shutdown_copilot_client(client: Any) -> None:
-    """Shut down the Copilot client gracefully with fallbacks."""
+    """Shut down the Copilot client gracefully with fallbacks.
+
+    Also deregisters the client's copilot PID from the active registry
+    so the orphan killer knows it's no longer an active worker.
+    """
+    # Deregister PID before shutdown so orphan killer won't protect a dying process
+    pid = extract_client_pid(client)
+    if pid is not None:
+        _active_pid_registry.deregister(pid)
+
     try:
         logger.info("\n[SDK] Initiating graceful client shutdown...")
         await asyncio.sleep(0.5)

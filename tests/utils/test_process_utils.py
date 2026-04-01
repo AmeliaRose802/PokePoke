@@ -10,8 +10,10 @@ import pytest
 
 import pokepoke.utils.process_utils as process_utils_mod
 from pokepoke.utils.process_utils import (
+    ActivePidRegistry,
     apply_memory_backpressure,
     check_copilot_processes,
+    get_active_pid_registry,
     get_available_memory_mb,
     is_memory_critical,
     is_memory_pressure,
@@ -28,9 +30,79 @@ def reset_copilot_cache():
     """Reset the module-level caches before each test to prevent cross-test pollution."""
     process_utils_mod._copilot_process_cache = None
     process_utils_mod._memory_cache = None
+    get_active_pid_registry().clear()
     yield
     process_utils_mod._copilot_process_cache = None
     process_utils_mod._memory_cache = None
+    get_active_pid_registry().clear()
+
+
+class TestActivePidRegistry:
+    """Tests for ActivePidRegistry."""
+
+    def test_register_and_deregister(self) -> None:
+        registry = ActivePidRegistry()
+        registry.register(100)
+        registry.register(200)
+        assert registry.active_pids == frozenset({100, 200})
+        registry.deregister(100)
+        assert registry.active_pids == frozenset({200})
+
+    def test_deregister_nonexistent_pid_is_safe(self) -> None:
+        registry = ActivePidRegistry()
+        registry.deregister(999)  # Should not raise
+        assert registry.active_pids == frozenset()
+
+    def test_tracked_context_manager(self) -> None:
+        registry = ActivePidRegistry()
+        with registry.tracked(42):
+            assert 42 in registry.active_pids
+        assert 42 not in registry.active_pids
+
+    def test_tracked_context_manager_deregisters_on_exception(self) -> None:
+        registry = ActivePidRegistry()
+        with pytest.raises(ValueError), registry.tracked(42):
+            assert 42 in registry.active_pids
+            raise ValueError("boom")
+        assert 42 not in registry.active_pids
+
+    def test_clear(self) -> None:
+        registry = ActivePidRegistry()
+        registry.register(1)
+        registry.register(2)
+        registry.clear()
+        assert registry.active_pids == frozenset()
+
+    def test_thread_safety(self) -> None:
+        """Concurrent register/deregister should not corrupt state."""
+        registry = ActivePidRegistry()
+        errors: list[str] = []
+
+        def worker(pid_base: int) -> None:
+            try:
+                for i in range(50):
+                    pid = pid_base + i
+                    registry.register(pid)
+                    _ = registry.active_pids  # concurrent reads
+                    registry.deregister(pid)
+            except Exception as e:
+                errors.append(str(e))
+
+        threads = [threading.Thread(target=worker, args=(base,)) for base in range(0, 500, 50)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors
+        # All PIDs were deregistered
+        assert registry.active_pids == frozenset()
+
+    def test_singleton_registry(self) -> None:
+        """get_active_pid_registry returns the module singleton."""
+        r1 = get_active_pid_registry()
+        r2 = get_active_pid_registry()
+        assert r1 is r2
 
 
 class TestCheckCopilotProcesses:
@@ -225,25 +297,24 @@ class TestIsMemoryCritical:
 
 
 class TestKillOrphanedCopilotProcesses:
-    """Tests for kill_orphaned_copilot_processes."""
+    """Tests for kill_orphaned_copilot_processes (PID-set based)."""
 
     @patch('pokepoke.utils.process_utils.os')
     def test_returns_zero_on_non_windows(self, mock_os: MagicMock) -> None:
         mock_os.name = 'posix'
-        assert kill_orphaned_copilot_processes(expected_count=0) == 0
+        assert kill_orphaned_copilot_processes() == 0
 
     @patch('pokepoke.utils.process_utils.os')
     @patch('pokepoke.utils.process_utils.subprocess.run')
     def test_no_processes_found(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
         mock_os.name = 'nt'
         mock_run.return_value = MagicMock(stdout='INFO: No tasks')
-        assert kill_orphaned_copilot_processes(expected_count=0) == 0
+        assert kill_orphaned_copilot_processes() == 0
 
     @patch('pokepoke.utils.process_utils.os')
     @patch('pokepoke.utils.process_utils.subprocess.run')
-    def test_kills_excess_processes(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+    def test_kills_orphan_processes_not_in_active_set(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
         mock_os.name = 'nt'
-        # First call: tasklist returns 4 processes
         tasklist_output = (
             '"Image Name","PID","Session Name","Session#","Mem Usage"\n'
             '"copilot.exe","100","Console","1","50,000 K"\n'
@@ -252,17 +323,23 @@ class TestKillOrphanedCopilotProcesses:
             '"copilot.exe","400","Console","1","50,000 K"'
         )
         mock_run.return_value = MagicMock(stdout=tasklist_output)
-        # expected_count=2, so 2 should be killed (PIDs 100 and 200 as lowest)
-        killed = kill_orphaned_copilot_processes(expected_count=2)
+        # PIDs 200 and 300 are active workers; 100 and 400 are orphans
+        killed = kill_orphaned_copilot_processes(active_pids={200, 300})
         assert killed == 2
-        # Verify taskkill was called with /F /T /PID for the oldest PIDs
+        # Verify taskkill was called for orphan PIDs only
         taskkill_calls = [c for c in mock_run.call_args_list
                          if 'taskkill' in str(c)]
         assert len(taskkill_calls) == 2
+        killed_pids = set()
+        for call in taskkill_calls:
+            args = call[0][0] if call[0] else call[1].get('args', [])
+            pid_idx = args.index('/PID') + 1
+            killed_pids.add(int(args[pid_idx]))
+        assert killed_pids == {100, 400}
 
     @patch('pokepoke.utils.process_utils.os')
     @patch('pokepoke.utils.process_utils.subprocess.run')
-    def test_no_kill_when_under_expected(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+    def test_no_kill_when_all_active(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
         mock_os.name = 'nt'
         tasklist_output = (
             '"Image Name","PID"\n'
@@ -270,14 +347,32 @@ class TestKillOrphanedCopilotProcesses:
             '"copilot.exe","200"'
         )
         mock_run.return_value = MagicMock(stdout=tasklist_output)
-        assert kill_orphaned_copilot_processes(expected_count=3) == 0
+        assert kill_orphaned_copilot_processes(active_pids={100, 200}) == 0
+
+    @patch('pokepoke.utils.process_utils.os')
+    @patch('pokepoke.utils.process_utils.subprocess.run')
+    def test_uses_registry_when_no_active_pids_provided(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+        mock_os.name = 'nt'
+        tasklist_output = (
+            '"Image Name","PID"\n'
+            '"copilot.exe","100"\n'
+            '"copilot.exe","200"\n'
+            '"copilot.exe","300"'
+        )
+        mock_run.return_value = MagicMock(stdout=tasklist_output)
+        # Register PID 200 in the global registry
+        registry = get_active_pid_registry()
+        registry.register(200)
+        # Should kill 100 and 300 (not in registry)
+        killed = kill_orphaned_copilot_processes()
+        assert killed == 2
 
     @patch('pokepoke.utils.process_utils.os')
     @patch('pokepoke.utils.process_utils.subprocess.run')
     def test_handles_tasklist_exception(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
         mock_os.name = 'nt'
         mock_run.side_effect = subprocess.TimeoutExpired(cmd='tasklist', timeout=30)
-        assert kill_orphaned_copilot_processes(expected_count=0) == 0
+        assert kill_orphaned_copilot_processes() == 0
 
     @patch('pokepoke.utils.process_utils.os')
     @patch('pokepoke.utils.process_utils.subprocess.run')
@@ -289,8 +384,8 @@ class TestKillOrphanedCopilotProcesses:
             '"copilot.exe","200"'
         )
         mock_run.return_value = MagicMock(stdout=tasklist_output)
-        # Only PID 200 is valid, expected 0 → kill 1
-        killed = kill_orphaned_copilot_processes(expected_count=0)
+        # Only PID 200 is valid, no active_pids → kill 1
+        killed = kill_orphaned_copilot_processes(active_pids=set())
         assert killed == 1
 
     @patch('pokepoke.utils.process_utils.os')
@@ -309,8 +404,22 @@ class TestKillOrphanedCopilotProcesses:
             return MagicMock(stdout=tasklist_output)
 
         mock_run.side_effect = side_effect
-        killed = kill_orphaned_copilot_processes(expected_count=0)
+        killed = kill_orphaned_copilot_processes(active_pids=set())
         assert killed == 0
+
+    @patch('pokepoke.utils.process_utils.os')
+    @patch('pokepoke.utils.process_utils.subprocess.run')
+    def test_kills_all_when_empty_registry(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+        """With no active PIDs registered, all copilot.exe processes are orphans."""
+        mock_os.name = 'nt'
+        tasklist_output = (
+            '"Image Name","PID"\n'
+            '"copilot.exe","100"\n'
+            '"copilot.exe","200"'
+        )
+        mock_run.return_value = MagicMock(stdout=tasklist_output)
+        killed = kill_orphaned_copilot_processes()
+        assert killed == 2
 
 
 class TestApplyMemoryBackpressure:
@@ -503,8 +612,8 @@ class TestCacheLockThreadSafety:
         # Pre-seed cache
         process_utils_mod._copilot_process_cache = (time.time(), 5)
 
-        # Kill with expected_count=0 (should kill both)
-        killed = kill_orphaned_copilot_processes(expected_count=0)
+        # Kill with empty active set (should kill both)
+        killed = kill_orphaned_copilot_processes(active_pids=set())
         assert killed == 2
 
         # Cache should be invalidated
@@ -755,3 +864,30 @@ class TestGetAvailableMemoryMbWindows:
         result = get_available_memory_mb()
         # Should return 0 on exception
         assert result == 0
+
+
+class TestExtractClientPid:
+    """Tests for extract_client_pid helper."""
+
+    def test_returns_pid_from_process(self) -> None:
+        from pokepoke.utils.process_utils import extract_client_pid
+        client = MagicMock()
+        client._process = MagicMock(pid=12345)
+        assert extract_client_pid(client) == 12345
+
+    def test_returns_none_when_no_process(self) -> None:
+        from pokepoke.utils.process_utils import extract_client_pid
+        client = MagicMock(spec=[])  # No attributes
+        assert extract_client_pid(client) is None
+
+    def test_returns_none_when_process_has_no_pid(self) -> None:
+        from pokepoke.utils.process_utils import extract_client_pid
+        client = MagicMock()
+        client._process = object()  # No pid attribute
+        assert extract_client_pid(client) is None
+
+    def test_returns_none_on_exception(self) -> None:
+        from pokepoke.utils.process_utils import extract_client_pid
+        client = MagicMock()
+        type(client)._process = property(lambda self: (_ for _ in ()).throw(RuntimeError("boom")))
+        assert extract_client_pid(client) is None

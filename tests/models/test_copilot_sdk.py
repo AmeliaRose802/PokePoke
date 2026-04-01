@@ -48,7 +48,7 @@ class TestBuildPromptFromWorkItem:
         assert work_item.title in result
         assert isinstance(result, str)
 
-    @patch('pokepoke.models.copilot_sdk.PromptService')
+    @patch('pokepoke.prompts.prompts.PromptService')
     def test_build_prompt_from_work_item(self, mock_service_class, sample_work_item):
         """Test building prompt from work item."""
         mock_service = MagicMock()
@@ -65,7 +65,7 @@ class TestBuildPromptFromWorkItem:
         assert variables["item_id"] == "test-123"
         assert variables["title"] == "Test work item"
 
-    @patch('pokepoke.models.copilot_sdk.PromptService')
+    @patch('pokepoke.prompts.prompts.PromptService')
     def test_build_prompt_without_labels(self, mock_service_class):
         """Test building prompt for work item without labels."""
         mock_service = MagicMock()
@@ -91,7 +91,7 @@ class TestBuildPromptFromWorkItem:
         # so {{#labels}} conditional sections still won't render
         assert not variables["labels"]
 
-    @patch('pokepoke.models.copilot_sdk.PromptService')
+    @patch('pokepoke.prompts.prompts.PromptService')
     def test_build_prompt_uses_custom_template_name(self, mock_service_class, sample_work_item):
         """Test that a custom template_name from assignment rules is used."""
         mock_service = MagicMock()
@@ -104,7 +104,7 @@ class TestBuildPromptFromWorkItem:
         call_args = mock_service.load_and_render.call_args
         assert call_args[0][0] == "high-pri-feature"
 
-    @patch('pokepoke.models.copilot_sdk.PromptService')
+    @patch('pokepoke.prompts.prompts.PromptService')
     def test_build_prompt_defaults_to_beads_item_template(self, mock_service_class, sample_work_item):
         """Test that default template_name is 'beads-item' when none specified."""
         mock_service = MagicMock()

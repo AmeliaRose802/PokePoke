@@ -26,6 +26,7 @@ except (ImportError, AttributeError):
 from pokepoke.desktop import terminal_ui
 from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
 from pokepoke.utils.command_validator import validate_and_rewrite_powershell_tool_args
+from pokepoke.utils.prompt_sanitizer import sanitize_prompt_input, sanitize_short
 from pokepoke.utils.shutdown import is_shutting_down
 
 from .sdk_event_handler import SessionStats
@@ -246,3 +247,48 @@ from pokepoke.models.sdk_resume import (
 from pokepoke.models.sdk_resume import (
     build_resume_prompt as build_resume_prompt,
 )
+
+
+def build_prompt_from_work_item(
+    work_item: BeadsWorkItem,
+    template_name: str = "beads-item",
+    retry_feedback: list[str] | None = None,
+) -> str:
+    """Build a prompt from a work item using the template system.
+
+    Args:
+        work_item: The work item to build a prompt for.
+        template_name: Name of the prompt template to use (default: ``"beads-item"``).
+        retry_feedback: Optional list of feedback strings from previous gate-agent
+            rejections or copilot failures.
+    """
+    from pokepoke.config import get_config
+    from pokepoke.prompts.prompts import PromptService
+    config = get_config()
+    service = PromptService()
+    test_data_lines = [
+        f"When you need {k.replace('_', ' ').capitalize()}, use: {v}"
+        for k, v in config.test_data.items()
+    ]
+    test_data_section = "\n\n".join(test_data_lines) if test_data_lines else None
+    retry_feedback_section: str | None = None
+    if retry_feedback:
+        bullets = "\n".join(f"- {fb}" for fb in retry_feedback)
+        retry_feedback_section = bullets
+    variables = {
+        "item_id": work_item.id,
+        "title": sanitize_short(work_item.title, "title"),
+        "description": sanitize_prompt_input(
+            work_item.description, field_name="description",
+        ),
+        "issue_type": sanitize_short(work_item.issue_type, "issue_type"),
+        "priority": work_item.priority,
+        "labels": sanitize_short(
+            ", ".join(work_item.labels) if work_item.labels else None, "labels",
+        ),
+        "mcp_enabled": config.mcp_server.enabled,
+        "test_data_section": test_data_section,
+        "command_timeout": config.command_timeout,
+        "retry_feedback": retry_feedback_section,
+    }
+    return service.load_and_render(template_name, variables)

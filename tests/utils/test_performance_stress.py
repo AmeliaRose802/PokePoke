@@ -546,7 +546,7 @@ class TestSubprocessTimeoutBehavior:
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="tasklist", timeout=30)
 
         from pokepoke.utils.process_utils import kill_orphaned_copilot_processes
-        killed = kill_orphaned_copilot_processes(expected_count=0)
+        killed = kill_orphaned_copilot_processes()
         assert killed == 0
 
     @patch("pokepoke.utils.process_utils.subprocess.run")

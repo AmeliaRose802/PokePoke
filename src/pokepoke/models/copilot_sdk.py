@@ -15,11 +15,13 @@ except ImportError:
 
 from pokepoke.config import DEFAULT_MODEL, FALLBACK_MODEL, get_config
 from pokepoke.desktop import terminal_ui
-from pokepoke.prompts.prompts import PromptService
 from pokepoke.types import BeadsWorkItem, CopilotResult, RetryConfig
 from pokepoke.utils.constants import DEFAULT_AGENT_TIMEOUT
-from pokepoke.utils.process_utils import shutdown_copilot_client
-from pokepoke.utils.prompt_sanitizer import sanitize_prompt_input, sanitize_short
+from pokepoke.utils.process_utils import (
+    get_active_pid_registry,
+    register_client_pid,
+    shutdown_copilot_client,
+)
 from pokepoke.utils.shutdown import is_shutting_down
 
 from .sdk_event_handler import RateLimitError, create_event_handler
@@ -35,56 +37,14 @@ from .sdk_helpers import (
     _summarize_output,
     build_resume_prompt,
 )
+from .sdk_helpers import (
+    build_prompt_from_work_item as build_prompt_from_work_item,
+)
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from pokepoke.utils.logging_utils import ItemLogger
-
-def build_prompt_from_work_item(
-    work_item: BeadsWorkItem,
-    template_name: str = "beads-item",
-    retry_feedback: list[str] | None = None,
-) -> str:
-    """Build a prompt from a work item using the template system.
-
-    Args:
-        work_item: The work item to build a prompt for.
-        template_name: Name of the prompt template to use (default: ``"beads-item"``).
-        retry_feedback: Optional list of feedback strings from previous gate-agent
-            rejections or copilot failures.
-    """
-    config = get_config()
-    service = PromptService()
-    # Build test data section from config
-    test_data_lines = [
-        f"When you need {k.replace('_', ' ').capitalize()}, use: {v}"
-        for k, v in config.test_data.items()
-    ]
-    test_data_section = "\n\n".join(test_data_lines) if test_data_lines else None
-    # Format retry feedback as a bullet list for the template
-    retry_feedback_section: str | None = None
-    if retry_feedback:
-        bullets = "\n".join(f"- {fb}" for fb in retry_feedback)
-        retry_feedback_section = bullets
-    variables = {
-        "item_id": work_item.id,
-        "title": sanitize_short(work_item.title, "title"),
-        "description": sanitize_prompt_input(
-            work_item.description, field_name="description",
-        ),
-        "issue_type": sanitize_short(work_item.issue_type, "issue_type"),
-        "priority": work_item.priority,
-        "labels": sanitize_short(
-            ", ".join(work_item.labels) if work_item.labels else None, "labels",
-        ),
-        "mcp_enabled": config.mcp_server.enabled,
-        "test_data_section": test_data_section,
-        "command_timeout": config.command_timeout,
-        "retry_feedback": retry_feedback_section,
-    }
-
-    return service.load_and_render(template_name, variables)
 
 def _build_worker_env(cwd: str | None) -> dict[str, str]:
     """Build environment variables for a worker session."""
@@ -319,6 +279,9 @@ async def invoke_copilot_sdk(
     try:
         logger.info("[SDK] Starting Copilot client...")
         await client.start()
+
+        # Register the copilot process PID so the orphan killer won't touch it
+        register_client_pid(client, get_active_pid_registry())
 
         current_model = model or DEFAULT_MODEL
         total_wall_duration = 0.0
