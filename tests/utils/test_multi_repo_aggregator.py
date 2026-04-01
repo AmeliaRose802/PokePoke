@@ -351,8 +351,11 @@ class TestRepoConfig:
     def test_priority_weight_clamped(self) -> None:
         rc = RepoConfig(priority_weight=0)
         assert rc.priority_weight == 1
-        rc2 = RepoConfig(priority_weight=-5)
-        assert rc2.priority_weight == 1
+
+    def test_priority_weight_negative_raises(self) -> None:
+        from pokepoke.config import ConfigError
+        with pytest.raises(ConfigError, match="negative value"):
+            RepoConfig(priority_weight=-5)
 
     def test_custom_values(self) -> None:
         rc = RepoConfig(path="/my/repo", priority_weight=10, enabled=False)

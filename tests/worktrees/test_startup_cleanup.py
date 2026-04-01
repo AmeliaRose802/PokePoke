@@ -203,11 +203,14 @@ class TestStartupCleanup:
         assert stats['total_removed'] == 1
         assert stats['checked'] == 2  # Only checked first 2 non-main worktrees
 
-    def test_config_validation(self):
+    def test_config_validation(self, caplog):
         """Test that configuration values are properly validated."""
-        # Test minimum threshold is enforced
-        config = ProjectConfig(stale_worktree_commit_threshold=0)
+        import logging
+        # Test minimum threshold is enforced with warning
+        with caplog.at_level(logging.WARNING, logger="pokepoke.config"):
+            config = ProjectConfig(stale_worktree_commit_threshold=0)
         assert config.stale_worktree_commit_threshold == 1  # Clamped to minimum
+        assert "stale_worktree_commit_threshold" in caplog.text
 
     @patch('pokepoke.worktrees.startup_cleanup.list_worktrees')
     def test_no_worktrees_to_process(self, mock_list_worktrees, mock_config):

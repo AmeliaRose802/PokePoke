@@ -106,9 +106,10 @@ class TestConfigParsingMultipleRepos:
         config = ProjectConfig.from_dict({})
         assert config.repos == []
 
-    def test_repo_config_max_workers_clamped_to_zero(self) -> None:
-        rc = RepoConfig(max_workers=-5)
-        assert rc.max_workers == 0
+    def test_repo_config_max_workers_negative_raises(self) -> None:
+        from pokepoke.config import ConfigError
+        with pytest.raises(ConfigError, match="negative value"):
+            RepoConfig(max_workers=-5)
 
     def test_repo_config_max_workers_zero_means_uncapped(self) -> None:
         rc = RepoConfig(max_workers=0)
