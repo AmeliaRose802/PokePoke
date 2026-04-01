@@ -84,7 +84,7 @@ def save_manifest_to_path(
     retry_config = RetryConfig(
         max_retries=max_retries,
         initial_delay=retry_delay,
-        backoff_factor=1.0,  # Linear backoff (delay * (attempt + 1))
+        backoff_mode="linear",
         jitter=True,
     )
     for attempt in range(max_retries):

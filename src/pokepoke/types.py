@@ -2,7 +2,7 @@
 import threading
 from collections.abc import Iterator
 from dataclasses import dataclass, field, is_dataclass, replace
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 from pokepoke.agents.agent_types import (
     AGENT_TYPES,
@@ -75,12 +75,18 @@ class IssueWithDependencies:
 
 @dataclass
 class RetryConfig:
-    """Configuration for retry logic with exponential backoff."""
+    """Configuration for retry logic with backoff.
+
+    Supports two backoff modes:
+    - ``"exponential"`` (default): ``initial_delay * backoff_factor ** attempt``
+    - ``"linear"``: ``initial_delay * (attempt + 1)``
+    """
     max_retries: int = 3
     initial_delay: float = 1.0  # seconds
     max_delay: float = 60.0  # seconds
     backoff_factor: float = 2.0
     jitter: bool = True  # Add random jitter to prevent thundering herd
+    backoff_mode: Literal["exponential", "linear"] = "exponential"
 
 @dataclass
 class AgentStats:
