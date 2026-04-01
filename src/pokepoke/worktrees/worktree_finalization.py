@@ -5,9 +5,9 @@ import logging
 import subprocess
 from pathlib import Path
 
-from pokepoke.beads.beads_query import _run_bd_with_retry
 from pokepoke.beads.beads_hierarchy import close_parent_if_complete, get_parent_id
 from pokepoke.beads.beads_management import close_item
+from pokepoke.beads.beads_query import _run_bd_with_retry
 from pokepoke.git.git_helpers import run_git
 from pokepoke.git.git_operations import get_default_branch
 from pokepoke.types import BeadsWorkItem

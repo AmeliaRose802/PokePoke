@@ -78,14 +78,14 @@ def select_model_for_item(item: BeadsWorkItem) -> str:
     # Check economy mode routing
     if config.economy_mode.enabled:
         complexity = get_item_complexity(item)
-        
+
         if complexity == "simple":
             economy_model = config.economy_mode.simple_model
         elif complexity == "medium":
             economy_model = config.economy_mode.medium_model
         else:  # complex
             economy_model = config.economy_mode.complex_model
-            
+
         logger.info(f"   [Economy] Assigned model '{economy_model}' to {item.id} "
               f"(complexity: {complexity}, economy mode enabled)")
         return economy_model
@@ -178,13 +178,13 @@ def select_gate_model(work_model: str, item_id: str) -> str:
 
 def get_item_complexity(item: BeadsWorkItem) -> str:
     """Determine complexity level of a work item from labels or heuristics.
-    
+
     Checks for explicit complexity tags in item labels first, then falls back
     to heuristics based on item properties like priority and issue type.
-    
+
     Args:
         item: The work item to analyze.
-        
+
     Returns:
         Complexity level: "simple", "medium", or "complex".
     """
@@ -192,15 +192,15 @@ def get_item_complexity(item: BeadsWorkItem) -> str:
     if item.labels:
         for label in item.labels:
             label_lower = label.lower().strip()
-            
+
             # Support both "complexity:simple" and "simple" formats
             if label_lower in ("complexity:simple", "simple"):
                 return "simple"
             elif label_lower in ("complexity:medium", "medium"):
-                return "medium" 
+                return "medium"
             elif label_lower in ("complexity:complex", "complex"):
                 return "complex"
-    
+
     # Fallback heuristics based on item properties
     # Priority-based classification (lower priority = higher urgency = simpler fixes)
     if item.priority <= 1:
@@ -209,6 +209,6 @@ def get_item_complexity(item: BeadsWorkItem) -> str:
         return "medium"  # Medium priority = standard work
     else:
         return "complex"  # Low priority = complex features
-    
+
     # Note: Could extend heuristics based on issue_type, title keywords, etc.
     # For now, priority-based classification provides reasonable defaults

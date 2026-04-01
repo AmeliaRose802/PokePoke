@@ -1,5 +1,6 @@
 """Windows-safe directory removal utilities for worktree cleanup."""
 
+import contextlib
 import logging
 import os
 import stat
@@ -109,17 +110,13 @@ def _safe_rmtree(dir_path: Path) -> None:
                 _remove_tree(entry)
             else:
                 # Regular file - remove it
-                try:
+                with contextlib.suppress(OSError):
                     os.chmod(str(entry), stat.S_IWRITE | stat.S_IREAD)
-                except OSError:
-                    pass
                 os.remove(str(entry))
 
         # Remove the now-empty directory
-        try:
+        with contextlib.suppress(OSError):
             os.chmod(str(path), stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
-        except OSError:
-            pass
         os.rmdir(str(path))
 
     _remove_tree(dir_path)

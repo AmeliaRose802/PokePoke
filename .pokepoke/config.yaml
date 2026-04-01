@@ -142,3 +142,6 @@ performance_thresholds:
   min_memory_mb: 256.0
   min_success_rate: 0.5
 repos: []
+# Startup worktree cleanup configuration
+startup_cleanup_enabled: true
+stale_worktree_commit_threshold: 20
