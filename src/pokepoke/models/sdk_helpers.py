@@ -25,8 +25,8 @@ except (ImportError, AttributeError):
 
 from pokepoke.desktop import terminal_ui
 from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
+from pokepoke.utils.command_validator import validate_and_rewrite_powershell_tool_args
 from pokepoke.utils.shutdown import is_shutting_down
-from pokepoke.utils.tool_command_validator import validate_tool_request
 
 from .sdk_event_handler import SessionStats
 
@@ -93,44 +93,80 @@ def _build_copilot_result(
         session_id=session_id,
     )
 
-def _build_permission_handler(item_logger: Any | None = None) -> Callable[[Any, Any], Any] | None:
-    """Build a permission handler that rejects unsafe tool commands."""
+def _set_tool_args_on_request(req: Any, new_args: Any) -> None:
+    if isinstance(req, dict):
+        if "args" in req or "arguments" not in req:
+            req["args"] = new_args
+        else:
+            req["arguments"] = new_args
+        return
+
+    if hasattr(req, "args"):
+        req.args = new_args
+        return
+    if hasattr(req, "arguments"):
+        req.arguments = new_args
+        return
+    # Unknown request shape: ignore.
+
+
+def _extract_tool_request(req: Any) -> tuple[str | None, Any, Callable[[Any], None]]:
+    """Return (tool_name, tool_args, set_tool_args)."""
+    if isinstance(req, dict):
+        tool_name = req.get("tool_name") or req.get("tool")
+        tool_args = req.get("args") if "args" in req else req.get("arguments")
+        full_command = req.get("full_command_text")
+    else:
+        tool_name = getattr(req, "tool_name", None) or getattr(req, "tool", None)
+        tool_args = getattr(req, "args", None) or getattr(req, "arguments", None)
+        full_command = getattr(req, "full_command_text", None)
+
+    def set_tool_args(new_args: Any) -> None:
+        _set_tool_args_on_request(req, new_args)
+
+    if tool_args is None and full_command:
+        if not tool_name:
+            tool_name = "powershell"
+        tool_args = {"command": full_command}
+        set_tool_args(tool_args)
+
+    return tool_name, tool_args, set_tool_args
+
+
+def _build_permission_handler(
+    item_logger: Any | None = None,
+    *,
+    required_cwd: str | None = None,
+) -> Callable[[Any, Any], Any] | None:
+    """Build a permission handler that rejects/rewrites unsafe tool commands."""
     if _approve_all is None and _PERMISSION_RESULT_CLS is None:
         return None
 
-    def _extract_tool_request(req: Any) -> tuple[str | None, Any]:
-        if isinstance(req, dict):
-            tool_name = req.get("tool_name") or req.get("tool")
-            tool_args = req.get("args") or req.get("arguments")
-            full_command = req.get("full_command_text")
-        else:
-            tool_name = getattr(req, "tool_name", None) or getattr(req, "tool", None)
-            tool_args = getattr(req, "args", None) or getattr(req, "arguments", None)
-            full_command = getattr(req, "full_command_text", None)
-
-        if tool_args is None and full_command:
-            if not tool_name:
-                tool_name = "powershell"
-            tool_args = {"command": full_command}
-
-        return tool_name, tool_args
-
     def handler(req: Any, ctx: Any = None) -> Any:
-        tool_name, tool_args = _extract_tool_request(req)
-        violation = validate_tool_request(tool_name, tool_args)
-        if violation:
-            message = f"Denied tool request: {violation}"
-            logger.warning(message)
-            if item_logger:
-                item_logger.log_error(message)
-            if _PERMISSION_RESULT_CLS is not None:
-                return _PERMISSION_RESULT_CLS(
-                    kind="denied-by-rules",
-                    rules=[],
-                    feedback=violation,
-                    message=message,
-                )
-            return _approve_all(req, ctx) if _approve_all is not None else None
+        tool_name, tool_args, set_tool_args = _extract_tool_request(req)
+        if tool_name and str(tool_name).lower() == "powershell":
+            validation = validate_and_rewrite_powershell_tool_args(
+                tool_args,
+                required_cwd=required_cwd,
+            )
+            if validation.denied_reason:
+                violation = validation.denied_reason
+                message = f"Denied tool request: {violation}"
+                logger.warning(message)
+                if item_logger:
+                    item_logger.log_error(message)
+                if _PERMISSION_RESULT_CLS is not None:
+                    return _PERMISSION_RESULT_CLS(
+                        kind="denied-by-rules",
+                        rules=[],
+                        feedback=violation,
+                        message=message,
+                    )
+                return _approve_all(req, ctx) if _approve_all is not None else None
+
+            if validation.rewritten_tool_args is not None:
+                set_tool_args(validation.rewritten_tool_args)
+
         return _approve_all(req, ctx) if _approve_all is not None else None
 
     return handler
@@ -141,10 +177,12 @@ def _build_session_config(
     deny_write: bool,
     session_id: str | None = None,
     item_logger: Any | None = None,
+    *,
+    cwd: str | None = None,
 ) -> dict[str, Any]:
     """Build the SDK session configuration dict."""
     config: dict[str, Any] = {"model": model, "streaming": True}
-    permission_handler = _build_permission_handler(item_logger)
+    permission_handler = _build_permission_handler(item_logger, required_cwd=cwd)
     if permission_handler is not None:
         config["on_permission_request"] = permission_handler
     if deny_write:
