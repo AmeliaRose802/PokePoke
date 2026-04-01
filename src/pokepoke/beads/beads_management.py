@@ -1,5 +1,7 @@
 """Beads item management - close, assign, and select work items."""
 
+import atexit
+import concurrent.futures
 import json
 import logging
 import subprocess
@@ -36,6 +38,12 @@ __all__ = [
     'increment_total_attempts',
     '_is_transient_jsonl_sync_error',
 ]
+
+# Module-level thread pool for _resolve_with_timeout to avoid creating (and
+# leaking) a new ThreadPoolExecutor on every call.  A single worker suffices
+# because resolutions are dispatched sequentially from select_next_hierarchical_item.
+_resolve_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+atexit.register(_resolve_pool.shutdown, wait=False)
 
 
 def run_bd_sync_with_retry(
@@ -279,11 +287,10 @@ def _resolve_with_timeout(
     """Resolve an epic/feature to a leaf task with a timeout guard.
 
     Prevents multi-minute stalls when epics have many children that
-    each require a bd show subprocess call.
+    each require a bd show subprocess call.  Uses the module-level
+    ``_resolve_pool`` to avoid per-call thread creation/leak.
     """
-    import concurrent.futures
-    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    fut = pool.submit(resolve_to_leaf_task, item)
+    fut = _resolve_pool.submit(resolve_to_leaf_task, item)
     try:
         return fut.result(timeout=timeout)
     except concurrent.futures.TimeoutError:
@@ -295,8 +302,6 @@ def _resolve_with_timeout(
     except Exception:
         logger.warning("Hierarchical resolve failed for %s", item.id, exc_info=True)
         return None
-    finally:
-        pool.shutdown(wait=True, cancel_futures=True)
 
 
 def select_next_hierarchical_item(items: list[BeadsWorkItem]) -> BeadsWorkItem | None:
