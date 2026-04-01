@@ -38,11 +38,9 @@ def _log(item_logger: Any | None, message: str) -> None:
 
 
 def _run_copilot_models(cli_path: str, timeout: int = 30) -> list[dict[str, Any]]:
+    # Copilot CLI requires -p (prompt mode) for non-interactive commands
     commands = [
-        [cli_path, "models", "list", "--json"],
-        [cli_path, "models", "list", "--output", "json"],
-        [cli_path, "models", "list", "--format", "json"],
-        [cli_path, "models", "list"],
+        [cli_path, "-p", "models list"],
     ]
     last_error: str | None = None
     for cmd in commands:
