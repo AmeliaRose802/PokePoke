@@ -30,12 +30,71 @@ if (-not (Test-Path $stagedUtils)) {
 . $stagedUtils
 
 # Main execution
+$repoRoot = git rev-parse --show-toplevel 2>$null
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($repoRoot)) {
+    $repoRoot = $PSScriptRoot | Split-Path -Parent
+}
+
+$testFiles = Get-StagedFiles -Pattern '(^tests/|/tests/|test_.*\.py$|_test\.py$)' `
+    -DenyPatterns @('(venv|.venv|__pycache__|dist|build)') `
+    -ResolveFullPath -RepoRoot $repoRoot
+
 $stagedFiles = Get-StagedFiles -Pattern '\.py$' `
     -DenyPatterns @('(venv|.venv|__pycache__|dist|build)') `
     -SourceOnly
 
+if ($testFiles.Count -gt 0) {
+    Write-Host "🔍 Scanning staged test files for unmocked subprocess/git/bd calls..." -ForegroundColor Cyan
+    $violations = @()
+
+    foreach ($file in $testFiles) {
+        $content = Get-Content $file -Raw
+        $relPath = $file
+        if ([IO.Path]::IsPathRooted($file)) {
+            $relPath = $file -replace [regex]::Escape($repoRoot + [IO.Path]::DirectorySeparatorChar), ''
+        }
+
+        $hasSubprocessCall = [regex]::IsMatch($content, '(?m)\bsubprocess\.(run|Popen|call)\s*\(')
+        $hasSubprocessMock = [regex]::IsMatch($content, '(?m)\b(monkeypatch|patch|Mock|MagicMock)\b')
+        if ($hasSubprocessCall -and -not $hasSubprocessMock) {
+            $violations += "${relPath}: subprocess.run/Popen/call without monkeypatch/patch/Mock"
+        }
+
+        $hasRunCommand = [regex]::IsMatch($content, '(?m)\b_run_(git|bd)\s*\(')
+        $hasMonkeypatchSetattr = [regex]::IsMatch($content, '(?m)\bmonkeypatch\.setattr\s*\(')
+        if ($hasRunCommand -and -not $hasMonkeypatchSetattr) {
+            $violations += "${relPath}: _run_git/_run_bd without monkeypatch.setattr"
+        }
+
+        $hasOsSystem = [regex]::IsMatch($content, '(?m)\bos\.system\s*\(')
+        if ($hasOsSystem) {
+            $violations += "${relPath}: os.system call detected (not allowed in tests)"
+        }
+    }
+
+    if ($violations.Count -gt 0) {
+        Write-Host ""
+        Write-Host "❌ Unmocked external calls detected in staged tests" -ForegroundColor Red
+        Write-Host ""
+        foreach ($v in $violations) {
+            Write-Host "  $v" -ForegroundColor Yellow
+        }
+        Write-Host ""
+        Write-Host "Mock subprocess and CLI calls in tests (use monkeypatch.setattr or unittest.mock.patch/Mock)." -ForegroundColor Cyan
+        Write-Host "Example: tests/beads/test_beads_management.py" -ForegroundColor Cyan
+        exit 1
+    }
+
+    Write-Host "✅ Test mocking scan passed" -ForegroundColor Green
+}
+
 if ($stagedFiles.Count -eq 0) {
-    Write-Host "No Python files staged for commit" -ForegroundColor Gray
+    if ($testFiles.Count -eq 0) {
+        Write-Host "No Python files staged for commit" -ForegroundColor Gray
+    }
+    else {
+        Write-Host "No src Python files staged for commit" -ForegroundColor Gray
+    }
     exit 0
 }
 
