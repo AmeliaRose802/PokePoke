@@ -201,9 +201,9 @@ class TestDispatchItems:
 
     @patch("pokepoke.beads.beads_query.is_beads_item_closed", return_value=False)
     @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=False)
+    @patch("pokepoke.agents.parallel.assign_and_sync_item", return_value=False)
     @patch("pokepoke.agents.agent_context.get_agent_name", return_value="agent")
-    def test_unclaimable_items_added_to_failed_ids(self, _name, _claim, _stop, _closed):
+    def test_unclaimable_items_added_to_failed_ids(self, _name, _assign, _stop, _closed):
         """Regression for PokePoke-pfoc: unclaimable items must be added to
         failed_claim_ids so they are not re-selected in subsequent iterations."""
         items = [_make_item(f"uc-{i}") for i in range(3)]

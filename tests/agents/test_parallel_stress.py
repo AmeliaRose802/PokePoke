@@ -731,7 +731,7 @@ class TestComputeSlotsConcurrency:
         monkeypatch.setattr(
             "pokepoke.agents.parallel.get_effective_max_agents", lambda: 6)
         monkeypatch.setattr(
-            "pokepoke.agents.parallel_support.apply_memory_backpressure",
+            "pokepoke.utils.process_utils.apply_memory_backpressure",
             lambda slots: (slots, 8000))
 
         errors: list[str] = []

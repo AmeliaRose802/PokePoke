@@ -1,4 +1,7 @@
 """Parallel orchestrator loop for running multiple work items concurrently."""
+
+from __future__ import annotations
+
 import concurrent.futures
 import logging
 import threading
@@ -180,15 +183,28 @@ def _handle_circuit_breaker_drain(
     run_logger: RunLogger,
     record_fn: Any,
     mode_name: str,
+    lock: threading.Lock | None = None,
 ) -> bool:
-    """Drain futures while circuit breaker is tripped. Returns True to break."""
-    if not futures:
+    """Drain futures while circuit breaker is tripped. Returns True to break.
+
+    Parameters
+    ----------
+    lock:
+        Optional lock protecting *futures* and *failed_claim_ids*. When
+        provided, the lock is passed to drain functions for thread-safe operation.
+    """
+    if lock is not None:
+        with lock:
+            has_futures = bool(futures)
+    else:
+        has_futures = bool(futures)
+    if not has_futures:
         run_logger.log_orchestrator("Circuit breaker: all remaining agents finished \u2014 exiting")
         state.exit_code = 1
         return True
     state.total_requests = _drain_circuit_breaker(
         futures, failed_claim_ids, state.total_requests,
-        session_stats, run_logger, record_fn, _collect_done_futures, mode_name,
+        session_stats, run_logger, record_fn, _collect_done_futures, mode_name, lock,
     )
     return False
 
@@ -206,8 +222,16 @@ def _run_loop_iteration(
     start_time: float,
     continuous: bool,
     mode_name: str,
+    lock: threading.Lock | None = None,
 ) -> str | None:
     """Execute one iteration of the parallel loop.
+
+    Parameters
+    ----------
+    lock:
+        Optional lock protecting *futures* and *failed_claim_ids*. When
+        provided, the lock is passed to helper functions for thread-safe operation.
+
     Returns:
         ``None`` to continue normally, ``"break"`` to exit the loop,
         ``"continue"`` to skip the sleep at the end.
@@ -223,27 +247,33 @@ def _run_loop_iteration(
 
     state.total_requests, any_success, batch_successes, batch_failures = _collect_done_futures(
         futures, failed_claim_ids, state.total_requests,
-        session_stats, run_logger, record_fn,
+        session_stats, run_logger, record_fn, lock,
     )
     state.items_completed = session_stats.items_completed
     state.has_success = state.has_success or any_success
 
     state.consecutive_failures, state.circuit_breaker_tripped = _update_circuit_breaker(
         batch_successes, batch_failures, state.consecutive_failures,
-        _MAX_CONSECUTIVE_FAILURES, futures, run_logger,
+        _MAX_CONSECUTIVE_FAILURES, futures, run_logger, lock,
     )
-    if state.circuit_breaker_tripped and not futures:
+    if lock is not None:
+        with lock:
+            has_futures = bool(futures)
+    else:
+        has_futures = bool(futures)
+    if state.circuit_breaker_tripped and not has_futures:
         state.exit_code = 1
         return "break"
 
     terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
-    current_active, slots, _avail_mb = _compute_slots(futures, run_logger)
-    # DISABLED: kill_orphaned_copilot_processes was causing a death spiral
-    # by killing active workers' copilot processes during retries.
-    # See follow-up item for PID-tracked replacement.
-    # kill_orphaned_copilot_processes(expected_count=len(futures))
+    current_active, slots, _avail_mb = _compute_slots(futures, run_logger, lock)
 
-    if futures or ready_items:
+    if lock is not None:
+        with lock:
+            has_futures = bool(futures)
+    else:
+        has_futures = bool(futures)
+    if has_futures or ready_items:
         state.idle_sleep = _IDLE_BASE_DELAY
 
     state.worker_counter = _dispatch_items(
@@ -251,14 +281,14 @@ def _run_loop_iteration(
         state.consecutive_failures, _MAX_CONSECUTIVE_FAILURES,
         failed_claim_ids, current_active,
         futures, semaphore, executor, run_logger, state.worker_counter,
-        _build_worker_name, _parallel_process_item,
+        _build_worker_name, _parallel_process_item, lock,
     )
 
     action = _check_loop_exit(
         futures, ready_items, continuous, state.has_success,
         state.total_requests, state.items_completed, session_stats,
         start_time, state.idle_sleep, mode_name,
-        run_logger, finalize_fn, get_ready_work_items,
+        run_logger, finalize_fn, get_ready_work_items, lock,
     )
     if action is not None:
         if action.startswith("break"):
@@ -283,7 +313,10 @@ def _safe_cleanup(
     """Run cleanup operations with individual exception protection."""
     timeout_occurred = False
     try:
-        state.total_requests, timeout_occurred = _finalize_workers(pool.futures, session_stats, start_time, state.total_requests, run_logger, record_fn)
+        state.total_requests, timeout_occurred = _finalize_workers(
+            pool.futures, session_stats, start_time, state.total_requests,
+            run_logger, record_fn, pool.lock,
+        )
     except Exception as e:
         logger.error(f"Failed to finalize workers: {e}", exc_info=True)
         run_logger.log_orchestrator(f"Worker finalization error: {e}", level="ERROR")
@@ -331,13 +364,16 @@ def run_parallel_loop(
     try:
         while not is_shutting_down():
             if state.circuit_breaker_tripped:
-                if _handle_circuit_breaker_drain(state, pool.futures, failed_claim_ids, session_stats, run_logger, record_fn, mode_name):
+                if _handle_circuit_breaker_drain(
+                    state, pool.futures, failed_claim_ids, session_stats,
+                    run_logger, record_fn, mode_name, pool.lock,
+                ):
                     break
                 continue
             result = _run_loop_iteration(
                 state, pool.futures, failed_claim_ids, session_stats, run_logger,
                 record_fn, finalize_fn, pool.semaphore, pool.executor,
-                main_repo_path, start_time, continuous, mode_name,
+                main_repo_path, start_time, continuous, mode_name, pool.lock,
             )
             if result == "break":
                 break
