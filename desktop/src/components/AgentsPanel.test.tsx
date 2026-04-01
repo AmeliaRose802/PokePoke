@@ -104,8 +104,8 @@ describe("AgentsPanel", () => {
     const agent = mkAgent({ status: "success" });
     render(<AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
 
-    // Completed section is collapsed by default; expand to ensure card renders
-    fireEvent.click(screen.getByRole("button", { name: /completed/i }));
+    // Completed success section is collapsed by default; expand to ensure card renders
+    fireEvent.click(screen.getByRole("button", { name: /Completed · Passed/i }));
 
     expect(screen.queryByTitle("Pause agent")).not.toBeInTheDocument();
     expect(screen.queryByTitle("Resume agent")).not.toBeInTheDocument();
@@ -120,8 +120,78 @@ describe("AgentsPanel", () => {
     expect(screen.getByText("RunningWorker")).toBeInTheDocument();
     expect(screen.queryByText("DoneWorker")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /completed/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Completed · Passed/i }));
     expect(screen.getByText("DoneWorker")).toBeInTheDocument();
+  });
+
+  describe("separate completed accordions for success and failure", () => {
+    it("shows separate accordions for successful and failed completed agents", () => {
+      const successAgent = mkAgent({ agent_id: "success-1", name: "SuccessWorker", status: "success" });
+      const failedAgent = mkAgent({ agent_id: "failed-1", name: "FailedWorker", status: "failed" });
+
+      render(<AgentsPanel agents={[successAgent, failedAgent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
+
+      // Both accordions should be present
+      expect(screen.getByRole("button", { name: /Completed · Passed/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Completed · Failed/i })).toBeInTheDocument();
+    });
+
+    it("only shows success accordion when all completed agents succeeded", () => {
+      const successAgent1 = mkAgent({ agent_id: "success-1", name: "SuccessWorker1", status: "success" });
+      const successAgent2 = mkAgent({ agent_id: "success-2", name: "SuccessWorker2", status: "success" });
+
+      render(<AgentsPanel agents={[successAgent1, successAgent2]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
+
+      expect(screen.getByRole("button", { name: /Completed · Passed/i })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Completed · Failed/i })).not.toBeInTheDocument();
+    });
+
+    it("only shows failure accordion when all completed agents failed", () => {
+      const failedAgent1 = mkAgent({ agent_id: "failed-1", name: "FailedWorker1", status: "failed" });
+      const failedAgent2 = mkAgent({ agent_id: "failed-2", name: "FailedWorker2", status: "failed" });
+
+      render(<AgentsPanel agents={[failedAgent1, failedAgent2]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
+
+      expect(screen.queryByRole("button", { name: /Completed · Passed/i })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Completed · Failed/i })).toBeInTheDocument();
+    });
+
+    it("expands success accordion independently from failure accordion", () => {
+      const successAgent = mkAgent({ agent_id: "success-1", name: "SuccessWorker", status: "success" });
+      const failedAgent = mkAgent({ agent_id: "failed-1", name: "FailedWorker", status: "failed" });
+
+      render(<AgentsPanel agents={[successAgent, failedAgent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
+
+      // Both collapsed by default
+      expect(screen.queryByText("SuccessWorker")).not.toBeInTheDocument();
+      expect(screen.queryByText("FailedWorker")).not.toBeInTheDocument();
+
+      // Expand success only
+      fireEvent.click(screen.getByRole("button", { name: /Completed · Passed/i }));
+      expect(screen.getByText("SuccessWorker")).toBeInTheDocument();
+      expect(screen.queryByText("FailedWorker")).not.toBeInTheDocument();
+
+      // Expand failure as well
+      fireEvent.click(screen.getByRole("button", { name: /Completed · Failed/i }));
+      expect(screen.getByText("SuccessWorker")).toBeInTheDocument();
+      expect(screen.getByText("FailedWorker")).toBeInTheDocument();
+    });
+
+    it("shows correct count in each accordion", () => {
+      const successAgent1 = mkAgent({ agent_id: "success-1", name: "SuccessWorker1", status: "success" });
+      const successAgent2 = mkAgent({ agent_id: "success-2", name: "SuccessWorker2", status: "success" });
+      const failedAgent = mkAgent({ agent_id: "failed-1", name: "FailedWorker", status: "failed" });
+
+      const { container } = render(
+        <AgentsPanel agents={[successAgent1, successAgent2, failedAgent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />
+      );
+
+      const successSection = container.querySelector(".agent-section-success");
+      const failedSection = container.querySelector(".agent-section-failed");
+
+      expect(successSection?.querySelector(".agent-section-count")?.textContent).toBe("2");
+      expect(failedSection?.querySelector(".agent-section-count")?.textContent).toBe("1");
+    });
   });
 
   it("collapses active agents on click and expands again", () => {
@@ -414,49 +484,49 @@ describe("AgentsPanel", () => {
     it("shows verdict status for gate agent with success JSON in logs", () => {
       const agent = mkGateAgent([`\`\`\`json\n${successVerdictJson}\n\`\`\``]);
       render(<AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
-      fireEvent.click(screen.getByRole("button", { name: /completed/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Completed · Passed/i }));
       expect(screen.getByText("✓ Passed")).toBeInTheDocument();
     });
 
     it("shows verdict status for gate agent with failure JSON in logs", () => {
       const agent = mkGateAgent([`\`\`\`json\n${failureVerdictJson}\n\`\`\``]);
       render(<AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
-      fireEvent.click(screen.getByRole("button", { name: /completed/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Completed · Passed/i }));
       expect(screen.getByText("✗ Failed")).toBeInTheDocument();
     });
 
     it("shows reason from success verdict", () => {
       const agent = mkGateAgent([`\`\`\`json\n${successVerdictJson}\n\`\`\``]);
       render(<AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
-      fireEvent.click(screen.getByRole("button", { name: /completed/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Completed · Passed/i }));
       expect(screen.getByText("new_work_verified")).toBeInTheDocument();
     });
 
     it("shows message from success verdict", () => {
       const agent = mkGateAgent([`\`\`\`json\n${successVerdictJson}\n\`\`\``]);
       render(<AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
-      fireEvent.click(screen.getByRole("button", { name: /completed/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Completed · Passed/i }));
       expect(screen.getByText("All tests pass and implementation looks correct.")).toBeInTheDocument();
     });
 
     it("shows details from failure verdict", () => {
       const agent = mkGateAgent([`\`\`\`json\n${failureVerdictJson}\n\`\`\``]);
       render(<AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
-      fireEvent.click(screen.getByRole("button", { name: /completed/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Completed · Passed/i }));
       expect(screen.getByText("Two unit tests are still failing in test_foo.py.")).toBeInTheDocument();
     });
 
     it("shows recommendation when present in verdict", () => {
       const agent = mkGateAgent([`\`\`\`json\n${successVerdictJson}\n\`\`\``]);
       render(<AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
-      fireEvent.click(screen.getByRole("button", { name: /completed/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Completed · Passed/i }));
       expect(screen.getByText("Close the issue.")).toBeInTheDocument();
     });
 
     it("shows raw logs for gate agent without verdict", () => {
       const agent = mkGateAgent(["Running tests...", "Coverage: 85%"]);
       render(<AgentsPanel agents={[agent]} onPauseAgent={vi.fn()} onResumeAgent={vi.fn()} />);
-      fireEvent.click(screen.getByRole("button", { name: /completed/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Completed · Passed/i }));
       expect(screen.getByText("Running tests...")).toBeInTheDocument();
       expect(screen.queryByText("✓ Passed")).not.toBeInTheDocument();
       expect(screen.queryByText("✗ Failed")).not.toBeInTheDocument();
@@ -853,8 +923,8 @@ describe("AgentsPanel", () => {
         />,
       );
 
-      // Expand the completed section (collapsed by default)
-      fireEvent.click(screen.getByRole("button", { name: /completed/i }));
+      // Expand the completed failed section (collapsed by default)
+      fireEvent.click(screen.getByRole("button", { name: /Completed · Failed/i }));
 
       // Root card should show the FINAL gate outcome (passed, from retry)
       const rootCard = container.querySelector(".agent-card:not(.agent-card-child)");

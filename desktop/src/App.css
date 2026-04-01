@@ -948,6 +948,34 @@
   flex-shrink: 0;
 }
 
+/* Success section styling */
+.agent-section-success .agent-section-header {
+  border-left: 3px solid var(--status-success, #22c55e);
+}
+
+.agent-section-success .agent-section-label {
+  color: var(--status-success, #22c55e);
+}
+
+.agent-section-success .agent-section-count {
+  background: color-mix(in srgb, var(--status-success, #22c55e) 15%, var(--bg-elevated));
+  color: var(--status-success, #22c55e);
+}
+
+/* Failed section styling */
+.agent-section-failed .agent-section-header {
+  border-left: 3px solid var(--status-error, #ef4444);
+}
+
+.agent-section-failed .agent-section-label {
+  color: var(--status-error, #ef4444);
+}
+
+.agent-section-failed .agent-section-count {
+  background: color-mix(in srgb, var(--status-error, #ef4444) 15%, var(--bg-elevated));
+  color: var(--status-error, #ef4444);
+}
+
 .agent-section-content {
   padding-top: 4px;
   display: flex;

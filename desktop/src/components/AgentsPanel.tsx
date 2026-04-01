@@ -61,7 +61,8 @@ export function AgentsPanel({
   spawnAtLimit = false,
 }: Props) {
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
-  const [expandedCompletedSections, setExpandedCompletedSections] = useState<Set<string>>(new Set());
+  const [expandedSuccessSections, setExpandedSuccessSections] = useState<Set<string>>(new Set());
+  const [expandedFailedSections, setExpandedFailedSections] = useState<Set<string>>(new Set());
   const [collapsedActiveSections, setCollapsedActiveSections] = useState<Set<string>>(new Set());
   const [collapsedWorkItems, setCollapsedWorkItems] = useState<Set<string>>(new Set());
 
@@ -361,14 +362,19 @@ export function AgentsPanel({
     };
 
     const renderedActiveAgents = renderGroupedAgentSection(activeRootAgents);
-    const renderedCompletedAgents = renderGroupedAgentSection(completedRootAgents);
 
-    const completedFailedCount = completedRootAgents.filter(treeHasFailure).length;
-    const completedSuccessCount = completedRootAgents.length - completedFailedCount;
+    // Split completed agents into successes and failures
+    const completedSuccessAgents = completedRootAgents.filter((agent) => !treeHasFailure(agent));
+    const completedFailedAgents = completedRootAgents.filter(treeHasFailure);
+    const renderedSuccessAgents = renderGroupedAgentSection(completedSuccessAgents);
+    const renderedFailedAgents = renderGroupedAgentSection(completedFailedAgents);
 
-    const isCompletedExpanded = expandedCompletedSections.has(group.sessionId);
+    const isSuccessExpanded = expandedSuccessSections.has(group.sessionId);
+    const isFailedExpanded = expandedFailedSections.has(group.sessionId);
     const isActiveExpanded = !collapsedActiveSections.has(group.sessionId);
     const activeSectionId = `active-agents-${group.sessionId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+    const successSectionId = `success-agents-${group.sessionId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+    const failedSectionId = `failed-agents-${group.sessionId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 
     const renderedSections = (
       <div className="agent-sections">
@@ -397,24 +403,37 @@ export function AgentsPanel({
           ) : null}
         </div>
 
-        {completedRootAgents.length > 0 ? (
-          <div className="agent-section agent-section-completed">
+        {completedSuccessAgents.length > 0 ? (
+          <div className="agent-section agent-section-completed agent-section-success">
             <button
               className="agent-section-header"
-              onClick={() => toggleInSet(setExpandedCompletedSections, group.sessionId)}
-              aria-expanded={isCompletedExpanded}
+              onClick={() => toggleInSet(setExpandedSuccessSections, group.sessionId)}
+              aria-expanded={isSuccessExpanded}
+              aria-controls={isSuccessExpanded ? successSectionId : undefined}
               type="button"
             >
-              <span className="agent-section-chevron">{isCompletedExpanded ? "▾" : "▸"}</span>
-              <span className="agent-section-label">Completed</span>
-              <span className="agent-section-count">{completedRootAgents.length}</span>
-              <span className="agent-section-summary">
-                {completedFailedCount > 0
-                  ? `${completedSuccessCount} ok · ${completedFailedCount} failed`
-                  : `${completedSuccessCount} ok`}
-              </span>
+              <span className="agent-section-chevron">{isSuccessExpanded ? "▾" : "▸"}</span>
+              <span className="agent-section-label">Completed · Passed</span>
+              <span className="agent-section-count">{completedSuccessAgents.length}</span>
             </button>
-            {isCompletedExpanded && <div className="agent-section-content">{renderedCompletedAgents}</div>}
+            {isSuccessExpanded && <div id={successSectionId} className="agent-section-content">{renderedSuccessAgents}</div>}
+          </div>
+        ) : null}
+
+        {completedFailedAgents.length > 0 ? (
+          <div className="agent-section agent-section-completed agent-section-failed">
+            <button
+              className="agent-section-header"
+              onClick={() => toggleInSet(setExpandedFailedSections, group.sessionId)}
+              aria-expanded={isFailedExpanded}
+              aria-controls={isFailedExpanded ? failedSectionId : undefined}
+              type="button"
+            >
+              <span className="agent-section-chevron">{isFailedExpanded ? "▾" : "▸"}</span>
+              <span className="agent-section-label">Completed · Failed</span>
+              <span className="agent-section-count">{completedFailedAgents.length}</span>
+            </button>
+            {isFailedExpanded && <div id={failedSectionId} className="agent-section-content">{renderedFailedAgents}</div>}
           </div>
         ) : null}
       </div>
