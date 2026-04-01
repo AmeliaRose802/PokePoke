@@ -90,6 +90,52 @@ def _read_lock_metadata(lock_path: Path) -> dict[str, object] | None:
     return None
 
 
+def _break_stale_lock_if_needed(
+    name: str, lock_path: Path, stale_timeout: float,
+) -> None:
+    """Detect and remove a stale lock, serialized via a meta-lock to prevent TOCTOU races."""
+    if not lock_path.exists():
+        return
+    # Meta-lock ensures only one process checks-and-removes at a time.
+    meta_lock = FileLock(str(lock_path) + ".break")
+    try:
+        meta_lock.acquire(timeout=30)
+    except Timeout:
+        logger.debug("Meta-lock for stale detection on %s timed out; skipping.", name)
+        return
+    try:
+        if not lock_path.exists():
+            return
+        try:
+            age = time.time() - lock_path.stat().st_mtime
+        except FileNotFoundError:
+            return
+        if age <= stale_timeout:
+            return
+        meta = _read_lock_metadata(lock_path)
+        raw_pid = meta.get("pid") if meta else None
+        holder_pid = int(raw_pid) if isinstance(raw_pid, (int, float)) else None
+        if holder_pid is not None and _is_pid_alive(holder_pid):
+            logger.info(
+                'Lock file %s is %.0f s old but holder PID %s is still alive.',
+                lock_path, age, holder_pid,
+            )
+            return
+        logger.warning(
+            'Lock file %s is %.0f s old (stale_timeout=%.0f), '
+            'holder PID %s is dead. Removing stale lock.',
+            lock_path, age, stale_timeout, holder_pid,
+        )
+        try:
+            lock_path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning('Could not remove stale lock file %s: %s', lock_path, exc)
+        else:
+            _contention_tracker.record_stale_clearance(name)
+    finally:
+        meta_lock.release()
+
+
 @contextmanager
 def acquire_lock(
     name: str,
@@ -102,39 +148,15 @@ def acquire_lock(
         name: Logical lock name (e.g. "worktree-setup").
         timeout: Seconds to wait (-1 means wait forever).
         stale_timeout: If set and the lock file is old, verify holder PID and
-            remove the lock if the holder is dead.
+            remove the lock if the holder is dead.  Stale detection is
+            serialized via a meta-lock to prevent TOCTOU races.
     Raises:
         filelock.Timeout: If *timeout* expires before the lock is acquired.
     """
     lock_path = _lock_path(name)
     lock = FileLock(lock_path)
-    if stale_timeout is not None and lock_path.exists():
-        try:
-            age = time.time() - lock_path.stat().st_mtime
-        except FileNotFoundError:
-            age = 0.0  # File disappeared between exists() and stat()
-        if age > stale_timeout:
-            meta = _read_lock_metadata(lock_path)
-            raw_pid = meta.get("pid") if meta else None
-            holder_pid = int(raw_pid) if isinstance(raw_pid, (int, float)) else None
-            # Only force-remove if holder PID is dead (or unknown)
-            if holder_pid is None or not _is_pid_alive(holder_pid):
-                logger.warning(
-                    'Lock file %s is %.0f s old (stale_timeout=%.0f), '
-                    'holder PID %s is dead. Removing stale lock.',
-                    lock_path, age, stale_timeout, holder_pid,
-                )
-                try:
-                    lock_path.unlink(missing_ok=True)
-                except OSError as exc:
-                    logger.warning('Could not remove stale lock file %s: %s', lock_path, exc)
-                else:
-                    _contention_tracker.record_stale_clearance(name)
-            else:
-                logger.info(
-                    'Lock file %s is %.0f s old but holder PID %s is still alive.',
-                    lock_path, age, holder_pid,
-                )
+    if stale_timeout is not None:
+        _break_stale_lock_if_needed(name, lock_path, stale_timeout)
     t0 = time.monotonic()
     try:
         lock.acquire(timeout=timeout)
@@ -154,13 +176,7 @@ def acquire_lock(
 
 
 def try_lock(name: str) -> FileLock | None:
-    """Non-blocking lock attempt.
-
-    Returns:
-        The acquired :class:`filelock.FileLock` if successful, or ``None``
-        if the lock is already held by another process.  The caller is
-        responsible for calling ``lock.release()`` when done.
-    """
+    """Non-blocking lock attempt; returns acquired lock or None."""
     lp = _lock_path(name)
     lock = FileLock(lp)
     try:
@@ -176,16 +192,13 @@ _MERGE_LOCK = "merge-queue"
 _MANIFEST_LOCK = "worktree-manifest"
 _BEADS_DB_LOCK = "beads-db"
 
-# Age threshold (seconds) after which a merge lock file is considered stale.
-# 15 minutes should be beyond any legitimate merge operation.
-_MERGE_LOCK_STALE_AGE = 900.0
+_MERGE_LOCK_STALE_AGE = 900.0  # 15 min; beyond any legitimate merge
 
-# Stale-timeout defaults (seconds) for dead-PID lock recovery.
-_WORKTREE_SETUP_STALE = 300.0   # 5 min
-_MERGE_STALE = 600.0            # 10 min
-_MANIFEST_STALE = 120.0         # 2 min
-_CLEANUP_STALE = 300.0          # 5 min (main-repo-cleanup)
-_BEADS_DB_STALE = 300.0         # 5 min (beads DB mutations)
+_WORKTREE_SETUP_STALE = 300.0  # 5 min
+_MERGE_STALE = 600.0           # 10 min
+_MANIFEST_STALE = 120.0        # 2 min
+_CLEANUP_STALE = 300.0         # 5 min
+_BEADS_DB_STALE = 300.0        # 5 min
 
 
 @contextmanager
@@ -316,13 +329,9 @@ def with_worktree_lock(
 def check_lock_status(lock_name: str) -> tuple[bool, dict[str, object] | None]:
     """Check if a lock exists and return metadata if available."""
     lock_path = _lock_path(lock_name)
-    exists = lock_path.exists()
-
-    if not exists:
+    if not lock_path.exists():
         return False, None
-
-    metadata = _read_lock_metadata(lock_path)
-    return True, metadata
+    return True, _read_lock_metadata(lock_path)
 
 
 def clear_lock_if_stale(lock_name: str, max_age_seconds: float = 3600) -> bool:
