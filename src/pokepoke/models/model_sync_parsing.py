@@ -36,19 +36,76 @@ def _extract_json_payload(output: str) -> Any | None:
         return None
 
 
+def _parse_markdown_table(output: str) -> list[dict[str, Any]]:
+    """Parse a markdown table into a list of dicts."""
+    lines = output.splitlines()
+    models: list[dict[str, Any]] = []
+
+    # Find the header row (contains |)
+    header_idx = None
+    for i, line in enumerate(lines):
+        if "|" in line and "Model" in line:
+            header_idx = i
+            break
+
+    if header_idx is None:
+        return []
+
+    # Parse header to get column names
+    header_line = lines[header_idx]
+    headers = [h.strip() for h in header_line.split("|") if h.strip()]
+
+    # Skip separator row (|---|---|)
+    data_start = header_idx + 2
+
+    for line in lines[data_start:]:
+        if "|" not in line:
+            continue
+        # Stop at non-table content
+        stripped = line.strip()
+        is_table_row = stripped.startswith("|") or stripped.endswith("|") or any(c == "|" for c in stripped)
+        if not is_table_row:
+            break
+        cells = [c.strip().strip("`") for c in line.split("|") if c.strip()]
+        if len(cells) >= 2:
+            # Map to dict using headers
+            entry: dict[str, Any] = {}
+            for j, header in enumerate(headers):
+                if j < len(cells):
+                    key = header.lower().replace(" ", "_")
+                    if key == "id":
+                        entry["name"] = cells[j]
+                    elif key == "model":
+                        entry["display_name"] = cells[j]
+                    elif key == "tier":
+                        entry["status"] = cells[j]
+                    else:
+                        entry[key] = cells[j]
+            if "name" in entry:
+                models.append(entry)
+    return models
+
+
 def _parse_models_from_text(output: str) -> list[dict[str, Any]]:
+    # First try markdown table format (Copilot CLI returns this)
+    if "|" in output and "Model" in output:
+        table_models = _parse_markdown_table(output)
+        if table_models:
+            return table_models
+
+    # Fallback to simple line-based parsing
     lines = [line.strip() for line in output.splitlines() if line.strip()]
     if not lines:
         return []
     if any(token in lines[0].lower() for token in ("model", "name", "status")):
         lines = lines[1:]
-    models: list[dict[str, Any]] = []
+    result: list[dict[str, Any]] = []
     for line in lines:
         parts = line.split()
         if not parts:
             continue
-        models.append({"name": parts[0], "raw": line})
-    return models
+        result.append({"name": parts[0], "raw": line})
+    return result
 
 
 def parse_copilot_models_output(output: str) -> list[dict[str, Any]]:

@@ -43,6 +43,28 @@ def test_parse_text_table():
     assert [m["name"] for m in models] == ["gpt-5.2", "claude-opus-4.6"]
 
 
+def test_parse_markdown_table():
+    """Parse markdown table output from Copilot CLI."""
+    output = """Here are the available models:
+| Model | ID | Tier |
+|---|---|---|
+| Claude Opus 4.6 | `claude-opus-4.6` | Premium |
+| GPT-5.2 | `gpt-5.2` | Standard |
+| GPT-4.1 | `gpt-4.1` | Fast/Cheap |
+
+**Current session:** Claude Opus 4.6
+"""
+    models = parse_copilot_models_output(output)
+    assert len(models) == 3
+    names = [m["name"] for m in models]
+    assert "claude-opus-4.6" in names
+    assert "gpt-5.2" in names
+    assert "gpt-4.1" in names
+    # Check tier/status was captured
+    claude = next(m for m in models if m["name"] == "claude-opus-4.6")
+    assert claude.get("status") == "Premium"
+
+
 def test_normalize_and_beta_detection():
     entry = {"name": "gpt-5.2", "status": "beta", "capabilities": ["tools"]}
     model = normalize_model_entry(entry)
