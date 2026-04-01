@@ -307,6 +307,9 @@ class PromptService:
     def load_and_render(self, template_name: str, variables: dict[str, Any]) -> str:
         """Load and render a template in one call.
 
+        Supports template inheritance via {{>template_name}} include syntax.
+        For example, {{>beads-item}} includes the base beads-item template.
+
         Args:
             template_name: Name of template (without .md extension)
             variables: Dictionary of variables to substitute
@@ -315,7 +318,33 @@ class PromptService:
             Rendered prompt
         """
         template = self.load_prompt(template_name)
+        # Process template includes before rendering variables
+        template = self._process_includes(template)
         return self.render_prompt(template, variables)
+
+    def _process_includes(self, template: str) -> str:
+        """Process {{>template_name}} includes in templates.
+
+        Args:
+            template: Template content with possible includes
+
+        Returns:
+            Template with includes resolved
+        """
+        # Pattern to match {{>template_name}}
+        include_pattern = re.compile(r'\{\{>(\w+(?:-\w+)*)\}\}')
+
+        def replace_include(match: re.Match[str]) -> str:
+            included_template_name = match.group(1)
+            try:
+                included_template = self.load_prompt(included_template_name)
+                # Recursively process includes in the included template
+                return self._process_includes(included_template)
+            except FileNotFoundError:
+                logger.warning(f"Template include not found: {included_template_name}")
+                return f"{{{{missing include: {included_template_name}}}}}"
+
+        return include_pattern.sub(replace_include, template)
 
     def _validate_template_name(self, template_name: str) -> str:
         """Ensure template names cannot perform path traversal."""

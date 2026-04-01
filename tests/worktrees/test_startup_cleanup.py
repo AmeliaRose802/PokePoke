@@ -121,7 +121,7 @@ class TestStartupCleanup:
         # Verify is_worktree_merged was called with item_id (not full branch name)
         expected_calls = [
             (("item1", "main", "/repo"), {}),  # item_id extracted from "task/item1"
-            (("item2", "main", "/repo"), {}),  # item_id extracted from "task/item2"  
+            (("item2", "main", "/repo"), {}),  # item_id extracted from "task/item2"
             (("item3", "main", "/repo"), {}),  # item_id extracted from "task/item3"
         ]
         assert mock_is_merged.call_args_list == expected_calls

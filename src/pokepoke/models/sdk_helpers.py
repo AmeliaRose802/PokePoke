@@ -256,9 +256,14 @@ def build_prompt_from_work_item(
 ) -> str:
     """Build a prompt from a work item using the template system.
 
+    Supports label-based template selection: if the work item has labels that
+    match entries in the ``prompt_templates`` config, the corresponding template
+    will be used instead of the default.
+
     Args:
         work_item: The work item to build a prompt for.
         template_name: Name of the prompt template to use (default: ``"beads-item"``).
+            This can be overridden by label-based template selection.
         retry_feedback: Optional list of feedback strings from previous gate-agent
             rejections or copilot failures.
     """
@@ -266,6 +271,14 @@ def build_prompt_from_work_item(
     from pokepoke.prompts.prompts import PromptService
     config = get_config()
     service = PromptService()
+
+    # Check for label-based template override
+    if work_item.labels and isinstance(config.prompt_templates, dict) and config.prompt_templates:
+        for label in work_item.labels:
+            if label in config.prompt_templates:
+                template_name = config.prompt_templates[label]
+                logger.info(f"Using label-specific template '{template_name}' for label '{label}'")
+                break
     test_data_lines = [
         f"When you need {k.replace('_', ' ').capitalize()}, use: {v}"
         for k, v in config.test_data.items()

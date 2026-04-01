@@ -303,6 +303,8 @@ class ProjectConfig:
     # Startup cleanup configuration
     startup_cleanup_enabled: bool = True
     stale_worktree_commit_threshold: int = 20
+    # Label-based prompt template selection
+    prompt_templates: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         _cls = "ProjectConfig"

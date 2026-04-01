@@ -152,3 +152,15 @@ repos: []
 # Startup worktree cleanup configuration
 startup_cleanup_enabled: true
 stale_worktree_commit_threshold: 20
+
+# Label-based prompt template selection
+# Maps work item labels to custom prompt templates
+# When a work item has a label matching a key here, that template is used
+# instead of the default beads-item.md template
+prompt_templates:
+  orchestrator: "orchestrator-work"
+  desktop: "desktop-work"
+  tests: "tests-work"
+  # Add more label -> template mappings as needed
+  # Example: "api": "api-work"
+
