@@ -112,8 +112,9 @@ class TestMaxParallelAgentsConfig:
 
     def test_from_dict_negative_clamped(self):
         from pokepoke.config import ProjectConfig
-        config = ProjectConfig.from_dict({"max_parallel_agents": -5})
-        assert config.max_parallel_agents == 1
+        from pokepoke.config_validation import ConfigError
+        with pytest.raises(ConfigError):
+            ProjectConfig.from_dict({"max_parallel_agents": -5})
 
 
 class TestSingleAgentPanelRegistration:

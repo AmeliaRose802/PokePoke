@@ -799,6 +799,7 @@ class TestRunOrchestratorWorktreeCoverage:
             result = run_orch(interactive=False, continuous=True)
             assert result == 0
 
+    @patch('subprocess.run')
     @patch('pokepoke.agents.agent_runner.run_worktree_cleanup')
     @patch('pokepoke.orchestration.orchestrator.run_beta_tester')
     @patch('pokepoke.orchestration.orchestrator.run_periodic_maintenance')
@@ -813,7 +814,7 @@ class TestRunOrchestratorWorktreeCoverage:
         mock_select: Mock, mock_process: Mock,
         mock_stats: Mock, mock_input: Mock,
         mock_maintenance: Mock, mock_beta: Mock,
-        mock_cleanup: Mock
+        mock_cleanup: Mock, mock_subprocess: Mock
     ) -> None:
         """Test interactive continuous mode with user quitting."""
         from pokepoke.orchestration.orchestrator import run_orchestrator as run_orch

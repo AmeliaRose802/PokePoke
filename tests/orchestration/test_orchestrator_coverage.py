@@ -207,8 +207,9 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.select_work_item", return_value=None)
     @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=False)
     @patch("pokepoke.orchestration.orchestrator.print_stats")
+    @patch("subprocess.run")
     def test_no_work_items_exits_zero(
-        self, mock_print, mock_shutdown, mock_select, mock_ready,
+        self, mock_subprocess, mock_print, mock_shutdown, mock_select, mock_ready,
         mock_repo, mock_unassign_count, mock_beads_stats,
         mock_config, mock_agent, mock_init_agent,
         mock_banner_fmt, mock_clear_banner, mock_set_banner, mock_ui,
@@ -235,8 +236,9 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.check_and_commit_main_repo", return_value=False)
     @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=False)
     @patch("pokepoke.orchestration.orchestrator.print_stats")
+    @patch("subprocess.run")
     def test_repo_check_failure_returns_one(
-        self, mock_print, mock_shutdown, mock_repo,
+        self, mock_subprocess, mock_print, mock_shutdown, mock_repo,
         mock_unassign_count, mock_beads_stats,
         mock_config, mock_agent, mock_init_agent,
         mock_banner_fmt, mock_clear_banner, mock_set_banner, mock_ui,
@@ -269,8 +271,9 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.print_stats")
     @patch("pokepoke.orchestration.orchestrator.run_periodic_maintenance")
     @patch("pokepoke.orchestration.orchestrator.increment_items_completed", return_value=1)
+    @patch("subprocess.run")
     def test_single_item_success(
-        self, mock_increment, mock_maintenance, mock_print,
+        self, mock_subprocess, mock_increment, mock_maintenance, mock_print,
         mock_stop, mock_shutdown, mock_process, mock_select, mock_ready,
         mock_repo, mock_unassign_count, mock_beads_stats,
         mock_config, mock_agent, mock_init_agent,
@@ -312,8 +315,9 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=False)
     @patch("pokepoke.orchestration.orchestrator.should_stop_after_current", return_value=False)
     @patch("pokepoke.orchestration.orchestrator.print_stats")
+    @patch("subprocess.run")
     def test_single_item_failure(
-        self, mock_print, mock_stop, mock_shutdown, mock_process,
+        self, mock_subprocess, mock_print, mock_stop, mock_shutdown, mock_process,
         mock_select, mock_ready, mock_repo,
         mock_unassign_count, mock_beads_stats,
         mock_config, mock_agent, mock_init_agent,
@@ -350,8 +354,9 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=False)
     @patch("pokepoke.orchestration.orchestrator.should_stop_after_current", return_value=False)
     @patch("pokepoke.orchestration.orchestrator.print_stats")
+    @patch("subprocess.run")
     def test_claim_failure_adds_to_skip(
-        self, mock_print, mock_stop, mock_shutdown, mock_process,
+        self, mock_subprocess, mock_print, mock_stop, mock_shutdown, mock_process,
         mock_select, mock_ready, mock_repo,
         mock_unassign_count, mock_beads_stats,
         mock_config, mock_agent, mock_init_agent,
@@ -389,8 +394,9 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.select_work_item", return_value=None)
     @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=False)
     @patch("pokepoke.orchestration.orchestrator.print_stats")
+    @patch("subprocess.run")
     def test_recovery_of_stuck_items(
-        self, mock_print, mock_shutdown, mock_select, mock_ready,
+        self, mock_subprocess, mock_print, mock_shutdown, mock_select, mock_ready,
         mock_repo, mock_retry, mock_unassign_count, mock_beads_stats,
         mock_config, mock_agent, mock_init_agent,
         mock_banner_fmt, mock_clear_banner, mock_set_banner, mock_ui,

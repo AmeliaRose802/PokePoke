@@ -21,10 +21,24 @@ File layout:
       "work": {"created": int, "completed": int, "net_delta": int}
     },
     "last_updated": "<iso-timestamp>"
+  },
+  "items": {
+    "PokePoke-abc": {
+      "attempt_count": int,
+      "total_tokens": int,
+      "total_duration_seconds": float,
+      "first_attempted": "<iso-timestamp>",
+      "last_attempted": "<iso-timestamp>",
+      "last_result": "success" | "failed",
+      "consecutive_failures": int,
+      "needs_human_attention": bool,
+      "failure_reasons": ["reason1", ...]
+    }
   }
 }
 
 The raw log is append-only; summary can be rebuilt at any time.
+Per-item metrics in "items" are updated incrementally on each attempt.
 """
 
 import os
@@ -33,6 +47,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
+from pokepoke.constants import DEFAULT_NEEDS_HUMAN_ATTENTION_FAILURES
 from pokepoke.stats.persistent_json_store import PersistentJsonStore
 
 STATS_FILE = Path(".pokepoke") / "beads_item_stats.json"
@@ -58,6 +73,7 @@ def _empty_store() -> dict[str, Any]:
             "by_agent_type": {},
             "last_updated": "",
         },
+        "items": {},
     }
 
 
@@ -141,6 +157,9 @@ def _normalize_store(data: Any) -> dict[str, Any]:
         return _empty_store()
     if not isinstance(data.get("log"), list):
         return _empty_store()
+    # Ensure "items" key exists (migration for stores created before quality scoring)
+    if "items" not in data or not isinstance(data.get("items"), dict):
+        data["items"] = {}
     return data
 
 
@@ -265,3 +284,110 @@ def get_summary_by_repo(path: Path | None = None) -> dict[str, dict[str, Any]]:
             "net_delta": created - completed,
         }
     return result
+
+
+# ── Per-item quality metrics ─────────────────────────────────────────────────
+
+_MAX_FAILURE_REASONS = 10  # Cap stored failure reasons per item
+
+
+def _empty_item_metrics() -> dict[str, Any]:
+    """Return a fresh per-item metrics dict."""
+    return {
+        "attempt_count": 0,
+        "total_tokens": 0,
+        "total_duration_seconds": 0.0,
+        "first_attempted": "",
+        "last_attempted": "",
+        "last_result": "",
+        "consecutive_failures": 0,
+        "needs_human_attention": False,
+        "failure_reasons": [],
+    }
+
+
+def record_item_attempt(
+    item_id: str,
+    *,
+    success: bool,
+    tokens_used: int = 0,
+    duration_seconds: float = 0.0,
+    failure_reason: str | None = None,
+    attention_threshold: int = DEFAULT_NEEDS_HUMAN_ATTENTION_FAILURES,
+    path: Path | None = None,
+) -> dict[str, Any]:
+    """Record a processing attempt for a specific item and return its updated metrics.
+
+    Updates per-item counters (attempt_count, tokens, duration) and manages
+    the ``needs_human_attention`` flag based on consecutive failures.
+    """
+    now = _now_iso()
+
+    with _STORE.lock(timeout=60):
+        data = load_beads_item_stats(path)
+        items: dict[str, Any] = data.setdefault("items", {})
+        metrics = items.get(item_id)
+        if not isinstance(metrics, dict):
+            metrics = _empty_item_metrics()
+
+        metrics["attempt_count"] = int(metrics.get("attempt_count", 0)) + 1
+        metrics["total_tokens"] = int(metrics.get("total_tokens", 0)) + max(0, tokens_used)
+        metrics["total_duration_seconds"] = (
+            float(metrics.get("total_duration_seconds", 0.0)) + max(0.0, duration_seconds)
+        )
+        if not metrics.get("first_attempted"):
+            metrics["first_attempted"] = now
+        metrics["last_attempted"] = now
+
+        if success:
+            metrics["last_result"] = "success"
+            metrics["consecutive_failures"] = 0
+            metrics["needs_human_attention"] = False
+        else:
+            metrics["last_result"] = "failed"
+            metrics["consecutive_failures"] = int(metrics.get("consecutive_failures", 0)) + 1
+            if failure_reason:
+                reasons = metrics.get("failure_reasons", [])
+                if not isinstance(reasons, list):
+                    reasons = []
+                reasons.append(failure_reason)
+                if len(reasons) > _MAX_FAILURE_REASONS:
+                    reasons = reasons[-_MAX_FAILURE_REASONS:]
+                metrics["failure_reasons"] = reasons
+            if metrics["consecutive_failures"] >= attention_threshold:
+                metrics["needs_human_attention"] = True
+
+        items[item_id] = metrics
+        data["items"] = items
+        save_beads_item_stats(data, path)
+        return dict(metrics)
+
+
+def get_item_stats(item_id: str, *, path: Path | None = None) -> dict[str, Any]:
+    """Return per-item metrics for a single item, or empty metrics if not tracked."""
+    data = load_beads_item_stats(path)
+    items = data.get("items", {})
+    if not isinstance(items, dict):
+        return _empty_item_metrics()
+    metrics = items.get(item_id)
+    if not isinstance(metrics, dict):
+        return _empty_item_metrics()
+    return dict(metrics)
+
+
+def get_items_needing_attention(*, path: Path | None = None) -> dict[str, dict[str, Any]]:
+    """Return all items flagged as needing human attention.
+
+    Returns a mapping of ``item_id`` → per-item metrics for items where
+    ``needs_human_attention`` is True.
+    """
+    data = load_beads_item_stats(path)
+    items = data.get("items", {})
+    if not isinstance(items, dict):
+        return {}
+    return {
+        item_id: dict(metrics)
+        for item_id, metrics in items.items()
+        if isinstance(metrics, dict) and metrics.get("needs_human_attention")
+    }
+

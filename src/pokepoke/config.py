@@ -294,6 +294,7 @@ class ProjectConfig:
     circuit_breaker_drain_timeout: int = _c.DEFAULT_CIRCUIT_BREAKER_DRAIN_TIMEOUT
     decomposition_enabled: bool = True
     decomposition_failure_threshold: int = 3
+    needs_human_attention_threshold: int = _c.DEFAULT_NEEDS_HUMAN_ATTENTION_FAILURES
     assignment: AssignmentConfig = field(default_factory=AssignmentConfig)
     economy_mode: EconomyModeConfig = field(default_factory=EconomyModeConfig)
     performance_thresholds: PerformanceThresholdsConfig = field(
@@ -319,6 +320,7 @@ class ProjectConfig:
         self.max_ping_failures = _clamp(_cls, "max_ping_failures", self.max_ping_failures, minimum=_c.MIN_MAX_PING_FAILURES)
         self.circuit_breaker_drain_timeout = _clamp(_cls, "circuit_breaker_drain_timeout", self.circuit_breaker_drain_timeout, minimum=_c.MIN_CIRCUIT_BREAKER_DRAIN_TIMEOUT)
         self.decomposition_failure_threshold = _clamp(_cls, "decomposition_failure_threshold", self.decomposition_failure_threshold, minimum=1)
+        self.needs_human_attention_threshold = _clamp(_cls, "needs_human_attention_threshold", self.needs_human_attention_threshold, minimum=_c.MIN_NEEDS_HUMAN_ATTENTION_FAILURES)
         self.stale_worktree_commit_threshold = _clamp(_cls, "stale_worktree_commit_threshold", self.stale_worktree_commit_threshold, minimum=1)
 
     def to_dict(self) -> dict[str, Any]:
@@ -327,11 +329,7 @@ class ProjectConfig:
 
     @staticmethod
     def from_dict(data: dict[str, Any]) -> 'ProjectConfig':
-        """Create a ProjectConfig from a dictionary (parsed YAML/JSON).
-
-        Warns and skips unrecognized keys instead of crashing, then retries
-        in non-strict mode so valid settings are still applied.
-        """
+        """Create a ProjectConfig from a dictionary (parsed YAML/JSON)."""
         processed_data = dict(data)
 
         if "model_sync" in processed_data:
@@ -401,13 +399,7 @@ _config_lock = threading.Lock()
 
 
 def load_config(config_path: Path | None = None) -> ProjectConfig:
-    """Load project configuration from explicit path or auto-discovered file.
-
-    Search order: .pokepoke/config.yaml, .yml, .json, then pokepoke.config.json.
-    Returns defaults if no config file is found.
-
-    Thread-safe: concurrent calls are serialized via ``_config_lock``.
-    """
+    """Load project configuration from explicit path or auto-discovered file."""
     global _cached_config
 
     with _config_lock:
