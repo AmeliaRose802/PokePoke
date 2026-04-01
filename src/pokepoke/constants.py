@@ -54,7 +54,7 @@ DEFAULT_SESSION_INACTIVITY_TIMEOUT = 900  # Default no-SDK-event timeout (second
 DEFAULT_TOOL_CALL_TIMEOUT = 1800  # Default max single tool invocation (seconds)
 DEFAULT_PROCESS_OUTPUT_TIMEOUT = 600  # Default no-output timeout (seconds)
 DEFAULT_MAX_PING_FAILURES = 3  # Default consecutive ping failures before dead
-DEFAULT_CIRCUIT_BREAKER_DRAIN_TIMEOUT = 900  # Default max wait for agents after circuit breaker trips (seconds, 0 = wait forever)
+DEFAULT_CIRCUIT_BREAKER_DRAIN_TIMEOUT = 1800  # Default max wait for agents after circuit breaker trips (seconds, 0 = wait forever)
 
 # Minimum floor values for orchestration settings.
 MIN_MAX_PARALLEL_AGENTS = 1  # Must have at least one agent
