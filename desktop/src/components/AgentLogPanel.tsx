@@ -48,6 +48,7 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
   const [detailedAgent, setDetailedAgent] = useState<AgentInfo | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [copyStatus, setCopyStatus] = useState<"idle" | "success" | "error">("idle");
   const isGate = isGateAgent(agent);
   const linkedParent = isGate
     ? (agents.find((candidate) => {
@@ -89,6 +90,23 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
   const primaryLabel = getAgentPrimaryLabel(agent);
   // Show the friendly name prominently when it differs from the primary label
   const friendlyName = agent.name !== primaryLabel ? agent.name : null;
+
+  const handleCopyAgentName = async () => {
+    const nameToCopy = agent.name;
+    if (!nameToCopy) return;
+    try {
+      if (!navigator.clipboard) {
+        throw new Error("Clipboard API not available");
+      }
+      await navigator.clipboard.writeText(nameToCopy);
+      setCopyStatus("success");
+      setTimeout(() => setCopyStatus("idle"), 2000);
+    } catch (error) {
+      console.error("Failed to copy agent name:", error);
+      setCopyStatus("error");
+      setTimeout(() => setCopyStatus("idle"), 2000);
+    }
+  };
   const containerRef = useRef<HTMLDivElement>(null);
   const isUserScrolledUp = useRef(false);
   const isProgrammaticScroll = useRef(false);
@@ -189,7 +207,16 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
           <span className="agent-log-panel-avatar">{fallbackAvatar}</span>
         )}
         <div className="agent-log-panel-info">
-          <span className="agent-log-panel-name">{primaryLabel}</span>
+          <div className="agent-log-panel-name-row">
+            <span className="agent-log-panel-name">{primaryLabel}</span>
+            <button
+              className={`agent-name-copy-btn ${copyStatus !== "idle" ? copyStatus : ""}`}
+              onClick={handleCopyAgentName}
+              title={copyStatus === "success" ? "Copied!" : copyStatus === "error" ? "Failed to copy" : "Copy agent name"}
+            >
+              {copyStatus === "success" ? "✓" : copyStatus === "error" ? "✕" : "📋"}
+            </button>
+          </div>
           <span className="agent-log-panel-iter">v{agent.iteration}</span>
           {friendlyName ? <span className="agent-log-panel-friendly-name">{friendlyName}</span> : null}
         </div>
