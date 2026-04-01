@@ -32,19 +32,101 @@ Variables are replaced with values from the context dictionary.
 
 Conditional sections only render when the variable is truthy (not `None`, `False`, `""`, etc.).
 
+### Template Inheritance
+
+```markdown
+{{>base-template}}
+
+Additional content here...
+```
+
+Templates can include other templates using `{{>template-name}}` syntax. This allows you to extend base templates with additional content.
+
 ## Available Templates
 
-### `work-item.md`
+### `beads-item.md`
 
-Basic work item prompt for first-time task execution.
+Main work item prompt for task execution (formerly `work-item.md`).
 
 **Variables:**
-- `id` - Work item ID (e.g., "PokePoke-123")
+- `item_id` - Work item ID (e.g., "PokePoke-123")
 - `title` - Work item title
 - `description` - Work item description
 - `priority` - Priority level (0-4)
 - `issue_type` - Type (bug, feature, task, etc.)
 - `labels` - Comma-separated labels (optional)
+- `command_timeout` - Command timeout in seconds
+- `retry_feedback` - Feedback from previous attempts (optional)
+- `mcp_enabled` - Whether MCP server is enabled (boolean)
+- `test_data_section` - Test data section content (optional)
+
+### Label-Specific Templates
+
+Custom templates can be selected based on work item labels. Configure in `.pokepoke/config.yaml`:
+
+```yaml
+prompt_templates:
+  orchestrator: "orchestrator-work"
+  desktop: "desktop-work"
+  tests: "tests-work"
+```
+
+When a work item has a label matching a key in `prompt_templates`, that template will be used instead of the default `beads-item.md`.
+
+**Example templates provided:**
+
+#### `orchestrator-work.md`
+- Extends `beads-item.md` with orchestrator-specific context
+- Lists key orchestrator files
+- Documents common patterns (beads integration, worktree management)
+- Highlights common pitfalls
+
+#### `desktop-work.md`
+- Extends `beads-item.md` with desktop/TUI context
+- Lists key UI component files
+- Documents UI patterns and state management
+- Includes testing guidelines for UI changes
+
+#### `tests-work.md`
+- Extends `beads-item.md` with testing context
+- Documents coverage requirements (80%+)
+- Shows test organization and running tests
+- Provides testing best practices and mock patterns
+
+### Creating Label-Specific Templates
+
+1. **Create template file**: `<label>-work.md` in this directory
+2. **Extend base template**: Start with `{{>beads-item}}` to include all base content
+3. **Add label-specific content**: Add sections with context, files, patterns, pitfalls
+4. **Configure mapping**: Add to `prompt_templates` in config file
+5. **Test**: Create a work item with that label and verify the prompt
+
+**Template structure example:**
+
+```markdown
+{{>beads-item}}
+
+## 📋 [Domain] Context
+
+Brief description of this domain/area.
+
+### Key Files
+
+- `path/to/file.py` - Description
+- `path/to/other.py` - Description
+
+### Common Patterns
+
+**Pattern Name:**
+- Description of pattern
+- When to use it
+- Example or reference
+
+### Common Pitfalls
+
+- ⚠️ Pitfall description
+- ⚠️ Another pitfall
+```
 
 ### `work-item-retry.md`
 
