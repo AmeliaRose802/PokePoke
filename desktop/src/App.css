@@ -1534,6 +1534,46 @@
   color: var(--text-primary);
 }
 
+.agent-log-panel-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agent-name-copy-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+  transition:
+    border-color 0.15s,
+    color 0.15s,
+    background-color 0.15s;
+  flex-shrink: 0;
+}
+
+.agent-name-copy-btn:hover {
+  border-color: var(--border-primary);
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+}
+
+.agent-name-copy-btn.success {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--accent-green-bg);
+}
+
+.agent-name-copy-btn.error {
+  border-color: var(--accent-error);
+  color: var(--accent-error);
+  background: var(--accent-red-bg);
+}
+
 .agent-log-panel-friendly-name {
   font-size: 13px;
   font-weight: 600;
