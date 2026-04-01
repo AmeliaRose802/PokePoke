@@ -481,3 +481,76 @@ class TestPermissionHandler:
         result = handler(req, None)
         kind = getattr(result, "kind", None)
         assert kind == "denied-by-rules"
+
+    def test_rewrites_pytest_timeout_and_cwd_prefix(self):
+        handler = _build_permission_handler(required_cwd=r"C:\repo\worktrees\task-123")
+        if handler is None:
+            assert sdk_helpers._PERMISSION_RESULT_CLS is None
+            assert sdk_helpers._approve_all is None
+            return
+
+        from copilot.generated.session_events import PermissionRequest, PermissionRequestKind
+
+        req = PermissionRequest(
+            kind=PermissionRequestKind.SHELL,
+            tool_name="powershell",
+            args={"command": "pytest tests/test_tool_command_validator.py"},
+        )
+
+        result = handler(req, None)
+        assert getattr(result, "kind", None) == "approved"
+        cmd = req.args.get("command", "")
+        assert "--timeout=300" in cmd
+        assert "Set-Location" in cmd
+
+    def test_rewrites_dict_request_args_and_arguments(self):
+        class FakePermissionResult:
+            def __init__(self, kind: str, rules: list, feedback: str | None = None, message: str | None = None):
+                self.kind = kind
+                self.rules = rules
+                self.feedback = feedback
+                self.message = message
+
+        def fake_approve_all(_req, _ctx=None):
+            return FakePermissionResult(kind="approved", rules=[])
+
+        with patch.object(sdk_helpers, "_PERMISSION_RESULT_CLS", FakePermissionResult), patch.object(
+            sdk_helpers, "_approve_all", fake_approve_all
+        ):
+            handler = _build_permission_handler(required_cwd=r"C:\repo\worktrees\task-123")
+            assert handler is not None
+
+            req_args = {"tool_name": "powershell", "args": {"command": "pytest tests/test_types.py"}}
+            result = handler(req_args, None)
+            assert result.kind == "approved"
+            assert "Set-Location" in req_args["args"]["command"]
+            assert "--timeout=300" in req_args["args"]["command"]
+
+            req_arguments = {"tool_name": "powershell", "arguments": {"command": "pytest tests/test_types.py"}}
+            result2 = handler(req_arguments, None)
+            assert result2.kind == "approved"
+            assert "Set-Location" in req_arguments["arguments"]["command"]
+            assert "--timeout=300" in req_arguments["arguments"]["command"]
+
+    def test_full_command_text_fallback_sets_args(self):
+        class FakePermissionResult:
+            def __init__(self, kind: str, rules: list, feedback: str | None = None, message: str | None = None):
+                self.kind = kind
+                self.rules = rules
+                self.feedback = feedback
+                self.message = message
+
+        def fake_approve_all(_req, _ctx=None):
+            return FakePermissionResult(kind="approved", rules=[])
+
+        with patch.object(sdk_helpers, "_PERMISSION_RESULT_CLS", FakePermissionResult), patch.object(
+            sdk_helpers, "_approve_all", fake_approve_all
+        ):
+            handler = _build_permission_handler(required_cwd=r"C:\repo\worktrees\task-123")
+            assert handler is not None
+
+            req = {"full_command_text": "pytest tests/test_types.py", "tool": "powershell"}
+            result = handler(req, None)
+            assert result.kind == "approved"
+            assert "args" in req
+            assert "--timeout=300" in req["args"]["command"]
