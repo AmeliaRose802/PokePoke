@@ -14,6 +14,7 @@ from pokepoke.config import (
     ProjectConfig,
     QualityGateOverrides,
     RepoConfig,
+    WarmSessionConfig,
     _find_repo_root,  # noqa: F401  # used via patch strings
     _load_config_file,
     get_config,
@@ -146,6 +147,53 @@ class TestMaintenanceConfig:
         config = MaintenanceConfig.defaults()
         code_review = next(a for a in config.agents if a.name == "Code Review")
         assert code_review.model == "gpt-5.1-codex"
+
+
+class TestWarmSessionConfig:
+    """Tests for WarmSessionConfig dataclass."""
+
+    def test_defaults(self):
+        config = WarmSessionConfig()
+        assert config.enabled is True
+        assert config.labels == ["orchestrator", "tests", "config", "agents", "models"]
+        assert config.max_age_hours == 4.0
+        assert config.exploration_prompt_template == "warm-session-explore"
+        assert config.refresh_on_merge is True
+        assert config.pool_size_per_label == 1
+
+    def test_custom_values(self):
+        config = WarmSessionConfig(
+            enabled=True,
+            labels=["orchestrator", "tests", "docs"],
+            max_age_hours=2.0,
+            exploration_prompt_template="custom-explore",
+            refresh_on_merge=False,
+            pool_size_per_label=3,
+        )
+        assert config.enabled is True
+        assert config.labels == ["orchestrator", "tests", "docs"]
+        assert config.max_age_hours == 2.0
+        assert config.exploration_prompt_template == "custom-explore"
+        assert config.refresh_on_merge is False
+        assert config.pool_size_per_label == 3
+
+    def test_max_age_hours_clamped(self):
+        # Too low
+        config = WarmSessionConfig(max_age_hours=0.1)
+        assert config.max_age_hours == 0.5  # min is 0.5
+
+        # Too high
+        config = WarmSessionConfig(max_age_hours=48.0)
+        assert config.max_age_hours == 24.0  # max is 24.0
+
+    def test_pool_size_clamped(self):
+        # Too low
+        config = WarmSessionConfig(pool_size_per_label=0)
+        assert config.pool_size_per_label == 1  # min is 1
+
+        # Too high
+        config = WarmSessionConfig(pool_size_per_label=10)
+        assert config.pool_size_per_label == 5  # max is 5
 
 
 class TestGitConfig:

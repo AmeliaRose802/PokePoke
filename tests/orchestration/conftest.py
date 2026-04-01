@@ -93,6 +93,7 @@ PATCH_FIN_CHECK_MERGE = f"{_FIN}.check_and_merge_worktree"
 PATCH_FIN_CLOSE_PARENTS = f"{_FIN}.close_work_item_and_parents"
 PATCH_FIN_CHECK_HIERARCHY = f"{_FIN}.check_parent_hierarchy"
 PATCH_FIN_MERGE_LOCK = f"{_FIN}.merge_lock"
+PATCH_FIN_RUN_BD = f"{_FIN}._run_bd_with_retry"
 PATCH_PERFORM_MERGE = "pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge"
 
 # -- selection targets --
@@ -318,6 +319,7 @@ def make_workflow_mocks(
         patch(PATCH_FIN_CLOSE_PARENT) as mock_close_parent,
         patch(PATCH_FIN_GET_PARENT) as mock_get_parent,
         patch(PATCH_FIN_CLOSE_ITEM) as mock_close,
+        patch(PATCH_FIN_RUN_BD) as mock_run_bd,
         patch('subprocess.run') as mock_subprocess,
         patch(PATCH_WF_CLEANUP_WORKTREE) as mock_cleanup,
         patch(PATCH_PERFORM_MERGE) as mock_merge,
@@ -377,11 +379,19 @@ def make_workflow_mocks(
 
         mock_subprocess.side_effect = subprocess_side_effect
 
+        # Mock _run_bd_with_retry for worktree_finalization's item status check
+        # Returns an item with status "open" so the "agent did not close" path is taken
+        mock_run_bd.return_value = Mock(
+            stdout='[{"id": "task-1", "title": "Test", "status": "open", "priority": 1, "issue_type": "task"}]',
+            returncode=0
+        )
+
         yield {
             'gate': mock_gate,
             'close_parent': mock_close_parent,
             'get_parent': mock_get_parent,
             'close': mock_close,
+            'run_bd': mock_run_bd,
             'subprocess': mock_subprocess,
             'cleanup': mock_cleanup,
             'merge': mock_merge,

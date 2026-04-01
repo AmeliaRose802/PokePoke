@@ -9,6 +9,8 @@ from pokepoke.models.copilot_sdk import (
     _build_copilot_result,
     _build_token_usage_callback,
     _fail_result,
+    _try_get_warm_session_id,
+    _try_get_warm_session_id_async,
     build_prompt_from_work_item,
     invoke_copilot_sdk_sync,
 )
@@ -2210,3 +2212,136 @@ class TestAwaitCompletionAbortOSError:
 
         assert result == "tool_timeout"
         mock_session.abort.assert_called_once()
+
+
+class TestWarmSessionIntegration:
+    """Tests for warm session lookup and on-demand creation."""
+
+    def test_try_get_warm_session_id_sync_fallback(self):
+        """Test sync warm session lookup returns existing session."""
+        work_item = BeadsWorkItem(
+            id="test-1",
+            title="Test item",
+            description="Test",
+            status="open",
+            priority=1,
+            issue_type="task",
+            labels=["orchestrator"]
+        )
+
+        with patch('pokepoke.models.warm_session_pool.get_warm_session_pool') as mock_pool_getter:
+            mock_pool = MagicMock()
+            mock_pool.enabled = True
+            mock_warm_session = MagicMock()
+            mock_warm_session.session_id = "warm-orchestrator-123"
+            mock_pool.get_warm_session.return_value = mock_warm_session
+            mock_pool_getter.return_value = mock_pool
+
+            result = _try_get_warm_session_id(work_item, None, False, True)
+
+            assert result == "warm-orchestrator-123"
+            mock_pool.get_warm_session.assert_called_once_with(["orchestrator"])
+
+    def test_try_get_warm_session_id_disabled(self):
+        """Test warm session lookup returns None when disabled."""
+        work_item = BeadsWorkItem(
+            id="test-1", title="Test", description="Test", status="open",
+            priority=1, issue_type="task", labels=["orchestrator"]
+        )
+
+        result = _try_get_warm_session_id(work_item, None, False, False)
+        assert result is None
+
+    def test_try_get_warm_session_id_with_existing_session_id(self):
+        """Test warm session lookup skips when session_id provided."""
+        work_item = BeadsWorkItem(
+            id="test-1", title="Test", description="Test", status="open",
+            priority=1, issue_type="task", labels=["orchestrator"]
+        )
+
+        result = _try_get_warm_session_id(work_item, "existing-session", False, True)
+        assert result == "existing-session"
+
+    @pytest.mark.asyncio
+    async def test_try_get_warm_session_id_async_on_demand_creation(self):
+        """Test async warm session creation when no existing session found."""
+        work_item = BeadsWorkItem(
+            id="test-1", title="Test", description="Test", status="open",
+            priority=1, issue_type="task", labels=["orchestrator"]
+        )
+
+        with patch('pokepoke.models.warm_session_pool.get_warm_session_pool') as mock_pool_getter:
+            mock_pool = MagicMock()
+            mock_pool.enabled = True
+            mock_pool.configured_labels = ["orchestrator", "tests", "agents"]
+            mock_pool.get_warm_session.return_value = None  # No existing session
+            mock_pool_getter.return_value = mock_pool
+
+            with patch('pokepoke.models.warm_session_service.warm_session_for_label') as mock_warm_label:
+                mock_new_session = MagicMock()
+                mock_new_session.session_id = "warm-orchestrator-456"
+                mock_warm_label.return_value = mock_new_session
+
+                result = await _try_get_warm_session_id_async(work_item, None, False, True, cwd="/test")
+
+                assert result == "warm-orchestrator-456"
+                mock_warm_label.assert_called_once_with("orchestrator", cwd="/test", timeout=120.0)
+
+    @pytest.mark.asyncio
+    async def test_try_get_warm_session_id_async_label_not_configured(self):
+        """Test async warm session creation skips non-configured labels."""
+        work_item = BeadsWorkItem(
+            id="test-1", title="Test", description="Test", status="open",
+            priority=1, issue_type="task", labels=["unknown-label"]
+        )
+
+        with patch('pokepoke.models.warm_session_pool.get_warm_session_pool') as mock_pool_getter:
+            mock_pool = MagicMock()
+            mock_pool.enabled = True
+            mock_pool.configured_labels = ["orchestrator", "tests", "agents"]
+            mock_pool.get_warm_session.return_value = None
+            mock_pool_getter.return_value = mock_pool
+
+            with patch('pokepoke.models.warm_session_service.warm_session_for_label') as mock_warm_label:
+                result = await _try_get_warm_session_id_async(work_item, None, False, True)
+
+                assert result is None
+                mock_warm_label.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_try_get_warm_session_id_async_creation_fails(self):
+        """Test async warm session creation handles creation failure gracefully."""
+        work_item = BeadsWorkItem(
+            id="test-1", title="Test", description="Test", status="open",
+            priority=1, issue_type="task", labels=["orchestrator"]
+        )
+
+        with patch('pokepoke.models.warm_session_pool.get_warm_session_pool') as mock_pool_getter:
+            mock_pool = MagicMock()
+            mock_pool.enabled = True
+            mock_pool.configured_labels = ["orchestrator"]
+            mock_pool.get_warm_session.return_value = None
+            mock_pool_getter.return_value = mock_pool
+
+            with patch('pokepoke.models.warm_session_service.warm_session_for_label') as mock_warm_label:
+                mock_warm_label.return_value = None  # Creation failed
+
+                result = await _try_get_warm_session_id_async(work_item, None, False, True)
+
+                assert result is None
+                mock_warm_label.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_try_get_warm_session_id_async_exception_handled(self):
+        """Test async warm session creation handles exceptions gracefully."""
+        work_item = BeadsWorkItem(
+            id="test-1", title="Test", description="Test", status="open",
+            priority=1, issue_type="task", labels=["orchestrator"]
+        )
+
+        with patch('pokepoke.models.warm_session_pool.get_warm_session_pool') as mock_pool_getter:
+            mock_pool_getter.side_effect = Exception("Pool error")
+
+            result = await _try_get_warm_session_id_async(work_item, None, False, True)
+
+            assert result is None  # Should return None on error

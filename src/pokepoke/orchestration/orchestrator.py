@@ -124,6 +124,92 @@ class _OrchestratorContext:
                           self.total_requests, self.run_logger)
 
 
+def _init_beads_state(session_stats: SessionStats, run_logger: RunLogger) -> None:
+    """Backfill beads item stats and recover stuck unassigns."""
+    try:
+        backfill_result = backfill_from_beads_db(silent=True)
+        if backfill_result["backfilled"] > 0:
+            logger.info(f"✅ Backfilled {backfill_result['backfilled']} beads item creation events")
+    except Exception as e:
+        logger.warning(f"Failed to backfill beads item stats: {e}")
+    s = _get_beads_summary()
+    session_stats.set_lifetime_beads_item_totals(
+        created=int(s.get("total_created", 0)), completed=int(s.get("total_completed", 0)))
+    stuck_count = get_failed_unassign_count()
+    if stuck_count > 0:
+        logger.error(f"🔧 Recovering {stuck_count} item(s) stuck from failed unassigns...")
+        recovered = retry_failed_unassigns()
+        if recovered:
+            run_logger.log_orchestrator(f"Recovered {recovered}/{stuck_count} stuck item(s)")
+    session_stats.set_starting_beads_stats(get_beads_stats())
+
+
+def _run_startup_plugins(session_stats: SessionStats, run_logger: RunLogger,
+                         main_repo_path: Path, run_beta_first: bool) -> None:
+    """Run optional startup tasks: beta tester, model sync, warm session pool."""
+    if run_beta_first:
+        logger.info("\n🧪 Running Beta Tester at startup...")
+        run_logger.log_orchestrator("Running Beta Tester at startup")
+        beta_stats = run_beta_tester(repo_root=main_repo_path)
+        if beta_stats:
+            session_stats.record_agent_stats(beta_stats)
+        logger.info("✅ Beta Tester completed\n")
+
+    try:
+        from pokepoke.models.model_sync import sync_copilot_models
+        if stats := sync_copilot_models(force=True):
+            session_stats.record_agent_stats(stats)
+    except Exception as e:
+        logger.warning(f"⚠️  Model sync failed (will use cached registry): {e}")
+
+    try:
+        from pokepoke.models.warm_session_pool import get_warm_session_pool
+        pool = get_warm_session_pool()
+        if pool.enabled:
+            labels = pool.configured_labels
+            logger.info(f"🔥 Warm session pool enabled for labels: {', '.join(labels)}")
+            run_logger.log_orchestrator(f"Warm session pool enabled: {labels}")
+    except Exception as e:
+        logger.warning(f"⚠️  Warm session pool initialization failed: {e}")
+
+
+def _run_startup_cleanup(cfg: Any, main_repo_path: Path, run_logger: RunLogger) -> None:
+    """Clean up stale worktrees at startup if enabled."""
+    if not cfg.startup_cleanup_enabled:
+        return
+    try:
+        from pokepoke.worktrees.startup_cleanup import cleanup_stale_worktrees_at_startup
+        cleanup_stats = cleanup_stale_worktrees_at_startup(repo_path=str(main_repo_path), cfg=cfg)
+        if cleanup_stats['total_removed'] > 0:
+            logger.info(
+                f"🧹 Startup cleanup completed: {cleanup_stats['total_removed']} worktrees removed "
+                f"({cleanup_stats['stale_removed']} stale, {cleanup_stats['merged_removed']} merged)"
+            )
+            run_logger.log_orchestrator(
+                f"Startup worktree cleanup: {cleanup_stats['total_removed']} removed "
+                f"({cleanup_stats['stale_removed']} stale, {cleanup_stats['merged_removed']} merged, "
+                f"{cleanup_stats['errors']} errors)"
+            )
+        elif cleanup_stats['checked'] > 0:
+            logger.debug(f"🧹 Startup cleanup: {cleanup_stats['checked']} worktrees checked, none required removal")
+    except Exception as e:
+        logger.warning(f"⚠️  Startup worktree cleanup failed: {e}")
+        run_logger.log_orchestrator(f"Startup worktree cleanup error: {e}", level="WARNING")
+
+
+def _resolve_parallelism(max_parallel_agents: int, cfg: Any, interactive: bool,
+                         run_logger: RunLogger) -> int:
+    """Resolve effective parallelism from CLI arg, config, and mode."""
+    effective = max(1, max_parallel_agents if max_parallel_agents > 1 else cfg.max_parallel_agents)
+    if effective > 1 and interactive:
+        logger.warning(f"⚠️  Parallel mode (--max-agents {effective}) requires autonomous mode; forcing parallel=1")
+        effective = 1
+    if effective > 1:
+        logger.info(f"🔀 Parallel mode: up to {effective} concurrent agents")
+        run_logger.log_orchestrator(f"Parallel mode enabled: max_parallel_agents={effective}")
+    return effective
+
+
 def _setup_orchestrator(interactive: bool, continuous: bool, run_beta_first: bool,
                         agent_name_override: str | None, max_parallel_agents: int) -> _OrchestratorContext:
     """Initialize agent identity, logging, signal handlers, beads recovery, and config."""
@@ -149,74 +235,16 @@ def _setup_orchestrator(interactive: bool, continuous: bool, run_beta_first: boo
     start_time = time.time()
     session_stats = SessionStats(agent_stats=AgentStats())
     set_current_session_stats(session_stats)
-    # Backfill missing beads item creation events for Desktop UI accuracy
-    try:
-        backfill_result = backfill_from_beads_db(silent=True)
-        if backfill_result["backfilled"] > 0:
-            logger.info(f"✅ Backfilled {backfill_result['backfilled']} beads item creation events")
-    except Exception as e:
-        logger.warning(f"Failed to backfill beads item stats: {e}")
-    s = _get_beads_summary()
-    session_stats.set_lifetime_beads_item_totals(
-        created=int(s.get("total_created", 0)), completed=int(s.get("total_completed", 0)))
-    # Recover any items that failed to unassign in previous runs
-    stuck_count = get_failed_unassign_count()
-    if stuck_count > 0:
-        logger.error(f"🔧 Recovering {stuck_count} item(s) stuck from failed unassigns...")
-        recovered = retry_failed_unassigns()
-        if recovered:
-            run_logger.log_orchestrator(f"Recovered {recovered}/{stuck_count} stuck item(s)")
-    session_stats.set_starting_beads_stats(get_beads_stats())
+
+    _init_beads_state(session_stats, run_logger)
     terminal_ui.ui.set_session_start_time(start_time)
     terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
+    _run_startup_plugins(session_stats, run_logger, main_repo_path, run_beta_first)
 
-    if run_beta_first:
-        logger.info("\n🧪 Running Beta Tester at startup...")
-        run_logger.log_orchestrator("Running Beta Tester at startup")
-        beta_stats = run_beta_tester(repo_root=main_repo_path)
-        if beta_stats:
-            session_stats.record_agent_stats(beta_stats)
-        logger.info("✅ Beta Tester completed\n")
-
-    # Sync models from Copilot SDK at startup
-    try:
-        from pokepoke.models.model_sync import sync_copilot_models
-        if stats := sync_copilot_models(force=True):
-            session_stats.record_agent_stats(stats)
-    except Exception as e:
-        logger.warning(f"⚠️  Model sync failed (will use cached registry): {e}")
-
-    # Resolve effective parallelism: CLI arg > config > 1
     cfg = load_config()
+    _run_startup_cleanup(cfg, main_repo_path, run_logger)
+    effective_parallel = _resolve_parallelism(max_parallel_agents, cfg, interactive, run_logger)
 
-    # Clean up stale worktrees at startup
-    if cfg.startup_cleanup_enabled:
-        try:
-            from pokepoke.worktrees.startup_cleanup import cleanup_stale_worktrees_at_startup
-            cleanup_stats = cleanup_stale_worktrees_at_startup(repo_path=str(main_repo_path), cfg=cfg)
-            if cleanup_stats['total_removed'] > 0:
-                logger.info(
-                    f"🧹 Startup cleanup completed: {cleanup_stats['total_removed']} worktrees removed "
-                    f"({cleanup_stats['stale_removed']} stale, {cleanup_stats['merged_removed']} merged)"
-                )
-                run_logger.log_orchestrator(
-                    f"Startup worktree cleanup: {cleanup_stats['total_removed']} removed "
-                    f"({cleanup_stats['stale_removed']} stale, {cleanup_stats['merged_removed']} merged, "
-                    f"{cleanup_stats['errors']} errors)"
-                )
-            elif cleanup_stats['checked'] > 0:
-                logger.debug(f"🧹 Startup cleanup: {cleanup_stats['checked']} worktrees checked, none required removal")
-        except Exception as e:
-            logger.warning(f"⚠️  Startup worktree cleanup failed: {e}")
-            run_logger.log_orchestrator(f"Startup worktree cleanup error: {e}", level="WARNING")
-
-    effective_parallel = max(1, max_parallel_agents if max_parallel_agents > 1 else cfg.max_parallel_agents)
-    if effective_parallel > 1 and interactive:
-        logger.warning(f"⚠️  Parallel mode (--max-agents {effective_parallel}) requires autonomous mode; forcing parallel=1")
-        effective_parallel = 1
-    if effective_parallel > 1:
-        logger.info(f"🔀 Parallel mode: up to {effective_parallel} concurrent agents")
-        run_logger.log_orchestrator(f"Parallel mode enabled: max_parallel_agents={effective_parallel}")
     return _OrchestratorContext(
         agent_name=agent_name, mode_name=mode_name, run_logger=run_logger,
         main_repo_path=main_repo_path, start_time=start_time, session_stats=session_stats,

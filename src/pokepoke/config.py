@@ -177,6 +177,27 @@ class AssignmentConfig:
     rules: list[AssignmentRule] = field(default_factory=list)
     fallback: str = "weighted"
 @dataclass
+class WarmSessionConfig:
+    """Configuration for warm session pools.
+
+    Warm sessions pre-create SDK sessions with codebase context for common work
+    types. When a work item arrives with a matching label, the orchestrator can
+    resume a pre-warmed session that already knows the module layout.
+    """
+    enabled: bool = True
+    labels: list[str] = field(default_factory=lambda: ["orchestrator", "tests", "config", "agents", "models"])
+    max_age_hours: float = 4.0
+    exploration_prompt_template: str = "warm-session-explore"
+    refresh_on_merge: bool = True
+    pool_size_per_label: int = 1
+
+    def __post_init__(self) -> None:
+        """Clamp values to valid ranges."""
+        self.max_age_hours = max(0.5, min(24.0, self.max_age_hours))
+        self.pool_size_per_label = max(1, min(5, self.pool_size_per_label))
+
+
+@dataclass
 class QualityGateOverrides:
     """Repo-specific overrides for quality gate checks (None = inherit global)."""
     coverage_threshold: float | None = None
@@ -260,6 +281,7 @@ class ProjectConfig:
     mcp_server: MCPServerConfig = field(default_factory=MCPServerConfig)
     git: GitConfig = field(default_factory=GitConfig)
     preflight_health: PreflightHealthConfig = field(default_factory=PreflightHealthConfig)
+    warm_sessions: WarmSessionConfig = field(default_factory=WarmSessionConfig)
     test_data: dict[str, str] = field(default_factory=dict)
     work_artifacts_dir: str | None = None
     max_parallel_agents: int = _c.DEFAULT_MAX_PARALLEL_AGENTS

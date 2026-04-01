@@ -242,4 +242,12 @@ def perform_worktree_merge(  # noqa: C901
         logger.error("Worktree directory persists after merge: %s", worktree_path)
         add_uncleaned_worktree(item_id, str(worktree_path), "Worktree persists after successful merge")
     logger.info("   Merged worktree" + (" and cleaned up" if worktree_cleaned else " (cleanup incomplete)"))
+
+    # Invalidate warm sessions after successful merge (codebase may have changed)
+    try:
+        from pokepoke.models.warm_session_service import refresh_pool_after_merge
+        refresh_pool_after_merge(cwd=repo_path)
+    except Exception as e:
+        logger.debug(f"Failed to refresh warm session pool after merge: {e}")
+
     return True, worktree_cleaned
