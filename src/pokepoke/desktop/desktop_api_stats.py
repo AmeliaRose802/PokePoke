@@ -328,3 +328,22 @@ def get_repo_summary(self: DesktopAPI) -> dict[str, dict[str, Any]]:
             "net_items_delta": bm.get("net_delta", 0),
         }
     return result
+
+
+def get_concurrency_timeline(self: DesktopAPI) -> dict[str, Any]:
+    """Return concurrency timeline data parsed from orchestrator.log.
+
+    Parses Lifecycle entries and item completion/failure events from
+    the current session's orchestrator.log for the concurrency chart.
+    """
+    with self._lock:
+        logs_dir = self._current_logs_dir
+
+    if not logs_dir:
+        return {"lifecycle": [], "completions": [], "failures": []}
+
+    from pathlib import Path
+    log_path = Path(logs_dir) / "orchestrator.log"
+
+    from pokepoke.desktop.concurrency_log_parser import parse_concurrency_timeline
+    return parse_concurrency_timeline(log_path)

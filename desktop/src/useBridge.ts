@@ -19,6 +19,7 @@ import {
 import type {
   AgentInfo,
   AvailableModelsResponse,
+  ConcurrencyTimeline,
   ConfigResponse,
   ConnectionStatus,
   LogEntry,
@@ -117,6 +118,7 @@ interface PyWebViewAPI {
   add_work_item_label(item_id: string, label: string): Promise<{ item_id: string; label: string; labels: string[] }>;
   remove_work_item_label(item_id: string, label: string): Promise<{ item_id: string; label: string; labels: string[] }>;
   get_available_models(): Promise<AvailableModelsResponse>;
+  get_concurrency_timeline(): Promise<ConcurrencyTimeline>;
 
   // First-time setup wizard API
   check_setup_status(): Promise<SetupStatus>;
@@ -182,6 +184,7 @@ export interface BridgeStateBase {
   saveConfig: (config: ProjectConfig) => Promise<boolean>;
   getAvailableModels: () => Promise<AvailableModelsResponse | null>;
   getModelHistory: (limit?: number) => Promise<ModelHistoryEntry[]>;
+  getConcurrencyTimeline: () => Promise<ConcurrencyTimeline | null>;
   requestStopAfterCurrent: () => Promise<void>;
   cancelStopAfterCurrent: () => Promise<void>;
   addWorkItemLabel: (label: string) => Promise<void>;
@@ -276,6 +279,15 @@ export function useBridge(): BridgeState {
       return raw.map((e, i) => validatePayload(ModelHistoryEntrySchema, e, `getModelHistory[${i}]`));
     } catch {
       return [];
+    }
+  }, []);
+
+  const getConcurrencyTimeline = useCallback(async (): Promise<ConcurrencyTimeline | null> => {
+    if (!window.pywebview?.api) return null;
+    try {
+      return await window.pywebview.api.get_concurrency_timeline();
+    } catch {
+      return null;
     }
   }, []);
 
@@ -467,6 +479,7 @@ export function useBridge(): BridgeState {
     saveConfig,
     getAvailableModels,
     getModelHistory,
+    getConcurrencyTimeline,
     requestStopAfterCurrent,
     cancelStopAfterCurrent,
     addWorkItemLabel,

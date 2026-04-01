@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { useCopyCompletedItems } from "../hooks/useCopyCompletedItems";
-import type { AgentInfo, ModelHistoryEntry, ModelPerformanceSummary, SessionStats } from "../types";
+import type { AgentInfo, ConcurrencyTimeline, ModelHistoryEntry, ModelPerformanceSummary, SessionStats } from "../types";
 import { buildAgentActivity, normalizeAgentSegments, type NormalizedAgentSegment } from "../utils/agentActivity";
 import { getAgentType } from "../utils/agentHelpers";
 import { getInProgressItems } from "../utils/inProgressItems";
@@ -19,6 +19,7 @@ import {
 } from "../utils/stats";
 import { CompletedItemCard } from "./CompletedItemCard";
 import { CompletionTimeChart } from "./CompletionTimeChart";
+import { ConcurrencyChart } from "./ConcurrencyChart";
 import { InProgressItemsSection } from "./InProgressItemsSection";
 import { ModelTable } from "./ModelTable";
 import { TrendChart } from "./TrendChart";
@@ -32,6 +33,7 @@ interface StatsPageProps {
   onRefreshHistory: () => void;
   onClose: () => void;
   agents?: AgentInfo[];
+  concurrencyTimeline?: ConcurrencyTimeline | null;
 }
 
 type SortField = "model" | "runs" | "success" | "duration" | "tokens";
@@ -51,6 +53,7 @@ export function StatsPage({
   onRefreshHistory,
   onClose,
   agents = [],
+  concurrencyTimeline,
 }: StatsPageProps) {
   const agent = stats?.agent_stats;
   const [completedItems, doneCount] = [getCompletedItems(stats), getDoneCount(stats)];
@@ -286,6 +289,12 @@ export function StatsPage({
                   ))}
                 </div>
               </div>
+            </section>
+          )}
+
+          {concurrencyTimeline && concurrencyTimeline.lifecycle.length > 0 && (
+            <section>
+              <ConcurrencyChart data={concurrencyTimeline} />
             </section>
           )}
 
