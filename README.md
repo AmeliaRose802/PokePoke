@@ -81,6 +81,21 @@ from pokepoke.beads.beads_query import set_active_backend, BR_CONFIG
 set_active_backend(BR_CONFIG)  # Switch to Rust backend
 ```
 
+### Beads Item Templates
+
+PokePoke provides pre-defined templates for common work types that give agents concrete guidance when creating issues:
+
+- **[Bug Fix](.pokepoke/templates/bug-fix.md)** - Fix defects and production issues
+- **[Feature](.pokepoke/templates/feature.md)** - Add new functionality
+- **[Refactor](.pokepoke/templates/refactor.md)** - Improve code structure without changing behavior
+- **[Test Addition](.pokepoke/templates/test-addition.md)** - Add or improve test coverage
+- **[Documentation](.pokepoke/templates/documentation.md)** - Update docs, specs, or comments
+- **[Performance](.pokepoke/templates/performance.md)** - Optimize slow operations
+
+Each template includes: expected files to modify, testing approach, acceptance criteria, complexity guidelines, and example commands.
+
+📖 **[Full Template Documentation](.pokepoke/templates/README.md)**
+
 ---
 
 ## Architecture
