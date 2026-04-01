@@ -1,10 +1,11 @@
 #!/usr/bin/env pwsh
 # Restart the MCP HTTP Server
-# Usage: .\Restart-MCPServer.ps1 [-Port 8080] [-HostName 0.0.0.0]
+# Usage: .\Restart-MCPServer.ps1 [-Port 8080] [-HostName 0.0.0.0] [-ServerPath <path>]
 
 param(
     [int]$Port = 8080,
-    [string]$HostName = "0.0.0.0"
+    [string]$HostName = "0.0.0.0",
+    [string]$ServerPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -42,7 +43,19 @@ if ($stillListening) {
 
 # Start the server in a background job
 Write-Host "3. Starting new server..." -ForegroundColor Cyan
-$serverScript = "C:\Users\ameliapayne\icm_queue_c#\start-mcp-server-http.ps1"
+
+# Resolve server path: parameter > environment variable > error
+if (-not $ServerPath) {
+    $ServerPath = $env:MCP_HTTP_SERVER_PATH
+}
+
+if (-not $ServerPath) {
+    Write-Host "   ✗ Server path not specified." -ForegroundColor Red
+    Write-Host "     Set MCP_HTTP_SERVER_PATH environment variable or use -ServerPath parameter" -ForegroundColor Yellow
+    exit 1
+}
+
+$serverScript = $ServerPath
 
 if (-not (Test-Path $serverScript)) {
     Write-Host "   ✗ Server script not found: $serverScript" -ForegroundColor Red
