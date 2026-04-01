@@ -686,3 +686,98 @@ def test_noop_events_do_not_produce_output() -> None:
     assert stats['event_count'] == initial_event_count + len(noop_events)
     assert output_lines == []
     assert errors == []
+
+
+def test_pending_tool_calls_counter_thread_safety() -> None:
+    """Test that pending_tool_calls counter modifications are thread-safe.
+
+    This verifies the fix for PokePoke-rtvvm - ensuring that concurrent
+    tool start/complete events don't cause race conditions in the counter.
+    """
+    import threading
+    import time
+
+    done = asyncio.Event()
+    output_lines: list[str] = []
+    errors: list[str] = []
+
+    handler, stats = create_event_handler(done, output_lines, errors)
+
+    # Track all counter values we observe during concurrent access
+    observed_values: list[int] = []
+    observed_values_lock = threading.Lock()
+
+    def worker_start_tools(worker_id: int, num_tools: int) -> None:
+        """Worker that starts tools with small random delays."""
+        for i in range(num_tools):
+            # Small random delay to increase chance of race conditions
+            time.sleep(0.001 * (i % 3))
+            handler(_make_event(
+                "tool.execution_start",
+                tool_name=f"tool_{worker_id}_{i}",
+                arguments={"cmd": f"test_{i}"},
+                tool_call_id=f"worker{worker_id}_tool{i}"
+            ))
+            # Record the counter value we see after increment
+            with observed_values_lock:
+                observed_values.append(stats['pending_tool_calls'])
+
+    def worker_complete_tools(worker_id: int, num_tools: int) -> None:
+        """Worker that completes tools with small random delays."""
+        for i in range(num_tools):
+            # Wait a bit before starting to complete tools
+            time.sleep(0.01 + 0.001 * (i % 3))
+            handler(_make_event(
+                "tool.execution_complete",
+                tool_name=f"tool_{worker_id}_{i}",
+                arguments={"cmd": f"test_{i}"},
+                result=SimpleNamespace(content="ok"),
+                success=True,
+                tool_call_id=f"worker{worker_id}_tool{i}"
+            ))
+            # Record the counter value we see after decrement
+            with observed_values_lock:
+                observed_values.append(stats['pending_tool_calls'])
+
+    # Run concurrent start and complete operations
+    num_workers = 4
+    tools_per_worker = 10
+    threads: list[threading.Thread] = []
+
+    # Start workers that will create tools
+    for worker_id in range(num_workers):
+        thread = threading.Thread(
+            target=worker_start_tools,
+            args=(worker_id, tools_per_worker)
+        )
+        threads.append(thread)
+        thread.start()
+
+    # Start workers that will complete tools (after a small delay)
+    for worker_id in range(num_workers):
+        thread = threading.Thread(
+            target=worker_complete_tools,
+            args=(worker_id, tools_per_worker)
+        )
+        threads.append(thread)
+        thread.start()
+
+    # Wait for all threads to complete
+    for thread in threads:
+        thread.join()
+
+    # Verify the counter ended at 0 (all tools completed)
+    assert stats['pending_tool_calls'] == 0, "All tools should be completed, counter should be 0"
+
+    # Verify total tool calls counter is correct
+    expected_total = num_workers * tools_per_worker
+    assert stats['total_tool_calls'] == expected_total, f"Expected {expected_total} total tool calls"
+
+    # The counter should never go negative due to race conditions
+    with observed_values_lock:
+        negative_values = [v for v in observed_values if v < 0]
+        assert len(negative_values) == 0, f"Counter should never go negative, but observed: {negative_values}"
+
+        # The maximum value should not exceed the total number of tools we started
+        max_observed = max(observed_values) if observed_values else 0
+        assert max_observed <= expected_total, f"Counter exceeded expected maximum: {max_observed} > {expected_total}"

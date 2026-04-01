@@ -93,6 +93,7 @@ class _EventHandler:
         with self._pending_tools_lock:
             self._pending_tools.clear()
             self._stats['tool_start_times'].clear()
+            self._stats['pending_tool_calls'] = 0
         self._stats['last_tool_output_time'] = 0.0
         self._stats['last_tool_output'] = None
 
@@ -151,7 +152,6 @@ class _EventHandler:
         if self._stats['idle_task'] and not self._stats['idle_task'].done():
             self._stats['idle_task'].cancel()
         self._stats['total_tool_calls'] += 1
-        self._stats['pending_tool_calls'] += 1
         self._stats['last_tool_activity_time'] = time.monotonic()
         self._stale_idle_count = 0
         self._last_idle_pending = None
@@ -168,6 +168,7 @@ class _EventHandler:
         with self._pending_tools_lock:
             self._pending_tools[str(tool_id)] = {'name': tool_name, 'args': tool_args}
             self._stats['tool_start_times'][str(tool_id)] = time.monotonic()
+            self._stats['pending_tool_calls'] += 1
         if tool_name == 'powershell':
             shell_id = tool_args.get('shellId')
             if shell_id:
@@ -175,7 +176,6 @@ class _EventHandler:
 
     def _on_tool_complete(self, event: Any) -> None:
         terminal_ui.ui.set_style(None)
-        self._stats['pending_tool_calls'] = max(0, self._stats['pending_tool_calls'] - 1)
         self._stats['last_tool_activity_time'] = time.monotonic()
         self._stale_idle_count = 0
         self._last_idle_pending = None
@@ -189,6 +189,7 @@ class _EventHandler:
         with self._pending_tools_lock:
             tool_info = self._pending_tools.pop(str(tool_id), {}) if tool_id else {}
             start_time = self._stats['tool_start_times'].pop(str(tool_id), None)
+            self._stats['pending_tool_calls'] = max(0, self._stats['pending_tool_calls'] - 1)
         tool_args = tool_info.get('args', {})
 
         if start_time is not None:
@@ -288,7 +289,8 @@ class _EventHandler:
         if self._stale_idle_count >= self._MAX_STALE_IDLES:
             logger.warning("[SDK] Session idle with %d stale pending tool(s) (idle x%d) - forcing completion",
                           self._stats['pending_tool_calls'], self._stale_idle_count)
-            self._stats['pending_tool_calls'] = 0
+            with self._pending_tools_lock:
+                self._stats['pending_tool_calls'] = 0
             self._done.set()
         else:
             logger.info("[SDK] Session idle but %d tool(s) still executing (stale %d/%d) - continuing...",
