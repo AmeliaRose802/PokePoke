@@ -5,12 +5,17 @@ import ctypes
 import logging
 import os
 import subprocess
+import threading
 import time
 from typing import Any
 
 from pokepoke.stats.perf_timing import timed_block
 
 logger = logging.getLogger(__name__)
+
+# Lock protecting all global cache state. Acquire this lock before reading/writing
+# _copilot_process_cache, _copilot_last_tasklist_failure_log, or _memory_cache.
+_cache_lock = threading.Lock()
 
 # Cache *successful* tasklist results to avoid flooding the console with timeout messages
 # under high parallelism. Stores (timestamp, count) or None if uncached.
@@ -40,10 +45,11 @@ def get_available_memory_mb() -> int:
         return 0
 
     now = time.time()
-    if _memory_cache is not None:
-        cached_time, cached_mb = _memory_cache
-        if now - cached_time < _MEMORY_CACHE_TTL:
-            return cached_mb
+    with _cache_lock:
+        if _memory_cache is not None:
+            cached_time, cached_mb = _memory_cache
+            if now - cached_time < _MEMORY_CACHE_TTL:
+                return cached_mb
 
     try:
         with timed_block("memory.check"):
@@ -64,7 +70,8 @@ def get_available_memory_mb() -> int:
             mem_status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
             ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(mem_status))
             available_mb = int(mem_status.ullAvailPhys / (1024 * 1024))
-            _memory_cache = (now, available_mb)
+            with _cache_lock:
+                _memory_cache = (now, available_mb)
             return available_mb
     except Exception as e:
         logger.debug(f"Failed to query available memory: {e}")
@@ -142,7 +149,8 @@ def kill_orphaned_copilot_processes(expected_count: int = 0) -> int:
             logger.info(f"Killed {killed} orphaned Copilot process(es)")
             # Invalidate cache after killing processes
             global _copilot_process_cache
-            _copilot_process_cache = None
+            with _cache_lock:
+                _copilot_process_cache = None
 
         return killed
     except Exception as e:
@@ -236,10 +244,11 @@ def check_copilot_processes() -> int:
         return 0
 
     now = time.time()
-    if _copilot_process_cache is not None:
-        cached_time, cached_count = _copilot_process_cache
-        if now - cached_time < _COPILOT_CACHE_TTL:
-            return cached_count
+    with _cache_lock:
+        if _copilot_process_cache is not None:
+            cached_time, cached_count = _copilot_process_cache
+            if now - cached_time < _COPILOT_CACHE_TTL:
+                return cached_count
 
     try:
         with timed_block("tasklist.copilot"):
@@ -252,16 +261,18 @@ def check_copilot_processes() -> int:
         lines = result.stdout.strip().split('\n')
         count = max(0, len(lines) - 1) if len(lines) > 1 else 0
 
-        _copilot_process_cache = (now, count)
+        with _cache_lock:
+            _copilot_process_cache = (now, count)
         return count
     except Exception as e:
         # Do not cache failures: a transient tasklist error must not mask still-running processes.
-        if (
-            _copilot_last_tasklist_failure_log is None
-            or now - _copilot_last_tasklist_failure_log >= _COPILOT_CACHE_TTL
-        ):
-            logger.warning(f"Failed to check for Copilot processes: {e}")
-            _copilot_last_tasklist_failure_log = now
+        with _cache_lock:
+            if (
+                _copilot_last_tasklist_failure_log is None
+                or now - _copilot_last_tasklist_failure_log >= _COPILOT_CACHE_TTL
+            ):
+                logger.warning(f"Failed to check for Copilot processes: {e}")
+                _copilot_last_tasklist_failure_log = now
         return 0
 
 
