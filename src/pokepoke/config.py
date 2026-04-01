@@ -1,5 +1,6 @@
 """Project configuration system for PokePoke."""
 import logging
+import threading
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -347,8 +348,9 @@ def _load_config_file(config_path: Path) -> dict[str, Any]:
     raise ValueError(f"Unsupported config file format: {config_path.suffix}")
 
 
-# Module-level cached config
+# Module-level cached config with thread-safe access
 _cached_config: ProjectConfig | None = None
+_config_lock = threading.Lock()
 
 
 def load_config(config_path: Path | None = None) -> ProjectConfig:
@@ -356,18 +358,22 @@ def load_config(config_path: Path | None = None) -> ProjectConfig:
 
     Search order: .pokepoke/config.yaml, .yml, .json, then pokepoke.config.json.
     Returns defaults if no config file is found.
+
+    Thread-safe: concurrent calls are serialized via ``_config_lock``.
     """
     global _cached_config
 
-    if _cached_config is not None and config_path is None:
-        return _cached_config
+    with _config_lock:
+        if _cached_config is not None and config_path is None:
+            return _cached_config
 
     repo_root = _find_repo_root()
 
     if config_path is not None:
         data = _load_config_file(config_path)
         config = ProjectConfig.from_dict(data)
-        _cached_config = config
+        with _config_lock:
+            _cached_config = config
         return config
 
     # Search for config files in order of preference
@@ -382,19 +388,25 @@ def load_config(config_path: Path | None = None) -> ProjectConfig:
         if candidate.exists():
             data = _load_config_file(candidate)
             config = ProjectConfig.from_dict(data)
-            _cached_config = config
+            with _config_lock:
+                _cached_config = config
             return config
 
     # No config file found - use defaults
     config = ProjectConfig()
-    _cached_config = config
+    with _config_lock:
+        _cached_config = config
     return config
 
 
 def reset_config() -> None:
-    """Reset the cached configuration (useful for testing)."""
+    """Reset the cached configuration (useful for testing).
+
+    Thread-safe: acquires ``_config_lock`` before clearing the cache.
+    """
     global _cached_config
-    _cached_config = None
+    with _config_lock:
+        _cached_config = None
 
 
 def get_config() -> ProjectConfig:

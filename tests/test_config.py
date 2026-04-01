@@ -986,3 +986,42 @@ class TestParseReposCli:
         assert configs[0].priority_weight == 2
         assert configs[1].path == "/repo/b"
         assert configs[1].priority_weight == 3
+
+
+class TestConfigThreadSafety:
+    """Verify that _cached_config access is thread-safe."""
+
+    def test_concurrent_load_and_reset(self):
+        """Many threads loading while others reset should never raise."""
+        import threading
+
+        from pokepoke.config import _config_lock  # noqa: F401
+
+        errors: list[Exception] = []
+        barrier = threading.Barrier(20)
+
+        def loader():
+            try:
+                barrier.wait(timeout=5)
+                for _ in range(50):
+                    cfg = load_config()
+                    assert isinstance(cfg, ProjectConfig)
+            except Exception as exc:
+                errors.append(exc)
+
+        def resetter():
+            try:
+                barrier.wait(timeout=5)
+                for _ in range(50):
+                    reset_config()
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [threading.Thread(target=loader) for _ in range(15)]
+        threads += [threading.Thread(target=resetter) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+
+        assert not errors, f"Thread-safety errors: {errors}"
