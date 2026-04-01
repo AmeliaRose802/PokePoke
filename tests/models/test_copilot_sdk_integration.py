@@ -18,8 +18,8 @@ from pokepoke.types import BeadsWorkItem, CopilotResult
 class TestBuildPromptIntegration:
     """Integration tests for build_prompt_from_work_item."""
 
-    @patch('pokepoke.models.copilot_sdk.get_config')
-    @patch('pokepoke.models.copilot_sdk.PromptService')
+    @patch('pokepoke.config.get_config')
+    @patch('pokepoke.prompts.prompts.PromptService')
     def test_build_prompt_includes_all_fields(
         self, mock_service_class, mock_get_config
     ):
@@ -62,8 +62,8 @@ class TestBuildPromptIntegration:
         assert variables['mcp_enabled'] is True
         assert variables['command_timeout'] == 300
 
-    @patch('pokepoke.models.copilot_sdk.get_config')
-    @patch('pokepoke.models.copilot_sdk.PromptService')
+    @patch('pokepoke.config.get_config')
+    @patch('pokepoke.prompts.prompts.PromptService')
     def test_build_prompt_handles_missing_description(
         self, mock_service_class, mock_get_config
     ):
@@ -93,8 +93,8 @@ class TestBuildPromptIntegration:
         variables = call_args[0][1]
         assert variables['description'] == ""
 
-    @patch('pokepoke.models.copilot_sdk.get_config')
-    @patch('pokepoke.models.copilot_sdk.PromptService')
+    @patch('pokepoke.config.get_config')
+    @patch('pokepoke.prompts.prompts.PromptService')
     def test_build_prompt_with_custom_template(
         self, mock_service_class, mock_get_config
     ):
@@ -235,8 +235,8 @@ class TestCopilotSDKErrorHandling:
         if sys.platform == "win32":
             time.sleep(0.05)
 
-    @patch('pokepoke.models.copilot_sdk.get_config')
-    @patch('pokepoke.models.copilot_sdk.PromptService')
+    @patch('pokepoke.config.get_config')
+    @patch('pokepoke.prompts.prompts.PromptService')
     def test_build_prompt_handles_service_error(
         self, mock_service_class, mock_get_config
     ):
@@ -265,8 +265,8 @@ class TestCopilotSDKErrorHandling:
 class TestCopilotSDKConfiguration:
     """Tests for configuration handling in copilot_sdk."""
 
-    @patch('pokepoke.models.copilot_sdk.get_config')
-    @patch('pokepoke.models.copilot_sdk.PromptService')
+    @patch('pokepoke.config.get_config')
+    @patch('pokepoke.prompts.prompts.PromptService')
     def test_build_prompt_uses_config_test_data(
         self, mock_service_class, mock_get_config
     ):
@@ -303,8 +303,8 @@ class TestCopilotSDKConfiguration:
         assert 'Sample command' in variables['test_data_section']
         assert 'pytest tests/' in variables['test_data_section']
 
-    @patch('pokepoke.models.copilot_sdk.get_config')
-    @patch('pokepoke.models.copilot_sdk.PromptService')
+    @patch('pokepoke.config.get_config')
+    @patch('pokepoke.prompts.prompts.PromptService')
     def test_build_prompt_handles_empty_test_data(
         self, mock_service_class, mock_get_config
     ):
