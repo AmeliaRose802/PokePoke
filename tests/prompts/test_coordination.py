@@ -741,6 +741,48 @@ class TestAcquireLockContention:
         assert snap["track-stale"]["stale_cleared"] == 1
         assert snap["track-stale"]["acquired"] == 1
 
+    def test_concurrent_stale_detection_serialized(self, tmp_path: Path) -> None:
+        """Multiple threads detecting a stale lock record exactly one clearance."""
+        _contention_tracker.reset()
+        with patch("pokepoke.worktrees.coordination._lock_dir", return_value=tmp_path):
+            lock_file = tmp_path / "race-stale.lock"
+            lock_file.write_text("")
+            (tmp_path / "race-stale.lock.meta").write_text(json.dumps({
+                "pid": 2**30,
+                "timestamp": time.time() - 7200,
+            }))
+            old_mtime = time.time() - 7200
+            os.utime(lock_file, (old_mtime, old_mtime))
+
+            results: dict[str, int] = {"acquired": 0, "errors": 0}
+            lock = threading.Lock()
+            barrier = threading.Barrier(5)
+
+            def worker() -> None:
+                try:
+                    barrier.wait(timeout=5)
+                    with acquire_lock("race-stale", timeout=10, stale_timeout=300):
+                        with lock:
+                            results["acquired"] += 1
+                        time.sleep(0.05)
+                except Exception:
+                    with lock:
+                        results["errors"] += 1
+
+            threads = [threading.Thread(target=worker) for _ in range(5)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=30)
+
+            assert results["acquired"] == 5
+            assert results["errors"] == 0
+
+        snap = get_lock_contention_stats()
+        # Only ONE stale clearance despite 5 concurrent threads
+        assert snap["race-stale"]["stale_cleared"] == 1
+        assert snap["race-stale"]["acquired"] == 5
+
     def test_get_lock_contention_stats_returns_dict(self, tmp_path: Path) -> None:
         _contention_tracker.reset()
         result = get_lock_contention_stats()
