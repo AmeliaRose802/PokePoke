@@ -337,7 +337,8 @@ class SDKWatchdog:
                             logger.debug("Ignoring ping failure: %d tool call(s) pending", pending_for_log)
                     else:
                         consecutive_ping_failures += 1
-                logger.info(
+                hb_log = logger.debug if ping_ok else logger.info
+                hb_log(
                     "SDK heartbeat: ping=%s, event_gap=%.0fs, pending=%d, "
                     "events_delta=%d (total=%d), turns=%d, remaining=%.0fs, "
                     "ping_failures=%d/%d",
