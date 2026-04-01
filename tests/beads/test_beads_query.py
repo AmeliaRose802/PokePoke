@@ -22,6 +22,11 @@ def test_parse_beads_json_returns_none_when_no_json() -> None:
     assert beads_query._parse_beads_json("no json here") is None
 
 
+def test_parse_beads_json_returns_none_on_malformed_json() -> None:
+    assert beads_query._parse_beads_json('{"truncated": ') is None
+    assert beads_query._parse_beads_json('[{"id": "x"') is None
+
+
 def test_get_ready_work_items_parses_results(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = [
         {"id": "x", "title": "Task", "status": "open", "priority": 1, "issue_type": "task", "description": "d"},
