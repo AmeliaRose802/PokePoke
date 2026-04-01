@@ -379,6 +379,54 @@ def _block_real_bd_subprocess(request, monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def _enforce_subprocess_timeout(request, monkeypatch):
+    """CRITICAL: Enforce timeouts on subprocess calls to prevent test hangs.
+
+    Wraps subprocess.run and subprocess.Popen to ensure all subprocess calls
+    have a timeout. Tests that spawn subprocesses without timeouts can hang
+    indefinitely, especially in worktree environments.
+
+    Default timeout: 30 seconds (can be overridden by explicit timeout param)
+
+    Opt out with: @pytest.mark.allow_real_bd or @pytest.mark.allow_git_repair
+    (these markers indicate genuine integration tests that need real subprocesses)
+    """
+    # Skip for tests that explicitly allow real subprocess operations
+    if (request.node.get_closest_marker("allow_real_bd") or
+        request.node.get_closest_marker("allow_git_repair")):
+        yield
+        return
+
+    import subprocess as _sp
+    _original_run = _sp.run
+    _original_popen = _sp.Popen
+
+    def _safe_run(*args, **kwargs):
+        """Wrapper for subprocess.run that enforces timeout."""
+        # If timeout is not set, add a default
+        if 'timeout' not in kwargs:
+            kwargs['timeout'] = 30
+        return _original_run(*args, **kwargs)
+
+    class _SafePopen(_sp.Popen):
+        """Wrapper for subprocess.Popen that enforces timeout on communicate()."""
+        def __init__(self, *args, **kwargs):
+            # Store the timeout for later use
+            self._default_timeout = 30
+            super().__init__(*args, **kwargs)
+
+        def communicate(self, input=None, timeout=None):
+            """Override communicate to enforce timeout."""
+            if timeout is None:
+                timeout = self._default_timeout
+            return super().communicate(input, timeout)
+
+    monkeypatch.setattr("subprocess.run", _safe_run)
+    monkeypatch.setattr("subprocess.Popen", _SafePopen)
+    yield
+
+
 @pytest.fixture
 def sample_work_item() -> BeadsWorkItem:
     """Create a sample work item for testing."""
