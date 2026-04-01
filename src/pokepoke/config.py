@@ -108,11 +108,15 @@ class MaintenanceConfig:
             ),
         ])
 @dataclass
-class MpcServerConfig:
+class MCPServerConfig:
     """MCP server configuration."""
     enabled: bool = False
     restart_script: str | None = None
     name: str | None = None
+
+
+# Backwards-compatible alias (old typo kept to avoid breaking imports).
+MpcServerConfig = MCPServerConfig
 @dataclass
 class GitConfig:
     """Git-related configuration."""
@@ -229,7 +233,7 @@ class ProjectConfig:
     ai_backend: AIBackendConfig = field(default_factory=AIBackendConfig)
     maintenance: MaintenanceConfig = field(default_factory=MaintenanceConfig.defaults)
     model_sync: ModelSyncConfig = field(default_factory=ModelSyncConfig)
-    mcp_server: MpcServerConfig = field(default_factory=MpcServerConfig)
+    mcp_server: MCPServerConfig = field(default_factory=MCPServerConfig)
     git: GitConfig = field(default_factory=GitConfig)
     preflight_health: PreflightHealthConfig = field(default_factory=PreflightHealthConfig)
     test_data: dict[str, str] = field(default_factory=dict)
