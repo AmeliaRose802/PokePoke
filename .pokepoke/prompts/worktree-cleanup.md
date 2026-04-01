@@ -50,9 +50,9 @@ git -C <worktree-path> log --oneline HEAD --not origin/master -- | head -20
 git -C <worktree-path> status --porcelain
 ```
 
-**Check if its associated beads issue exists and what state it's in:**
-- Extract the issue ID from the branch name (usually `task/<id>`)
-- Run `bd show <id> --json` to check status
+**Do NOT run any `bd` commands.** The orchestrator owns beads lifecycle transitions (claim/close/unassign/reopen).
+
+Use git history + diffs to judge whether a worktree is worth merging.
 
 ### 3. Decision Matrix
 
@@ -62,9 +62,9 @@ For each worktree, decide:
 |-----------|--------|
 | Has meaningful committed changes that address the issue | **Merge it** |
 | Has uncommitted changes worth keeping | **Commit first, then merge** |
-| Changes don't actually fix the problem (review the code and test) | **Delete worktree, reopen beads issue** |
+| Changes don't actually fix the problem (review the code and test) | **Delete worktree** (do not merge) |
 | Associated beads issue is already closed | **Delete worktree** (work was done elsewhere) |
-| Branch has merge conflicts with main | **Try to resolve, or delete and reopen issue** |
+| Branch has merge conflicts with main | **Try to resolve, or delete worktree** (do not merge) |
 | Worktree is empty / no meaningful changes | **Delete worktree** |
 | Worktree is on `beads-sync` branch | **SKIP - do not touch** |
 
@@ -80,11 +80,11 @@ git merge <branch-name>
 After a successful merge:
 - Remove the worktree: `git worktree remove <path>`
 - Delete the branch: `git branch -d <branch-name>`
-- Close the associated beads issue if it was fixed: `bd close <id> --reason "Merged from worktree cleanup"`
+- Do NOT run `bd close`/`bd update` — the orchestrator manages beads lifecycle.
 
 If merge fails due to conflicts:
 - Try to resolve the conflicts if they're simple
-- If conflicts are complex, delete the worktree and reopen the issue with a note about the conflicts
+- If conflicts are complex, delete the worktree (do not merge)
 
 ### 5. Deleting an Obsolete Worktree
 
@@ -93,15 +93,7 @@ git worktree remove <path> --force
 git branch -D <branch-name>
 ```
 
-If the associated beads issue should be reopened:
-```bash
-bd update <id> --status open --json
-```
-
-Add a note explaining why:
-```bash
-bd update <id> -d "Worktree cleanup: previous attempt did not address the issue. Original work was discarded." --json
-```
+Do NOT run any `bd` commands to reopen/close/update items. If you discard a worktree, just remove the worktree/branch; the orchestrator will handle any beads state transitions.
 
 ### 6. Verification
 
@@ -126,8 +118,8 @@ Before merging any worktree, **verify the work is actually good**:
 4. **Check for broken imports** or obvious errors
 5. **Assess completeness** - Does it fully address the issue or is it half-done?
 6. If tests fail, the code doesn't look right, or it doesn't address the problem:
-   - **Don't merge** — delete the worktree and reopen the beads issue
-   - Add a note to the issue explaining what was wrong with the previous attempt
+   - **Don't merge** — delete the worktree (discard the attempt)
+   - Do NOT run `bd update`/`bd close`; the orchestrator will handle beads state
 
 ## Remember
 

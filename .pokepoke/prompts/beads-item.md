@@ -164,8 +164,10 @@ Get-NetTCPConnection -LocalPort 5000 | ForEach-Object { Stop-Process -Id $_.Owni
 
 ## If it is already completed
 
-Close the beads item
+- Ensure all changes are committed and pushed.
+- Do NOT run `bd close` or `bd update` — the orchestrator owns beads lifecycle.
 
 ## When you finish it
 
-Close the beads item
+- Ensure all changes are committed and pushed so the orchestrator can merge.
+- Do NOT run `bd close` or `bd update`.
