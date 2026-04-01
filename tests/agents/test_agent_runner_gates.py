@@ -58,7 +58,7 @@ class TestRunGateAgent:
         assert "All tests pass" in reason
         assert stats is not None
         assert crashed is False
-        mock_invoke.assert_called_once_with(work_item, prompt="Gate prompt", deny_write=True, cwd=None, model=None, item_logger=None, session_id=None, is_resume=False)
+        mock_invoke.assert_called_once_with(work_item, prompt="Gate prompt", deny_write=True, cwd=None, model=None, item_logger=None, session_id=None, is_resume=False, add_parent_dir=True)
 
     @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
     @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
@@ -428,6 +428,7 @@ class TestRunGateAgent:
             item_logger=None,
             session_id=None,
             is_resume=False,
+            add_parent_dir=True,
         )
 
     @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')

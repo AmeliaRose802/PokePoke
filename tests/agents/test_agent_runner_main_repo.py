@@ -50,7 +50,7 @@ class TestRunMainRepoAgent:
         assert stats.wall_duration == 15.0
         # Verify deny_write=False (write access enabled)
         mock_invoke.assert_called_once_with(
-            agent_item, prompt="cleanup prompt", deny_write=False, model=None, cwd=None, item_logger=None
+            agent_item, prompt="cleanup prompt", deny_write=False, model=None, cwd=None, item_logger=None, add_parent_dir=False
         )
 
     @patch('pokepoke.agents.agent_runner.invoke_copilot')

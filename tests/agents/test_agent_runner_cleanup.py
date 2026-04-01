@@ -303,3 +303,29 @@ class TestWorktreeCleanupPreCleanupRetry:
 
         mock_retry.assert_called_once()
         mock_uncleaned.assert_called_once()
+
+    @patch('pokepoke.agents.agent_runner.get_uncleaned_worktree_count', return_value=0)
+    @patch('pokepoke.agents.agent_runner.has_unmerged_worktrees', return_value=True)
+    @patch('pokepoke.agents.agent_runner._run_main_repo_agent')
+    @patch('pokepoke.agents.agent_runner.get_pokepoke_prompts_dir')
+    def test_worktree_cleanup_passes_add_parent_dir(
+        self,
+        mock_get_prompts: Mock,
+        mock_main_repo_agent: Mock,
+        mock_has_worktrees: Mock,
+        mock_uncleaned_count: Mock,
+    ) -> None:
+        """Cleanup agent should pass add_parent_dir=True for parent repo visibility."""
+        mock_dir = MagicMock()
+        mock_get_prompts.return_value = mock_dir
+        mock_file = Mock()
+        mock_file.exists.return_value = True
+        mock_file.read_text.return_value = "Cleanup prompt"
+        mock_dir.__truediv__.return_value = mock_file
+        mock_main_repo_agent.return_value = None
+
+        from pokepoke.agents.agent_runner import run_worktree_cleanup
+        run_worktree_cleanup()
+
+        _, kwargs = mock_main_repo_agent.call_args
+        assert kwargs.get("add_parent_dir") is True

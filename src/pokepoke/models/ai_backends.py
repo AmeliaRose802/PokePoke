@@ -34,6 +34,7 @@ class AIBackend(Protocol):
         template_name: str | None = None,
         session_id: str | None = None,
         is_resume: bool = False,
+        add_parent_dir: bool = False,
     ) -> CopilotResult:
         ...
 
@@ -57,6 +58,7 @@ class CopilotBackend:
         template_name: str | None = None,
         session_id: str | None = None,
         is_resume: bool = False,
+        add_parent_dir: bool = False,
     ) -> CopilotResult:
         return invoke_copilot_sdk_sync(
             work_item=work_item,
@@ -70,6 +72,7 @@ class CopilotBackend:
             template_name=template_name,
             session_id=session_id,
             is_resume=is_resume,
+            add_parent_dir=add_parent_dir,
         )
 
 
@@ -97,6 +100,7 @@ class ClaudeCodeBackend:
         template_name: str | None = None,
         session_id: str | None = None,
         is_resume: bool = False,
+        add_parent_dir: bool = False,
     ) -> CopilotResult:
         final_prompt = prompt or build_prompt_from_work_item(work_item, template_name or "beads-item")
         # Claude Code is read-only by design; deny_write is inherent.
@@ -211,6 +215,7 @@ def invoke_copilot(
     template_name: str | None = None,
     session_id: str | None = None,
     is_resume: bool = False,
+    add_parent_dir: bool = False,
 ) -> CopilotResult:
     """Invoke an AI backend to process a work item.
 
@@ -227,6 +232,8 @@ def invoke_copilot(
         template_name: Optional prompt template name from assignment rules.
         session_id: Optional SDK session ID for resuming a timed-out session.
         is_resume: When True, the invocation is a resume after timeout.
+        add_parent_dir: When True, pass ``--add-dir`` to give the agent
+            visibility into the parent repository (for cleanup/gate agents).
 
     Returns:
         Result of the invocation.
@@ -244,4 +251,5 @@ def invoke_copilot(
         template_name=template_name,
         session_id=session_id,
         is_resume=is_resume,
+        add_parent_dir=add_parent_dir,
     )

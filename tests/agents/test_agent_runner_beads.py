@@ -54,7 +54,8 @@ class TestRunBeadsOnlyAgent:
             deny_write=True,
             model=None,
             cwd=None,
-            item_logger=None
+            item_logger=None,
+            add_parent_dir=False,
         )
 
     @patch('pokepoke.agents.agent_runner.invoke_copilot')
