@@ -73,6 +73,7 @@ $failed = @()
 # Static checks that don't depend on build artifacts - run sequentially
 $staticChecks = @(
     @{ Name = "Pokepoke Boot"; Script = "check-pokepoke-import.ps1" }
+    @{ Name = "Test Safety"; Script = "check-test-safety.ps1" }
     @{ Name = "Skipped Tests"; Script = "check-skipped-tests.ps1" }
     @{ Name = "File Length"; Script = "check-file-length.ps1" }
     @{ Name = "Desktop ESLint"; Script = "check-desktop-lint.ps1" }
