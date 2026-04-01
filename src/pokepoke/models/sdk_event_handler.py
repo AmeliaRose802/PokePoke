@@ -66,6 +66,7 @@ class _EventHandler:
         self._on_token_usage = on_token_usage
         self._pending_tools: dict[str, dict[str, Any]] = {}
         self._pending_tools_lock = threading.Lock()
+        self._pending_tool_calls_lock = threading.Lock()
         self._received_deltas = False
         self._stale_idle_count = 0
         self._last_idle_pending: int | None = None
@@ -75,6 +76,11 @@ class _EventHandler:
     def rate_limit_detected(self) -> bool:
         """True if the session ended due to a rate limit error."""
         return self._rate_limit_detected
+
+    def get_pending_tool_calls(self) -> int:
+        """Thread-safe read of pending_tool_calls counter."""
+        with self._pending_tool_calls_lock:
+            return self._stats['pending_tool_calls']
 
     def reset_for_retry(
         self,
@@ -105,9 +111,9 @@ class _EventHandler:
         self._stats['last_event_time'] = now
 
         if gap > 30:
-            logger.info("SDK event '%s' after %.1fs silence (events=%d, pending=%d, turns=%d)",
-                        event_type, gap, self._stats['event_count'],
-                        self._stats['pending_tool_calls'], self._stats['turn_count'])
+            with self._pending_tool_calls_lock:
+                pending = self._stats['pending_tool_calls']
+            logger.info("SDK '%s' after %.1fs (ev=%d, pend=%d, turn=%d)", event_type, gap, self._stats['event_count'], pending, self._stats['turn_count'])
 
         handler = self._DISPATCH.get(event_type)
         if handler is not None:
@@ -118,7 +124,6 @@ class _EventHandler:
             logger.debug("Unhandled SDK event: %s", event_type)
 
     # -- per-event handlers ---------------------------------------------------
-
     def _on_message_delta(self, event: Any) -> None:
         self._received_deltas = True
         terminal_ui.ui.set_style("green")
@@ -152,6 +157,8 @@ class _EventHandler:
         if self._stats['idle_task'] and not self._stats['idle_task'].done():
             self._stats['idle_task'].cancel()
         self._stats['total_tool_calls'] += 1
+        with self._pending_tool_calls_lock:
+            self._stats['pending_tool_calls'] += 1
         self._stats['last_tool_activity_time'] = time.monotonic()
         self._stale_idle_count = 0
         self._last_idle_pending = None
@@ -176,6 +183,8 @@ class _EventHandler:
 
     def _on_tool_complete(self, event: Any) -> None:
         terminal_ui.ui.set_style(None)
+        with self._pending_tool_calls_lock:
+            self._stats['pending_tool_calls'] = max(0, self._stats['pending_tool_calls'] - 1)
         self._stats['last_tool_activity_time'] = time.monotonic()
         self._stale_idle_count = 0
         self._last_idle_pending = None
@@ -192,11 +201,8 @@ class _EventHandler:
             self._stats['pending_tool_calls'] = max(0, self._stats['pending_tool_calls'] - 1)
         tool_args = tool_info.get('args', {})
 
-        if start_time is not None:
-            latency = time.monotonic() - start_time
-            if latency >= 10.0:
-                logger.info("TOOL_LATENCY: %s latency=%.1fs success=%s args=%s",
-                            tool_name, latency, success, str(tool_args)[:200])
+        if start_time is not None and (latency := time.monotonic() - start_time) >= 10.0:
+            logger.info("TOOL_LATENCY: %s %.1fs success=%s args=%s", tool_name, latency, success, str(tool_args)[:200])
 
         if not result:
             return
@@ -212,18 +218,14 @@ class _EventHandler:
 
     def _check_hung_command(self, tool_name: str, tool_args: dict[str, Any], result_content: str) -> None:
         if tool_name == 'read_powershell':
-            shell_id = tool_args.get('shellId', '')
-            delay = float(tool_args.get('delay', 30))
-            is_hung, corrective_msg = self._hung.record_read_powershell(shell_id, delay, result_content)
-            if is_hung and corrective_msg:
-                logger.info(f"\n{corrective_msg}")
-                self._output_lines.append(f"\n{corrective_msg}\n")
+            is_hung, msg = self._hung.record_read_powershell(tool_args.get('shellId', ''), float(tool_args.get('delay', 30)), result_content)
+            if is_hung and msg:
+                logger.info(f"\n{msg}")
+                self._output_lines.append(f"\n{msg}\n")
                 if self._item_logger:
-                    self._item_logger.log_error(f"Hung command detected for shell {shell_id}")
-        elif tool_name == 'stop_powershell':
-            shell_id = tool_args.get('shellId', '')
-            if shell_id:
-                self._hung.record_stop_powershell(shell_id)
+                    self._item_logger.log_error(f"Hung command: {tool_args.get('shellId', '')}")
+        elif tool_name == 'stop_powershell' and (sid := tool_args.get('shellId')):
+            self._hung.record_stop_powershell(sid)
 
     @staticmethod
     def _check_beads_creation(tool_name: str, arguments: Any, result_content: str, success: bool) -> None:
@@ -257,16 +259,19 @@ class _EventHandler:
 
     def _on_turn_start(self, _event: Any) -> None:
         self._stats['last_tool_activity_time'] = time.monotonic()
-        logger.info("Turn %d started (pending=%d)", self._stats['turn_count'] + 1, self._stats['pending_tool_calls'])
+        with self._pending_tool_calls_lock:
+            pending = self._stats['pending_tool_calls']
+        logger.info("Turn %d started (pending=%d)", self._stats['turn_count'] + 1, pending)
 
     def _on_turn_end(self, _event: Any) -> None:
         self._stats['turn_count'] += 1
         self._stats['last_tool_activity_time'] = time.monotonic()
-        logger.info("Turn %d ended (pending=%d)", self._stats['turn_count'], self._stats['pending_tool_calls'])
+        with self._pending_tool_calls_lock:
+            pending = self._stats['pending_tool_calls']
+        logger.info("Turn %d ended (pending=%d)", self._stats['turn_count'], pending)
 
     def _on_context_reduction(self, _event: Any) -> None:
-        logger.warning("Session context reduction (events=%d, in=%d tok)",
-                       self._stats['event_count'], self._stats['total_input_tokens'])
+        logger.warning("Context reduction (events=%d, in=%d tok)", self._stats['event_count'], self._stats['total_input_tokens'])
 
     def _on_model_change(self, event: Any) -> None:
         model = getattr(event.data, 'model', None) if hasattr(event, 'data') else None
@@ -275,48 +280,49 @@ class _EventHandler:
     def _on_session_idle(self, _event: Any) -> None:
         if self._stats['idle_task'] and not self._stats['idle_task'].done():
             self._stats['idle_task'].cancel()
-        if self._stats['pending_tool_calls'] > 0:
+        with self._pending_tool_calls_lock:
+            has_pending = self._stats['pending_tool_calls'] > 0
+        if has_pending:
             self._handle_stale_idle()
         else:
             self._schedule_idle_completion()
 
     def _handle_stale_idle(self) -> None:
-        if self._last_idle_pending == self._stats['pending_tool_calls']:
-            self._stale_idle_count += 1
-        else:
-            self._stale_idle_count = 1
-            self._last_idle_pending = self._stats['pending_tool_calls']
-        if self._stale_idle_count >= self._MAX_STALE_IDLES:
-            logger.warning("[SDK] Session idle with %d stale pending tool(s) (idle x%d) - forcing completion",
-                          self._stats['pending_tool_calls'], self._stale_idle_count)
-            with self._pending_tools_lock:
+        with self._pending_tool_calls_lock:
+            current_pending = self._stats['pending_tool_calls']
+            if self._last_idle_pending == current_pending:
+                self._stale_idle_count += 1
+            else:
+                self._stale_idle_count = 1
+                self._last_idle_pending = current_pending
+            if self._stale_idle_count >= self._MAX_STALE_IDLES:
+                logger.warning("[SDK] Idle with %d stale pending (x%d) - forcing done", current_pending, self._stale_idle_count)
                 self._stats['pending_tool_calls'] = 0
-            self._done.set()
-        else:
-            logger.info("[SDK] Session idle but %d tool(s) still executing (stale %d/%d) - continuing...",
-                       self._stats['pending_tool_calls'], self._stale_idle_count, self._MAX_STALE_IDLES)
+                self._done.set()
+            else:
+                logger.info("[SDK] Idle but %d pending (stale %d/%d) - continuing", current_pending, self._stale_idle_count, self._MAX_STALE_IDLES)
 
     def _schedule_idle_completion(self) -> None:
         self._stale_idle_count = 0
         self._last_idle_pending = None
-        logger.debug("Session idle with no pending tools - scheduling completion check")
-
+        logger.debug("Idle with no pending - scheduling check")
         async def check_still_idle() -> None:
             try:
                 await asyncio.sleep(self._idle_timeout)
-                if not self._done.is_set() and self._stats['pending_tool_calls'] == 0:
-                    logger.info("[SDK] Session confirmed idle - processing complete")
+                with self._pending_tool_calls_lock:
+                    still_idle = self._stats['pending_tool_calls'] == 0
+                if not self._done.is_set() and still_idle:
+                    logger.info("[SDK] Confirmed idle - done")
                     self._done.set()
             except asyncio.CancelledError:
-                pass  # task cancelled during idle check — expected on shutdown
-
+                pass
         self._stats['idle_task'] = asyncio.create_task(check_still_idle())
 
     def _on_noop(self, _event: Any) -> None:
-        """Silently ignore informational SDK events that need no processing."""
+        """Ignore informational events needing no processing."""
 
     def _on_session_end(self, _event: Any) -> None:
-        logger.info("[SDK] Agent signaled session complete")
+        logger.info("[SDK] Agent signaled complete")
         self._done.set()
 
     def _on_session_error(self, event: Any) -> None:
@@ -324,9 +330,8 @@ class _EventHandler:
         logger.error(f"\n[SDK] ERROR: {error_msg}")
         if self._item_logger:
             self._item_logger.log_error(error_msg)
-        error_lower = error_msg.lower()
-        if not self._rate_limit_detected and 'rate' in error_lower and 'limit' in error_lower:
-            logger.info(f"\n[SDK] Rate limit detected, will retry with {FALLBACK_MODEL}...")
+        if not self._rate_limit_detected and 'rate' in error_msg.lower() and 'limit' in error_msg.lower():
+            logger.info(f"\n[SDK] Rate limit, will retry with {FALLBACK_MODEL}...")
             self._rate_limit_detected = True
             self._done.set()
             return
