@@ -417,17 +417,20 @@ class TestCleanupEdgeCases:
 
             m["unassign_item"].assert_not_called()
 
-    def test_no_worktree_created_skips_merge_abort(self) -> None:
-        """When _worktree_created is False, cleanup should skip merge abort."""
+    def test_resumed_session_still_aborts_merge(self, tmp_path: Path) -> None:
+        """Resumed sessions (_worktree_created=False) must still abort stale merges."""
         with _patch_all_helpers() as m:
             m["is_merge"].return_value = True
-            session = _make_session(worktree_path="/tmp/wt/task-test-item")
+            session = _make_session(worktree_path=str(tmp_path))
             session._worktree_created = False
             session.cleanup_on_failure()
 
-            # Merge abort should be skipped since worktree was never created
-            m["is_merge"].assert_not_called()
-            m["subprocess_run"].assert_not_called()
+            # Merge abort must still run because worktree_path exists on disk
+            m["is_merge"].assert_called_once()
+            m["subprocess_run"].assert_called_once()
+            call_args = m["subprocess_run"].call_args
+            assert "merge" in call_args[0][0]
+            assert "--abort" in call_args[0][0]
 
     def test_partial_init_cleanup_only_unassigns(self) -> None:
         """Session with only _assigned=True should only unassign, not touch worktree."""
