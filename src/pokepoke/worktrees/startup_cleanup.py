@@ -87,7 +87,15 @@ def cleanup_stale_worktrees_at_startup(
 
             try:
                 # Check if the branch is already merged
-                if is_worktree_merged(branch, default_branch, repo_path):
+                # Extract item_id from branch name since is_worktree_merged expects item_id
+                if branch.startswith("task/"):
+                    item_id = branch[5:]  # Remove "task/" prefix to get the item_id
+                    is_merged = is_worktree_merged(item_id, default_branch, repo_path)
+                else:
+                    # For non-standard branch names, use the full branch name as item_id
+                    is_merged = is_worktree_merged(branch, default_branch, repo_path)
+                
+                if is_merged:
                     logger.info(f"🔗 Removing merged worktree: {branch}")
                     _cleanup_worktree_safe(branch, worktree_path, repo_path)
                     stats['merged_removed'] += 1
