@@ -23,20 +23,16 @@ File layout (.pokepoke/model_stats.json):
 }
 """
 
-import json
 import logging
-import os
 import statistics
 import threading
-from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from pokepoke.stats.perf_timing import timed_block
+from pokepoke.stats.persistent_json_store import PersistentJsonStore
 from pokepoke.types import ModelCompletionRecord
-from pokepoke.utils.file_utils import replace_with_retry
-from pokepoke.worktrees.coordination import acquire_lock
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +49,21 @@ _STATS_FILE_LOCK = "model-stats-file"
 def _empty_store() -> dict[str, Any]:
     """Return an empty store structure."""
     return {"log": [], "summary": {}}
+
+
+def _normalize_store(data: Any) -> dict[str, Any]:
+    if not isinstance(data, dict) or "log" not in data:
+        return _empty_store()
+    return data
+
+
+_STORE = PersistentJsonStore(
+    default_path=STATS_FILE,
+    empty=_empty_store,
+    thread_lock=_thread_lock,
+    lock_name=_STATS_FILE_LOCK,
+    normalize=_normalize_store,
+)
 
 
 def _record_to_dict(record: ModelCompletionRecord) -> dict[str, Any]:
@@ -190,18 +201,7 @@ def load_model_stats(path: Path | None = None) -> dict[str, Any]:
     Returns an empty store if the file does not exist or is corrupt.
     """
     with timed_block("model_stats.load"):
-        stats_path = path or STATS_FILE
-        if not stats_path.exists():
-            return _empty_store()
-        try:
-            with stats_path.open(encoding="utf-8") as f:
-                data = json.load(f)
-            # Basic validation
-            if not isinstance(data, dict) or "log" not in data:
-                return _empty_store()
-            return data
-        except (json.JSONDecodeError, OSError):
-            return _empty_store()
+        return _STORE.load(path)
 
 
 def save_model_stats(data: dict[str, Any], path: Path | None = None) -> None:
@@ -211,17 +211,7 @@ def save_model_stats(data: dict[str, Any], path: Path | None = None) -> None:
     on crashes.
     """
     with timed_block("model_stats.save"):
-        stats_path = path or STATS_FILE
-        stats_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = stats_path.with_suffix(".tmp")
-        with tmp_path.open("w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-            f.flush()
-            with suppress(OSError):
-                os.fsync(f.fileno())
-        # Retry os.replace on Windows where the destination file may be briefly
-        # locked by a previous operation, causing PermissionError.
-        replace_with_retry(tmp_path, stats_path)
+        _STORE.save(data, path)
 
 
 def record_completion(record: ModelCompletionRecord, path: Path | None = None) -> None:
@@ -234,7 +224,7 @@ def record_completion(record: ModelCompletionRecord, path: Path | None = None) -
     Uses incremental summary update — only the affected model's bucket is
     touched, avoiding O(N) full-log rescans on every call.
     """
-    with _thread_lock, acquire_lock(_STATS_FILE_LOCK, timeout=60):
+    with _STORE.lock(timeout=60):
         data = load_model_stats(path)
         entry = _record_to_dict(record)
         data["log"].append(entry)
