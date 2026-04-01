@@ -100,7 +100,7 @@ class TestCloseWorkItemAndParents:
 
     @patch('pokepoke.worktrees.worktree_finalization.check_parent_hierarchy')
     @patch('pokepoke.worktrees.worktree_finalization.close_item')
-    @patch('subprocess.run')
+    @patch('pokepoke.worktrees.worktree_finalization._run_bd_with_retry')
     def test_item_already_closed(
         self,
         mock_run: Mock,

@@ -11,6 +11,15 @@ from pokepoke.agents.agent_types import (
     resolve_agent_type,
 )
 from pokepoke.git.merge_queue_stats import MergeQueueStats as MergeQueueStats  # re-export
+from pokepoke.work_agent_outcome import (
+    WORK_AGENT_OUTCOME_STATUSES as WORK_AGENT_OUTCOME_STATUSES,
+)
+from pokepoke.work_agent_outcome import (
+    WorkAgentOutcome as WorkAgentOutcome,
+)
+from pokepoke.work_agent_outcome import (
+    parse_work_agent_outcome as parse_work_agent_outcome,
+)
 
 
 @dataclass
@@ -392,6 +401,7 @@ class CopilotResult:
     model: str | None = None  # Model used for this invocation
     session_id: str | None = None  # SDK session ID, reusable for resume on timeout
     last_output_summary: str | None = None  # Truncated output summary for retry context
+    work_agent_outcome: WorkAgentOutcome | None = None  # Structured outcome from work agent
 
 @dataclass
 class GateAgentResult:

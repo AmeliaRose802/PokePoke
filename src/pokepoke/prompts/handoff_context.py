@@ -5,10 +5,16 @@ diff stats, commit history, unified diff) so the gate agent can skip
 re-discovering the project structure and reviewing diffs via git commands.
 """
 
+from __future__ import annotations
+
 import logging
 import subprocess
+from typing import TYPE_CHECKING
 
 from pokepoke.git.git_helpers import run_git
+
+if TYPE_CHECKING:
+    from pokepoke.types import WorkAgentOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +22,69 @@ logger = logging.getLogger(__name__)
 _MAX_DIFF_CHARS = 20_000
 
 
-def build_handoff_context(cwd: str | None = None) -> str:
+def _format_outcome_section(outcome: WorkAgentOutcome) -> list[str]:
+    """Format a WorkAgentOutcome into lines for the handoff context."""
+    lines = [
+        "## Work Agent Self-Report",
+        f"- **Status:** {outcome.status}",
+    ]
+    if outcome.reason:
+        lines.append(f"- **Reason:** {outcome.reason}")
+    if outcome.files_modified:
+        lines.append(f"- **Files modified:** {', '.join(outcome.files_modified)}")
+    if outcome.tests_added:
+        lines.append(f"- **Tests added:** {', '.join(outcome.tests_added)}")
+    if outcome.suggested_split:
+        lines.append("- **Suggested split:**")
+        lines.extend(f"  - {s}" for s in outcome.suggested_split)
+    return lines
+
+
+def _assemble_handoff_sections(
+    header_lines: list[str],
+    diff_lines: list[str],
+    outcome_lines: list[str],
+    footer_lines: list[str],
+) -> str:
+    """Combine handoff context sections into the final string."""
+    sections: list[str] = []
+    sections.extend(header_lines)
+    if outcome_lines:
+        sections.append("")
+        sections.extend(outcome_lines)
+    if diff_lines:
+        sections.append("")
+        sections.extend(diff_lines)
+    if footer_lines:
+        sections.append("")
+        sections.extend(footer_lines)
+    return "\n".join(sections)
+
+
+def _build_diff_lines(
+    stat_text: str,
+    commit_lines: list[str],
+    diff_content: str,
+    diff_truncated: bool,
+) -> list[str]:
+    """Build the diff-related sections of the handoff context."""
+    diff_lines: list[str] = []
+    if stat_text:
+        diff_lines.extend(["### Diff Summary", "```", stat_text, "```"])
+    if commit_lines:
+        if diff_lines:
+            diff_lines.append("")
+        diff_lines.extend(["### Commit History", "```", *commit_lines, "```"])
+    if diff_content:
+        if diff_lines:
+            diff_lines.append("")
+        diff_lines.extend(["### Diff Content", "```diff", diff_content, "```"])
+        if diff_truncated:
+            diff_lines.append("*(diff truncated — run `git diff` for the full output)*")
+    return diff_lines
+
+
+def build_handoff_context(cwd: str | None = None, *, work_agent_outcome: WorkAgentOutcome | None = None) -> str:
     """Build a structured context handoff summary for the gate agent.
 
     Captures the list of changed files (name + status), a compact diff stat,
@@ -103,42 +171,23 @@ def build_handoff_context(cwd: str | None = None) -> str:
             diff_content = raw
 
     # 5. Assemble structured handoff block
-    sections: list[str] = []
-    sections.append("## Work Agent Handoff Context")
-    sections.append("")
-    sections.append("The following information was captured from the work agent's session.")
-    sections.append("Use this to skip re-discovering the project — focus your verification on these files.")
-    sections.append("")
+    header_lines: list[str] = [
+        "## Work Agent Handoff Context",
+        "",
+        "The following information was captured from the work agent's session.",
+        "Use this to skip re-discovering the project — focus your verification on these files.",
+        "",
+        "### Changed Files",
+        "```",
+        *changed_files,
+        "```",
+    ]
 
-    sections.append("### Changed Files")
-    sections.append("```")
-    sections.extend(changed_files)
-    sections.append("```")
+    diff_lines = _build_diff_lines(stat_text, commit_lines, diff_content, diff_truncated)
+    outcome_lines = _format_outcome_section(work_agent_outcome) if work_agent_outcome else []
 
-    if stat_text:
-        sections.append("")
-        sections.append("### Diff Summary")
-        sections.append("```")
-        sections.append(stat_text)
-        sections.append("```")
+    footer_lines = [
+        "**Start your verification by reviewing the diff content above rather than running git commands.**",
+    ]
 
-    if commit_lines:
-        sections.append("")
-        sections.append("### Commit History")
-        sections.append("```")
-        sections.extend(commit_lines)
-        sections.append("```")
-
-    if diff_content:
-        sections.append("")
-        sections.append("### Diff Content")
-        sections.append("```diff")
-        sections.append(diff_content)
-        sections.append("```")
-        if diff_truncated:
-            sections.append("*(diff truncated — run `git diff` for the full output)*")
-
-    sections.append("")
-    sections.append("**Start your verification by reviewing the diff content above rather than running git commands.**")
-
-    return "\n".join(sections)
+    return _assemble_handoff_sections(header_lines, diff_lines, outcome_lines, footer_lines)

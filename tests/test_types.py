@@ -107,6 +107,11 @@ class TestCopilotResult:
         assert result.success is False
         assert result.error == "Something went wrong"
 
+    def test_work_agent_outcome_default_none(self):
+        from pokepoke.types import CopilotResult
+        result = CopilotResult(work_item_id="test", success=True)
+        assert result.work_agent_outcome is None
+
 
 class TestDependency:
     """Test Dependency dataclass."""
@@ -354,3 +359,165 @@ class TestSessionStats:
         # items_completed counter should still reflect total, not list length
         assert stats.items_completed == max_entries + 5
         assert len(stats.completed_items_list) < max_entries
+
+class TestWorkAgentOutcome:
+    """Tests for the WorkAgentOutcome dataclass."""
+
+    def test_valid_completed_status(self):
+        from pokepoke.types import WorkAgentOutcome
+        outcome = WorkAgentOutcome(status="completed", reason="All done")
+        assert outcome.status == "completed"
+        assert outcome.reason == "All done"
+
+    def test_valid_blocked_status(self):
+        from pokepoke.types import WorkAgentOutcome
+        outcome = WorkAgentOutcome(status="blocked", reason="Missing dep")
+        assert outcome.status == "blocked"
+
+    def test_valid_needs_clarification(self):
+        from pokepoke.types import WorkAgentOutcome
+        outcome = WorkAgentOutcome(status="needs_clarification")
+        assert outcome.status == "needs_clarification"
+
+    def test_valid_too_large(self):
+        from pokepoke.types import WorkAgentOutcome
+        outcome = WorkAgentOutcome(status="too_large", suggested_split=["a", "b"])
+        assert outcome.suggested_split == ["a", "b"]
+
+    def test_invalid_status_raises(self):
+        import pytest
+
+        from pokepoke.types import WorkAgentOutcome
+        with pytest.raises(ValueError, match="Invalid work agent outcome status"):
+            WorkAgentOutcome(status="invalid_status")
+
+    def test_default_fields(self):
+        from pokepoke.types import WorkAgentOutcome
+        outcome = WorkAgentOutcome(status="completed")
+        assert outcome.reason == ""
+        assert outcome.files_modified == []
+        assert outcome.tests_added == []
+        assert outcome.suggested_split == []
+
+    def test_files_modified_and_tests_added(self):
+        from pokepoke.types import WorkAgentOutcome
+        outcome = WorkAgentOutcome(
+            status="completed",
+            files_modified=["a.py", "b.py"],
+            tests_added=["test_a.py"],
+        )
+        assert outcome.files_modified == ["a.py", "b.py"]
+        assert outcome.tests_added == ["test_a.py"]
+
+
+class TestParseWorkAgentOutcome:
+    """Tests for parse_work_agent_outcome()."""
+
+    def test_returns_none_for_none_input(self):
+        from pokepoke.types import parse_work_agent_outcome
+        assert parse_work_agent_outcome(None) is None
+
+    def test_returns_none_for_empty_string(self):
+        from pokepoke.types import parse_work_agent_outcome
+        assert parse_work_agent_outcome("") is None
+
+    def test_returns_none_for_no_json_blocks(self):
+        from pokepoke.types import parse_work_agent_outcome
+        assert parse_work_agent_outcome("just some text") is None
+
+    def test_parses_completed_outcome(self):
+        from pokepoke.types import parse_work_agent_outcome
+        output = '''Some text
+```json
+{"status": "completed", "reason": "All tasks done", "files_modified": ["a.py"]}
+```
+'''
+        result = parse_work_agent_outcome(output)
+        assert result is not None
+        assert result.status == "completed"
+        assert result.reason == "All tasks done"
+        assert result.files_modified == ["a.py"]
+
+    def test_parses_blocked_outcome(self):
+        from pokepoke.types import parse_work_agent_outcome
+        output = '''```json
+{"status": "blocked", "reason": "Need API key"}
+```'''
+        result = parse_work_agent_outcome(output)
+        assert result is not None
+        assert result.status == "blocked"
+        assert result.reason == "Need API key"
+
+    def test_parses_too_large_with_split(self):
+        from pokepoke.types import parse_work_agent_outcome
+        output = '''```json
+{"status": "too_large", "reason": "Too many changes", "suggested_split": ["part1", "part2"]}
+```'''
+        result = parse_work_agent_outcome(output)
+        assert result is not None
+        assert result.status == "too_large"
+        assert result.suggested_split == ["part1", "part2"]
+
+    def test_uses_last_matching_json_block(self):
+        from pokepoke.types import parse_work_agent_outcome
+        output = '''```json
+{"status": "blocked", "reason": "first"}
+```
+Some work...
+```json
+{"status": "completed", "reason": "final"}
+```'''
+        result = parse_work_agent_outcome(output)
+        assert result is not None
+        assert result.status == "completed"
+        assert result.reason == "final"
+
+    def test_skips_non_outcome_json(self):
+        from pokepoke.types import parse_work_agent_outcome
+        output = '''```json
+{"name": "test", "value": 42}
+```
+```json
+{"status": "completed", "reason": "done"}
+```'''
+        result = parse_work_agent_outcome(output)
+        assert result is not None
+        assert result.status == "completed"
+
+    def test_skips_invalid_json(self):
+        from pokepoke.types import parse_work_agent_outcome
+        output = '''```json
+{invalid json here}
+```
+```json
+{"status": "completed"}
+```'''
+        result = parse_work_agent_outcome(output)
+        assert result is not None
+        assert result.status == "completed"
+
+    def test_returns_none_for_unknown_status(self):
+        from pokepoke.types import parse_work_agent_outcome
+        output = '''```json
+{"status": "unknown_status", "reason": "test"}
+```'''
+        assert parse_work_agent_outcome(output) is None
+
+    def test_coerces_non_list_fields(self):
+        from pokepoke.types import parse_work_agent_outcome
+        output = '''```json
+{"status": "completed", "files_modified": "not_a_list", "tests_added": 42}
+```'''
+        result = parse_work_agent_outcome(output)
+        assert result is not None
+        assert result.files_modified == []
+        assert result.tests_added == []
+
+    def test_case_insensitive_json_fence(self):
+        from pokepoke.types import parse_work_agent_outcome
+        output = '''```JSON
+{"status": "completed", "reason": "done"}
+```'''
+        result = parse_work_agent_outcome(output)
+        assert result is not None
+        assert result.status == "completed"

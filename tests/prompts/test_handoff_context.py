@@ -174,3 +174,50 @@ class TestBuildHandoffContext:
         debug_messages = [str(call) for call in mock_debug.call_args_list]
         assert any("git diff --stat failed" in msg for msg in debug_messages)
         assert any("git log --oneline failed" in msg for msg in debug_messages)
+
+
+class TestHandoffContextWorkAgentOutcome:
+    """Tests for work_agent_outcome integration in handoff context."""
+
+    @patch(_PATCH_DEFAULT_BRANCH, return_value='main')
+    @patch(_PATCH_RUN_GIT)
+    def test_outcome_included_when_provided(self, mock_run: Mock, mock_branch: Mock):
+        from pokepoke.types import WorkAgentOutcome
+        mock_run.return_value = Mock(returncode=0, stdout="M\tsrc/main.py\n")
+        outcome = WorkAgentOutcome(
+            status="completed",
+            reason="All done",
+            files_modified=["src/main.py"],
+            tests_added=["tests/test_main.py"],
+        )
+        context = build_handoff_context(
+            cwd="C:\\tmp\\worktree",
+            work_agent_outcome=outcome,
+        )
+        assert "Work Agent Self-Report" in context
+        assert "completed" in context
+        assert "src/main.py" in context
+
+    @patch(_PATCH_DEFAULT_BRANCH, return_value='main')
+    @patch(_PATCH_RUN_GIT)
+    def test_no_outcome_section_when_none(self, mock_run: Mock, mock_branch: Mock):
+        mock_run.return_value = Mock(returncode=0, stdout="M\tsrc/foo.py\n")
+        context = build_handoff_context(cwd="C:\\tmp\\worktree")
+        assert "Work Agent Self-Report" not in context
+
+    @patch(_PATCH_DEFAULT_BRANCH, return_value='main')
+    @patch(_PATCH_RUN_GIT)
+    def test_outcome_with_suggested_split(self, mock_run: Mock, mock_branch: Mock):
+        from pokepoke.types import WorkAgentOutcome
+        mock_run.return_value = Mock(returncode=0, stdout="M\tsrc/foo.py\n")
+        outcome = WorkAgentOutcome(
+            status="too_large",
+            reason="Too many changes",
+            suggested_split=["part1: API", "part2: UI"],
+        )
+        context = build_handoff_context(
+            cwd="C:\\tmp\\worktree",
+            work_agent_outcome=outcome,
+        )
+        assert "too_large" in context
+        assert "part1: API" in context

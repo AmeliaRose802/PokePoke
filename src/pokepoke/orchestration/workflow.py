@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_FAIL_FAST_STATUSES = frozenset({"blocked", "needs_clarification", "too_large"})
 _MAX_GATE_CRASH_RETRIES = _MAX_GATE_TIMEOUT_RETRIES = 3
 _LOCK_TIMEOUT_PER_AGENT = 120.0
 
@@ -243,6 +244,20 @@ def process_work_item(  # noqa: C901
 
             _log_commit_status(worktree_cwd)
 
+            # ── Fail-fast on non-completion outcomes ──
+            outcome = result.work_agent_outcome
+            if outcome and outcome.status in _FAIL_FAST_STATUSES:
+                reason = outcome.reason or outcome.status
+                _comment(
+                    item.id,
+                    f"Work agent returned '{outcome.status}': {reason}",
+                )
+                logger.info(
+                    "Work agent fail-fast: status=%s reason=%s — skipping gate",
+                    outcome.status, reason,
+                )
+                break
+
             # Skip cleanup/gate if agent already closed the beads item (self-merge)
             from pokepoke.beads.reconciliation import is_beads_item_closed
             if is_beads_item_closed(item.id):
@@ -279,7 +294,7 @@ def process_work_item(  # noqa: C901
             _gate_resume_output: str | None = None
             while gate_crash_attempts < _MAX_GATE_CRASH_RETRIES:
                 from pokepoke.git.git_operations import build_handoff_context
-                handoff_ctx = build_handoff_context(cwd=worktree_cwd)
+                handoff_ctx = build_handoff_context(cwd=worktree_cwd, work_agent_outcome=result.work_agent_outcome)
                 gate_iteration = gate_agent_runs + 1
                 gate_agent_id = f"{base_agent_id}-gate-{gate_iteration}"
                 gate_is_resume = gate_resume_session_id is not None

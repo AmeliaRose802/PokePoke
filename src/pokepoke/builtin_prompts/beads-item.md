@@ -183,3 +183,62 @@ Get-NetTCPConnection -LocalPort 5000 | ForEach-Object { Stop-Process -Id $_.Owni
 
 - Ensure all changes are committed and pushed so the orchestrator can merge.
 - Do NOT run `bd close` or `bd update`.
+
+## REQUIRED: Structured Outcome Report
+
+**At the very end of your session**, you MUST output a structured JSON outcome block.
+This tells the orchestrator what happened so it can make intelligent decisions.
+
+Choose the appropriate status and fill in the fields:
+
+### If you completed the work successfully:
+```json
+{
+  "status": "completed",
+  "reason": "Brief summary of what was done",
+  "files_modified": ["src/file1.py", "src/file2.py"],
+  "tests_added": ["tests/test_file1.py"],
+  "suggested_split": []
+}
+```
+
+### If the item is too large or too vague to complete:
+```json
+{
+  "status": "too_large",
+  "reason": "Why this item cannot be completed as-is",
+  "files_modified": [],
+  "tests_added": [],
+  "suggested_split": ["Suggested sub-task 1", "Suggested sub-task 2"]
+}
+```
+
+### If you are blocked on a dependency or missing information:
+```json
+{
+  "status": "blocked",
+  "reason": "What you need that you cannot find",
+  "files_modified": [],
+  "tests_added": [],
+  "suggested_split": []
+}
+```
+
+### If the requirements are unclear and you need clarification:
+```json
+{
+  "status": "needs_clarification",
+  "reason": "What specific questions need answering",
+  "files_modified": [],
+  "tests_added": [],
+  "suggested_split": []
+}
+```
+
+**Rules:**
+- Always output exactly ONE outcome block at the END of your session
+- The JSON must be in a fenced code block with the `json` language tag
+- `status` must be one of: `completed`, `blocked`, `needs_clarification`, `too_large`
+- `files_modified` and `tests_added` should list actual file paths you changed
+- `suggested_split` is only relevant for `too_large` status
+- If you completed the work, list ALL files you modified and tests you added

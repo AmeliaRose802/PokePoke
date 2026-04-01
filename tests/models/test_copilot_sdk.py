@@ -1532,6 +1532,34 @@ class TestBuildCopilotResult:
         assert result.success is True
         assert result.output == ""
 
+    def test_parses_work_agent_outcome_from_output(self):
+        """_build_copilot_result parses WorkAgentOutcome from output text."""
+        output_line = 'Done!\n```json\n{"status": "completed", "reason": "all good", "files_modified": ["a.py"]}\n```'
+        result = _build_copilot_result(
+            work_item=self._make_work_item(),
+            output_lines=[output_line],
+            errors=[],
+            stats=self._make_stats(),
+            current_model="m",
+            total_api_duration=0.0,
+            total_wall_duration=0.0,
+        )
+        assert result.work_agent_outcome is not None
+        assert result.work_agent_outcome.status == "completed"
+
+    def test_no_outcome_when_output_has_no_json(self):
+        """_build_copilot_result returns None outcome when no JSON block."""
+        result = _build_copilot_result(
+            work_item=self._make_work_item(),
+            output_lines=["just text"],
+            errors=[],
+            stats=self._make_stats(),
+            current_model="m",
+            total_api_duration=0.0,
+            total_wall_duration=0.0,
+        )
+        assert result.work_agent_outcome is None
+
 
 @pytest.mark.asyncio
 class TestRateLimitFallback:
@@ -1938,6 +1966,11 @@ class TestRateLimitFallback:
 @pytest.mark.asyncio
 class TestAwaitCompletionAbortOSError:
     """Tests that _await_completion handles OSError during session.abort() gracefully."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_process_tree(self):
+        with patch("pokepoke.models.sdk_watchdog._log_process_tree_snapshot"):
+            yield
 
     async def test_shutdown_abort_oserror_returns_shutdown(self):
         """When session.abort() raises OSError on shutdown, still return 'shutdown'."""

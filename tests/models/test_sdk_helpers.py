@@ -276,6 +276,11 @@ class TestBuildResumePrompt:
 
 
 class TestCheckToolWatchdog:
+    @pytest.fixture(autouse=True)
+    def _mock_process_tree(self):
+        with patch("pokepoke.models.sdk_watchdog._log_process_tree_snapshot"):
+            yield
+
     @pytest.mark.asyncio
     async def test_returns_none_when_no_stats(self):
         session = AsyncMock()

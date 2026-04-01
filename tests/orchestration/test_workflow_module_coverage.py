@@ -20,6 +20,13 @@ from pokepoke.types import (
     WorkItemResult,
 )
 
+
+@pytest.fixture(autouse=True)
+def _mock_decomposition():
+    """Prevent decomposition from invoking real SDK during tests."""
+    with patch("pokepoke.agents.decomposition_agent.should_decompose", return_value=False):
+        yield
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

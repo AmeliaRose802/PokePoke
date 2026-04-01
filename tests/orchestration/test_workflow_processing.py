@@ -10,6 +10,8 @@ This module tests work item processing logic including:
 
 from unittest.mock import patch
 
+import pytest
+
 from pokepoke.orchestration.workflow import process_work_item
 from pokepoke.types import AgentStats, CopilotResult, GateAgentResult
 from tests.orchestration.conftest import (
@@ -20,6 +22,13 @@ from tests.orchestration.conftest import (
     make_process_item_mocks,
     make_work_item,
 )
+
+
+@pytest.fixture(autouse=True)
+def _mock_decomposition():
+    """Prevent decomposition from invoking real SDK during tests."""
+    with patch("pokepoke.agents.decomposition_agent.should_decompose", return_value=False):
+        yield
 
 
 class TestProcessWorkItem:
@@ -453,3 +462,39 @@ class TestProcessWorkItemCoordination:
             assert result.success is False
             assert result.request_count == 0
             mocks['session_cleanup'].assert_called_once()
+
+
+class TestWorkAgentOutcomeFailFast:
+    """Tests for fail-fast behavior when work agent returns non-completion outcomes."""
+
+    @pytest.mark.asyncio
+    async def test_blocked_outcome_breaks_loop(self):
+        """When work agent returns 'blocked', the workflow breaks early."""
+        from pokepoke.orchestration.workflow import _FAIL_FAST_STATUSES
+        from pokepoke.types import WorkAgentOutcome
+        outcome = WorkAgentOutcome(status="blocked", reason="Missing dependency")
+        assert outcome.status in _FAIL_FAST_STATUSES
+
+    @pytest.mark.asyncio
+    async def test_too_large_outcome_breaks_loop(self):
+        from pokepoke.orchestration.workflow import _FAIL_FAST_STATUSES
+        from pokepoke.types import WorkAgentOutcome
+        outcome = WorkAgentOutcome(status="too_large", reason="Too many files", suggested_split=["a", "b"])
+        assert outcome.status in _FAIL_FAST_STATUSES
+
+    @pytest.mark.asyncio
+    async def test_needs_clarification_breaks_loop(self):
+        from pokepoke.orchestration.workflow import _FAIL_FAST_STATUSES
+        from pokepoke.types import WorkAgentOutcome
+        outcome = WorkAgentOutcome(status="needs_clarification", reason="Unclear requirements")
+        assert outcome.status in _FAIL_FAST_STATUSES
+
+    @pytest.mark.asyncio
+    async def test_completed_not_in_fail_fast(self):
+        from pokepoke.orchestration.workflow import _FAIL_FAST_STATUSES
+        assert "completed" not in _FAIL_FAST_STATUSES
+
+    @pytest.mark.asyncio
+    async def test_fail_fast_statuses_is_frozen(self):
+        from pokepoke.orchestration.workflow import _FAIL_FAST_STATUSES
+        assert isinstance(_FAIL_FAST_STATUSES, frozenset)

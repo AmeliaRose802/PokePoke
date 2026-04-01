@@ -1030,6 +1030,11 @@ class TestAwaitCompletionProcessOutputTimeout:
 class TestCheckToolWatchdog:
     """Tests for _check_tool_watchdog function."""
 
+    @pytest.fixture(autouse=True)
+    def _mock_process_tree(self):
+        with patch("pokepoke.models.sdk_watchdog._log_process_tree_snapshot"):
+            yield
+
     @pytest.mark.asyncio
     async def test_returns_none_when_no_stats(self):
         """Returns None when stats is None."""

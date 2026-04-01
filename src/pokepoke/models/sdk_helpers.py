@@ -24,7 +24,7 @@ except (ImportError, AttributeError):
         _approve_all = None
 
 from pokepoke.desktop import terminal_ui
-from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
+from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult, parse_work_agent_outcome
 from pokepoke.utils.command_validator import validate_and_rewrite_powershell_tool_args
 from pokepoke.utils.prompt_sanitizer import sanitize_prompt_input, sanitize_short
 from pokepoke.utils.shutdown import is_shutting_down
@@ -92,6 +92,7 @@ def _build_copilot_result(
         stats=agent_stats,
         model=current_model,
         session_id=session_id,
+        work_agent_outcome=parse_work_agent_outcome(output_text),
     )
 
 def _set_tool_args_on_request(req: Any, new_args: Any) -> None:
