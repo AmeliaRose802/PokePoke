@@ -43,6 +43,17 @@ Write-Host "Pre-commit checks:" -ForegroundColor Cyan
 $hooksDir = Join-Path $repoRoot ".githooks"
 $overallStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
+# Timeout caps — defense-in-depth against hanging tests/checks
+$PerCheckTimeoutSeconds = 720    # 12 min per individual check
+$OverallTimeoutMinutes  = 15     # 15 min for entire pre-commit hook
+$TimeoutDiagnostics = @"
+Tests are likely hanging. Check for:
+  - Tests using real subprocess/git calls without mocking
+  - Tests waiting for stdin input
+  - Select-Object -First/-Last piping
+Run pytest with --timeout=30 to find the hanging test.
+"@
+
 # Run standalone integrity verification
 Write-Host "  • Running standalone verification... " -NoNewline -ForegroundColor Gray
 $verifyScript = Join-Path $hooksDir "verify-integrity.ps1"
@@ -80,19 +91,44 @@ $buildDependentChecks = @(
 # Run build-dependent checks sequentially (abort on first failure)
 $buildFailed = $false
 foreach ($check in $buildDependentChecks) {
+    # Overall timeout guard
+    if ($overallStopwatch.Elapsed.TotalMinutes -ge $OverallTimeoutMinutes) {
+        Write-Host ""
+        Write-Host "⏰ Pre-commit timed out after $([math]::Round($overallStopwatch.Elapsed.TotalMinutes, 1)) minutes." -ForegroundColor Red
+        Write-Host $TimeoutDiagnostics -ForegroundColor Yellow
+        exit 1
+    }
+
     Write-Host "  • $($check.Name)... " -ForegroundColor Gray
     $checkStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     
     try {
         $checkScript = Join-Path $hooksDir $check.Script
-        # Stream output directly without buffering
+        # Run each check as a child process with a hard timeout to prevent hanging.
         if ($check.Interpreter) {
-            & $check.Interpreter $checkScript
+            $proc = Start-Process -FilePath $check.Interpreter -ArgumentList $checkScript `
+                -NoNewWindow -PassThru -WorkingDirectory $repoRoot
         } else {
-            & $checkScript
+            $proc = Start-Process -FilePath "pwsh" `
+                -ArgumentList "-NoProfile", "-NonInteractive", "-File", $checkScript `
+                -NoNewWindow -PassThru -WorkingDirectory $repoRoot
         }
+
+        $exited = $proc.WaitForExit($PerCheckTimeoutSeconds * 1000)
         $checkStopwatch.Stop()
-        if ($LASTEXITCODE -eq 0) {
+
+        if (-not $exited) {
+            # Timeout — kill the process tree and fail with diagnostics
+            try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
+            $elapsed = [math]::Round($checkStopwatch.Elapsed.TotalMinutes, 1)
+            Write-Host "    ⏱ $($check.Name): TIMED OUT after ${elapsed} min" -ForegroundColor Red
+            Write-Host ""
+            Write-Host "⏰ Pre-commit timed out after ${elapsed} minutes." -ForegroundColor Red
+            Write-Host $TimeoutDiagnostics -ForegroundColor Yellow
+            exit 1
+        }
+
+        if ($proc.ExitCode -eq 0) {
             Write-Host "    ⏱ $($check.Name): $([math]::Round($checkStopwatch.Elapsed.TotalSeconds, 1))s" -ForegroundColor DarkGray
             $passed += $check.Name
         }
@@ -126,6 +162,14 @@ if ($buildFailed) {
 
 # Run static checks sequentially (no Start-Job overhead)
 foreach ($check in $staticChecks) {
+    # Overall timeout guard
+    if ($overallStopwatch.Elapsed.TotalMinutes -ge $OverallTimeoutMinutes) {
+        Write-Host ""
+        Write-Host "⏰ Pre-commit timed out after $([math]::Round($overallStopwatch.Elapsed.TotalMinutes, 1)) minutes." -ForegroundColor Red
+        Write-Host $TimeoutDiagnostics -ForegroundColor Yellow
+        exit 1
+    }
+
     Write-Host "  • $($check.Name)... " -NoNewline -ForegroundColor Gray
     $checkStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     

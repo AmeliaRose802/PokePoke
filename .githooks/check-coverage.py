@@ -5,12 +5,17 @@ Works correctly in both regular repositories and git worktrees.
 Explicitly resolves the repo/worktree root to avoid CWD dependency issues.
 """
 
+import contextlib
 import json
 import os
 import re
 import subprocess
 import sys
 from pathlib import Path
+
+# Maximum time (seconds) for the pytest subprocess before it is killed.
+# Individual tests time out at 30s via --timeout; this caps the entire suite.
+_PYTEST_TIMEOUT_SECONDS = 600
 
 
 def get_repo_root() -> Path:
@@ -51,12 +56,7 @@ def _get_staged_files() -> list[str]:
 
 
 def get_staged_python_files() -> list[str]:
-    """Get staged Python source files under src/pokepoke/ (excludes tests).
-
-    Uses precise exclusions so that legitimate source files whose names
-    contain 'test' (e.g. beta_tester.py) are not accidentally skipped.
-    Works with both the flat layout and future subdirectory layout.
-    """
+    """Get staged Python source files under src/pokepoke/ (excludes tests)."""
     return [
         f
         for f in _get_staged_files()
@@ -133,23 +133,17 @@ def _map_source_to_tests(
 
 
 def _find_test_files_for_staged(
-    staged_source: list[str], repo_root: Path
+    staged_source: list[str], repo_root: Path,
 ) -> tuple[list[str], bool]:
-    """Map staged source files to relevant test files.
-
-    Returns (test_files, run_full_suite).
-    """
+    """Map staged source files to relevant test files. Returns (test_files, run_full_suite)."""
     all_staged = _get_staged_files()
     test_files: list[str] = []
-
     _collect_conftest_tests(all_staged, repo_root, test_files)
     _collect_staged_test_files(all_staged, test_files)
     _map_source_to_tests(staged_source, repo_root, test_files)
-
     if not test_files:
         print("[scope] No matching test files found — falling back to full test suite")
         return [], True
-
     return sorted(test_files), False
 
 
@@ -161,20 +155,12 @@ _PROGRESS_RE = re.compile(r'^[.sFExXpP]+(\s+\[\s*\d+%\])?\s*$')
 
 def _filter_pytest_output(output: str) -> str:
     """Remove progress-dot lines; keep failures, warnings, and the summary."""
-    filtered = []
-    for line in output.splitlines():
-        if _PROGRESS_RE.match(line.lstrip()):
-            continue
-        filtered.append(line)
-    # Collapse consecutive blank lines and strip leading/trailing blanks
+    lines = [ln for ln in output.splitlines() if not _PROGRESS_RE.match(ln.lstrip())]
     result: list[str] = []
-    prev_blank = False
-    for line in filtered:
-        is_blank = not line.strip()
-        if is_blank and prev_blank:
+    for line in lines:
+        if not line.strip() and result and not result[-1].strip():
             continue
         result.append(line)
-        prev_blank = is_blank
     while result and not result[0].strip():
         result.pop(0)
     while result and not result[-1].strip():
@@ -188,26 +174,30 @@ def _filter_pytest_stderr(stderr: str) -> str:
     skip_block = False
     for line in stderr.splitlines():
         stripped = line.strip()
-        # Detect the start of a rm_rf warning block:
-        #   "C:\...\pathlib.py:96: PytestWarning: (rm_rf) error removing ..."
         if "PytestWarning" in stripped and "(rm_rf)" in stripped:
             skip_block = True
-            # Also drop any immediately preceding "warnings.warn(" line
             if result and result[-1].strip() == "warnings.warn(":
                 result.pop()
             continue
-        # Drop continuation lines that belong to the same warning block:
-        # the OSError detail and the closing "  warnings.warn(" call.
         if skip_block:
             if stripped.startswith(("<class 'OSError'>", "warnings.warn(")):
-                # The closing "warnings.warn(" ends this block.
                 if stripped == "warnings.warn(":
                     skip_block = False
                 continue
-            # Any other content ends the block and is kept.
             skip_block = False
         result.append(line)
     return "\n".join(result)
+
+
+def _kill_process_tree(pid: int) -> None:
+    """Kill a process and all its descendants (best-effort)."""
+    if sys.platform == "win32":
+        with contextlib.suppress(subprocess.SubprocessError, OSError):
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, timeout=10)
+    else:
+        import signal
+        with contextlib.suppress(OSError, ProcessLookupError):
+            os.killpg(os.getpgid(pid), signal.SIGKILL)
 
 
 def run_tests_with_coverage(
@@ -252,35 +242,57 @@ def run_tests_with_coverage(
     if test_files:
         cmd.extend(test_files)
 
+    # Use Popen for process-tree control on timeout.
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=900,
-            cwd=str(repo_root),
-            encoding="utf-8",
-            errors="backslashreplace",
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            cwd=str(repo_root), encoding="utf-8", errors="backslashreplace",
+            start_new_session=(sys.platform != "win32"),
         )
-
-        # Print filtered output (no progress dots)
-        filtered = _filter_pytest_output(result.stdout)
-        if filtered:
-            print(filtered)
-
-        if result.returncode != 0:
-            if result.stderr.strip():
-                print(_filter_pytest_stderr(result.stderr).strip(), file=sys.stderr)
-            print("[error] Tests failed", file=sys.stderr)
-            return False
-
-        return True
-    except subprocess.TimeoutExpired:
-        print("[error] Tests timed out", file=sys.stderr)
-        return False
     except Exception as e:
         print(f"[error] Test execution failed: {e}", file=sys.stderr)
         return False
+
+    try:
+        stdout, stderr = proc.communicate(timeout=_PYTEST_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        _kill_process_tree(proc.pid)
+        with contextlib.suppress(OSError):
+            proc.kill()
+        with contextlib.suppress(subprocess.TimeoutExpired, OSError):
+            proc.communicate(timeout=5)
+        timeout_min = _PYTEST_TIMEOUT_SECONDS // 60
+        print(
+            f"\n⏰ Pre-commit timed out after {timeout_min} minutes.\n"
+            "Tests are likely hanging. Check for:\n"
+            "  - Tests using real subprocess/git calls without mocking\n"
+            "  - Tests waiting for stdin input\n"
+            "  - Select-Object -First/-Last piping\n"
+            "\nRun pytest with --timeout=30 to find the hanging test.",
+            file=sys.stderr,
+        )
+        return False
+    except Exception as e:
+        with contextlib.suppress(OSError):
+            proc.kill()
+        with contextlib.suppress(OSError):
+            proc.wait()
+        print(f"[error] Test execution failed: {e}", file=sys.stderr)
+        return False
+
+    # Print filtered output (no progress dots)
+    filtered = _filter_pytest_output(stdout)
+    if filtered:
+        print(filtered)
+
+    exit_code = proc.wait()
+    if exit_code != 0:
+        if stderr.strip():
+            print(_filter_pytest_stderr(stderr).strip(), file=sys.stderr)
+        print("[error] Tests failed", file=sys.stderr)
+        return False
+
+    return True
 
 
 def _normalize_path(p: Path) -> str:
