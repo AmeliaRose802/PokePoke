@@ -1,4 +1,4 @@
-Your job is to address a specific beads item in your worktree, then merge and close the item.
+Your job is to address a specific beads item on your subtree then commit making sure all validation passes.
 
 You are working on item: {{item_id}}
 
