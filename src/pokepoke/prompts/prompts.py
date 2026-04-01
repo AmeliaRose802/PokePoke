@@ -333,7 +333,7 @@ class PromptService:
         """
         # Pattern to match {{>template_name}}
         include_pattern = re.compile(r'\{\{>(\w+(?:-\w+)*)\}\}')
-        
+
         def replace_include(match: re.Match[str]) -> str:
             included_template_name = match.group(1)
             try:
@@ -343,7 +343,7 @@ class PromptService:
             except FileNotFoundError:
                 logger.warning(f"Template include not found: {included_template_name}")
                 return f"{{{{missing include: {included_template_name}}}}}"
-        
+
         return include_pattern.sub(replace_include, template)
 
     def _validate_template_name(self, template_name: str) -> str:

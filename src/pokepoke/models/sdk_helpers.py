@@ -271,9 +271,9 @@ def build_prompt_from_work_item(
     from pokepoke.prompts.prompts import PromptService
     config = get_config()
     service = PromptService()
-    
+
     # Check for label-based template override
-    if work_item.labels and config.prompt_templates:
+    if work_item.labels and isinstance(config.prompt_templates, dict) and config.prompt_templates:
         for label in work_item.labels:
             if label in config.prompt_templates:
                 template_name = config.prompt_templates[label]

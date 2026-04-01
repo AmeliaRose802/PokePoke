@@ -652,21 +652,21 @@ def test_template_include_with_user_override(tmp_path):
 
 def test_build_prompt_with_label_template_selection():
     """Test that prompt template is selected based on work item labels."""
-    from pokepoke.config import get_config, reset_config
+    from pokepoke.config import reset_config
     from pokepoke.models.sdk_helpers import build_prompt_from_work_item
     from pokepoke.types import BeadsWorkItem
 
     reset_config()
-    
+
     # Mock config with prompt_templates mapping
     import pokepoke.config as config_module
     original_get_config = config_module.get_config
-    
+
     def mock_get_config():
         cfg = original_get_config()
         cfg.prompt_templates = {"orchestrator": "orchestrator-work"}
         return cfg
-    
+
     config_module.get_config = mock_get_config
 
     try:
@@ -681,7 +681,7 @@ def test_build_prompt_with_label_template_selection():
         )
 
         prompt = build_prompt_from_work_item(work_item)
-        
+
         # Should include orchestrator-specific content
         assert "Orchestrator Context" in prompt or "orchestrator" in prompt.lower()
     finally:
@@ -708,7 +708,7 @@ def test_build_prompt_falls_back_to_default_when_no_label_match():
     )
 
     prompt = build_prompt_from_work_item(work_item)
-    
+
     # Should use default beads-item template
     assert "PokePoke-456" in prompt
     assert "Generic task" in prompt
@@ -718,15 +718,15 @@ def test_build_prompt_falls_back_to_default_when_no_label_match():
 
 def test_build_prompt_with_multiple_labels_uses_first_match():
     """Test that first matching label is used when multiple labels exist."""
-    from pokepoke.config import get_config, reset_config
+    from pokepoke.config import reset_config
     from pokepoke.models.sdk_helpers import build_prompt_from_work_item
     from pokepoke.types import BeadsWorkItem
 
     reset_config()
-    
+
     import pokepoke.config as config_module
     original_get_config = config_module.get_config
-    
+
     def mock_get_config():
         cfg = original_get_config()
         cfg.prompt_templates = {
@@ -734,7 +734,7 @@ def test_build_prompt_with_multiple_labels_uses_first_match():
             "desktop": "desktop-work",
         }
         return cfg
-    
+
     config_module.get_config = mock_get_config
 
     try:
@@ -749,7 +749,7 @@ def test_build_prompt_with_multiple_labels_uses_first_match():
         )
 
         prompt = build_prompt_from_work_item(work_item)
-        
+
         # Should use orchestrator template (first match in labels list)
         # Note: This test documents current behavior - first label wins
         assert "PokePoke-789" in prompt
@@ -777,7 +777,7 @@ def test_build_prompt_with_no_labels():
     )
 
     prompt = build_prompt_from_work_item(work_item)
-    
+
     # Should use default template
     assert "PokePoke-999" in prompt
     assert "Task with no labels" in prompt
