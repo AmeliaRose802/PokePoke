@@ -96,14 +96,12 @@ def _build_worker_env(cwd: str | None) -> dict[str, str]:
 def _build_add_dir_args(cwd: str) -> list[str]:
     """Return ``--add-dir`` CLI args so worktree agents can also access the main repo."""
     cwd_path = Path(cwd).resolve()
-    # Pattern: <repo_root>/worktrees/task-<id>
-    if cwd_path.parent.name == "worktrees":
-        repo_root = str(cwd_path.parent.parent)
-        return ["--add-dir", repo_root]
+    if cwd_path.parent.name == "worktrees":  # Pattern: <repo_root>/worktrees/task-<id>
+        return ["--add-dir", str(cwd_path.parent.parent)]
     return []
 
-def _create_sdk_client(cwd: str | None) -> Any:
-    """Create and configure a CopilotClient instance."""
+def _create_sdk_client(cwd: str | None, add_parent_dir: bool = False) -> Any:
+    """Create a CopilotClient; *add_parent_dir* passes ``--add-dir`` for parent repo visibility."""
     proj_config = get_config()
     cli_path = proj_config.ai_backend.copilot_cli_path
     # Resolve relative CLI names (e.g. "copilot.cmd") to absolute paths via PATH
@@ -118,9 +116,10 @@ def _create_sdk_client(cwd: str | None) -> Any:
     }
     if cwd:
         client_opts["cwd"] = cwd
-        add_dir_args = _build_add_dir_args(cwd)
-        if add_dir_args:
-            client_opts["cli_args"] = add_dir_args
+        if add_parent_dir:
+            add_dir_args = _build_add_dir_args(cwd)
+            if add_dir_args:
+                client_opts["cli_args"] = add_dir_args
     if not _HAS_COPILOT:
         raise ImportError(
             "The 'copilot' SDK package is required but not installed. "
@@ -140,11 +139,7 @@ async def _send_and_wait(
     final_prompt: str, done: asyncio.Event,
     max_timeout: float, stats: Any, inactivity_timeout: float, **kw: Any,
 ) -> str | None:
-    """Send the prompt and wait for completion. Returns abort reason or None.
-
-    Raises ``RateLimitError`` if the handler detected a rate limit.
-    Raises ``KeyboardInterrupt`` if the user interrupts.
-    """
+    """Send the prompt and wait for completion. Returns abort reason or None."""
     logger.info("[SDK] Sending message...\n")
     with terminal_ui.ui.agent_output():
         await session.send({"prompt": final_prompt})
@@ -283,20 +278,9 @@ async def invoke_copilot_sdk(
     session_id: str | None = None,
     is_resume: bool = False,
     use_warm_session: bool = True,
+    add_parent_dir: bool = False,
 ) -> CopilotResult:
-    """Invoke GitHub Copilot using the SDK. Falls back to Sonnet on rate limit.
-
-    Args:
-        session_id: Optional SDK session ID for resuming a timed-out session.
-            When provided, the SDK will attempt to restore the previous
-            conversation history.
-        is_resume: When ``True``, the invocation is a resume after timeout.
-            A shorter resume-oriented prompt is sent instead of the full
-            template.
-        use_warm_session: When ``True`` (default), check for a matching warm
-            session before starting cold. Set to ``False`` for retries or
-            when a specific session_id is provided.
-    """
+    """Invoke GitHub Copilot using the SDK. Falls back to Sonnet on rate limit."""
     # Check for a warm session match if enabled and not resuming
     session_id = await _try_get_warm_session_id_async(work_item, session_id, is_resume, use_warm_session, cwd)
 
@@ -314,7 +298,7 @@ async def invoke_copilot_sdk(
     liveness_kw = {'process_output_timeout': float(get_config().process_output_timeout),
                    'max_ping_failures': int(get_config().max_ping_failures)}
 
-    client = _create_sdk_client(cwd)
+    client = _create_sdk_client(cwd, add_parent_dir=add_parent_dir)
 
     try:
         logger.info("[SDK] Starting Copilot client...")
@@ -446,31 +430,19 @@ async def invoke_copilot_sdk(
 
 
 def invoke_copilot_sdk_sync(
-    work_item: BeadsWorkItem,
-    prompt: str | None = None,
-    retry_config: RetryConfig | None = None,
-    timeout: float | None = None,
-    deny_write: bool = False,
-    item_logger: 'ItemLogger | None' = None,
-    model: str | None = None,
-    cwd: str | None = None,
-    template_name: str | None = None,
-    session_id: str | None = None,
-    is_resume: bool = False,
-    use_warm_session: bool = True,
+    work_item: BeadsWorkItem, prompt: str | None = None,
+    retry_config: RetryConfig | None = None, timeout: float | None = None,
+    deny_write: bool = False, item_logger: 'ItemLogger | None' = None,
+    model: str | None = None, cwd: str | None = None,
+    template_name: str | None = None, session_id: str | None = None,
+    is_resume: bool = False, use_warm_session: bool = True,
+    add_parent_dir: bool = False,
 ) -> CopilotResult:
     """Synchronous wrapper around invoke_copilot_sdk."""
     return asyncio.run(invoke_copilot_sdk(
-        work_item=work_item,
-        prompt=prompt,
-        retry_config=retry_config,
-        timeout=timeout,
-        deny_write=deny_write,
-        item_logger=item_logger,
-        model=model,
-        cwd=cwd,
-        template_name=template_name,
-        session_id=session_id,
-        is_resume=is_resume,
-        use_warm_session=use_warm_session,
+        work_item=work_item, prompt=prompt, retry_config=retry_config,
+        timeout=timeout, deny_write=deny_write, item_logger=item_logger,
+        model=model, cwd=cwd, template_name=template_name,
+        session_id=session_id, is_resume=is_resume,
+        use_warm_session=use_warm_session, add_parent_dir=add_parent_dir,
     ))

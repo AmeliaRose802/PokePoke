@@ -2345,3 +2345,103 @@ class TestWarmSessionIntegration:
             result = await _try_get_warm_session_id_async(work_item, None, False, True)
 
             assert result is None  # Should return None on error
+
+
+class TestBuildAddDirArgs:
+    """Tests for _build_add_dir_args function."""
+
+    def test_returns_add_dir_for_worktree_path(self, tmp_path):
+        """Should return --add-dir args when cwd is inside a worktrees directory."""
+        from pokepoke.models.copilot_sdk import _build_add_dir_args
+
+        worktrees_dir = tmp_path / "worktrees"
+        worktrees_dir.mkdir()
+        task_dir = worktrees_dir / "task-abc"
+        task_dir.mkdir()
+
+        result = _build_add_dir_args(str(task_dir))
+
+        assert result == ["--add-dir", str(tmp_path)]
+
+    def test_returns_empty_for_non_worktree_path(self, tmp_path):
+        """Should return empty list when cwd is not inside a worktrees directory."""
+        from pokepoke.models.copilot_sdk import _build_add_dir_args
+
+        result = _build_add_dir_args(str(tmp_path))
+
+        assert result == []
+
+
+class TestCreateSdkClientAddParentDir:
+    """Tests for _create_sdk_client add_parent_dir parameter."""
+
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.shutil.which', return_value='/usr/bin/copilot')
+    @patch('pokepoke.models.copilot_sdk.get_config')
+    def test_no_cli_args_when_add_parent_dir_false(
+        self, mock_config, mock_which, mock_client_class, tmp_path
+    ):
+        """Work agents (add_parent_dir=False) should NOT get --add-dir cli_args."""
+        from pokepoke.models.copilot_sdk import _create_sdk_client
+
+        mock_config.return_value = MagicMock(
+            ai_backend=MagicMock(copilot_cli_path='copilot')
+        )
+
+        worktrees_dir = tmp_path / "worktrees"
+        worktrees_dir.mkdir()
+        task_dir = worktrees_dir / "task-abc"
+        task_dir.mkdir()
+
+        _create_sdk_client(str(task_dir), add_parent_dir=False)
+
+        call_args = mock_client_class.call_args[0][0]
+        assert call_args["cwd"] == str(task_dir)
+        assert "cli_args" not in call_args
+
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.shutil.which', return_value='/usr/bin/copilot')
+    @patch('pokepoke.models.copilot_sdk.get_config')
+    def test_cli_args_when_add_parent_dir_true(
+        self, mock_config, mock_which, mock_client_class, tmp_path
+    ):
+        """Cleanup/gate agents (add_parent_dir=True) should get --add-dir cli_args."""
+        from pokepoke.models.copilot_sdk import _create_sdk_client
+
+        mock_config.return_value = MagicMock(
+            ai_backend=MagicMock(copilot_cli_path='copilot')
+        )
+
+        worktrees_dir = tmp_path / "worktrees"
+        worktrees_dir.mkdir()
+        task_dir = worktrees_dir / "task-abc"
+        task_dir.mkdir()
+
+        _create_sdk_client(str(task_dir), add_parent_dir=True)
+
+        call_args = mock_client_class.call_args[0][0]
+        assert call_args["cwd"] == str(task_dir)
+        assert call_args["cli_args"] == ["--add-dir", str(tmp_path)]
+
+    @patch('pokepoke.models.copilot_sdk.CopilotClient')
+    @patch('pokepoke.models.copilot_sdk.shutil.which', return_value='/usr/bin/copilot')
+    @patch('pokepoke.models.copilot_sdk.get_config')
+    def test_default_add_parent_dir_is_false(
+        self, mock_config, mock_which, mock_client_class, tmp_path
+    ):
+        """Default behavior (no add_parent_dir) should not add --add-dir."""
+        from pokepoke.models.copilot_sdk import _create_sdk_client
+
+        mock_config.return_value = MagicMock(
+            ai_backend=MagicMock(copilot_cli_path='copilot')
+        )
+
+        worktrees_dir = tmp_path / "worktrees"
+        worktrees_dir.mkdir()
+        task_dir = worktrees_dir / "task-abc"
+        task_dir.mkdir()
+
+        _create_sdk_client(str(task_dir))
+
+        call_args = mock_client_class.call_args[0][0]
+        assert "cli_args" not in call_args

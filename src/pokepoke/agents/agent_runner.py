@@ -98,13 +98,14 @@ def run_maintenance_agent(
 
 def _run_simple_agent(
     agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, deny_write: bool = True,
-    model: str | None = None, cwd: str | None = None, item_logger: 'ItemLogger | None' = None
+    model: str | None = None, cwd: str | None = None, item_logger: 'ItemLogger | None' = None,
+    add_parent_dir: bool = False,
 ) -> AgentStats | None:
     """Run a simple agent in the main repo with configurable write access."""
     logger.info("Running %s (%s)%s", agent_name, "no write" if deny_write else "write enabled", f", model={model}" if model else "")
     normalized = agent_name.lower().replace(" ", "_")
     with agent_type_context(normalized):
-        result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=deny_write, model=model, cwd=cwd, item_logger=item_logger)
+        result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=deny_write, model=model, cwd=cwd, item_logger=item_logger, add_parent_dir=add_parent_dir)
     if result.success:
         logger.info("%s completed", agent_name)
         return (parse_agent_stats(result.output) if result.output else None) or AgentStats()
@@ -115,9 +116,9 @@ def _run_beads_only_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prom
     """Run a beads-only maintenance agent in the main repo."""
     return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=True, model=model, cwd=cwd, item_logger=item_logger)
 
-def _run_main_repo_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: str | None = None, cwd: str | None = None, item_logger: 'ItemLogger | None' = None) -> AgentStats | None:
+def _run_main_repo_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: str | None = None, cwd: str | None = None, item_logger: 'ItemLogger | None' = None, add_parent_dir: bool = False) -> AgentStats | None:
     """Run a maintenance agent in the main repo WITH write access."""
-    return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=False, model=model, cwd=cwd, item_logger=item_logger)
+    return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=False, model=model, cwd=cwd, item_logger=item_logger, add_parent_dir=add_parent_dir)
 
 def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger | None' = None, parent_agent_id: str | None = None) -> AgentStats | None:
     """Run worktree cleanup agent to merge/delete stale worktrees."""
@@ -169,7 +170,7 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
             is_ephemeral=True,
         )
         cwd = str(repo_root) if repo_root is not None else None
-        agent_result = _run_main_repo_agent("Worktree Cleanup", cleanup_item, cleanup_prompt, cwd=cwd, item_logger=item_logger)
+        agent_result = _run_main_repo_agent("Worktree Cleanup", cleanup_item, cleanup_prompt, cwd=cwd, item_logger=item_logger, add_parent_dir=True)
         status = "success" if agent_result is not None else "failed"
         terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status=status, parent_agent_id=parent_agent_id, agent_type="worktree_cleanup")
         return agent_result

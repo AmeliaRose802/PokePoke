@@ -79,6 +79,7 @@ def run_gate_agent(
             item, prompt=final_prompt, deny_write=True, cwd=cwd,
             model=gate_model, item_logger=item_logger,
             session_id=session_id, is_resume=is_resume,
+            add_parent_dir=True,
         )
 
     stats = parse_agent_stats(result.output) if result.output else None

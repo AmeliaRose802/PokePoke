@@ -314,3 +314,22 @@ class TestGateModelRecording:
         run_gate_agent(_make_item(), work_model="gpt-4")
 
         mock_record.assert_not_called()
+
+
+class TestGateAgentAddParentDir:
+    """Tests that gate agent passes add_parent_dir=True for parent repo visibility."""
+
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_gate_agent_passes_add_parent_dir_true(self, mock_ui, mock_branch, mock_model, mock_invoke):
+        """Gate agent invocations should include add_parent_dir=True."""
+        verdict = json.dumps({"status": "success", "message": "ok"})
+        output = f"```json\n{verdict}\n```"
+        mock_invoke.return_value = _mock_invoke_result(success=True, output=output)
+
+        run_gate_agent(_make_item())
+
+        _, kwargs = mock_invoke.call_args
+        assert kwargs.get("add_parent_dir") is True

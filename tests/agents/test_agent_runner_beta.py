@@ -45,7 +45,9 @@ class TestRunBetaTester:
     ) -> None:
         """Test successful beta tester run."""
         mock_get_config.return_value = _mcp_enabled_config()
-        mock_exists.return_value = True
+        # First exists() at line 47 → False (skip resolve(strict=True)),
+        # second exists() at line 54 → True (enter else → subprocess.run called)
+        mock_exists.side_effect = [False, True]
         mock_read.return_value = "Beta test prompt"
         mock_run.return_value = Mock(returncode=0)
 
@@ -97,9 +99,9 @@ class TestRunBetaTester:
     ) -> None:
         """Test restart script missing but proceeds."""
         mock_get_config.return_value = _mcp_enabled_config()
-        # restart_script.exists() -> False
-        # prompt_path.exists() -> True
-        mock_exists.side_effect = [False, True]
+        # restart_script.exists() -> False both times (script missing)
+        # prompt_path.exists() comes from the Mock object, not patched Path.exists
+        mock_exists.side_effect = [False, False]
         mock_read.return_value = "prompt"
 
         mock_worktree_agent.return_value = AgentStats(
@@ -211,7 +213,9 @@ class TestRunBetaTester:
     ) -> None:
         """Test restart script execution failure but proceeds."""
         mock_get_config.return_value = _mcp_enabled_config()
-        mock_exists.return_value = True
+        # First exists() at line 47 → False (skip resolve(strict=True)),
+        # second exists() at line 54 → True (enter else → subprocess.run called)
+        mock_exists.side_effect = [False, True]
         mock_read.return_value = "prompt"
 
         # Restart fails

@@ -829,3 +829,44 @@ class TestWorktreeAgentFailureReconciliation:
 
         assert stats is None
         mock_branch_has_commits.assert_not_called()
+
+
+class TestWorktreeAgentSandbox:
+    """Test that work agents are sandboxed without --add-dir parent repo access."""
+
+    @patch('pokepoke.agents.agent_runner.handle_worktree_merge')
+    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
+    @patch('pokepoke.agents.agent_runner.invoke_copilot')
+    @patch('pokepoke.agents.agent_runner.create_worktree')
+    def test_worktree_agent_does_not_pass_add_parent_dir(
+        self,
+        mock_create: Mock,
+        mock_invoke: Mock,
+        mock_cleanup_loop: Mock,
+        mock_parse: Mock,
+        mock_handle_merge: Mock,
+    ) -> None:
+        """Work agents should NOT receive add_parent_dir — sandboxed to worktree only."""
+        agent_item = BeadsWorkItem(
+            id="work-1", title="Work", description="Work task",
+            status="in_progress", priority=1, issue_type="task",
+            labels=["orchestrator"],
+        )
+
+        mock_create.return_value = Path("/repo/worktrees/task-work-1")
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="work-1", success=True, output="Done", attempt_count=1,
+        )
+        mock_cleanup_loop.return_value = (True, 0)
+        mock_parse.return_value = AgentStats()
+        mock_handle_merge.return_value = (True, True)
+
+        _run_worktree_agent(
+            "Work", "work-1", agent_item, "Prompt", Path("/repo"),
+        )
+
+        _, kwargs = mock_invoke.call_args
+        # Work agents must not get add_parent_dir — the parameter should not be
+        # passed (i.e. it uses the default False on invoke_copilot).
+        assert kwargs.get("add_parent_dir", False) is False
