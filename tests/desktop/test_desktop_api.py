@@ -157,11 +157,11 @@ def test_add_label_returns_error_on_called_process_error(monkeypatch) -> None:
     def _raise(*args, **kwargs):
         raise subprocess.CalledProcessError(
             returncode=1,
-            cmd=args[0],
+            cmd=["bd", "update"],
             stderr="network unavailable",
         )
 
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext.subprocess.run", _raise)
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._run_bd_with_retry", _raise)
 
     result = api.add_work_item_label("PokePoke-1", "human-required")
     assert result["success"] is False
@@ -176,9 +176,9 @@ def test_remove_label_returns_error_on_timeout(monkeypatch) -> None:
     api.push_work_item("PokePoke-1", "Title", "open", ["urgent"])
 
     def _timeout(*args, **kwargs):
-        raise subprocess.TimeoutExpired(cmd=args[0], timeout=30, stderr="timed out")
+        raise subprocess.TimeoutExpired(cmd=["bd", "update"], timeout=30, stderr="timed out")
 
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext.subprocess.run", _timeout)
+    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._run_bd_with_retry", _timeout)
 
     result = api.remove_work_item_label("PokePoke-1", "urgent")
     assert result["success"] is False

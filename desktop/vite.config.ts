@@ -4,6 +4,10 @@ import { defineConfig } from 'vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  build: {
+    // Desktop app bundled with pywebview — large chunks are fine
+    chunkSizeWarningLimit: 600,
+  },
   server: {
     // Allow pywebview to connect from any origin
     cors: true,

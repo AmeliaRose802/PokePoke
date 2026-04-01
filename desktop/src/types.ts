@@ -274,3 +274,25 @@ export interface AppState {
   current_session_id: string | null;
   logs_dir: string | null;
 }
+
+/** A single Lifecycle data point from the orchestrator log */
+export interface LifecycleEntry {
+  ts: string;
+  active: number;
+  max: number;
+  slots: number;
+  mem: number;
+}
+
+/** An item event (completion or failure) with timestamp */
+export interface ItemEvent {
+  ts: string;
+  item_id: string;
+}
+
+/** Concurrency timeline data from the orchestrator log */
+export interface ConcurrencyTimeline {
+  lifecycle: LifecycleEntry[];
+  completions: ItemEvent[];
+  failures: ItemEvent[];
+}
