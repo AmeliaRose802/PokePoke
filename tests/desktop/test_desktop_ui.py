@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 import pokepoke.desktop.desktop_ui as desktop_ui_module
 import pokepoke.desktop.frontend_discovery as frontend_discovery_module
 import pokepoke.desktop.thread_output_router as thread_output_router_module
+import pokepoke.desktop.window_manager as window_manager_module
 from pokepoke.desktop import pywebview_patches
 from pokepoke.desktop.desktop_ui import DesktopUI, _shutdown_threading_excepthook
 
@@ -349,7 +350,7 @@ class TestDesktopUIRunWithOrchestrator:
         fake_webview = FakeWebviewModule()
         monkeypatch.setitem(sys.modules, "webview", fake_webview)
         monkeypatch.setattr(
-            frontend_discovery_module, "find_frontend_dist", lambda: dist_dir
+            window_manager_module, "find_frontend_dist", lambda: dist_dir
         )
         monkeypatch.setattr(desktop_ui_module, "request_shutdown", lambda: None)
 
@@ -385,7 +386,7 @@ class TestDesktopUIRunWithOrchestrator:
         fake_webview = OrderTrackingWebview()
         monkeypatch.setitem(sys.modules, "webview", fake_webview)
         monkeypatch.setattr(
-            frontend_discovery_module, "find_frontend_dist", lambda: dist_dir
+            window_manager_module, "find_frontend_dist", lambda: dist_dir
         )
         monkeypatch.setattr(desktop_ui_module, "request_shutdown", lambda: None)
 
@@ -393,7 +394,7 @@ class TestDesktopUIRunWithOrchestrator:
             call_order.append("set_app_user_model_id")
 
         monkeypatch.setattr(
-            desktop_ui_module, "set_app_user_model_id", tracking_set_app_user_model_id
+            window_manager_module, "set_app_user_model_id", tracking_set_app_user_model_id
         )
 
         ui = DesktopUI()
@@ -409,7 +410,7 @@ class TestDesktopUIRunWithOrchestrator:
     def test_run_with_orchestrator_missing_frontend(self, monkeypatch) -> None:
         fake_webview = FakeWebviewModule()
         monkeypatch.setitem(sys.modules, "webview", fake_webview)
-        monkeypatch.setattr(desktop_ui_module, "find_frontend_dist", lambda: None)
+        monkeypatch.setattr(window_manager_module, "find_frontend_dist", lambda: None)
         ui = DesktopUI()
         original_print = builtins.print
 
@@ -426,7 +427,7 @@ class TestDesktopUIRunWithOrchestrator:
         fake_webview = FakeWebviewModule()
         monkeypatch.setitem(sys.modules, "webview", fake_webview)
         monkeypatch.setattr(
-            frontend_discovery_module, "find_frontend_dist", lambda: dist_dir
+            window_manager_module, "find_frontend_dist", lambda: dist_dir
         )
         monkeypatch.setattr(desktop_ui_module, "request_shutdown", lambda: None)
 
@@ -452,7 +453,7 @@ class TestDesktopUIRunWithOrchestrator:
         fake_webview = FakeWebviewModule()
         monkeypatch.setitem(sys.modules, "webview", fake_webview)
         monkeypatch.setattr(
-            frontend_discovery_module, "find_frontend_dist", lambda: dist_dir
+            window_manager_module, "find_frontend_dist", lambda: dist_dir
         )
         monkeypatch.setattr(desktop_ui_module, "request_shutdown", lambda: None)
 
@@ -485,7 +486,7 @@ class TestDesktopUIRunWithOrchestrator:
         fake_webview = RaisingAfterLoadedWebview()
         monkeypatch.setitem(sys.modules, "webview", fake_webview)
         monkeypatch.setattr(
-            frontend_discovery_module, "find_frontend_dist", lambda: dist_dir
+            window_manager_module, "find_frontend_dist", lambda: dist_dir
         )
         mock_shutdown = MagicMock()
         monkeypatch.setattr(desktop_ui_module, "request_shutdown", mock_shutdown)
@@ -520,7 +521,7 @@ class TestDesktopUIRunWithOrchestrator:
         fake_webview = RaisingBeforeLoadedWebview()
         monkeypatch.setitem(sys.modules, "webview", fake_webview)
         monkeypatch.setattr(
-            frontend_discovery_module, "find_frontend_dist", lambda: dist_dir
+            window_manager_module, "find_frontend_dist", lambda: dist_dir
         )
         mock_shutdown = MagicMock()
         monkeypatch.setattr(desktop_ui_module, "request_shutdown", mock_shutdown)
