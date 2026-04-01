@@ -9,17 +9,13 @@ of check results plus a computed per-model summary.
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 import threading
-from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from pokepoke.utils.file_utils import replace_with_retry
-from pokepoke.worktrees.coordination import acquire_lock
+from pokepoke.stats.persistent_json_store import PersistentJsonStore
 
 logger = logging.getLogger(__name__)
 
@@ -36,32 +32,29 @@ def _empty_gate_store() -> dict[str, Any]:
     return {"log": [], "summary": {}}
 
 
+def _normalize_gate_store(data: Any) -> dict[str, Any]:
+    if not isinstance(data, dict) or "log" not in data:
+        return _empty_gate_store()
+    return data
+
+
+_STORE = PersistentJsonStore(
+    default_path=GATE_STATS_FILE,
+    empty=_empty_gate_store,
+    thread_lock=_gate_thread_lock,
+    lock_name=_GATE_STATS_FILE_LOCK,
+    normalize=_normalize_gate_store,
+)
+
+
 def load_gate_stats(path: Path | None = None) -> dict[str, Any]:
     """Load the persistent gate rejection stats from disk."""
-    stats_path = path or GATE_STATS_FILE
-    if not stats_path.exists():
-        return _empty_gate_store()
-    try:
-        with stats_path.open(encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict) or "log" not in data:
-            return _empty_gate_store()
-        return data
-    except (json.JSONDecodeError, OSError):
-        return _empty_gate_store()
+    return _STORE.load(path)
 
 
 def save_gate_stats(data: dict[str, Any], path: Path | None = None) -> None:
     """Atomically persist gate rejection stats to disk."""
-    stats_path = path or GATE_STATS_FILE
-    stats_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = stats_path.with_suffix(".tmp")
-    with tmp_path.open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-        f.flush()
-        with suppress(OSError):
-            os.fsync(f.fileno())
-    replace_with_retry(tmp_path, stats_path)
+    _STORE.save(data, path)
 
 
 def _rebuild_gate_summary(log: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -139,7 +132,7 @@ def record_gate_check(
         "timestamp": datetime.now(UTC).isoformat(),
     }
 
-    with _gate_thread_lock, acquire_lock(_GATE_STATS_FILE_LOCK, timeout=60):
+    with _STORE.lock(timeout=60):
         data = load_gate_stats(path)
         data["log"].append(entry)
         summary = data.get("summary", {})
