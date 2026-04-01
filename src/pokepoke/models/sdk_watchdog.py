@@ -78,13 +78,16 @@ class SDKWatchdog:
             logger.debug("Failed to check client state during heartbeat", exc_info=True)
 
     @staticmethod
-    def _log_event_gap(stats: SessionStats, last_event_gap_log: float) -> float:
+    def _log_event_gap(stats: SessionStats, last_event_gap_log: float, handler: Any = None) -> float:
         """Log significant event gaps for diagnostics. Returns updated last_event_gap_log."""
         now = time.monotonic()
         if (now - last_event_gap_log) >= 30.0:
             gap = now - stats['last_event_time']
             if gap >= 60.0:
-                pending = stats.get('pending_tool_calls', 0)
+                if handler and hasattr(handler, 'get_pending_tool_calls'):
+                    pending = handler.get_pending_tool_calls()
+                else:
+                    pending = stats.get('pending_tool_calls', 0)
                 logger.info(
                     "SDK_EVENT_GAP: %.0fs since last event, pending_tools=%d, "
                     "event_count=%d, turn_count=%d",
@@ -99,6 +102,7 @@ class SDKWatchdog:
         client: Any, stats: SessionStats, consecutive_ping_failures: int,
         max_ping_failures: int, process_output_timeout: float,
         gap: float, ping_ok: bool, session: Any, done: asyncio.Event,
+        handler: Any = None,
     ) -> tuple[bool, str, int]:
         """Check process liveness via ping and event timing.
 
@@ -107,7 +111,10 @@ class SDKWatchdog:
         should_abort, reason = False, ""
         if consecutive_ping_failures >= max_ping_failures:
             has_done_work = stats.get('turn_count', 0) > 0
-            no_pending = stats.get('pending_tool_calls', 0) == 0
+            if handler and hasattr(handler, 'get_pending_tool_calls'):
+                no_pending = handler.get_pending_tool_calls() == 0
+            else:
+                no_pending = stats.get('pending_tool_calls', 0) == 0
 
             process_exited_ok = False
             try:
@@ -116,36 +123,35 @@ class SDKWatchdog:
                     proc.poll()
                     if proc.returncode is not None:
                         process_exited_ok = proc.returncode == 0
-                        logger.info(
-                            "SDK process exited with code %d during ping failure evaluation",
-                            proc.returncode,
-                        )
+                        logger.info("SDK process exited with code %d during ping failure evaluation", proc.returncode)
             except Exception:
                 logger.debug("Failed to check process exit code", exc_info=True)
 
             if has_done_work and no_pending and process_exited_ok:
-                logger.warning(
-                    "Pings failing but session completed (turns=%d, pending=%d, "
-                    "process_exited_ok=%s) - treating as normal completion",
-                    stats.get('turn_count', 0),
-                    stats.get('pending_tool_calls', 0),
-                    process_exited_ok,
-                )
+                if handler and hasattr(handler, 'get_pending_tool_calls'):
+                    pending = handler.get_pending_tool_calls()
+                else:
+                    pending = stats.get('pending_tool_calls', 0)
+                logger.warning("Pings failing but session completed (turns=%d, pending=%d, process_exited_ok=%s) - treating as normal completion", stats.get('turn_count', 0), pending, process_exited_ok)
                 done.set()
                 return False, "", consecutive_ping_failures
             should_abort = True
             reason = (f"PROCESS DEAD: {consecutive_ping_failures} consecutive "
                       f"ping failures (threshold: {max_ping_failures})")
         elif (process_output_timeout > 0 and gap >= process_output_timeout
-              and not ping_ok and stats.get('pending_tool_calls', 0) == 0):
-            should_abort = True
-            reason = (f"PROCESS UNRESPONSIVE: No events for {gap:.0f}s "
-                      f"(threshold: {process_output_timeout:.0f}s) and ping failed")
+              and not ping_ok):
+            if handler and hasattr(handler, 'get_pending_tool_calls'):
+                no_pending = handler.get_pending_tool_calls() == 0
+            else:
+                no_pending = stats.get('pending_tool_calls', 0) == 0
+            if no_pending:
+                should_abort = True
+                reason = (f"PROCESS UNRESPONSIVE: No events for {gap:.0f}s "
+                          f"(threshold: {process_output_timeout:.0f}s) and ping failed")
 
         if should_abort:
             logger.info(f"\n[SDK] {reason} - aborting")
-            logger.error("SDK process liveness: %s (event_count=%d)", reason,
-                         stats.get('event_count', 0))
+            logger.error("SDK process liveness: %s (event_count=%d)", reason, stats.get('event_count', 0))
             try:
                 await session.abort()
             except Exception as e:
@@ -184,6 +190,7 @@ class SDKWatchdog:
     @staticmethod
     async def _check_inactivity(
         stats: SessionStats, inactivity_timeout: float, session: Any,
+        handler: Any = None,
     ) -> bool:
         """Check for session inactivity and abort if detected.
 
@@ -192,7 +199,10 @@ class SDKWatchdog:
         if inactivity_timeout <= 0:
             return False
 
-        has_pending_tools = stats.get('pending_tool_calls', 0) > 0
+        if handler and hasattr(handler, 'get_pending_tool_calls'):
+            has_pending_tools = handler.get_pending_tool_calls() > 0
+        else:
+            has_pending_tools = stats.get('pending_tool_calls', 0) > 0
         since_last_tool = time.monotonic() - stats.get('last_tool_activity_time', 0)
         tool_cooldown_grace = 60.0
         is_in_grace_period = since_last_tool < tool_cooldown_grace
@@ -202,18 +212,8 @@ class SDKWatchdog:
 
         if since_last_event >= inactivity_timeout and not has_pending_tools and not is_in_grace_period and not has_active_children:
             debug_info = f"pending_tools={has_pending_tools}, grace={is_in_grace_period}, active_children={has_active_children}"
-            logger.debug(
-                f"\n[SDK] SESSION DEAD: No events received for {since_last_event:.0f}s "
-                f"(threshold: {inactivity_timeout:.0f}s) — aborting ({debug_info})"
-            )
-            logger.error(
-                "SDK session inactivity detected: no events for %.0fs "
-                "(event_count=%d, last_tool_activity=%.0fs ago, has_children=%s)",
-                since_last_event,
-                stats.get('event_count', 0),
-                time.monotonic() - stats.get('last_tool_activity_time', 0),
-                has_active_children,
-            )
+            logger.debug(f"\n[SDK] SESSION DEAD: No events received for {since_last_event:.0f}s (threshold: {inactivity_timeout:.0f}s) — aborting ({debug_info})")
+            logger.error("SDK session inactivity detected: no events for %.0fs (event_count=%d, last_tool_activity=%.0fs ago, has_children=%s)", since_last_event, stats.get('event_count', 0), time.monotonic() - stats.get('last_tool_activity_time', 0), has_active_children)
             try:
                 await session.abort()
             except Exception as e:
@@ -303,7 +303,7 @@ class SDKWatchdog:
             now = time.monotonic()
 
             if stats is not None:
-                last_event_gap_log = SDKWatchdog._log_event_gap(stats, last_event_gap_log)
+                last_event_gap_log = SDKWatchdog._log_event_gap(stats, last_event_gap_log, handler)
 
             # Periodic heartbeat with ping to distinguish live-but-silent from dead
             if stats is not None and (now - last_hb) >= _HB_INTERVAL:
@@ -311,7 +311,12 @@ class SDKWatchdog:
                 gap = now - stats['last_event_time']
                 remaining_wall = deadline - asyncio.get_event_loop().time()
                 ping_ok = False
-                has_pending = stats.get('pending_tool_calls', 0) > 0
+                if handler and hasattr(handler, 'get_pending_tool_calls'):
+                    has_pending = handler.get_pending_tool_calls() > 0
+                    pending_for_log = handler.get_pending_tool_calls()
+                else:
+                    has_pending = stats.get('pending_tool_calls', 0) > 0
+                    pending_for_log = stats.get('pending_tool_calls', 0)
                 try:
                     await client.ping()
                     ping_ok = True
@@ -329,17 +334,15 @@ class SDKWatchdog:
                         if process_exited:
                             consecutive_ping_failures += 1
                         else:
-                            logger.debug("Ignoring ping failure: %d tool call(s) pending", stats.get('pending_tool_calls', 0))
+                            logger.debug("Ignoring ping failure: %d tool call(s) pending", pending_for_log)
                     else:
                         consecutive_ping_failures += 1
                 logger.info(
                     "SDK heartbeat: ping=%s, event_gap=%.0fs, pending=%d, "
                     "events_delta=%d (total=%d), turns=%d, remaining=%.0fs, "
                     "ping_failures=%d/%d",
-                    "ok" if ping_ok else "FAIL", gap,
-                    stats.get('pending_tool_calls', 0), evts, stats['event_count'],
-                    stats.get('turn_count', 0), remaining_wall,
-                    consecutive_ping_failures, max_ping_failures,
+                    "ok" if ping_ok else "FAIL", gap, pending_for_log, evts, stats['event_count'],
+                    stats.get('turn_count', 0), remaining_wall, consecutive_ping_failures, max_ping_failures,
                 )
                 last_hb = now
                 last_hb_events = stats['event_count']
@@ -347,7 +350,7 @@ class SDKWatchdog:
                 # Process-level liveness checks
                 should_abort, _reason, consecutive_ping_failures = await SDKWatchdog._check_process_liveness(
                     client, stats, consecutive_ping_failures, max_ping_failures,
-                    process_output_timeout, gap, ping_ok, session, done,
+                    process_output_timeout, gap, ping_ok, session, done, handler,
                 )
                 if should_abort:
                     return "process_dead"
@@ -360,7 +363,7 @@ class SDKWatchdog:
             # Also considers child agent activity timestamps.
             if stats is not None:
                 inactivity_detected = await SDKWatchdog._check_inactivity(
-                    stats, inactivity_timeout, session
+                    stats, inactivity_timeout, session, handler
                 )
                 if inactivity_detected:
                     return "inactivity"
