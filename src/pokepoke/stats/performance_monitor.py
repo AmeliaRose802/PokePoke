@@ -37,6 +37,7 @@ class PerformanceMonitor:
         max_iteration_seconds: float = 30.0,
         min_memory_mb: float = 256.0,
         min_success_rate: float = 0.5,
+        max_alerts: int = 500,
         enabled: bool = True,
     ) -> None:
         self._enabled = enabled
@@ -45,6 +46,7 @@ class PerformanceMonitor:
         self._max_iteration_seconds = max_iteration_seconds
         self._min_memory_mb = min_memory_mb
         self._min_success_rate = min_success_rate
+        self._max_alerts = max_alerts
 
         self._lock = threading.Lock()
         self._alerts: list[PerformanceAlert] = []
@@ -219,6 +221,8 @@ class PerformanceMonitor:
     def _record_alert(self, alert: PerformanceAlert) -> None:
         with self._lock:
             self._alerts.append(alert)
+            if len(self._alerts) >= self._max_alerts:
+                del self._alerts[: len(self._alerts) // 2]
             self._total_alerts += 1
 
     def get_alerts(self, *, since: float | None = None) -> list[PerformanceAlert]:

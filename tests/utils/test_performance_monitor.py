@@ -252,6 +252,29 @@ class TestAlertManagement:
         mon.clear_alerts()
         assert len(mon.get_alerts()) == 0
 
+    def test_alerts_evict_oldest_half_at_max(self) -> None:
+        """Test that alerts list evicts oldest half when reaching max_alerts."""
+        max_alerts = 20
+        mon = PerformanceMonitor(max_merge_queue_depth=1, max_alerts=max_alerts)
+        for i in range(max_alerts):
+            mon.check_merge_queue(i + 2)
+
+        alerts = mon.get_alerts()
+        # After reaching max, oldest half evicted: 10 remain
+        assert len(alerts) == max_alerts // 2
+        # total_alerts counter should still reflect all recorded alerts
+        snap = mon.snapshot()
+        assert snap["total_alerts"] == max_alerts
+
+    def test_alerts_stay_bounded_after_many_records(self) -> None:
+        """Test that alerts never exceed max_alerts even after many records."""
+        max_alerts = 10
+        mon = PerformanceMonitor(max_merge_queue_depth=1, max_alerts=max_alerts)
+        for i in range(100):
+            mon.check_merge_queue(i + 2)
+        alerts = mon.get_alerts()
+        assert len(alerts) <= max_alerts
+
 
 class TestSnapshot:
     """Tests for the snapshot method."""
