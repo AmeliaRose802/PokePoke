@@ -322,7 +322,8 @@ class TestAgentContextInParallelProcessItem:
             for _ in range(3):
                 t = threading.Thread(
                     target=_parallel_process_item,
-                    args=(item, "/repo", MagicMock(), MagicMock())
+                    args=(item, MagicMock(), MagicMock()),
+                    kwargs={"worker_agent_name": "test-context-123"}
                 )
                 t.start()
                 threads.append(t)
