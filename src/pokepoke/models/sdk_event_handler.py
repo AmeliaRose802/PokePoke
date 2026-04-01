@@ -175,7 +175,6 @@ class _EventHandler:
         with self._pending_tools_lock:
             self._pending_tools[str(tool_id)] = {'name': tool_name, 'args': tool_args}
             self._stats['tool_start_times'][str(tool_id)] = time.monotonic()
-            self._stats['pending_tool_calls'] += 1
         if tool_name == 'powershell':
             shell_id = tool_args.get('shellId')
             if shell_id:
@@ -198,7 +197,6 @@ class _EventHandler:
         with self._pending_tools_lock:
             tool_info = self._pending_tools.pop(str(tool_id), {}) if tool_id else {}
             start_time = self._stats['tool_start_times'].pop(str(tool_id), None)
-            self._stats['pending_tool_calls'] = max(0, self._stats['pending_tool_calls'] - 1)
         tool_args = tool_info.get('args', {})
 
         if start_time is not None and (latency := time.monotonic() - start_time) >= 10.0:
