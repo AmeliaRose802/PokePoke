@@ -943,6 +943,28 @@ class TestResolveWithTimeout:
         result = _resolve_with_timeout(epic, timeout=5)
         assert result is None
 
+    @patch("pokepoke.beads.beads_management.resolve_to_leaf_task")
+    def test_reuses_module_level_pool(self, mock_resolve: Mock) -> None:
+        """Verify _resolve_with_timeout reuses the module-level pool
+        instead of creating a new ThreadPoolExecutor per call."""
+        from pokepoke.beads.beads_management import (
+            _resolve_pool,
+            _resolve_with_timeout,
+        )
+        from pokepoke.types import BeadsWorkItem
+
+        epic = BeadsWorkItem(id="e-1", title="Epic", description="", status="open",
+                             priority=1, issue_type="epic")
+        leaf = BeadsWorkItem(id="t-1", title="Leaf", description="", status="open",
+                             priority=1, issue_type="task")
+        mock_resolve.return_value = leaf
+
+        # Call twice and confirm the same pool is used both times
+        with patch.object(_resolve_pool, "submit", wraps=_resolve_pool.submit) as spy:
+            _resolve_with_timeout(epic, timeout=5)
+            _resolve_with_timeout(epic, timeout=5)
+            assert spy.call_count == 2
+
 
 @pytest.mark.parametrize("backend_config", [BD_CONFIG, BR_CONFIG], ids=["bd", "br"])
 class TestBothBackendsManagement:
