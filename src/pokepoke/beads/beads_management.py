@@ -296,7 +296,7 @@ def _resolve_with_timeout(
         logger.warning("Hierarchical resolve failed for %s", item.id, exc_info=True)
         return None
     finally:
-        pool.shutdown(wait=False, cancel_futures=True)
+        pool.shutdown(wait=True, cancel_futures=True)
 
 
 def select_next_hierarchical_item(items: list[BeadsWorkItem]) -> BeadsWorkItem | None:
