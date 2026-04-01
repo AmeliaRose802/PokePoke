@@ -279,7 +279,7 @@ class WorkItemSession:
 
     def _unassign_beads_item(self) -> None:
         """Return the beads item to the ready queue (with retry)."""
-        from pokepoke.beads.beads_recovery import unassign_with_retry
+        from pokepoke.beads.beads_manifest_utils import unassign_with_retry
 
         if not unassign_with_retry(self.item_id):
             raise RuntimeError(f"unassign_with_retry exhausted for {self.item_id}")

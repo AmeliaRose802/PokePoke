@@ -2,19 +2,21 @@
 
 import subprocess
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from pokepoke.beads.beads_manifest_utils import (
+    _load_failed_unassign_manifest,
+    _save_failed_unassign_manifest,
+    add_failed_unassign,
+    remove_failed_unassign,
+    unassign_with_retry,
+)
 from pokepoke.beads.beads_query import BD_CONFIG, BR_CONFIG, get_active_backend, set_active_backend
 from pokepoke.beads.beads_recovery import (
-    _add_failed_unassign,
-    _load_failed_unassign_manifest,
-    _remove_failed_unassign,
-    _save_failed_unassign_manifest,
     get_failed_unassign_count,
     retry_failed_unassigns,
-    unassign_with_retry,
 )
 
 
@@ -24,7 +26,7 @@ class TestFailedUnassignManifest:
     def test_load_returns_empty_for_missing_file(self, tmp_path: Path) -> None:
         manifest_path = tmp_path / "missing.json"
         with patch(
-            "pokepoke.beads.beads_recovery._get_failed_unassign_manifest_path",
+            "pokepoke.beads.beads_manifest_utils._get_failed_unassign_manifest_path",
             return_value=manifest_path,
         ):
             assert _load_failed_unassign_manifest() == {}
@@ -33,7 +35,7 @@ class TestFailedUnassignManifest:
         manifest_path = tmp_path / "corrupt.json"
         manifest_path.write_text("not json{{{", encoding="utf-8")
         with patch(
-            "pokepoke.beads.beads_recovery._get_failed_unassign_manifest_path",
+            "pokepoke.beads.beads_manifest_utils._get_failed_unassign_manifest_path",
             return_value=manifest_path,
         ):
             assert _load_failed_unassign_manifest() == {}
@@ -42,7 +44,7 @@ class TestFailedUnassignManifest:
         manifest_path = tmp_path / "list.json"
         manifest_path.write_text("[1,2,3]", encoding="utf-8")
         with patch(
-            "pokepoke.beads.beads_recovery._get_failed_unassign_manifest_path",
+            "pokepoke.beads.beads_manifest_utils._get_failed_unassign_manifest_path",
             return_value=manifest_path,
         ):
             assert _load_failed_unassign_manifest() == {}
@@ -51,7 +53,7 @@ class TestFailedUnassignManifest:
         manifest_path = tmp_path / ".pokepoke" / "failed_unassigns.json"
         manifest_path.parent.mkdir(parents=True)
         with patch(
-            "pokepoke.beads.beads_recovery._get_failed_unassign_manifest_path",
+            "pokepoke.beads.beads_manifest_utils._get_failed_unassign_manifest_path",
             return_value=manifest_path,
         ):
             data = {"item-1": {"reason": "bd failed", "timestamp": "2026-01-01T00:00:00"}}
@@ -66,10 +68,10 @@ class TestAddRemoveFailedUnassign:
     def test_add_creates_entry(self, tmp_path: Path) -> None:
         manifest_path = tmp_path / "failed_unassigns.json"
         with patch(
-            "pokepoke.beads.beads_recovery._get_failed_unassign_manifest_path",
+            "pokepoke.beads.beads_manifest_utils._get_failed_unassign_manifest_path",
             return_value=manifest_path,
         ):
-            _add_failed_unassign("item-abc", "network error")
+            add_failed_unassign("item-abc", "network error")
             manifest = _load_failed_unassign_manifest()
             assert "item-abc" in manifest
             assert manifest["item-abc"]["reason"] == "network error"
@@ -77,21 +79,21 @@ class TestAddRemoveFailedUnassign:
     def test_remove_deletes_entry(self, tmp_path: Path) -> None:
         manifest_path = tmp_path / "failed_unassigns.json"
         with patch(
-            "pokepoke.beads.beads_recovery._get_failed_unassign_manifest_path",
+            "pokepoke.beads.beads_manifest_utils._get_failed_unassign_manifest_path",
             return_value=manifest_path,
         ):
-            _add_failed_unassign("item-abc", "error")
-            _remove_failed_unassign("item-abc")
+            add_failed_unassign("item-abc", "error")
+            remove_failed_unassign("item-abc")
             manifest = _load_failed_unassign_manifest()
             assert "item-abc" not in manifest
 
     def test_remove_nonexistent_is_noop(self, tmp_path: Path) -> None:
         manifest_path = tmp_path / "failed_unassigns.json"
         with patch(
-            "pokepoke.beads.beads_recovery._get_failed_unassign_manifest_path",
+            "pokepoke.beads.beads_manifest_utils._get_failed_unassign_manifest_path",
             return_value=manifest_path,
         ):
-            _remove_failed_unassign("nonexistent")  # Should not raise
+            remove_failed_unassign("nonexistent")  # Should not raise
 
 
 class TestGetFailedUnassignCount:
@@ -99,7 +101,7 @@ class TestGetFailedUnassignCount:
 
     def test_returns_zero_when_empty(self, tmp_path: Path) -> None:
         with patch(
-            "pokepoke.beads.beads_recovery._get_failed_unassign_manifest_path",
+            "pokepoke.beads.beads_manifest_utils._get_failed_unassign_manifest_path",
             return_value=tmp_path / "missing.json",
         ):
             assert get_failed_unassign_count() == 0
@@ -107,36 +109,36 @@ class TestGetFailedUnassignCount:
     def test_returns_correct_count(self, tmp_path: Path) -> None:
         manifest_path = tmp_path / "failed_unassigns.json"
         with patch(
-            "pokepoke.beads.beads_recovery._get_failed_unassign_manifest_path",
+            "pokepoke.beads.beads_manifest_utils._get_failed_unassign_manifest_path",
             return_value=manifest_path,
         ):
-            _add_failed_unassign("a", "err")
-            _add_failed_unassign("b", "err")
+            add_failed_unassign("a", "err")
+            add_failed_unassign("b", "err")
             assert get_failed_unassign_count() == 2
 
 
 class TestUnassignWithRetry:
     """Tests for unassign_with_retry."""
 
-    @patch("pokepoke.beads.beads_recovery.time.sleep")
-    @patch("pokepoke.beads.beads_recovery._unassign")
+    @patch("pokepoke.beads.beads_manifest_utils.time.sleep")
+    @patch("pokepoke.beads.beads_management.unassign_item")
     def test_succeeds_on_first_try(self, mock_unassign: Mock, mock_sleep: Mock) -> None:
         mock_unassign.return_value = True
         assert unassign_with_retry("item-1") is True
         mock_unassign.assert_called_once_with("item-1")
         mock_sleep.assert_not_called()
 
-    @patch("pokepoke.beads.beads_recovery.time.sleep")
-    @patch("pokepoke.beads.beads_recovery._unassign")
+    @patch("pokepoke.beads.beads_manifest_utils.time.sleep")
+    @patch("pokepoke.beads.beads_management.unassign_item")
     def test_succeeds_on_second_try(self, mock_unassign: Mock, mock_sleep: Mock) -> None:
         mock_unassign.side_effect = [False, True]
         assert unassign_with_retry("item-1") is True
         assert mock_unassign.call_count == 2
         mock_sleep.assert_called_once()
 
-    @patch("pokepoke.beads.beads_recovery._add_failed_unassign")
-    @patch("pokepoke.beads.beads_recovery.time.sleep")
-    @patch("pokepoke.beads.beads_recovery._unassign")
+    @patch("pokepoke.beads.beads_manifest_utils.add_failed_unassign")
+    @patch("pokepoke.beads.beads_manifest_utils.time.sleep")
+    @patch("pokepoke.beads.beads_management.unassign_item")
     def test_tracks_failure_after_all_retries(
         self, mock_unassign: Mock, mock_sleep: Mock, mock_add: Mock
     ) -> None:
@@ -146,9 +148,9 @@ class TestUnassignWithRetry:
         mock_add.assert_called_once()
         assert mock_add.call_args[0][0] == "item-stuck"
 
-    @patch("pokepoke.beads.beads_recovery._add_failed_unassign")
-    @patch("pokepoke.beads.beads_recovery.time.sleep")
-    @patch("pokepoke.beads.beads_recovery._unassign")
+    @patch("pokepoke.beads.beads_manifest_utils.add_failed_unassign")
+    @patch("pokepoke.beads.beads_manifest_utils.time.sleep")
+    @patch("pokepoke.beads.beads_management.unassign_item")
     def test_handles_exceptions(
         self, mock_unassign: Mock, mock_sleep: Mock, mock_add: Mock
     ) -> None:
@@ -157,8 +159,8 @@ class TestUnassignWithRetry:
         assert mock_unassign.call_count == 3
         mock_add.assert_called_once()
 
-    @patch("pokepoke.beads.beads_recovery.time.sleep")
-    @patch("pokepoke.beads.beads_recovery._unassign")
+    @patch("pokepoke.beads.beads_manifest_utils.time.sleep")
+    @patch("pokepoke.beads.beads_management.unassign_item")
     def test_exponential_backoff_delays(self, mock_unassign: Mock, mock_sleep: Mock) -> None:
         mock_unassign.side_effect = [False, False, True]
         unassign_with_retry("item-1")
@@ -173,11 +175,14 @@ class TestRetryFailedUnassigns:
     @patch("pokepoke.beads.beads_recovery._unassign")
     def test_recovers_stuck_items(self, mock_unassign: Mock, tmp_path: Path) -> None:
         manifest_path = tmp_path / "failed_unassigns.json"
-        with patch(
-            "pokepoke.beads.beads_recovery._get_failed_unassign_manifest_path",
-            return_value=manifest_path,
+        with (
+            patch(
+                "pokepoke.beads.beads_manifest_utils._get_failed_unassign_manifest_path",
+                return_value=manifest_path,
+            ),
+            patch("pokepoke.beads.beads_manifest_utils.manifest_lock", return_value=MagicMock()),
         ):
-            _add_failed_unassign("stuck-1", "previous failure")
+            add_failed_unassign("stuck-1", "previous failure")
             mock_unassign.return_value = True
             recovered = retry_failed_unassigns()
             assert recovered == 1
@@ -186,12 +191,15 @@ class TestRetryFailedUnassigns:
     @patch("pokepoke.beads.beads_recovery._unassign")
     def test_leaves_still_failing_items(self, mock_unassign: Mock, tmp_path: Path) -> None:
         manifest_path = tmp_path / "failed_unassigns.json"
-        with patch(
-            "pokepoke.beads.beads_recovery._get_failed_unassign_manifest_path",
-            return_value=manifest_path,
+        with (
+            patch(
+                "pokepoke.beads.beads_manifest_utils._get_failed_unassign_manifest_path",
+                return_value=manifest_path,
+            ),
+            patch("pokepoke.beads.beads_manifest_utils.manifest_lock", return_value=MagicMock()),
         ):
-            _add_failed_unassign("stuck-1", "err")
-            _add_failed_unassign("stuck-2", "err")
+            add_failed_unassign("stuck-1", "err")
+            add_failed_unassign("stuck-2", "err")
             mock_unassign.side_effect = [True, RuntimeError("still broken")]
             recovered = retry_failed_unassigns()
             assert recovered == 1
@@ -199,7 +207,7 @@ class TestRetryFailedUnassigns:
 
     def test_returns_zero_when_no_manifest(self, tmp_path: Path) -> None:
         with patch(
-            "pokepoke.beads.beads_recovery._get_failed_unassign_manifest_path",
+            "pokepoke.beads.beads_manifest_utils._get_failed_unassign_manifest_path",
             return_value=tmp_path / "missing.json",
         ):
             assert retry_failed_unassigns() == 0
@@ -562,7 +570,7 @@ class TestAssignAndSyncItem:
 class TestRollbackAssignment:
     """Tests for _rollback_assignment."""
 
-    @patch("pokepoke.beads.beads_recovery.unassign_with_retry")
+    @patch("pokepoke.beads.beads_manifest_utils.unassign_with_retry")
     def test_calls_unassign_with_retry(self, mock_unassign: Mock) -> None:
         from pokepoke.beads.beads_management import _rollback_assignment
         mock_unassign.return_value = True
@@ -571,7 +579,7 @@ class TestRollbackAssignment:
 
         mock_unassign.assert_called_once_with("item-1")
 
-    @patch("pokepoke.beads.beads_recovery.unassign_with_retry")
+    @patch("pokepoke.beads.beads_manifest_utils.unassign_with_retry")
     def test_logs_error_when_all_retries_exhausted(
         self, mock_unassign: Mock,
     ) -> None:

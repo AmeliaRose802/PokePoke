@@ -7,6 +7,7 @@ beads_management and beads_recovery modules.
 
 import json
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import cast
@@ -14,6 +15,16 @@ from typing import cast
 from pokepoke.worktrees.coordination import manifest_lock
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    'add_failed_unassign',
+    'remove_failed_unassign',
+    'unassign_with_retry',
+]
+
+# Retry settings for unassign operations
+_UNASSIGN_MAX_RETRIES = 3
+_UNASSIGN_BASE_DELAY = 1.0  # seconds
 
 
 def _get_failed_unassign_manifest_path() -> Path:
@@ -67,3 +78,41 @@ def remove_failed_unassign(item_id: str) -> None:
         if item_id in manifest:
             del manifest[item_id]
             _save_failed_unassign_manifest(manifest)
+
+
+def unassign_with_retry(item_id: str) -> bool:
+    """Unassign an item with retry and persistent failure tracking.
+
+    Retries up to ``_UNASSIGN_MAX_RETRIES`` times with exponential backoff.
+    If all retries fail, the item ID is persisted to a manifest file so that
+    ``retry_failed_unassigns()`` can recover it later.
+
+    Args:
+        item_id: The item ID to unassign.
+
+    Returns:
+        True if the item was successfully unassigned, False otherwise.
+    """
+    # Import here to avoid circular dependency during module initialization
+    from .beads_management import unassign_item
+
+    last_error: Exception | None = None
+    for attempt in range(1, _UNASSIGN_MAX_RETRIES + 1):
+        try:
+            if unassign_item(item_id):
+                return True
+            last_error = RuntimeError(f"unassign_item returned False on attempt {attempt}")
+        except Exception as e:
+            last_error = e
+        if attempt < _UNASSIGN_MAX_RETRIES:
+            delay = _UNASSIGN_BASE_DELAY * (2 ** (attempt - 1))
+            logger.info("Retrying unassign for %s in %.1fs (attempt %d/%d)",
+                        item_id, delay, attempt, _UNASSIGN_MAX_RETRIES)
+            time.sleep(delay)
+
+    # All retries exhausted — persist for later recovery
+    reason = str(last_error) if last_error else "unknown"
+    logger.warning("All %d unassign attempts failed for %s: %s",
+                   _UNASSIGN_MAX_RETRIES, item_id, reason)
+    add_failed_unassign(item_id, reason)
+    return False

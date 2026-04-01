@@ -160,7 +160,7 @@ class TestWorkflowCleanupException:
                 copilot_success=False,
                 include_cleanup_worktree=True, include_session_cleanup=True,
             ) as mocks,
-            patch('pokepoke.beads.beads_recovery.unassign_with_retry', return_value=True) as mock_unassign,
+            patch('pokepoke.beads.beads_manifest_utils.unassign_with_retry', return_value=True) as mock_unassign,
         ):
             # Allow cleanup_on_failure to call through to real method
             mocks['session_cleanup'].side_effect = lambda: mock_unassign(item.id)

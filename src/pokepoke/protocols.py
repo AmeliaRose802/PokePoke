@@ -142,7 +142,7 @@ class DefaultBeadsClient:
         return unassign_item(item_id)
 
     def unassign_with_retry(self, item_id: str) -> bool:
-        from pokepoke.beads.beads_recovery import unassign_with_retry
+        from pokepoke.beads.beads_manifest_utils import unassign_with_retry
 
         return unassign_with_retry(item_id)
 

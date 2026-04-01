@@ -37,6 +37,7 @@ from .beads_management import (
     select_next_hierarchical_item,
     unassign_item,
 )
+from .beads_manifest_utils import unassign_with_retry
 from .beads_query import (
     get_beads_stats,
     get_issue_dependencies,
@@ -47,7 +48,6 @@ from .beads_query import (
 from .beads_recovery import (
     get_failed_unassign_count,
     retry_failed_unassigns,
-    unassign_with_retry,
 )
 from .sync_strategy import (
     DaemonSync,

@@ -11,11 +11,11 @@ from pokepoke.beads.beads_manifest_utils import (
     _load_failed_unassign_manifest,
     add_failed_unassign,
     remove_failed_unassign,
+    unassign_with_retry,
 )
 from pokepoke.beads.beads_recovery import (
     get_failed_unassign_count,
     retry_failed_unassigns,
-    unassign_with_retry,
 )
 
 
@@ -90,34 +90,34 @@ class TestGetFailedUnassignCount:
 
 
 class TestUnassignWithRetry:
-    @patch("pokepoke.beads.beads_recovery.time.sleep")
+    @patch("pokepoke.beads.beads_manifest_utils.time.sleep")
     def test_success_on_first_attempt(self, mock_sleep: MagicMock) -> None:
-        with patch("pokepoke.beads.beads_recovery._unassign", return_value=True):
+        with patch("pokepoke.beads.beads_management.unassign_item", return_value=True):
             assert unassign_with_retry("item-1") is True
         mock_sleep.assert_not_called()
 
-    @patch("pokepoke.beads.beads_recovery.time.sleep")
+    @patch("pokepoke.beads.beads_manifest_utils.time.sleep")
     def test_success_on_retry(self, mock_sleep: MagicMock) -> None:
-        with patch("pokepoke.beads.beads_recovery._unassign", side_effect=[False, False, True]):
+        with patch("pokepoke.beads.beads_management.unassign_item", side_effect=[False, False, True]):
             assert unassign_with_retry("item-1") is True
 
-    @patch("pokepoke.beads.beads_recovery.add_failed_unassign")
-    @patch("pokepoke.beads.beads_recovery.time.sleep")
+    @patch("pokepoke.beads.beads_manifest_utils.add_failed_unassign")
+    @patch("pokepoke.beads.beads_manifest_utils.time.sleep")
     def test_all_retries_exhausted(self, mock_sleep: MagicMock, mock_add: MagicMock) -> None:
-        with patch("pokepoke.beads.beads_recovery._unassign", return_value=False):
+        with patch("pokepoke.beads.beads_management.unassign_item", return_value=False):
             assert unassign_with_retry("item-1") is False
         mock_add.assert_called_once()
 
-    @patch("pokepoke.beads.beads_recovery.add_failed_unassign")
-    @patch("pokepoke.beads.beads_recovery.time.sleep")
+    @patch("pokepoke.beads.beads_manifest_utils.add_failed_unassign")
+    @patch("pokepoke.beads.beads_manifest_utils.time.sleep")
     def test_exception_triggers_retry(self, mock_sleep: MagicMock, mock_add: MagicMock) -> None:
-        with patch("pokepoke.beads.beads_recovery._unassign", side_effect=RuntimeError("boom")):
+        with patch("pokepoke.beads.beads_management.unassign_item", side_effect=RuntimeError("boom")):
             assert unassign_with_retry("item-1") is False
         mock_add.assert_called_once()
 
-    @patch("pokepoke.beads.beads_recovery.time.sleep")
+    @patch("pokepoke.beads.beads_manifest_utils.time.sleep")
     def test_exponential_backoff_delays(self, mock_sleep: MagicMock) -> None:
-        with patch("pokepoke.beads.beads_recovery._unassign", side_effect=[False, False, True]):
+        with patch("pokepoke.beads.beads_management.unassign_item", side_effect=[False, False, True]):
             unassign_with_retry("item-1")
         assert mock_sleep.call_count == 2
         delays = [c.args[0] for c in mock_sleep.call_args_list]
@@ -145,7 +145,7 @@ class TestRetryFailedUnassigns:
                 "pokepoke.beads.beads_manifest_utils._get_failed_unassign_manifest_path",
                 return_value=manifest_path,
             ),
-            patch("pokepoke.beads.beads_recovery._unassign", return_value=True),
+            patch("pokepoke.beads.beads_management.unassign_item", return_value=True),
             patch("pokepoke.beads.beads_manifest_utils.manifest_lock", return_value=MagicMock()),
         ):
             assert retry_failed_unassigns() == 1
