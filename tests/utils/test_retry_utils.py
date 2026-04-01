@@ -1,6 +1,8 @@
 """Tests for retry utilities with jitter support."""
 from unittest.mock import patch
 
+import pytest
+
 from pokepoke.types import RetryConfig
 from pokepoke.utils.retry_utils import calculate_backoff_delay, sleep_with_backoff
 
@@ -98,18 +100,73 @@ class TestCalculateBackoffDelay:
         assert calculate_backoff_delay(2, config) == 18.0
 
     def test_linear_backoff(self):
-        """Test linear backoff (backoff_factor=1.0)."""
+        """Test linear backoff mode: initial_delay * (attempt + 1)."""
         config = RetryConfig(
             initial_delay=1.0,
-            backoff_factor=1.0,
             max_delay=100.0,
             jitter=False,
+            backoff_mode="linear",
         )
 
-        # All attempts should have same delay with backoff_factor=1.0
+        # Attempt 0: 1.0 * (0 + 1) = 1.0
         assert calculate_backoff_delay(0, config) == 1.0
-        assert calculate_backoff_delay(1, config) == 1.0
-        assert calculate_backoff_delay(2, config) == 1.0
+
+        # Attempt 1: 1.0 * (1 + 1) = 2.0
+        assert calculate_backoff_delay(1, config) == 2.0
+
+        # Attempt 2: 1.0 * (2 + 1) = 3.0
+        assert calculate_backoff_delay(2, config) == 3.0
+
+        # Attempt 4: 1.0 * (4 + 1) = 5.0
+        assert calculate_backoff_delay(4, config) == 5.0
+
+    def test_linear_backoff_with_custom_initial_delay(self):
+        """Test linear backoff with non-default initial delay."""
+        config = RetryConfig(
+            initial_delay=0.05,
+            max_delay=100.0,
+            jitter=False,
+            backoff_mode="linear",
+        )
+
+        # Matches original manifest_utils behavior: delay * (attempt + 1)
+        assert calculate_backoff_delay(0, config) == pytest.approx(0.05)
+        assert calculate_backoff_delay(1, config) == pytest.approx(0.10)
+        assert calculate_backoff_delay(2, config) == pytest.approx(0.15)
+        assert calculate_backoff_delay(3, config) == pytest.approx(0.20)
+        assert calculate_backoff_delay(4, config) == pytest.approx(0.25)
+
+    def test_linear_backoff_respects_max_delay(self):
+        """Test that linear backoff is capped at max_delay."""
+        config = RetryConfig(
+            initial_delay=5.0,
+            max_delay=10.0,
+            jitter=False,
+            backoff_mode="linear",
+        )
+
+        # Attempt 0: 5.0 * 1 = 5.0
+        assert calculate_backoff_delay(0, config) == 5.0
+
+        # Attempt 1: 5.0 * 2 = 10.0 (at cap)
+        assert calculate_backoff_delay(1, config) == 10.0
+
+        # Attempt 2: 5.0 * 3 = 15.0 → capped at 10.0
+        assert calculate_backoff_delay(2, config) == 10.0
+
+    def test_linear_backoff_with_jitter(self):
+        """Test linear backoff with jitter applied."""
+        config = RetryConfig(
+            initial_delay=2.0,
+            max_delay=100.0,
+            jitter=True,
+            backoff_mode="linear",
+        )
+
+        # Attempt 2: base = 2.0 * 3 = 6.0, jitter range [3.0, 9.0]
+        delays = [calculate_backoff_delay(2, config) for _ in range(100)]
+        assert all(3.0 <= d <= 9.0 for d in delays)
+        assert len(set(delays)) > 1
 
 
 class TestSleepWithBackoff:

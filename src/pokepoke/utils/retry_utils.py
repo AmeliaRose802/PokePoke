@@ -13,7 +13,11 @@ def calculate_backoff_delay(
     config: RetryConfig,
 ) -> float:
     """
-    Calculate exponential backoff delay with optional jitter.
+    Calculate backoff delay with optional jitter.
+
+    Supports two modes controlled by ``config.backoff_mode``:
+    - ``"exponential"``: ``initial_delay * backoff_factor ** attempt``
+    - ``"linear"``: ``initial_delay * (attempt + 1)``
 
     Args:
         attempt: Current attempt number (0-indexed)
@@ -25,8 +29,11 @@ def calculate_backoff_delay(
     The jitter range is [0.5, 1.5] of the base delay, preventing synchronized
     retry storms when multiple agents encounter the same transient error.
     """
-    # Base exponential backoff
-    base_delay = config.initial_delay * (config.backoff_factor ** attempt)
+    if config.backoff_mode == "linear":
+        base_delay = config.initial_delay * (attempt + 1)
+    else:
+        # Exponential backoff (default)
+        base_delay = config.initial_delay * (config.backoff_factor ** attempt)
 
     # Cap at max_delay
     base_delay = min(base_delay, config.max_delay)
