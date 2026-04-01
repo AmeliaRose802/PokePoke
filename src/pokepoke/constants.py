@@ -65,3 +65,11 @@ MIN_TOOL_CALL_TIMEOUT = 60  # Minimum tool call timeout (seconds)
 MIN_PROCESS_OUTPUT_TIMEOUT = 30  # Minimum process output timeout (seconds)
 MIN_MAX_PING_FAILURES = 1  # Must allow at least one ping failure
 MIN_CIRCUIT_BREAKER_DRAIN_TIMEOUT = 0  # Minimum drain timeout (0 = wait forever)
+
+# ---------------------------------------------------------------------------
+# Item quality scoring constants
+# ---------------------------------------------------------------------------
+
+# Consecutive failures before an item is flagged as needing human attention.
+DEFAULT_NEEDS_HUMAN_ATTENTION_FAILURES = 3
+MIN_NEEDS_HUMAN_ATTENTION_FAILURES = 1  # Must allow at least one failure

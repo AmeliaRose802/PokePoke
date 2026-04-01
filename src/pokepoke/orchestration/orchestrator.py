@@ -21,7 +21,7 @@ from pokepoke.beads.beads import (
 )
 from pokepoke.beads.beads_item_stats_backfill import backfill_from_beads_db
 from pokepoke.beads.beads_item_stats_store import get_summary as _get_beads_summary
-from pokepoke.beads.beads_item_stats_store import record_item_completed
+from pokepoke.beads.beads_item_stats_store import record_item_attempt, record_item_completed
 from pokepoke.config import load_config
 from pokepoke.desktop import terminal_ui
 from pokepoke.desktop.terminal_ui import clear_terminal_banner, format_work_item_banner, set_terminal_banner
@@ -87,6 +87,18 @@ def _record_item_result(selected_item: BeadsWorkItem, result: WorkItemResult,
         append_model_history_entry(item=selected_item, model_completion=result.model_completion,
                                    success=result.success, request_count=result.request_count,
                                    gate_runs=result.gate_agent_runs, item_stats=result.stats)
+
+    # Record per-item quality metrics
+    s = result.stats
+    item_metrics = record_item_attempt(
+        selected_item.id, success=result.success,
+        tokens_used=(s.input_tokens + s.output_tokens) if s else 0,
+        duration_seconds=s.wall_duration if s else 0.0,
+        failure_reason=result.failure_reason,
+        attention_threshold=load_config().needs_human_attention_threshold)
+    if item_metrics.get("needs_human_attention"):
+        logger.warning(f"⚠️  Item {selected_item.id} flagged as needs-human-attention ({item_metrics['consecutive_failures']} consecutive failures)")
+
     items_completed = 0
     if result.success:
         items_completed = session_stats.record_completion(selected_item, agent_type="work")
@@ -138,8 +150,7 @@ def _init_beads_state(session_stats: SessionStats, run_logger: RunLogger) -> Non
     stuck_count = get_failed_unassign_count()
     if stuck_count > 0:
         logger.error(f"🔧 Recovering {stuck_count} item(s) stuck from failed unassigns...")
-        recovered = retry_failed_unassigns()
-        if recovered:
+        if recovered := retry_failed_unassigns():
             run_logger.log_orchestrator(f"Recovered {recovered}/{stuck_count} stuck item(s)")
     session_stats.set_starting_beads_stats(get_beads_stats())
 
@@ -161,14 +172,12 @@ def _run_startup_plugins(session_stats: SessionStats, run_logger: RunLogger,
             session_stats.record_agent_stats(stats)
     except Exception as e:
         logger.warning(f"⚠️  Model sync failed (will use cached registry): {e}")
-
     try:
         from pokepoke.models.warm_session_pool import get_warm_session_pool
         pool = get_warm_session_pool()
         if pool.enabled:
-            labels = pool.configured_labels
-            logger.info(f"🔥 Warm session pool enabled for labels: {', '.join(labels)}")
-            run_logger.log_orchestrator(f"Warm session pool enabled: {labels}")
+            logger.info(f"🔥 Warm session pool enabled for labels: {', '.join(pool.configured_labels)}")
+            run_logger.log_orchestrator(f"Warm session pool enabled: {pool.configured_labels}")
     except Exception as e:
         logger.warning(f"⚠️  Warm session pool initialization failed: {e}")
 
@@ -179,19 +188,13 @@ def _run_startup_cleanup(cfg: Any, main_repo_path: Path, run_logger: RunLogger) 
         return
     try:
         from pokepoke.worktrees.startup_cleanup import cleanup_stale_worktrees_at_startup
-        cleanup_stats = cleanup_stale_worktrees_at_startup(repo_path=str(main_repo_path), cfg=cfg)
-        if cleanup_stats['total_removed'] > 0:
-            logger.info(
-                f"🧹 Startup cleanup completed: {cleanup_stats['total_removed']} worktrees removed "
-                f"({cleanup_stats['stale_removed']} stale, {cleanup_stats['merged_removed']} merged)"
-            )
-            run_logger.log_orchestrator(
-                f"Startup worktree cleanup: {cleanup_stats['total_removed']} removed "
-                f"({cleanup_stats['stale_removed']} stale, {cleanup_stats['merged_removed']} merged, "
-                f"{cleanup_stats['errors']} errors)"
-            )
-        elif cleanup_stats['checked'] > 0:
-            logger.debug(f"🧹 Startup cleanup: {cleanup_stats['checked']} worktrees checked, none required removal")
+        cs = cleanup_stale_worktrees_at_startup(repo_path=str(main_repo_path), cfg=cfg)
+        if cs['total_removed'] > 0:
+            msg = f"Startup cleanup: {cs['total_removed']} worktrees removed ({cs['stale_removed']} stale, {cs['merged_removed']} merged)"
+            logger.info(f"🧹 {msg}")
+            run_logger.log_orchestrator(f"{msg}, {cs['errors']} errors")
+        elif cs['checked'] > 0:
+            logger.debug(f"🧹 Startup cleanup: {cs['checked']} worktrees checked, none required removal")
     except Exception as e:
         logger.warning(f"⚠️  Startup worktree cleanup failed: {e}")
         run_logger.log_orchestrator(f"Startup worktree cleanup error: {e}", level="WARNING")
@@ -217,8 +220,7 @@ def _setup_orchestrator(interactive: bool, continuous: bool, run_beta_first: boo
     os.environ['AGENT_NAME'] = agent_name
     set_agent_name(agent_name)
     mode_name = "Interactive" if interactive else "Autonomous"
-    logger.info(f"🎯 PokePoke {mode_name} Mode | 🤖 Agent: {agent_name}")
-    logger.info("=" * 50)
+    logger.info(f"🎯 PokePoke {mode_name} Mode | 🤖 Agent: {agent_name}\n{'=' * 50}")
     set_terminal_banner(f"PokePoke {mode_name} - {agent_name}")
     terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", agent_name)
     run_logger = RunLogger()
@@ -255,7 +257,6 @@ def _setup_orchestrator(interactive: bool, continuous: bool, run_beta_first: boo
 def _run_preflight(ctx: _OrchestratorContext) -> int | None:
     """Run pre-flight health checks. Returns exit code to stop, or None to continue."""
     logger.info("\n🔍 Running pre-flight health checks...")
-    ctx.run_logger.log_polling("Running pre-flight health checks")
     should_continue, _is_critical = handle_preflight_checks(ctx.main_repo_path, ctx.run_logger, cfg=ctx.cfg)
     if not should_continue:
         terminal_ui.ui.stop_and_capture()
@@ -267,12 +268,10 @@ def _run_preflight(ctx: _OrchestratorContext) -> int | None:
 def _fetch_work_items(ctx: _OrchestratorContext) -> tuple[int | None, list[BeadsWorkItem]]:
     """Fetch ready work items. Returns (exit_code, items) - exit_code is set if we should stop."""
     logger.info("\n🔍 Checking main repository status...")
-    ctx.run_logger.log_polling("Checking main repository status")
     if not check_and_commit_main_repo(ctx.main_repo_path, ctx.run_logger):
         ctx.run_logger.log_orchestrator("Main repo check failed", level="ERROR")
         return 1, []
     logger.info("\nFetching ready work from beads...")
-    ctx.run_logger.log_polling("Fetching ready work from beads")
     ready_items = get_ready_work_items()
     if ready_items is None:
         terminal_ui.ui.stop_and_capture()
@@ -305,16 +304,12 @@ def _run_main_loop(ctx: _OrchestratorContext) -> int:
             ctx.finalize()
             return 0
         ctx.run_logger.log_orchestrator(f"Selected item: {selected_item.id} - {selected_item.title}")
-        banner = format_work_item_banner(selected_item.id, selected_item.title)
-        set_terminal_banner(banner)
+        set_terminal_banner(format_work_item_banner(selected_item.id, selected_item.title))
         terminal_ui.ui.update_header(selected_item.id, selected_item.title)
-        agent_id = selected_item.id
-        display_name = get_agent_name(default="pokepoke")
+        agent_id, display_name = selected_item.id, get_agent_name(default="pokepoke")
         terminal_ui.ui.push_agent_status(
             agent_id, display_name, iteration=1, status="running",
-            work_item_id=selected_item.id, work_item_title=selected_item.title,
-            agent_type="work",
-        )
+            work_item_id=selected_item.id, work_item_title=selected_item.title, agent_type="work")
         success = False
         try:
             with terminal_ui.ui.agent_output_for(agent_id):
@@ -330,8 +325,7 @@ def _run_main_loop(ctx: _OrchestratorContext) -> int:
                 work_item_id=selected_item.id, work_item_title=selected_item.title, agent_type="work")
         if not wi_result.success and wi_result.request_count == 0:
             ctx.failed_claim_ids.add(selected_item.id)
-            ctx.run_logger.log_orchestrator(
-                f"Item {selected_item.id} failed to claim, added to skip list ({len(ctx.failed_claim_ids)} skipped)")
+            ctx.run_logger.log_orchestrator(f"Item {selected_item.id} failed to claim, added to skip list ({len(ctx.failed_claim_ids)} skipped)")
         elif wi_result.success:
             ctx.failed_claim_ids.clear()
         ctx.total_requests += wi_result.request_count
@@ -368,10 +362,8 @@ def _run_main_loop(ctx: _OrchestratorContext) -> int:
                 if is_shutting_down():
                     break
                 time.sleep(0.5)
-
-    # Shutdown requested - clean exit
     terminal_ui.ui.stop_and_capture()
-    logger.info("\n\ud83d\udc4b Shutdown requested - exiting PokePoke.")
+    logger.info("\n👋 Shutdown requested - exiting PokePoke.")
     ctx.finalize()
     return 0
 
@@ -417,8 +409,7 @@ def run_orchestrator(
     except KeyboardInterrupt:
         request_shutdown()
         terminal_ui.ui.stop_and_capture()
-        logger.warning("\n\n⚠️  Interrupted by user (Ctrl+C)")
-        logger.info("📊 Collecting final statistics...\n👋 Exiting PokePoke.")
+        logger.warning("\n\n⚠️  Interrupted by user (Ctrl+C)\n📊 Collecting final statistics...\n👋 Exiting PokePoke.")
         if ctx is not None:
             ctx.finalize()
         return 0
@@ -432,17 +423,9 @@ def run_orchestrator(
         return 1
     finally:
         terminal_ui.ui.stop()
-        try:
+        with contextlib.suppress(Exception):
             mq = get_merge_queue()
             if mq.is_running:
                 mq.shutdown(timeout=10.0)
-        except Exception as e:
-            logger.debug(f"Failed to shutdown merge queue during cleanup: {e}")
         with contextlib.suppress(Exception):
             unregister_shutdown_handlers()
-
-if __name__ == "__main__":
-    import sys
-
-    from pokepoke.__main__ import main
-    sys.exit(main())

@@ -222,6 +222,7 @@ class TestRunOrchestratorRepoCheckFailure:
 class TestOrchestratorCleanupDetection:
     """Test orchestrator's main repo cleanup detection."""
 
+    @patch('subprocess.run')
     @patch('pokepoke.orchestration.orchestrator.check_and_commit_main_repo')
     @patch('pokepoke.orchestration.orchestrator.get_beads_stats')
     @patch('pokepoke.orchestration.orchestrator.get_ready_work_items')
@@ -230,6 +231,7 @@ class TestOrchestratorCleanupDetection:
         mock_get_items: Mock,
         mock_beads_stats: Mock,
         mock_check_repo: Mock,
+        mock_subprocess: Mock,
     ) -> None:
         """Test that orchestrator invokes check_and_commit_main_repo."""
         mock_check_repo.return_value = True  # Repo check passes (cleanup succeeded or continued)
@@ -249,6 +251,7 @@ class TestOrchestratorCleanupDetection:
         # Should call get_items since repo check passed
         mock_get_items.assert_called()
 
+    @patch('subprocess.run')
     @patch('pokepoke.orchestration.orchestrator.check_and_commit_main_repo')
     @patch('pokepoke.orchestration.orchestrator.get_beads_stats')
     @patch('pokepoke.orchestration.orchestrator.get_ready_work_items')
@@ -257,6 +260,7 @@ class TestOrchestratorCleanupDetection:
         mock_get_items: Mock,
         mock_beads_stats: Mock,
         mock_check_repo: Mock,
+        mock_subprocess: Mock,
     ) -> None:
         """Test that beads-only changes are detected but NOT auto-committed."""
         mock_beads_stats.return_value = BeadsStats(
