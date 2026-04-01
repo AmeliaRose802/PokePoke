@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 
 GATE_STATS_FILE = Path(".pokepoke") / "gate_rejection_stats.json"
 
+# Maximum log entries before evicting the oldest half.
+_MAX_LOG_ENTRIES = 500
+
 _gate_thread_lock = threading.Lock()
 _GATE_STATS_FILE_LOCK = "gate-stats-file"
 
@@ -135,6 +138,8 @@ def record_gate_check(
     with _STORE.lock(timeout=60):
         data = load_gate_stats(path)
         data["log"].append(entry)
+        if len(data["log"]) >= _MAX_LOG_ENTRIES:
+            del data["log"][: len(data["log"]) // 2]
         summary = data.get("summary", {})
         _update_gate_summary_incremental(summary, entry)
         data["summary"] = summary

@@ -2,7 +2,7 @@
 import threading
 from collections.abc import Iterator
 from dataclasses import dataclass, field, is_dataclass, replace
-from typing import Any
+from typing import Any, ClassVar
 
 from pokepoke.agents.agent_types import (
     AGENT_TYPES,
@@ -185,6 +185,11 @@ class SessionStatsSnapshot(_AgentRunCountsMixin):
 @dataclass
 class SessionStats(_AgentRunCountsMixin):
     """Combined session statistics including agent stats and run counts."""
+
+    # Maximum entries kept in each rolling list before evicting the oldest half.
+    # Follows the same pattern as OperationTimingRegistry.max_samples.
+    MAX_LIST_ENTRIES: ClassVar[int] = 500
+
     agent_stats: AgentStats
 
     # Per-session beads throughput
@@ -231,6 +236,8 @@ class SessionStats(_AgentRunCountsMixin):
                     raise ValueError("items_completed cannot be negative")
                 self.items_completed = items_completed
             self.completed_items_list.append(replace(item))
+            if len(self.completed_items_list) >= self.MAX_LIST_ENTRIES:
+                del self.completed_items_list[: len(self.completed_items_list) // 2]
             if agent_type:
                 normalized = agent_type.strip().lower() or "unknown"
                 self.completed_counts_by_agent_type[normalized] = (
@@ -246,6 +253,8 @@ class SessionStats(_AgentRunCountsMixin):
             self._created_item_ids.add(item.id)
             self.items_created += 1
             self.created_items_list.append(replace(item))
+            if len(self.created_items_list) >= self.MAX_LIST_ENTRIES:
+                del self.created_items_list[: len(self.created_items_list) // 2]
             normalized = (item.agent_type or "unknown").strip().lower() or "unknown"
             self.created_counts_by_agent_type[normalized] = (
                 self.created_counts_by_agent_type.get(normalized, 0) + 1
@@ -297,6 +306,8 @@ class SessionStats(_AgentRunCountsMixin):
         """Record a model completion for A/B testing."""
         with self._lock:
             self.model_completions.append(replace(completion))
+            if len(self.model_completions) >= self.MAX_LIST_ENTRIES:
+                del self.model_completions[: len(self.model_completions) // 2]
 
     def record_janitor_lines_removed(self, lines_removed: int) -> None:
         """Record lines removed by the Janitor agent."""

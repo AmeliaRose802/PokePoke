@@ -294,3 +294,63 @@ class TestSessionStats:
             thread.join()
 
         assert stats.janitor_agent_runs == 200
+
+    def test_completed_items_list_evicts_oldest_half_at_max(self) -> None:
+        """Test that completed_items_list evicts oldest half when reaching MAX_LIST_ENTRIES."""
+        max_entries = 20
+        stats = SessionStats(agent_stats=AgentStats())
+        stats.MAX_LIST_ENTRIES = max_entries
+
+        for i in range(max_entries):
+            stats.record_completion(_make_item(item_id=f"item-{i}"))
+
+        # After reaching max, oldest half (10) is evicted leaving 10
+        assert len(stats.completed_items_list) == max_entries // 2
+        # The oldest items should be gone, newest should remain
+        ids = [item.id for item in stats.completed_items_list]
+        assert "item-0" not in ids
+        assert f"item-{max_entries - 1}" in ids
+
+    def test_created_items_list_evicts_oldest_half_at_max(self) -> None:
+        """Test that created_items_list evicts oldest half when reaching MAX_LIST_ENTRIES."""
+        from pokepoke.types import BeadsCreatedItem
+        max_entries = 20
+        stats = SessionStats(agent_stats=AgentStats())
+        stats.MAX_LIST_ENTRIES = max_entries
+
+        for i in range(max_entries):
+            stats.record_created_item(BeadsCreatedItem(id=f"created-{i}", title=f"Item {i}"))
+
+        assert len(stats.created_items_list) == max_entries // 2
+        ids = [item.id for item in stats.created_items_list]
+        assert "created-0" not in ids
+        assert f"created-{max_entries - 1}" in ids
+
+    def test_model_completions_evicts_oldest_half_at_max(self) -> None:
+        """Test that model_completions evicts oldest half when reaching MAX_LIST_ENTRIES."""
+        max_entries = 20
+        stats = SessionStats(agent_stats=AgentStats())
+        stats.MAX_LIST_ENTRIES = max_entries
+
+        for i in range(max_entries):
+            stats.record_model_completion(
+                ModelCompletionRecord(item_id=f"mc-{i}", model="model-a", duration_seconds=1.0)
+            )
+
+        assert len(stats.model_completions) == max_entries // 2
+        ids = [mc.item_id for mc in stats.model_completions]
+        assert "mc-0" not in ids
+        assert f"mc-{max_entries - 1}" in ids
+
+    def test_eviction_preserves_counters(self) -> None:
+        """Test that eviction trims lists but does not affect scalar counters."""
+        max_entries = 10
+        stats = SessionStats(agent_stats=AgentStats())
+        stats.MAX_LIST_ENTRIES = max_entries
+
+        for i in range(max_entries + 5):
+            stats.record_completion(_make_item(item_id=f"item-{i}"))
+
+        # items_completed counter should still reflect total, not list length
+        assert stats.items_completed == max_entries + 5
+        assert len(stats.completed_items_list) < max_entries

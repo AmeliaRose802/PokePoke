@@ -90,6 +90,34 @@ def test_trend_capped_to_50() -> None:
     assert len(summary["m1"]["trend"]) == 50
 
 
+def test_log_capped_at_max_entries(tmp_path: Path, _chdir_tmp, monkeypatch) -> None:
+    """Test that the raw log evicts oldest half when reaching _MAX_LOG_ENTRIES."""
+    import pokepoke.stats.gate_rejection_tracker as grt
+
+    monkeypatch.setattr(grt, "_MAX_LOG_ENTRIES", 20)
+    stats_path = tmp_path / "gate_stats.json"
+
+    for i in range(25):
+        record_gate_check(f"model-{i % 3}", f"PP-{i}", passed=(i % 2 == 0), path=stats_path)
+
+    data = load_gate_stats(stats_path)
+    assert len(data["log"]) <= 20
+
+
+def test_log_eviction_preserves_summary_accuracy(tmp_path: Path, _chdir_tmp, monkeypatch) -> None:
+    """Test that summary counters remain correct after log eviction."""
+    import pokepoke.stats.gate_rejection_tracker as grt
+
+    monkeypatch.setattr(grt, "_MAX_LOG_ENTRIES", 10)
+    stats_path = tmp_path / "gate_stats.json"
+
+    for i in range(15):
+        record_gate_check("model-A", f"PP-{i}", passed=(i % 2 == 0), path=stats_path)
+
+    stats = get_gate_rejection_stats(stats_path)
+    assert stats["model-A"]["total_checks"] == 15
+
+
 def test_print_leaderboard_logs_output(tmp_path: Path, _chdir_tmp, caplog) -> None:
     stats_path = tmp_path / "gate_stats.json"
     record_gate_check("m1", "PP-1", passed=False, path=stats_path)
