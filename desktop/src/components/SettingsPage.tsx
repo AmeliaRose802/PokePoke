@@ -195,6 +195,24 @@ export function SettingsPage({ getConfig, saveConfig, getAvailableModels, onClos
     [abTestingEnabled, candidateModels, markDirty],
   );
 
+  const addAllCandidateModels = useCallback(() => {
+    if (!abTestingEnabled) return;
+
+    setCandidateModels((prev) => {
+      const existing = new Set(prev);
+      const merged = [...prev];
+      for (const model of availableModels) {
+        if (!existing.has(model)) {
+          merged.push(model);
+        }
+      }
+      return merged;
+    });
+
+    setChipInput("");
+    markDirty();
+  }, [abTestingEnabled, availableModels, markDirty]);
+
   const removeChip = useCallback(
     (model: string) => {
       if (!abTestingEnabled) return;
@@ -294,13 +312,20 @@ export function SettingsPage({ getConfig, saveConfig, getAvailableModels, onClos
               abTestingEnabled={abTestingEnabled}
               onAbToggle={handleAbToggle}
               defaultModel={defaultModel}
-              onDefaultModelChange={(v) => { setDefaultModel(v); markDirty(); }}
+              onDefaultModelChange={(v) => {
+                setDefaultModel(v);
+                markDirty();
+              }}
               fallbackModel={fallbackModel}
-              onFallbackModelChange={(v) => { setFallbackModel(v); markDirty(); }}
+              onFallbackModelChange={(v) => {
+                setFallbackModel(v);
+                markDirty();
+              }}
               candidateModels={candidateModels}
               chipInput={chipInput}
               onChipInputChange={setChipInput}
               onAddChip={addChip}
+              onAddAllCandidateModels={addAllCandidateModels}
               onRemoveChip={removeChip}
               onChipKeyDown={handleChipKeyDown}
               availableModels={availableModels}

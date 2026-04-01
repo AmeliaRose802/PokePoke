@@ -16,6 +16,7 @@ interface Props {
   chipInput: string;
   onChipInputChange: (value: string) => void;
   onAddChip: (value: string) => void;
+  onAddAllCandidateModels: () => void;
   onRemoveChip: (model: string) => void;
   onChipKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   availableModels: string[];
@@ -32,6 +33,7 @@ export function ModelConfigSection({
   chipInput,
   onChipInputChange,
   onAddChip,
+  onAddAllCandidateModels,
   onRemoveChip,
   onChipKeyDown,
   availableModels,
@@ -39,6 +41,8 @@ export function ModelConfigSection({
   const suggestions = availableModels.filter(
     (m) => !candidateModels.includes(m) && m.toLowerCase().includes(chipInput.toLowerCase()),
   );
+
+  const showAddAll = abTestingEnabled && availableModels.some((m) => !candidateModels.includes(m));
 
   return (
     <div className="settings-section">
@@ -110,7 +114,14 @@ export function ModelConfigSection({
 
       {/* Candidate Models (tag chips) */}
       <div className="settings-field">
-        <label className="settings-label">A/B Candidate Models</label>
+        <div className="settings-label-row">
+          <label className="settings-label">A/B Candidate Models</label>
+          {showAddAll && (
+            <button type="button" className="add-all-btn" onClick={onAddAllCandidateModels}>
+              Add All
+            </button>
+          )}
+        </div>
         <div
           className={`chip-container ${!abTestingEnabled ? "chip-container-disabled" : ""}`}
           aria-disabled={!abTestingEnabled}
