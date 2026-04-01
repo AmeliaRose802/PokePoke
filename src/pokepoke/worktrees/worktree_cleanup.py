@@ -5,12 +5,13 @@ import logging
 import os
 import stat
 import subprocess
-import time
 from datetime import datetime
 from pathlib import Path
 
 from pokepoke.git.git_helpers import run_git
+from pokepoke.types import RetryConfig
 from pokepoke.utils.constants import BRANCH_PREFIX, WORKTREE_DIR, WORKTREE_TASK_PREFIX
+from pokepoke.utils.retry_utils import sleep_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -177,15 +178,22 @@ def force_remove_directory(dir_path: Path, *, max_attempts: int | None = None, r
 
     logger.info(f"🔄 Attempting force removal of worktree: {dir_path}")
 
+    retry_config = RetryConfig(
+        max_retries=max_attempts,
+        initial_delay=_CLEANUP_RETRY_DELAY_SECONDS,
+        max_delay=_CLEANUP_MAX_DELAY_SECONDS,
+        backoff_factor=2.0,
+        jitter=True,
+    )
+
     for attempt in range(max_attempts):
         if attempt > 0:
             # Wait for processes to clean up before retry
             wait_for_process_cleanup(max_wait=3.0)
 
-            # Calculate delay with capped exponential backoff
-            delay = min(_CLEANUP_RETRY_DELAY_SECONDS * (2 ** (attempt - 1)), _CLEANUP_MAX_DELAY_SECONDS)
+            # Calculate delay with capped exponential backoff and jitter
+            delay = sleep_with_backoff(attempt - 1, retry_config, f'worktree cleanup {dir_path.name}')
             logger.info(f"   ⏳ Retry {attempt + 1}/{max_attempts} after {delay:.1f}s...")
-            time.sleep(delay)
 
         # First try git worktree remove --force
         try:

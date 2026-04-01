@@ -16,8 +16,10 @@ from __future__ import annotations
 import abc
 import logging
 import subprocess
-import time
 from typing import TYPE_CHECKING
+
+from pokepoke.types import RetryConfig
+from pokepoke.utils.retry_utils import sleep_with_backoff
 
 if TYPE_CHECKING:
     from pokepoke.beads.beads_query import CLIBackendConfig
@@ -123,6 +125,12 @@ class DaemonSync(SyncStrategy):
         from pokepoke.beads.beads_query import _run_cli
 
         last_result: subprocess.CompletedProcess[str] | None = None
+        retry_config = RetryConfig(
+            max_retries=max_attempts,
+            initial_delay=base_delay,
+            backoff_factor=2.0,
+            jitter=True,
+        )
         for attempt in range(1, max_attempts + 1):
             result = _run_cli(
                 ["sync"],
@@ -141,14 +149,13 @@ class DaemonSync(SyncStrategy):
 
             output = f"{result.stdout}\n{result.stderr}"
             if _is_transient_jsonl_sync_error(output) and attempt < max_attempts:
-                delay = base_delay * (2 ** (attempt - 1))
+                delay = sleep_with_backoff(attempt - 1, retry_config, 'bd sync JSONL lock')
                 message = (
                     "⚠️  bd sync failed due to locked JSONL file; "
                     f"retrying in {delay:.1f}s (attempt {attempt}/{max_attempts})"
                 )
                 logger.info(message)
                 logger.warning(message)
-                time.sleep(delay)
                 continue
             return result
 
@@ -215,14 +222,19 @@ class ExplicitSync(SyncStrategy):
 
             output = f"{result.stdout}\n{result.stderr}"
             if _is_transient_br_sync_error(output) and attempt < max_attempts:
-                delay = base_delay * (2 ** (attempt - 1))
+                retry_config = RetryConfig(
+                    max_retries=max_attempts,
+                    initial_delay=base_delay,
+                    backoff_factor=2.0,
+                    jitter=True,
+                )
+                delay = sleep_with_backoff(attempt - 1, retry_config, 'br sync')
                 message = (
                     "⚠️  br sync failed due to transient error; "
                     f"retrying in {delay:.1f}s (attempt {attempt}/{max_attempts})"
                 )
                 logger.info(message)
                 logger.warning(message)
-                time.sleep(delay)
                 continue
             return result
 

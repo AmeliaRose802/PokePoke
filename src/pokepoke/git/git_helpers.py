@@ -3,9 +3,10 @@
 import contextlib
 import logging
 import subprocess
-import time
 
+from pokepoke.types import RetryConfig
 from pokepoke.utils.constants import BEADS_DIR, DEFAULT_GIT_TIMEOUT
+from pokepoke.utils.retry_utils import sleep_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,12 @@ def _run_git_status_with_retry(
     max_retries: int = 3, base_delay: float = 0.5, timeout: int = 10,
 ) -> subprocess.CompletedProcess[str]:
     """Run git status with exponential-backoff retry on index.lock contention."""
+    retry_config = RetryConfig(
+        max_retries=max_retries,
+        initial_delay=base_delay,
+        backoff_factor=2.0,
+        jitter=True,
+    )
     last_exc: Exception | None = None
     for attempt in range(max_retries):
         try:
@@ -124,9 +131,8 @@ def _run_git_status_with_retry(
                 raise
             last_exc = exc
         if attempt < max_retries - 1:
-            delay = base_delay * (2 ** attempt)
+            delay = sleep_with_backoff(attempt, retry_config, 'git status index.lock contention')
             logger.warning('git status retry %d/%d in %.1fs (index.lock contention)', attempt + 1, max_retries, delay)
-            time.sleep(delay)
     assert last_exc is not None
     raise last_exc
 

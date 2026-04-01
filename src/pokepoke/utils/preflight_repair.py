@@ -8,13 +8,14 @@ worktrees, and stale lock files.
 import logging
 import shutil
 import subprocess
-import time
 from pathlib import Path
 from typing import Any
 
 from pokepoke.git.git_helpers import run_git
+from pokepoke.types import RetryConfig
 from pokepoke.utils.constants import STATUS_IN_PROGRESS
 from pokepoke.utils.preflight_checks import HealthCheckError, is_lock_stale
+from pokepoke.utils.retry_utils import sleep_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +200,12 @@ def attempt_repair(
 
     repair_success = True
     max_attempts = config.get('max_repair_attempts', 3)
+    retry_config = RetryConfig(
+        max_retries=max_attempts,
+        initial_delay=2.0,
+        backoff_factor=2.0,
+        jitter=True,
+    )
 
     for error in recoverable_errors:
         error.recovery_attempted = True
@@ -223,7 +230,7 @@ def attempt_repair(
                     break
                 elif attempt < max_attempts:
                     logger.warning(f"Repair attempt {attempt} failed, retrying")
-                    time.sleep(2 ** attempt)  # Exponential backoff
+                    sleep_with_backoff(attempt - 1, retry_config, f'repair {error.check_name}')
                 else:
                     logger.error(f"All repair attempts failed for {error.check_name}")
                     repair_success = False

@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import logging
 import subprocess
-import time
 from typing import TYPE_CHECKING
+
+from pokepoke.types import RetryConfig
+from pokepoke.utils.retry_utils import sleep_with_backoff
 
 if TYPE_CHECKING:
     from pokepoke.beads.beads_query import CLIBackendConfig
@@ -81,6 +83,12 @@ def _run_bd_with_retry(
     """
     from pokepoke.beads.beads_query import _run_bd
 
+    retry_config = RetryConfig(
+        max_retries=max_attempts,
+        initial_delay=base_delay,
+        backoff_factor=2.0,
+        jitter=True,
+    )
     last_exc: Exception | None = None
     cmd_label = args[0] if args else "unknown"
     for attempt in range(1, max_attempts + 1):
@@ -97,12 +105,11 @@ def _run_bd_with_retry(
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
             last_exc = exc
             if _is_transient_cli_error(exc) and attempt < max_attempts:
-                delay = base_delay * (2 ** (attempt - 1))
+                delay = sleep_with_backoff(attempt - 1, retry_config, f'beads {cmd_label}')
                 logger.warning(
                     "⚠️  beads %s failed (attempt %d/%d), retrying in %.1fs: %s",
                     cmd_label, attempt, max_attempts, delay, exc,
                 )
-                time.sleep(delay)
                 continue
             raise
 

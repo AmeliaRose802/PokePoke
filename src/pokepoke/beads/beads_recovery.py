@@ -6,11 +6,12 @@ unassign, preventing them from becoming permanently stuck.
 
 import json
 import logging
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import cast
 
+from pokepoke.types import RetryConfig
+from pokepoke.utils.retry_utils import sleep_with_backoff
 from pokepoke.worktrees.coordination import manifest_lock
 
 from .beads_management import unassign_item as _unassign
@@ -88,6 +89,12 @@ def unassign_with_retry(item_id: str) -> bool:
     Returns:
         True if the item was successfully unassigned, False otherwise.
     """
+    retry_config = RetryConfig(
+        max_retries=_UNASSIGN_MAX_RETRIES,
+        initial_delay=_UNASSIGN_BASE_DELAY,
+        backoff_factor=2.0,
+        jitter=True,
+    )
     last_error: Exception | None = None
     for attempt in range(1, _UNASSIGN_MAX_RETRIES + 1):
         try:
@@ -97,10 +104,9 @@ def unassign_with_retry(item_id: str) -> bool:
         except Exception as e:
             last_error = e
         if attempt < _UNASSIGN_MAX_RETRIES:
-            delay = _UNASSIGN_BASE_DELAY * (2 ** (attempt - 1))
+            delay = sleep_with_backoff(attempt - 1, retry_config, f'unassign {item_id}')
             logger.info("Retrying unassign for %s in %.1fs (attempt %d/%d)",
                         item_id, delay, attempt, _UNASSIGN_MAX_RETRIES)
-            time.sleep(delay)
 
     # All retries exhausted — persist for later recovery
     reason = str(last_error) if last_error else "unknown"

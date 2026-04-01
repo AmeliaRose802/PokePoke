@@ -87,7 +87,7 @@ class TestForceRemoveDirectory:
     """Tests for force_remove_directory function."""
 
     @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.retry_utils.time.sleep')
     @patch('subprocess.run')
     @patch('builtins.print')
     def test_force_remove_git_worktree_success(
@@ -111,7 +111,7 @@ class TestForceRemoveDirectory:
         assert 'remove' in first_call[0][0]
 
     @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.retry_utils.time.sleep')
     @patch('subprocess.run')
     @patch('pokepoke.worktrees.worktree_cleanup._safe_rmtree')
     @patch('builtins.print')
@@ -139,7 +139,7 @@ class TestForceRemoveDirectory:
         mock_safe_rmtree.assert_called_once()
 
     @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.retry_utils.time.sleep')
     @patch('subprocess.run')
     @patch('pokepoke.worktrees.worktree_cleanup._safe_rmtree')
     @patch('builtins.print')
@@ -178,7 +178,7 @@ class TestForceRemoveDirectory:
         assert mock_wait.call_count >= 0  # Just verify mock was used
 
     @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.retry_utils.time.sleep')
     @patch('subprocess.run')
     @patch('pokepoke.worktrees.worktree_cleanup._safe_rmtree')
     @patch('builtins.print')
@@ -202,7 +202,7 @@ class TestForceRemoveDirectory:
         assert result is False
 
     @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.retry_utils.time.sleep')
     @patch('subprocess.run')
     @patch('builtins.print')
     def test_force_remove_timeout_expired(
@@ -221,7 +221,7 @@ class TestForceRemoveDirectory:
         assert mock_wait.call_count >= 1
 
     @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.retry_utils.time.sleep')
     @patch('subprocess.run')
     @patch('pokepoke.worktrees.worktree_cleanup._safe_rmtree')
     @patch('builtins.print')
@@ -260,7 +260,7 @@ class TestForceRemoveDirectory:
         assert mock_sleep.call_count >= 2
 
     @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.retry_utils.time.sleep')
     @patch('subprocess.run')
     @patch('builtins.print')
     def test_force_remove_no_wait_on_first_attempt(
@@ -279,7 +279,7 @@ class TestForceRemoveDirectory:
         mock_wait.assert_not_called()
 
     @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.retry_utils.time.sleep')
     @patch('subprocess.run')
     @patch('pokepoke.worktrees.worktree_cleanup._safe_rmtree')
     @patch('builtins.print')
@@ -304,7 +304,7 @@ class TestForceRemoveDirectory:
         mock_wait.assert_not_called()
 
     @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.retry_utils.time.sleep')
     @patch('subprocess.run')
     @patch('builtins.print')
     def test_max_attempts_limits_retries(
@@ -507,7 +507,7 @@ class TestWindowsLockErrorHandling:
     """Integration tests for Windows lock error handling in force_remove_directory."""
 
     @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.retry_utils.time.sleep')
     @patch('subprocess.run')
     @patch('pokepoke.worktrees.worktree_cleanup._safe_rmtree')
     @patch('builtins.print')
@@ -536,7 +536,7 @@ class TestWindowsLockErrorHandling:
         assert result is True
 
     @patch('pokepoke.utils.process_utils.wait_for_process_cleanup')
-    @patch('pokepoke.worktrees.worktree_cleanup.time.sleep')
+    @patch('pokepoke.utils.retry_utils.time.sleep')
     @patch('subprocess.run')
     @patch('pokepoke.worktrees.worktree_cleanup._safe_rmtree')
     @patch('builtins.print')

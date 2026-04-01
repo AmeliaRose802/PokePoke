@@ -133,7 +133,7 @@ class TestRunGitStatusWithRetry:
         _run_git_status_with_retry(["git", "status", "--porcelain"])
         assert mock_run.call_count == 1
 
-    @patch('pokepoke.git.git_helpers.time.sleep')
+    @patch('pokepoke.utils.retry_utils.time.sleep')
     @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_retries_on_timeout(self, mock_run: Mock, mock_sleep: Mock) -> None:
         """TimeoutExpired triggers up to max_retries attempts."""
@@ -148,7 +148,7 @@ class TestRunGitStatusWithRetry:
         assert mock_run.call_count == 3
         assert mock_sleep.call_count == 2
 
-    @patch('pokepoke.git.git_helpers.time.sleep')
+    @patch('pokepoke.utils.retry_utils.time.sleep')
     @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_raises_timeout_after_all_retries(self, mock_run: Mock, mock_sleep: Mock) -> None:
         """TimeoutExpired is re-raised after all retries are exhausted."""
@@ -160,7 +160,7 @@ class TestRunGitStatusWithRetry:
             )
         assert mock_run.call_count == 2
 
-    @patch('pokepoke.git.git_helpers.time.sleep')
+    @patch('pokepoke.utils.retry_utils.time.sleep')
     @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_retries_on_index_lock_in_stderr(self, mock_run: Mock, mock_sleep: Mock) -> None:
         """CalledProcessError with 'index.lock' in stderr triggers retry."""
@@ -183,10 +183,10 @@ class TestRunGitStatusWithRetry:
             _run_git_status_with_retry(["git", "status", "--porcelain"], max_retries=3)
         assert mock_run.call_count == 1
 
-    @patch('pokepoke.git.git_helpers.time.sleep')
+    @patch('pokepoke.utils.retry_utils.time.sleep')
     @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_exponential_backoff_delays(self, mock_run: Mock, mock_sleep: Mock) -> None:
-        """Back-off delays double on each retry."""
+        """Back-off delays with jitter are in expected range."""
         mock_run.side_effect = [
             subprocess.TimeoutExpired("git", 10),
             subprocess.TimeoutExpired("git", 10),
@@ -196,7 +196,11 @@ class TestRunGitStatusWithRetry:
             ["git", "status", "--porcelain"], max_retries=3, base_delay=1.0
         )
         delays = [c.args[0] for c in mock_sleep.call_args_list]
-        assert delays == [1.0, 2.0]
+        # With jitter enabled, delays should be in range [base*0.5, base*1.5]
+        # Attempt 0: base_delay * 2^0 = 1.0, jittered: [0.5, 1.5]
+        # Attempt 1: base_delay * 2^1 = 2.0, jittered: [1.0, 3.0]
+        assert 0.5 <= delays[0] <= 1.5
+        assert 1.0 <= delays[1] <= 3.0
 
 
 class TestValidatePostMerge:

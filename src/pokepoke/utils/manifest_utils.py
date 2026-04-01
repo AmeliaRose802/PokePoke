@@ -9,11 +9,12 @@ with consistent error handling and atomic writes.
 import contextlib
 import json
 import logging
-import time
 from pathlib import Path
 from typing import cast
 
+from pokepoke.types import RetryConfig
 from pokepoke.utils.constants import DEFAULT_ENCODING, POKEPOKE_DIR
+from pokepoke.utils.retry_utils import sleep_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -80,13 +81,20 @@ def save_manifest_to_path(
         return
     # Retry the rename; on Windows the target can be briefly locked by
     # antivirus / indexer even when our own file lock is held.
+    retry_config = RetryConfig(
+        max_retries=max_retries,
+        initial_delay=retry_delay,
+        backoff_factor=1.0,  # Linear backoff (delay * (attempt + 1))
+        jitter=True,
+    )
     for attempt in range(max_retries):
         try:
             tmp.replace(manifest_path)
             return
         except OSError:
             if attempt < max_retries - 1:
-                time.sleep(retry_delay * (attempt + 1))
+                # Use linear backoff for manifest: delay * (attempt + 1)
+                sleep_with_backoff(attempt, retry_config, f'manifest save {manifest_path.name}')
     # All retries exhausted – clean up and warn
     with contextlib.suppress(OSError):
         tmp.unlink(missing_ok=True)
