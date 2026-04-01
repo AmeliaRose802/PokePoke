@@ -27,16 +27,13 @@ File layout:
 The raw log is append-only; summary can be rebuilt at any time.
 """
 
-import json
 import os
 import threading
-from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from pokepoke.utils.file_utils import replace_with_retry
-from pokepoke.worktrees.coordination import acquire_lock
+from pokepoke.stats.persistent_json_store import PersistentJsonStore
 
 STATS_FILE = Path(".pokepoke") / "beads_item_stats.json"
 
@@ -139,35 +136,30 @@ def _resolve_lock_name() -> str:
     return _STATS_FILE_LOCK
 
 
-def load_beads_item_stats(path: Path | None = None) -> dict[str, Any]:
-    stats_path = _resolve_stats_path(path)
-    if not stats_path.exists():
+def _normalize_store(data: Any) -> dict[str, Any]:
+    if not isinstance(data, dict) or "log" not in data:
         return _empty_store()
+    if not isinstance(data.get("log"), list):
+        return _empty_store()
+    return data
 
-    try:
-        with stats_path.open(encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict) or "log" not in data:
-            return _empty_store()
-        if not isinstance(data.get("log"), list):
-            return _empty_store()
-        return data
-    except (json.JSONDecodeError, OSError):
-        return _empty_store()
+
+_STORE = PersistentJsonStore(
+    default_path=STATS_FILE,
+    empty=_empty_store,
+    thread_lock=_thread_lock,
+    lock_name_resolver=_resolve_lock_name,
+    path_resolver=_resolve_stats_path,
+    normalize=_normalize_store,
+)
+
+
+def load_beads_item_stats(path: Path | None = None) -> dict[str, Any]:
+    return _STORE.load(path)
 
 
 def save_beads_item_stats(data: dict[str, Any], path: Path | None = None) -> None:
-    stats_path = _resolve_stats_path(path)
-    stats_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = stats_path.with_suffix(".tmp")
-    with tmp_path.open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-        f.flush()
-        with suppress(OSError):
-            os.fsync(f.fileno())
-    # Retry os.replace on Windows where the destination file may be briefly
-    # locked by a previous operation, causing PermissionError.
-    replace_with_retry(tmp_path, stats_path)
+    _STORE.save(data, path)
 
 
 def record_event(
@@ -190,8 +182,7 @@ def record_event(
         "timestamp": _now_iso(),
     }
 
-    lock_name = _resolve_lock_name()
-    with _thread_lock, acquire_lock(lock_name, timeout=60):
+    with _STORE.lock(timeout=60):
         data = load_beads_item_stats(path)
         data["log"].append(entry)
         data["summary"] = _rebuild_summary(data["log"])
