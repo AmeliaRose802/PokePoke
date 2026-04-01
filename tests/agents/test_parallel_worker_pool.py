@@ -2,6 +2,7 @@
 
 import concurrent.futures
 import threading
+import time
 from unittest.mock import Mock
 
 import pytest
@@ -349,3 +350,184 @@ class TestBackwardCompatAlias:
     def test_alias_identity(self) -> None:
         from pokepoke.agents.parallel import _collect_done_futures
         assert _collect_done_futures is collect_done_futures
+
+
+# ---------------------------------------------------------------------------
+# Thread-safety tests
+# ---------------------------------------------------------------------------
+
+
+class TestThreadSafety:
+    """Tests for thread-safe access to shared collections."""
+
+    def test_pool_has_lock_attribute(self) -> None:
+        """Verify ParallelWorkerPool exposes a lock property."""
+        pool = ParallelWorkerPool(pool_size=2)
+        try:
+            assert hasattr(pool, "lock")
+            assert isinstance(pool.lock, type(threading.Lock()))
+        finally:
+            pool.shutdown()
+
+    def test_concurrent_dispatch_and_collect(self) -> None:
+        """Test that concurrent dispatch/collect operations don't raise errors."""
+        pool = ParallelWorkerPool(pool_size=4)
+        errors: list[Exception] = []
+        completed_count = [0]
+
+        def process_fn(item, run_logger, sem, worker_name):
+            time.sleep(0.05)
+            sem.release()
+            return WorkItemResult(success=True, request_count=1)
+
+        def dispatcher():
+            for i in range(10):
+                try:
+                    item = _make_item(f"dispatch-{i}")
+                    pool._semaphore.acquire()
+                    with pool.lock:
+                        fut = pool._executor.submit(
+                            process_fn, item, Mock(), pool._semaphore, f"w-{i}",
+                        )
+                        pool._futures[fut] = item
+                except Exception as e:
+                    errors.append(e)
+                time.sleep(0.01)
+
+        def collector():
+            failed: set[str] = set()
+            stats = SessionStats(agent_stats=AgentStats())
+            for _ in range(20):
+                try:
+                    _, _, successes, _ = pool.collect_done(
+                        failed, 0, stats, Mock(), Mock(),
+                    )
+                    completed_count[0] += successes
+                except Exception as e:
+                    errors.append(e)
+                time.sleep(0.02)
+
+        dispatch_thread = threading.Thread(target=dispatcher)
+        collect_thread = threading.Thread(target=collector)
+
+        try:
+            dispatch_thread.start()
+            collect_thread.start()
+            dispatch_thread.join(timeout=5)
+            collect_thread.join(timeout=5)
+
+            assert not errors, f"Unexpected errors: {errors}"
+        finally:
+            pool.shutdown(wait=True)
+
+    def test_collect_done_futures_with_lock_no_race(self) -> None:
+        """Test collect_done_futures uses lock to prevent race conditions."""
+        lock = threading.Lock()
+        futures_dict: dict[concurrent.futures.Future, BeadsWorkItem] = {}
+        failed: set[str] = set()
+        stats = SessionStats(agent_stats=AgentStats())
+        errors: list[Exception] = []
+
+        def add_futures():
+            for i in range(5):
+                fut = concurrent.futures.Future()
+                fut.set_result(WorkItemResult(success=True, request_count=1))
+                with lock:
+                    futures_dict[fut] = _make_item(f"add-{i}")
+                time.sleep(0.01)
+
+        def collect_futures():
+            for _ in range(10):
+                try:
+                    collect_done_futures(
+                        futures_dict, failed, 0, stats, Mock(), Mock(), lock=lock,
+                    )
+                except Exception as e:
+                    errors.append(e)
+                time.sleep(0.02)
+
+        add_thread = threading.Thread(target=add_futures)
+        collect_thread = threading.Thread(target=collect_futures)
+
+        add_thread.start()
+        collect_thread.start()
+        add_thread.join(timeout=5)
+        collect_thread.join(timeout=5)
+
+        assert not errors, f"Race condition errors: {errors}"
+
+    def test_active_count_thread_safe(self) -> None:
+        """Test active_count property is thread-safe."""
+        pool = ParallelWorkerPool(pool_size=2)
+        errors: list[Exception] = []
+
+        def reader():
+            for _ in range(100):
+                try:
+                    _ = pool.active_count
+                except Exception as e:
+                    errors.append(e)
+
+        def writer():
+            for i in range(10):
+                fut = concurrent.futures.Future()
+                with pool.lock:
+                    pool._futures[fut] = _make_item(f"w-{i}")
+                time.sleep(0.001)
+                with pool.lock:
+                    pool._futures.pop(fut, None)
+
+        threads = [
+            threading.Thread(target=reader),
+            threading.Thread(target=reader),
+            threading.Thread(target=writer),
+        ]
+
+        try:
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=5)
+
+            assert not errors, f"Thread-safety errors: {errors}"
+        finally:
+            pool.shutdown()
+
+    def test_failed_claim_ids_lock_protection(self) -> None:
+        """Test that failed_claim_ids set is protected by lock during collect."""
+        lock = threading.Lock()
+        failed: set[str] = set()
+        errors: list[Exception] = []
+
+        def modifier():
+            for i in range(50):
+                try:
+                    with lock:
+                        failed.add(f"item-{i}")
+                    time.sleep(0.001)
+                    with lock:
+                        failed.discard(f"item-{i}")
+                except Exception as e:
+                    errors.append(e)
+
+        def reader():
+            for _ in range(50):
+                try:
+                    with lock:
+                        _ = list(failed)
+                except Exception as e:
+                    errors.append(e)
+                time.sleep(0.001)
+
+        threads = [
+            threading.Thread(target=modifier),
+            threading.Thread(target=modifier),
+            threading.Thread(target=reader),
+        ]
+
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+
+        assert not errors, f"Set race errors: {errors}"
