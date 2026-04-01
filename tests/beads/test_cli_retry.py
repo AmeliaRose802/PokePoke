@@ -84,7 +84,7 @@ class TestIsTransientCliError:
 class TestRunBdWithRetry:
     """Cover retry wrapper logic."""
 
-    @patch("pokepoke.beads.cli_retry.time.sleep")
+    @patch("pokepoke.utils.retry_utils.time.sleep")
     @patch("pokepoke.beads.beads_query._run_bd")
     def test_success_on_first_attempt(self, mock_run: MagicMock, mock_sleep: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(args=["ready"], returncode=0)
@@ -93,7 +93,7 @@ class TestRunBdWithRetry:
         mock_run.assert_called_once()
         mock_sleep.assert_not_called()
 
-    @patch("pokepoke.beads.cli_retry.time.sleep")
+    @patch("pokepoke.utils.retry_utils.time.sleep")
     @patch("pokepoke.beads.beads_query._run_bd")
     def test_retry_on_transient_then_succeed(self, mock_run: MagicMock, mock_sleep: MagicMock) -> None:
         transient = subprocess.TimeoutExpired(cmd="bd", timeout=30)
@@ -105,7 +105,7 @@ class TestRunBdWithRetry:
         assert mock_run.call_count == 2
         mock_sleep.assert_called_once()
 
-    @patch("pokepoke.beads.cli_retry.time.sleep")
+    @patch("pokepoke.utils.retry_utils.time.sleep")
     @patch("pokepoke.beads.beads_query._run_bd")
     def test_raises_after_max_attempts(self, mock_run: MagicMock, mock_sleep: MagicMock) -> None:
         transient = subprocess.TimeoutExpired(cmd="bd", timeout=30)
@@ -115,7 +115,7 @@ class TestRunBdWithRetry:
             _run_bd_with_retry(["ready"], max_attempts=3, base_delay=0.01)
         assert mock_run.call_count == 3
 
-    @patch("pokepoke.beads.cli_retry.time.sleep")
+    @patch("pokepoke.utils.retry_utils.time.sleep")
     @patch("pokepoke.beads.beads_query._run_bd")
     def test_non_transient_raises_immediately(self, mock_run: MagicMock, mock_sleep: MagicMock) -> None:
         non_transient = subprocess.CalledProcessError(1, "bd", stderr="item not found")
@@ -126,7 +126,7 @@ class TestRunBdWithRetry:
         mock_run.assert_called_once()
         mock_sleep.assert_not_called()
 
-    @patch("pokepoke.beads.cli_retry.time.sleep")
+    @patch("pokepoke.utils.retry_utils.time.sleep")
     @patch("pokepoke.beads.beads_query._run_bd")
     def test_exponential_backoff_delays(self, mock_run: MagicMock, mock_sleep: MagicMock) -> None:
         transient = subprocess.TimeoutExpired(cmd="bd", timeout=30)
@@ -135,18 +135,21 @@ class TestRunBdWithRetry:
 
         _run_bd_with_retry(["ready"], max_attempts=3, base_delay=1.0)
         assert mock_sleep.call_count == 2
-        # base_delay * 2^0 = 1.0, base_delay * 2^1 = 2.0
-        mock_sleep.assert_any_call(1.0)
-        mock_sleep.assert_any_call(2.0)
+        # With jitter enabled, delays should be in range [base*0.5, base*1.5]
+        # Attempt 0: base_delay * 2^0 = 1.0, jittered: [0.5, 1.5]
+        # Attempt 1: base_delay * 2^1 = 2.0, jittered: [1.0, 3.0]
+        delays = [call.args[0] for call in mock_sleep.call_args_list]
+        assert 0.5 <= delays[0] <= 1.5
+        assert 1.0 <= delays[1] <= 3.0
 
-    @patch("pokepoke.beads.cli_retry.time.sleep")
+    @patch("pokepoke.utils.retry_utils.time.sleep")
     @patch("pokepoke.beads.beads_query._run_bd")
     def test_empty_args_uses_unknown_label(self, mock_run: MagicMock, mock_sleep: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
         result = _run_bd_with_retry([], base_delay=0.01)
         assert result.returncode == 0
 
-    @patch("pokepoke.beads.cli_retry.time.sleep")
+    @patch("pokepoke.utils.retry_utils.time.sleep")
     @patch("pokepoke.beads.beads_query._run_bd")
     def test_passes_kwargs_to_run_bd(self, mock_run: MagicMock, mock_sleep: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(args=["ready"], returncode=0)
@@ -162,7 +165,7 @@ class TestRunBdWithRetry:
             ["ready"], check=False, timeout=60, cwd="/tmp", backend=None,
         )
 
-    @patch("pokepoke.beads.cli_retry.time.sleep")
+    @patch("pokepoke.utils.retry_utils.time.sleep")
     @patch("pokepoke.beads.beads_query._run_bd")
     def test_oserror_retried(self, mock_run: MagicMock, mock_sleep: MagicMock) -> None:
         oserr = OSError("permission denied")

@@ -391,15 +391,16 @@ class TestAttemptRepair:
         health_result.get_recoverable_errors.return_value = [error]
 
         with patch("pokepoke.utils.preflight_repair.repair_git_status", side_effect=[False, False, True]) as mock_fn, \
-             patch("pokepoke.utils.preflight_repair.time.sleep") as mock_sleep:
+             patch("pokepoke.utils.retry_utils.time.sleep") as mock_sleep:
             result = attempt_repair(health_result, repo_path, {"max_repair_attempts": 3})
 
         assert result is True
         assert mock_fn.call_count == 3
-        # Exponential backoff: sleep(2^1), sleep(2^2) before attempts 2 and 3
+        # Exponential backoff with jitter: attempt 0 = 2.0 * [0.5, 1.5], attempt 1 = 4.0 * [0.5, 1.5]
         assert mock_sleep.call_count == 2
-        mock_sleep.assert_any_call(2)
-        mock_sleep.assert_any_call(4)
+        delays = [c.args[0] for c in mock_sleep.call_args_list]
+        assert 1.0 <= delays[0] <= 3.0  # 2.0 * [0.5, 1.5]
+        assert 2.0 <= delays[1] <= 6.0  # 4.0 * [0.5, 1.5]
 
     @pytest.mark.allow_git_repair
     def test_all_attempts_fail(self, repo_path):
@@ -412,7 +413,7 @@ class TestAttemptRepair:
         health_result.get_recoverable_errors.return_value = [error]
 
         with patch("pokepoke.utils.preflight_repair.repair_git_status", return_value=False), \
-             patch("pokepoke.utils.preflight_repair.time.sleep"):
+             patch("pokepoke.utils.retry_utils.time.sleep"):
             result = attempt_repair(health_result, repo_path, {"max_repair_attempts": 3})
 
         assert result is False
@@ -431,7 +432,7 @@ class TestAttemptRepair:
         health_result.get_recoverable_errors.return_value = [error]
 
         with patch("pokepoke.utils.preflight_repair.repair_git_status", return_value=False) as mock_fn, \
-             patch("pokepoke.utils.preflight_repair.time.sleep"):
+             patch("pokepoke.utils.retry_utils.time.sleep"):
             attempt_repair(health_result, repo_path, {})
 
         assert mock_fn.call_count == 3

@@ -102,7 +102,7 @@ class TestDaemonSync:
             ["sync"], backend=BD_CONFIG, check=False, timeout=60,
         )
 
-    @patch("pokepoke.beads.sync_strategy.time.sleep")
+    @patch("pokepoke.utils.retry_utils.time.sleep")
     @patch(_RUN_CLI_PATH)
     def test_retries_on_jsonl_lock_error(
         self, mock_run_cli: Mock, mock_sleep: Mock,
@@ -131,7 +131,7 @@ class TestDaemonSync:
         assert result.returncode == 1
         assert mock_run_cli.call_count == 1
 
-    @patch("pokepoke.beads.sync_strategy.time.sleep")
+    @patch("pokepoke.utils.retry_utils.time.sleep")
     @patch(_RUN_CLI_PATH)
     def test_exponential_backoff_delay(
         self, mock_run_cli: Mock, mock_sleep: Mock,
@@ -144,8 +144,10 @@ class TestDaemonSync:
         strategy.sync(max_attempts=4, base_delay=1.0)
 
         assert mock_sleep.call_count == 2
-        mock_sleep.assert_any_call(1.0)
-        mock_sleep.assert_any_call(2.0)
+        # With jitter: attempt 0 = 1.0 * [0.5, 1.5], attempt 1 = 2.0 * [0.5, 1.5]
+        delays = [c.args[0] for c in mock_sleep.call_args_list]
+        assert 0.5 <= delays[0] <= 1.5
+        assert 1.0 <= delays[1] <= 3.0
 
     @patch(_RUN_CLI_PATH)
     def test_passes_timeout(self, mock_run_cli: Mock) -> None:
@@ -200,7 +202,7 @@ class TestExplicitSync:
         mock_git_pub.assert_called_once()
 
     @patch("pokepoke.beads.sync_strategy.ExplicitSync._git_publish_sync")
-    @patch("pokepoke.beads.sync_strategy.time.sleep")
+    @patch("pokepoke.utils.retry_utils.time.sleep")
     @patch(_RUN_CLI_PATH)
     def test_retries_on_index_lock_error(
         self, mock_run_cli: Mock, mock_sleep: Mock, mock_git_pub: Mock,
@@ -222,7 +224,7 @@ class TestExplicitSync:
         mock_git_pub.assert_called_once()
 
     @patch("pokepoke.beads.sync_strategy.ExplicitSync._git_publish_sync")
-    @patch("pokepoke.beads.sync_strategy.time.sleep")
+    @patch("pokepoke.utils.retry_utils.time.sleep")
     @patch(_RUN_CLI_PATH)
     def test_retries_on_connection_refused(
         self, mock_run_cli: Mock, mock_sleep: Mock, mock_git_pub: Mock,
