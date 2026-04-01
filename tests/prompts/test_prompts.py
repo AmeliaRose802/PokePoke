@@ -647,6 +647,70 @@ def test_template_include_with_user_override(tmp_path):
     assert "Builtin base" not in result
 
 
+def test_template_include_circular_reference(tmp_path):
+    """Test that circular includes are detected and don't cause infinite recursion."""
+    user_dir = tmp_path / "user"
+    user_dir.mkdir()
+    builtin_dir = tmp_path / "builtin"
+    builtin_dir.mkdir()
+    # Create circular reference: A includes B, B includes A
+    (builtin_dir / "template-a.md").write_text("Template A\n{{>template-b}}", encoding="utf-8")
+    (builtin_dir / "template-b.md").write_text("Template B\n{{>template-a}}", encoding="utf-8")
+
+    service = PromptService(prompts_dir=user_dir, builtin_dir=builtin_dir)
+    result = service.load_and_render("template-a", {})
+
+    # Should detect circular reference and mark it
+    assert "Template A" in result
+    assert "Template B" in result
+    # Either template-a or template-b will be marked as circular depending on order
+    assert "{{circular include:" in result
+    assert ("template-a" in result or "template-b" in result)
+
+
+def test_template_include_self_reference(tmp_path):
+    """Test that self-referencing templates don't cause infinite recursion."""
+    user_dir = tmp_path / "user"
+    user_dir.mkdir()
+    builtin_dir = tmp_path / "builtin"
+    builtin_dir.mkdir()
+    # Create self-reference: template includes itself
+    (builtin_dir / "self-ref.md").write_text("Self referencing\n{{>self-ref}}", encoding="utf-8")
+
+    service = PromptService(prompts_dir=user_dir, builtin_dir=builtin_dir)
+    result = service.load_and_render("self-ref", {})
+
+    # Should detect circular reference and mark it
+    assert "Self referencing" in result
+    assert "{{circular include: self-ref}}" in result
+
+
+def test_template_include_depth_limit(tmp_path):
+    """Test that excessive nesting depth is limited to prevent stack overflow."""
+    user_dir = tmp_path / "user"
+    user_dir.mkdir()
+    builtin_dir = tmp_path / "builtin"
+    builtin_dir.mkdir()
+
+    # Create a chain of 12 templates (exceeds MAX_DEPTH of 10)
+    for i in range(12):
+        if i < 11:
+            content = f"Level {i}\n{{{{>level{i+1}}}}}"
+        else:
+            content = f"Level {i} (deepest)"
+        (builtin_dir / f"level{i}.md").write_text(content, encoding="utf-8")
+
+    service = PromptService(prompts_dir=user_dir, builtin_dir=builtin_dir)
+    result = service.load_and_render("level0", {})
+
+    # Should include levels 0-9 but stop at depth 10
+    assert "Level 0" in result
+    assert "Level 9" in result
+    # Should stop before level 11 due to depth limit
+    assert "{{>level11}}" in result  # Unresolved include at max depth
+    assert "Level 11" not in result
+
+
 # ── Label-Based Template Selection Tests ─────────────────────────────────
 
 
