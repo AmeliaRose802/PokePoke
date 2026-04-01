@@ -91,7 +91,7 @@ class TestDefaultBeadsClient:
 
     def test_unassign_with_retry_delegates(self) -> None:
         client = DefaultBeadsClient()
-        with patch("pokepoke.beads.beads_recovery.unassign_with_retry", return_value=True) as mock:
+        with patch("pokepoke.beads.beads_manifest_utils.unassign_with_retry", return_value=True) as mock:
             result = client.unassign_with_retry("item-1")
         mock.assert_called_once_with("item-1")
         assert result is True

@@ -448,12 +448,12 @@ class TestHelpers:
 
     def test_unassign_item_success(self) -> None:
         """_unassign_item returns True on success."""
-        with patch("pokepoke.beads.beads_recovery.unassign_with_retry", return_value=True):
+        with patch("pokepoke.beads.beads_manifest_utils.unassign_with_retry", return_value=True):
             assert _unassign_item("ITEM-1") is True
 
     def test_unassign_item_failure(self) -> None:
         """_unassign_item returns False on exception."""
-        with patch("pokepoke.beads.beads_recovery.unassign_with_retry", side_effect=RuntimeError("fail")):
+        with patch("pokepoke.beads.beads_manifest_utils.unassign_with_retry", side_effect=RuntimeError("fail")):
             assert _unassign_item("ITEM-1") is False
 
     def test_branch_delete_failure_leaves_journal(self, sessions_dir: Path) -> None:

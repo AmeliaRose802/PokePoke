@@ -78,7 +78,7 @@ def _patch_all_helpers():
             mocks["branch_exists"] = p.start()
             patches["branch_exists"] = p
 
-            p = patch("pokepoke.beads.beads_recovery.unassign_with_retry", return_value=True)
+            p = patch("pokepoke.beads.beads_manifest_utils.unassign_with_retry", return_value=True)
             mocks["unassign_item"] = p.start()
             patches["unassign_item"] = p
 
@@ -522,7 +522,7 @@ def _patch_enter_helpers():
             mocks["branch_exists"] = p.start()
             patches["branch_exists"] = p
 
-            p = patch("pokepoke.beads.beads_recovery.unassign_with_retry", return_value=True)
+            p = patch("pokepoke.beads.beads_manifest_utils.unassign_with_retry", return_value=True)
             mocks["unassign_item"] = p.start()
             patches["unassign_item"] = p
 

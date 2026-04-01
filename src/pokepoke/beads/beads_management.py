@@ -81,8 +81,9 @@ def is_item_claimable(item_id: str) -> bool:
 
 def _rollback_assignment(item_id: str, reason: str) -> None:
     """Best-effort rollback: unassign item with retry, or persist to manifest for startup recovery."""
+    from .beads_manifest_utils import unassign_with_retry
+
     logger.warning("↩️  Rolling back assignment for %s: %s", item_id, reason)
-    from .beads_recovery import unassign_with_retry  # late import: circular dep
     if not unassign_with_retry(item_id):
         logger.error("All retry attempts exhausted for rollback of %s: %s", item_id, reason)
 

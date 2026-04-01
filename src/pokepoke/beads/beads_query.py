@@ -204,7 +204,7 @@ def get_ready_work_items(*, backend: CLIBackendConfig | None = None) -> list[Bea
         return [_filter_to_dataclass(BeadsWorkItem, item) for item in items_data] if items_data else []
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         logger.warning(f"⚠️  Warning: failed to parse beads output: {e}")
-        return None
+        return []
 
 
 def get_in_progress_items(*, backend: CLIBackendConfig | None = None) -> list[BeadsWorkItem] | None:

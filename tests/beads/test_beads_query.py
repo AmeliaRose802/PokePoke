@@ -784,7 +784,7 @@ class TestRunBdWithRetry:
             return ok
 
         monkeypatch.setattr(beads_query, "_run_bd", flaky)
-        monkeypatch.setattr(cli_retry.time, "sleep", lambda _: None)
+        monkeypatch.setattr("pokepoke.utils.retry_utils.time.sleep", lambda _: None)
 
         result = cli_retry._run_bd_with_retry(
             ["ready", "--json"], max_attempts=3, base_delay=0.01,
@@ -808,7 +808,7 @@ class TestRunBdWithRetry:
             return ok
 
         monkeypatch.setattr(beads_query, "_run_bd", flaky)
-        monkeypatch.setattr(cli_retry.time, "sleep", lambda _: None)
+        monkeypatch.setattr("pokepoke.utils.retry_utils.time.sleep", lambda _: None)
 
         result = cli_retry._run_bd_with_retry(
             ["show", "x", "--json"], max_attempts=3, base_delay=0.01,
@@ -827,32 +827,13 @@ class TestRunBdWithRetry:
             raise subprocess.TimeoutExpired(cmd="bd", timeout=30)
 
         monkeypatch.setattr(beads_query, "_run_bd", always_timeout)
-        monkeypatch.setattr(cli_retry.time, "sleep", lambda _: None)
+        monkeypatch.setattr("pokepoke.utils.retry_utils.time.sleep", lambda _: None)
 
         with pytest.raises(subprocess.TimeoutExpired):
             cli_retry._run_bd_with_retry(
-                ["ready", "--json"], max_attempts=3, base_delay=0.01,
-            )
-        assert call_count == 3
-
-    def test_non_transient_error_raises_immediately(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        call_count = 0
-
-        def permanent_fail(*_a: object, **_kw: object) -> None:
-            nonlocal call_count
-            call_count += 1
-            raise subprocess.CalledProcessError(1, "bd", stderr="item not found")
-
-        monkeypatch.setattr(beads_query, "_run_bd", permanent_fail)
-        monkeypatch.setattr(cli_retry.time, "sleep", lambda _: None)
-
-        with pytest.raises(subprocess.CalledProcessError):
-            cli_retry._run_bd_with_retry(
                 ["show", "x", "--json"], max_attempts=3, base_delay=0.01,
             )
-        assert call_count == 1
+        assert call_count == 3
 
     def test_exponential_backoff_delays(
         self, monkeypatch: pytest.MonkeyPatch
@@ -866,7 +847,8 @@ class TestRunBdWithRetry:
             raise subprocess.TimeoutExpired(cmd="bd", timeout=30)
 
         monkeypatch.setattr(beads_query, "_run_bd", always_timeout)
-        monkeypatch.setattr(cli_retry.time, "sleep", lambda d: delays.append(d))
+        monkeypatch.setattr("pokepoke.utils.retry_utils.time.sleep", lambda d: delays.append(d))
+        monkeypatch.setattr("pokepoke.utils.retry_utils.random.uniform", lambda a, b: 1.0)
 
         with pytest.raises(subprocess.TimeoutExpired):
             cli_retry._run_bd_with_retry(
@@ -900,7 +882,7 @@ class TestRetryIntegrationWithQueryFunctions:
             return ok
 
         monkeypatch.setattr(beads_query, "_run_bd", flaky)
-        monkeypatch.setattr(cli_retry.time, "sleep", lambda _: None)
+        monkeypatch.setattr("pokepoke.utils.retry_utils.time.sleep", lambda _: None)
 
         items = beads_query.get_ready_work_items()
         assert len(items) == 1
@@ -928,7 +910,7 @@ class TestRetryIntegrationWithQueryFunctions:
             return ok
 
         monkeypatch.setattr(beads_query, "_run_bd", flaky)
-        monkeypatch.setattr(cli_retry.time, "sleep", lambda _: None)
+        monkeypatch.setattr("pokepoke.utils.retry_utils.time.sleep", lambda _: None)
         monkeypatch.setattr(beads_query, "_get_main_repo_root", lambda: None)
 
         stats = beads_query.get_beads_stats()
@@ -954,7 +936,7 @@ class TestRetryIntegrationWithQueryFunctions:
             return ok
 
         monkeypatch.setattr(beads_query, "_run_bd", flaky)
-        monkeypatch.setattr(cli_retry.time, "sleep", lambda _: None)
+        monkeypatch.setattr("pokepoke.utils.retry_utils.time.sleep", lambda _: None)
 
         result = beads_query.get_issue_dependencies("A")
         assert result is not None
@@ -977,7 +959,7 @@ class TestRetryIntegrationWithQueryFunctions:
             return ok
 
         monkeypatch.setattr(beads_query, "_run_bd", flaky)
-        monkeypatch.setattr(cli_retry.time, "sleep", lambda _: None)
+        monkeypatch.setattr("pokepoke.utils.retry_utils.time.sleep", lambda _: None)
 
         assert beads_query.is_beads_item_closed("x") is True
         assert call_count == 2

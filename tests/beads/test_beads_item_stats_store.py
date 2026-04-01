@@ -101,7 +101,7 @@ def test_replace_with_retry_retries_on_permission_error() -> None:
             # Success on third attempt — nothing to do, just return
 
         with patch("pokepoke.utils.file_utils.os.replace", side_effect=fake_replace), \
-             patch("pokepoke.utils.file_utils.time.sleep") as mock_sleep:
+             patch("pokepoke.utils.retry_utils.time.sleep") as mock_sleep:
             replace_with_retry(src, dst, retries=5, delay=0.01)
 
         assert fail_count[0] == 3
@@ -115,7 +115,7 @@ def test_replace_with_retry_raises_after_all_retries_exhausted() -> None:
         src.write_text("data", encoding="utf-8")
 
         with patch("pokepoke.utils.file_utils.os.replace", side_effect=PermissionError("locked")), \
-             patch("pokepoke.utils.file_utils.time.sleep"), pytest.raises(PermissionError):
+             patch("pokepoke.utils.retry_utils.time.sleep"), pytest.raises(PermissionError):
             replace_with_retry(src, dst, retries=3, delay=0.001)
 
 

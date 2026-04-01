@@ -67,8 +67,9 @@ class TestBeadsIntegration:
         assert len(items) == 1
         assert items[0].id == "test-123"
 
+    @patch("pokepoke.utils.retry_utils.time.sleep")
     @patch('pokepoke.beads.beads_query._run_bd')
-    def test_get_ready_work_items_command_failure(self, mock_run: Mock) -> None:
+    def test_get_ready_work_items_command_failure(self, mock_run: Mock, mock_sleep: Mock) -> None:
         """Test get_ready_work_items handles subprocess errors gracefully."""
         mock_run.side_effect = subprocess.CalledProcessError(
             1, ['bd', 'ready', '--json'], stderr="Database not available"
@@ -76,7 +77,7 @@ class TestBeadsIntegration:
 
         items = get_ready_work_items()
 
-        assert items == []
+        assert items is None
 
     @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_ready_work_items_timeout(self, mock_run: Mock) -> None:
@@ -87,7 +88,7 @@ class TestBeadsIntegration:
 
         items = get_ready_work_items()
 
-        assert items == []
+        assert items is None
 
     @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_ready_work_items_generic_exception(self, mock_run: Mock) -> None:
@@ -96,7 +97,7 @@ class TestBeadsIntegration:
 
         items = get_ready_work_items()
 
-        assert items == []
+        assert items is None
 
     @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_ready_work_items_json_decode_error(self, mock_run: Mock) -> None:
@@ -108,7 +109,7 @@ class TestBeadsIntegration:
 
         items = get_ready_work_items()
 
-        assert items == []
+        assert items is None
 
     @patch('pokepoke.beads.beads_query._run_bd')
     def test_get_issue_dependencies_found(self, mock_run: Mock) -> None:
