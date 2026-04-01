@@ -322,24 +322,56 @@ class PromptService:
         template = self._process_includes(template)
         return self.render_prompt(template, variables)
 
-    def _process_includes(self, template: str) -> str:
+    def _process_includes(
+        self, template: str, seen: set[str] | None = None, depth: int = 0
+    ) -> str:
         """Process {{>template_name}} includes in templates.
 
         Args:
             template: Template content with possible includes
+            seen: Set of template names already being processed (cycle detection)
+            depth: Current recursion depth
 
         Returns:
             Template with includes resolved
         """
+        # Initialize seen set on first call
+        if seen is None:
+            seen = set()
+
+        # Maximum recursion depth to prevent stack overflow
+        MAX_DEPTH = 10
+
+        if depth >= MAX_DEPTH:
+            logger.warning(
+                f"Template include depth limit ({MAX_DEPTH}) exceeded. "
+                "Stopping resolution to prevent infinite recursion."
+            )
+            return template
+
         # Pattern to match {{>template_name}}
         include_pattern = re.compile(r'\{\{>(\w+(?:-\w+)*)\}\}')
 
         def replace_include(match: re.Match[str]) -> str:
             included_template_name = match.group(1)
+
+            # Cycle detection: check if we're already processing this template
+            if included_template_name in seen:
+                logger.warning(
+                    f"Circular include detected: {included_template_name} "
+                    f"(include chain: {' -> '.join(seen)} -> {included_template_name}). "
+                    "Leaving include unresolved."
+                )
+                return f"{{{{circular include: {included_template_name}}}}}"
+
             try:
                 included_template = self.load_prompt(included_template_name)
-                # Recursively process includes in the included template
-                return self._process_includes(included_template)
+                # Add to seen set and recursively process includes
+                seen.add(included_template_name)
+                result = self._process_includes(included_template, seen, depth + 1)
+                # Remove from seen set after processing (allows reuse in different branches)
+                seen.discard(included_template_name)
+                return result
             except FileNotFoundError:
                 logger.warning(f"Template include not found: {included_template_name}")
                 return f"{{{{missing include: {included_template_name}}}}}"
