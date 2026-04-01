@@ -226,6 +226,29 @@ class PerformanceThresholdsConfig:
         self.min_success_rate = max(0.0, min(1.0, self.min_success_rate))
 
 @dataclass
+class EconomyModeConfig:
+    """Economy mode configuration for routing tasks to appropriate models based on complexity.
+    
+    When enabled, routes simple tasks to cheaper/faster models and complex tasks to 
+    premium models based on complexity tags in work item labels.
+    """
+    enabled: bool = False
+    simple_model: str = "claude-sonnet-4.5"      # Cheapest/fastest for simple tasks
+    medium_model: str = "claude-opus-4.5"        # Mid-tier for medium complexity
+    complex_model: str = "claude-opus-4.6"       # Premium for complex tasks
+    
+    def __post_init__(self) -> None:
+        """Validate economy mode configuration."""
+        # Ensure model names are non-empty strings when enabled
+        if self.enabled:
+            if not self.simple_model.strip():
+                raise ValueError("simple_model cannot be empty when economy mode is enabled")
+            if not self.medium_model.strip():
+                raise ValueError("medium_model cannot be empty when economy mode is enabled")
+            if not self.complex_model.strip():
+                raise ValueError("complex_model cannot be empty when economy mode is enabled")
+
+@dataclass
 class ProjectConfig:
     """Top-level project configuration."""
     project_name: str = ""
@@ -252,6 +275,7 @@ class ProjectConfig:
     decomposition_enabled: bool = True
     decomposition_failure_threshold: int = 3
     assignment: AssignmentConfig = field(default_factory=AssignmentConfig)
+    economy_mode: EconomyModeConfig = field(default_factory=EconomyModeConfig)
     performance_thresholds: PerformanceThresholdsConfig = field(
         default_factory=PerformanceThresholdsConfig,
     )

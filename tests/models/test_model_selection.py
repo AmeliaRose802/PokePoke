@@ -386,3 +386,271 @@ class TestSelectModelWithAssignmentRules:
         model = select_model_for_item(_make_item("x"))
         assert model == "my-fallback-model"
         mock_weights.assert_not_called()
+
+
+class TestGetItemComplexity:
+    """Test get_item_complexity function for parsing complexity from labels and heuristics."""
+
+    def test_explicit_complexity_simple_label(self) -> None:
+        """Test detection of explicit 'complexity:simple' label."""
+        item = _make_item("x", labels=["complexity:simple", "other-tag"])
+        from pokepoke.models.model_selection import get_item_complexity
+        assert get_item_complexity(item) == "simple"
+
+    def test_explicit_complexity_medium_label(self) -> None:
+        """Test detection of explicit 'complexity:medium' label."""
+        item = _make_item("x", labels=["some-tag", "complexity:medium"])
+        from pokepoke.models.model_selection import get_item_complexity
+        assert get_item_complexity(item) == "medium"
+
+    def test_explicit_complexity_complex_label(self) -> None:
+        """Test detection of explicit 'complexity:complex' label."""
+        item = _make_item("x", labels=["complexity:complex"])
+        from pokepoke.models.model_selection import get_item_complexity
+        assert get_item_complexity(item) == "complex"
+
+    def test_short_form_labels(self) -> None:
+        """Test detection of short-form complexity labels."""
+        from pokepoke.models.model_selection import get_item_complexity
+        
+        assert get_item_complexity(_make_item("x", labels=["simple"])) == "simple"
+        assert get_item_complexity(_make_item("x", labels=["medium"])) == "medium"
+        assert get_item_complexity(_make_item("x", labels=["complex"])) == "complex"
+
+    def test_case_insensitive_labels(self) -> None:
+        """Test that label matching is case-insensitive."""
+        from pokepoke.models.model_selection import get_item_complexity
+        
+        assert get_item_complexity(_make_item("x", labels=["SIMPLE"])) == "simple"
+        assert get_item_complexity(_make_item("x", labels=["Complexity:Medium"])) == "medium"
+        assert get_item_complexity(_make_item("x", labels=["COMPLEX"])) == "complex"
+
+    def test_first_match_wins(self) -> None:
+        """Test that first matching complexity label wins."""
+        from pokepoke.models.model_selection import get_item_complexity
+        
+        # Should return "simple" because it's first
+        item = _make_item("x", labels=["simple", "complex"])
+        assert get_item_complexity(item) == "simple"
+
+    def test_priority_heuristics_high_priority(self) -> None:
+        """Test that high priority items default to simple."""
+        from pokepoke.models.model_selection import get_item_complexity
+        
+        assert get_item_complexity(_make_item("x", priority=0, labels=None)) == "simple"
+        assert get_item_complexity(_make_item("x", priority=1, labels=[])) == "simple"
+
+    def test_priority_heuristics_medium_priority(self) -> None:
+        """Test that medium priority items default to medium."""
+        from pokepoke.models.model_selection import get_item_complexity
+        
+        assert get_item_complexity(_make_item("x", priority=2, labels=None)) == "medium"
+        assert get_item_complexity(_make_item("x", priority=3, labels=[])) == "medium"
+
+    def test_priority_heuristics_low_priority(self) -> None:
+        """Test that low priority items default to complex."""
+        from pokepoke.models.model_selection import get_item_complexity
+        
+        assert get_item_complexity(_make_item("x", priority=4, labels=None)) == "complex"
+        assert get_item_complexity(_make_item("x", priority=5, labels=[])) == "complex"
+
+    def test_labels_override_priority_heuristics(self) -> None:
+        """Test that explicit labels override priority-based heuristics."""
+        from pokepoke.models.model_selection import get_item_complexity
+        
+        # High priority but explicit complex label
+        item = _make_item("x", priority=1, labels=["complex"])
+        assert get_item_complexity(item) == "complex"
+        
+        # Low priority but explicit simple label
+        item = _make_item("x", priority=5, labels=["simple"])
+        assert get_item_complexity(item) == "simple"
+
+
+class TestEconomyModeIntegration:
+    """Test economy mode integration in select_model_for_item."""
+
+    @patch('pokepoke.models.model_selection.get_config')
+    def test_economy_mode_disabled_by_default(self, mock_config: Mock) -> None:
+        """Test that economy mode is disabled by default."""
+        from pokepoke.config import ProjectConfig, EconomyModeConfig
+        
+        cfg = ProjectConfig()
+        # Default EconomyModeConfig has enabled=False
+        assert cfg.economy_mode.enabled is False
+        mock_config.return_value = cfg
+
+        # Should fall back to normal weighted selection
+        model = select_model_for_item(_make_item("x", labels=["simple"]))
+        assert model in ["claude-opus-4.6", "claude-sonnet-4.5"]  # Default or fallback
+
+    @patch('pokepoke.models.model_selection.get_config')
+    def test_economy_mode_routes_simple_task(self, mock_config: Mock) -> None:
+        """Test that economy mode routes simple tasks to simple_model."""
+        from pokepoke.config import ProjectConfig, EconomyModeConfig
+        
+        cfg = ProjectConfig()
+        cfg.economy_mode = EconomyModeConfig(
+            enabled=True,
+            simple_model="cheap-model",
+            medium_model="mid-model",
+            complex_model="premium-model"
+        )
+        mock_config.return_value = cfg
+
+        item = _make_item("x", labels=["complexity:simple"])
+        model = select_model_for_item(item)
+        assert model == "cheap-model"
+
+    @patch('pokepoke.models.model_selection.get_config')
+    def test_economy_mode_routes_medium_task(self, mock_config: Mock) -> None:
+        """Test that economy mode routes medium tasks to medium_model."""
+        from pokepoke.config import ProjectConfig, EconomyModeConfig
+        
+        cfg = ProjectConfig()
+        cfg.economy_mode = EconomyModeConfig(
+            enabled=True,
+            simple_model="cheap-model",
+            medium_model="mid-model",
+            complex_model="premium-model"
+        )
+        mock_config.return_value = cfg
+
+        item = _make_item("x", labels=["complexity:medium"])
+        model = select_model_for_item(item)
+        assert model == "mid-model"
+
+    @patch('pokepoke.models.model_selection.get_config')
+    def test_economy_mode_routes_complex_task(self, mock_config: Mock) -> None:
+        """Test that economy mode routes complex tasks to complex_model."""
+        from pokepoke.config import ProjectConfig, EconomyModeConfig
+        
+        cfg = ProjectConfig()
+        cfg.economy_mode = EconomyModeConfig(
+            enabled=True,
+            simple_model="cheap-model",
+            medium_model="mid-model", 
+            complex_model="premium-model"
+        )
+        mock_config.return_value = cfg
+
+        item = _make_item("x", labels=["complexity:complex"])
+        model = select_model_for_item(item)
+        assert model == "premium-model"
+
+    @patch('pokepoke.models.model_selection.get_config')
+    def test_economy_mode_with_priority_heuristics(self, mock_config: Mock) -> None:
+        """Test economy mode using priority-based heuristics when no labels present."""
+        from pokepoke.config import ProjectConfig, EconomyModeConfig
+        
+        cfg = ProjectConfig()
+        cfg.economy_mode = EconomyModeConfig(
+            enabled=True,
+            simple_model="cheap-model",
+            medium_model="mid-model",
+            complex_model="premium-model"
+        )
+        mock_config.return_value = cfg
+
+        # High priority (simple heuristic)
+        high_priority = _make_item("x", priority=1, labels=None)
+        assert select_model_for_item(high_priority) == "cheap-model"
+        
+        # Medium priority (medium heuristic)
+        med_priority = _make_item("x", priority=3, labels=[])
+        assert select_model_for_item(med_priority) == "mid-model"
+        
+        # Low priority (complex heuristic)
+        low_priority = _make_item("x", priority=5, labels=None)
+        assert select_model_for_item(low_priority) == "premium-model"
+
+    @patch('pokepoke.models.model_selection.get_config')
+    def test_assignment_rules_override_economy_mode(self, mock_config: Mock) -> None:
+        """Test that assignment rules take priority over economy mode."""
+        from pokepoke.config import ProjectConfig, EconomyModeConfig, AssignmentConfig, AssignmentRule, AssignmentRuleMatch
+        
+        cfg = ProjectConfig()
+        cfg.economy_mode = EconomyModeConfig(
+            enabled=True,
+            simple_model="cheap-model"
+        )
+        cfg.assignment = AssignmentConfig(rules=[
+            AssignmentRule(
+                match=AssignmentRuleMatch(issue_type="bug"),
+                model="bug-specific-model"
+            )
+        ])
+        mock_config.return_value = cfg
+
+        # Bug item with simple complexity should use assignment rule, not economy mode
+        bug_item = _make_item("x", issue_type="bug", labels=["simple"])
+        model = select_model_for_item(bug_item)
+        assert model == "bug-specific-model"
+
+    @patch('pokepoke.models.model_selection.get_config')
+    def test_economy_mode_fallback_when_no_assignment_match(self, mock_config: Mock) -> None:
+        """Test that economy mode is used when no assignment rule matches."""
+        from pokepoke.config import ProjectConfig, EconomyModeConfig, AssignmentConfig, AssignmentRule, AssignmentRuleMatch
+        
+        cfg = ProjectConfig()
+        cfg.economy_mode = EconomyModeConfig(
+            enabled=True,
+            simple_model="cheap-model"
+        )
+        cfg.assignment = AssignmentConfig(rules=[
+            AssignmentRule(
+                match=AssignmentRuleMatch(issue_type="bug"),
+                model="bug-specific-model"
+            )
+        ])
+        mock_config.return_value = cfg
+
+        # Feature item should use economy mode since assignment rule doesn't match
+        feature_item = _make_item("x", issue_type="feature", labels=["simple"])
+        model = select_model_for_item(feature_item)
+        assert model == "cheap-model"
+
+
+class TestEconomyModeConfig:
+    """Test EconomyModeConfig validation and behavior."""
+
+    def test_default_config_valid(self) -> None:
+        """Test that default economy mode config is valid."""
+        from pokepoke.config import EconomyModeConfig
+        
+        config = EconomyModeConfig()
+        assert config.enabled is False
+        assert config.simple_model == "claude-sonnet-4.5"
+        assert config.medium_model == "claude-opus-4.5"
+        assert config.complex_model == "claude-opus-4.6"
+
+    def test_validation_rejects_empty_models_when_enabled(self) -> None:
+        """Test that validation rejects empty model names when enabled."""
+        from pokepoke.config import EconomyModeConfig
+        
+        # Should raise ValueError for empty simple_model
+        import pytest
+        with pytest.raises(ValueError, match="simple_model cannot be empty"):
+            EconomyModeConfig(enabled=True, simple_model="")
+            
+        with pytest.raises(ValueError, match="medium_model cannot be empty"):
+            EconomyModeConfig(enabled=True, medium_model="")
+            
+        with pytest.raises(ValueError, match="complex_model cannot be empty"):
+            EconomyModeConfig(enabled=True, complex_model="")
+
+    def test_validation_allows_empty_models_when_disabled(self) -> None:
+        """Test that validation allows empty models when economy mode is disabled."""
+        from pokepoke.config import EconomyModeConfig
+        
+        # Should not raise when disabled
+        config = EconomyModeConfig(enabled=False, simple_model="", medium_model="", complex_model="")
+        assert config.enabled is False
+
+    def test_validation_strips_whitespace(self) -> None:
+        """Test that validation considers whitespace-only strings as empty."""
+        from pokepoke.config import EconomyModeConfig
+        
+        import pytest
+        with pytest.raises(ValueError, match="simple_model cannot be empty"):
+            EconomyModeConfig(enabled=True, simple_model="   ")
