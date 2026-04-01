@@ -229,15 +229,15 @@ class PerformanceThresholdsConfig:
 @dataclass
 class EconomyModeConfig:
     """Economy mode configuration for routing tasks to appropriate models based on complexity.
-    
-    When enabled, routes simple tasks to cheaper/faster models and complex tasks to 
+
+    When enabled, routes simple tasks to cheaper/faster models and complex tasks to
     premium models based on complexity tags in work item labels.
     """
     enabled: bool = False
     simple_model: str = "claude-sonnet-4.5"      # Cheapest/fastest for simple tasks
     medium_model: str = "claude-opus-4.5"        # Mid-tier for medium complexity
     complex_model: str = "claude-opus-4.6"       # Premium for complex tasks
-    
+
     def __post_init__(self) -> None:
         """Validate economy mode configuration."""
         # Ensure model names are non-empty strings when enabled
@@ -281,6 +281,9 @@ class ProjectConfig:
         default_factory=PerformanceThresholdsConfig,
     )
     repos: list[RepoConfig] = field(default_factory=list)
+    # Startup cleanup configuration
+    startup_cleanup_enabled: bool = True
+    stale_worktree_commit_threshold: int = 20
 
     def __post_init__(self) -> None:
         """Clamp values to valid ranges."""
@@ -295,6 +298,7 @@ class ProjectConfig:
         self.max_ping_failures = max(_c.MIN_MAX_PING_FAILURES, self.max_ping_failures)
         self.circuit_breaker_drain_timeout = max(_c.MIN_CIRCUIT_BREAKER_DRAIN_TIMEOUT, self.circuit_breaker_drain_timeout)
         self.decomposition_failure_threshold = max(1, self.decomposition_failure_threshold)
+        self.stale_worktree_commit_threshold = max(1, self.stale_worktree_commit_threshold)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a canonical dict suitable for YAML/JSON output."""

@@ -188,6 +188,28 @@ def _setup_orchestrator(interactive: bool, continuous: bool, run_beta_first: boo
 
     # Resolve effective parallelism: CLI arg > config > 1
     cfg = load_config()
+
+    # Clean up stale worktrees at startup
+    if cfg.startup_cleanup_enabled:
+        try:
+            from pokepoke.worktrees.startup_cleanup import cleanup_stale_worktrees_at_startup
+            cleanup_stats = cleanup_stale_worktrees_at_startup(repo_path=str(main_repo_path), cfg=cfg)
+            if cleanup_stats['total_removed'] > 0:
+                logger.info(
+                    f"🧹 Startup cleanup completed: {cleanup_stats['total_removed']} worktrees removed "
+                    f"({cleanup_stats['stale_removed']} stale, {cleanup_stats['merged_removed']} merged)"
+                )
+                run_logger.log_orchestrator(
+                    f"Startup worktree cleanup: {cleanup_stats['total_removed']} removed "
+                    f"({cleanup_stats['stale_removed']} stale, {cleanup_stats['merged_removed']} merged, "
+                    f"{cleanup_stats['errors']} errors)"
+                )
+            elif cleanup_stats['checked'] > 0:
+                logger.debug(f"🧹 Startup cleanup: {cleanup_stats['checked']} worktrees checked, none required removal")
+        except Exception as e:
+            logger.warning(f"⚠️  Startup worktree cleanup failed: {e}")
+            run_logger.log_orchestrator(f"Startup worktree cleanup error: {e}", level="WARNING")
+
     effective_parallel = max(1, max_parallel_agents if max_parallel_agents > 1 else cfg.max_parallel_agents)
     if effective_parallel > 1 and interactive:
         logger.warning(f"⚠️  Parallel mode (--max-agents {effective_parallel}) requires autonomous mode; forcing parallel=1")

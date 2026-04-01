@@ -7,6 +7,7 @@ import pytest
 
 from pokepoke.git.git_helpers import (
     _run_git_status_with_retry,
+    get_commits_behind,
     list_worktrees,
     restore_beads_stash,
     validate_post_merge,
@@ -258,3 +259,81 @@ class TestListWorktrees:
         """Returns empty list on TimeoutExpired."""
         mock_run.side_effect = subprocess.TimeoutExpired("git", 30)
         assert list_worktrees() == []
+
+
+class TestGetCommitsBehind:
+    """Tests for get_commits_behind helper."""
+
+    @patch('pokepoke.git.git_helpers.subprocess.run')
+    def test_returns_commit_count(self, mock_run: Mock) -> None:
+        """Returns the number of commits behind when successful."""
+        mock_run.return_value = Mock(stdout="42\n", returncode=0)
+
+        result = get_commits_behind("feature", "main")
+
+        assert result == 42
+        mock_run.assert_called_once_with(
+            ["git", "rev-list", "feature..main", "--count"],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            check=False,
+            timeout=30,  # Default timeout from constants
+            cwd=None
+        )
+
+    @patch('pokepoke.git.git_helpers.subprocess.run')
+    def test_returns_zero_when_up_to_date(self, mock_run: Mock) -> None:
+        """Returns 0 when branch is up to date."""
+        mock_run.return_value = Mock(stdout="0\n", returncode=0)
+
+        result = get_commits_behind("feature", "main")
+
+        assert result == 0
+
+    @patch('pokepoke.git.git_helpers.subprocess.run')
+    def test_returns_none_on_git_error(self, mock_run: Mock) -> None:
+        """Returns None when git command fails."""
+        mock_run.return_value = Mock(stdout="", returncode=1)
+
+        result = get_commits_behind("nonexistent", "main")
+
+        assert result is None
+
+    @patch('pokepoke.git.git_helpers.subprocess.run')
+    def test_returns_none_on_timeout(self, mock_run: Mock) -> None:
+        """Returns None when git command times out."""
+        mock_run.side_effect = subprocess.TimeoutExpired("git", 30)
+
+        result = get_commits_behind("feature", "main")
+
+        assert result is None
+
+    @patch('pokepoke.git.git_helpers.subprocess.run')
+    def test_returns_none_on_exception(self, mock_run: Mock) -> None:
+        """Returns None when subprocess raises an exception."""
+        mock_run.side_effect = subprocess.CalledProcessError(1, "git")
+
+        result = get_commits_behind("feature", "main")
+
+        assert result is None
+
+    @patch('pokepoke.git.git_helpers.subprocess.run')
+    def test_returns_none_on_invalid_output(self, mock_run: Mock) -> None:
+        """Returns None when output is not a valid number."""
+        mock_run.return_value = Mock(stdout="invalid\n", returncode=0)
+
+        result = get_commits_behind("feature", "main")
+
+        assert result is None
+
+    @patch('pokepoke.git.git_helpers.subprocess.run')
+    def test_uses_custom_cwd(self, mock_run: Mock) -> None:
+        """Uses the provided working directory."""
+        mock_run.return_value = Mock(stdout="5\n", returncode=0)
+
+        get_commits_behind("feature", "main", cwd="/custom/path")
+
+        args = mock_run.call_args
+        assert args[1]['cwd'] == "/custom/path"

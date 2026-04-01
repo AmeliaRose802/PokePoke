@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "_run_git_status_with_retry",
+    "get_commits_behind",
     "list_worktrees",
     "restore_beads_stash",
     "run_git",
@@ -143,6 +144,32 @@ def validate_post_merge(target_branch: str, cwd: str | None = None) -> bool:
         logger.error(f"❌ Post-merge validation failed: {target_branch} has uncommitted changes")
         return False
     return True
+
+
+def get_commits_behind(branch: str, target: str, *, cwd: str | None = None) -> int | None:
+    """Get the number of commits that a branch is behind the target branch.
+
+    Args:
+        branch: Branch to check (e.g., "task/feature-branch")
+        target: Target branch to compare against (e.g., "master", "main")
+        cwd: Working directory for the git command (defaults to process CWD).
+
+    Returns:
+        Number of commits behind, or None if unable to determine.
+    """
+    try:
+        result = run_git(
+            ["git", "rev-list", f"{branch}..{target}", "--count"],
+            cwd=cwd,
+            check=False
+        )
+        if result.returncode == 0:
+            count_str = result.stdout.strip()
+            if count_str.isdigit():
+                return int(count_str)
+        return None
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError):
+        return None
 
 
 def list_worktrees(cwd: str | None = None) -> list[dict[str, str]]:
