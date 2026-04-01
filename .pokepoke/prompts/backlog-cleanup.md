@@ -17,7 +17,7 @@ Review and maintain the beads backlog. Keep it healthy, actionable, and free of 
 bd list --status open --json
 ```
 
-### 2. Close Stale or Completed Items
+### 2. Identify Stale or Completed Items
 
 Look for items that are:
 
@@ -26,15 +26,16 @@ Look for items that are:
 - **No longer relevant** - The feature or code they reference has been removed
 - **Too vague to action** - Items with no clear definition of done
 
-For items that are already fixed:
+For items that are already fixed, add a comment explaining why:
 ```bash
+bd comment <id> "Already implemented — verified in <file/module>"
 bd update <id> --status done --json
 ```
 
 For duplicates, close the less detailed one:
 ```bash
-bd update <id> --status done --json
 bd comment <id> "Closing as duplicate of <other-id>"
+bd update <id> --status done --json
 ```
 
 ### 3. Improve Item Quality
