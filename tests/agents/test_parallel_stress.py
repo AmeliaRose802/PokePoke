@@ -72,9 +72,6 @@ def _mock_parallel_externals(monkeypatch):
     monkeypatch.setattr(
         "pokepoke.agents.parallel.unassign_with_retry", lambda *a, **kw: None)
     monkeypatch.setattr(
-        "pokepoke.agents.parallel_support.kill_orphaned_copilot_processes",
-        lambda **kw: None)
-    monkeypatch.setattr(
         "pokepoke.agents.parallel_support.terminal_ui", MagicMock())
     monkeypatch.setattr(
         "pokepoke.agents.parallel_support.is_high_conflict_risk",

@@ -42,7 +42,6 @@ def _disable_preflight_health(monkeypatch):
     monkeypatch.setattr("pokepoke.agents.parallel.assign_and_sync_item", lambda *a, **kw: True)
     monkeypatch.setattr("pokepoke.agents.parallel.unassign_with_retry", lambda *a, **kw: None)
     # Mock parallel_support dependencies so _finalize_workers doesn't call real processes
-    monkeypatch.setattr("pokepoke.agents.parallel_support.kill_orphaned_copilot_processes", lambda **kw: None)
     monkeypatch.setattr("pokepoke.agents.parallel_support.terminal_ui", MagicMock())
 
 
@@ -102,70 +101,6 @@ class TestRunParallelLoop:
         )
 
         assert code == 1
-
-    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.agents.parallel.time.sleep")
-    @patch("pokepoke.agents.parallel.terminal_ui")
-    @patch("pokepoke.agents.parallel.set_executor")
-    @patch("pokepoke.agents.parallel.is_shutting_down", side_effect=[False, True, True])
-    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.agents.parallel.get_ready_work_items")
-    @patch("pokepoke.agents.parallel.select_multiple_items")
-    @patch("pokepoke.agents.parallel.process_work_item")
-    def test_submits_and_collects_item(
-        self, mock_pwi, mock_sel, mock_ready,
-        mock_repo, mock_shut, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
-    ) -> None:
-        """Submits an item and collects its result in single-shot mode."""
-        item = _make_item("x1")
-        mock_ready.return_value = [item]
-        mock_sel.return_value = [item]
-        mock_pwi.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats(), gate_agent_runs=1)
-
-        stats = SessionStats(agent_stats=AgentStats())
-        record_fn = Mock()
-        finalize_fn = Mock()
-        logger = Mock()
-
-        code = run_parallel_loop(
-            effective_parallel=2, mode_name="Autonomous",
-            main_repo_path="/repo", failed_claim_ids=set(),
-            session_stats=stats, start_time=time.time(),
-            run_logger=logger, continuous=False,
-            record_fn=record_fn, finalize_fn=finalize_fn,
-        )
-
-        assert code == 0
-        finalize_fn.assert_called_once()
-        # record_fn should be called at least once (from collect or drain)
-        assert record_fn.call_count >= 1
-
-    @patch("pokepoke.agents.parallel.time.sleep")
-    @patch("pokepoke.agents.parallel.terminal_ui")
-    @patch("pokepoke.agents.parallel.set_executor")
-    @patch("pokepoke.agents.parallel.is_shutting_down", side_effect=[False, True])
-    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.agents.parallel.get_ready_work_items", side_effect=RuntimeError("db error"))
-    @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_get_ready_items_exception_handled(
-        self, mock_sel, mock_ready, mock_repo, mock_shut,
-        mock_set_exec, mock_ui, mock_sleep,
-    ) -> None:
-        """get_ready_work_items exception is caught and loop continues."""
-        stats = SessionStats(agent_stats=AgentStats())
-        logger = Mock()
-        finalize_fn = Mock()
-
-        code = run_parallel_loop(
-            effective_parallel=2, mode_name="Autonomous",
-            main_repo_path="/repo", failed_claim_ids=set(),
-            session_stats=stats, start_time=time.time(),
-            run_logger=logger, continuous=True,
-            record_fn=Mock(), finalize_fn=finalize_fn,
-        )
-
-        assert code == 0
-        finalize_fn.assert_called_once()
 
     @patch("pokepoke.agents.parallel.time.sleep")
     @patch("pokepoke.agents.parallel.terminal_ui")

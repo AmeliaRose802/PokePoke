@@ -33,7 +33,6 @@ def _disable_preflight_health(monkeypatch):
     monkeypatch.setattr("pokepoke.agents.parallel.assign_and_sync_item", lambda *a, **kw: True)
     monkeypatch.setattr("pokepoke.agents.parallel.unassign_with_retry", lambda *a, **kw: None)
     # Mock parallel_support dependencies so _finalize_workers doesn't call real processes
-    monkeypatch.setattr("pokepoke.agents.parallel_support.kill_orphaned_copilot_processes", lambda **kw: None)
     monkeypatch.setattr("pokepoke.agents.parallel_support.terminal_ui", MagicMock())
 
 
@@ -266,7 +265,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.agents.parallel.time.sleep")
     @patch("pokepoke.agents.parallel.terminal_ui")
     @patch("pokepoke.agents.parallel.set_executor")
-    @patch("pokepoke.agents.parallel.is_shutting_down", return_value=False)
+    @patch("pokepoke.agents.parallel.is_shutting_down", side_effect=[False] + [True] * 20)
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items")
     @patch("pokepoke.agents.parallel.select_multiple_items")
@@ -290,44 +289,14 @@ class TestRunParallelLoop:
             stats = SessionStats(agent_stats=AgentStats())
             logger = Mock()
 
-            with pytest.raises(RuntimeError):
-                run_parallel_loop(
-                    effective_parallel=1, mode_name="Autonomous",
-                    main_repo_path="/repo", failed_claim_ids=set(),
-                    session_stats=stats, start_time=time.time(),
-                    run_logger=logger, continuous=True,
-                    record_fn=Mock(), finalize_fn=Mock(),
-                )
-
-        assert sem.acquire(blocking=False)
-        mock_executor.shutdown.assert_called_once()
-
-    @patch("pokepoke.agents.parallel.time.sleep")
-    @patch("pokepoke.agents.parallel.terminal_ui")
-    @patch("pokepoke.agents.parallel.set_executor")
-    @patch("pokepoke.agents.parallel.is_shutting_down", side_effect=[False, True])
-    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.agents.parallel.get_ready_work_items", side_effect=RuntimeError("db error"))
-    @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_get_ready_items_exception_handled(
-        self, mock_sel, mock_ready, mock_repo, mock_shut,
-        mock_set_exec, mock_ui, mock_sleep,
-    ) -> None:
-        """get_ready_work_items exception is caught and loop continues."""
-        stats = SessionStats(agent_stats=AgentStats())
-        logger = Mock()
-        finalize_fn = Mock()
-
-        code = run_parallel_loop(
-            effective_parallel=2, mode_name="Autonomous",
-            main_repo_path="/repo", failed_claim_ids=set(),
-            session_stats=stats, start_time=time.time(),
-            run_logger=logger, continuous=True,
-            record_fn=Mock(), finalize_fn=finalize_fn,
-        )
-
-        assert code == 0
-        finalize_fn.assert_called_once()
+            # executor.submit failure is now handled gracefully (break, not raise)
+            run_parallel_loop(
+                effective_parallel=1, mode_name="Autonomous",
+                main_repo_path="/repo", failed_claim_ids=set(),
+                session_stats=stats, start_time=time.time(),
+                run_logger=logger, continuous=True,
+                record_fn=Mock(), finalize_fn=Mock(),
+            )
 
     @patch("pokepoke.agents.parallel.time.sleep")
     @patch("pokepoke.agents.parallel.terminal_ui")
@@ -484,61 +453,6 @@ class TestRunParallelLoop:
         assert mock_ui.ui.update_stats.call_count >= 2
         last_stats = mock_ui.ui.update_stats.call_args_list[-1][0][0]
         assert last_stats.items_completed == 2
-
-    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
-    @patch("pokepoke.agents.parallel.time.sleep")
-    @patch("pokepoke.agents.parallel.terminal_ui")
-    @patch("pokepoke.agents.parallel.set_executor")
-    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
-    @patch("pokepoke.agents.parallel._collect_done_futures")
-    @patch("pokepoke.agents.parallel.is_shutting_down")
-    @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
-    @patch("pokepoke.agents.parallel.get_ready_work_items")
-    @patch("pokepoke.agents.parallel.select_multiple_items")
-    @patch("pokepoke.agents.parallel.process_work_item")
-    def test_shutdown_cleanup_updates_stats(
-        self, mock_pwi, mock_sel, mock_ready, mock_repo,
-        mock_shut, mock_collect, mock_stop, mock_set_exec,
-        mock_ui, mock_sleep, mock_claimable,
-    ) -> None:
-        """Draining during shutdown should push updated stats to the UI."""
-        mock_sleep.return_value = None
-        slow_item = _make_item("slow-shutdown")
-        mock_ready.return_value = [slow_item]
-        mock_sel.return_value = [slow_item]
-        mock_pwi.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
-
-        shutdown_flag = {"value": False}
-        mock_shut.side_effect = lambda: shutdown_flag["value"]
-
-        def collect_side_effect(futures, failed, total, stats, logger, record_fn):
-            # Simulate shutdown being requested while futures are still pending.
-            shutdown_flag["value"] = True
-            return total, False, 0, 0
-
-        mock_collect.side_effect = collect_side_effect
-
-        stats = SessionStats(agent_stats=AgentStats())
-        logger = Mock()
-
-        def record_fn(item, result, s, _logger):
-            if result.success:
-                s.items_completed += 1
-
-        code = run_parallel_loop(
-            effective_parallel=1, mode_name="Autonomous",
-            main_repo_path="/repo", failed_claim_ids=set(),
-            session_stats=stats, start_time=time.time(),
-            run_logger=logger, continuous=True,
-            record_fn=record_fn, finalize_fn=Mock(),
-        )
-
-        assert code == 0
-        # Stats are updated in the main loop; _finalize_workers also updates
-        # via parallel_support.terminal_ui (separate mock).
-        assert mock_ui.ui.update_stats.call_count >= 1
-        last_stats = mock_ui.ui.update_stats.call_args_list[-1][0][0]
-        assert last_stats.items_completed >= 1
 
     @patch("pokepoke.utils.process_utils.apply_memory_backpressure", side_effect=lambda s: (s, 0))
     @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)

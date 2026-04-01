@@ -27,18 +27,15 @@ class TestFinalizeWorkers:
     """Tests for finalize_workers."""
 
     @patch("pokepoke.agents.parallel_support.terminal_ui")
-    @patch("pokepoke.agents.parallel_support.kill_orphaned_copilot_processes")
-    def test_empty_futures(self, mock_kill, mock_tui):
+    def test_empty_futures(self, mock_tui):
         stats = SessionStats(agent_stats=AgentStats())
         run_logger = MagicMock()
         total, timeout = finalize_workers({}, stats, time.time(), 0, run_logger, Mock())
         assert total == 0
         assert timeout is False
-        mock_kill.assert_not_called()
 
     @patch("pokepoke.agents.parallel_support.terminal_ui")
-    @patch("pokepoke.agents.parallel_support.kill_orphaned_copilot_processes")
-    def test_successful_worker(self, mock_kill, mock_tui):
+    def test_successful_worker(self, mock_tui):
         item = _make_item("s1")
         result = WorkItemResult(success=True, request_count=3)
         fut = concurrent.futures.Future()
@@ -50,11 +47,9 @@ class TestFinalizeWorkers:
         assert total == 8  # 5 + 3
         assert timeout is False
         record_fn.assert_called_once()
-        mock_kill.assert_called_once()
 
     @patch("pokepoke.agents.parallel_support.terminal_ui")
-    @patch("pokepoke.agents.parallel_support.kill_orphaned_copilot_processes")
-    def test_failed_worker(self, mock_kill, mock_tui):
+    def test_failed_worker(self, mock_tui):
         item = _make_item("f1")
         fut = concurrent.futures.Future()
         fut.set_exception(RuntimeError("boom"))
@@ -67,8 +62,7 @@ class TestFinalizeWorkers:
         record_fn.assert_called_once()
 
     @patch("pokepoke.agents.parallel_support.terminal_ui")
-    @patch("pokepoke.agents.parallel_support.kill_orphaned_copilot_processes")
-    def test_record_fn_exception(self, mock_kill, mock_tui):
+    def test_record_fn_exception(self, mock_tui):
         """record_fn raising doesn't crash finalize_workers."""
         item = _make_item("r1")
         result = WorkItemResult(success=True, request_count=1)
@@ -82,10 +76,9 @@ class TestFinalizeWorkers:
         assert timeout is False
 
     @patch("pokepoke.agents.parallel_support.terminal_ui")
-    @patch("pokepoke.agents.parallel_support.kill_orphaned_copilot_processes")
     @patch("pokepoke.agents.parallel_support._drain_orphaned_futures")
     @patch("pokepoke.agents.parallel_support.concurrent.futures.as_completed")
-    def test_timeout_drains_orphans(self, mock_as_completed, mock_drain, mock_kill, mock_tui):
+    def test_timeout_drains_orphans(self, mock_as_completed, mock_drain, mock_tui):
         """Timeout triggers drain of orphaned futures."""
         mock_as_completed.side_effect = concurrent.futures.TimeoutError()
         item = _make_item("t1")

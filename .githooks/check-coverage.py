@@ -260,6 +260,7 @@ def run_tests_with_coverage(
             timeout=900,
             cwd=str(repo_root),
             encoding="utf-8",
+            errors="backslashreplace",
         )
 
         # Print filtered output (no progress dots)

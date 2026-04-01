@@ -11,7 +11,7 @@ from pokepoke.desktop import terminal_ui
 from pokepoke.types import BeadsWorkItem, SessionStats, WorkItemResult
 from pokepoke.utils.logging_utils import RunLogger
 from pokepoke.utils.preflight_log_utils import handle_preflight_checks
-from pokepoke.utils.process_utils import apply_memory_backpressure, kill_orphaned_copilot_processes
+from pokepoke.utils.process_utils import apply_memory_backpressure
 from pokepoke.utils.shutdown import is_shutting_down
 
 logger = logging.getLogger(__name__)
@@ -67,7 +67,7 @@ def finalize_workers(
         timeout_occurred = True
         _drain_orphaned_futures(futures, session_stats, start_time, run_logger, record_fn)
     run_logger.log_orchestrator("Workers completed")
-    kill_orphaned_copilot_processes(expected_count=0)
+    # DISABLED: kill_orphaned_copilot_processes caused death spiral (PokePoke-q3t16)
     terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
     return total_requests, timeout_occurred
 def _drain_orphaned_futures(
@@ -192,10 +192,9 @@ def dispatch_items(
         return worker_counter
 
     attempted_this_cycle: set[str] = set()
-    dispatched = 0
-    logged_replenish = False
+    dispatched = logged_replenish = submit_failed = 0
 
-    while dispatched < slots:
+    while dispatched < slots and not submit_failed:
         needed = slots - dispatched
         cycle_skip = failed_claim_ids | attempted_this_cycle
 
@@ -237,9 +236,11 @@ def dispatch_items(
                 fut = executor.submit(process_item_fn, item, run_logger, semaphore, worker_name)
             except Exception as e:
                 logger.warning(f"Failed to submit work item {item.id} to executor: {e}")
+                run_logger.log_orchestrator(f"Executor submit failed for {item.id}: {e}", level="ERROR")
                 semaphore.release()
                 _safe_unassign(item.id, run_logger, "submit-failed")
-                raise
+                submit_failed = True
+                break
             futures[fut] = item
             current_active.add(item.id)
             dispatched += 1

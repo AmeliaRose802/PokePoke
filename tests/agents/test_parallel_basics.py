@@ -45,7 +45,6 @@ def _disable_preflight_health(monkeypatch):
     monkeypatch.setattr("pokepoke.agents.parallel.assign_and_sync_item", lambda *a, **kw: True)
     monkeypatch.setattr("pokepoke.agents.parallel.unassign_with_retry", lambda *a, **kw: None)
     # Mock parallel_support dependencies so _finalize_workers doesn't call real processes
-    monkeypatch.setattr("pokepoke.agents.parallel_support.kill_orphaned_copilot_processes", lambda **kw: None)
     monkeypatch.setattr("pokepoke.agents.parallel_support.terminal_ui", MagicMock())
 
 

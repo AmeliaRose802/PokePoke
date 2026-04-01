@@ -28,7 +28,6 @@ from pokepoke.orchestration.work_item_selection import select_multiple_items
 from pokepoke.orchestration.workflow import process_work_item
 from pokepoke.types import BeadsWorkItem, SessionStats, WorkItemResult
 from pokepoke.utils.logging_utils import RunLogger
-from pokepoke.utils.process_utils import kill_orphaned_copilot_processes
 from pokepoke.utils.shutdown import (
     cancel_stop_after_current,
     is_shutting_down,
@@ -239,7 +238,10 @@ def _run_loop_iteration(
 
     terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
     current_active, slots, _avail_mb = _compute_slots(futures, run_logger)
-    kill_orphaned_copilot_processes(expected_count=len(futures))
+    # DISABLED: kill_orphaned_copilot_processes was causing a death spiral
+    # by killing active workers' copilot processes during retries.
+    # See follow-up item for PID-tracked replacement.
+    # kill_orphaned_copilot_processes(expected_count=len(futures))
 
     if futures or ready_items:
         state.idle_sleep = _IDLE_BASE_DELAY
@@ -267,6 +269,41 @@ def _run_loop_iteration(
         return "continue"
 
     return None
+
+
+def _safe_cleanup(
+    state: _LoopState,
+    pool: ParallelWorkerPool,
+    session_stats: SessionStats,
+    start_time: float,
+    run_logger: RunLogger,
+    record_fn: Any,
+    finalize_fn: Any,
+) -> None:
+    """Run cleanup operations with individual exception protection."""
+    timeout_occurred = False
+    try:
+        state.total_requests, timeout_occurred = _finalize_workers(pool.futures, session_stats, start_time, state.total_requests, run_logger, record_fn)
+    except Exception as e:
+        logger.error(f"Failed to finalize workers: {e}", exc_info=True)
+        run_logger.log_orchestrator(f"Worker finalization error: {e}", level="ERROR")
+    try:
+        pool.shutdown(wait=True, cancel_futures=timeout_occurred)
+    except Exception as e:
+        logger.error(f"Failed to shutdown pool: {e}", exc_info=True)
+    set_executor(None)
+    clear_runtime_parallel_limits()
+    if not state.finalized:
+        logger.info("\n🏁 Finalizing session...")
+        run_logger.log_orchestrator("Finalizing session on exit")
+        try:
+            if terminal_ui.ui._is_running:
+                terminal_ui.ui.stop_and_capture()
+            finalize_fn(session_stats, start_time, state.items_completed, state.total_requests, run_logger)
+        except Exception as e:
+            logger.error(f"Failed to finalize session: {e}", exc_info=True)
+            run_logger.log_orchestrator(f"Session finalization error: {e}", level="ERROR")
+
 
 def run_parallel_loop(
     effective_parallel: int,
@@ -313,16 +350,13 @@ def run_parallel_loop(
                 time.sleep(0.5)
             _spawn_wakeup.clear()
 
+    except (KeyboardInterrupt, SystemExit, StopIteration):
+        raise
+    except Exception as loop_exc:
+        logger.error(f"Parallel loop crashed: {loop_exc}", exc_info=True)
+        run_logger.log_orchestrator(f"Parallel loop exception: {loop_exc}", level="ERROR")
+        state.exit_code = 1
     finally:
-        state.total_requests, timeout_occurred = _finalize_workers(pool.futures, session_stats, start_time, state.total_requests, run_logger, record_fn)
-        pool.shutdown(wait=True, cancel_futures=timeout_occurred)
-        set_executor(None)
-        clear_runtime_parallel_limits()
-        if not state.finalized:
-            logger.info("\n🏁 Finalizing session...")
-            run_logger.log_orchestrator("Finalizing session on exit")
-            if terminal_ui.ui._is_running:
-                terminal_ui.ui.stop_and_capture()
-            finalize_fn(session_stats, start_time, state.items_completed, state.total_requests, run_logger)
+        _safe_cleanup(state, pool, session_stats, start_time, run_logger, record_fn, finalize_fn)
 
     return state.exit_code

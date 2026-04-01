@@ -62,7 +62,6 @@ def _disable_preflight(monkeypatch):
     monkeypatch.setattr("pokepoke.config.get_config", lambda: mock_cfg)
     monkeypatch.setattr("pokepoke.agents.parallel.assign_and_sync_item", lambda *a, **kw: True)
     monkeypatch.setattr("pokepoke.agents.parallel.unassign_with_retry", lambda *a, **kw: None)
-    monkeypatch.setattr("pokepoke.agents.parallel_support.kill_orphaned_copilot_processes", lambda **kw: None)
     monkeypatch.setattr("pokepoke.agents.parallel_support.terminal_ui", MagicMock())
 
 
@@ -533,9 +532,6 @@ class TestRunParallelLoop:
         monkeypatch.setattr("pokepoke.agents.parallel.set_executor", mock_set_executor)
         monkeypatch.setattr("pokepoke.agents.parallel.set_runtime_parallel_limits", mock_set_runtime)
         monkeypatch.setattr("pokepoke.agents.parallel.clear_runtime_parallel_limits", mock_clear_runtime)
-
-        # Kill orphaned processes
-        monkeypatch.setattr("pokepoke.agents.parallel.kill_orphaned_copilot_processes", lambda **kw: None)
 
         # terminal_ui
         mock_ui = MagicMock()

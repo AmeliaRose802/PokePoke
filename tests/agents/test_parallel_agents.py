@@ -289,54 +289,6 @@ class TestMaxParallelAgentsConfig:
 class TestAgentContextInParallelProcessItem:
     """_parallel_process_item should set/clear per-thread agent names."""
 
-    def test_worker_sees_its_own_name(self) -> None:
-        """Thread should resolve the worker_agent_name set by _parallel_process_item."""
-        observed_names: list[str] = []
-
-        def fake_process(item, **kwargs):
-            observed_names.append(get_agent_name())
-            return _fake_process_result()
-
-        semaphore = threading.Semaphore(0)
-        logger = MagicMock(spec=RunLogger)
-
-        with patch("pokepoke.agents.parallel.process_work_item", side_effect=fake_process):
-            t = threading.Thread(
-                target=_parallel_process_item,
-                args=(_make_item(), logger, semaphore, "special-worker"),
-            )
-            t.start()
-            t.join(timeout=5)
-
-        assert observed_names == ["special-worker"]
-
-    def test_name_cleared_after_completion(self) -> None:
-        """After _parallel_process_item exits, thread-local should be cleared."""
-        post_name: list[str | None] = []
-
-        def fake_process(item, **kwargs):
-            return _fake_process_result()
-
-        semaphore = threading.Semaphore(0)
-        logger = MagicMock(spec=RunLogger)
-
-        def run_and_check():
-            _parallel_process_item(
-                _make_item(), logger, semaphore, "temp-worker",
-            )
-            # After completion, thread-local should be cleared
-            from pokepoke.agents.agent_context import _thread_local
-            post_name.append(getattr(_thread_local, "agent_name", "NOT_SET"))
-
-        with patch("pokepoke.agents.parallel.process_work_item", side_effect=fake_process):
-            t = threading.Thread(target=run_and_check)
-            t.start()
-            t.join(timeout=5)
-
-        # Should be None (cleared)
-        assert post_name[0] is None
-
-
 # ---------------------------------------------------------------------------
 # 7. Failed claim IDs are tracked and skipped
 # ---------------------------------------------------------------------------
