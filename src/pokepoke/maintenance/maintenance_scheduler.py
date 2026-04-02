@@ -33,7 +33,17 @@ def _is_stopping() -> bool:
     """Check if the orchestrator is shutting down or stop-after-current is set."""
     return is_shutting_down() or should_stop_after_current()
 
-# Agents that require singleton guard (modify shared state or produce duplicates)
+# Agents that require exclusive access to the main repo (clean working tree,
+# wait for work agents to drain).  Only agents that modify shared filesystem
+# state belong here.
+_EXCLUSIVE_AGENTS: set[str] = {
+    "Janitor",
+    "Worktree Cleanup",
+}
+
+# Agents that require singleton guard (file + thread locks) to prevent
+# duplicate concurrent runs, but do NOT need exclusive repo access.
+# _EXCLUSIVE_AGENTS also receive singleton guards automatically.
 _SINGLETON_AGENTS: set[str] = {
     "Beta Tester",
     "Janitor",
@@ -155,16 +165,23 @@ class MaintenanceScheduler:
         if not due_agents:
             return
 
-        # Split due agents into parallel-safe (can run alongside work agents
-        # without repo cleanliness) and exclusive (need a clean repo).
+        # Split due agents into three tiers:
+        #  1. parallel-safe — no coordination needed (read-only / beads-only)
+        #  2. non-exclusive singleton — need duplicate-prevention locks but
+        #     can run alongside work agents without a clean repo
+        #  3. exclusive — need clean repo AND wait for work agents to drain
         parallel_due = [a for a in due_agents if a.name in _PARALLEL_SAFE_AGENTS]
-        exclusive_due = [a for a in due_agents if a.name not in _PARALLEL_SAFE_AGENTS]
+        singleton_due = [a for a in due_agents if a.name not in _PARALLEL_SAFE_AGENTS and a.name not in _EXCLUSIVE_AGENTS]
+        exclusive_due = [a for a in due_agents if a.name in _EXCLUSIVE_AGENTS]
 
-        # Run parallel-safe agents first — they are read-only / beads-only
-        # and don't require the main repo to be clean.
+        # Tier 1: parallel-safe agents run immediately
         self._run_agent_batch(parallel_due, pokepoke_repo, session_stats, run_logger, repo_id, label="parallel-safe")
 
-        # Run exclusive agents (require clean repo and singleton guards).
+        # Tier 2: singleton agents (e.g. Beta Tester, Model Sync) need locks
+        # but don't require a clean repo or work-agent drain
+        self._run_agent_batch(singleton_due, pokepoke_repo, session_stats, run_logger, repo_id, label="singleton")
+
+        # Tier 3: exclusive agents need clean repo and singleton guards
         self._run_exclusive_agents(exclusive_due, pokepoke_repo, session_stats, run_logger, repo_id)
 
         # Record that a maintenance pass was executed for this repo
@@ -243,10 +260,10 @@ class MaintenanceScheduler:
             run_logger.log_maintenance(log_key, f"Skipping {agent_name} Agent - orchestrator is stopping")
             return
 
-        # Defer singleton agents when other agents are actively processing
+        # Defer exclusive agents when other agents are actively processing
         # (e.g. retrying after gate failures) to avoid interfering with
-        # in-progress work.
-        if agent_name in _SINGLETON_AGENTS:
+        # in-progress work that modifies the repo.
+        if agent_name in _EXCLUSIVE_AGENTS:
             active_count = get_active_agent_count()
             if active_count > 0:
                 run_logger.log_maintenance(
