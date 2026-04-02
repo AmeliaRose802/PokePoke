@@ -1,9 +1,13 @@
-"""Windows-safe directory removal utilities for worktree cleanup."""
+"""Worktree cleanup orchestration for PokePoke.
 
-import contextlib
+High-level cleanup operations: manifest management, branch deletion,
+worktree-and-branch cleanup, and error handling.
+
+Low-level directory removal lives in :mod:`worktree_removal`.
+Escalation strategies (nuclear, quarantine) live in :mod:`cleanup_escalation`.
+"""
+
 import logging
-import os
-import stat
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -13,161 +17,62 @@ from pokepoke.types import RetryConfig
 from pokepoke.utils.constants import BRANCH_PREFIX, WORKTREE_DIR, WORKTREE_TASK_PREFIX
 from pokepoke.utils.retry_utils import sleep_with_backoff
 
+# Re-export removal utilities so existing imports keep working
+from pokepoke.worktrees.worktree_removal import (  # noqa: F401
+    PathBoundaryError,
+    SymlinkFoundError,
+    _CLEANUP_MAX_DELAY_SECONDS,
+    _CLEANUP_MAX_RETRIES,
+    _CLEANUP_RETRY_DELAY_SECONDS,
+    _is_junction,
+    _is_windows_lock_error,
+    _release_known_lock_files,
+    _safe_rmtree,
+    _validate_within_worktrees_dir,
+)
+
 logger = logging.getLogger(__name__)
 
-# Retry settings for worktree removal on Windows
-_CLEANUP_MAX_RETRIES = 5  # Increased from 3
-_CLEANUP_RETRY_DELAY_SECONDS = 3.0  # Increased from 2.0 seconds
-_CLEANUP_MAX_DELAY_SECONDS = 30.0  # Cap on exponential backoff
-
-
-class SymlinkFoundError(OSError):
-    """Raised when a symlink or junction is found during safe directory removal."""
-
-
-class PathBoundaryError(OSError):
-    """Raised when a path escapes the expected worktree boundary."""
-
-
-def _validate_within_worktrees_dir(dir_path: Path, *, repo_root: Path | None = None) -> None:
-    """Validate that *dir_path* resolves inside the expected worktrees directory.
-
-    The expected worktrees directory is determined by:
-    1. Finding the git repository root (or using provided repo_root)
-    2. Checking that the resolved path is under repo_root/worktrees/
-
-    Args:
-        dir_path: Path to validate.
-        repo_root: Optional repository root. If not provided, will be discovered.
-
-    Raises :class:`PathBoundaryError` if the resolved path is not inside the
-    expected worktrees directory.
-    """
-    try:
-        resolved = dir_path.resolve(strict=False)
-    except (OSError, ValueError) as exc:
-        raise PathBoundaryError(
-            f"Cannot resolve path for boundary validation: {dir_path} ({exc})"
-        ) from exc
-
-    # Find the expected worktrees directory at the repository root
-    try:
-        if repo_root is None:
-            from pokepoke.config import _find_repo_root
-            repo_root = _find_repo_root()
-        expected_worktrees_dir = (repo_root / WORKTREE_DIR).resolve(strict=False)
-    except Exception as exc:
-        # If we can't find the repo root, be conservative and reject
-        raise PathBoundaryError(
-            f"Cannot determine repository root for boundary validation: {exc}"
-        ) from exc
-
-    # Check if the resolved path is a child of the expected worktrees directory
-    try:
-        resolved.relative_to(expected_worktrees_dir)
-    except ValueError:
-        raise PathBoundaryError(
-            f"Path {dir_path} (resolved: {resolved}) is not inside the expected "
-            f"worktrees directory ({expected_worktrees_dir}) — refusing to delete"
-        ) from None
-
-
-def _safe_rmtree(dir_path: Path) -> None:
-    """Remove a directory tree without following symlinks or junctions.
-
-    Manually walks the directory tree to avoid following symlinks or junctions.
-    Note: ``os.walk(followlinks=False)`` prevents following symbolic links but
-    NOT NTFS junctions on Windows, so we cannot rely on it.
-
-    Read-only flags are cleared before each removal attempt (Windows ``.git``
-    objects are typically read-only).
-
-    Raises :class:`SymlinkFoundError` if *dir_path* itself is a symlink/junction.
-    """
-    if dir_path.is_symlink() or _is_junction(dir_path):
-        raise SymlinkFoundError(
-            f"Refusing to remove {dir_path}: it is a symlink or junction"
-        )
-
-    def _remove_tree(path: Path) -> None:
-        """Recursively remove directory tree, unlinking symlinks/junctions."""
-        # List directory contents
-        try:
-            entries = list(path.iterdir())
-        except (OSError, PermissionError):
-            # If we can't list the directory, try to make it accessible
-            try:
-                os.chmod(str(path), stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
-                entries = list(path.iterdir())
-            except (OSError, PermissionError):
-                raise
-
-        for entry in entries:
-            if entry.is_symlink() or _is_junction(entry):
-                # Unlink symlink or junction - do NOT traverse
-                os.remove(str(entry))
-            elif entry.is_dir():
-                # Regular directory - recurse into it
-                _remove_tree(entry)
-            else:
-                # Regular file - remove it
-                with contextlib.suppress(OSError):
-                    os.chmod(str(entry), stat.S_IWRITE | stat.S_IREAD)
-                os.remove(str(entry))
-
-        # Remove the now-empty directory
-        with contextlib.suppress(OSError):
-            os.chmod(str(path), stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
-        os.rmdir(str(path))
-
-    _remove_tree(dir_path)
-
-
-def _is_junction(path: Path) -> bool:
-    """Return True if *path* is an NTFS junction point (Windows-only concept)."""
-    try:
-        return bool(path.is_junction())
-    except AttributeError:
-        # Python < 3.12 does not have Path.is_junction
-        try:
-            import ctypes.wintypes  # only available on Windows
-            # Junction points have FILE_ATTRIBUTE_REPARSE_POINT
-            FILE_ATTRIBUTE_REPARSE_POINT = 0x400
-            attrs = ctypes.windll.kernel32.GetFileAttributesW(str(path))
-            if attrs == -1:
-                return False
-            return bool(attrs & FILE_ATTRIBUTE_REPARSE_POINT) and not path.is_symlink()
-        except (AttributeError, ImportError, OSError):
-            return False
+# Explicit exports for mypy (re-exported names from sub-modules)
+__all__ = [
+    "PathBoundaryError",
+    "SymlinkFoundError",
+    "_is_junction",
+    "_is_windows_lock_error",
+    "_release_known_lock_files",
+    "_safe_rmtree",
+    "_validate_within_worktrees_dir",
+    "force_remove_directory",
+    "retry_failed_cleanups",
+    "_nuclear_remove",
+    "_quarantine_directory",
+    "_get_quarantine_dir",
+    "cleanup_worktree_and_branch",
+    "cleanup_after_merge",
+    "add_uncleaned_worktree",
+    "remove_from_manifest",
+    "load_worktree_manifest",
+    "save_worktree_manifest",
+    "get_worktree_manifest_path",
+    "get_uncleaned_worktree_count",
+    "has_unmerged_worktrees",
+]
 
 
 def force_remove_directory(dir_path: Path, *, max_attempts: int | None = None, repo_root: Path | None = None) -> bool:
     """Force-remove a directory, handling Windows permission issues.
 
-    Enhanced retry logic with better error detection and backoff for Windows file locking.
     Returns True if the directory was removed.
-
-    Security: validates that *dir_path* is inside a ``worktrees/`` directory
-    and never follows symlinks or junctions during deletion.
-
-    Args:
-        dir_path: Directory to remove.
-        max_attempts: Maximum removal attempts. Defaults to ``_CLEANUP_MAX_RETRIES``.
-            Pass ``1`` for a single non-blocking attempt (fire-and-forget cleanup).
-        repo_root: Optional repository root for boundary validation. If not provided,
-            will be auto-discovered. Primarily for testing.
 
     Raises:
         PathBoundaryError: If *dir_path* is not inside a ``worktrees/`` directory.
         SymlinkFoundError: If *dir_path* itself is a symlink or junction.
     """
-    # Import here to avoid circular dependency
     from pokepoke.utils.process_utils import wait_for_process_cleanup
 
     if max_attempts is None:
         max_attempts = _CLEANUP_MAX_RETRIES
 
-    # --- Safety checks (fail loudly, never silently skip) ---
     _validate_within_worktrees_dir(dir_path, repo_root=repo_root)
 
     if dir_path.is_symlink() or _is_junction(dir_path):
@@ -188,39 +93,27 @@ def force_remove_directory(dir_path: Path, *, max_attempts: int | None = None, r
 
     for attempt in range(max_attempts):
         if attempt > 0:
-            # Wait for processes to clean up before retry
             wait_for_process_cleanup(max_wait=3.0)
-
-            # Calculate delay with capped exponential backoff and jitter
             delay = sleep_with_backoff(attempt - 1, retry_config, f'worktree cleanup {dir_path.name}')
             logger.info(f"   ⏳ Retry {attempt + 1}/{max_attempts} after {delay:.1f}s...")
 
-        # First try git worktree remove --force
         try:
-            run_git(
-                ["git", "worktree", "remove", "--force", str(dir_path)],
-            )
+            run_git(["git", "worktree", "remove", "--force", str(dir_path)])
             logger.info("   ✅ Git worktree remove successful")
             return True
         except subprocess.CalledProcessError as e:
             stderr = e.stderr or ""
             if _is_windows_lock_error(stderr):
                 logger.info(f"   🔒 Windows lock detected on attempt {attempt + 1}: {stderr.strip()}")
-            elif attempt == 0:  # Only log git errors on first attempt
+            elif attempt == 0:
                 logger.error(f"   ⚠️ Git worktree remove failed: {stderr.strip()}")
         except subprocess.TimeoutExpired:
             logger.info(f"   ⏱️ Git worktree remove timed out on attempt {attempt + 1}")
 
-        # Fallback: symlink-safe directory removal
         try:
             logger.info("   🔨 Attempting direct directory removal...")
             _safe_rmtree(dir_path)
-
-            # Clean up git worktree bookkeeping after manual removal
-            run_git(
-                ["git", "worktree", "prune"],
-                check=False,
-            )
+            run_git(["git", "worktree", "prune"], check=False)
             logger.info("   ✅ Direct removal and git prune successful")
             return True
         except (OSError, PermissionError) as e:
@@ -231,33 +124,6 @@ def force_remove_directory(dir_path: Path, *, max_attempts: int | None = None, r
 
     logger.error(f"   ❌ All {max_attempts} removal attempts failed")
     return False
-
-
-def _is_windows_lock_error(error_text: str) -> bool:
-    """Detect Windows file locking related errors.
-
-    Only matches errors that are strong indicators of Windows file locking,
-    not generic filesystem errors that could have other causes.  Patterns
-    like 'directory not empty' and 'device or resource busy' are intentionally
-    excluded because they can originate from non-locking scenarios.
-    """
-    if not error_text:
-        return False
-
-    error_lower = error_text.lower()
-    windows_lock_indicators = [
-        # WinError 32 – ERROR_SHARING_VIOLATION
-        "being used by another process",
-        # WinError 33 – ERROR_LOCK_VIOLATION
-        "locked a portion of the file",
-        # Windows sharing-violation phrasing
-        "sharing violation",
-        # Explicit Windows error codes in Python exception strings
-        "[winerror 32]",
-        "[winerror 33]",
-    ]
-
-    return any(indicator in error_lower for indicator in windows_lock_indicators)
 
 
 _WORKTREE_MANIFEST = "uncleaned_worktrees.json"
@@ -292,16 +158,25 @@ def add_uncleaned_worktree(worktree_id: str, worktree_path: str, reason: str) ->
     """Add a worktree to the uncleaned manifest.
 
     Uses file locking to prevent race conditions when multiple agents
-    concurrently update the manifest.
+    concurrently update the manifest.  Tracks ``failure_count`` so that
+    :func:`retry_failed_cleanups` can escalate its removal strategy.
     """
     from pokepoke.worktrees.coordination import manifest_lock
 
     with manifest_lock():
         manifest = load_worktree_manifest()
+        existing = manifest.get(worktree_id)
+        failure_count = 1
+        if existing:
+            try:
+                failure_count = int(existing.get("failure_count", "0")) + 1
+            except (ValueError, TypeError):
+                failure_count = 1
         manifest[worktree_id] = {
             "path": worktree_path,
             "reason": reason,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "failure_count": str(failure_count),
         }
         save_worktree_manifest(manifest)
 
@@ -470,49 +345,15 @@ def cleanup_after_merge(worktree_path: Path, branch_name: str, cwd: str | None =
     )
 
 
-def retry_failed_cleanups() -> int:
-    """Retry cleanup of worktrees that previously failed to be removed.
+_NUCLEAR_FAILURE_THRESHOLD = 3  # Re-exported from cleanup_escalation
 
-    Returns the number of worktrees successfully cleaned up.
-    """
-    manifest = load_worktree_manifest()
-    if not manifest:
-        return 0
-
-    cleaned_count = 0
-    logger.error(f"🔄 Found {len(manifest)} worktrees in failed cleanup manifest")
-
-    for worktree_id, entry in list(manifest.items()):
-        worktree_path = Path(entry["path"])
-        reason = entry.get("reason", "Unknown reason")
-        timestamp = entry.get("timestamp", "Unknown time")
-
-        logger.info(f"\n🧹 Retrying cleanup for {worktree_id}:")
-        logger.info(f"   Path: {worktree_path}")
-        logger.error(f"   Failed at: {timestamp}")
-        logger.info(f"   Reason: {reason}")
-
-        # Check if worktree still exists
-        if not worktree_path.exists():
-            logger.info("   ✅ Directory no longer exists - removing from manifest")
-            remove_from_manifest(worktree_id)
-            cleaned_count += 1
-            continue
-
-        # Try enhanced force removal
-        if force_remove_directory(worktree_path):
-            logger.info(f"   ✅ Successfully removed worktree {worktree_id}")
-            remove_from_manifest(worktree_id)
-            cleaned_count += 1
-        else:
-            logger.error(f"   ❌ Still failed to remove {worktree_id} - will retry later")
-
-    if cleaned_count > 0:
-        logger.error(f"\n✅ Successfully cleaned up {cleaned_count} previously failed worktrees")
-    else:
-        logger.warning("\n⚠️  No additional worktrees could be cleaned up this time")
-
-    return cleaned_count
+# Re-export escalation functions for backward compatibility
+from pokepoke.worktrees.cleanup_escalation import (  # noqa: E402
+    _get_quarantine_dir,
+    _nuclear_remove,
+    _quarantine_directory,
+    retry_failed_cleanups,
+)
 
 
 def get_uncleaned_worktree_count() -> int:

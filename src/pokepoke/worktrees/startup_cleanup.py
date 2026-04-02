@@ -181,4 +181,3 @@ def _cleanup_worktree_safe(branch: str, worktree_path: str, repo_path: str) -> N
     except Exception as e:
         # Log the error but don't re-raise to avoid stopping the entire cleanup process
         logger.warning(f"Failed to cleanup worktree {branch}: {e}")
-        raise

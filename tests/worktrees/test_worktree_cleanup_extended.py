@@ -5,23 +5,29 @@ _handle_worktree_removal_error, cleanup_worktree_and_branch, _delete_branch,
 retry_failed_cleanups, get_uncleaned_worktree_count, and has_unmerged_worktrees.
 """
 
+import os
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from pokepoke.worktrees.cleanup_escalation import (
+    _nuclear_remove,
+    _quarantine_directory,
+    retry_failed_cleanups,
+)
 from pokepoke.worktrees.worktree_cleanup import (
     PathBoundaryError,
     _delete_branch,
     _handle_worktree_removal_error,
     _is_junction,
+    _release_known_lock_files,
     _safe_rmtree,
     _validate_within_worktrees_dir,
     cleanup_worktree_and_branch,
     get_uncleaned_worktree_count,
     has_unmerged_worktrees,
-    retry_failed_cleanups,
 )
 
 # ---------------------------------------------------------------------------
@@ -441,14 +447,14 @@ class TestRetryFailedCleanups:
 
     @patch("pokepoke.worktrees.worktree_cleanup.load_worktree_manifest", return_value={})
     def test_empty_manifest_returns_zero(self, mock_load) -> None:
-        """Empty manifest returns 0 immediately (lines 470-472)."""
+        """Empty manifest returns 0 immediately."""
         assert retry_failed_cleanups() == 0
 
     @patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
     @patch("pokepoke.worktrees.worktree_cleanup.force_remove_directory", return_value=True)
     @patch("pokepoke.worktrees.worktree_cleanup.load_worktree_manifest")
     def test_removes_existing_worktree(self, mock_load, mock_force, mock_remove) -> None:
-        """Existing worktree that force_remove succeeds on is cleaned (lines 495-498)."""
+        """Existing worktree that force_remove succeeds on is cleaned."""
         mock_load.return_value = {
             "wt-1": {"path": "/tmp/wt1", "reason": "failed", "timestamp": "2025-01-01"},
         }
@@ -461,7 +467,7 @@ class TestRetryFailedCleanups:
     @patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
     @patch("pokepoke.worktrees.worktree_cleanup.load_worktree_manifest")
     def test_removes_already_gone_worktree(self, mock_load, mock_remove) -> None:
-        """Worktree that no longer exists is removed from manifest (lines 488-492)."""
+        """Worktree that no longer exists is removed from manifest."""
         mock_load.return_value = {
             "wt-1": {"path": "/tmp/gone", "reason": "failed", "timestamp": "2025-01-01"},
         }
@@ -471,19 +477,21 @@ class TestRetryFailedCleanups:
         assert result == 1
         mock_remove.assert_called_once_with("wt-1")
 
+    @patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
     @patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
     @patch("pokepoke.worktrees.worktree_cleanup.force_remove_directory", return_value=False)
     @patch("pokepoke.worktrees.worktree_cleanup.load_worktree_manifest")
-    def test_force_remove_failure_keeps_entry(self, mock_load, mock_force, mock_remove) -> None:
-        """When force_remove fails, entry stays in manifest (lines 499-500)."""
+    def test_force_remove_failure_keeps_entry(self, mock_load, mock_force, mock_remove, mock_add) -> None:
+        """When force_remove fails, entry stays in manifest and failure count is bumped."""
         mock_load.return_value = {
-            "wt-1": {"path": "/tmp/wt1", "reason": "failed", "timestamp": "2025-01-01"},
+            "wt-1": {"path": "/tmp/wt1", "reason": "failed", "timestamp": "2025-01-01", "failure_count": "1"},
         }
         with patch.object(Path, "exists", return_value=True):
             result = retry_failed_cleanups()
 
         assert result == 0
         mock_remove.assert_not_called()
+        mock_add.assert_called_once_with("wt-1", str(Path("/tmp/wt1")), "failed")
 
     @patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
     @patch("pokepoke.worktrees.worktree_cleanup.force_remove_directory", return_value=True)
@@ -513,6 +521,201 @@ class TestRetryFailedCleanups:
             result = retry_failed_cleanups()
 
         assert result == 2
+
+
+    @patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
+    @patch("pokepoke.worktrees.cleanup_escalation._nuclear_remove", return_value=True)
+    @patch("pokepoke.worktrees.worktree_cleanup.load_worktree_manifest")
+    def test_nuclear_option_triggered_after_threshold(self, mock_load, mock_nuclear, mock_remove) -> None:
+        """After 3+ failures, nuclear removal is used instead of force_remove."""
+        mock_load.return_value = {
+            "wt-1": {"path": "/tmp/wt1", "reason": "failed", "timestamp": "2025-01-01", "failure_count": "3"},
+        }
+        with patch.object(Path, "exists", return_value=True):
+            result = retry_failed_cleanups()
+
+        assert result == 1
+        mock_nuclear.assert_called_once()
+        mock_remove.assert_called_once_with("wt-1")
+
+    @patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+    @patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
+    @patch("pokepoke.worktrees.cleanup_escalation._quarantine_directory", return_value=True)
+    @patch("pokepoke.worktrees.cleanup_escalation._nuclear_remove", return_value=False)
+    @patch("pokepoke.worktrees.worktree_cleanup.load_worktree_manifest")
+    def test_quarantine_used_when_nuclear_fails(self, mock_load, mock_nuclear, mock_quarantine, mock_remove, mock_add) -> None:
+        """When nuclear removal fails, directory is quarantined."""
+        mock_load.return_value = {
+            "wt-1": {"path": "/tmp/wt1", "reason": "failed", "timestamp": "2025-01-01", "failure_count": "5"},
+        }
+        with patch.object(Path, "exists", return_value=True):
+            result = retry_failed_cleanups()
+
+        assert result == 1
+        mock_nuclear.assert_called_once()
+        mock_quarantine.assert_called_once()
+        mock_remove.assert_called_once_with("wt-1")
+
+    @patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+    @patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
+    @patch("pokepoke.worktrees.cleanup_escalation._quarantine_directory", return_value=False)
+    @patch("pokepoke.worktrees.cleanup_escalation._nuclear_remove", return_value=False)
+    @patch("pokepoke.worktrees.worktree_cleanup.load_worktree_manifest")
+    def test_all_escalations_fail_bumps_count(self, mock_load, mock_nuclear, mock_quarantine, mock_remove, mock_add) -> None:
+        """When nuclear and quarantine both fail, failure count is bumped."""
+        mock_load.return_value = {
+            "wt-1": {"path": "/tmp/wt1", "reason": "failed", "timestamp": "2025-01-01", "failure_count": "4"},
+        }
+        with patch.object(Path, "exists", return_value=True):
+            result = retry_failed_cleanups()
+
+        assert result == 0
+        mock_remove.assert_not_called()
+        mock_add.assert_called_once_with("wt-1", str(Path("/tmp/wt1")), "failed")
+
+
+# ---------------------------------------------------------------------------
+# _release_known_lock_files
+# ---------------------------------------------------------------------------
+
+class TestReleaseKnownLockFiles:
+    """Cover _release_known_lock_files function."""
+
+    def test_removes_existing_lock_files(self, tmp_path: Path) -> None:
+        """Lock files in .git/ are removed."""
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        lock = git_dir / "index.lock"
+        lock.write_text("lock")
+
+        removed = _release_known_lock_files(tmp_path)
+
+        assert len(removed) == 1
+        assert not lock.exists()
+
+    def test_no_git_dir_returns_empty(self, tmp_path: Path) -> None:
+        """No .git directory returns empty list."""
+        removed = _release_known_lock_files(tmp_path)
+        assert removed == []
+
+    def test_non_lock_files_left_alone(self, tmp_path: Path) -> None:
+        """Files that are not known lock files are untouched."""
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        other_file = git_dir / "config"
+        other_file.write_text("data")
+
+        _release_known_lock_files(tmp_path)
+
+        assert other_file.exists()
+
+
+# ---------------------------------------------------------------------------
+# _safe_rmtree error logging
+# ---------------------------------------------------------------------------
+
+class TestSafeRmtreeErrorLogging:
+    """Cover _safe_rmtree failed file logging."""
+
+    def test_logs_specific_failed_files(self, tmp_path: Path, caplog) -> None:
+        """When a file cannot be deleted, it is logged with the reason."""
+        subdir = tmp_path / "target"
+        subdir.mkdir()
+        (subdir / "good.txt").write_text("ok")
+        (subdir / "locked.txt").write_text("locked")
+
+        original_remove = os.remove
+
+        def _selective_remove(path):
+            if "locked.txt" in path:
+                raise OSError("[WinError 32] being used by another process")
+            return original_remove(path)
+
+        import logging
+        with patch("os.remove", side_effect=_selective_remove), \
+             caplog.at_level(logging.WARNING), \
+             pytest.raises(OSError):
+            _safe_rmtree(subdir)
+
+        assert any("locked.txt" in r.message for r in caplog.records)
+        assert any("could not be removed" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# _nuclear_remove
+# ---------------------------------------------------------------------------
+
+class TestNuclearRemove:
+    """Cover _nuclear_remove function."""
+
+    def test_removes_directory_with_shutil(self, tmp_path: Path) -> None:
+        """shutil.rmtree succeeds and removes the directory."""
+        target = tmp_path / "nuke-me"
+        target.mkdir()
+        (target / "file.txt").write_text("data")
+
+        result = _nuclear_remove(target)
+
+        assert result is True
+        assert not target.exists()
+
+    def test_returns_false_when_all_fail(self, tmp_path: Path) -> None:
+        """Returns False when directory cannot be removed by any method."""
+        target = tmp_path / "stubborn"
+        target.mkdir()
+
+        with patch("shutil.rmtree", side_effect=OSError("fail")), \
+             patch("subprocess.run", side_effect=OSError("fail")):
+            result = _nuclear_remove(target)
+
+        assert result is False
+
+
+# ---------------------------------------------------------------------------
+# _quarantine_directory
+# ---------------------------------------------------------------------------
+
+class TestQuarantineDirectory:
+    """Cover _quarantine_directory function."""
+
+    @patch("pokepoke.worktrees.cleanup_escalation._get_quarantine_dir")
+    def test_moves_directory_to_quarantine(self, mock_qdir, tmp_path: Path) -> None:
+        """Directory is renamed into quarantine location."""
+        qdir = tmp_path / "quarantine"
+        qdir.mkdir()
+        mock_qdir.return_value = qdir
+
+        target = tmp_path / "target"
+        target.mkdir()
+        (target / "file.txt").write_text("data")
+
+        result = _quarantine_directory(target, "wt-1")
+
+        assert result is True
+        assert not target.exists()
+        quarantined = list(qdir.iterdir())
+        assert len(quarantined) == 1
+        assert quarantined[0].name.startswith("wt-1_")
+
+    def test_nonexistent_directory_returns_true(self, tmp_path: Path) -> None:
+        """If directory doesn't exist, returns True."""
+        target = tmp_path / "gone"
+        result = _quarantine_directory(target, "wt-1")
+        assert result is True
+
+    @patch("pokepoke.worktrees.cleanup_escalation._get_quarantine_dir")
+    def test_rename_failure_returns_false(self, mock_qdir, tmp_path: Path) -> None:
+        """If rename fails, returns False."""
+        mock_qdir.return_value = tmp_path / "quarantine"
+        (tmp_path / "quarantine").mkdir()
+
+        target = tmp_path / "target"
+        target.mkdir()
+
+        with patch.object(Path, "rename", side_effect=OSError("access denied")):
+            result = _quarantine_directory(target, "wt-1")
+
+        assert result is False
 
 
 # ---------------------------------------------------------------------------
