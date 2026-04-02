@@ -18,6 +18,7 @@ from pokepoke.agents.parallel_runtime import (
 from pokepoke.agents.parallel_worker_pool import (
     ParallelWorkerPool,
     collect_done_futures,
+    update_memory_circuit_breaker,
 )
 from pokepoke.beads.beads import (
     assign_and_sync_item,
@@ -81,6 +82,8 @@ _IDLE_BASE_DELAY = 8.0   # Idle backoff start for continuous mode (exponential t
 _IDLE_MAX_DELAY = 120.0
 _MAX_CONSECUTIVE_FAILURES = 10  # Circuit breaker: stop dispatching after N consecutive failures
 _MAX_CONSECUTIVE_PREFLIGHT_FAILURES = 5  # Stop after N preflight failures
+_MEMORY_FLOOR_MB = 3072  # Memory circuit breaker: 3GB threshold
+_MEMORY_FLOOR_POLL_THRESHOLD = 3  # Trip after 3 consecutive polls below floor
 
 # Type alias to satisfy mypy strict generics
 _Future = concurrent.futures.Future[WorkItemResult]
@@ -174,6 +177,8 @@ class _LoopState:
     consecutive_failures: int = 0
     consecutive_preflight_failures: int = 0
     circuit_breaker_tripped: bool = False
+    consecutive_low_memory_polls: int = 0
+    memory_circuit_breaker_tripped: bool = False
 
 def _handle_circuit_breaker_drain(
     state: _LoopState,
@@ -266,7 +271,23 @@ def _run_loop_iteration(
         return "break"
 
     terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
-    current_active, slots, _avail_mb = _compute_slots(futures, run_logger, lock)
+    current_active, slots, avail_mb = _compute_slots(futures, run_logger, lock)
+
+    # Check memory circuit breaker
+    state.consecutive_low_memory_polls, state.memory_circuit_breaker_tripped = (
+        update_memory_circuit_breaker(
+            avail_mb,
+            _MEMORY_FLOOR_MB,
+            _MEMORY_FLOOR_POLL_THRESHOLD,
+            state.consecutive_low_memory_polls,
+            futures,
+            run_logger,
+            lock,
+        )
+    )
+    if state.memory_circuit_breaker_tripped and not has_futures:
+        state.exit_code = 1
+        return "break"
 
     if lock is not None:
         with lock:
@@ -376,7 +397,7 @@ def run_parallel_loop(
 
     try:
         while not is_shutting_down():
-            if state.circuit_breaker_tripped:
+            if state.circuit_breaker_tripped or state.memory_circuit_breaker_tripped:
                 if _handle_circuit_breaker_drain(
                     state, pool.futures, failed_claim_ids, session_stats,
                     run_logger, record_fn, mode_name, active_lock,

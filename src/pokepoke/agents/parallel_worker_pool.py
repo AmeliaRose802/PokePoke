@@ -292,6 +292,33 @@ def update_circuit_breaker(
     return consecutive_failures, tripped
 
 
+def update_memory_circuit_breaker(
+    available_mb: int,
+    memory_floor_mb: int,
+    threshold_polls: int,
+    consecutive_low_polls: int,
+    futures: dict[_Future, BeadsWorkItem],
+    run_logger: RunLogger,
+    lock: threading.Lock | None = None,
+) -> tuple[int, bool]:
+    """Track consecutive memory-floor violations. Returns (consecutive_low_polls, tripped)."""
+    # avail_mb == 0 means memory monitoring is unavailable (non-Windows or error)
+    # Don't trip the circuit breaker in this case
+    if available_mb > 0 and available_mb < memory_floor_mb:
+        consecutive_low_polls += 1
+    else:
+        consecutive_low_polls = 0
+
+    tripped = consecutive_low_polls >= threshold_polls
+    if tripped:
+        futures_len = _locked_futures_len(lock, futures)
+        run_logger.log_orchestrator(
+            f"Memory circuit breaker: {consecutive_low_polls} consecutive low-memory polls "
+            f"({available_mb}MB < {memory_floor_mb}MB) — stopping dispatch, "
+            f"draining {futures_len} remaining agent(s)", level="ERROR")
+    return consecutive_low_polls, tripped
+
+
 def compute_slots(
     futures: dict[_Future, BeadsWorkItem], run_logger: RunLogger, lock: threading.Lock | None = None,
 ) -> tuple[set[str], int, int]:
