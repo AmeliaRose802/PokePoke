@@ -12,6 +12,7 @@ from pokepoke.worktrees.worktree_merge_handler import (
     handle_worktree_merge,
     perform_worktree_merge,
 )
+from pokepoke.worktrees.worktrees import MergeResult
 
 
 def _make_test_item(item_id: str = "test-item") -> BeadsWorkItem:
@@ -41,7 +42,7 @@ class TestPerformWorktreeMergeIntegration:
     ):
         """Test successful merge path without cleanup agent."""
         mock_check_ready.return_value = (True, '')
-        mock_merge.return_value = (True, [])
+        mock_merge.return_value = MergeResult(success=True)
         mock_cleanup_lock.return_value.__enter__ = Mock()
         mock_cleanup_lock.return_value.__exit__ = Mock(return_value=False)
 
@@ -83,7 +84,7 @@ class TestPerformWorktreeMergeIntegration:
         agent_item = _make_test_item('test-456')
         worktree_path = Path('C:/repos/worktrees/task-test-456')
 
-        with patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree', return_value=(True, [])):
+        with patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree', return_value=MergeResult(success=True)):
             success, _cleaned = perform_worktree_merge(
                 item_id=agent_item.id,
                 item=agent_item,
@@ -143,7 +144,7 @@ class TestPerformWorktreeMergeIntegration:
     ):
         """Test handling of merge conflicts."""
         mock_check_ready.return_value = (True, '')
-        mock_merge.return_value = (False, ['file1.py', 'file2.py'])
+        mock_merge.return_value = MergeResult(success=False, unmerged_files=['file1.py', 'file2.py'])
         mock_conflict_agent.return_value = (True, None)
         mock_cleanup_lock.return_value.__enter__ = Mock()
         mock_cleanup_lock.return_value.__exit__ = Mock(return_value=False)
@@ -184,7 +185,7 @@ class TestPerformWorktreeMergeIntegration:
     ):
         """Test that failed merges track uncleaned worktrees."""
         mock_check_ready.return_value = (True, '')
-        mock_merge.return_value = (False, [])  # Failed, no conflicts
+        mock_merge.return_value = MergeResult(success=False)  # Failed, no conflicts
         mock_conflict_agent.return_value = (False, None)
         mock_cleanup_lock.return_value.__enter__ = Mock()
         mock_cleanup_lock.return_value.__exit__ = Mock(return_value=False)
@@ -217,7 +218,7 @@ class TestPerformWorktreeMergeIntegration:
     ):
         """Test that successful merge completes cleanly."""
         mock_check_ready.return_value = (True, '')
-        mock_merge.return_value = (True, [])
+        mock_merge.return_value = MergeResult(success=True)
         mock_cleanup_lock.return_value.__enter__ = Mock()
         mock_cleanup_lock.return_value.__exit__ = Mock(return_value=False)
 
@@ -353,7 +354,7 @@ class TestMergeSequenceErrorRecovery:
             (True, '')
         ]
         mock_invoke_cleanup.return_value = (True, None)
-        mock_merge.return_value = (True, [])
+        mock_merge.return_value = MergeResult(success=True)
         mock_cleanup_lock.return_value.__enter__ = Mock()
         mock_cleanup_lock.return_value.__exit__ = Mock(return_value=False)
 
@@ -430,7 +431,7 @@ class TestCleanupAgentInvocation:
         repo_root = Path('C:/repos')
         parent_id = 'parent-agent-123'
 
-        with patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree', return_value=(True, [])):
+        with patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree', return_value=MergeResult(success=True)):
             perform_worktree_merge(
                 item_id=agent_item.id,
                 item=agent_item,
@@ -459,7 +460,7 @@ class TestCleanupAgentInvocation:
         """Test that conflict cleanup agent receives list of conflicted files."""
         mock_check_ready.return_value = (True, '')
         conflict_files = ['src/file1.py', 'src/file2.py', 'tests/test_file.py']
-        mock_merge.return_value = (False, conflict_files)
+        mock_merge.return_value = MergeResult(success=False, unmerged_files=conflict_files)
         mock_conflict_agent.return_value = (True, None)
         mock_cleanup_lock.return_value.__enter__ = Mock()
         mock_cleanup_lock.return_value.__exit__ = Mock(return_value=False)
