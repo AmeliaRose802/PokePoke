@@ -17,6 +17,7 @@ from pokepoke.git.multi_repo_aggregator import (
 
 from .beads_hierarchy import (
     HIGH_CONFLICT_LABELS,
+    NEEDS_DECOMPOSITION_LABEL,
     all_children_complete,
     close_parent_if_complete,
     get_children,
@@ -31,6 +32,7 @@ from .beads_management import (
     assign_and_sync_item,
     block_item,
     close_item,
+    defer_item,
     fail_task,
     get_total_attempts,
     increment_total_attempts,
@@ -78,10 +80,12 @@ __all__ = [
     'resolve_to_leaf_task',
     'is_high_conflict_risk',
     'HIGH_CONFLICT_LABELS',
+    'NEEDS_DECOMPOSITION_LABEL',
 
     # Management operations
     'block_item',
     'close_item',
+    'defer_item',
     'fail_task',
     'select_next_hierarchical_item',
     'is_item_claimable',

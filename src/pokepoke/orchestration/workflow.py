@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from pokepoke.agents.agent_context import get_agent_name
 from pokepoke.agents.agent_runner import run_gate_agent  # re-exported via workflow_helpers
-from pokepoke.beads.beads import add_comment, assign_and_sync_item, block_item
+from pokepoke.beads.beads import add_comment, assign_and_sync_item, defer_item
 from pokepoke.config import get_config
 from pokepoke.desktop import terminal_ui
 from pokepoke.git.git_helpers import verify_worktree_branch
@@ -63,7 +63,7 @@ def process_work_item(  # noqa: C901
     register_agent()
     _assign = beads_client.assign_and_sync_item if beads_client else assign_and_sync_item
     _comment = beads_client.add_comment if beads_client else add_comment
-    _block = beads_client.block_item if beads_client else block_item
+    _defer = beads_client.defer_item if beads_client else defer_item
     _session: WorkItemSession | None = None
     try:
         start_time = time.time()
@@ -94,8 +94,8 @@ def process_work_item(  # noqa: C901
         max_gate_rejections = config.max_gate_rejections_per_item
         if existing_rejection_count >= max_gate_rejections:
             reason = f"Exceeded gate rejection cap ({existing_rejection_count}/{max_gate_rejections})"
-            logger.error(f"\n\u274c Item {item.id} has {existing_rejection_count} gate rejections (cap: {max_gate_rejections}). Refusing to process.")
-            _block(item.id, f"{reason}. Requires manual review.")
+            logger.error(f"\n\u274c Item {item.id} has {existing_rejection_count} gate rejections (cap: {max_gate_rejections}). Auto-deferring to backlog.")
+            _defer(item.id, f"{reason}. Item likely too complex for a single agent session — needs decomposition.")
             _log_failure(run_logger, item_logger)
             return _fail_result(failure_reason=reason)
 
@@ -398,7 +398,7 @@ def process_work_item(  # noqa: C901
                 _comment(item.id, f"Gate Agent Rejection ({gate_rejection_count}/{max_gate_rejections}):\n{gate_reason}")
                 if gate_rejection_count >= max_gate_rejections:
                     logger.error(f"\n❌ Exceeded max gate rejections ({gate_rejection_count}/{max_gate_rejections}) for {item.id}")
-                    _comment(item.id, f"Abandoned after {gate_rejection_count} gate rejections (cap: {max_gate_rejections}). Last rejection:\n{gate_reason}")
+                    _defer(item.id, f"Auto-deferred after {gate_rejection_count} gate rejections (cap: {max_gate_rejections}). Item likely too complex for a single agent session. Last rejection:\n{gate_reason}")
                     _maybe_decompose(item, copilot_failure_count, gate_rejection_count, config)
                     result.success = False
                     result.error = f"Exceeded max gate rejections ({max_gate_rejections})"

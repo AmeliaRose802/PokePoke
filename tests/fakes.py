@@ -220,6 +220,20 @@ class FakeBeadsClient:
         self._comments.setdefault(item_id, []).append(f"🚫 Blocked: {reason}")
         return True
 
+    def defer_item(self, item_id: str, reason: str) -> bool:
+        self.calls.append(_BeadsCall("defer_item", (item_id, reason)))
+        if "defer_item" in self.fail_methods:
+            return False
+        item = self.items.get(item_id)
+        if item is not None:
+            item.status = "backlog"
+            if item.labels is None:
+                item.labels = []
+            if "needs-decomposition" not in item.labels:
+                item.labels.append("needs-decomposition")
+        self._comments.setdefault(item_id, []).append(f"📦 Auto-deferred: {reason}")
+        return True
+
     def unassign_item(self, item_id: str) -> bool:
         self.calls.append(_BeadsCall("unassign_item", (item_id,)))
         if "unassign_item" in self.fail_methods:

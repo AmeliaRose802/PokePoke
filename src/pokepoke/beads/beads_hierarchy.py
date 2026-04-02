@@ -13,6 +13,9 @@ logger = logging.getLogger(__name__)
 # Label that marks items as requiring human intervention - agents will skip these
 HUMAN_REQUIRED_LABEL = 'human-required'
 
+# Label applied when an item is auto-deferred after repeated gate rejections
+NEEDS_DECOMPOSITION_LABEL = 'needs-decomposition'
+
 # Labels that mark items as high merge-conflict risk and should be serialized
 HIGH_CONFLICT_LABELS: tuple[str, ...] = ('high-conflict-risk', 'merge-conflict-prone')
 
