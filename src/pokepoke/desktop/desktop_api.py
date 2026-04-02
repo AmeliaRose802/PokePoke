@@ -45,7 +45,11 @@ class DesktopAPI:
         self._lock = threading.RLock()
         self._window_disposed = False
 
-        configure_logging(Path(".pokepoke/logs/desktop_api.log"))
+        from pokepoke.config import load_config as _load_config
+        _cfg = _load_config()
+        configure_logging(
+            Path(".pokepoke/logs/desktop_api.log"), otel_config=_cfg.otel,
+        )
 
         # Buffered state — frontend can poll or get pushed updates
         self._log_buffer: list[dict[str, Any]] = []

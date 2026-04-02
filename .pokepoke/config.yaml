@@ -130,6 +130,13 @@ needs_human_attention_threshold: 3
 assignment:
   rules: []
   fallback: weighted
+otel:
+  enabled: false
+  service_name: pokepoke
+  exporter: console
+  endpoint: http://localhost:4318
+  log_level: INFO
+  batch_export: true
 economy_mode:
   enabled: false
   simple_model: claude-sonnet-4.5

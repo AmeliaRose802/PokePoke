@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from pokepoke.utils.logging_filters import JsonFormatter, WorkItemFilter
 
 if TYPE_CHECKING:
+    from pokepoke.otel_config import OtelConfig
     from pokepoke.types import SessionStats
 
 
@@ -28,12 +29,17 @@ def configure_logging(
     log_file: Path | str,
     console_level: int = logging.WARNING,
     json_output: bool = False,
+    otel_config: 'OtelConfig | None' = None,
 ) -> None:
     """Configure Python logging handlers for a PokePoke entry point.
 
     Attaches a :class:`WorkItemFilter` to every handler so that all records
     carry ``work_item_id``, ``repo_name``, and ``agent_type``.  When
     *json_output* is True the file handler uses :class:`JsonFormatter`.
+
+    When *otel_config* is supplied and enabled, an OpenTelemetry logging
+    handler is added to the root logger so that every log record is also
+    exported to the configured OTEL backend.
     """
     log_file = Path(log_file)
     log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -77,6 +83,16 @@ def configure_logging(
         if not any(isinstance(f, WorkItemFilter) for f in console.filters):
             console.addFilter(WorkItemFilter())
         pokepoke_logger.addHandler(console)
+
+    # Set up OpenTelemetry logging handler if configured
+    if otel_config is not None:
+        from pokepoke.utils.otel_logging import setup_otel_logging
+
+        otel_handler = setup_otel_logging(otel_config)
+        if otel_handler is not None:
+            if not any(isinstance(f, WorkItemFilter) for f in otel_handler.filters):
+                otel_handler.addFilter(WorkItemFilter())
+            root.addHandler(otel_handler)
 
 
 class RunLogger:
