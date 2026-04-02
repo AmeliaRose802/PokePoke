@@ -702,3 +702,78 @@ class TestGetPerformanceMetrics:
 
         assert result["merge_queue"] == {}
         assert result["idle_productive_ratio"]["total_seconds"] == 0.0
+
+
+class TestGetGateRejectionStats:
+    """Tests for get_gate_rejection_stats desktop API method."""
+
+    def test_returns_gate_stats_with_data(self) -> None:
+        obj = _make_self()
+        per_model = {
+            "model-A": {
+                "total_checks": 10, "total_passed": 7, "total_rejected": 3,
+                "rejection_rate": 0.3, "last_used": "2026-01-01T00:00:00",
+                "trend": [],
+            }
+        }
+        per_item = {
+            "PP-1": {
+                "total_checks": 5, "rejections": 2,
+                "gate_models_used": ["model-A"], "last_check": "2026-01-01",
+                "reasons": ["lint failed"],
+            }
+        }
+        with patch("pokepoke.stats.gate_rejection_tracker.get_gate_rejection_stats", return_value=per_model), \
+             patch("pokepoke.stats.gate_rejection_tracker.get_per_item_rejection_stats", return_value=per_item):
+            from pokepoke.desktop.desktop_api_stats import get_gate_rejection_stats
+            result = get_gate_rejection_stats(obj)
+
+        assert result["per_model"] == per_model
+        assert result["per_item"] == per_item
+        assert result["totals"]["total_checks"] == 10
+        assert result["totals"]["total_rejections"] == 3
+        assert result["totals"]["rejection_rate"] == 0.3
+
+    def test_returns_empty_when_no_data(self) -> None:
+        obj = _make_self()
+        with patch("pokepoke.stats.gate_rejection_tracker.get_gate_rejection_stats", return_value={}), \
+             patch("pokepoke.stats.gate_rejection_tracker.get_per_item_rejection_stats", return_value={}):
+            from pokepoke.desktop.desktop_api_stats import get_gate_rejection_stats
+            result = get_gate_rejection_stats(obj)
+
+        assert result["per_model"] == {}
+        assert result["per_item"] == {}
+        assert result["totals"]["total_checks"] == 0
+        assert result["totals"]["total_rejections"] == 0
+        assert result["totals"]["rejection_rate"] == 0.0
+
+    def test_caches_results(self) -> None:
+        obj = _make_self()
+        per_model = {"m1": {"total_checks": 5, "total_passed": 3, "total_rejected": 2,
+                            "rejection_rate": 0.4, "last_used": "", "trend": []}}
+        with patch("pokepoke.stats.gate_rejection_tracker.get_gate_rejection_stats", return_value=per_model), \
+             patch("pokepoke.stats.gate_rejection_tracker.get_per_item_rejection_stats", return_value={}):
+            from pokepoke.desktop.desktop_api_stats import get_gate_rejection_stats
+            result1 = get_gate_rejection_stats(obj)
+            result2 = get_gate_rejection_stats(obj)
+
+        assert result1 is result2  # Same object from cache
+
+
+class TestSnapshotGateRejections:
+    """Tests for gate rejection totals in snapshot_to_dict."""
+
+    def test_gate_rejection_totals_in_snapshot(self) -> None:
+        stats = _make_stats()
+        per_model = {"m1": {"total_checks": 10, "total_rejected": 3}}
+        with patch("pokepoke.stats.gate_rejection_tracker.get_gate_rejection_stats", return_value=per_model):
+            d = snapshot_to_dict(stats.snapshot())
+        assert d["gate_rejections"] == 3
+        assert d["gate_checks"] == 10
+
+    def test_gate_rejection_totals_default_zero(self) -> None:
+        stats = _make_stats()
+        with patch("pokepoke.stats.gate_rejection_tracker.get_gate_rejection_stats", return_value={}):
+            d = snapshot_to_dict(stats.snapshot())
+        assert d["gate_rejections"] == 0
+        assert d["gate_checks"] == 0

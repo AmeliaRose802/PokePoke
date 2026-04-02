@@ -287,7 +287,7 @@ class TestGateModelRecording:
 
         run_gate_agent(_make_item(), work_model="gpt-4")
 
-        mock_record.assert_called_once_with("claude-3", "item-1", True)
+        mock_record.assert_called_once_with("claude-3", "item-1", True, reason='')
 
     @patch("pokepoke.agents.gate_agent_executor.record_gate_check")
     @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
@@ -301,7 +301,7 @@ class TestGateModelRecording:
 
         run_gate_agent(_make_item(), work_model="gpt-4")
 
-        mock_record.assert_called_once_with("claude-3", "item-1", False)
+        mock_record.assert_called_once_with("claude-3", "item-1", False, reason="Bad code\nDetails: ")
 
     @patch("pokepoke.agents.gate_agent_executor.record_gate_check")
     @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")

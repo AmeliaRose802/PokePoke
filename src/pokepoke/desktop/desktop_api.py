@@ -109,13 +109,14 @@ class DesktopAPI:
     (_snapshot_to_dict, _serialize_live_stats, _get_cached_leaderboard,
      get_model_leaderboard, get_model_history, push_stats, get_repo_summary,
      get_lock_contention_stats, get_merge_queue_stats, get_operation_timings,
-     get_performance_metrics, get_concurrency_timeline) = (
+     get_performance_metrics, get_concurrency_timeline,
+     get_gate_rejection_stats) = (
         staticmethod(_stats.snapshot_to_dict), _stats.serialize_live_stats,
         _stats.get_cached_leaderboard, _stats.get_model_leaderboard,
         _stats.get_model_history, _stats.push_stats, _stats.get_repo_summary,
         _stats.get_lock_contention_stats, _stats.get_merge_queue_stats,
         _stats.get_operation_timings, _stats.get_performance_metrics,
-        _stats.get_concurrency_timeline)
+        _stats.get_concurrency_timeline, _stats.get_gate_rejection_stats)
 
     def get_state(self) -> dict[str, Any]:
         """State snapshot + new log entries since last poll (single IPC call)."""

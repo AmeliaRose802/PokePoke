@@ -87,7 +87,7 @@ def run_gate_agent(
     def _finish(success: bool, reason: str, crashed: bool,
                 is_timeout: bool = False) -> 'GateAgentResult':
         if gate_model and not crashed:
-            record_gate_check(gate_model, item.id, success)
+            record_gate_check(gate_model, item.id, success, reason=reason if not success else "")
         return GateAgentResult(
             success=success, reason=reason, stats=stats, crashed=crashed,
             is_timeout=is_timeout,

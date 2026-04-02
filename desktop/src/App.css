@@ -2651,6 +2651,67 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Gate rejection stats */
+.gate-rejection-subsection {
+  margin-top: 12px;
+}
+
+.gate-rejection-subsection h4 {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 0 0 6px;
+}
+
+.gate-rejection-table {
+  display: grid;
+  gap: 2px 0;
+  font-size: 13px;
+}
+
+.gate-rejection-header {
+  display: grid;
+  grid-template-columns: 1fr 70px 70px 60px 1fr;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.gate-rejection-row {
+  display: grid;
+  grid-template-columns: 1fr 70px 70px 60px 1fr;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  align-items: center;
+}
+
+.gate-rejection-row:last-child {
+  border-bottom: none;
+}
+
+.gate-rejection-model {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+}
+
+.gate-rejection-trend {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.gate-rejection-trend span {
+  display: inline;
+}
+
 .model-table {
   width: 100%;
   border-collapse: collapse;

@@ -105,6 +105,10 @@ export interface SessionStats {
   worktree_cleanup_agent_runs?: number;
   agent_type_elapsed_seconds?: Record<string, number>;
   model_completions?: ModelCompletionRecord[];
+
+  // Gate rejection totals (from persistent tracker)
+  gate_rejections?: number;
+  gate_checks?: number;
 }
 
 /** Progress indicator state */
@@ -295,4 +299,34 @@ export interface ConcurrencyTimeline {
   lifecycle: LifecycleEntry[];
   completions: ItemEvent[];
   failures: ItemEvent[];
+}
+
+/** Per-model gate rejection summary */
+export interface GateModelRejectionSummary {
+  total_checks: number;
+  total_passed: number;
+  total_rejected: number;
+  rejection_rate: number;
+  last_used: string;
+  trend: Array<{ timestamp: string; passed: boolean }>;
+}
+
+/** Per-item gate rejection stats */
+export interface GateItemRejectionStats {
+  total_checks: number;
+  rejections: number;
+  gate_models_used: string[];
+  last_check: string;
+  reasons: string[];
+}
+
+/** Full gate rejection statistics response */
+export interface GateRejectionStats {
+  per_model: Record<string, GateModelRejectionSummary>;
+  per_item: Record<string, GateItemRejectionStats>;
+  totals: {
+    total_checks: number;
+    total_rejections: number;
+    rejection_rate: number;
+  };
 }

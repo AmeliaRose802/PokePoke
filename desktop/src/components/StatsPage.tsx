@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { useCopyCompletedItems } from "../hooks/useCopyCompletedItems";
-import type { AgentInfo, ConcurrencyTimeline, ModelHistoryEntry, ModelPerformanceSummary, SessionStats } from "../types";
+import type { AgentInfo, ConcurrencyTimeline, GateRejectionStats, ModelHistoryEntry, ModelPerformanceSummary, SessionStats } from "../types";
 import { buildAgentActivity, normalizeAgentSegments, type NormalizedAgentSegment } from "../utils/agentActivity";
 import { getAgentType } from "../utils/agentHelpers";
 import { getInProgressItems } from "../utils/inProgressItems";
@@ -20,6 +20,7 @@ import {
 import { CompletedItemCard } from "./CompletedItemCard";
 import { CompletionTimeChart } from "./CompletionTimeChart";
 import { ConcurrencyChart } from "./ConcurrencyChart";
+import { GateRejectionsSection } from "./GateRejectionsSection";
 import { InProgressItemsSection } from "./InProgressItemsSection";
 import { ModelTable } from "./ModelTable";
 import { TrendChart } from "./TrendChart";
@@ -34,6 +35,7 @@ interface StatsPageProps {
   onClose: () => void;
   agents?: AgentInfo[];
   concurrencyTimeline?: ConcurrencyTimeline | null;
+  gateRejectionStats?: GateRejectionStats | null;
 }
 
 type SortField = "model" | "runs" | "success" | "duration" | "tokens";
@@ -54,6 +56,7 @@ export function StatsPage({
   onClose,
   agents = [],
   concurrencyTimeline,
+  gateRejectionStats,
 }: StatsPageProps) {
   const agent = stats?.agent_stats;
   const [completedItems, doneCount] = [getCompletedItems(stats), getDoneCount(stats)];
@@ -69,6 +72,7 @@ export function StatsPage({
     { label: "Done", value: doneCount, icon: "✅" },
     { label: "Net", value: netDelta > 0 ? `+${netDelta}` : netDelta, icon: "📊" },
     { label: "Retries", value: agent?.retries ?? 0, icon: "🔁" },
+    { label: "Gate Rejections", value: stats?.gate_rejections ?? 0, icon: "🚫" },
     { label: "API Calls", value: agent?.premium_requests ?? 0, icon: "📡" },
     {
       label: "API seconds",
@@ -296,6 +300,10 @@ export function StatsPage({
             <section>
               <ConcurrencyChart data={concurrencyTimeline} />
             </section>
+          )}
+
+          {gateRejectionStats && gateRejectionStats.totals.total_checks > 0 && (
+            <GateRejectionsSection gateStats={gateRejectionStats} />
           )}
 
           {agentTokenSegments.length > 0 && (
