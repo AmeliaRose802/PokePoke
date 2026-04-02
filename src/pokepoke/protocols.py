@@ -81,6 +81,8 @@ class BeadsClient(Protocol):
 
     def block_item(self, item_id: str, reason: str) -> bool: ...
 
+    def defer_item(self, item_id: str, reason: str) -> bool: ...
+
     def unassign_item(self, item_id: str) -> bool: ...
 
     def unassign_with_retry(self, item_id: str) -> bool: ...
@@ -149,6 +151,11 @@ class DefaultBeadsClient:
         from pokepoke.beads.beads_management import block_item
 
         return block_item(item_id, reason=reason)
+
+    def defer_item(self, item_id: str, reason: str) -> bool:
+        from pokepoke.beads.beads_management import defer_item
+
+        return defer_item(item_id, reason=reason)
 
     def unassign_item(self, item_id: str) -> bool:
         from pokepoke.beads.beads_management import unassign_item

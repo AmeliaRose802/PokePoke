@@ -32,6 +32,7 @@ from .sync_strategy import (
 
 __all__ = [
     'block_item',
+    'defer_item',
     'fail_task',
     'get_gate_rejection_count',
     'get_total_attempts',
@@ -282,6 +283,37 @@ def block_item(item_id: str, reason: str) -> bool:
         return False
     truncated = reason[:500] if reason else "Blocked by orchestrator"
     add_comment(item_id, f"🚫 Blocked: {truncated}")
+    return True
+
+
+def defer_item(item_id: str, reason: str) -> bool:
+    """Defer a beads item to backlog with a needs-decomposition label.
+
+    Used when an item has exceeded the gate rejection cap, indicating it is
+    too complex for a single agent session and should be broken into smaller
+    pieces rather than retried.
+
+    Args:
+        item_id: The item ID to defer.
+        reason: Human-readable explanation of why the item is being deferred.
+
+    Returns:
+        True if the status was updated successfully, False otherwise.
+    """
+    from .beads_hierarchy import NEEDS_DECOMPOSITION_LABEL
+
+    try:
+        _run_bd_with_retry([
+            'update', item_id,
+            '--status', 'backlog',
+            '--add-label', NEEDS_DECOMPOSITION_LABEL,
+        ])
+        logger.info("📦 Deferred %s to backlog with %s label", item_id, NEEDS_DECOMPOSITION_LABEL)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+        logger.error("⚠️  Failed to defer %s after retries: %s", item_id, e)
+        return False
+    truncated = reason[:500] if reason else "Deferred to backlog for decomposition"
+    add_comment(item_id, f"📦 Auto-deferred: {truncated}")
     return True
 
 
