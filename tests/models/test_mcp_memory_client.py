@@ -63,6 +63,27 @@ class TestMCPMemoryClientInitialization:
 
         assert client.repo_slug == repo_name
 
+    def test_discover_repo_root_with_git(self, tmp_path):
+        """Discovers repo root by finding .git directory."""
+        # Create a .git directory
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+
+        # Create nested directory
+        nested_dir = tmp_path / "src" / "models"
+        nested_dir.mkdir(parents=True)
+
+        # Create client from nested directory (mock cwd)
+        import os
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(nested_dir)
+            client = MCPMemoryClient(memory_file_path=tmp_path / "memory.jsonl")
+
+            assert client.repo_root == tmp_path
+        finally:
+            os.chdir(old_cwd)
+
 
 class TestEntityNameScoping:
     """Tests for repository-scoped entity names."""
@@ -199,6 +220,66 @@ class TestStoreFact:
 
         assert result is False
 
+    def test_store_fact_updates_existing_entity(self, memory_client, mock_subprocess):
+        """Successfully updates existing entity with add_observations."""
+        mock_process = Mock()
+        mock_process.stdin = Mock()
+        mock_process.stdout = Mock()
+        mock_process.stderr = Mock()
+
+        init_response = {"jsonrpc": "2.0", "id": "test-id", "result": {}}
+        # First call to add_observations succeeds (entity exists)
+        add_response = {"jsonrpc": "2.0", "id": "test-id", "result": {"added": 1}}
+
+        mock_process.stdout.readline.side_effect = [
+            json.dumps(init_response),
+            json.dumps(add_response)
+        ]
+        mock_process.wait.return_value = None
+        mock_subprocess.return_value = mock_process
+
+        result = memory_client.store_fact(
+            entity_name="existing_entity",
+            entity_type="file",
+            observations=["Additional observation"]
+        )
+
+        assert result is True
+
+    def test_store_fact_creates_after_add_fails(self, memory_client, mock_subprocess):
+        """Creates entity when add_observations fails with doesn't exist."""
+        mock_process = Mock()
+        mock_process.stdin = Mock()
+        mock_process.stdout = Mock()
+        mock_process.stderr = Mock()
+
+        init_response = {"jsonrpc": "2.0", "id": "test-id", "result": {}}
+        # First call fails because entity doesn't exist
+        error_response = {
+            "jsonrpc": "2.0",
+            "id": "test-id",
+            "error": {"code": -1, "message": "Entity doesn't exist"}
+        }
+        # Second call creates the entity
+        create_response = {"jsonrpc": "2.0", "id": "test-id", "result": {"created": 1}}
+
+        mock_process.stdout.readline.side_effect = [
+            json.dumps(init_response),  # First init
+            json.dumps(error_response),  # add_observations fails
+            json.dumps(init_response),  # Second init for create
+            json.dumps(create_response)  # create_entities succeeds
+        ]
+        mock_process.wait.return_value = None
+        mock_subprocess.return_value = mock_process
+
+        result = memory_client.store_fact(
+            entity_name="new_entity",
+            entity_type="file",
+            observations=["New observation"]
+        )
+
+        assert result is True
+
 
 class TestRetrieveFacts:
     """Tests for retrieving facts from memory."""
@@ -211,15 +292,25 @@ class TestRetrieveFacts:
         mock_process.stderr = Mock()
 
         init_response = {"jsonrpc": "2.0", "id": "test-id", "result": {}}
+
+        # MCP protocol response format: entities are nested in content[0].text as JSON
+        entities_data = {
+            "entities": [
+                {
+                    "name": f"{memory_client.repo_slug}::workflow.py",
+                    "entityType": "file",
+                    "observations": ["[2026-01-01T00:00:00] Main loop", "[2026-01-01T00:00:00] Handles items"]
+                }
+            ]
+        }
         search_response = {
             "jsonrpc": "2.0",
             "id": "test-id",
             "result": {
-                "entities": [
+                "content": [
                     {
-                        "name": f"{memory_client.repo_slug}::workflow.py",
-                        "entityType": "file",
-                        "observations": ["[2026-01-01T00:00:00] Main loop", "[2026-01-01T00:00:00] Handles items"]
+                        "type": "text",
+                        "text": json.dumps(entities_data)
                     }
                 ]
             }
@@ -247,20 +338,30 @@ class TestRetrieveFacts:
         mock_process.stderr = Mock()
 
         init_response = {"jsonrpc": "2.0", "id": "test-id", "result": {}}
+
+        # MCP protocol response format: entities are nested in content[0].text as JSON
+        entities_data = {
+            "entities": [
+                {
+                    "name": f"{memory_client.repo_slug}::workflow.py",
+                    "entityType": "file",
+                    "observations": ["Our repo"]
+                },
+                {
+                    "name": "other_repo::workflow.py",
+                    "entityType": "file",
+                    "observations": ["Other repo"]
+                }
+            ]
+        }
         search_response = {
             "jsonrpc": "2.0",
             "id": "test-id",
             "result": {
-                "entities": [
+                "content": [
                     {
-                        "name": f"{memory_client.repo_slug}::workflow.py",
-                        "entityType": "file",
-                        "observations": ["Our repo"]
-                    },
-                    {
-                        "name": "other_repo::workflow.py",
-                        "entityType": "file",
-                        "observations": ["Other repo"]
+                        "type": "text",
+                        "text": json.dumps(entities_data)
                     }
                 ]
             }
@@ -287,10 +388,20 @@ class TestRetrieveFacts:
         mock_process.stderr = Mock()
 
         init_response = {"jsonrpc": "2.0", "id": "test-id", "result": {}}
+
+        # MCP protocol response format: entities are nested in content[0].text as JSON
+        entities_data = {"entities": []}
         search_response = {
             "jsonrpc": "2.0",
             "id": "test-id",
-            "result": {"entities": []}
+            "result": {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(entities_data)
+                    }
+                ]
+            }
         }
 
         mock_process.stdout.readline.side_effect = [
@@ -303,6 +414,211 @@ class TestRetrieveFacts:
         results = memory_client.retrieve_facts("nonexistent")
 
         assert results == []
+
+    def test_retrieve_facts_no_content(self, memory_client, mock_subprocess):
+        """Returns empty list when response has no content."""
+        mock_process = Mock()
+        mock_process.stdin = Mock()
+        mock_process.stdout = Mock()
+        mock_process.stderr = Mock()
+
+        init_response = {"jsonrpc": "2.0", "id": "test-id", "result": {}}
+        search_response = {
+            "jsonrpc": "2.0",
+            "id": "test-id",
+            "result": {"content": []}
+        }
+
+        mock_process.stdout.readline.side_effect = [
+            json.dumps(init_response),
+            json.dumps(search_response)
+        ]
+        mock_process.wait.return_value = None
+        mock_subprocess.return_value = mock_process
+
+        results = memory_client.retrieve_facts("query")
+
+        assert results == []
+
+    def test_retrieve_facts_empty_text(self, memory_client, mock_subprocess):
+        """Returns empty list when text content is empty."""
+        mock_process = Mock()
+        mock_process.stdin = Mock()
+        mock_process.stdout = Mock()
+        mock_process.stderr = Mock()
+
+        init_response = {"jsonrpc": "2.0", "id": "test-id", "result": {}}
+        search_response = {
+            "jsonrpc": "2.0",
+            "id": "test-id",
+            "result": {
+                "content": [{"type": "text", "text": ""}]
+            }
+        }
+
+        mock_process.stdout.readline.side_effect = [
+            json.dumps(init_response),
+            json.dumps(search_response)
+        ]
+        mock_process.wait.return_value = None
+        mock_subprocess.return_value = mock_process
+
+        results = memory_client.retrieve_facts("query")
+
+        assert results == []
+
+    def test_retrieve_facts_server_error(self, memory_client, mock_subprocess):
+        """Returns empty list on server error."""
+        mock_process = Mock()
+        mock_process.stdin = Mock()
+        mock_process.stdout = Mock()
+        mock_process.stderr = Mock()
+
+        init_response = {"jsonrpc": "2.0", "id": "test-id", "result": {}}
+        error_response = {
+            "jsonrpc": "2.0",
+            "id": "test-id",
+            "error": {"code": -1, "message": "Server error"}
+        }
+
+        mock_process.stdout.readline.side_effect = [
+            json.dumps(init_response),
+            json.dumps(error_response)
+        ]
+        mock_process.wait.return_value = None
+        mock_subprocess.return_value = mock_process
+
+        results = memory_client.retrieve_facts("query")
+
+        assert results == []
+
+
+class TestListAllFacts:
+    """Tests for listing all facts."""
+
+    def test_list_all_facts_success(self, memory_client, mock_subprocess):
+        """Successfully lists all facts for repository."""
+        mock_process = Mock()
+        mock_process.stdin = Mock()
+        mock_process.stdout = Mock()
+        mock_process.stderr = Mock()
+
+        init_response = {"jsonrpc": "2.0", "id": "test-id", "result": {}}
+
+        entities_data = {
+            "entities": [
+                {
+                    "name": f"{memory_client.repo_slug}::entity1",
+                    "entityType": "file",
+                    "observations": ["obs1"]
+                },
+                {
+                    "name": f"{memory_client.repo_slug}::entity2",
+                    "entityType": "module",
+                    "observations": ["obs2"]
+                }
+            ]
+        }
+        read_response = {
+            "jsonrpc": "2.0",
+            "id": "test-id",
+            "result": {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(entities_data)
+                    }
+                ]
+            }
+        }
+
+        mock_process.stdout.readline.side_effect = [
+            json.dumps(init_response),
+            json.dumps(read_response)
+        ]
+        mock_process.wait.return_value = None
+        mock_subprocess.return_value = mock_process
+
+        results = memory_client.list_all_facts()
+
+        assert len(results) == 2
+        assert results[0].name == "entity1"
+        assert results[1].name == "entity2"
+
+    def test_list_all_facts_error(self, memory_client, mock_subprocess):
+        """Returns empty list on error."""
+        mock_process = Mock()
+        mock_process.stdin = Mock()
+        mock_process.stdout = Mock()
+        mock_process.stderr = Mock()
+
+        init_response = {"jsonrpc": "2.0", "id": "test-id", "result": {}}
+        error_response = {
+            "jsonrpc": "2.0",
+            "id": "test-id",
+            "error": {"code": -1, "message": "Error"}
+        }
+
+        mock_process.stdout.readline.side_effect = [
+            json.dumps(init_response),
+            json.dumps(error_response)
+        ]
+        mock_process.wait.return_value = None
+        mock_subprocess.return_value = mock_process
+
+        results = memory_client.list_all_facts()
+
+        assert results == []
+
+
+class TestDeleteEntity:
+    """Tests for deleting entities."""
+
+    def test_delete_entity_success(self, memory_client, mock_subprocess):
+        """Successfully deletes an entity."""
+        mock_process = Mock()
+        mock_process.stdin = Mock()
+        mock_process.stdout = Mock()
+        mock_process.stderr = Mock()
+
+        init_response = {"jsonrpc": "2.0", "id": "test-id", "result": {}}
+        delete_response = {"jsonrpc": "2.0", "id": "test-id", "result": {"deleted": 1}}
+
+        mock_process.stdout.readline.side_effect = [
+            json.dumps(init_response),
+            json.dumps(delete_response)
+        ]
+        mock_process.wait.return_value = None
+        mock_subprocess.return_value = mock_process
+
+        result = memory_client.delete_entity("test_entity")
+
+        assert result is True
+
+    def test_delete_entity_error(self, memory_client, mock_subprocess):
+        """Returns False on error."""
+        mock_process = Mock()
+        mock_process.stdin = Mock()
+        mock_process.stdout = Mock()
+        mock_process.stderr = Mock()
+
+        init_response = {"jsonrpc": "2.0", "id": "test-id", "result": {}}
+        error_response = {
+            "jsonrpc": "2.0",
+            "id": "test-id",
+            "error": {"code": -1, "message": "Error"}
+        }
+
+        mock_process.stdout.readline.side_effect = [
+            json.dumps(init_response),
+            json.dumps(error_response)
+        ]
+        mock_process.wait.return_value = None
+        mock_subprocess.return_value = mock_process
+
+        result = memory_client.delete_entity("test_entity")
+
+        assert result is False
 
 
 class TestCleanStaleObservations:
@@ -324,15 +640,25 @@ class TestCleanStaleObservations:
 
         # Mock responses for: init, read_graph, init, delete_observations
         init_response = {"jsonrpc": "2.0", "id": "test-id", "result": {}}
+
+        # MCP protocol response format: entities are nested in content[0].text as JSON
+        entities_data = {
+            "entities": [
+                {
+                    "name": f"{memory_client.repo_slug}::test_entity",
+                    "entityType": "test",
+                    "observations": [fresh_obs, stale_obs]
+                }
+            ]
+        }
         read_response = {
             "jsonrpc": "2.0",
             "id": "test-id",
             "result": {
-                "entities": [
+                "content": [
                     {
-                        "name": f"{memory_client.repo_slug}::test_entity",
-                        "entityType": "test",
-                        "observations": [fresh_obs, stale_obs]
+                        "type": "text",
+                        "text": json.dumps(entities_data)
                     }
                 ]
             }
@@ -363,15 +689,25 @@ class TestCleanStaleObservations:
         mock_process.stderr = Mock()
 
         init_response = {"jsonrpc": "2.0", "id": "test-id", "result": {}}
+
+        # MCP protocol response format: entities are nested in content[0].text as JSON
+        entities_data = {
+            "entities": [
+                {
+                    "name": f"{memory_client.repo_slug}::test_entity",
+                    "entityType": "test",
+                    "observations": [stale_obs]
+                }
+            ]
+        }
         read_response = {
             "jsonrpc": "2.0",
             "id": "test-id",
             "result": {
-                "entities": [
+                "content": [
                     {
-                        "name": f"{memory_client.repo_slug}::test_entity",
-                        "entityType": "test",
-                        "observations": [stale_obs]
+                        "type": "text",
+                        "text": json.dumps(entities_data)
                     }
                 ]
             }
@@ -395,6 +731,105 @@ class TestCleanStaleObservations:
         assert removed == 1
         # Verify delete_entities was called (check write calls)
         assert mock_process.stdin.write.call_count >= 4  # init + read + init + delete
+
+    def test_clean_handles_invalid_timestamp(self, memory_client, mock_subprocess):
+        """Keeps observations with invalid timestamps."""
+        mock_process = Mock()
+        mock_process.stdin = Mock()
+        mock_process.stdout = Mock()
+        mock_process.stderr = Mock()
+
+        init_response = {"jsonrpc": "2.0", "id": "test-id", "result": {}}
+
+        entities_data = {
+            "entities": [
+                {
+                    "name": f"{memory_client.repo_slug}::test_entity",
+                    "entityType": "test",
+                    "observations": [
+                        "[invalid-timestamp] Invalid timestamp",
+                        "No timestamp at all"
+                    ]
+                }
+            ]
+        }
+        read_response = {
+            "jsonrpc": "2.0",
+            "id": "test-id",
+            "result": {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(entities_data)
+                    }
+                ]
+            }
+        }
+
+        mock_process.stdout.readline.side_effect = [
+            json.dumps(init_response),
+            json.dumps(read_response)
+        ]
+        mock_process.wait.return_value = None
+        mock_subprocess.return_value = mock_process
+
+        removed = memory_client.clean_stale_observations(max_age_days=30)
+
+        # No observations should be removed (all have invalid/missing timestamps)
+        assert removed == 0
+
+    def test_clean_handles_deletion_error(self, memory_client, mock_subprocess):
+        """Continues cleaning even if one deletion fails."""
+        stale_date = datetime.now() - timedelta(days=40)
+        stale_obs = f"[{stale_date.isoformat()}] Stale observation"
+
+        mock_process = Mock()
+        mock_process.stdin = Mock()
+        mock_process.stdout = Mock()
+        mock_process.stderr = Mock()
+
+        init_response = {"jsonrpc": "2.0", "id": "test-id", "result": {}}
+
+        entities_data = {
+            "entities": [
+                {
+                    "name": f"{memory_client.repo_slug}::test_entity",
+                    "entityType": "test",
+                    "observations": [stale_obs]
+                }
+            ]
+        }
+        read_response = {
+            "jsonrpc": "2.0",
+            "id": "test-id",
+            "result": {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(entities_data)
+                    }
+                ]
+            }
+        }
+        error_response = {
+            "jsonrpc": "2.0",
+            "id": "test-id",
+            "error": {"code": -1, "message": "Deletion failed"}
+        }
+
+        mock_process.stdout.readline.side_effect = [
+            json.dumps(init_response),  # read_graph init
+            json.dumps(read_response),  # read_graph result
+            json.dumps(init_response),  # delete_observations init
+            json.dumps(error_response)  # delete_observations fails
+        ]
+        mock_process.wait.return_value = None
+        mock_subprocess.return_value = mock_process
+
+        removed = memory_client.clean_stale_observations(max_age_days=30)
+
+        # Should return 0 because deletion failed
+        assert removed == 0
 
 
 class TestMemoryHelpers:

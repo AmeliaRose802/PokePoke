@@ -272,8 +272,23 @@ class MCPMemoryClient:
                 }
             )
 
+            # Parse MCP protocol response: result = {"content": [{"type": "text", "text": "..."}]}
+            # The actual data is nested inside content[0].text as a JSON string
+            content = result.get("content", [])
+            if not content or len(content) == 0:
+                logger.debug("No content in MCP response")
+                return []
+
+            text_content = content[0].get("text", "")
+            if not text_content:
+                logger.debug("Empty text content in MCP response")
+                return []
+
+            # Parse the JSON string to get the actual entity data
+            data = json.loads(text_content)
+
             entities = []
-            for entity_data in result.get("entities", []):
+            for entity_data in data.get("entities", []):
                 name = entity_data.get("name", "")
                 # Only return entities from this repo
                 if name.startswith(f"{self.repo_slug}::"):
@@ -305,8 +320,23 @@ class MCPMemoryClient:
                 }
             )
 
+            # Parse MCP protocol response: result = {"content": [{"type": "text", "text": "..."}]}
+            # The actual data is nested inside content[0].text as a JSON string
+            content = result.get("content", [])
+            if not content or len(content) == 0:
+                logger.debug("No content in MCP response")
+                return []
+
+            text_content = content[0].get("text", "")
+            if not text_content:
+                logger.debug("Empty text content in MCP response")
+                return []
+
+            # Parse the JSON string to get the actual entity data
+            data = json.loads(text_content)
+
             entities = []
-            for entity_data in result.get("entities", []):
+            for entity_data in data.get("entities", []):
                 name = entity_data.get("name", "")
                 # Only return entities from this repo
                 if name.startswith(f"{self.repo_slug}::"):
