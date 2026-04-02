@@ -253,9 +253,15 @@ class SubprocessMonitor:
     def _monitor_process_output(self, pid: int, command: str) -> None:
         """Monitor output from a specific process.
 
-        This uses psutil to periodically check if the process has generated
-        new output. On Windows, we simulate output streaming by detecting
-        process activity and emitting status updates.
+        On Windows, we cannot directly attach to an already-running process's
+        stdout/stderr pipes. Instead, we:
+        1. Emit periodic status updates to show the process is alive
+        2. Track I/O activity to detect when output is being generated
+        3. Emit liveness signals that help detect hung vs active processes
+
+        For real stdout/stderr capture, the SDK's tool streaming events
+        (handled by _on_tool_streaming in sdk_event_handler.py) are used
+        when the underlying tool supports streaming.
 
         Args:
             pid: Process ID to monitor
@@ -263,41 +269,55 @@ class SubprocessMonitor:
         """
         try:
             process = psutil.Process(pid)
-            last_check = time.monotonic()
-            last_status = None
-            output_count = 0
+            last_status_time = time.monotonic()
+            last_io_time = time.monotonic()
+            last_io_bytes = 0
+            status_count = 0
+
+            # Emit initial detection message
+            cmd_name = command.split()[0] if command else "unknown"
+            if os.path.sep in cmd_name:
+                cmd_name = os.path.basename(cmd_name)
+            self._emit_output("stdout", f"[ProcessMonitor] Started monitoring PID {pid} ({cmd_name})\n")
 
             while self._monitoring:
                 try:
                     if not process.is_running():
+                        self._emit_output("stdout", f"[ProcessMonitor] PID {pid} ({cmd_name}) completed\n")
                         break
 
-                    # Check process status
+                    now = time.monotonic()
+
+                    # Check process status and CPU every cycle
                     status = process.status()
                     cpu_percent = process.cpu_percent(interval=0.1)
 
-                    # Emit periodic status updates to show liveness
-                    now = time.monotonic()
-                    if now - last_check >= 5.0 and (status != last_status or cpu_percent > 1.0):
-                        output_count += 1
-                        status_msg = self._format_process_status(
-                            pid, command, status, cpu_percent, output_count
-                        )
-                        self._emit_output("stdout", status_msg)
-                        last_status = status
-                        last_check = now
-
-                    # Check for process I/O activity (indicates it's producing output)
+                    # Track I/O activity to detect active output generation
                     try:
                         io_counters = process.io_counters()
-                        if (hasattr(io_counters, 'write_bytes')
-                            and io_counters.write_bytes > 0
-                            and now - last_check >= 2.0):
-                            output_msg = f"[PID {pid}] Process active (I/O detected)\n"
-                            self._emit_output("stdout", output_msg)
-                            last_check = now
+                        current_io_bytes = io_counters.write_bytes if hasattr(io_counters, 'write_bytes') else 0
+
+                        # If I/O bytes increased, the process is writing output
+                        if current_io_bytes > last_io_bytes:
+                            bytes_written = current_io_bytes - last_io_bytes
+                            if now - last_io_time >= 1.0:
+                                self._emit_output(
+                                    "stdout",
+                                    f"[ProcessMonitor] PID {pid} ({cmd_name}) active - wrote {bytes_written} bytes\n"
+                                )
+                                last_io_time = now
+                            last_io_bytes = current_io_bytes
                     except (psutil.AccessDenied, AttributeError):
                         pass
+
+                    # Emit periodic status updates (every 10 seconds) to show liveness
+                    if now - last_status_time >= 10.0:
+                        status_count += 1
+                        status_msg = self._format_process_status(
+                            pid, command, status, cpu_percent, status_count
+                        )
+                        self._emit_output("stdout", status_msg)
+                        last_status_time = now
 
                     time.sleep(self._poll_interval)
 

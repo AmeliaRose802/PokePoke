@@ -277,28 +277,22 @@ async def invoke_copilot_sdk(  # noqa: C901
 
             def on_subprocess_output(source: str, text: str) -> None:
                 """Callback for subprocess output - route to logs, UI, and desktop API."""
-                prefix = "[stderr] " if source == "stderr" else ""
-                logger.info(f"[ToolOutput] {prefix}{text}")
+                logger.info(f"[ToolOutput] {'[stderr] ' if source == 'stderr' else ''}{text}")
                 output_lines.append(text)
                 if item_logger:
                     item_logger.log_copilot_output(text)
-                # Push to desktop UI with styling
+                # Push to desktop UI
                 try:
                     terminal_ui.ui.set_style("cyan")
                     if terminal_ui.ui._api:
                         terminal_ui.ui._api.push_log(
-                            text,
-                            target="agent",
-                            style="cyan" if source == "stdout" else "yellow",
+                            text, target="agent",
+                            style="cyan" if source == "stdout" else "yellow"
                         )
                 except Exception as e:
                     logger.debug(f"Failed to push subprocess output to UI: {e}")
 
-            subprocess_monitor = create_monitor_for_client(
-                client,
-                item_logger=item_logger,
-                on_output=on_subprocess_output,
-            )
+            subprocess_monitor = create_monitor_for_client(client, on_output=on_subprocess_output)
             if subprocess_monitor:
                 logger.info("[SDK] Subprocess output monitoring enabled")
         except Exception as e:
@@ -339,7 +333,6 @@ async def invoke_copilot_sdk(  # noqa: C901
                 handler, stats = create_event_handler(
                     done, output_lines, errors, item_logger, idle_timeout,
                     on_token_usage=on_token_usage,
-                    subprocess_monitor=subprocess_monitor,
                 )
             else:
                 handler.reset_for_retry(done, output_lines, errors)

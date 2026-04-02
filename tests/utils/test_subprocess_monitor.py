@@ -119,7 +119,10 @@ def test_subprocess_monitor_find_children_wmic_failure():
     mock_result.returncode = 1
     mock_result.stdout = ""
 
-    with patch('pokepoke.utils.subprocess_monitor.subprocess.run', return_value=mock_result):
+    with (
+        patch('pokepoke.utils.subprocess_monitor._HAS_PSUTIL', False),
+        patch('pokepoke.utils.subprocess_monitor.subprocess.run', return_value=mock_result),
+    ):
         children = monitor._find_child_processes()
 
     # Should return empty list without crashing
@@ -130,7 +133,10 @@ def test_subprocess_monitor_find_children_wmic_timeout():
     """Test graceful handling when WMIC times out."""
     monitor = SubprocessMonitor(copilot_pid=12345)
 
-    with patch('pokepoke.utils.subprocess_monitor.subprocess.run', side_effect=TimeoutError("Command timed out")):
+    with (
+        patch('pokepoke.utils.subprocess_monitor._HAS_PSUTIL', False),
+        patch('pokepoke.utils.subprocess_monitor.subprocess.run', side_effect=TimeoutError("Command timed out")),
+    ):
         children = monitor._find_child_processes()
 
     # Should return empty list without crashing
@@ -347,14 +353,21 @@ def test_subprocess_monitor_process_output_monitoring():
 
     # Create mock process
     mock_process = Mock()
-    mock_process.is_running.side_effect = [True, True, False]  # Run twice then exit
+    mock_process.is_running.side_effect = [True, True, True, False]  # Run 3 times then exit
     mock_process.status.return_value = "running"
     mock_process.cpu_percent.return_value = 5.0
 
-    # Mock io_counters
-    mock_io = Mock()
-    mock_io.write_bytes = 1000
-    mock_process.io_counters.return_value = mock_io
+    # Mock io_counters with increasing bytes to simulate I/O activity
+    io_values = [1000, 2000, 3000, 3000]  # Bytes increase, then stay same
+    io_index = [0]
+
+    def mock_io_counters():
+        mock_io = Mock()
+        mock_io.write_bytes = io_values[io_index[0]]
+        io_index[0] = min(io_index[0] + 1, len(io_values) - 1)
+        return mock_io
+
+    mock_process.io_counters = mock_io_counters
 
     output_captured = []
 
@@ -364,10 +377,17 @@ def test_subprocess_monitor_process_output_monitoring():
     monitor._on_output = capture_output
     monitor._monitoring = True
 
-    # Patch time.monotonic to speed up status checks
+    # Patch time.monotonic to control timing
     start_time = [0.0]
+    call_count = [0]
+
     def mock_monotonic():
-        start_time[0] += 6.0  # Advance 6 seconds each time
+        call_count[0] += 1
+        # First calls: fast forward to trigger I/O messages
+        if call_count[0] <= 10:
+            start_time[0] += 1.5  # Fast forward to trigger I/O checks
+        else:
+            start_time[0] += 11.0  # Fast forward to trigger status update
         return start_time[0]
 
     # Run monitoring with mocked process
@@ -377,8 +397,20 @@ def test_subprocess_monitor_process_output_monitoring():
     ):
         monitor._monitor_process_output(67890, "pytest --verbose")
 
-    # Should have captured output due to status changes
-    assert len(output_captured) >= 1
+    # Should have captured multiple types of output
+    assert len(output_captured) >= 3, f"Expected at least 3 outputs, got {len(output_captured)}"
+
+    # Check for start message
+    start_messages = [msg for src, msg in output_captured if "Started monitoring" in msg]
+    assert len(start_messages) >= 1, "Should emit start monitoring message"
+
+    # Check for I/O activity messages
+    io_messages = [msg for src, msg in output_captured if "active - wrote" in msg]
+    assert len(io_messages) >= 1, "Should emit I/O activity messages"
+
+    # Check for completion message
+    completion_messages = [msg for src, msg in output_captured if "completed" in msg]
+    assert len(completion_messages) >= 1, "Should emit completion message"
 
 
 if __name__ == "__main__":

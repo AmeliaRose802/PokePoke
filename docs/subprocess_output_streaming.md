@@ -64,15 +64,21 @@ Session ends → Monitor stopped
 
 **V1 (This Implementation):**
 - ✅ Detects child processes spawned by Copilot CLI
-- ✅ Logs child process PID and command line
-- ✅ Provides infrastructure for output streaming
+- ✅ Streams process liveness signals and I/O activity in real-time
+- ✅ Emits status updates showing process activity (CPU, I/O bytes written)
+- ✅ Detects when processes are actively generating output
 - ✅ Integrates with item logger and desktop UI
 - ✅ Comprehensive test coverage
+- ✅ Output-based liveness detection via I/O monitoring
+
+**Hybrid Streaming Approach:**
+- SDK streaming events: Used when tools support native streaming (handled by sdk_event_handler.py)
+- Process monitoring: Provides liveness signals and I/O activity updates for all subprocesses
+- Note: Direct stdout/stderr capture from already-running processes is not feasible on Windows without console attachment APIs
 
 **Future Enhancements:**
-- Capture stdout/stderr from child processes using Windows console APIs
-- Real-time output streaming (line-by-line as it's produced)
-- Output-based liveness detection (if no output for N minutes, command is hung)
+- Windows Console API integration for direct stdout/stderr capture (requires console attachment)
+- Cross-platform support using platform-specific process inspection
 - Automatic detection of commands waiting for stdin input
 
 ## Benefits

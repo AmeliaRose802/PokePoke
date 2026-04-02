@@ -55,7 +55,6 @@ class _EventHandler:
         idle_timeout: float,
         hung_command_detector: HungCommandDetector,
         on_token_usage: Callable[[int, int], None] | None,
-        subprocess_monitor: Any | None = None,
     ) -> None:
         self._done = done
         self._output_lines = output_lines
@@ -65,7 +64,6 @@ class _EventHandler:
         self._idle_timeout = idle_timeout
         self._hung = hung_command_detector
         self._on_token_usage = on_token_usage
-        self._subprocess_monitor = subprocess_monitor
         self._pending_tools: dict[str, dict[str, Any]] = {}
         self._pending_tools_lock = threading.Lock()
         self._pending_tool_calls_lock = threading.Lock()
@@ -370,7 +368,6 @@ def create_event_handler(
     idle_timeout: float = 90.0,
     hung_command_detector: HungCommandDetector | None = None,
     on_token_usage: Callable[[int, int], None] | None = None,
-    subprocess_monitor: Any | None = None,
 ) -> tuple['_EventHandler', SessionStats]:
     """Create an event handler and stats dict for SDK session events."""
     if hung_command_detector is None:
@@ -400,6 +397,5 @@ def create_event_handler(
     handler = _EventHandler(
         done, output_lines, errors, stats, item_logger,
         idle_timeout, hung_command_detector, on_token_usage,
-        subprocess_monitor=subprocess_monitor,
     )
     return handler, stats
