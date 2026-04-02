@@ -201,14 +201,19 @@ class TestProcessWorkItem:
             assert result.request_count == 1  # No retry on rate limit
             assert mocks['invoke'].call_count == 1
 
-    def test_process_crash_skips_gate_agent(self) -> None:
-        """Test that gate agent is skipped when CLI process crashes, even if retry succeeds."""
+    def test_process_crash_still_runs_gate_agent(self) -> None:
+        """Test that gate agent runs even when CLI process crashed on earlier attempt.
+
+        Bug fix: Previously, process_crashed_this_session flag would permanently skip gate
+        even if retry succeeded. Now gate always runs if work agent eventually succeeds.
+        """
         item = make_work_item()
 
         with make_process_item_mocks(
             uncommitted=True,
             include_config=True, include_session_cleanup=True,
             include_cleanup_worktree=True,
+            include_handoff=True,
             max_copilot_failure_retries=2,
         ) as mocks:
             # First attempt: process crashes
@@ -230,17 +235,22 @@ class TestProcessWorkItem:
             # Should succeed (retry worked)
             assert result.success is True
             assert result.request_count == 2
-            # Gate agent should NOT have been called (process crashed on first attempt)
-            assert mocks['gate'].call_count == 0
+            # Gate agent SHOULD have been called (work agent succeeded, gate must verify)
+            assert mocks['gate'].call_count == 1
 
-    def test_sdk_exception_crash_skips_gate_agent(self) -> None:
-        """Test that gate agent is skipped for SDK exceptions with 'exited unexpectedly' pattern."""
+    def test_sdk_exception_crash_still_runs_gate_agent(self) -> None:
+        """Test that gate agent runs for SDK exceptions with 'exited unexpectedly' pattern.
+
+        Bug fix: Previously, process crash detection would permanently skip gate.
+        Now gate runs if work agent eventually succeeds, regardless of earlier crashes.
+        """
         item = make_work_item()
 
         with make_process_item_mocks(
             uncommitted=True,
             include_config=True, include_session_cleanup=True,
             include_cleanup_worktree=True,
+            include_handoff=True,
             max_copilot_failure_retries=2,
         ) as mocks:
             # First attempt: SDK exception with CLI process crash
@@ -262,8 +272,8 @@ class TestProcessWorkItem:
             # Should succeed (retry worked)
             assert result.success is True
             assert result.request_count == 2
-            # Gate agent should NOT have been called (process crashed on first attempt)
-            assert mocks['gate'].call_count == 0
+            # Gate agent SHOULD have been called (work agent succeeded, gate must verify)
+            assert mocks['gate'].call_count == 1
 
     def test_gate_agent_retry_loop(self) -> None:
         """Test gate agent rejection triggers retry loop."""
