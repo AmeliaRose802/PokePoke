@@ -2,15 +2,7 @@ project_name: ExampleProject
 models:
   default: claude-opus-4.6
   fallback: claude-sonnet-4.5
-  candidate_models:
-    - claude-opus-4.5
-    - gpt-5.2-codex
-    - claude-opus-4.6
-    - gemini-3-pro
-    - gpt-5.1-codex-max
-    - claude-sonnet-4.5
-    - claude-sonnet-4
-    - gpt-5.2
+  candidate_models: []
 ai_backend:
   provider: copilot
   copilot_cli_path: copilot.cmd
@@ -104,10 +96,9 @@ mcp_server:
   enabled: false
   restart_script: null
   name: null
-  # Memory server settings (persistent agent knowledge across sessions)
   memory_enabled: false
-  memory_file_path: null  # Default: {repo_root}/.pokepoke/memory.jsonl
-  confidence_decay_days: 30  # Days before observations are considered stale
+  memory_file_path: null
+  confidence_decay_days: 30
 git:
   default_branch: master
   fallback_branch: master
@@ -145,9 +136,17 @@ max_ping_failures: 3
 circuit_breaker_drain_timeout: 1800
 decomposition_enabled: true
 decomposition_failure_threshold: 3
+needs_human_attention_threshold: 3
 assignment:
   rules: []
   fallback: weighted
+otel:
+  enabled: false
+  service_name: pokepoke
+  exporter: console
+  endpoint: http://localhost:4318
+  log_level: INFO
+  batch_export: true
 economy_mode:
   enabled: false
   simple_model: claude-sonnet-4.5
@@ -161,18 +160,9 @@ performance_thresholds:
   min_memory_mb: 256.0
   min_success_rate: 0.5
 repos: []
-# Startup worktree cleanup configuration
 startup_cleanup_enabled: true
 stale_worktree_commit_threshold: 20
-
-# Label-based prompt template selection
-# Maps work item labels to custom prompt templates
-# When a work item has a label matching a key here, that template is used
-# instead of the default beads-item.md template
 prompt_templates:
-  orchestrator: "orchestrator-work"
-  desktop: "desktop-work"
-  tests: "tests-work"
-  # Add more label -> template mappings as needed
-  # Example: "api": "api-work"
-
+  orchestrator: orchestrator-work
+  desktop: desktop-work
+  tests: tests-work

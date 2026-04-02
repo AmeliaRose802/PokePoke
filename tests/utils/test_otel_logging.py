@@ -449,3 +449,81 @@ class TestConfigureLoggingOtelIntegration:
         finally:
             root.handlers = original_handlers
             pokepoke_logger.handlers = original_pp_handlers
+
+
+# ---------------------------------------------------------------------------
+# Entry-point wiring tests
+# ---------------------------------------------------------------------------
+
+class TestEntryPointOtelWiring:
+    """Verify that entry points pass otel_config to configure_logging."""
+
+    def test_orchestrator_passes_otel_config(self) -> None:
+        """_setup_orchestrator must forward cfg.otel to configure_logging."""
+        from pokepoke.otel_config import OtelConfig
+
+        with patch(
+            "pokepoke.orchestration.orchestrator.configure_logging"
+        ) as mock_cl, patch(
+            "pokepoke.orchestration.orchestrator.load_config"
+        ) as mock_cfg, patch(
+            "pokepoke.orchestration.orchestrator.register_shutdown_handlers"
+        ), patch(
+            "pokepoke.orchestration.orchestrator.terminal_ui"
+        ), patch(
+            "pokepoke.orchestration.orchestrator.set_terminal_banner"
+        ), patch(
+            "pokepoke.orchestration.orchestrator.initialize_agent_name",
+            return_value="test-agent",
+        ), patch(
+            "pokepoke.orchestration.orchestrator.get_beads_stats",
+        ), patch(
+            "pokepoke.orchestration.orchestrator.get_failed_unassign_count",
+            return_value=0,
+        ), patch(
+            "pokepoke.orchestration.orchestrator.backfill_from_beads_db",
+            return_value={"backfilled": 0},
+        ), patch(
+            "pokepoke.orchestration.orchestrator._get_beads_summary",
+            return_value={"total_created": 0, "total_completed": 0},
+        ):
+            otel = OtelConfig(enabled=True, service_name="test-svc")
+            mock_cfg.return_value = MagicMock(
+                max_parallel_agents=1,
+                preflight_health=MagicMock(enabled=False),
+                otel=otel,
+            )
+            from pokepoke.orchestration.orchestrator import _setup_orchestrator
+
+            _setup_orchestrator(
+                interactive=False, continuous=False,
+                run_beta_first=False, agent_name_override=None,
+                max_parallel_agents=1,
+            )
+
+        mock_cl.assert_called_once()
+        _, kwargs = mock_cl.call_args
+        assert kwargs.get("otel_config") is otel
+
+    def test_desktop_api_passes_otel_config(self) -> None:
+        """DesktopAPI.__init__ must forward cfg.otel to configure_logging."""
+        from pokepoke.otel_config import OtelConfig
+
+        otel = OtelConfig(enabled=False)
+        mock_cfg_obj = MagicMock(otel=otel)
+
+        with patch(
+            "pokepoke.desktop.desktop_api.configure_logging"
+        ) as mock_cl, patch(
+            "pokepoke.config.load_config", return_value=mock_cfg_obj,
+        ), patch(
+            "pokepoke.desktop.desktop_api.get_repository_name",
+            return_value="test-repo",
+        ):
+            from pokepoke.desktop.desktop_api import DesktopAPI
+
+            DesktopAPI()
+
+        mock_cl.assert_called_once()
+        _, kwargs = mock_cl.call_args
+        assert kwargs.get("otel_config") is otel

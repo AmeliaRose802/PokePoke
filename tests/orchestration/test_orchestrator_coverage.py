@@ -16,6 +16,7 @@ from pokepoke.orchestration.orchestrator import (
     _setup_orchestrator,
     run_orchestrator,
 )
+from pokepoke.otel_config import OtelConfig
 from pokepoke.types import (
     AgentStats,
     BeadsStats,
@@ -215,7 +216,7 @@ class TestRunOrchestrator:
         mock_banner_fmt, mock_clear_banner, mock_set_banner, mock_ui,
         mock_register, mock_unregister,
     ):
-        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
+        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False), otel=OtelConfig())
         with patch("pokepoke.orchestration.orchestrator.backfill_from_beads_db",
                     return_value={"backfilled": 0}), patch("pokepoke.orchestration.orchestrator._get_beads_summary",
                     return_value={"total_created": 0, "total_completed": 0}):
@@ -244,7 +245,7 @@ class TestRunOrchestrator:
         mock_banner_fmt, mock_clear_banner, mock_set_banner, mock_ui,
         mock_register, mock_unregister,
     ):
-        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
+        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False), otel=OtelConfig())
         with patch("pokepoke.orchestration.orchestrator.backfill_from_beads_db",
                     return_value={"backfilled": 0}), patch("pokepoke.orchestration.orchestrator._get_beads_summary",
                     return_value={"total_created": 0, "total_completed": 0}):
@@ -281,7 +282,7 @@ class TestRunOrchestrator:
         mock_register, mock_unregister,
     ):
         item = _item()
-        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
+        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False), otel=OtelConfig())
         mock_ready.return_value = [item]
         mock_select.return_value = item
         mock_process.return_value = _success_result()
@@ -325,7 +326,7 @@ class TestRunOrchestrator:
         mock_register, mock_unregister,
     ):
         item = _item()
-        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
+        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False), otel=OtelConfig())
         mock_ready.return_value = [item]
         mock_select.return_value = item
         mock_process.return_value = _fail_result()
@@ -364,7 +365,7 @@ class TestRunOrchestrator:
         mock_register, mock_unregister,
     ):
         item = _item()
-        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
+        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False), otel=OtelConfig())
         mock_ready.return_value = [item]
         mock_select.return_value = item
         # request_count=0 means claim failure
@@ -402,7 +403,7 @@ class TestRunOrchestrator:
         mock_banner_fmt, mock_clear_banner, mock_set_banner, mock_ui,
         mock_register, mock_unregister,
     ):
-        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
+        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False), otel=OtelConfig())
         with patch("pokepoke.orchestration.orchestrator.backfill_from_beads_db",
                     return_value={"backfilled": 0}), patch("pokepoke.orchestration.orchestrator._get_beads_summary",
                     return_value={"total_created": 0, "total_completed": 0}):
@@ -426,7 +427,7 @@ class TestSetupOrchestrator:
         self, mock_unassign_count, mock_beads_stats, mock_config,
         mock_init, mock_banner, mock_ui, mock_register,
     ):
-        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
+        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False), otel=OtelConfig())
         with (
             patch("pokepoke.orchestration.orchestrator.backfill_from_beads_db",
                   return_value={"backfilled": 0}),
@@ -458,7 +459,7 @@ class TestSetupOrchestrator:
         self, mock_unassign_count, mock_beads_stats, mock_config,
         mock_init, mock_banner, mock_ui, mock_register,
     ):
-        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
+        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False), otel=OtelConfig())
         with (
             patch("pokepoke.orchestration.orchestrator.backfill_from_beads_db",
                   return_value={"backfilled": 0}),
@@ -484,7 +485,7 @@ class TestSetupOrchestrator:
         self, mock_unassign_count, mock_beads_stats, mock_config,
         mock_init, mock_banner, mock_ui, mock_register,
     ):
-        mock_config.return_value = MagicMock(max_parallel_agents=4, preflight_health=MagicMock(enabled=False))
+        mock_config.return_value = MagicMock(max_parallel_agents=4, preflight_health=MagicMock(enabled=False), otel=OtelConfig())
         with (
             patch("pokepoke.orchestration.orchestrator.backfill_from_beads_db",
                   return_value={"backfilled": 0}),
@@ -511,7 +512,7 @@ class TestSetupOrchestrator:
         mock_init, mock_banner, mock_ui, mock_register,
     ):
         """Test that model sync is called with force=True at startup."""
-        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False))
+        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False), otel=OtelConfig())
         mock_sync.return_value = AgentStats(wall_duration=1.5)
 
         with (

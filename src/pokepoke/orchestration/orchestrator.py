@@ -39,6 +39,7 @@ from pokepoke.stats.session_stats_registry import set_current_session_stats
 from pokepoke.stats.stats import print_stats
 from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats, WorkItemResult
 from pokepoke.utils.logging_utils import RunLogger, configure_logging
+from pokepoke.utils.otel_logging import shutdown_otel_logging
 from pokepoke.utils.preflight_log_utils import handle_preflight_checks
 from pokepoke.utils.shutdown import (
     cancel_stop_after_current,
@@ -160,7 +161,6 @@ def _run_startup_plugins(session_stats: SessionStats, run_logger: RunLogger,
     """Run optional startup tasks: beta tester, model sync, warm session pool."""
     if run_beta_first:
         logger.info("\n🧪 Running Beta Tester at startup...")
-        run_logger.log_orchestrator("Running Beta Tester at startup")
         beta_stats = run_beta_tester(repo_root=main_repo_path)
         if beta_stats:
             session_stats.record_agent_stats(beta_stats)
@@ -177,7 +177,6 @@ def _run_startup_plugins(session_stats: SessionStats, run_logger: RunLogger,
         pool = get_warm_session_pool()
         if pool.enabled:
             logger.info(f"🔥 Warm session pool enabled for labels: {', '.join(pool.configured_labels)}")
-            run_logger.log_orchestrator(f"Warm session pool enabled: {pool.configured_labels}")
     except Exception as e:
         logger.warning(f"⚠️  Warm session pool initialization failed: {e}")
 
@@ -223,9 +222,10 @@ def _setup_orchestrator(interactive: bool, continuous: bool, run_beta_first: boo
     logger.info(f"🎯 PokePoke {mode_name} Mode | 🤖 Agent: {agent_name}\n{'=' * 50}")
     set_terminal_banner(f"PokePoke {mode_name} - {agent_name}")
     terminal_ui.ui.update_header("PokePoke", f"{mode_name} Mode", agent_name)
+    cfg = load_config()
     run_logger = RunLogger()
     run_dir = run_logger.get_run_dir()
-    configure_logging(run_dir / 'debug.log')
+    configure_logging(run_dir / 'debug.log', otel_config=cfg.otel)
     logger.info(f"📝 Run ID: {run_logger.get_run_id()} | 📁 Logs: {run_dir}")
     terminal_ui.ui.set_logs_dir(str(run_dir))
     run_logger.log_orchestrator(f"PokePoke started in {mode_name} mode with agent name: {agent_name}")
@@ -233,17 +233,13 @@ def _setup_orchestrator(interactive: bool, continuous: bool, run_beta_first: boo
     atexit.register(lambda: logger.info(f"📁 Logs saved to: {run_dir}"))
     main_repo_path = Path.cwd()
     logger.info(f"📁 Repository: {main_repo_path}")
-    run_logger.log_orchestrator(f"Repository: {main_repo_path}")
     start_time = time.time()
     session_stats = SessionStats(agent_stats=AgentStats())
     set_current_session_stats(session_stats)
-
     _init_beads_state(session_stats, run_logger)
     terminal_ui.ui.set_session_start_time(start_time)
     terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
     _run_startup_plugins(session_stats, run_logger, main_repo_path, run_beta_first)
-
-    cfg = load_config()
     _run_startup_cleanup(cfg, main_repo_path, run_logger)
     effective_parallel = _resolve_parallelism(max_parallel_agents, cfg, interactive, run_logger)
 
@@ -423,6 +419,8 @@ def run_orchestrator(
         return 1
     finally:
         terminal_ui.ui.stop()
+        with contextlib.suppress(Exception):
+            shutdown_otel_logging()
         with contextlib.suppress(Exception):
             mq = get_merge_queue()
             if mq.is_running:
