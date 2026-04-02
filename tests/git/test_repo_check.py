@@ -456,6 +456,24 @@ class TestTryAutoCommit:
 
             assert result is False
 
+    def test_auto_commit_uses_tracked_only(self):
+        """Auto-commit uses git add -u to avoid staging untracked .pokepoke/ files."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run:
+            mock_run.side_effect = [
+                Mock(returncode=0),  # git add -u
+                Mock(returncode=0, stdout="", stderr=""),  # git commit
+            ]
+
+            _try_auto_commit(repo_path, mock_logger)
+
+            # First call should be git add -u (not --all)
+            add_call = mock_run.call_args_list[0]
+            add_cmd = add_call[0][0]
+            assert add_cmd == ["git", "add", "-u"], f"Expected git add -u, got {add_cmd}"
+
 
 class TestStashUncommittedChanges:
     """Test _stash_uncommitted_changes function."""
@@ -530,6 +548,24 @@ class TestStashUncommittedChanges:
             result = _stash_uncommitted_changes(repo_path, mock_logger)
 
             assert result is False
+
+    def test_stash_uses_tracked_only(self):
+        """Stash uses git add -u to avoid staging untracked .pokepoke/ files."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run:
+            mock_run.side_effect = [
+                Mock(returncode=0),  # git add -u
+                Mock(returncode=0, stdout="", stderr=""),  # git stash push
+            ]
+
+            _stash_uncommitted_changes(repo_path, mock_logger)
+
+            # First call should be git add -u (not --all)
+            add_call = mock_run.call_args_list[0]
+            add_cmd = add_call[0][0]
+            assert add_cmd == ["git", "add", "-u"], f"Expected git add -u, got {add_cmd}"
 
 
 class TestCheckBeadsAvailable:

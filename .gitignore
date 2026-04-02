@@ -8,17 +8,11 @@ coverage/
 .vscode/settings.json
 /worktrees/
 
-# PokePoke runtime state
-.pokepoke/maintenance_state.json
-.pokepoke/model_stats.json
-.pokepoke/model_stats.tmp
-.pokepoke/model_history.jsonl
-.pokepoke/gate_rejection_stats.json
-.pokepoke/uncleaned_worktrees.json
-.pokepoke/beads_item_stats.json
-.pokepoke/beads_item_stats.gw*.json
-.pokepoke/failed_unassigns.json
-.pokepoke/model_registry.json
+# PokePoke runtime state — blanket-ignore all JSON/JSONL/tmp files to prevent
+# operational state from being accidentally committed (config.yaml is YAML, stays tracked)
+.pokepoke/*.json
+.pokepoke/*.jsonl
+.pokepoke/*.tmp
 .maintenance_state.json
 .pokepoke/locks/
 .pokepoke/stats/

@@ -5,11 +5,12 @@ import re
 import subprocess
 from pathlib import Path
 
-from pokepoke.utils.constants import BEADS_DIR, WORKTREE_DIR
+from pokepoke.utils.constants import BEADS_DIR, POKEPOKE_DIR, WORKTREE_DIR
 
 # Pre-built path prefixes for string matching in git status output
 _BEADS_PATH = f"{BEADS_DIR}/"
 _WT_PATH = f"{WORKTREE_DIR}/"
+_POKEPOKE_PATH = str(POKEPOKE_DIR).replace("\\", "/") + "/"
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ from .git_helpers import (
 )
 
 __all__ = [
+    '_auto_resolve_pokepoke_conflicts',
     'build_handoff_context',
     'categorize_git_changes',
     'check_main_repo_ready_for_merge',
@@ -272,6 +274,73 @@ def is_worktree_clean(worktree_path: Path) -> bool:
     except subprocess.CalledProcessError:
         return False
 
+def _auto_resolve_pokepoke_conflicts(
+    unmerged_files: list[str],
+    cwd: str | None = None,
+) -> list[str]:
+    """Auto-resolve merge conflicts on .pokepoke/ runtime state files.
+
+    These files are operational JSON written by the orchestrator and should
+    never block a merge.  We accept the target-branch ("ours") version
+    because the orchestrator will regenerate the content.
+
+    Returns the list of files that still have unresolved conflicts.
+    """
+    remaining: list[str] = []
+    for filepath in unmerged_files:
+        if filepath.startswith(_POKEPOKE_PATH):
+            try:
+                run_git(["git", "checkout", "--ours", "--", filepath], timeout=10, cwd=cwd)
+                run_git(["git", "add", "--", filepath], timeout=10, cwd=cwd)
+                logger.info("Auto-resolved .pokepoke/ conflict: %s (accepted ours)", filepath)
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+                logger.warning("Failed to auto-resolve %s: %s", filepath, exc)
+                remaining.append(filepath)
+        else:
+            remaining.append(filepath)
+    return remaining
+
+
+def _handle_merge_failure(
+    exc: subprocess.CalledProcessError | subprocess.TimeoutExpired,
+    cwd: str | None,
+) -> tuple[bool, str, list[str]]:
+    """Handle a failed git merge, auto-resolving .pokepoke/ conflicts if possible."""
+    from .merge_conflict import abort_merge, get_unmerged_files, is_merge_in_progress
+
+    repo_path_obj = Path(cwd) if cwd else None
+    unmerged = get_unmerged_files(repo_path=repo_path_obj)
+    is_merging = is_merge_in_progress(repo_path=repo_path_obj)
+
+    # Auto-resolve .pokepoke/ runtime state conflicts before aborting
+    if is_merging and unmerged:
+        remaining = _auto_resolve_pokepoke_conflicts(unmerged, cwd=cwd)
+        if not remaining:
+            # All conflicts were .pokepoke/ files — complete the merge
+            try:
+                run_git(["git", "commit", "--no-edit"], timeout=60, cwd=cwd)
+                logger.info("Auto-resolved all .pokepoke/ conflicts and completed merge")
+                return True, "", []
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as commit_err:
+                logger.warning("Failed to commit after auto-resolving .pokepoke/ conflicts: %s", commit_err)
+        else:
+            unmerged = remaining
+
+    # Rollback: abort the failed merge to leave repo in a clean state
+    if is_merging:
+        success, abort_msg = abort_merge(repo_path=repo_path_obj)
+        if success:
+            logger.info("Rolled back failed merge with git merge --abort")
+        else:
+            logger.error("Failed to abort merge during rollback: %s", abort_msg)
+
+    if isinstance(exc, subprocess.TimeoutExpired):
+        return False, "Merge timed out after 60s", unmerged
+    if unmerged:
+        return False, f"Merge conflicts detected in {len(unmerged)} file(s)", unmerged
+    return False, f"Merge failed: {exc.stderr or str(exc)}", unmerged
+
+
 def execute_merge_sequence(
     branch_name: str,
     target_branch: str,
@@ -342,25 +411,7 @@ def execute_merge_sequence(
                      timeout=60, cwd=cwd)
         return True, "", []
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-        from .merge_conflict import abort_merge, get_unmerged_files, is_merge_in_progress
-        repo_path_obj = Path(cwd) if cwd else None
-        unmerged = get_unmerged_files(repo_path=repo_path_obj)
-        is_merging = is_merge_in_progress(repo_path=repo_path_obj)
-
-        # Rollback: abort the failed merge to leave repo in a clean state
-        if is_merging:
-            success, abort_msg = abort_merge(repo_path=repo_path_obj)
-            if success:
-                logger.info("Rolled back failed merge with git merge --abort")
-            else:
-                logger.error("Failed to abort merge during rollback: %s", abort_msg)
-
-        if isinstance(e, subprocess.TimeoutExpired):
-            return False, "Merge timed out after 60s", unmerged
-        if unmerged:
-            return False, f"Merge conflicts detected in {len(unmerged)} file(s)", unmerged
-        else:
-            return False, f"Merge failed: {e.stderr or str(e)}", unmerged
+        return _handle_merge_failure(e, cwd)
 
 def has_commits_ahead(target_branch: str | None = None, cwd: str | None = None) -> int:
     """Count commits in current branch ahead of the target branch."""

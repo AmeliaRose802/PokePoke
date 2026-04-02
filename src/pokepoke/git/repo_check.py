@@ -140,8 +140,10 @@ def _try_auto_commit(repo_path: Path, run_logger: 'RunLogger') -> bool:
     """
     with main_repo_git_lock():
         try:
+            # Use -u (tracked only) to avoid staging untracked files like
+            # .pokepoke/ runtime state which could cause merge conflicts
             subprocess.run(
-                ["git", "add", "--all"],
+                ["git", "add", "-u"],
                 check=True,
                 capture_output=True,
                 encoding='utf-8',
@@ -190,8 +192,10 @@ def _stash_uncommitted_changes(repo_path: Path, run_logger: 'RunLogger') -> bool
     """Attempt to stash uncommitted changes as a fallback."""
     with main_repo_git_lock():
         try:
+            # Use -u (tracked only) to avoid staging untracked files like
+            # .pokepoke/ runtime state which could cause merge conflicts
             subprocess.run(
-                ["git", "add", "--all"], check=True, capture_output=True,
+                ["git", "add", "-u"], check=True, capture_output=True,
                 encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=30
             )
             import datetime
