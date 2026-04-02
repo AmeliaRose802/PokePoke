@@ -77,6 +77,8 @@ class BeadsClient(Protocol):
 
     def add_comment(self, item_id: str, message: str) -> bool: ...
 
+    def block_item(self, item_id: str, reason: str) -> bool: ...
+
     def unassign_item(self, item_id: str) -> bool: ...
 
     def unassign_with_retry(self, item_id: str) -> bool: ...
@@ -135,6 +137,11 @@ class DefaultBeadsClient:
         from pokepoke.beads.beads_management import add_comment
 
         return add_comment(item_id, comment=message)
+
+    def block_item(self, item_id: str, reason: str) -> bool:
+        from pokepoke.beads.beads_management import block_item
+
+        return block_item(item_id, reason=reason)
 
     def unassign_item(self, item_id: str) -> bool:
         from pokepoke.beads.beads_management import unassign_item

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from pokepoke.agents.agent_context import get_agent_name
 from pokepoke.agents.agent_runner import run_gate_agent  # re-exported via workflow_helpers
-from pokepoke.beads.beads import add_comment, assign_and_sync_item
+from pokepoke.beads.beads import add_comment, assign_and_sync_item, block_item
 from pokepoke.config import get_config
 from pokepoke.desktop import terminal_ui
 from pokepoke.git.git_helpers import verify_worktree_branch
@@ -58,6 +58,7 @@ def process_work_item(  # noqa: C901
     register_agent()
     _assign = beads_client.assign_and_sync_item if beads_client else assign_and_sync_item
     _comment = beads_client.add_comment if beads_client else add_comment
+    _block = beads_client.block_item if beads_client else block_item
     _session: WorkItemSession | None = None
     try:
         start_time = time.time()
@@ -89,7 +90,7 @@ def process_work_item(  # noqa: C901
         if existing_rejection_count >= max_gate_rejections:
             reason = f"Exceeded gate rejection cap ({existing_rejection_count}/{max_gate_rejections})"
             logger.error(f"\n\u274c Item {item.id} has {existing_rejection_count} gate rejections (cap: {max_gate_rejections}). Refusing to process.")
-            _comment(item.id, f"\u26d4 Refusing to process: {reason}. Requires manual review.")
+            _block(item.id, f"{reason}. Requires manual review.")
             _log_failure(run_logger, item_logger)
             return _fail_result(failure_reason=reason)
 

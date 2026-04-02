@@ -31,6 +31,7 @@ from .sync_strategy import (
 )
 
 __all__ = [
+    'block_item',
     'fail_task',
     'get_gate_rejection_count',
     'get_total_attempts',
@@ -261,6 +262,27 @@ def fail_task(item_id: str, reason: str, agent_type: str = "work") -> bool:
 
     logger.info("📝 Recorded failure for %s: %s", item_id, truncated[:80])
     return comment_ok
+
+
+def block_item(item_id: str, reason: str) -> bool:
+    """Move a beads item to 'blocked' status with a comment explaining why.
+
+    Args:
+        item_id: The item ID to block.
+        reason: Human-readable explanation of why the item is blocked.
+
+    Returns:
+        True if the status was updated successfully, False otherwise.
+    """
+    try:
+        _run_bd_with_retry(['update', item_id, '--status', 'blocked'])
+        logger.info("🚫 Marked %s as blocked", item_id)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+        logger.error("⚠️  Failed to block %s after retries: %s", item_id, e)
+        return False
+    truncated = reason[:500] if reason else "Blocked by orchestrator"
+    add_comment(item_id, f"🚫 Blocked: {truncated}")
+    return True
 
 
 def add_comment(item_id: str, comment: str) -> bool:

@@ -29,6 +29,7 @@ from .beads_hierarchy import (
 from .beads_management import (
     add_comment,
     assign_and_sync_item,
+    block_item,
     close_item,
     fail_task,
     get_total_attempts,
@@ -77,6 +78,7 @@ __all__ = [
     'HIGH_CONFLICT_LABELS',
 
     # Management operations
+    'block_item',
     'close_item',
     'fail_task',
     'select_next_hierarchical_item',
