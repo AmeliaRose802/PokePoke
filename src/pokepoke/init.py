@@ -88,13 +88,6 @@ maintenance:
       needs_worktree: false
       enabled: true
 
-    - name: Model Sync
-      prompt_file: ""
-      frequency: 1
-      needs_worktree: false
-      merge_changes: false
-      enabled: true
-
 # Project-specific test data for prompt templates (optional)
 # test_data:
 #   a test url: "https://example.com/test"

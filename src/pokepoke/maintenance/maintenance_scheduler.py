@@ -39,7 +39,6 @@ _SINGLETON_AGENTS: set[str] = {
     "Janitor",
     "Backlog Cleanup",
     "Worktree Cleanup",
-    "Model Sync",
 }
 
 # Agents that can safely run in parallel (beads-only, no conflicts)
@@ -49,7 +48,7 @@ _PARALLEL_SAFE_AGENTS: set[str] = {
 }
 
 # Agents that have special runner functions instead of the generic one
-_SPECIAL_AGENTS = {"Beta Tester", "Worktree Cleanup", "Model Sync"}
+_SPECIAL_AGENTS = {"Beta Tester", "Worktree Cleanup"}
 
 
 class MaintenanceScheduler:

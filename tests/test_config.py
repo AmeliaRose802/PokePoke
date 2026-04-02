@@ -126,7 +126,7 @@ class TestMaintenanceConfig:
 
     def test_defaults_factory(self):
         config = MaintenanceConfig.defaults()
-        assert len(config.agents) == 7
+        assert len(config.agents) == 6
         names = [a.name for a in config.agents]
         assert "Tech Debt" in names
         assert "Janitor" in names
@@ -134,7 +134,6 @@ class TestMaintenanceConfig:
         assert "Code Review" in names
         assert "Worktree Cleanup" in names
         assert "Backlog Cleanup" in names
-        assert "Model Sync" in names
 
     def test_default_frequencies(self):
         config = MaintenanceConfig.defaults()
@@ -145,7 +144,6 @@ class TestMaintenanceConfig:
         assert by_name["Beta Tester"].frequency == 3
         assert by_name["Code Review"].frequency == 5
         assert by_name["Worktree Cleanup"].frequency == 4
-        assert by_name["Model Sync"].frequency == 1
 
     def test_code_review_has_model(self):
         config = MaintenanceConfig.defaults()
@@ -348,7 +346,7 @@ class TestProjectConfig:
     def test_from_dict_no_maintenance_keeps_defaults(self):
         """When maintenance section is absent, defaults are used."""
         config = ProjectConfig.from_dict({"project_name": "test"})
-        assert len(config.maintenance.agents) == 7
+        assert len(config.maintenance.agents) == 6
 
 
 
@@ -435,7 +433,7 @@ class TestLoadConfig:
         config = load_config()
         assert config.project_name == ""
         assert config.models.default == "claude-opus-4.6"
-        assert len(config.maintenance.agents) == 7
+        assert len(config.maintenance.agents) == 6
 
     @patch("pokepoke.config._find_repo_root")
     def test_pokepoke_yaml_takes_priority(self, mock_root, tmp_path):

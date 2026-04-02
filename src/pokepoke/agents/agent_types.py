@@ -72,11 +72,6 @@ AGENT_TYPES: dict[str, AgentTypeDefinition] = {
         display_name="Worktree Cleanup",
         emoji="🌲",
     ),
-    "model_sync": AgentTypeDefinition(
-        key="model_sync",
-        display_name="Model Sync",
-        emoji="🔄",
-    ),
     "decomposition": AgentTypeDefinition(
         key="decomposition",
         display_name="Decomposition",

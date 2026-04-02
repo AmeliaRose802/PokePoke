@@ -576,16 +576,14 @@ class TestRunSpecialAgent:
             mock_wc.assert_called_once_with(repo_root=Path("/repo"), item_logger=None, parent_agent_id=None)
             assert isinstance(result, AgentStats)
 
-    def test_model_sync(self) -> None:
-        """Test that Model Sync delegates to sync_copilot_models."""
-        from pathlib import Path
-        with patch('pokepoke.models.model_sync.sync_copilot_models', return_value=AgentStats()) as mock_sync:
-            result = _run_special_agent("Model Sync", Path("/repo"))
-            mock_sync.assert_called_once_with(item_logger=None)
-            assert isinstance(result, AgentStats)
-
     def test_unknown_agent_returns_none(self) -> None:
         """Test that unknown agent name returns None."""
         from pathlib import Path
         result = _run_special_agent("Unknown Agent", Path("/repo"))
+        assert result is None
+
+    def test_model_sync_is_unknown(self) -> None:
+        """Model Sync is no longer a special agent (runs at boot only)."""
+        from pathlib import Path
+        result = _run_special_agent("Model Sync", Path("/repo"))
         assert result is None
