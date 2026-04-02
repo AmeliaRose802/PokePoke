@@ -8,6 +8,7 @@ import pytest
 
 from pokepoke.types import BeadsWorkItem
 from pokepoke.worktrees.worktree_merge_handler import handle_worktree_merge, perform_worktree_merge
+from pokepoke.worktrees.worktrees import MergeResult
 
 
 def _make_agent_item(item_id: str = "maintenance-test") -> BeadsWorkItem:
@@ -40,7 +41,7 @@ def test_handle_worktree_merge_retries_after_successful_cleanup(
     """Cleanup success should allow merge to proceed."""
     mock_check_ready.side_effect = [(False, "dirty state"), (True, "")]
     mock_invoke_cleanup.return_value = (True, None)
-    mock_merge_worktree.return_value = (True, [])
+    mock_merge_worktree.return_value = MergeResult(success=True)
 
     agent_item = _make_agent_item()
     success, cleaned = handle_worktree_merge(
@@ -112,7 +113,7 @@ def test_handle_worktree_merge_conflict_cleanup_retry_succeeds(
 ) -> None:
     """Ensure merge-conflict path retries and cleans manifest on success."""
     mock_check_ready.return_value = (True, "")
-    mock_merge_worktree.side_effect = [(False, []), (True, [])]
+    mock_merge_worktree.side_effect = [MergeResult(success=False), MergeResult(success=True)]
     mock_invoke_conflict_cleanup.return_value = (True, None)
     mock_get_unmerged_files.return_value = ["conflict.txt"]
     mock_is_merge_in_progress.side_effect = [True, True]
@@ -155,7 +156,7 @@ def test_handle_worktree_merge_conflict_cleanup_failure(
 ) -> None:
     """If conflict cleanup fails we should abort and report failure."""
     mock_check_ready.return_value = (True, "")
-    mock_merge_worktree.return_value = (False, ["conflict.txt"])
+    mock_merge_worktree.return_value = MergeResult(success=False, unmerged_files=["conflict.txt"])
     mock_invoke_conflict_cleanup.return_value = (False, None)
     mock_is_merge_in_progress.return_value = True
 
@@ -192,7 +193,7 @@ def test_perform_first_merge_succeeds(
 ) -> None:
     """Direct success on first merge attempt."""
     mock_check.return_value = (True, "")
-    mock_merge.return_value = (True, [])
+    mock_merge.return_value = MergeResult(success=True)
 
     success, cleaned = perform_worktree_merge(
         "item-1", _make_agent_item("item-1"),
@@ -236,7 +237,7 @@ def test_perform_abort_merge_failure_returns_false(
 ) -> None:
     """When abort_merge fails after cleanup, return (False, False)."""
     mock_check.return_value = (True, "")
-    mock_merge.return_value = (False, ["file.py"])
+    mock_merge.return_value = MergeResult(success=False, unmerged_files=["file.py"])
     mock_is_merging.return_value = True
     mock_get_unmerged.return_value = ["file.py"]
     mock_conflict_cleanup.return_value = (True, None)
@@ -266,7 +267,7 @@ def test_perform_retry_merge_succeeds_after_cleanup(
 ) -> None:
     """Retry merge succeeds when cleanup resolves merge state."""
     mock_check.return_value = (True, "")
-    mock_merge.side_effect = [(False, ["file.py"]), (True, [])]
+    mock_merge.side_effect = [MergeResult(success=False, unmerged_files=["file.py"]), MergeResult(success=True)]
     mock_is_merging.side_effect = [True, False]
     mock_get_unmerged.return_value = ["file.py"]
     mock_conflict_cleanup.return_value = (True, None)
@@ -295,7 +296,7 @@ def test_perform_retry_merge_fails_aborts(
 ) -> None:
     """Retry merge failure triggers abort when merge still in progress."""
     mock_check.return_value = (True, "")
-    mock_merge.side_effect = [(False, ["f.py"]), (False, ["f.py"])]
+    mock_merge.side_effect = [MergeResult(success=False, unmerged_files=["f.py"]), MergeResult(success=False, unmerged_files=["f.py"])]
     mock_is_merging.side_effect = [True, False, True]
     mock_get_unmerged.return_value = ["f.py"]
     mock_conflict_cleanup.return_value = (True, None)
@@ -322,7 +323,7 @@ def test_perform_cleanup_failure_no_abort_when_not_merging(
 ) -> None:
     """No abort when cleanup fails and not in merge state."""
     mock_check.return_value = (True, "")
-    mock_merge.return_value = (False, ["file.py"])
+    mock_merge.return_value = MergeResult(success=False, unmerged_files=["file.py"])
     mock_is_merging.side_effect = [True, False]
     mock_conflict_cleanup.return_value = (False, None)
 
@@ -348,7 +349,7 @@ def test_perform_conflict_details_in_cleanup_prompt(
     """Verify conflict_details with file list is passed to cleanup agent."""
     mock_check.return_value = (True, "")
     files = ["src/a.py", "src/b.py", "tests/c.py"]
-    mock_merge.side_effect = [(False, files), (True, [])]
+    mock_merge.side_effect = [MergeResult(success=False, unmerged_files=files), MergeResult(success=True)]
     mock_is_merging.side_effect = [True, False]
     mock_get_unmerged.return_value = files
     mock_conflict_cleanup.return_value = (True, None)
@@ -379,7 +380,7 @@ def test_perform_handles_many_conflict_files(
     """15+ files should all be included in the cleanup prompt."""
     mock_check.return_value = (True, "")
     many_files = [f"src/module{i}.py" for i in range(15)]
-    mock_merge.side_effect = [(False, many_files), (True, [])]
+    mock_merge.side_effect = [MergeResult(success=False, unmerged_files=many_files), MergeResult(success=True)]
     mock_is_merging.side_effect = [True, False]
     mock_get_unmerged.return_value = many_files
     mock_conflict_cleanup.return_value = (True, None)
@@ -405,7 +406,7 @@ def test_perform_fetches_fresh_unmerged_when_not_merging(
 ) -> None:
     """get_unmerged_files called when merge fails without merge-in-progress."""
     mock_check.return_value = (True, "")
-    mock_merge.side_effect = [(False, []), (True, [])]
+    mock_merge.side_effect = [MergeResult(success=False), MergeResult(success=True)]
     mock_is_merging.return_value = False
     mock_get_unmerged.return_value = ["stale.py"]
     mock_conflict_cleanup.return_value = (True, None)
@@ -429,7 +430,7 @@ def test_perform_first_merge_worktree_persists(
 ) -> None:
     """Worktree directory persisting after merge reports cleaned=False."""
     mock_check.return_value = (True, "")
-    mock_merge.return_value = (True, [])
+    mock_merge.return_value = MergeResult(success=True)
 
     # Create a real directory that simulates a worktree not cleaned up
     worktree_dir = tmp_path / "task-item-1"
@@ -459,7 +460,7 @@ def test_perform_retry_abort_failure_logs_error(
 ) -> None:
     """When abort_merge fails after retry merge failure, return (False, False) with error logged."""
     mock_check.return_value = (True, "")
-    mock_merge.side_effect = [(False, ["f.py"]), (False, ["f.py"])]
+    mock_merge.side_effect = [MergeResult(success=False, unmerged_files=["f.py"]), MergeResult(success=False, unmerged_files=["f.py"])]
     mock_is_merging.side_effect = [True, False, True]
     mock_get_unmerged.return_value = ["f.py"]
     mock_conflict_cleanup.return_value = (True, None)
@@ -486,7 +487,7 @@ def test_perform_cleanup_failure_abort_failure_logged(
 ) -> None:
     """When abort_merge fails after cleanup failure, error is logged but function returns."""
     mock_check.return_value = (True, "")
-    mock_merge.return_value = (False, ["file.py"])
+    mock_merge.return_value = MergeResult(success=False, unmerged_files=["file.py"])
     mock_is_merging.side_effect = [True, True]
     mock_conflict_cleanup.return_value = (False, None)
     mock_abort.return_value = (False, "Cannot abort")
@@ -514,7 +515,7 @@ def test_perform_retry_merge_worktree_persists(
 ) -> None:
     """Retry merge succeeds but worktree directory persists — cleaned=False."""
     mock_check.return_value = (True, "")
-    mock_merge.side_effect = [(False, ["file.py"]), (True, [])]
+    mock_merge.side_effect = [MergeResult(success=False, unmerged_files=["file.py"]), MergeResult(success=True)]
     mock_is_merging.side_effect = [True, False]
     mock_get_unmerged.return_value = ["file.py"]
     mock_conflict_cleanup.return_value = (True, None)

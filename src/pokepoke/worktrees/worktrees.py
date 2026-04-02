@@ -19,6 +19,7 @@ from pokepoke.git.git_operations import (
 from pokepoke.stats.perf_timing import timed_block
 from pokepoke.utils.constants import BRANCH_PREFIX, WORKTREE_DIR, WORKTREE_TASK_PREFIX
 from pokepoke.worktrees.coordination import with_worktree_lock
+from pokepoke.worktrees.merge_result import MergeResult as MergeResult  # re-export
 from pokepoke.worktrees.worktree_cleanup import (
     cleanup_after_merge,
     cleanup_worktree_and_branch,
@@ -311,7 +312,7 @@ def _rollback_merge_commit(reason: str, cwd: str | None = None) -> bool:
         return False
 
 
-def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool = True, repo_path: str | None = None) -> tuple[bool, list[str]]:
+def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool = True, repo_path: str | None = None) -> MergeResult:
     """Merge a worktree's branch into the target branch and optionally clean up.
 
     Args:
@@ -320,7 +321,9 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
         cleanup: Whether to clean up worktree after merge.
         repo_path: Target repo root for git operations. Defaults to CWD.
 
-    Returns (success, unmerged_files). On success: (True, []). On failure: (False, conflicted_files).
+    Returns:
+        MergeResult with success, unmerged_files, and rollback_failed.
+        Supports 2-tuple unpacking: ``success, files = merge_worktree(...)``.
     """
     sanitized_id = sanitize_branch_name(item_id)
     branch_name = f"{BRANCH_PREFIX}{sanitized_id}"
@@ -334,12 +337,12 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
     # PRE-MERGE VALIDATION: Verify worktree is clean
     if not is_worktree_clean(worktree_path):
         logger.error("❌ Pre-merge validation failed: Worktree has uncommitted changes")
-        return False, []
+        return MergeResult(success=False)
 
     logger.info("✅ Pre-merge validation passed: Worktree is clean")
 
     if not _sync_and_ensure_clean_main_repo(branch_name, cwd=repo_cwd):
-        return False, []
+        return MergeResult(success=False)
 
     # Execute merge sequence with proper error handling
     merge_success, merge_error, unmerged_files = execute_merge_sequence(branch_name, target_branch, cwd=repo_cwd)
@@ -353,19 +356,29 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
                 logger.info(f"   ... and {len(unmerged_files) - 10} more")
         else:
             logger.error(f"❌ Merge failed: {merge_error}")
-        return False, unmerged_files
+        return MergeResult(success=False, unmerged_files=unmerged_files)
 
     logger.info(f"✅ Merged {branch_name} into {target_branch}")
 
     try:
         if not validate_post_merge(target_branch, cwd=repo_cwd):
             logger.warning("Post-merge validation failed, rolling back merge commit")
-            _rollback_merge_commit("post-merge validation failure", cwd=repo_cwd)
-            return False, []
+            rolled_back = _rollback_merge_commit("post-merge validation failure", cwd=repo_cwd)
+            if not rolled_back:
+                logger.critical(
+                    "ROLLBACK FAILED after post-merge validation failure — "
+                    "repo has an unpushed merge commit. Manual intervention required."
+                )
+            return MergeResult(success=False, rollback_failed=not rolled_back)
     except Exception as e:
         logger.error("Post-merge validation raised exception: %s", e)
-        _rollback_merge_commit("post-merge validation exception", cwd=repo_cwd)
-        return False, []
+        rolled_back = _rollback_merge_commit("post-merge validation exception", cwd=repo_cwd)
+        if not rolled_back:
+            logger.critical(
+                "ROLLBACK FAILED after post-merge validation exception — "
+                "repo has an unpushed merge commit. Manual intervention required."
+            )
+        return MergeResult(success=False, rollback_failed=not rolled_back)
 
     logger.info(f"✅ Post-merge validation passed: {target_branch} is clean")
 
@@ -382,8 +395,13 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
         else:
             err_detail = str(e)
         logger.error(f"❌ Push failed after retries: {err_detail}")
-        _rollback_merge_commit("push failure", cwd=repo_cwd)
-        return False, []
+        rolled_back = _rollback_merge_commit("push failure", cwd=repo_cwd)
+        if not rolled_back:
+            logger.critical(
+                "ROLLBACK FAILED after push failure — "
+                "repo has an unpushed merge commit. Manual intervention required."
+            )
+        return MergeResult(success=False, rollback_failed=not rolled_back)
 
     # Verify branch is actually merged (warnings only - push already succeeded)
     if not is_worktree_merged(item_id, target_branch, repo_path=repo_cwd):
@@ -395,7 +413,7 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
     if cleanup:
         cleanup_after_merge(worktree_path, branch_name, cwd=repo_cwd)
 
-    return True, []  # Merge completed
+    return MergeResult(success=True)
 
 
 def cleanup_worktree(item_id: str, force: bool = False, repo_path: str | None = None) -> bool:

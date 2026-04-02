@@ -15,7 +15,7 @@ from pokepoke.types import AgentStats, BeadsWorkItem
 from pokepoke.utils.constants import WORKTREE_DIR, WORKTREE_TASK_PREFIX
 from pokepoke.worktrees.coordination import merge_lock
 from pokepoke.worktrees.worktree_cleanup import add_uncleaned_worktree
-from pokepoke.worktrees.worktrees import merge_worktree
+from pokepoke.worktrees.worktrees import MergeResult, merge_worktree
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +153,17 @@ def perform_worktree_merge(  # noqa: C901
 
     # --- attempt merge ---
     logger.info(f"\n🔀 Merging worktree for {item_id}...")
-    merge_success, unmerged_files = merge_worktree(item_id, cleanup=True, repo_path=repo_cwd)
+    merge_result = merge_worktree(item_id, cleanup=True, repo_path=repo_cwd)
+    merge_success = merge_result.success
+    unmerged_files = merge_result.unmerged_files
+
+    if merge_result.rollback_failed:
+        logger.critical(
+            "🚨 REPO CORRUPTION: Rollback failed for %s — "
+            "local repo has an unpushed merge commit that could not be undone. "
+            "Manual intervention required (git reset --hard HEAD~1).",
+            item_id,
+        )
 
     if not merge_success:
         repo_root_path = Path(repo_cwd) if repo_cwd else None
@@ -207,7 +217,14 @@ def perform_worktree_merge(  # noqa: C901
                     return False, False
                 logger.info("   ✅ Merge aborted, will retry")
 
-            merge_success, _ = merge_worktree(item_id, cleanup=True, repo_path=repo_cwd)
+            retry_result = merge_worktree(item_id, cleanup=True, repo_path=repo_cwd)
+            merge_success = retry_result.success
+            if retry_result.rollback_failed:
+                logger.critical(
+                    "🚨 REPO CORRUPTION: Rollback failed during retry merge for %s — "
+                    "local repo has an unpushed merge commit. Manual intervention required.",
+                    item_id,
+                )
             if merge_success:
                 remove_from_manifest(item_id)
                 worktree_cleaned = not worktree_path.exists()
