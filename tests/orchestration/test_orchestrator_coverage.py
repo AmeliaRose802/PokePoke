@@ -4,6 +4,7 @@ Exercises real code paths in orchestrator.py, mocking only external I/O
 (beads CLI, process_work_item, terminal_ui, filesystem, git operations).
 """
 
+import threading
 import time
 from unittest.mock import MagicMock, patch
 
@@ -541,7 +542,7 @@ class TestRunPreflight:
             agent_name="test", mode_name="Autonomous",
             run_logger=MagicMock(), main_repo_path=MagicMock(),
             start_time=time.time(), session_stats=SessionStats(agent_stats=AgentStats()),
-            failed_claim_ids=set(),
+            failed_claim_ids=set(), failed_claim_ids_lock=threading.Lock(),
             cfg=MagicMock(preflight_health=MagicMock(enabled=False)),
             effective_parallel=1, interactive=False, continuous=False,
         )
@@ -576,7 +577,7 @@ class TestRunMainLoop:
             agent_name="test", mode_name="Autonomous",
             run_logger=MagicMock(), main_repo_path=MagicMock(),
             start_time=time.time(), session_stats=SessionStats(agent_stats=AgentStats()),
-            failed_claim_ids=set(),
+            failed_claim_ids=set(), failed_claim_ids_lock=threading.Lock(),
             cfg=MagicMock(preflight_health=MagicMock(enabled=False)),
             effective_parallel=1, interactive=False, continuous=False,
         )

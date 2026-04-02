@@ -18,12 +18,12 @@ from pokepoke.utils.constants import BRANCH_PREFIX, WORKTREE_DIR, WORKTREE_TASK_
 from pokepoke.utils.retry_utils import sleep_with_backoff
 
 # Re-export removal utilities so existing imports keep working
-from pokepoke.worktrees.worktree_removal import (  # noqa: F401
-    PathBoundaryError,
-    SymlinkFoundError,
+from pokepoke.worktrees.worktree_removal import (
     _CLEANUP_MAX_DELAY_SECONDS,
     _CLEANUP_MAX_RETRIES,
     _CLEANUP_RETRY_DELAY_SECONDS,
+    PathBoundaryError,
+    SymlinkFoundError,
     _is_junction,
     _is_windows_lock_error,
     _release_known_lock_files,
@@ -348,7 +348,7 @@ def cleanup_after_merge(worktree_path: Path, branch_name: str, cwd: str | None =
 _NUCLEAR_FAILURE_THRESHOLD = 3  # Re-exported from cleanup_escalation
 
 # Re-export escalation functions for backward compatibility
-from pokepoke.worktrees.cleanup_escalation import (  # noqa: E402
+from pokepoke.worktrees.cleanup_escalation import (
     _get_quarantine_dir,
     _nuclear_remove,
     _quarantine_directory,

@@ -3,6 +3,7 @@ import atexit
 import contextlib
 import logging
 import os
+import threading
 import time
 import traceback
 from dataclasses import dataclass
@@ -123,6 +124,7 @@ class _OrchestratorContext:
     start_time: float
     session_stats: SessionStats
     failed_claim_ids: set[str]
+    failed_claim_ids_lock: threading.Lock
     cfg: Any
     effective_parallel: int
     interactive: bool
@@ -250,8 +252,8 @@ def _setup_orchestrator(interactive: bool, continuous: bool, run_beta_first: boo
     return _OrchestratorContext(
         agent_name=agent_name, mode_name=mode_name, run_logger=run_logger,
         main_repo_path=main_repo_path, start_time=start_time, session_stats=session_stats,
-        failed_claim_ids=set(), cfg=cfg, effective_parallel=effective_parallel,
-        interactive=interactive, continuous=continuous)
+        failed_claim_ids=set(), failed_claim_ids_lock=threading.Lock(), cfg=cfg,
+        effective_parallel=effective_parallel, interactive=interactive, continuous=continuous)
 
 
 def _run_preflight(ctx: _OrchestratorContext) -> int | None:
@@ -282,7 +284,7 @@ def _fetch_work_items(ctx: _OrchestratorContext) -> tuple[int | None, list[Beads
     return None, ready_items
 
 
-def _run_main_loop(ctx: _OrchestratorContext) -> int:
+def _run_main_loop(ctx: _OrchestratorContext) -> int:  # noqa: C901
     """Sequential work-selection and dispatch loop. Returns process exit code."""
     while not is_shutting_down():
         iter_start = time.monotonic()
@@ -294,7 +296,10 @@ def _run_main_loop(ctx: _OrchestratorContext) -> int:
             return exit_code
         if ctx.interactive:
             terminal_ui.ui.stop()
-        selected_item = select_work_item(ready_items, ctx.interactive, skip_ids=ctx.failed_claim_ids)
+        # Snapshot failed_claim_ids under lock for work item selection
+        with ctx.failed_claim_ids_lock:
+            skip_ids = set(ctx.failed_claim_ids)
+        selected_item = select_work_item(ready_items, ctx.interactive, skip_ids=skip_ids)
         if ctx.interactive:
             terminal_ui.ui.start()
         if selected_item is None:
@@ -323,11 +328,17 @@ def _run_main_loop(ctx: _OrchestratorContext) -> int:
                 agent_id, display_name, iteration=1,
                 status="success" if success else "failed",
                 work_item_id=selected_item.id, work_item_title=selected_item.title, agent_type="work")
+        # Update failed_claim_ids under lock to prevent race conditions with parallel workers
+        with ctx.failed_claim_ids_lock:
+            if not wi_result.success and wi_result.request_count == 0:
+                ctx.failed_claim_ids.add(selected_item.id)
+                failed_count = len(ctx.failed_claim_ids)
         if not wi_result.success and wi_result.request_count == 0:
-            ctx.failed_claim_ids.add(selected_item.id)
-            ctx.run_logger.log_orchestrator(f"Item {selected_item.id} failed to claim, added to skip list ({len(ctx.failed_claim_ids)} skipped)")
+            ctx.run_logger.log_orchestrator(f"Item {selected_item.id} failed to claim, added to skip list ({failed_count} skipped)")
         elif wi_result.success:
-            ctx.failed_claim_ids.clear()
+            # Use discard() instead of clear() to avoid wiping parallel worker state
+            with ctx.failed_claim_ids_lock:
+                ctx.failed_claim_ids.discard(selected_item.id)
         ctx.total_requests += wi_result.request_count
         _record_item_result(selected_item, wi_result, ctx.session_stats, ctx.run_logger)
         ctx.items_completed = ctx.session_stats.items_completed
@@ -395,6 +406,7 @@ def run_orchestrator(
                 record_fn=_record_item_result,
                 finalize_fn=_finalize_session,
                 cli_override=(max_parallel_agents > 1),
+                external_lock=ctx.failed_claim_ids_lock,
             )
             ctx.items_completed = ctx.session_stats.items_completed
             terminal_ui.ui.stop_and_capture()

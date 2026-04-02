@@ -309,13 +309,14 @@ def _safe_cleanup(
     run_logger: RunLogger,
     record_fn: Any,
     finalize_fn: Any,
+    active_lock: threading.Lock | None,
 ) -> None:
     """Run cleanup operations with individual exception protection."""
     timeout_occurred = False
     try:
         state.total_requests, timeout_occurred = _finalize_workers(
             pool.futures, session_stats, start_time, state.total_requests,
-            run_logger, record_fn, pool.lock,
+            run_logger, record_fn, active_lock,
         )
     except Exception as e:
         logger.error(f"Failed to finalize workers: {e}", exc_info=True)
@@ -350,14 +351,26 @@ def run_parallel_loop(
     record_fn: Any,
     finalize_fn: Any,
     *, cli_override: bool = False,
+    external_lock: threading.Lock | None = None,
 ) -> int:
-    """Run the parallel orchestrator loop with a ThreadPoolExecutor."""
+    """Run the parallel orchestrator loop with a ThreadPoolExecutor.
+
+    Args:
+        external_lock: Optional external lock for failed_claim_ids synchronization.
+                      If provided, this lock will be used instead of the pool's internal lock
+                      to protect failed_claim_ids access, allowing coordination with the main
+                      orchestrator thread in hybrid sequential/parallel modes.
+    """
     pool_size = min(effective_parallel, _DEFAULT_PARALLEL_CEILING)
     if effective_parallel > _DEFAULT_PARALLEL_CEILING:
         logger.warning("max_parallel_agents (%d) exceeds ceiling (%d); clamping pool", effective_parallel, _DEFAULT_PARALLEL_CEILING)
     pool = ParallelWorkerPool(pool_size)
     set_executor(pool.executor)
     set_runtime_parallel_limits(effective_parallel, cli_override, baseline=_get_dynamic_max_agents() if cli_override else None)
+
+    # Use external lock if provided (for coordination with main orchestrator thread)
+    # Otherwise use pool's internal lock
+    active_lock = external_lock if external_lock is not None else pool.lock
 
     state = _LoopState()
 
@@ -366,14 +379,14 @@ def run_parallel_loop(
             if state.circuit_breaker_tripped:
                 if _handle_circuit_breaker_drain(
                     state, pool.futures, failed_claim_ids, session_stats,
-                    run_logger, record_fn, mode_name, pool.lock,
+                    run_logger, record_fn, mode_name, active_lock,
                 ):
                     break
                 continue
             result = _run_loop_iteration(
                 state, pool.futures, failed_claim_ids, session_stats, run_logger,
                 record_fn, finalize_fn, pool.semaphore, pool.executor,
-                main_repo_path, start_time, continuous, mode_name, pool.lock,
+                main_repo_path, start_time, continuous, mode_name, active_lock,
             )
             if result == "break":
                 break
@@ -393,6 +406,6 @@ def run_parallel_loop(
         run_logger.log_orchestrator(f"Parallel loop exception: {loop_exc}", level="ERROR")
         state.exit_code = 1
     finally:
-        _safe_cleanup(state, pool, session_stats, start_time, run_logger, record_fn, finalize_fn)
+        _safe_cleanup(state, pool, session_stats, start_time, run_logger, record_fn, finalize_fn, active_lock)
 
     return state.exit_code
