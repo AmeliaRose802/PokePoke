@@ -254,6 +254,7 @@ def build_prompt_from_work_item(
     work_item: BeadsWorkItem,
     template_name: str = "beads-item",
     retry_feedback: list[str] | None = None,
+    previous_worker_context: str | None = None,
 ) -> str:
     """Build a prompt from a work item using the template system.
 
@@ -267,6 +268,8 @@ def build_prompt_from_work_item(
             This can be overridden by label-based template selection.
         retry_feedback: Optional list of feedback strings from previous gate-agent
             rejections or copilot failures.
+        previous_worker_context: Pre-formatted context from previous worker
+            attempts (fetched from beads comments).
     """
     from pokepoke.config import get_config
     from pokepoke.prompts.prompts import PromptService
@@ -304,5 +307,6 @@ def build_prompt_from_work_item(
         "test_data_section": test_data_section,
         "command_timeout": config.command_timeout,
         "retry_feedback": retry_feedback_section,
+        "previous_worker_context": previous_worker_context,
     }
     return service.load_and_render(template_name, variables)

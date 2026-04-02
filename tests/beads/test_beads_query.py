@@ -963,3 +963,51 @@ class TestRetryIntegrationWithQueryFunctions:
 
         assert beads_query.is_beads_item_closed("x") is True
         assert call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# get_item_comments
+# ---------------------------------------------------------------------------
+
+
+class TestGetItemComments:
+    def test_returns_parsed_comments(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        payload = [
+            {"id": 1, "issue_id": "x", "author": "agent", "text": "hello", "created_at": "2025-01-01T00:00:00Z"},
+            {"id": 2, "issue_id": "x", "author": "agent", "text": "world", "created_at": "2025-01-01T00:01:00Z"},
+        ]
+        mock_process = subprocess.CompletedProcess("bd", 0, stdout=json.dumps(payload))
+        monkeypatch.setattr(beads_query, "_run_bd", lambda *a, **kw: mock_process)
+        result = beads_query.get_item_comments("x")
+        assert len(result) == 2
+        assert result[0]["text"] == "hello"
+        assert result[1]["text"] == "world"
+
+    def test_returns_empty_on_subprocess_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def boom(*_a: object, **_kw: object) -> None:
+            raise subprocess.CalledProcessError(1, "bd")
+
+        monkeypatch.setattr(beads_query, "_run_bd", boom)
+        assert beads_query.get_item_comments("x") == []
+
+    def test_returns_empty_on_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def boom(*_a: object, **_kw: object) -> None:
+            raise subprocess.TimeoutExpired(cmd="bd", timeout=30)
+
+        monkeypatch.setattr(beads_query, "_run_bd", boom)
+        assert beads_query.get_item_comments("x") == []
+
+    def test_returns_empty_for_no_output(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        mock_process = subprocess.CompletedProcess("bd", 0, stdout="")
+        monkeypatch.setattr(beads_query, "_run_bd", lambda *a, **kw: mock_process)
+        assert beads_query.get_item_comments("x") == []
+
+    def test_returns_empty_for_empty_array(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        mock_process = subprocess.CompletedProcess("bd", 0, stdout="[]")
+        monkeypatch.setattr(beads_query, "_run_bd", lambda *a, **kw: mock_process)
+        assert beads_query.get_item_comments("x") == []
+
+    def test_returns_empty_for_non_list_json(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        mock_process = subprocess.CompletedProcess("bd", 0, stdout='{"error": "not found"}')
+        monkeypatch.setattr(beads_query, "_run_bd", lambda *a, **kw: mock_process)
+        assert beads_query.get_item_comments("x") == []

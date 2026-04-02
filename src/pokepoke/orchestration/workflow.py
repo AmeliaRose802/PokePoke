@@ -16,6 +16,11 @@ from pokepoke.models.model_selection import get_assignment_for_item, select_mode
 from pokepoke.models.sdk_helpers import build_resume_prompt
 from pokepoke.orchestration.work_item_selection import select_work_item  # noqa: F401  # re-exported
 from pokepoke.orchestration.work_item_session import WorkItemSession
+from pokepoke.orchestration.worker_context import (
+    format_worker_context_for_prompt,
+    get_worker_contexts,
+    save_worker_context,
+)
 from pokepoke.orchestration.workflow_helpers import (
     _apply_gate_feedback,
     _extract_agent_stats,
@@ -136,6 +141,13 @@ def process_work_item(  # noqa: C901
         result = CopilotResult(work_item_id=item.id, success=False,
             error="Session aborted due to application shutdown", attempt_count=0)
 
+        # Load previous worker context from beads comments (persists across sessions)
+        _get_comments = beads_client.get_item_comments if beads_client else None
+        prior_contexts = get_worker_contexts(item.id, get_comments_fn=_get_comments)
+        previous_worker_context = format_worker_context_for_prompt(prior_contexts)
+        if previous_worker_context:
+            logger.info("📋 Loaded context from %d previous worker attempt(s)", len(prior_contexts))
+
         while not is_shutting_down():
             elapsed = time.time() - start_time
             if timeout_seconds > 0 and elapsed >= timeout_seconds:
@@ -173,7 +185,8 @@ def process_work_item(  # noqa: C901
             else:
                 work_prompt = build_prompt_from_work_item(
                     item, template_name=prompt_template,
-                    retry_feedback=accumulated_feedback or None)
+                    retry_feedback=accumulated_feedback or None,
+                    previous_worker_context=previous_worker_context)
             with agent_type_context("work"):
                 is_retry = work_agent_iteration > 1
                 if is_retry and not last_retry_was_gate_feedback:
@@ -397,6 +410,17 @@ def process_work_item(  # noqa: C901
                 last_retry_was_gate_feedback = True  # Gate rejection → new card
             else:
                 break
+
+        # Save worker context for future workers when this attempt failed
+        if not result.success:
+            save_worker_context(
+                item.id,
+                attempt_number=work_agent_iteration,
+                failure_reason=result.error or "Unknown failure",
+                gate_feedback=accumulated_feedback or None,
+                error_summary=result.last_output_summary,
+                add_comment_fn=_comment,
+            )
 
         final_result, finalized = _finalize_item_result(
             result, item, worktree_path, selected_model, start_time, request_count,

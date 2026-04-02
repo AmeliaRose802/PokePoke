@@ -22,6 +22,17 @@ The following feedback was provided by previous gate-agent or retry checks. **Ad
 {{retry_feedback}}
 {{/retry_feedback}}
 
+{{#previous_worker_context}}
+
+## 📋 PREVIOUS WORKER CONTEXT
+
+Previous workers attempted this item but failed. **Use this context to avoid repeating their work:**
+
+{{previous_worker_context}}
+
+**Important:** The worktree may already contain partial changes from previous attempts. Check `git log` and `git diff` before starting to understand what was already done.
+{{/previous_worker_context}}
+
 ## ⚠️ CRITICAL: Avoiding Hung Commands
 
 **Command Timeout: {{command_timeout}} seconds**
