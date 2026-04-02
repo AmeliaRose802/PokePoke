@@ -31,7 +31,7 @@ from pokepoke.orchestration.workflow_helpers import (
 from pokepoke.stats.session_journal import SessionPhase
 from pokepoke.types import AgentStats, CopilotResult
 from tests.orchestration.conftest import (
-    PATCH_WF_ADD_COMMENT,
+    PATCH_WF_BLOCK_ITEM,
     make_process_item_mocks,
     make_work_item,
 )
@@ -185,7 +185,7 @@ class TestBranchVerificationFailure:
 
 
 class TestGateRejectionCapExceeded:
-    """Item that already hit the gate rejection cap should be refused."""
+    """Item that already hit the gate rejection cap should be refused and blocked."""
 
     def test_refuses_item_at_cap(self) -> None:
         """When existing rejection count >= max, processing is refused immediately."""
@@ -198,7 +198,7 @@ class TestGateRejectionCapExceeded:
                     "pokepoke.beads.beads_management.get_gate_rejection_count",
                     return_value=5,
                 ),
-                patch(PATCH_WF_ADD_COMMENT),
+                patch(PATCH_WF_BLOCK_ITEM),
             ):
                 result = process_work_item(item, interactive=False)
 
@@ -206,23 +206,23 @@ class TestGateRejectionCapExceeded:
             # Should not have tried to invoke copilot
             mocks['invoke'].assert_not_called()
 
-    def test_adds_comment_when_cap_exceeded(self) -> None:
-        """A comment should be posted explaining the cap."""
-        item = make_work_item(id="task-capped-comment", title="Capped Comment")
+    def test_blocks_item_when_cap_exceeded(self) -> None:
+        """The item should be moved to blocked status with a reason."""
+        item = make_work_item(id="task-capped-block", title="Capped Block")
         with make_process_item_mocks():
             with (
                 patch(
                     "pokepoke.beads.beads_management.get_gate_rejection_count",
                     return_value=3,
                 ),
-                patch(PATCH_WF_ADD_COMMENT) as mock_comment,
+                patch(PATCH_WF_BLOCK_ITEM) as mock_block,
             ):
                 result = process_work_item(item, interactive=False)
 
             assert result.success is False
-            mock_comment.assert_called_once()
-            comment_text = mock_comment.call_args[0][1]
-            assert "gate rejections" in comment_text.lower() or "Refusing" in comment_text
+            mock_block.assert_called_once()
+            block_reason = mock_block.call_args[0][1]
+            assert "gate rejection cap" in block_reason.lower() or "manual review" in block_reason.lower()
 
 
 # ═══════════════════════════════════════════════════════════════════════════

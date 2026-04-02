@@ -210,6 +210,16 @@ class FakeBeadsClient:
             for text in self._comments.get(item_id, [])
         ]
 
+    def block_item(self, item_id: str, reason: str) -> bool:
+        self.calls.append(_BeadsCall("block_item", (item_id, reason)))
+        if "block_item" in self.fail_methods:
+            return False
+        item = self.items.get(item_id)
+        if item is not None:
+            item.status = "blocked"
+        self._comments.setdefault(item_id, []).append(f"🚫 Blocked: {reason}")
+        return True
+
     def unassign_item(self, item_id: str) -> bool:
         self.calls.append(_BeadsCall("unassign_item", (item_id,)))
         if "unassign_item" in self.fail_methods:

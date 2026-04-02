@@ -40,6 +40,18 @@ def _is_closed(item: BeadsWorkItem) -> bool:
     return item.status.lower() == 'closed' if item.status else False
 
 
+def _is_blocked(item: BeadsWorkItem) -> bool:
+    """Check if an item is blocked (e.g. exceeded gate rejection cap).
+
+    Args:
+        item: Work item to check.
+
+    Returns:
+        True if the item's status indicates it is blocked.
+    """
+    return item.status.lower() == 'blocked' if item.status else False
+
+
 def _filter_skip_ids(ready_items: list[BeadsWorkItem], skip_ids: set[str] | None) -> list[BeadsWorkItem]:
     """Remove items that previously failed claiming this session."""
     if not skip_ids:
@@ -70,6 +82,13 @@ def _filter_available(ready_items: list[BeadsWorkItem]) -> list[BeadsWorkItem]:
         for item in closed_items:
             logger.info("Skipping %s - already closed in beads", item.id)
         available = [item for item in available if not _is_closed(item)]
+
+    # Filter out blocked items (e.g. exceeded gate rejection cap)
+    blocked_items = [item for item in available if _is_blocked(item)]
+    if blocked_items:
+        for item in blocked_items:
+            logger.info("Skipping %s - blocked in beads (requires manual review)", item.id)
+        available = [item for item in available if not _is_blocked(item)]
 
     # Note: has_unmet_blocking_dependencies is NOT called here because
     # bd ready already performs blocker-aware filtering ("open issues with
@@ -192,6 +211,7 @@ def select_multiple_items(
     filtered = [item for item in filtered if is_assigned_to_current_user(item)]
     filtered = [item for item in filtered if not _is_human_required(item)]
     filtered = [item for item in filtered if not _is_closed(item)]
+    filtered = [item for item in filtered if not _is_blocked(item)]
     # Note: has_unmet_blocking_dependencies check removed — bd ready already
     # applies blocker-aware filtering.  The per-item bd show calls were
     # adding ~5-10s each, causing multi-minute dispatch delays.

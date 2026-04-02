@@ -7,6 +7,7 @@ external I/O boundaries (beads CLI calls, user input, shutdown flag).
 from unittest.mock import patch
 
 from pokepoke.orchestration.work_item_selection import (
+    _is_blocked,
     _is_closed,
     _is_human_required,
     autonomous_selection,
@@ -65,6 +66,29 @@ class TestIsClosed:
     def test_empty_status(self):
         item = BeadsWorkItem(id="a", title="A", status="", priority=1, issue_type="task")
         assert _is_closed(item) is False
+
+
+# ── _is_blocked ─────────────────────────────────────────────────────
+
+class TestIsBlocked:
+    def test_blocked_status(self):
+        item = BeadsWorkItem(id="a", title="A", status="blocked", priority=1, issue_type="task")
+        assert _is_blocked(item) is True
+
+    def test_open_status(self):
+        assert _is_blocked(_item("a")) is False
+
+    def test_in_progress_status(self):
+        item = BeadsWorkItem(id="a", title="A", status="in_progress", priority=1, issue_type="task")
+        assert _is_blocked(item) is False
+
+    def test_blocked_case_insensitive(self):
+        item = BeadsWorkItem(id="a", title="A", status="Blocked", priority=1, issue_type="task")
+        assert _is_blocked(item) is True
+
+    def test_empty_status(self):
+        item = BeadsWorkItem(id="a", title="A", status="", priority=1, issue_type="task")
+        assert _is_blocked(item) is False
 
 
 # ── select_work_item ────────────────────────────────────────────────
@@ -155,6 +179,28 @@ class TestSelectWorkItem:
             issue_type="task",
         )
         result = select_work_item([closed], interactive=False)
+        assert result is None
+
+    @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
+    @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
+    def test_filters_blocked_items(self, mock_hier, mock_assigned):
+        blocked = BeadsWorkItem(
+            id="b", title="Blocked", status="blocked", priority=1,
+            issue_type="task",
+        )
+        open_item = _item("a")
+        mock_hier.return_value = open_item
+        result = select_work_item([blocked, open_item], interactive=False)
+        assert result is not None
+        assert result.id == "a"
+
+    @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
+    def test_all_blocked_returns_none(self, mock_assigned):
+        blocked = BeadsWorkItem(
+            id="b", title="Blocked", status="blocked", priority=1,
+            issue_type="task",
+        )
+        result = select_work_item([blocked], interactive=False)
         assert result is None
 
 
@@ -284,3 +330,16 @@ class TestSelectMultipleItems:
         result = select_multiple_items([closed, open_item], count=2)
         assert len(result) == 1
         assert result[0].id == "b"
+
+    @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
+    @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
+    def test_filters_blocked_items(self, mock_hier, mock_assigned):
+        blocked = BeadsWorkItem(
+            id="b", title="Blocked", status="blocked", priority=1,
+            issue_type="task",
+        )
+        open_item = _item("a")
+        mock_hier.return_value = open_item
+        result = select_multiple_items([blocked, open_item], count=2)
+        assert len(result) == 1
+        assert result[0].id == "a"

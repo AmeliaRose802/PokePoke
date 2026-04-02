@@ -740,6 +740,46 @@ class TestAddComment:
         assert result is False
 
 
+class TestBlockItem:
+    """Tests for block_item."""
+
+    @patch("pokepoke.beads.beads_query._run_bd")
+    def test_successful_block(self, mock_run_bd: Mock) -> None:
+        from pokepoke.beads.beads_management import block_item
+        mock_run_bd.return_value = Mock()
+
+        result = block_item("item-1", "Exceeded gate rejection cap")
+
+        assert result is True
+        # First call: update --status blocked; second call: add comment
+        calls = mock_run_bd.call_args_list
+        assert any(
+            'blocked' in str(c) and 'update' in str(c)
+            for c in calls
+        ), f"Expected bd update --status blocked call, got: {calls}"
+
+    @patch("pokepoke.beads.beads_query._run_bd")
+    def test_returns_false_on_update_error(self, mock_run_bd: Mock) -> None:
+        from pokepoke.beads.beads_management import block_item
+        mock_run_bd.side_effect = subprocess.CalledProcessError(1, "bd", stderr="error")
+
+        result = block_item("item-1", "reason")
+
+        assert result is False
+
+    @patch("pokepoke.beads.beads_query._run_bd")
+    def test_adds_comment_with_reason(self, mock_run_bd: Mock) -> None:
+        from pokepoke.beads.beads_management import block_item
+        mock_run_bd.return_value = Mock()
+
+        block_item("item-1", "Exceeded gate rejection cap (5/3)")
+
+        # Should have a comments add call with the reason
+        calls = mock_run_bd.call_args_list
+        comment_calls = [c for c in calls if 'comments' in str(c)]
+        assert len(comment_calls) >= 1, f"Expected comment call, got: {calls}"
+
+
 class TestGetTotalAttempts:
     """Tests for get_total_attempts."""
 

@@ -79,6 +79,8 @@ class BeadsClient(Protocol):
 
     def get_item_comments(self, item_id: str) -> list[dict[str, Any]]: ...
 
+    def block_item(self, item_id: str, reason: str) -> bool: ...
+
     def unassign_item(self, item_id: str) -> bool: ...
 
     def unassign_with_retry(self, item_id: str) -> bool: ...
@@ -142,6 +144,11 @@ class DefaultBeadsClient:
         from pokepoke.beads.beads_query import get_item_comments
 
         return get_item_comments(item_id)
+
+    def block_item(self, item_id: str, reason: str) -> bool:
+        from pokepoke.beads.beads_management import block_item
+
+        return block_item(item_id, reason=reason)
 
     def unassign_item(self, item_id: str) -> bool:
         from pokepoke.beads.beads_management import unassign_item
