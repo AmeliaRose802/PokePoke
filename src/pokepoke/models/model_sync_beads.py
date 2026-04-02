@@ -133,6 +133,12 @@ def _sync_beads_items(
             result = _run_bd(cmd, check=False, cwd=cwd)
             if result.returncode == 0:
                 created.append(model.name)
+                # Record in session stats so dashboard ADDED counter updates
+                from pokepoke.beads.sdk_beads_tracker import parse_created_items, record_items_created
+                items = parse_created_items(result.stdout or "")
+                if not items:
+                    items = [(f"model-sync-{model.name}", title)]
+                record_items_created(items)
             else:
                 _log(item_logger, f"⚠️  Failed to create beads item for {model.name}: {result.stderr.strip()}")
         else:
