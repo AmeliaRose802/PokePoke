@@ -19,6 +19,7 @@ from pokepoke.utils.process_utils import (
     is_memory_pressure,
     is_process_running,
     kill_orphaned_copilot_processes,
+    kill_process_tree,
     log_process_tree_snapshot,
     shutdown_copilot_client,
     wait_for_process_cleanup,
@@ -891,3 +892,175 @@ class TestExtractClientPid:
         client = MagicMock()
         type(client)._process = property(lambda self: (_ for _ in ()).throw(RuntimeError("boom")))
         assert extract_client_pid(client) is None
+
+
+class TestKillProcessTree:
+    """Tests for kill_process_tree."""
+
+    @patch('pokepoke.utils.process_utils.os')
+    @patch('pokepoke.utils.process_utils.subprocess.run')
+    def test_kills_tree_on_windows(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+        """Test that taskkill /F /T /PID is called on Windows."""
+        mock_os.name = 'nt'
+        mock_run.return_value = MagicMock(returncode=0)
+        result = kill_process_tree(1234)
+        assert result is True
+        mock_run.assert_called_once_with(
+            ['taskkill', '/F', '/T', '/PID', '1234'],
+            capture_output=True, text=True, timeout=15,
+            encoding='utf-8', errors='replace',
+        )
+
+    @patch('pokepoke.utils.process_utils.os')
+    @patch('pokepoke.utils.process_utils.subprocess.run')
+    def test_returns_false_on_nonzero_returncode(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+        """Test that non-zero return code returns False."""
+        mock_os.name = 'nt'
+        mock_run.return_value = MagicMock(returncode=1, stderr="Access denied")
+        result = kill_process_tree(1234)
+        assert result is False
+
+    @patch('pokepoke.utils.process_utils.os')
+    @patch('pokepoke.utils.process_utils.subprocess.run')
+    def test_handles_process_not_found(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+        """Test that 'not found' errors are handled gracefully."""
+        mock_os.name = 'nt'
+        mock_run.return_value = MagicMock(returncode=128, stderr="ERROR: The process \"1234\" not found.")
+        result = kill_process_tree(1234)
+        assert result is False
+
+    @patch('pokepoke.utils.process_utils.os')
+    @patch('pokepoke.utils.process_utils.subprocess.run')
+    def test_handles_timeout(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+        """Test that subprocess timeout is handled."""
+        mock_os.name = 'nt'
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd='taskkill', timeout=15)
+        result = kill_process_tree(1234)
+        assert result is False
+
+    @patch('pokepoke.utils.process_utils.os')
+    @patch('pokepoke.utils.process_utils.subprocess.run')
+    def test_handles_generic_exception(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+        """Test that generic exceptions are handled."""
+        mock_os.name = 'nt'
+        mock_run.side_effect = OSError("File not found")
+        result = kill_process_tree(1234)
+        assert result is False
+
+    @patch('pokepoke.utils.process_utils.os')
+    def test_unix_sends_sigkill(self, mock_os: MagicMock) -> None:
+        """Test that os.kill(pid, 9) is called on non-Windows."""
+        mock_os.name = 'posix'
+        mock_os.kill = MagicMock()
+        result = kill_process_tree(5678)
+        assert result is True
+        mock_os.kill.assert_called_once_with(5678, 9)
+
+    @patch('pokepoke.utils.process_utils.os')
+    def test_unix_handles_already_exited(self, mock_os: MagicMock) -> None:
+        """Test that ProcessLookupError (already exited) returns True."""
+        mock_os.name = 'posix'
+        mock_os.kill = MagicMock(side_effect=ProcessLookupError)
+        result = kill_process_tree(5678)
+        assert result is True
+
+    @patch('pokepoke.utils.process_utils.os')
+    def test_unix_handles_permission_error(self, mock_os: MagicMock) -> None:
+        """Test that PermissionError returns False."""
+        mock_os.name = 'posix'
+        mock_os.kill = MagicMock(side_effect=PermissionError("Operation not permitted"))
+        result = kill_process_tree(5678)
+        assert result is False
+
+
+class TestShutdownKillsProcessTree:
+    """Tests that shutdown_copilot_client kills the full process tree."""
+
+    @pytest.mark.asyncio
+    async def test_kills_tree_when_process_still_running_after_stop(self):
+        """After graceful stop, if process is still alive, tree kill fires."""
+        client = AsyncMock()
+        client.stop = AsyncMock()
+        client._process = MagicMock(pid=9999)
+
+        with (
+            patch('pokepoke.utils.process_utils.os') as mock_os,
+            patch('pokepoke.utils.process_utils.wait_for_process_cleanup'),
+            patch('pokepoke.utils.process_utils.is_process_running', return_value=True) as mock_running,
+            patch('pokepoke.utils.process_utils.kill_process_tree') as mock_kill_tree,
+        ):
+            mock_os.name = 'nt'
+            await shutdown_copilot_client(client)
+
+        mock_running.assert_called_with(9999)
+        mock_kill_tree.assert_called_once_with(9999)
+
+    @pytest.mark.asyncio
+    async def test_skips_tree_kill_when_process_already_exited(self):
+        """After graceful stop, if process already exited, no tree kill."""
+        client = AsyncMock()
+        client.stop = AsyncMock()
+        client._process = MagicMock(pid=9999)
+
+        with (
+            patch('pokepoke.utils.process_utils.os') as mock_os,
+            patch('pokepoke.utils.process_utils.wait_for_process_cleanup'),
+            patch('pokepoke.utils.process_utils.is_process_running', return_value=False),
+            patch('pokepoke.utils.process_utils.kill_process_tree') as mock_kill_tree,
+        ):
+            mock_os.name = 'nt'
+            await shutdown_copilot_client(client)
+
+        mock_kill_tree.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_skips_tree_kill_when_no_pid(self):
+        """If no PID can be extracted, tree kill is skipped."""
+        client = AsyncMock()
+        client.stop = AsyncMock()
+        # No _process attribute → extract_client_pid returns None
+        del client._process
+
+        with (
+            patch('pokepoke.utils.process_utils.os') as mock_os,
+            patch('pokepoke.utils.process_utils.kill_process_tree') as mock_kill_tree,
+        ):
+            mock_os.name = 'nt'
+            await shutdown_copilot_client(client)
+
+        mock_kill_tree.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_tree_kill_after_timeout_and_force_stop(self):
+        """Tree kill fires even after double-timeout + force_stop path."""
+        client = AsyncMock()
+        client._process = MagicMock(pid=7777)
+        client.force_stop = AsyncMock()
+
+        with (
+            patch('pokepoke.utils.process_utils.os') as mock_os,
+            patch('pokepoke.utils.process_utils.wait_for_process_cleanup'),
+            patch('pokepoke.utils.process_utils.asyncio.wait_for', side_effect=TimeoutError),
+            patch('pokepoke.utils.process_utils.is_process_running', return_value=True),
+            patch('pokepoke.utils.process_utils.kill_process_tree') as mock_kill_tree,
+        ):
+            mock_os.name = 'nt'
+            await shutdown_copilot_client(client)
+
+        mock_kill_tree.assert_called_once_with(7777)
+
+    @pytest.mark.asyncio
+    async def test_tree_kill_after_exception(self):
+        """Tree kill fires even when client.stop() raises an exception."""
+        client = AsyncMock()
+        client._process = MagicMock(pid=5555)
+        client.stop = AsyncMock(side_effect=RuntimeError("boom"))
+
+        with (
+            patch('pokepoke.utils.process_utils.asyncio.sleep', new_callable=AsyncMock),
+            patch('pokepoke.utils.process_utils.is_process_running', return_value=True),
+            patch('pokepoke.utils.process_utils.kill_process_tree') as mock_kill_tree,
+        ):
+            await shutdown_copilot_client(client)
+
+        mock_kill_tree.assert_called_once_with(5555)

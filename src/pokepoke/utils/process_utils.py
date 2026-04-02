@@ -185,27 +185,15 @@ def is_memory_critical() -> bool:
 def kill_orphaned_copilot_processes(
     active_pids: frozenset[int] | set[int] | None = None,
 ) -> int:
-    """Kill copilot.exe processes that are NOT owned by an active worker.
+    """Kill copilot.exe processes not owned by an active worker.
 
-    Instead of counting system-wide processes and killing by lowest PID
-    (which is unsafe during parallel retries), this function consults the
-    :class:`ActivePidRegistry` to determine which PIDs are legitimate and
-    only terminates the rest.
-
-    Args:
-        active_pids: Explicit set of PIDs to protect.  When ``None``
-            (the default), the module-level ``ActivePidRegistry`` is
-            consulted automatically.
-
-    Returns:
-        Number of processes killed.
+    Consults :class:`ActivePidRegistry` to protect legitimate PIDs.
+    Returns the number of processes killed.
     """
     if os.name != 'nt':
         return 0
-
     if active_pids is None:
         active_pids = _active_pid_registry.active_pids
-
     try:
         result = subprocess.run(
             ['tasklist', '/FI', 'IMAGENAME eq copilot.exe', '/FO', 'CSV'],
@@ -214,43 +202,28 @@ def kill_orphaned_copilot_processes(
         )
         lines = result.stdout.strip().split('\n')
         if len(lines) <= 1:
-            return 0  # No copilot processes at all
-
-        # Parse PIDs from CSV: "copilot.exe","12345",...
+            return 0
         all_pids: list[int] = []
         for line in lines[1:]:
             parts = line.strip().strip('"').split('","')
             if len(parts) >= 2:
-                try:
+                with contextlib.suppress(ValueError):
                     all_pids.append(int(parts[1]))
-                except ValueError:
-                    continue
-
         orphan_pids = [p for p in all_pids if p not in active_pids]
         if not orphan_pids:
             return 0
-
         killed = 0
         for pid in orphan_pids:
             try:
-                subprocess.run(
-                    ['taskkill', '/F', '/T', '/PID', str(pid)],
-                    capture_output=True, timeout=10,
-                )
+                subprocess.run(['taskkill', '/F', '/T', '/PID', str(pid)], capture_output=True, timeout=10)
                 killed += 1
             except Exception as e:
                 logger.warning(f"Failed to kill copilot PID {pid}: {e}")
-
         if killed > 0:
-            logger.info(
-                f"Killed {killed} orphaned Copilot process(es) "
-                f"(protected {len(active_pids)} active)"
-            )
-            # Invalidate cache after killing processes
+            logger.info(f"Killed {killed} orphaned Copilot process(es) (protected {len(active_pids)} active)")
             global _copilot_process_cache
             with _cache_lock:
                 _copilot_process_cache = None
-
         return killed
     except Exception as e:
         logger.warning(f"Failed to clean orphaned Copilot processes: {e}")
@@ -258,15 +231,9 @@ def kill_orphaned_copilot_processes(
 
 
 def log_process_tree_snapshot(
-    tool_name: str, args_str: str, elapsed: float,
-    handler: Any = None,
+    tool_name: str, args_str: str, elapsed: float, handler: Any = None,
 ) -> None:
-    """Capture child process tree when a tool timeout fires.
-
-    Logs all child processes of known copilot.exe instances so we can
-    determine whether the hang is git contention, a stuck subprocess,
-    antivirus scanning, or the CLI itself.
-    """
+    """Capture child process tree when a tool timeout fires."""
     if os.name != 'nt':
         return
     try:
@@ -285,7 +252,6 @@ def log_process_tree_snapshot(
             if len(parts) >= 2:
                 with contextlib.suppress(ValueError):
                     copilot_pids.append(int(parts[1]))
-
         for cpid in copilot_pids:
             child_result = subprocess.run(
                 ['wmic', 'process', 'where', f'ParentProcessId={cpid}',
@@ -294,17 +260,8 @@ def log_process_tree_snapshot(
                 encoding='utf-8', errors='replace',
             )
             children = child_result.stdout.strip()
-            if children:
-                logger.info(
-                    "TOOL_TIMEOUT_DIAG: copilot_pid=%d tool=%s elapsed=%.0fs children:\n%s",
-                    cpid, tool_name, elapsed, children,
-                )
-            else:
-                logger.info(
-                    "TOOL_TIMEOUT_DIAG: copilot_pid=%d tool=%s elapsed=%.0fs — no child processes",
-                    cpid, tool_name, elapsed,
-                )
-
+            suffix = f"children:\n{children}" if children else "— no child processes"
+            logger.info("TOOL_TIMEOUT_DIAG: copilot_pid=%d tool=%s elapsed=%.0fs %s", cpid, tool_name, elapsed, suffix)
         if handler and hasattr(handler, '_item_logger') and handler._item_logger:
             handler._item_logger.log_error(
                 f"TOOL_TIMEOUT_DIAG: {len(copilot_pids)} copilot process(es), "
@@ -312,6 +269,41 @@ def log_process_tree_snapshot(
             )
     except Exception as e:
         logger.debug("Failed to capture process tree snapshot: %s", e)
+
+
+def kill_process_tree(pid: int) -> bool:
+    """Kill a process and its entire child tree.
+
+    Windows: ``taskkill /F /T /PID``.  Unix: ``os.kill(SIGKILL)``.
+    Returns True on success (or if the process already exited).
+    """
+    if os.name == 'nt':
+        try:
+            result = subprocess.run(
+                ['taskkill', '/F', '/T', '/PID', str(pid)],
+                capture_output=True, text=True, timeout=15,
+                encoding='utf-8', errors='replace',
+            )
+            if result.returncode == 0:
+                logger.info("Killed process tree for PID %d", pid)
+            else:
+                stderr = (result.stderr or "").strip()
+                log = logger.debug if "not found" in stderr.lower() else logger.warning
+                log("taskkill /T for PID %d returned %d: %s", pid, result.returncode, stderr)
+            return result.returncode == 0
+        except (subprocess.TimeoutExpired, Exception) as e:
+            logger.warning("Failed to kill process tree for PID %d: %s", pid, e)
+            return False
+    try:
+        os.kill(pid, 9)  # SIGKILL
+        logger.info("Sent SIGKILL to PID %d", pid)
+        return True
+    except ProcessLookupError:
+        logger.debug("Process %d already exited", pid)
+        return True
+    except Exception as e:
+        logger.warning("Failed to kill PID %d: %s", pid, e)
+        return False
 
 
 def apply_memory_backpressure(slots: int) -> tuple[int, int]:
@@ -462,3 +454,9 @@ async def shutdown_copilot_client(client: Any) -> None:
         logger.error("[SDK] Client stopped (encoding error suppressed)")
     except Exception as e:
         logger.error(f"[SDK] Error stopping client: {e}")
+    finally:
+        # Kill the full process tree as a safety net to prevent orphaned
+        # child processes (Node.js sub-agents, PowerShell tool calls, etc.)
+        if pid is not None and is_process_running(pid):
+            logger.info("[SDK] Killing remaining process tree for PID %d", pid)
+            kill_process_tree(pid)
