@@ -102,13 +102,6 @@ class MaintenanceConfig:
                 frequency=4,
                 needs_worktree=False,
             ),
-            MaintenanceAgentConfig(
-                name="Model Sync",
-                prompt_file="",
-                frequency=1,
-                needs_worktree=False,
-                merge_changes=False,
-            ),
         ])
 @dataclass
 class MCPServerConfig:

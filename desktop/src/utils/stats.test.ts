@@ -402,9 +402,8 @@ describe("stats helpers", () => {
         makeAgent({ agent_id: "o2", agent_type: "tech_debt", status: "running" }),
         makeAgent({ agent_id: "o3", agent_type: "beta_tester", status: "running" }),
         makeAgent({ agent_id: "o4", agent_type: "code_review", status: "running" }),
-        makeAgent({ agent_id: "o5", agent_type: "model_sync", status: "running" }),
       ];
-      expect(getActiveRunCounts(agents)).toEqual({ work: 0, cleanup: 0, other: 5 });
+      expect(getActiveRunCounts(agents)).toEqual({ work: 0, cleanup: 0, other: 4 });
     });
   });
 

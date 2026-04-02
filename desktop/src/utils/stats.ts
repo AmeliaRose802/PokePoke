@@ -211,7 +211,7 @@ export function getAgentRunCounts(stats: SessionStats | null): AgentRunCounts {
 }
 
 const CLEANUP_AGENT_TYPES = new Set(["cleanup", "janitor", "backlog_cleanup", "worktree_cleanup"]);
-const OTHER_AGENT_TYPES = new Set(["gate", "tech_debt", "beta_tester", "code_review", "model_sync"]);
+const OTHER_AGENT_TYPES = new Set(["gate", "tech_debt", "beta_tester", "code_review"]);
 
 /**
  * Count currently-running agents by category so the Runs display
