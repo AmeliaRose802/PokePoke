@@ -11,7 +11,7 @@ from pokepoke.git.git_helpers import run_git
 from pokepoke.git.git_operations import get_status_porcelain_and_changes
 from pokepoke.git.repo_state_guard import cleanup_lock
 from pokepoke.utils.constants import BEADS_DIR, CLEANUP_AGGREGATE_TIMEOUT, STATUS_IN_PROGRESS, WORKTREE_DIR
-from pokepoke.worktrees.coordination import merge_lock_active
+from pokepoke.worktrees.coordination import main_repo_git_lock, merge_lock_active
 
 logger = logging.getLogger(__name__)
 
@@ -138,87 +138,89 @@ def _try_auto_commit(repo_path: Path, run_logger: 'RunLogger') -> bool:
     Returns:
         True if auto-commit succeeded, False otherwise (e.g., pre-commit hooks reject)
     """
-    try:
-        subprocess.run(
-            ["git", "add", "--all"],
-            check=True,
-            capture_output=True,
-            encoding='utf-8',
-            errors='replace',
-            cwd=str(repo_path),
-            timeout=30
-        )
+    with main_repo_git_lock():
+        try:
+            subprocess.run(
+                ["git", "add", "--all"],
+                check=True,
+                capture_output=True,
+                encoding='utf-8',
+                errors='replace',
+                cwd=str(repo_path),
+                timeout=30
+            )
 
-        result = subprocess.run(
-            ["git", "commit", "-m", "chore: auto-commit uncommitted changes"],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            cwd=str(repo_path),
-            timeout=120
-        )
+            result = subprocess.run(
+                ["git", "commit", "-m", "chore: auto-commit uncommitted changes"],
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                cwd=str(repo_path),
+                timeout=120
+            )
 
-        if result.returncode == 0:
-            run_logger.log_orchestrator("Auto-committed uncommitted changes")
-            return True
+            if result.returncode == 0:
+                run_logger.log_orchestrator("Auto-committed uncommitted changes")
+                return True
 
-        # Commit failed (e.g., pre-commit hooks rejected)
-        error_msg = result.stderr.strip() if result.stderr else "unknown error"
-        run_logger.log_orchestrator(
-            f"Auto-commit failed (will try cleanup agent): {error_msg}",
-            level="WARNING"
-        )
-        return False
+            # Commit failed (e.g., pre-commit hooks rejected)
+            error_msg = result.stderr.strip() if result.stderr else "unknown error"
+            run_logger.log_orchestrator(
+                f"Auto-commit failed (will try cleanup agent): {error_msg}",
+                level="WARNING"
+            )
+            return False
 
-    except subprocess.TimeoutExpired:
-        run_logger.log_orchestrator("Auto-commit timed out", level="WARNING")
-        return False
-    except subprocess.CalledProcessError as e:
-        error_msg = e.stderr.strip() if e.stderr else f"exit code {e.returncode}"
-        run_logger.log_orchestrator(
-            f"Auto-commit git add failed: {error_msg}", level="WARNING"
-        )
-        return False
-    except Exception as e:
-        run_logger.log_orchestrator(f"Auto-commit failed: {e}", level="WARNING")
-        return False
+        except subprocess.TimeoutExpired:
+            run_logger.log_orchestrator("Auto-commit timed out", level="WARNING")
+            return False
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr.strip() if e.stderr else f"exit code {e.returncode}"
+            run_logger.log_orchestrator(
+                f"Auto-commit git add failed: {error_msg}", level="WARNING"
+            )
+            return False
+        except Exception as e:
+            run_logger.log_orchestrator(f"Auto-commit failed: {e}", level="WARNING")
+            return False
 
 
 def _stash_uncommitted_changes(repo_path: Path, run_logger: 'RunLogger') -> bool:
     """Attempt to stash uncommitted changes as a fallback."""
-    try:
-        subprocess.run(
-            ["git", "add", "--all"], check=True, capture_output=True,
-            encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=30
-        )
-        import datetime
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        stash_msg = f"pokepoke-auto-stash-{timestamp}: cleanup agent failed"
-        result = subprocess.run(
-            ["git", "stash", "push", "-m", stash_msg], capture_output=True,
-            text=True, encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=60
-        )
-        if result.returncode == 0:
-            run_logger.log_orchestrator(f"Stashed changes: {stash_msg}")
-            return True
-        error_msg = result.stderr.strip() if result.stderr else "unknown error"
-        logger.error(f"⚠️  git stash failed: {error_msg}")
-        run_logger.log_orchestrator(f"git stash failed: {error_msg}", level="WARNING")
-        return False
-    except subprocess.TimeoutExpired:
-        logger.warning("⚠️  git stash timed out")
-        run_logger.log_orchestrator("git stash timed out", level="WARNING")
-        return False
-    except subprocess.CalledProcessError as e:
-        error_msg = e.stderr.strip() if e.stderr else f"exit code {e.returncode}"
-        logger.error(f"⚠️  git add failed: {error_msg}")
-        run_logger.log_orchestrator(f"git add for stash failed: {error_msg}", level="WARNING")
-        return False
-    except Exception as e:
-        logger.error(f"⚠️  Stash failed with unexpected error: {e}")
-        run_logger.log_orchestrator(f"Stash failed: {e}", level="WARNING")
-        return False
+    with main_repo_git_lock():
+        try:
+            subprocess.run(
+                ["git", "add", "--all"], check=True, capture_output=True,
+                encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=30
+            )
+            import datetime
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            stash_msg = f"pokepoke-auto-stash-{timestamp}: cleanup agent failed"
+            result = subprocess.run(
+                ["git", "stash", "push", "-m", stash_msg], capture_output=True,
+                text=True, encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=60
+            )
+            if result.returncode == 0:
+                run_logger.log_orchestrator(f"Stashed changes: {stash_msg}")
+                return True
+            error_msg = result.stderr.strip() if result.stderr else "unknown error"
+            logger.error(f"⚠️  git stash failed: {error_msg}")
+            run_logger.log_orchestrator(f"git stash failed: {error_msg}", level="WARNING")
+            return False
+        except subprocess.TimeoutExpired:
+            logger.warning("⚠️  git stash timed out")
+            run_logger.log_orchestrator("git stash timed out", level="WARNING")
+            return False
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr.strip() if e.stderr else f"exit code {e.returncode}"
+            logger.error(f"⚠️  git add failed: {error_msg}")
+            run_logger.log_orchestrator(f"git add for stash failed: {error_msg}", level="WARNING")
+            return False
+        except Exception as e:
+            logger.error(f"⚠️  Stash failed with unexpected error: {e}")
+            run_logger.log_orchestrator(f"Stash failed: {e}", level="WARNING")
+            return False
 
 
 def _run_cleanup_retries(
@@ -360,12 +362,13 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
         # Auto-resolve worktree cleanup deletions
         if changes['worktree']:
             logger.info("🧹 Committing worktree cleanup changes...")
-            run_git(["git", "add", f"{WORKTREE_DIR}/"], cwd=str(repo_path))
-            run_git(
-                ["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
-                cwd=str(repo_path),
-                timeout=60,
-            )
+            with main_repo_git_lock():
+                run_git(["git", "add", f"{WORKTREE_DIR}/"], cwd=str(repo_path))
+                run_git(
+                    ["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
+                    cwd=str(repo_path),
+                    timeout=60,
+                )
             logger.info("✅ Worktree cleanup committed")
 
     return True

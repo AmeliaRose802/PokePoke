@@ -7,6 +7,7 @@ Locks auto-release on process crash since they are backed by filelock.FileLock.
 import json
 import logging
 import os
+import threading
 import time
 from collections.abc import Generator
 from contextlib import contextmanager, suppress
@@ -235,6 +236,24 @@ def merge_lock_active() -> bool:
         return True
     lock.release()
     return False
+
+
+# ── Main-repo git operations lock ────────────────────────────────────
+# Threading-based reentrant lock that prevents index.lock contention
+# between the poll loop (check_and_commit_main_repo) and the merge
+# queue worker thread.  Both must acquire this before running any git
+# command whose cwd is the main repository.
+_main_repo_git_lock = threading.RLock()
+
+
+@contextmanager
+def main_repo_git_lock() -> Generator[None, None, None]:
+    """Serialize git operations on the main repository across threads."""
+    _main_repo_git_lock.acquire()
+    try:
+        yield
+    finally:
+        _main_repo_git_lock.release()
 
 
 @contextmanager

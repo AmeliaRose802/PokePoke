@@ -222,3 +222,64 @@ def test_concurrent_lock_acquisition_stress(cleanup_lock_files):
     # All workers should succeed
     assert results["success"] == num_workers
     assert results["failed"] == 0
+
+
+class TestMainRepoGitLock:
+    """Tests for the main_repo_git_lock threading primitive."""
+
+    def test_mutual_exclusion(self):
+        """Two threads cannot hold main_repo_git_lock simultaneously."""
+        from pokepoke.worktrees.coordination import main_repo_git_lock
+
+        overlap_detected = threading.Event()
+        inside = threading.Event()
+        done = threading.Event()
+
+        def holder():
+            with main_repo_git_lock():
+                inside.set()
+                # Hold the lock until the other thread has tried to acquire
+                done.wait(timeout=5)
+
+        def contender():
+            inside.wait(timeout=5)
+            # At this point, holder has the lock. We should block.
+            with main_repo_git_lock():
+                # If we reach here while holder still hasn't released, bad.
+                if not done.is_set():
+                    overlap_detected.set()
+            done.set()
+
+        t1 = threading.Thread(target=holder)
+        t2 = threading.Thread(target=contender)
+        t1.start()
+        t2.start()
+
+        # Let contender block briefly, then release holder
+        time.sleep(0.1)
+        done.set()
+
+        t1.join(timeout=5)
+        t2.join(timeout=5)
+
+        assert not overlap_detected.is_set(), "Both threads held main_repo_git_lock at the same time"
+
+    def test_reentrant(self):
+        """The same thread can acquire main_repo_git_lock multiple times."""
+        from pokepoke.worktrees.coordination import main_repo_git_lock
+
+        with main_repo_git_lock():
+            with main_repo_git_lock():
+                pass  # Should not deadlock
+
+    def test_context_manager_releases_on_exception(self):
+        """Lock is released even if the body raises."""
+        from pokepoke.worktrees.coordination import main_repo_git_lock
+
+        with contextlib.suppress(RuntimeError):
+            with main_repo_git_lock():
+                raise RuntimeError("boom")
+
+        # Should be acquirable again
+        with main_repo_git_lock():
+            pass

@@ -263,8 +263,9 @@ class MergeQueue:
                 logger.warning("Rebase failed for %s but worktree is clean - attempting merge", item.id)
 
             try:
+                from pokepoke.worktrees.coordination import main_repo_git_lock
                 from pokepoke.worktrees.worktree_finalization import merge_worktree_to_dev
-                with timed_block("merge_queue.merge"):
+                with main_repo_git_lock(), timed_block("merge_queue.merge"):
                     success = merge_worktree_to_dev(item, worktree_path=worktree_path, repo_path=request.repo_path)
                 status = MergeStatus.SUCCESS if success else MergeStatus.FAILED
                 msg = "Merge completed successfully" if success else "merge_worktree_to_dev returned False"
