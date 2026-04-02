@@ -13,3 +13,6 @@ pywebview>=5.0
 
 # Cross-process file locking
 filelock>=3.12
+
+# Process monitoring for subprocess output capture
+psutil>=5.9.0

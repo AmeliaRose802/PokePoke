@@ -98,7 +98,11 @@ HOSTNAME,powershell.exe -Command "test",67890
 HOSTNAME,pytest.exe --verbose,67891
 """
 
-    with patch('pokepoke.utils.subprocess_monitor.subprocess.run', return_value=mock_result):
+    # Mock psutil to fall back to WMIC
+    with (
+        patch('pokepoke.utils.subprocess_monitor._HAS_PSUTIL', False),
+        patch('pokepoke.utils.subprocess_monitor.subprocess.run', return_value=mock_result),
+    ):
         children = monitor._find_child_processes()
 
     assert len(children) == 2
@@ -216,18 +220,165 @@ def test_subprocess_monitor_detects_new_children():
 HOSTNAME,powershell.exe -Command "test",67890
 """
 
-    with patch('subprocess.run', return_value=mock_result):
+    # Mock psutil to fall back to WMIC
+    with (
+        patch('pokepoke.utils.subprocess_monitor._HAS_PSUTIL', False),
+        patch('subprocess.run', return_value=mock_result),
+    ):
         monitor._check_for_children()
 
     # Should have detected one child
     assert 67890 in monitor._monitored_pids
 
     # Check again with the same child - should not duplicate
-    with patch('subprocess.run', return_value=mock_result):
+    with (
+        patch('pokepoke.utils.subprocess_monitor._HAS_PSUTIL', False),
+        patch('subprocess.run', return_value=mock_result),
+    ):
         monitor._check_for_children()
 
     # Still only one child tracked
     assert len(monitor._monitored_pids) == 1
+
+
+def test_subprocess_monitor_psutil_detection():
+    """Test child process detection via psutil."""
+    from unittest.mock import MagicMock
+
+    monitor = SubprocessMonitor(copilot_pid=12345)
+
+    # Create mock psutil process structure
+    mock_child1 = MagicMock()
+    mock_child1.pid = 67890
+    mock_child1.cmdline.return_value = ['pytest', '--verbose']
+
+    mock_child2 = MagicMock()
+    mock_child2.pid = 67891
+    mock_child2.cmdline.return_value = ['powershell.exe', '-Command', 'test']
+
+    mock_parent = MagicMock()
+    mock_parent.children.return_value = [mock_child1, mock_child2]
+
+    with patch('psutil.Process', return_value=mock_parent):
+        children = monitor._find_child_processes()
+
+    assert len(children) == 2
+    assert (67890, 'pytest --verbose') in children
+    assert (67891, 'powershell.exe -Command test') in children
+
+
+def test_subprocess_monitor_psutil_access_denied():
+    """Test graceful handling when psutil access is denied."""
+    import psutil
+
+    monitor = SubprocessMonitor(copilot_pid=12345)
+
+    with patch('psutil.Process', side_effect=psutil.AccessDenied(pid=12345)):
+        children = monitor._find_child_processes()
+
+    # Should return empty list, not raise exception
+    assert children == []
+
+
+def test_subprocess_monitor_cleanup_dead_processes():
+    """Test cleanup of dead process monitoring threads."""
+
+    monitor = SubprocessMonitor(copilot_pid=12345)
+
+    # Add some fake process threads
+    fake_thread1 = Mock()
+    fake_thread1.is_alive.return_value = False
+    monitor._process_threads[67890] = fake_thread1
+    monitor._process_pipes[67890] = {}
+
+    fake_thread2 = Mock()
+    fake_thread2.is_alive.return_value = True
+    monitor._process_threads[67891] = fake_thread2
+    monitor._process_pipes[67891] = {}
+
+    # Mock psutil to say first process is dead
+    with patch('psutil.pid_exists', side_effect=lambda pid: pid != 67890):
+        monitor._cleanup_dead_processes()
+
+    # Dead process should be removed
+    assert 67890 not in monitor._process_threads
+    assert 67890 not in monitor._process_pipes
+
+    # Alive process should remain
+    assert 67891 in monitor._process_threads
+    assert 67891 in monitor._process_pipes
+
+
+def test_subprocess_monitor_format_status():
+    """Test formatting of process status messages."""
+    monitor = SubprocessMonitor(copilot_pid=12345)
+
+    status_msg = monitor._format_process_status(
+        pid=67890,
+        command="C:\\path\\to\\pytest.exe --verbose",
+        status="running",
+        cpu_percent=15.5,
+        count=3,
+    )
+
+    assert "67890" in status_msg
+    assert "pytest.exe" in status_msg
+    assert "running" in status_msg
+    assert "15.5" in status_msg
+    assert "#3" in status_msg
+
+
+def test_subprocess_monitor_start_process_monitor_no_psutil():
+    """Test that process monitoring is skipped when psutil unavailable."""
+    monitor = SubprocessMonitor(copilot_pid=12345)
+
+    with patch('pokepoke.utils.subprocess_monitor._HAS_PSUTIL', False):
+        # Should not raise exception, just log and return
+        monitor._start_process_monitor(67890, "pytest --verbose")
+
+    # No thread should be created
+    assert 67890 not in monitor._process_threads
+
+
+def test_subprocess_monitor_process_output_monitoring():
+    """Test the process output monitoring loop."""
+
+    monitor = SubprocessMonitor(copilot_pid=12345, poll_interval=0.05)
+
+    # Create mock process
+    mock_process = Mock()
+    mock_process.is_running.side_effect = [True, True, False]  # Run twice then exit
+    mock_process.status.return_value = "running"
+    mock_process.cpu_percent.return_value = 5.0
+
+    # Mock io_counters
+    mock_io = Mock()
+    mock_io.write_bytes = 1000
+    mock_process.io_counters.return_value = mock_io
+
+    output_captured = []
+
+    def capture_output(source: str, text: str) -> None:
+        output_captured.append((source, text))
+
+    monitor._on_output = capture_output
+    monitor._monitoring = True
+
+    # Patch time.monotonic to speed up status checks
+    start_time = [0.0]
+    def mock_monotonic():
+        start_time[0] += 6.0  # Advance 6 seconds each time
+        return start_time[0]
+
+    # Run monitoring with mocked process
+    with (
+        patch('psutil.Process', return_value=mock_process),
+        patch('time.monotonic', side_effect=mock_monotonic),
+    ):
+        monitor._monitor_process_output(67890, "pytest --verbose")
+
+    # Should have captured output due to status changes
+    assert len(output_captured) >= 1
 
 
 if __name__ == "__main__":
