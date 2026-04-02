@@ -2,7 +2,15 @@ project_name: ExampleProject
 models:
   default: claude-opus-4.6
   fallback: claude-sonnet-4.5
-  candidate_models: []
+  candidate_models:
+    - claude-opus-4.5
+    - gpt-5.2-codex
+    - claude-opus-4.6
+    - gemini-3-pro
+    - gpt-5.1-codex-max
+    - claude-sonnet-4.5
+    - claude-sonnet-4
+    - gpt-5.2
 ai_backend:
   provider: copilot
   copilot_cli_path: copilot.cmd
