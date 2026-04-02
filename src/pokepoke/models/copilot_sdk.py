@@ -224,7 +224,7 @@ def _try_get_warm_session_id(
     return session_id
 
 
-async def invoke_copilot_sdk(
+async def invoke_copilot_sdk(  # noqa: C901
     work_item: BeadsWorkItem,
     prompt: str | None = None,
     retry_config: RetryConfig | None = None,
@@ -260,12 +260,49 @@ async def invoke_copilot_sdk(
 
     client = _create_sdk_client(cwd, add_parent_dir=add_parent_dir)
 
+    # Track subprocess monitor for cleanup
+    subprocess_monitor = None
+
     try:
         logger.info("[SDK] Starting Copilot client...")
         await client.start()
 
         # Register the copilot process PID so the orphan killer won't touch it
         register_client_pid(client, get_active_pid_registry())
+
+        # Create subprocess monitor to capture tool output
+        try:
+            from pokepoke.desktop import terminal_ui
+            from pokepoke.utils.subprocess_monitor import create_monitor_for_client
+
+            def on_subprocess_output(source: str, text: str) -> None:
+                """Callback for subprocess output - route to logs, UI, and desktop API."""
+                prefix = "[stderr] " if source == "stderr" else ""
+                logger.info(f"[ToolOutput] {prefix}{text}")
+                output_lines.append(text)
+                if item_logger:
+                    item_logger.log_copilot_output(text)
+                # Push to desktop UI with styling
+                try:
+                    terminal_ui.ui.set_style("cyan")
+                    if terminal_ui.ui._api:
+                        terminal_ui.ui._api.push_log(
+                            text,
+                            target="agent",
+                            style="cyan" if source == "stdout" else "yellow",
+                        )
+                except Exception as e:
+                    logger.debug(f"Failed to push subprocess output to UI: {e}")
+
+            subprocess_monitor = create_monitor_for_client(
+                client,
+                item_logger=item_logger,
+                on_output=on_subprocess_output,
+            )
+            if subprocess_monitor:
+                logger.info("[SDK] Subprocess output monitoring enabled")
+        except Exception as e:
+            logger.debug(f"Failed to create subprocess monitor: {e}")
 
         current_model = model or DEFAULT_MODEL
         total_wall_duration = 0.0
@@ -302,6 +339,7 @@ async def invoke_copilot_sdk(
                 handler, stats = create_event_handler(
                     done, output_lines, errors, item_logger, idle_timeout,
                     on_token_usage=on_token_usage,
+                    subprocess_monitor=subprocess_monitor,
                 )
             else:
                 handler.reset_for_retry(done, output_lines, errors)
@@ -389,6 +427,12 @@ async def invoke_copilot_sdk(
         logger.info(f"\n[SDK] Exception: {e}")
         return _fail_result(work_item.id, f"SDK exception: {e}", session_id=session_id)
     finally:
+        # Stop subprocess monitoring
+        if subprocess_monitor is not None:
+            try:
+                subprocess_monitor.stop()
+            except Exception as e:
+                logger.debug(f"Error stopping subprocess monitor: {e}")
         await shutdown_copilot_client(client)
 
 
