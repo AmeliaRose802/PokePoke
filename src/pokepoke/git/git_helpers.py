@@ -16,6 +16,7 @@ __all__ = [
     "list_worktrees",
     "restore_beads_stash",
     "run_git",
+    "run_git_with_retry",
     "validate_post_merge",
     "verify_branch_pushed",
     "verify_worktree_branch",
@@ -40,6 +41,54 @@ def run_git(
         timeout=timeout,
         cwd=cwd,
     )
+
+
+def run_git_with_retry(
+    cmd: list[str],
+    *,
+    timeout: int = DEFAULT_GIT_TIMEOUT,
+    cwd: str | None = None,
+    max_retries: int = 3,
+    initial_delay: float = 2.0,
+    context: str = "git command",
+) -> subprocess.CompletedProcess[str]:
+    """Run a git command with exponential-backoff retry on transient failures.
+
+    Retries on both CalledProcessError and TimeoutExpired. Returns
+    the CompletedProcess on success or re-raises the last exception
+    after all retries are exhausted.
+    """
+    retry_config = RetryConfig(
+        max_retries=max_retries,
+        initial_delay=initial_delay,
+        backoff_factor=2.0,
+        jitter=True,
+    )
+    last_exc: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            return run_git(cmd, timeout=timeout, cwd=cwd)
+        except subprocess.TimeoutExpired as exc:
+            last_exc = exc
+            logger.warning(
+                "%s timed out (attempt %d/%d, timeout=%ds)",
+                context, attempt + 1, max_retries, timeout,
+            )
+        except subprocess.CalledProcessError as exc:
+            last_exc = exc
+            logger.warning(
+                "%s failed (attempt %d/%d, exit %d): %s",
+                context, attempt + 1, max_retries,
+                exc.returncode, exc.stderr or str(exc),
+            )
+        if attempt < max_retries - 1:
+            delay = sleep_with_backoff(attempt, retry_config, context)
+            logger.info(
+                "%s retry %d/%d in %.1fs",
+                context, attempt + 1, max_retries, delay,
+            )
+    assert last_exc is not None
+    raise last_exc
 
 
 def verify_branch_pushed(branch_name: str) -> bool:

@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 from pokepoke.git.git_helpers import run_git as _run_git
+from pokepoke.git.git_helpers import run_git_with_retry as _run_git_with_retry
 from pokepoke.git.git_operations import (
     execute_merge_sequence,
     get_default_branch,
@@ -290,14 +291,24 @@ def is_worktree_merged(item_id: str, target_branch: str | None = None, repo_path
         return False
 
 
-def _rollback_merge_commit(reason: str, cwd: str | None = None) -> None:
-    """Attempt to rollback the last merge commit and log the outcome."""
+def _rollback_merge_commit(reason: str, cwd: str | None = None) -> bool:
+    """Attempt to rollback the last merge commit and log the outcome.
+
+    Returns True if rollback succeeded, False otherwise.
+    """
     try:
         _run_git(["git", "reset", "--hard", "HEAD~1"], cwd=cwd)
         logger.info("Rolled back merge commit: %s", reason)
         logger.info(f"🔄 Rolled back merge commit due to {reason}")
+        return True
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as reset_err:
-        logger.error("Failed to rollback merge commit after %s: %s", reason, reset_err)
+        logger.critical(
+            "FAILED to rollback merge commit after %s: %s — "
+            "local repo may have a merged commit that was never pushed. "
+            "Manual intervention required.",
+            reason, reset_err,
+        )
+        return False
 
 
 def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool = True, repo_path: str | None = None) -> tuple[bool, list[str]]:
@@ -359,10 +370,18 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
     logger.info(f"✅ Post-merge validation passed: {target_branch} is clean")
 
     try:
-        _run_git(["git", "push"], timeout=120, cwd=repo_cwd)
+        _run_git_with_retry(
+            ["git", "push"], timeout=120, cwd=repo_cwd,
+            max_retries=3, initial_delay=2.0,
+            context="git push",
+        )
         logger.info(f"✅ Pushed {target_branch} to remote")
-    except subprocess.CalledProcessError as e:
-        logger.error(f"❌ Push failed: {e.stderr if e.stderr else str(e)}")
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        if isinstance(e, subprocess.CalledProcessError):
+            err_detail = e.stderr or str(e)
+        else:
+            err_detail = str(e)
+        logger.error(f"❌ Push failed after retries: {err_detail}")
         _rollback_merge_commit("push failure", cwd=repo_cwd)
         return False, []
 
