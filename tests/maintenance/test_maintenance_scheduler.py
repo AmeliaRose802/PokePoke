@@ -609,12 +609,12 @@ class TestAgentClassification:
 
     def test_singleton_agents_defined(self):
         """Test that singleton agents are properly defined."""
-        expected_singleton = {"Beta Tester", "Janitor", "Backlog Cleanup", "Worktree Cleanup", "Model Sync"}
+        expected_singleton = {"Beta Tester", "Janitor", "Worktree Cleanup", "Model Sync"}
         assert expected_singleton == _SINGLETON_AGENTS
 
     def test_parallel_safe_agents_defined(self):
         """Test that parallel-safe agents are properly defined."""
-        expected_parallel = {"Tech Debt", "Code Review"}
+        expected_parallel = {"Tech Debt", "Code Review", "Backlog Cleanup"}
         assert expected_parallel == _PARALLEL_SAFE_AGENTS
 
     def test_no_overlap_in_classifications(self):
