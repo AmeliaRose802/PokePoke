@@ -10,6 +10,8 @@ pytest-xdist>=3.5.0
 # Type Checking
 mypy>=1.7.0
 types-setuptools>=69.0.0
+types-pyyaml>=6.0.0
+types-psutil>=7.2.0
 
 # Linting
 ruff>=0.3.0
