@@ -33,7 +33,17 @@ def _is_stopping() -> bool:
     """Check if the orchestrator is shutting down or stop-after-current is set."""
     return is_shutting_down() or should_stop_after_current()
 
-# Agents that require singleton guard (modify shared state or produce duplicates)
+# Agents that require exclusive access to the main repo (clean working tree,
+# wait for work agents to drain).  Only agents that modify shared filesystem
+# state belong here.
+_EXCLUSIVE_AGENTS: set[str] = {
+    "Janitor",
+    "Worktree Cleanup",
+}
+
+# Agents that require singleton guard (file + thread locks) to prevent
+# duplicate concurrent runs, but do NOT need exclusive repo access.
+# _EXCLUSIVE_AGENTS also receive singleton guards automatically.
 _SINGLETON_AGENTS: set[str] = {
     "Beta Tester",
     "Janitor",
@@ -154,10 +164,68 @@ class MaintenanceScheduler:
         if not due_agents:
             return
 
-        # Check repo cleanliness ONCE for the entire batch.  Previously each
-        # agent called wait_for_main_repo_clean independently, so a dirty repo
-        # caused 4+ agents to each time-out after 3 minutes — wasting 12+ min
-        # per cycle with no useful work.
+        # Split due agents into three tiers:
+        #  1. parallel-safe — no coordination needed (read-only / beads-only)
+        #  2. non-exclusive singleton — need duplicate-prevention locks but
+        #     can run alongside work agents without a clean repo
+        #  3. exclusive — need clean repo AND wait for work agents to drain
+        parallel_due = [a for a in due_agents if a.name in _PARALLEL_SAFE_AGENTS]
+        singleton_due = [a for a in due_agents if a.name not in _PARALLEL_SAFE_AGENTS and a.name not in _EXCLUSIVE_AGENTS]
+        exclusive_due = [a for a in due_agents if a.name in _EXCLUSIVE_AGENTS]
+
+        # Tier 1: parallel-safe agents run immediately
+        self._run_agent_batch(parallel_due, pokepoke_repo, session_stats, run_logger, repo_id, label="parallel-safe")
+
+        # Tier 2: singleton agents (e.g. Beta Tester, Model Sync) need locks
+        # but don't require a clean repo or work-agent drain
+        self._run_agent_batch(singleton_due, pokepoke_repo, session_stats, run_logger, repo_id, label="singleton")
+
+        # Tier 3: exclusive agents need clean repo and singleton guards
+        self._run_exclusive_agents(exclusive_due, pokepoke_repo, session_stats, run_logger, repo_id)
+
+        # Record that a maintenance pass was executed for this repo
+        if repo_id is not None:
+            record_maintenance_run(repo_id)
+
+    def _run_agent_batch(
+        self,
+        agents: list[MaintenanceAgentConfig],
+        pokepoke_repo: Path,
+        session_stats: SessionStats,
+        run_logger: RunLogger,
+        repo_id: str | None,
+        label: str = "maintenance",
+    ) -> None:
+        """Run a batch of maintenance agents, stopping early on shutdown."""
+        from pokepoke.utils.shutdown import is_shutting_down, should_stop_after_current
+
+        for agent_cfg in agents:
+            if is_shutting_down() or should_stop_after_current():
+                remaining = len(agents) - agents.index(agent_cfg)
+                run_logger.log_maintenance(
+                    "maintenance",
+                    f"Stopping maintenance early - orchestrator is stopping "
+                    f"({remaining} {label} agent(s) skipped)",
+                )
+                break
+            self._maybe_run_agent(agent_cfg.name, agent_cfg, pokepoke_repo, session_stats, run_logger, repo_id=repo_id)
+
+    def _run_exclusive_agents(
+        self,
+        exclusive_due: list[MaintenanceAgentConfig],
+        pokepoke_repo: Path,
+        session_stats: SessionStats,
+        run_logger: RunLogger,
+        repo_id: str | None,
+    ) -> None:
+        """Run exclusive agents that require a clean main repo."""
+        if not exclusive_due:
+            return
+
+        if _is_stopping():
+            return
+
+        # Check repo cleanliness ONCE for the exclusive batch.
         def _batch_log(msg: str) -> None:
             run_logger.log_maintenance("maintenance", msg)
 
@@ -169,25 +237,11 @@ class MaintenanceScheduler:
         ):
             run_logger.log_maintenance(
                 "maintenance",
-                f"Skipping {len(due_agents)} maintenance agent(s) - main repo still dirty after wait",
+                f"Skipping {len(exclusive_due)} exclusive maintenance agent(s) - main repo still dirty after wait",
             )
             return
 
-        from pokepoke.utils.shutdown import is_shutting_down, should_stop_after_current
-
-        for agent_cfg in due_agents:
-            if is_shutting_down() or should_stop_after_current():
-                run_logger.log_maintenance(
-                    "maintenance",
-                    f"Stopping maintenance early - orchestrator is stopping "
-                    f"({len(due_agents) - due_agents.index(agent_cfg)} agent(s) skipped)",
-                )
-                break
-            self._maybe_run_agent(agent_cfg.name, agent_cfg, pokepoke_repo, session_stats, run_logger, repo_id=repo_id)
-
-        # Record that a maintenance pass was executed for this repo
-        if repo_id is not None:
-            record_maintenance_run(repo_id)
+        self._run_agent_batch(exclusive_due, pokepoke_repo, session_stats, run_logger, repo_id)
 
     def _maybe_run_agent(
         self,
@@ -205,10 +259,10 @@ class MaintenanceScheduler:
             run_logger.log_maintenance(log_key, f"Skipping {agent_name} Agent - orchestrator is stopping")
             return
 
-        # Defer singleton agents when other agents are actively processing
+        # Defer exclusive agents when other agents are actively processing
         # (e.g. retrying after gate failures) to avoid interfering with
-        # in-progress work.
-        if agent_name in _SINGLETON_AGENTS:
+        # in-progress work that modifies the repo.
+        if agent_name in _EXCLUSIVE_AGENTS:
             active_count = get_active_agent_count()
             if active_count > 0:
                 run_logger.log_maintenance(
