@@ -9,6 +9,7 @@ from pokepoke.agents.decomposition_agent import (
     DecompositionResult,
     SubTask,
     _add_blocking_dependency,
+    _block_parent_item,
     _create_child_item,
     _get_existing_child_titles,
     _is_valid_title,
@@ -292,6 +293,43 @@ class TestAddBlockingDependency:
 
 
 # ---------------------------------------------------------------------------
+# _block_parent_item
+# ---------------------------------------------------------------------------
+
+
+class TestBlockParentItem:
+    """Tests for parent item blocking after decomposition."""
+
+    @patch(f"{_DECOMP}._run_bd")
+    def test_blocks_parent_with_notes(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = subprocess.CompletedProcess(["bd"], 0, stdout="", stderr="")
+        assert _block_parent_item("parent-1", ["child-1", "child-2", "child-3"]) is True
+        args = mock_run.call_args[0][0]
+        assert "update" in args
+        assert "parent-1" in args
+        assert "--status" in args
+        status_idx = args.index("--status") + 1
+        assert args[status_idx] == "blocked"
+        assert "--notes" in args
+        notes_idx = args.index("--notes") + 1
+        notes = args[notes_idx]
+        assert "Decomposed into 3 subtasks" in notes
+        assert "child-1" in notes
+        assert "child-2" in notes
+        assert "child-3" in notes
+
+    @patch(f"{_DECOMP}._run_bd")
+    def test_returns_false_on_failure(self, mock_run: MagicMock) -> None:
+        mock_run.side_effect = subprocess.CalledProcessError(1, "bd")
+        assert _block_parent_item("parent-1", ["child-1"]) is False
+
+    @patch(f"{_DECOMP}._run_bd")
+    def test_returns_false_on_timeout(self, mock_run: MagicMock) -> None:
+        mock_run.side_effect = subprocess.TimeoutExpired("bd", 15)
+        assert _block_parent_item("parent-1", ["child-1"]) is False
+
+
+# ---------------------------------------------------------------------------
 # _get_existing_child_titles
 # ---------------------------------------------------------------------------
 
@@ -406,6 +444,7 @@ class TestRunDecomposition:
 
     @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")
     @patch("pokepoke.beads.beads_management.add_comment")
+    @patch(f"{_DECOMP}._block_parent_item")
     @patch(f"{_DECOMP}._update_parent_metadata")
     @patch(f"{_DECOMP}._add_blocking_dependency")
     @patch(f"{_DECOMP}._create_child_item")
@@ -416,8 +455,9 @@ class TestRunDecomposition:
         mock_sdk: MagicMock,
         mock_existing: MagicMock,
         mock_create: MagicMock,
-        mock_block: MagicMock,
+        mock_block_dep: MagicMock,
         mock_update: MagicMock,
+        mock_block_parent: MagicMock,
         mock_comment: MagicMock,
         mock_record: MagicMock,
     ) -> None:
@@ -437,10 +477,12 @@ class TestRunDecomposition:
         assert len(result.child_ids) == 3
         assert mock_create.call_count == 3
         mock_update.assert_called_once_with("task-1", ["child-1", "child-2", "child-3"])
+        mock_block_parent.assert_called_once_with("task-1", ["child-1", "child-2", "child-3"])
         mock_comment.assert_called_once()
 
     @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")
     @patch("pokepoke.beads.beads_management.add_comment")
+    @patch(f"{_DECOMP}._block_parent_item")
     @patch(f"{_DECOMP}._update_parent_metadata")
     @patch(f"{_DECOMP}._add_blocking_dependency")
     @patch(f"{_DECOMP}._create_child_item")
@@ -451,8 +493,9 @@ class TestRunDecomposition:
         mock_sdk: MagicMock,
         mock_existing: MagicMock,
         mock_create: MagicMock,
-        mock_block: MagicMock,
+        mock_block_dep: MagicMock,
         mock_update: MagicMock,
+        mock_block_parent: MagicMock,
         mock_comment: MagicMock,
         mock_record: MagicMock,
     ) -> None:
@@ -468,12 +511,13 @@ class TestRunDecomposition:
         run_decomposition(item, failure_count=3)
 
         # child-1 blocks child-2, child-2 blocks child-3
-        assert mock_block.call_count == 2
-        mock_block.assert_any_call("child-1", "child-2")
-        mock_block.assert_any_call("child-2", "child-3")
+        assert mock_block_dep.call_count == 2
+        mock_block_dep.assert_any_call("child-1", "child-2")
+        mock_block_dep.assert_any_call("child-2", "child-3")
 
     @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")
     @patch("pokepoke.beads.beads_management.add_comment")
+    @patch(f"{_DECOMP}._block_parent_item")
     @patch(f"{_DECOMP}._update_parent_metadata")
     @patch(f"{_DECOMP}._add_blocking_dependency")
     @patch(f"{_DECOMP}._create_child_item")
@@ -484,8 +528,9 @@ class TestRunDecomposition:
         mock_sdk: MagicMock,
         mock_existing: MagicMock,
         mock_create: MagicMock,
-        mock_block: MagicMock,
+        mock_block_dep: MagicMock,
         mock_update: MagicMock,
+        mock_block_parent: MagicMock,
         mock_comment: MagicMock,
         mock_record: MagicMock,
     ) -> None:
@@ -534,6 +579,7 @@ class TestRunDecomposition:
 
     @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")
     @patch("pokepoke.beads.beads_management.add_comment")
+    @patch(f"{_DECOMP}._block_parent_item")
     @patch(f"{_DECOMP}._update_parent_metadata")
     @patch(f"{_DECOMP}._add_blocking_dependency")
     @patch(f"{_DECOMP}._create_child_item")
@@ -544,8 +590,9 @@ class TestRunDecomposition:
         mock_sdk: MagicMock,
         mock_existing: MagicMock,
         mock_create: MagicMock,
-        mock_block: MagicMock,
+        mock_block_dep: MagicMock,
         mock_update: MagicMock,
+        mock_block_parent: MagicMock,
         mock_comment: MagicMock,
         mock_record: MagicMock,
     ) -> None:
@@ -581,6 +628,7 @@ class TestRunDecomposition:
 
     @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")
     @patch("pokepoke.beads.beads_management.add_comment")
+    @patch(f"{_DECOMP}._block_parent_item")
     @patch(f"{_DECOMP}._update_parent_metadata")
     @patch(f"{_DECOMP}._add_blocking_dependency")
     @patch(f"{_DECOMP}._create_child_item")
@@ -591,8 +639,9 @@ class TestRunDecomposition:
         mock_sdk: MagicMock,
         mock_existing: MagicMock,
         mock_create: MagicMock,
-        mock_block: MagicMock,
+        mock_block_dep: MagicMock,
         mock_update: MagicMock,
+        mock_block_parent: MagicMock,
         mock_comment: MagicMock,
         mock_record: MagicMock,
     ) -> None:
@@ -614,6 +663,7 @@ class TestRunDecomposition:
 
     @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")
     @patch("pokepoke.beads.beads_management.add_comment")
+    @patch(f"{_DECOMP}._block_parent_item")
     @patch(f"{_DECOMP}._update_parent_metadata")
     @patch(f"{_DECOMP}._add_blocking_dependency")
     @patch(f"{_DECOMP}._create_child_item")
@@ -624,8 +674,9 @@ class TestRunDecomposition:
         mock_sdk: MagicMock,
         mock_existing: MagicMock,
         mock_create: MagicMock,
-        mock_block: MagicMock,
+        mock_block_dep: MagicMock,
         mock_update: MagicMock,
+        mock_block_parent: MagicMock,
         mock_comment: MagicMock,
         mock_record: MagicMock,
     ) -> None:
@@ -646,6 +697,7 @@ class TestRunDecomposition:
 
     @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")
     @patch("pokepoke.beads.beads_management.add_comment")
+    @patch(f"{_DECOMP}._block_parent_item")
     @patch(f"{_DECOMP}._update_parent_metadata")
     @patch(f"{_DECOMP}._add_blocking_dependency")
     @patch(f"{_DECOMP}._create_child_item")
@@ -656,8 +708,9 @@ class TestRunDecomposition:
         mock_sdk: MagicMock,
         mock_existing: MagicMock,
         mock_create: MagicMock,
-        mock_block: MagicMock,
+        mock_block_dep: MagicMock,
         mock_update: MagicMock,
+        mock_block_parent: MagicMock,
         mock_comment: MagicMock,
         mock_record: MagicMock,
     ) -> None:
@@ -701,6 +754,7 @@ class TestRunDecomposition:
 
     @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")
     @patch("pokepoke.beads.beads_management.add_comment")
+    @patch(f"{_DECOMP}._block_parent_item")
     @patch(f"{_DECOMP}._update_parent_metadata")
     @patch(f"{_DECOMP}._add_blocking_dependency")
     @patch(f"{_DECOMP}._create_child_item")
@@ -711,8 +765,9 @@ class TestRunDecomposition:
         mock_sdk: MagicMock,
         mock_existing: MagicMock,
         mock_create: MagicMock,
-        mock_block: MagicMock,
+        mock_block_dep: MagicMock,
         mock_update: MagicMock,
+        mock_block_parent: MagicMock,
         mock_comment: MagicMock,
         mock_record: MagicMock,
     ) -> None:

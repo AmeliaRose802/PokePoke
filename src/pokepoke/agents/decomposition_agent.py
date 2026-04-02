@@ -240,6 +240,25 @@ def _add_blocking_dependency(blocker_id: str, blocked_id: str) -> bool:
         return False
 
 
+def _block_parent_item(parent_id: str, child_ids: list[str]) -> bool:
+    """Block parent item after decomposition so it doesn't compete with children."""
+    try:
+        notes = f"Decomposed into {len(child_ids)} subtasks: {', '.join(child_ids)}"
+        _run_bd([
+            "update", parent_id,
+            "--status", "blocked",
+            "--notes", notes,
+        ], check=False, timeout=15)
+        logger.info("🔀 Blocked parent item %s", parent_id)
+        return True
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        logger.warning(
+            "Failed to block parent item %s: %s",
+            parent_id, exc,
+        )
+        return False
+
+
 def run_decomposition(item: BeadsWorkItem, failure_count: int) -> DecompositionResult:
     """Decompose a failing item via SDK analysis, creating serialised child tasks."""
     logger.info(
@@ -324,6 +343,9 @@ def run_decomposition(item: BeadsWorkItem, failure_count: int) -> DecompositionR
         f"{DECOMPOSITION_COMMENT_PREFIX} after {failure_count} consecutive failures.\n"
         f"Created {len(child_ids)} sub-tasks: {', '.join(child_ids)}",
     )
+
+    # Block the parent item so it doesn't compete with its children
+    _block_parent_item(item.id, child_ids)
 
     reason = f"Created {len(child_ids)}/{len(subtasks)} sub-tasks"
     logger.info("🔀 Decomposition complete for %s: %s", item.id, reason)
