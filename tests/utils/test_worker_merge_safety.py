@@ -98,6 +98,23 @@ class TestWorkerPromptsDoNotInstructMerging:
             f"Worker prompt '{template_name}' lacks explicit merge prohibition"
         )
 
+    @pytest.mark.parametrize("template_name", WORKER_TEMPLATES)
+    def test_contains_beads_lifecycle_prohibition(self, prompt_service: PromptService, template_name: str) -> None:
+        """Worker prompt must prohibit bd close/bd update — orchestrator owns lifecycle.
+
+        Regression test for PokePoke-k9wjg: retry prompt previously told agents
+        to run bd close, bypassing gate agent verification.
+        """
+        content = prompt_service.load_prompt(template_name).lower()
+        has_bd_close_prohibition = "do not" in content and "bd close" in content
+        has_bd_update_prohibition = "do not" in content and "bd update" in content
+        assert has_bd_close_prohibition, (
+            f"Worker prompt '{template_name}' must explicitly prohibit 'bd close'"
+        )
+        assert has_bd_update_prohibition, (
+            f"Worker prompt '{template_name}' must explicitly prohibit 'bd update'"
+        )
+
 
 # ── SDK environment guard tests ──────────────────────────────────────────
 

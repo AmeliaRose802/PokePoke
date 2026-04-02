@@ -21,8 +21,8 @@ Please implement this task according to the project guidelines and best practice
 2. Add appropriate tests
 3. Update documentation if needed
 4. Commit your code changes with a descriptive message
-5. Update beads items as needed - beads changes sync automatically via 'bd sync'
-6. When done and all validation passes, push your commits — do not merge or close the beads item, the orchestrator handles that
+5. When done and all validation passes, push your commits — do not merge; the orchestrator handles merging and closing
+6. Do NOT run `bd close` or `bd update` — the orchestrator owns beads lifecycle
 
 Work independently and autonomously. Report completion when done.
 
