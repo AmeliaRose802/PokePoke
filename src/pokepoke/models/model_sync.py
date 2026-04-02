@@ -94,7 +94,10 @@ def load_registry(path: Path | None = None) -> dict[str, Any]:
 def save_registry(data: dict[str, Any], path: Path | None = None) -> None:
     registry_path = path or REGISTRY_PATH
     registry_path.parent.mkdir(parents=True, exist_ok=True)
-    registry_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    # Atomic write via temp file + rename to prevent corruption from concurrent access
+    tmp_path = registry_path.with_suffix(".tmp")
+    tmp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    tmp_path.replace(registry_path)
 
 
 def get_available_model_names(registry_path: Path | None = None) -> list[str]:
@@ -258,6 +261,8 @@ def sync_copilot_models(item_logger: Any | None = None, force: bool = False) -> 
         item_logger: Optional logger for output messages
         force: If True, skip the interval check and always run the sync
     """
+    from pokepoke.worktrees.coordination import model_registry_lock
+
     config = get_config()
     sync_cfg = config.model_sync
     start_time = time.time()
@@ -276,8 +281,11 @@ def sync_copilot_models(item_logger: Any | None = None, force: bool = False) -> 
         return None
 
     now = datetime.now(UTC)
-    registry, _new_models, removed_models = update_registry(models, registry, now)
-    save_registry(registry)
+    with model_registry_lock():
+        # Re-read under lock to avoid lost updates from concurrent writers
+        registry = load_registry()
+        registry, _new_models, removed_models = update_registry(models, registry, now)
+        save_registry(registry)
 
     repo_root = _get_main_repo_root()
     cwd = str(repo_root) if repo_root else None

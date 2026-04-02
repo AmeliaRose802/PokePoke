@@ -192,6 +192,7 @@ _WORKTREE_SETUP_LOCK = "worktree-setup"
 _MERGE_LOCK = "merge-queue"
 _MANIFEST_LOCK = "worktree-manifest"
 _BEADS_DB_LOCK = "beads-db"
+_MODEL_REGISTRY_LOCK = "model-registry"
 
 _MERGE_LOCK_STALE_AGE = 900.0  # 15 min; beyond any legitimate merge
 
@@ -200,6 +201,7 @@ _MERGE_STALE = 600.0           # 10 min
 _MANIFEST_STALE = 120.0        # 2 min
 _CLEANUP_STALE = 300.0         # 5 min
 _BEADS_DB_STALE = 300.0        # 5 min
+_MODEL_REGISTRY_STALE = 120.0  # 2 min
 
 
 @contextmanager
@@ -261,6 +263,15 @@ def manifest_lock(timeout: float = 30.0) -> Generator[FileLock, None, None]:
     """Serialize worktree manifest read-modify-write operations."""
     with acquire_lock(
         _MANIFEST_LOCK, timeout=timeout, stale_timeout=_MANIFEST_STALE,
+    ) as lock:
+        yield lock
+
+
+@contextmanager
+def model_registry_lock(timeout: float = 30.0) -> Generator[FileLock, None, None]:
+    """Serialize model registry read-modify-write operations."""
+    with acquire_lock(
+        _MODEL_REGISTRY_LOCK, timeout=timeout, stale_timeout=_MODEL_REGISTRY_STALE,
     ) as lock:
         yield lock
 
@@ -377,6 +388,11 @@ def clear_lock_if_stale(lock_name: str, max_age_seconds: float = 3600) -> bool:
             _meta_path(lock_path).unlink(missing_ok=True)
             logger.info("Cleared stale lock %s (%s)", lock_name, reason)
             return True
+        except FileNotFoundError:
+            # File already removed (e.g. by filelock on Windows) - effectively cleared
+            _meta_path(lock_path).unlink(missing_ok=True)
+            logger.info("Cleared stale lock %s (%s, file already gone)", lock_name, reason)
+            return True
         except PermissionError as exc:
             if os.name != "nt" or not lock.is_locked:
                 logger.warning("Failed to clear stale lock %s: %s", lock_name, exc)
@@ -386,6 +402,10 @@ def clear_lock_if_stale(lock_name: str, max_age_seconds: float = 3600) -> bool:
                 lock_path.unlink()
                 _meta_path(lock_path).unlink(missing_ok=True)
                 logger.info("Cleared stale lock %s (%s)", lock_name, reason)
+                return True
+            except FileNotFoundError:
+                _meta_path(lock_path).unlink(missing_ok=True)
+                logger.info("Cleared stale lock %s (%s, file already gone)", lock_name, reason)
                 return True
             except OSError as exc2:
                 logger.warning("Failed to clear stale lock %s: %s", lock_name, exc2)

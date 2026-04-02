@@ -294,7 +294,7 @@ class TestHasUncommittedChanges:
 
         assert result is True  # Assume dirty when git fails to prevent data loss
 
-    @patch('pokepoke.git.git_helpers.time.sleep')
+    @patch('pokepoke.git.git_helpers.sleep_with_backoff')
     @patch('pokepoke.git.git_helpers.subprocess.run')
     def test_git_timeout(self, mock_run: Mock, mock_sleep: Mock) -> None:
         """Test error handling when git command times out.
@@ -1201,3 +1201,133 @@ class TestExecuteMergeSequenceTimeoutExpired:
         assert success is False
         assert "timed out" in message
         assert unmerged == []
+
+
+class TestAutoResolvePokepokeConflicts:
+    """Tests for _auto_resolve_pokepoke_conflicts helper."""
+
+    @patch('pokepoke.git.git_helpers.subprocess.run')
+    def test_resolves_pokepoke_files(self, mock_run: Mock) -> None:
+        """Files under .pokepoke/ are auto-resolved with --ours."""
+        from pokepoke.git.git_operations import _auto_resolve_pokepoke_conflicts
+        mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
+
+        remaining = _auto_resolve_pokepoke_conflicts(
+            [".pokepoke/model_registry.json", ".pokepoke/failed_unassigns.json"],
+        )
+
+        assert remaining == []
+        # Should have called checkout --ours and add for each file
+        cmds = [call[0][0] for call in mock_run.call_args_list]
+        assert any("checkout" in cmd and "--ours" in cmd for cmd in cmds)
+        assert any(cmd[:2] == ["git", "add"] for cmd in cmds)
+
+    def test_leaves_non_pokepoke_files(self) -> None:
+        """Files outside .pokepoke/ are left unresolved."""
+        from pokepoke.git.git_operations import _auto_resolve_pokepoke_conflicts
+
+        remaining = _auto_resolve_pokepoke_conflicts(
+            ["src/main.py", "README.md"],
+        )
+
+        assert remaining == ["src/main.py", "README.md"]
+
+    @patch('pokepoke.git.git_helpers.subprocess.run')
+    def test_mixed_files_resolves_only_pokepoke(self, mock_run: Mock) -> None:
+        """Only .pokepoke/ files are resolved; others are returned."""
+        from pokepoke.git.git_operations import _auto_resolve_pokepoke_conflicts
+        mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
+
+        remaining = _auto_resolve_pokepoke_conflicts(
+            [".pokepoke/model_registry.json", "src/main.py"],
+        )
+
+        assert remaining == ["src/main.py"]
+
+    @patch('pokepoke.git.git_helpers.subprocess.run')
+    def test_git_failure_keeps_file_in_remaining(self, mock_run: Mock) -> None:
+        """If git checkout --ours fails, the file stays in remaining."""
+        from pokepoke.git.git_operations import _auto_resolve_pokepoke_conflicts
+        mock_run.side_effect = subprocess.CalledProcessError(1, "git checkout")
+
+        remaining = _auto_resolve_pokepoke_conflicts(
+            [".pokepoke/model_registry.json"],
+        )
+
+        assert remaining == [".pokepoke/model_registry.json"]
+
+    def test_empty_list_returns_empty(self) -> None:
+        """Empty input returns empty output."""
+        from pokepoke.git.git_operations import _auto_resolve_pokepoke_conflicts
+
+        assert _auto_resolve_pokepoke_conflicts([]) == []
+
+
+class TestMergeSequencePokepokeAutoResolve:
+    """Tests for .pokepoke/ auto-resolution in execute_merge_sequence."""
+
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=True)
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files',
+           return_value=[".pokepoke/model_registry.json", ".pokepoke/failed_unassigns.json"])
+    @patch('pokepoke.git.git_operations.restore_beads_stash')
+    @patch('pokepoke.git.git_operations.subprocess.run')
+    def test_all_pokepoke_conflicts_auto_resolved(
+        self, mock_run: Mock, mock_restore: Mock,
+        mock_unmerged: Mock, mock_in_progress: Mock,
+    ) -> None:
+        """When all conflicts are .pokepoke/ files, merge completes successfully."""
+        def side_effect(cmd, **kwargs):
+            if cmd[:2] == ["git", "checkout"] and "--ours" not in cmd:
+                return Mock(returncode=0)
+            if cmd[:3] == ["git", "status", "--porcelain"]:
+                return Mock(stdout="", returncode=0)
+            if cmd[:3] == ["git", "pull", "--rebase"]:
+                return Mock(returncode=0)
+            if cmd[:3] == ["git", "merge", "--no-ff"]:
+                raise subprocess.CalledProcessError(1, cmd, stderr="CONFLICT")
+            if cmd[:2] == ["git", "checkout"] and "--ours" in cmd:
+                return Mock(returncode=0)
+            if cmd[:2] == ["git", "add"]:
+                return Mock(returncode=0)
+            if cmd[:2] == ["git", "commit"]:
+                return Mock(returncode=0)
+            raise AssertionError(f"Unexpected command: {cmd}")
+
+        mock_run.side_effect = side_effect
+        success, _message, unmerged = execute_merge_sequence("feature", "main")
+
+        assert success is True
+        assert unmerged == []
+
+    @patch('pokepoke.git.merge_conflict.abort_merge', return_value=(True, ""))
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=True)
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files',
+           return_value=[".pokepoke/model_registry.json", "src/main.py"])
+    @patch('pokepoke.git.git_operations.restore_beads_stash')
+    @patch('pokepoke.git.git_operations.subprocess.run')
+    def test_mixed_conflicts_resolves_pokepoke_returns_others(
+        self, mock_run: Mock, mock_restore: Mock,
+        mock_unmerged: Mock, mock_in_progress: Mock, mock_abort: Mock,
+    ) -> None:
+        """When some conflicts are .pokepoke/ and others aren't, only others remain."""
+        def side_effect(cmd, **kwargs):
+            if cmd[:2] == ["git", "checkout"] and "--ours" not in cmd:
+                return Mock(returncode=0)
+            if cmd[:3] == ["git", "status", "--porcelain"]:
+                return Mock(stdout="", returncode=0)
+            if cmd[:3] == ["git", "pull", "--rebase"]:
+                return Mock(returncode=0)
+            if cmd[:3] == ["git", "merge", "--no-ff"]:
+                raise subprocess.CalledProcessError(1, cmd, stderr="CONFLICT")
+            if cmd[:2] == ["git", "checkout"] and "--ours" in cmd:
+                return Mock(returncode=0)
+            if cmd[:2] == ["git", "add"]:
+                return Mock(returncode=0)
+            raise AssertionError(f"Unexpected command: {cmd}")
+
+        mock_run.side_effect = side_effect
+        success, _message, unmerged = execute_merge_sequence("feature", "main")
+
+        assert success is False
+        assert "src/main.py" in unmerged
+        assert ".pokepoke/model_registry.json" not in unmerged

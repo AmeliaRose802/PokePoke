@@ -175,6 +175,30 @@ def test_save_registry_round_trip(tmp_path):
     assert loaded["models"]["gpt-5.2"]["available"] is True
 
 
+def test_save_registry_atomic_write(tmp_path):
+    """save_registry uses temp file + rename for atomic writes."""
+    path = tmp_path / "registry.json"
+    payload = {"last_sync": "2026-02-25T00:00:00+00:00", "models": {}}
+    save_registry(payload, path=path)
+
+    # Verify the file exists and no .tmp leftover
+    assert path.exists()
+    tmp_path_file = path.with_suffix(".tmp")
+    assert not tmp_path_file.exists(), "Temp file should be cleaned up after atomic rename"
+
+    # Verify content is valid JSON
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    assert loaded == payload
+
+
+def test_save_registry_creates_parent_dirs(tmp_path):
+    """save_registry creates parent directories if they don't exist."""
+    path = tmp_path / "nested" / "dir" / "registry.json"
+    payload = {"last_sync": None, "models": {}}
+    save_registry(payload, path=path)
+    assert path.exists()
+
+
 def test_run_copilot_models_parses_output():
     output = '[{"name":"gpt-5.2","status":"beta"}]'
     result = subprocess.CompletedProcess(["copilot", "models", "list", "--json"], 0, output, "")
