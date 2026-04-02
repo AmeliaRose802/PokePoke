@@ -280,6 +280,16 @@ def build_prompt_from_work_item(
                 template_name = config.prompt_templates[label]
                 logger.info(f"Using label-specific template '{template_name}' for label '{label}'")
                 break
+
+    # Retrieve relevant memories if enabled
+    memory_context: str | None = None
+    if config.mcp_server.memory_enabled:
+        try:
+            from pokepoke.models.memory_helpers import retrieve_relevant_memories
+            memory_context = retrieve_relevant_memories(work_item)
+        except Exception as e:
+            logger.warning(f"Failed to retrieve memories: {e}")
+
     test_data_lines = [
         f"When you need {k.replace('_', ' ').capitalize()}, use: {v}"
         for k, v in config.test_data.items()
@@ -301,6 +311,7 @@ def build_prompt_from_work_item(
             ", ".join(work_item.labels) if work_item.labels else None, "labels",
         ),
         "mcp_enabled": config.mcp_server.enabled,
+        "memory_context": memory_context,
         "test_data_section": test_data_section,
         "command_timeout": config.command_timeout,
         "retry_feedback": retry_feedback_section,

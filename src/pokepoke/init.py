@@ -53,6 +53,11 @@ mcp_server:
   # restart_script: scripts/Restart-MCPServer.ps1
   # name: My MCP Server
 
+  # Memory server (persistent agent knowledge across sessions)
+  memory_enabled: false
+  # memory_file_path: null  # Auto-detected: .pokepoke/memory.jsonl
+  # confidence_decay_days: 30  # Days before observations are considered stale
+
 # Maintenance agent scheduling
 # Each agent runs every N work items completed.
 maintenance:

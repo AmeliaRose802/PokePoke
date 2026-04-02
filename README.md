@@ -302,6 +302,49 @@ Agents share no Python-level state. All coordination runs through two channels:
 
 This design means agents are just Copilot CLI processes with no shared memory, no message bus, and no coordination server. The filesystem *is* the coordination layer.
 
+### Persistent Agent Memory (MCP Memory Server)
+
+PokePoke integrates the official [MCP memory server](https://github.com/modelcontextprotocol/servers/tree/main/src/memory) to store and retrieve learned facts across sessions. This provides **dynamic, agent-discovered knowledge** that complements the static Spec Registry.
+
+**How it works:**
+
+1. **Agent retrieval** — When starting work, agents query memory for facts relevant to the work item (based on labels, issue type, and title keywords). Retrieved memories appear in the agent's prompt context.
+
+2. **Agent storage** — After successful work completion, agents automatically store discovered facts (e.g., "workflow.py is the main orchestration loop") in the knowledge graph.
+
+3. **TTL decay** — Observations older than `confidence_decay_days` (default: 30) are automatically cleaned up to prevent stale knowledge from accumulating.
+
+**Configuration** (`.pokepoke/config.yaml`):
+
+```yaml
+mcp_server:
+  memory_enabled: true  # Enable persistent memory
+  memory_file_path: null  # Auto-detected: {repo_root}/.pokepoke/memory.jsonl
+  confidence_decay_days: 30  # Days before observations expire
+```
+
+**Storage location:** `.pokepoke/memory.jsonl` (JSONL knowledge graph format)
+
+**Repository scoping:** Facts are automatically scoped per-repository using entity name prefixes (e.g., `PokePoke::workflow.py`), preventing cross-repo pollution.
+
+**Inspecting memory:**
+
+```bash
+# View the raw knowledge graph
+cat .pokepoke/memory.jsonl
+
+# Or query via the MCP server
+npx -y @modelcontextprotocol/server-memory
+```
+
+**Use cases:**
+
+- Agent discovers "workflow.py is the main orchestration loop" → stores this fact
+- Next agent working on an 'orchestrator'-labeled item retrieves this knowledge instantly instead of re-exploring
+- Facts accumulate over runs, making each subsequent run faster
+
+**Disabling:** Set `memory_enabled: false` in config or omit the `mcp_server` section entirely.
+
 ### Concurrency Model
 
 **Atomic work claiming** — `assign_and_sync_item()` implements a check-then-act pattern under a per-item file lock:

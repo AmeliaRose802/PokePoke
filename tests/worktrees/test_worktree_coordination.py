@@ -268,17 +268,15 @@ class TestMainRepoGitLock:
         """The same thread can acquire main_repo_git_lock multiple times."""
         from pokepoke.worktrees.coordination import main_repo_git_lock
 
-        with main_repo_git_lock():
-            with main_repo_git_lock():
-                pass  # Should not deadlock
+        with main_repo_git_lock(), main_repo_git_lock():
+            pass  # Should not deadlock
 
     def test_context_manager_releases_on_exception(self):
         """Lock is released even if the body raises."""
         from pokepoke.worktrees.coordination import main_repo_git_lock
 
-        with contextlib.suppress(RuntimeError):
-            with main_repo_git_lock():
-                raise RuntimeError("boom")
+        with contextlib.suppress(RuntimeError), main_repo_git_lock():
+            raise RuntimeError("boom")
 
         # Should be acquirable again
         with main_repo_git_lock():

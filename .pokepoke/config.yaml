@@ -96,6 +96,10 @@ mcp_server:
   enabled: false
   restart_script: null
   name: null
+  # Memory server settings (persistent agent knowledge across sessions)
+  memory_enabled: false
+  memory_file_path: null  # Default: {repo_root}/.pokepoke/memory.jsonl
+  confidence_decay_days: 30  # Days before observations are considered stale
 git:
   default_branch: master
   fallback_branch: master

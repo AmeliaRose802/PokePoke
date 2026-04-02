@@ -323,6 +323,24 @@ def _finalize_item_result(
         set_terminal_banner(format_work_item_banner(item.id, item.title, "Finalizing"))
         assert worktree_path is not None, "worktree_path must be set when result is successful"
         success = finalize_work_item(item, worktree_path, parent_agent_id=base_agent_id, repo_path=repo_path)
+
+        # Store discoveries in memory after successful work completion
+        if success:
+            from pokepoke.config import get_config
+            config = get_config()
+            if config.mcp_server.memory_enabled:
+                try:
+                    from pokepoke.models.memory_helpers import auto_discover_from_prompt, store_agent_discoveries
+                    from pokepoke.models.sdk_helpers import build_prompt_from_work_item
+                    # Auto-discover facts from work item context
+                    work_prompt = build_prompt_from_work_item(item)
+                    discoveries = auto_discover_from_prompt(work_prompt, item)
+                    if discoveries:
+                        store_agent_discoveries(item, discoveries, repo_root=worktree_path.parent if worktree_path else None)
+                        logger.debug(f"Stored {len(discoveries)} discoveries in memory for item {item.id}")
+                except Exception as e:
+                    logger.warning(f"Failed to store memories after completion: {e}")
+
         item_stats = accumulated_stats
         set_terminal_banner(format_work_item_banner(item.id, item.title, "Completed" if success else "Failed"))
         if success and run_beta_test:

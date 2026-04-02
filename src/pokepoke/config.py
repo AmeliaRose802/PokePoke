@@ -116,6 +116,10 @@ class MCPServerConfig:
     enabled: bool = False
     restart_script: str | None = None
     name: str | None = None
+    # Memory server settings
+    memory_enabled: bool = False
+    memory_file_path: str | None = None  # Default: {repo_root}/.pokepoke/memory.jsonl
+    confidence_decay_days: int = 30  # Days before observations are considered stale
 
 
 # Backwards-compatible alias (old typo kept to avoid breaking imports).
