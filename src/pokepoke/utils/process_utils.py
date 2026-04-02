@@ -10,37 +10,28 @@ import time
 from collections.abc import Generator
 from typing import Any
 
+try:
+    import psutil
+    _HAS_PSUTIL = True
+except ImportError:
+    _HAS_PSUTIL = False
+
 from pokepoke.stats.perf_timing import timed_block
 
 logger = logging.getLogger(__name__)
 
-# Lock protecting all global cache state. Acquire this lock before reading/writing
-# _copilot_process_cache, _copilot_last_tasklist_failure_log, or _memory_cache.
-_cache_lock = threading.Lock()
-
-# Cache *successful* tasklist results to avoid flooding the console with timeout messages
-# under high parallelism. Stores (timestamp, count) or None if uncached.
-_copilot_process_cache: tuple[float, int] | None = None
-
-# Rate-limit warning logs for tasklist failures (we still re-run tasklist immediately).
+_cache_lock = threading.Lock()  # Protects global cache state
+_copilot_process_cache: tuple[float, int] | None = None  # (timestamp, count)
 _copilot_last_tasklist_failure_log: float | None = None
-
-_COPILOT_CACHE_TTL = 5.0  # seconds between actual tasklist invocations
-
-# Memory monitoring constants
-_MEMORY_PRESSURE_THRESHOLD_MB = 2048  # Throttle new agents when <2 GB free
-_MEMORY_CRITICAL_THRESHOLD_MB = 1024  # Block new agents when <1 GB free
-_MEMORY_CACHE_TTL = 10.0  # seconds between memory checks
-_memory_cache: tuple[float, int] | None = None  # (timestamp, available_mb)
+_COPILOT_CACHE_TTL = 5.0
+_MEMORY_PRESSURE_THRESHOLD_MB = 2048
+_MEMORY_CRITICAL_THRESHOLD_MB = 1024
+_MEMORY_CACHE_TTL = 10.0
+_memory_cache: tuple[float, int] | None = None
 
 
 class ActivePidRegistry:
-    """Thread-safe registry of PIDs belonging to active copilot workers.
-
-    Workers register their copilot process PID after spawning and deregister
-    on teardown.  The orphan killer uses this set to decide which copilot.exe
-    processes are legitimate and which are zombies.
-    """
+    """Thread-safe registry of active copilot worker PIDs. Orphan killer uses this to distinguish zombies from legitimate processes."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -89,11 +80,7 @@ def get_active_pid_registry() -> ActivePidRegistry:
 
 
 def extract_client_pid(client: Any) -> int | None:
-    """Try to extract the copilot subprocess PID from the SDK client.
-
-    The SDK stores the spawned process as ``client._process``.  We access
-    it defensively so that SDK version changes don't crash the caller.
-    """
+    """Extract copilot subprocess PID from SDK client._process (defensive for SDK version changes)."""
     try:
         proc = getattr(client, '_process', None)
         if proc is not None and hasattr(proc, 'pid'):
@@ -104,10 +91,7 @@ def extract_client_pid(client: Any) -> int | None:
 
 
 def register_client_pid(client: Any, registry: ActivePidRegistry) -> int | None:
-    """Extract the copilot subprocess PID and register it in the registry.
-
-    Returns the PID if successfully extracted, or None.
-    """
+    """Extract the copilot subprocess PID and register it. Returns the PID if successful, or None."""
     pid = extract_client_pid(client)
     if pid is not None:
         registry.register(pid)
@@ -120,18 +104,11 @@ def deregister_client_pid(pid: int | None, registry: ActivePidRegistry) -> None:
     if pid is not None:
         registry.deregister(pid)
 
-
 def get_available_memory_mb() -> int:
-    """Return available physical memory in MB.
-
-    Uses Windows GlobalMemoryStatusEx via ctypes (no external deps).
-    Returns 0 on non-Windows or on failure.
-    """
+    """Return available physical memory in MB (Windows only, uses ctypes). Returns 0 on non-Windows or failure."""
     global _memory_cache
-
     if os.name != 'nt':
         return 0
-
     now = time.time()
     with _cache_lock:
         if _memory_cache is not None:
@@ -185,11 +162,7 @@ def is_memory_critical() -> bool:
 def kill_orphaned_copilot_processes(
     active_pids: frozenset[int] | set[int] | None = None,
 ) -> int:
-    """Kill copilot.exe processes not owned by an active worker.
-
-    Consults :class:`ActivePidRegistry` to protect legitimate PIDs.
-    Returns the number of processes killed.
-    """
+    """Kill orphaned copilot.exe processes. Consults ActivePidRegistry to protect legitimate PIDs. Returns count killed."""
     if os.name != 'nt':
         return 0
     if active_pids is None:
@@ -270,11 +243,12 @@ def log_process_tree_snapshot(
     except Exception as e:
         logger.debug("Failed to capture process tree snapshot: %s", e)
 
-
 def kill_process_tree(pid: int) -> bool:
     """Kill a process and its entire child tree.
 
-    Windows: ``taskkill /F /T /PID``.  Unix: ``os.kill(SIGKILL)``.
+    Windows: ``taskkill /F /T /PID``.
+    Unix: Uses psutil to recursively kill children, then kills parent.
+          Falls back to process group termination if psutil unavailable.
     Returns True on success (or if the process already exited).
     """
     if os.name == 'nt':
@@ -294,10 +268,38 @@ def kill_process_tree(pid: int) -> bool:
         except (subprocess.TimeoutExpired, Exception) as e:
             logger.warning("Failed to kill process tree for PID %d: %s", pid, e)
             return False
+    # Unix: Kill children first, then parent
+    if _HAS_PSUTIL:
+        try:
+            parent = psutil.Process(pid)
+            children = parent.children(recursive=True)
+            for child in children:
+                try:
+                    child.kill()
+                    logger.debug("Killed child process PID %d", child.pid)
+                except psutil.NoSuchProcess:
+                    pass
+                except Exception as e:
+                    logger.warning("Failed to kill child PID %d: %s", child.pid, e)
+            parent.kill()
+            logger.info("Killed process tree for PID %d (%d children)", pid, len(children))
+            return True
+        except psutil.NoSuchProcess:
+            logger.debug("Process %d already exited", pid)
+            return True
+        except Exception as e:
+            logger.warning("Failed to kill process tree for PID %d: %s", pid, e)
+    # Fallback: Try process group kill, then direct kill
     try:
-        os.kill(pid, 9)  # SIGKILL
-        logger.info("Sent SIGKILL to PID %d", pid)
-        return True
+        try:
+            pgid = os.getpgid(pid)  # type: ignore[attr-defined]  # Unix only
+            os.killpg(pgid, 9)  # type: ignore[attr-defined]  # Unix only, SIGKILL
+            logger.info("Killed process group %d for PID %d", pgid, pid)
+            return True
+        except (ProcessLookupError, PermissionError, OSError):
+            os.kill(pid, 9)  # SIGKILL
+            logger.info("Sent SIGKILL to PID %d (no process group)", pid)
+            return True
     except ProcessLookupError:
         logger.debug("Process %d already exited", pid)
         return True
@@ -320,15 +322,8 @@ def apply_memory_backpressure(slots: int) -> tuple[int, int]:
         return min(slots, 1), avail_mb
     return slots, avail_mb
 
-
 def check_copilot_processes() -> int:
-    """Check for running Copilot-related processes on Windows.
-
-    Results are cached for _COPILOT_CACHE_TTL seconds to prevent hundreds of
-    tasklist invocations when many parallel agents poll simultaneously.
-
-    Returns the number of processes found.
-    """
+    """Check running Copilot processes on Windows (cached for _COPILOT_CACHE_TTL seconds). Returns count."""
     global _copilot_process_cache, _copilot_last_tasklist_failure_log
 
     if os.name != 'nt':
@@ -368,14 +363,7 @@ def check_copilot_processes() -> int:
 
 
 def is_process_running(pid: int) -> bool:
-    """Check if a process with the given PID is currently running.
-
-    Args:
-        pid: Process ID to check
-
-    Returns:
-        True if the process is running, False otherwise
-    """
+    """Check if a process with the given PID is currently running. Returns True if running, False otherwise."""
     if os.name == 'nt':
         # Windows implementation
         try:
@@ -397,8 +385,6 @@ def is_process_running(pid: int) -> bool:
             return True
         except OSError:
             return False
-
-
 def wait_for_process_cleanup(max_wait: float = 3.0) -> None:
     """Wait for Copilot processes to terminate on Windows.
 

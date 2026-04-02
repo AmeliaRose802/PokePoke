@@ -947,29 +947,122 @@ class TestKillProcessTree:
         result = kill_process_tree(1234)
         assert result is False
 
+    @patch('pokepoke.utils.process_utils._HAS_PSUTIL', True)
+    @patch('pokepoke.utils.process_utils.psutil')
     @patch('pokepoke.utils.process_utils.os')
-    def test_unix_sends_sigkill(self, mock_os: MagicMock) -> None:
-        """Test that os.kill(pid, 9) is called on non-Windows."""
+    def test_unix_kills_children_with_psutil(self, mock_os: MagicMock, mock_psutil: MagicMock) -> None:
+        """Test that psutil is used to kill child processes first, then parent."""
         mock_os.name = 'posix'
-        mock_os.kill = MagicMock()
+
+        # Setup mock parent and children
+        mock_child1 = MagicMock()
+        mock_child1.pid = 1001
+        mock_child2 = MagicMock()
+        mock_child2.pid = 1002
+
+        mock_parent = MagicMock()
+        mock_parent.children.return_value = [mock_child1, mock_child2]
+        mock_psutil.Process.return_value = mock_parent
+
         result = kill_process_tree(5678)
+
+        assert result is True
+        mock_psutil.Process.assert_called_once_with(5678)
+        mock_parent.children.assert_called_once_with(recursive=True)
+        # Children killed first
+        mock_child1.kill.assert_called_once()
+        mock_child2.kill.assert_called_once()
+        # Then parent
+        mock_parent.kill.assert_called_once()
+
+    @patch('pokepoke.utils.process_utils._HAS_PSUTIL', True)
+    @patch('pokepoke.utils.process_utils.psutil')
+    @patch('pokepoke.utils.process_utils.os')
+    def test_unix_handles_already_exited_with_psutil(self, mock_os: MagicMock, mock_psutil: MagicMock) -> None:
+        """Test that psutil NoSuchProcess (already exited) returns True."""
+        mock_os.name = 'posix'
+        mock_psutil.Process.side_effect = mock_psutil.NoSuchProcess(5678)
+
+        result = kill_process_tree(5678)
+
+        assert result is True
+
+    @patch('pokepoke.utils.process_utils._HAS_PSUTIL', True)
+    @patch('pokepoke.utils.process_utils.psutil')
+    @patch('pokepoke.utils.process_utils.os')
+    def test_unix_continues_on_child_already_exited(self, mock_os: MagicMock, mock_psutil: MagicMock) -> None:
+        """Test that child NoSuchProcess is handled gracefully."""
+        mock_os.name = 'posix'
+
+        # Setup mock with one child already dead
+        mock_child1 = MagicMock()
+        mock_child1.pid = 1001
+        mock_child1.kill.side_effect = mock_psutil.NoSuchProcess(1001)
+
+        mock_child2 = MagicMock()
+        mock_child2.pid = 1002
+
+        mock_parent = MagicMock()
+        mock_parent.children.return_value = [mock_child1, mock_child2]
+        mock_psutil.Process.return_value = mock_parent
+
+        result = kill_process_tree(5678)
+
+        assert result is True
+        # Both children should be attempted
+        mock_child1.kill.assert_called_once()
+        mock_child2.kill.assert_called_once()
+        # Parent should still be killed
+        mock_parent.kill.assert_called_once()
+
+    @patch('pokepoke.utils.process_utils._HAS_PSUTIL', False)
+    @patch('pokepoke.utils.process_utils.os')
+    def test_unix_fallback_uses_killpg(self, mock_os: MagicMock) -> None:
+        """Test that process group kill is used when psutil unavailable."""
+        mock_os.name = 'posix'
+        mock_os.getpgid.return_value = 5678
+        mock_os.killpg = MagicMock()
+
+        result = kill_process_tree(5678)
+
+        assert result is True
+        mock_os.getpgid.assert_called_once_with(5678)
+        mock_os.killpg.assert_called_once_with(5678, 9)
+
+    @patch('pokepoke.utils.process_utils._HAS_PSUTIL', False)
+    @patch('pokepoke.utils.process_utils.os')
+    def test_unix_fallback_uses_direct_kill_when_killpg_fails(self, mock_os: MagicMock) -> None:
+        """Test that direct kill is used when killpg fails."""
+        mock_os.name = 'posix'
+        mock_os.getpgid.side_effect = OSError("Not a process group leader")
+        mock_os.kill = MagicMock()
+
+        result = kill_process_tree(5678)
+
         assert result is True
         mock_os.kill.assert_called_once_with(5678, 9)
 
+    @patch('pokepoke.utils.process_utils._HAS_PSUTIL', False)
     @patch('pokepoke.utils.process_utils.os')
-    def test_unix_handles_already_exited(self, mock_os: MagicMock) -> None:
+    def test_unix_fallback_handles_already_exited(self, mock_os: MagicMock) -> None:
         """Test that ProcessLookupError (already exited) returns True."""
         mock_os.name = 'posix'
-        mock_os.kill = MagicMock(side_effect=ProcessLookupError)
+        mock_os.getpgid.side_effect = ProcessLookupError
+
         result = kill_process_tree(5678)
+
         assert result is True
 
+    @patch('pokepoke.utils.process_utils._HAS_PSUTIL', False)
     @patch('pokepoke.utils.process_utils.os')
-    def test_unix_handles_permission_error(self, mock_os: MagicMock) -> None:
-        """Test that PermissionError returns False."""
+    def test_unix_fallback_handles_permission_error(self, mock_os: MagicMock) -> None:
+        """Test that PermissionError in fallback returns False."""
         mock_os.name = 'posix'
-        mock_os.kill = MagicMock(side_effect=PermissionError("Operation not permitted"))
+        mock_os.getpgid.side_effect = PermissionError("Operation not permitted")
+        mock_os.kill.side_effect = PermissionError("Operation not permitted")
+
         result = kill_process_tree(5678)
+
         assert result is False
 
 
