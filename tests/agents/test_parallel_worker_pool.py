@@ -3,13 +3,16 @@
 import concurrent.futures
 import threading
 import time
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
 from pokepoke.agents.parallel_worker_pool import (
     ParallelWorkerPool,
     collect_done_futures,
+    compute_slots,
+    update_circuit_breaker,
+    update_memory_circuit_breaker,
 )
 from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats, WorkItemResult
 
@@ -531,3 +534,154 @@ class TestThreadSafety:
             t.join(timeout=5)
 
         assert not errors, f"Set race errors: {errors}"
+
+
+# ---------------------------------------------------------------------------
+# compute_slots
+# ---------------------------------------------------------------------------
+
+
+class TestComputeSlots:
+    """Tests for the compute_slots function."""
+
+    @patch("pokepoke.utils.memory_utils.get_process_rss_mb", return_value=150)
+    @patch("pokepoke.utils.memory_utils.apply_memory_backpressure")
+    @patch("pokepoke.agents.parallel.get_effective_max_agents", return_value=4)
+    def test_basic_slot_computation(
+        self, _mock_max: Mock, mock_backpressure: Mock, _mock_rss: Mock,
+    ) -> None:
+        mock_backpressure.side_effect = lambda s: (s, 8192)
+        item = _make_item("cs-1")
+        fut: concurrent.futures.Future[WorkItemResult] = concurrent.futures.Future()
+        futures: dict[concurrent.futures.Future[WorkItemResult], BeadsWorkItem] = {fut: item}
+        run_logger = Mock()
+        active, slots, avail = compute_slots(futures, run_logger)
+        assert slots == 3
+        assert avail == 8192
+        assert "cs-1" in active
+        run_logger.log_polling.assert_called_once()
+        log_msg = run_logger.log_polling.call_args[0][0]
+        assert "rss=150MB" in log_msg
+        assert "mem=8192MB" in log_msg
+
+    @patch("pokepoke.utils.memory_utils.get_process_rss_mb", return_value=200)
+    @patch("pokepoke.utils.memory_utils.apply_memory_backpressure")
+    @patch("pokepoke.agents.parallel.get_effective_max_agents", return_value=4)
+    def test_memory_low_warning(
+        self, _mock_max: Mock, mock_backpressure: Mock, _mock_rss: Mock,
+    ) -> None:
+        mock_backpressure.side_effect = lambda s: (0, 512)
+        item1 = _make_item("ml-1")
+        item2 = _make_item("ml-2")
+        f1: concurrent.futures.Future[WorkItemResult] = concurrent.futures.Future()
+        f2: concurrent.futures.Future[WorkItemResult] = concurrent.futures.Future()
+        futures: dict[concurrent.futures.Future[WorkItemResult], BeadsWorkItem] = {f1: item1, f2: item2}
+        run_logger = Mock()
+        _, slots, _ = compute_slots(futures, run_logger)
+        assert slots == 0
+        run_logger.log_orchestrator.assert_called_once()
+        assert "Memory low" in run_logger.log_orchestrator.call_args[0][0]
+
+    @patch("pokepoke.utils.memory_utils.get_process_rss_mb", return_value=200)
+    @patch("pokepoke.utils.memory_utils.apply_memory_backpressure")
+    @patch("pokepoke.agents.parallel.get_effective_max_agents", return_value=4)
+    def test_memory_pressure_warning(
+        self, _mock_max: Mock, mock_backpressure: Mock, _mock_rss: Mock,
+    ) -> None:
+        mock_backpressure.side_effect = lambda s: (1, 1500)
+        item1 = _make_item("mp-1")
+        f1: concurrent.futures.Future[WorkItemResult] = concurrent.futures.Future()
+        futures: dict[concurrent.futures.Future[WorkItemResult], BeadsWorkItem] = {f1: item1}
+        run_logger = Mock()
+        _, slots, _ = compute_slots(futures, run_logger)
+        assert slots == 1
+        run_logger.log_orchestrator.assert_called_once()
+        assert "Memory pressure" in run_logger.log_orchestrator.call_args[0][0]
+
+    @patch("pokepoke.utils.memory_utils.get_process_rss_mb", return_value=100)
+    @patch("pokepoke.utils.memory_utils.apply_memory_backpressure")
+    @patch("pokepoke.agents.parallel.get_effective_max_agents", return_value=4)
+    def test_with_lock(
+        self, _mock_max: Mock, mock_backpressure: Mock, _mock_rss: Mock,
+    ) -> None:
+        mock_backpressure.side_effect = lambda s: (s, 4096)
+        item = _make_item("lock-1")
+        f: concurrent.futures.Future[WorkItemResult] = concurrent.futures.Future()
+        futures: dict[concurrent.futures.Future[WorkItemResult], BeadsWorkItem] = {f: item}
+        lock = threading.Lock()
+        run_logger = Mock()
+        active, slots, _ = compute_slots(futures, run_logger, lock=lock)
+        assert "lock-1" in active
+        assert slots == 3
+
+    @patch("pokepoke.utils.memory_utils.get_process_rss_mb", return_value=0)
+    @patch("pokepoke.utils.memory_utils.apply_memory_backpressure")
+    @patch("pokepoke.agents.parallel.get_effective_max_agents", return_value=2)
+    def test_rss_zero_still_logs(
+        self, _mock_max: Mock, mock_backpressure: Mock, _mock_rss: Mock,
+    ) -> None:
+        mock_backpressure.side_effect = lambda s: (s, 0)
+        run_logger = Mock()
+        compute_slots({}, run_logger)
+        log_msg = run_logger.log_polling.call_args[0][0]
+        assert "rss=0MB" in log_msg
+
+
+# ---------------------------------------------------------------------------
+# update_circuit_breaker
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateCircuitBreaker:
+    """Tests for update_circuit_breaker."""
+
+    def test_resets_on_success(self) -> None:
+        run_logger = Mock()
+        count, tripped = update_circuit_breaker(1, 0, 3, 3, {}, run_logger)
+        assert count == 0
+        assert tripped is False
+
+    def test_increments_on_failure(self) -> None:
+        run_logger = Mock()
+        count, tripped = update_circuit_breaker(0, 1, 1, 3, {}, run_logger)
+        assert count == 2
+        assert tripped is False
+
+    def test_trips_at_threshold(self) -> None:
+        run_logger = Mock()
+        count, tripped = update_circuit_breaker(0, 1, 2, 3, {}, run_logger)
+        assert count == 3
+        assert tripped is True
+
+
+# ---------------------------------------------------------------------------
+# update_memory_circuit_breaker
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateMemoryCircuitBreaker:
+    """Tests for update_memory_circuit_breaker."""
+
+    def test_increments_when_below_floor(self) -> None:
+        run_logger = Mock()
+        count, tripped = update_memory_circuit_breaker(200, 512, 3, 0, {}, run_logger)
+        assert count == 1
+        assert tripped is False
+
+    def test_resets_when_above_floor(self) -> None:
+        run_logger = Mock()
+        count, tripped = update_memory_circuit_breaker(1024, 512, 3, 2, {}, run_logger)
+        assert count == 0
+        assert tripped is False
+
+    def test_does_not_trip_when_memory_unavailable(self) -> None:
+        run_logger = Mock()
+        count, tripped = update_memory_circuit_breaker(0, 512, 3, 5, {}, run_logger)
+        assert count == 0
+        assert tripped is False
+
+    def test_trips_at_threshold(self) -> None:
+        run_logger = Mock()
+        count, tripped = update_memory_circuit_breaker(200, 512, 3, 2, {}, run_logger)
+        assert count == 3
+        assert tripped is True

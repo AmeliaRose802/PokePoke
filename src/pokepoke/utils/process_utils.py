@@ -1,7 +1,6 @@
 """Process utilities for SDK client management and memory monitoring."""
 import asyncio
 import contextlib
-import ctypes
 import logging
 import os
 import subprocess
@@ -18,16 +17,29 @@ except ImportError:
 
 from pokepoke.stats.perf_timing import timed_block
 
+# Re-export memory functions so existing callers continue to work.
+from pokepoke.utils.memory_utils import (
+    apply_memory_backpressure as apply_memory_backpressure,
+)
+from pokepoke.utils.memory_utils import (
+    get_available_memory_mb as get_available_memory_mb,
+)
+from pokepoke.utils.memory_utils import (
+    get_process_rss_mb as get_process_rss_mb,
+)
+from pokepoke.utils.memory_utils import (
+    is_memory_critical as is_memory_critical,
+)
+from pokepoke.utils.memory_utils import (
+    is_memory_pressure as is_memory_pressure,
+)
+
 logger = logging.getLogger(__name__)
 
 _cache_lock = threading.Lock()  # Protects global cache state
 _copilot_process_cache: tuple[float, int] | None = None  # (timestamp, count)
 _copilot_last_tasklist_failure_log: float | None = None
 _COPILOT_CACHE_TTL = 5.0
-_MEMORY_PRESSURE_THRESHOLD_MB = 2048
-_MEMORY_CRITICAL_THRESHOLD_MB = 1024
-_MEMORY_CACHE_TTL = 10.0
-_memory_cache: tuple[float, int] | None = None
 
 
 class ActivePidRegistry:
@@ -103,61 +115,6 @@ def deregister_client_pid(pid: int | None, registry: ActivePidRegistry) -> None:
     """Deregister a copilot PID if one was registered."""
     if pid is not None:
         registry.deregister(pid)
-
-def get_available_memory_mb() -> int:
-    """Return available physical memory in MB (Windows only, uses ctypes). Returns 0 on non-Windows or failure."""
-    global _memory_cache
-    if os.name != 'nt':
-        return 0
-    now = time.time()
-    with _cache_lock:
-        if _memory_cache is not None:
-            cached_time, cached_mb = _memory_cache
-            if now - cached_time < _MEMORY_CACHE_TTL:
-                return cached_mb
-
-    try:
-        with timed_block("memory.check"):
-            class MEMORYSTATUSEX(ctypes.Structure):
-                _fields_ = [
-                    ("dwLength", ctypes.c_ulong),
-                    ("dwMemoryLoad", ctypes.c_ulong),
-                    ("ullTotalPhys", ctypes.c_ulonglong),
-                    ("ullAvailPhys", ctypes.c_ulonglong),
-                    ("ullTotalPageFile", ctypes.c_ulonglong),
-                    ("ullAvailPageFile", ctypes.c_ulonglong),
-                    ("ullTotalVirtual", ctypes.c_ulonglong),
-                    ("ullAvailVirtual", ctypes.c_ulonglong),
-                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
-                ]
-
-            mem_status = MEMORYSTATUSEX()
-            mem_status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
-            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(mem_status))
-            available_mb = int(mem_status.ullAvailPhys / (1024 * 1024))
-            with _cache_lock:
-                _memory_cache = (now, available_mb)
-            return available_mb
-    except Exception as e:
-        logger.debug(f"Failed to query available memory: {e}")
-        return 0
-
-
-def is_memory_pressure() -> bool:
-    """Return True if system memory is under pressure (< 2 GB free)."""
-    available = get_available_memory_mb()
-    if available == 0:
-        return False  # Can't determine; assume OK
-    return available < _MEMORY_PRESSURE_THRESHOLD_MB
-
-
-def is_memory_critical() -> bool:
-    """Return True if system memory is critically low (< 1 GB free)."""
-    available = get_available_memory_mb()
-    if available == 0:
-        return False
-    return available < _MEMORY_CRITICAL_THRESHOLD_MB
-
 
 def kill_orphaned_copilot_processes(
     active_pids: frozenset[int] | set[int] | None = None,
@@ -307,20 +264,6 @@ def kill_process_tree(pid: int) -> bool:
         logger.warning("Failed to kill PID %d: %s", pid, e)
         return False
 
-
-def apply_memory_backpressure(slots: int) -> tuple[int, int]:
-    """Apply memory-based backpressure to available agent slots.
-
-    Returns (adjusted_slots, available_mb).
-    """
-    avail_mb = get_available_memory_mb()
-    if avail_mb <= 0:
-        return slots, avail_mb
-    if is_memory_critical():
-        return 0, avail_mb
-    if is_memory_pressure() and slots > 0:
-        return min(slots, 1), avail_mb
-    return slots, avail_mb
 
 def check_copilot_processes() -> int:
     """Check running Copilot processes on Windows (cached for _COPILOT_CACHE_TTL seconds). Returns count."""

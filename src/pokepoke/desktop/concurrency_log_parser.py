@@ -9,10 +9,11 @@ import re
 from pathlib import Path
 from typing import Any
 
-# Lifecycle: active=3 max=8 slots=5 mem=2048MB
+# Lifecycle: active=3 max=8 slots=5 mem=2048MB rss=150MB
 _LIFECYCLE_RE = re.compile(
     r"\[(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] \[(?:INFO|DEBUG)\].*"
     r"Lifecycle: active=(?P<active>\d+) max=(?P<max>\d+) slots=(?P<slots>\d+) mem=(?P<mem>\d+)MB"
+    r"(?: rss=(?P<rss>\d+)MB)?"
 )
 
 # Worker completed <item_id>  OR  ✅ Agent <name> completed item <item_id>
@@ -54,13 +55,17 @@ def parse_concurrency_timeline(log_path: str | Path) -> dict[str, Any]:
             for line in f:
                 m = _LIFECYCLE_RE.search(line)
                 if m:
-                    lifecycle.append({
+                    entry: dict[str, Any] = {
                         "ts": m.group("ts"),
                         "active": int(m.group("active")),
                         "max": int(m.group("max")),
                         "slots": int(m.group("slots")),
                         "mem": int(m.group("mem")),
-                    })
+                    }
+                    rss_str = m.group("rss")
+                    if rss_str is not None:
+                        entry["rss"] = int(rss_str)
+                    lifecycle.append(entry)
                     continue
 
                 m = _COMPLETED_RE.search(line)

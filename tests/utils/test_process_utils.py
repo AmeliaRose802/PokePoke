@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+import pokepoke.utils.memory_utils as memory_utils_mod
 import pokepoke.utils.process_utils as process_utils_mod
 from pokepoke.utils.process_utils import (
     ActivePidRegistry,
@@ -15,6 +16,7 @@ from pokepoke.utils.process_utils import (
     check_copilot_processes,
     get_active_pid_registry,
     get_available_memory_mb,
+    get_process_rss_mb,
     is_memory_critical,
     is_memory_pressure,
     is_process_running,
@@ -30,11 +32,13 @@ from pokepoke.utils.process_utils import (
 def reset_copilot_cache():
     """Reset the module-level caches before each test to prevent cross-test pollution."""
     process_utils_mod._copilot_process_cache = None
-    process_utils_mod._memory_cache = None
+    memory_utils_mod._memory_cache = None
+    memory_utils_mod._rss_cache = None
     get_active_pid_registry().clear()
     yield
     process_utils_mod._copilot_process_cache = None
-    process_utils_mod._memory_cache = None
+    memory_utils_mod._memory_cache = None
+    memory_utils_mod._rss_cache = None
     get_active_pid_registry().clear()
 
 
@@ -228,51 +232,71 @@ class TestWaitForProcessCleanup:
 class TestGetAvailableMemoryMb:
     """Tests for get_available_memory_mb."""
 
-    @patch('pokepoke.utils.process_utils.os')
+    @patch('pokepoke.utils.memory_utils.os')
     def test_returns_zero_on_non_windows(self, mock_os: MagicMock) -> None:
         mock_os.name = 'posix'
         assert get_available_memory_mb() == 0
 
-    @patch('pokepoke.utils.process_utils.os')
-    @patch('pokepoke.utils.process_utils.ctypes')
+    @patch('pokepoke.utils.memory_utils.os')
+    @patch('pokepoke.utils.memory_utils.ctypes')
     def test_returns_available_memory_on_windows(self, mock_ctypes: MagicMock, mock_os: MagicMock) -> None:
         mock_os.name = 'nt'
-        # Create a mock MEMORYSTATUSEX with 4 GB available
         mock_mem = MagicMock()
         mock_mem.ullAvailPhys = 4 * 1024 * 1024 * 1024  # 4 GB
         mock_ctypes.Structure = type
         mock_ctypes.sizeof.return_value = 64
         mock_ctypes.c_ulong = int
         mock_ctypes.c_ulonglong = int
-        # Patch the class creation inside the function
-        with patch.object(process_utils_mod, 'get_available_memory_mb', wraps=get_available_memory_mb):
-            # Can't easily mock ctypes.Structure subclass creation;
-            # test the caching path instead
-            process_utils_mod._memory_cache = (process_utils_mod.time.time(), 4096)
-            result = get_available_memory_mb()
-            assert result == 4096
+        # Can't easily mock ctypes.Structure subclass creation;
+        # test the caching path instead
+        memory_utils_mod._memory_cache = (time.time(), 4096)
+        result = get_available_memory_mb()
+        assert result == 4096
 
     def test_caches_result_within_ttl(self) -> None:
         """Repeated calls within TTL reuse cached result."""
-        import time
-        process_utils_mod._memory_cache = (time.time(), 8000)
+        memory_utils_mod._memory_cache = (time.time(), 8000)
         assert get_available_memory_mb() == 8000
+
+
+class TestGetProcessRssMb:
+    """Tests for get_process_rss_mb."""
+
+    def test_returns_positive_value(self) -> None:
+        """On any platform with psutil, RSS should be a positive integer."""
+        result = get_process_rss_mb()
+        assert result > 0
+
+    def test_returns_zero_when_psutil_unavailable(self) -> None:
+        with patch.object(memory_utils_mod, '_HAS_PSUTIL', False):
+            memory_utils_mod._rss_cache = None
+            assert get_process_rss_mb() == 0
+
+    def test_caches_result_within_ttl(self) -> None:
+        memory_utils_mod._rss_cache = (time.time(), 256)
+        assert get_process_rss_mb() == 256
+
+    def test_returns_zero_on_exception(self) -> None:
+        memory_utils_mod._rss_cache = None
+        with patch('pokepoke.utils.memory_utils.psutil') as mock_psutil:
+            mock_psutil.Process.side_effect = RuntimeError("fail")
+            assert get_process_rss_mb() == 0
 
 
 class TestIsMemoryPressure:
     """Tests for is_memory_pressure."""
 
-    @patch('pokepoke.utils.process_utils.get_available_memory_mb')
+    @patch('pokepoke.utils.memory_utils.get_available_memory_mb')
     def test_no_pressure_when_plenty_of_memory(self, mock_mem: MagicMock) -> None:
         mock_mem.return_value = 8000  # 8 GB free
         assert is_memory_pressure() is False
 
-    @patch('pokepoke.utils.process_utils.get_available_memory_mb')
+    @patch('pokepoke.utils.memory_utils.get_available_memory_mb')
     def test_pressure_when_low_memory(self, mock_mem: MagicMock) -> None:
         mock_mem.return_value = 1500  # 1.5 GB free
         assert is_memory_pressure() is True
 
-    @patch('pokepoke.utils.process_utils.get_available_memory_mb')
+    @patch('pokepoke.utils.memory_utils.get_available_memory_mb')
     def test_no_pressure_when_unknown(self, mock_mem: MagicMock) -> None:
         mock_mem.return_value = 0  # Can't determine
         assert is_memory_pressure() is False
@@ -281,17 +305,17 @@ class TestIsMemoryPressure:
 class TestIsMemoryCritical:
     """Tests for is_memory_critical."""
 
-    @patch('pokepoke.utils.process_utils.get_available_memory_mb')
+    @patch('pokepoke.utils.memory_utils.get_available_memory_mb')
     def test_not_critical_with_normal_memory(self, mock_mem: MagicMock) -> None:
         mock_mem.return_value = 4000
         assert is_memory_critical() is False
 
-    @patch('pokepoke.utils.process_utils.get_available_memory_mb')
+    @patch('pokepoke.utils.memory_utils.get_available_memory_mb')
     def test_critical_when_very_low(self, mock_mem: MagicMock) -> None:
         mock_mem.return_value = 500  # 500 MB free
         assert is_memory_critical() is True
 
-    @patch('pokepoke.utils.process_utils.get_available_memory_mb')
+    @patch('pokepoke.utils.memory_utils.get_available_memory_mb')
     def test_not_critical_when_unknown(self, mock_mem: MagicMock) -> None:
         mock_mem.return_value = 0
         assert is_memory_critical() is False
@@ -426,28 +450,28 @@ class TestKillOrphanedCopilotProcesses:
 class TestApplyMemoryBackpressure:
     """Tests for apply_memory_backpressure."""
 
-    @patch('pokepoke.utils.process_utils.get_available_memory_mb')
+    @patch('pokepoke.utils.memory_utils.get_available_memory_mb')
     def test_no_change_when_plenty_of_memory(self, mock_mem: MagicMock) -> None:
         mock_mem.return_value = 8000
         slots, avail = apply_memory_backpressure(4)
         assert slots == 4
         assert avail == 8000
 
-    @patch('pokepoke.utils.process_utils.get_available_memory_mb')
+    @patch('pokepoke.utils.memory_utils.get_available_memory_mb')
     def test_returns_zero_slots_when_critical(self, mock_mem: MagicMock) -> None:
         mock_mem.return_value = 500  # Below critical threshold
         slots, avail = apply_memory_backpressure(4)
         assert slots == 0
         assert avail == 500
 
-    @patch('pokepoke.utils.process_utils.get_available_memory_mb')
+    @patch('pokepoke.utils.memory_utils.get_available_memory_mb')
     def test_throttles_to_one_under_pressure(self, mock_mem: MagicMock) -> None:
         mock_mem.return_value = 1500  # Under pressure but not critical
         slots, avail = apply_memory_backpressure(4)
         assert slots == 1
         assert avail == 1500
 
-    @patch('pokepoke.utils.process_utils.get_available_memory_mb')
+    @patch('pokepoke.utils.memory_utils.get_available_memory_mb')
     def test_passthrough_when_unknown(self, mock_mem: MagicMock) -> None:
         mock_mem.return_value = 0  # Can't determine
         slots, avail = apply_memory_backpressure(4)
@@ -570,13 +594,13 @@ class TestCacheLockThreadSafety:
         assert process_utils_mod._copilot_process_cache is not None
         assert process_utils_mod._copilot_process_cache[1] == 1
 
-    @patch('pokepoke.utils.process_utils.os')
+    @patch('pokepoke.utils.memory_utils.os')
     def test_get_available_memory_concurrent_access(self, mock_os: MagicMock) -> None:
         """Multiple threads calling get_available_memory_mb should not corrupt cache."""
         mock_os.name = 'nt'
 
         # Pre-seed cache so we don't need real ctypes calls
-        process_utils_mod._memory_cache = (time.time(), 4096)
+        memory_utils_mod._memory_cache = (time.time(), 4096)
 
         results = []
         errors = []
@@ -848,8 +872,8 @@ class TestShutdownCopilotClientAdvanced:
 class TestGetAvailableMemoryMbWindows:
     """Tests for get_available_memory_mb Windows ctypes path."""
 
-    @patch('pokepoke.utils.process_utils.os')
-    @patch('pokepoke.utils.process_utils.ctypes')
+    @patch('pokepoke.utils.memory_utils.os')
+    @patch('pokepoke.utils.memory_utils.ctypes')
     def test_windows_memory_query_exception(self, mock_ctypes: MagicMock, mock_os: MagicMock) -> None:
         """Test exception handling in Windows memory query."""
         mock_os.name = 'nt'
@@ -861,7 +885,7 @@ class TestGetAvailableMemoryMbWindows:
         mock_ctypes.byref = MagicMock()
 
         # Clear cache to force fresh query
-        process_utils_mod._memory_cache = None
+        memory_utils_mod._memory_cache = None
         result = get_available_memory_mb()
         # Should return 0 on exception
         assert result == 0

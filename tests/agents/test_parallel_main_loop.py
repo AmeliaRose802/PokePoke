@@ -145,7 +145,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
     @patch("pokepoke.agents.parallel.time.sleep")
     @patch("pokepoke.agents.parallel.terminal_ui")
-    @patch("pokepoke.utils.process_utils.apply_memory_backpressure", side_effect=lambda s: (s, 0))
+    @patch("pokepoke.utils.memory_utils.apply_memory_backpressure", side_effect=lambda s: (s, 0))
     @patch("pokepoke.agents.parallel.set_executor")
     @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
     @patch("pokepoke.agents.parallel.is_shutting_down")
@@ -199,6 +199,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
     @patch("pokepoke.agents.parallel.time.sleep")
     @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.utils.memory_utils.apply_memory_backpressure", side_effect=lambda s: (s, 0))
     @patch("pokepoke.agents.parallel.set_executor")
     @patch("pokepoke.agents.parallel.is_shutting_down")
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
@@ -208,7 +209,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=2)
     def test_cli_override_uses_effective_parallel_over_config(
         self, mock_dyn_max, mock_collect, mock_sel, mock_ready,
-        mock_repo, mock_shut, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
+        mock_repo, mock_shut, mock_set_exec, mock_mem, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
         """Regression (PokePoke-snio): CLI --max-agents must not be capped by config."""
         mock_ready.return_value = [_make_item(f"c{i}") for i in range(10)]
@@ -409,6 +410,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
     @patch("pokepoke.agents.parallel.time.sleep")
     @patch("pokepoke.agents.parallel.terminal_ui")
+    @patch("pokepoke.utils.memory_utils.apply_memory_backpressure", side_effect=lambda s: (s, 0))
     @patch("pokepoke.agents.parallel.set_executor")
     @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
     @patch("pokepoke.agents.parallel.is_shutting_down", return_value=False)
@@ -419,7 +421,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=2)
     def test_single_shot_drain_updates_stats(
         self, mock_dyn_max, mock_pwi, mock_sel, mock_ready, mock_repo,
-        mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
+        mock_shut, mock_stop, mock_set_exec, mock_mem, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
         """UI stats should update after both items complete in single-shot mode.
 
@@ -468,7 +470,7 @@ class TestRunParallelLoop:
         last_stats = mock_ui.ui.update_stats.call_args_list[-1][0][0]
         assert last_stats.items_completed == 2
 
-    @patch("pokepoke.utils.process_utils.apply_memory_backpressure", side_effect=lambda s: (s, 0))
+    @patch("pokepoke.utils.memory_utils.apply_memory_backpressure", side_effect=lambda s: (s, 0))
     @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
     @patch("pokepoke.agents.parallel.time.sleep")
     @patch("pokepoke.agents.parallel.terminal_ui")

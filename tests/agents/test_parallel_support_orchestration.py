@@ -185,7 +185,7 @@ class TestCheckLoopExit:
 class TestComputeSlots:
     """Tests for compute_slots."""
 
-    @patch("pokepoke.utils.process_utils.apply_memory_backpressure", return_value=(2, 8000))
+    @patch("pokepoke.utils.memory_utils.apply_memory_backpressure", return_value=(2, 8000))
     @patch("pokepoke.agents.parallel.get_effective_max_agents", return_value=4)
     def test_basic_slot_computation(self, _max, _mem):
         item = _make_item("cs1")
@@ -197,7 +197,7 @@ class TestComputeSlots:
         assert slots == 2
         assert avail_mb == 8000
 
-    @patch("pokepoke.utils.process_utils.apply_memory_backpressure", return_value=(0, 500))
+    @patch("pokepoke.utils.memory_utils.apply_memory_backpressure", return_value=(0, 500))
     @patch("pokepoke.agents.parallel.get_effective_max_agents", return_value=4)
     def test_memory_low_blocks_slots(self, _max, _mem):
         item = _make_item("ml1")
@@ -208,7 +208,7 @@ class TestComputeSlots:
         assert slots == 0
         assert avail_mb == 500
 
-    @patch("pokepoke.utils.process_utils.apply_memory_backpressure", return_value=(1, 2000))
+    @patch("pokepoke.utils.memory_utils.apply_memory_backpressure", return_value=(1, 2000))
     @patch("pokepoke.agents.parallel.get_effective_max_agents", return_value=4)
     def test_memory_pressure_reduces_slots(self, _max, _mem):
         """Memory pressure: backpressure returns fewer slots than available."""
