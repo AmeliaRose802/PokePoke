@@ -10,6 +10,7 @@ from pokepoke.git.git_helpers import (
     get_commits_behind,
     list_worktrees,
     restore_beads_stash,
+    run_git_with_retry,
     validate_post_merge,
     verify_branch_pushed,
 )
@@ -199,6 +200,103 @@ class TestRunGitStatusWithRetry:
         # With jitter enabled, delays should be in range [base*0.5, base*1.5]
         # Attempt 0: base_delay * 2^0 = 1.0, jittered: [0.5, 1.5]
         # Attempt 1: base_delay * 2^1 = 2.0, jittered: [1.0, 3.0]
+        assert 0.5 <= delays[0] <= 1.5
+        assert 1.0 <= delays[1] <= 3.0
+
+
+class TestRunGitWithRetry:
+    """Tests for run_git_with_retry general retry helper."""
+
+    @patch('pokepoke.git.git_helpers.subprocess.run')
+    def test_succeeds_on_first_attempt(self, mock_run: Mock) -> None:
+        """Happy path: command succeeds immediately without retries."""
+        mock_run.return_value = Mock(stdout="ok\n", returncode=0)
+        result = run_git_with_retry(["git", "push"], context="git push")
+        assert result.stdout == "ok\n"
+        assert mock_run.call_count == 1
+
+    @patch('pokepoke.utils.retry_utils.time.sleep')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
+    def test_retries_on_timeout_then_succeeds(self, mock_run: Mock, mock_sleep: Mock) -> None:
+        """TimeoutExpired triggers retry and succeeds on subsequent attempt."""
+        mock_run.side_effect = [
+            subprocess.TimeoutExpired("git", 120),
+            Mock(stdout="ok\n", returncode=0),
+        ]
+        result = run_git_with_retry(
+            ["git", "push"], max_retries=3, initial_delay=0.1, context="git push",
+        )
+        assert result.stdout == "ok\n"
+        assert mock_run.call_count == 2
+        assert mock_sleep.call_count == 1
+
+    @patch('pokepoke.utils.retry_utils.time.sleep')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
+    def test_retries_on_called_process_error_then_succeeds(self, mock_run: Mock, mock_sleep: Mock) -> None:
+        """CalledProcessError triggers retry and succeeds on subsequent attempt."""
+        mock_run.side_effect = [
+            subprocess.CalledProcessError(1, "git", stderr="network error"),
+            Mock(stdout="ok\n", returncode=0),
+        ]
+        result = run_git_with_retry(
+            ["git", "push"], max_retries=3, initial_delay=0.1, context="git push",
+        )
+        assert result.stdout == "ok\n"
+        assert mock_run.call_count == 2
+
+    @patch('pokepoke.utils.retry_utils.time.sleep')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
+    def test_raises_timeout_after_all_retries_exhausted(self, mock_run: Mock, mock_sleep: Mock) -> None:
+        """TimeoutExpired is re-raised after all retries are exhausted."""
+        mock_run.side_effect = subprocess.TimeoutExpired("git", 120)
+        with pytest.raises(subprocess.TimeoutExpired):
+            run_git_with_retry(
+                ["git", "push"], max_retries=3, initial_delay=0.1, context="git push",
+            )
+        assert mock_run.call_count == 3
+        assert mock_sleep.call_count == 2
+
+    @patch('pokepoke.utils.retry_utils.time.sleep')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
+    def test_raises_called_process_error_after_all_retries(self, mock_run: Mock, mock_sleep: Mock) -> None:
+        """CalledProcessError is re-raised after all retries are exhausted."""
+        mock_run.side_effect = subprocess.CalledProcessError(1, "git", stderr="fatal error")
+        with pytest.raises(subprocess.CalledProcessError):
+            run_git_with_retry(
+                ["git", "push"], max_retries=2, initial_delay=0.1, context="git push",
+            )
+        assert mock_run.call_count == 2
+
+    @patch('pokepoke.utils.retry_utils.time.sleep')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
+    def test_mixed_error_types_with_eventual_success(self, mock_run: Mock, mock_sleep: Mock) -> None:
+        """Handles mixed TimeoutExpired and CalledProcessError before success."""
+        mock_run.side_effect = [
+            subprocess.TimeoutExpired("git", 120),
+            subprocess.CalledProcessError(1, "git", stderr="network error"),
+            Mock(stdout="ok\n", returncode=0),
+        ]
+        result = run_git_with_retry(
+            ["git", "push"], max_retries=3, initial_delay=0.1, context="git push",
+        )
+        assert result.stdout == "ok\n"
+        assert mock_run.call_count == 3
+
+    @patch('pokepoke.utils.retry_utils.time.sleep')
+    @patch('pokepoke.git.git_helpers.subprocess.run')
+    def test_uses_exponential_backoff(self, mock_run: Mock, mock_sleep: Mock) -> None:
+        """Delays use exponential backoff with jitter."""
+        mock_run.side_effect = [
+            subprocess.TimeoutExpired("git", 120),
+            subprocess.TimeoutExpired("git", 120),
+            Mock(stdout="ok\n", returncode=0),
+        ]
+        run_git_with_retry(
+            ["git", "push"], max_retries=3, initial_delay=1.0, context="git push",
+        )
+        delays = [c.args[0] for c in mock_sleep.call_args_list]
+        # Attempt 0: 1.0 * 2^0 = 1.0, jittered [0.5, 1.5]
+        # Attempt 1: 1.0 * 2^1 = 2.0, jittered [1.0, 3.0]
         assert 0.5 <= delays[0] <= 1.5
         assert 1.0 <= delays[1] <= 3.0
 

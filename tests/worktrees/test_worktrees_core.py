@@ -373,6 +373,7 @@ class TestMergeWorktree:
         mock_run_git,
         mock_is_merged,
         mock_cleanup,
+        monkeypatch,
     ) -> None:
         """Successfully merge worktree."""
         mock_default_branch.return_value = 'main'
@@ -383,6 +384,10 @@ class TestMergeWorktree:
         mock_run_git.return_value = Mock(returncode=0, stdout='')
         mock_is_merged.return_value = True
         mock_cleanup.return_value = None
+        monkeypatch.setattr(
+            'pokepoke.worktrees.worktrees._run_git_with_retry',
+            lambda *a, **kw: Mock(returncode=0, stdout=''),
+        )
 
         success, conflicts = merge_worktree('item-1')
 
@@ -461,6 +466,7 @@ class TestMergeWorktree:
         mock_run_git,
         mock_is_merged,
         mock_cleanup,
+        monkeypatch,
     ) -> None:
         """Call cleanup_after_merge when cleanup=True."""
         mock_default_branch.return_value = 'main'
@@ -471,6 +477,10 @@ class TestMergeWorktree:
         mock_run_git.return_value = Mock(returncode=0, stdout='')
         mock_is_merged.return_value = True
         mock_cleanup.return_value = None
+        monkeypatch.setattr(
+            'pokepoke.worktrees.worktrees._run_git_with_retry',
+            lambda *a, **kw: Mock(returncode=0, stdout=''),
+        )
 
         success, _ = merge_worktree('item-1', cleanup=True)
 
