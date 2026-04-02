@@ -155,6 +155,11 @@ module = "tests.*"
 disallow_untyped_defs = false
 disallow_any_unimported = false
 
+# opentelemetry SDK may not be installed in all environments
+[[tool.mypy.overrides]]
+module = "opentelemetry.*"
+ignore_missing_imports = true
+
 # copilot SDK may not be installed in all environments
 [[tool.mypy.overrides]]
 module = "copilot.*"

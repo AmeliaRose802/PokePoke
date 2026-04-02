@@ -10,6 +10,7 @@ import dacite
 from pokepoke.config_validation import ConfigError  # noqa: F401
 from pokepoke.config_validation import clamp_with_warning as _clamp
 from pokepoke.models.model_sync_config import ModelSyncConfig, parse_model_sync_config
+from pokepoke.otel_config import OtelConfig
 
 logger = logging.getLogger(__name__)
 
@@ -121,9 +122,6 @@ class MCPServerConfig:
     memory_file_path: str | None = None  # Default: {repo_root}/.pokepoke/memory.jsonl
     confidence_decay_days: int = 30  # Days before observations are considered stale
 
-
-# Backwards-compatible alias (old typo kept to avoid breaking imports).
-MpcServerConfig = MCPServerConfig
 @dataclass
 class GitConfig:
     """Git-related configuration."""
@@ -132,9 +130,7 @@ class GitConfig:
 
     def get_preferred_branch(self) -> str:
         """Get the preferred branch, falling back to fallback_branch if not set."""
-        if self.default_branch:
-            return self.default_branch
-        return self.fallback_branch
+        return self.default_branch if self.default_branch else self.fallback_branch
 @dataclass
 class PreflightHealthConfig:
     """Pre-flight health check configuration."""
@@ -300,6 +296,7 @@ class ProjectConfig:
     decomposition_failure_threshold: int = 3
     needs_human_attention_threshold: int = _c.DEFAULT_NEEDS_HUMAN_ATTENTION_FAILURES
     assignment: AssignmentConfig = field(default_factory=AssignmentConfig)
+    otel: OtelConfig = field(default_factory=OtelConfig)
     economy_mode: EconomyModeConfig = field(default_factory=EconomyModeConfig)
     performance_thresholds: PerformanceThresholdsConfig = field(
         default_factory=PerformanceThresholdsConfig,

@@ -204,5 +204,76 @@ Potential improvements:
 - Log rotation by size/age
 - Compressed archive storage
 - Log search/query CLI
-- Structured JSON logs for machine parsing
 - Log aggregation across multiple runs
+
+## OpenTelemetry (OTEL) Integration
+
+PokePoke supports exporting structured logs to OpenTelemetry-compatible backends (Jaeger, Grafana, Azure Monitor, etc.) for centralized observability.
+
+### Quick Start
+
+Add the following to your `.pokepoke/config.yaml`:
+
+```yaml
+otel:
+  enabled: true
+  service_name: "pokepoke"
+  exporter: "console"     # "console" or "otlp"
+```
+
+### Configuration Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `enabled` | `false` | Enable OTEL log export |
+| `service_name` | `"pokepoke"` | Service name in OTEL resource attributes |
+| `exporter` | `"console"` | Exporter type: `"console"` (stdout) or `"otlp"` (HTTP) |
+| `endpoint` | `"http://localhost:4318"` | OTLP collector endpoint (only for `otlp` exporter) |
+| `log_level` | `"INFO"` | Minimum log level to export (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) |
+| `batch_export` | `true` | Batch log records before export (recommended for production) |
+
+### Exporter Types
+
+#### Console Exporter
+
+Prints OTEL-formatted log records to stdout. Useful for development and debugging:
+
+```yaml
+otel:
+  enabled: true
+  exporter: "console"
+```
+
+#### OTLP HTTP Exporter
+
+Sends log records to an OTLP-compatible collector over HTTP:
+
+```yaml
+otel:
+  enabled: true
+  exporter: "otlp"
+  endpoint: "http://otel-collector:4318"
+  batch_export: true
+```
+
+### Graceful Degradation
+
+OTEL integration is fully optional:
+- If OTEL packages are not installed, a warning is logged and file-based logging continues normally
+- If the OTLP endpoint is unreachable, log records are buffered and retried by the SDK
+- Disabling `otel.enabled` removes all OTEL overhead
+
+### Required Packages
+
+```bash
+pip install opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
+```
+
+These are included in `requirements.txt` by default.
+
+### How It Works
+
+1. When `otel.enabled` is `true`, `configure_logging()` creates an OTEL `LoggingHandler`
+2. The handler bridges Python's standard `logging` to the OTEL Logs SDK
+3. Every log record (including `work_item_id`, `repo_name`, `agent_type` context) is exported
+4. The existing file-based logging continues unchanged — OTEL is additive
