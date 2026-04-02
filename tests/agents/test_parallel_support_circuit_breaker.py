@@ -3,6 +3,7 @@
 This module tests:
 - drain_circuit_breaker: Draining remaining workers when circuit breaker trips
 - update_circuit_breaker: Tracking failure counts and tripping logic
+- update_memory_circuit_breaker: Tracking low-memory polls and tripping logic
 """
 
 import concurrent.futures
@@ -12,6 +13,7 @@ from pokepoke.agents.parallel_support import (
     drain_circuit_breaker,
     update_circuit_breaker,
 )
+from pokepoke.agents.parallel_worker_pool import update_memory_circuit_breaker
 from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats
 
 
@@ -183,3 +185,117 @@ class TestUpdateCircuitBreaker:
         failures, tripped = update_circuit_breaker(0, 0, 3, 10, {}, run_logger)
         assert failures == 3
         assert tripped is False
+
+
+class TestUpdateMemoryCircuitBreaker:
+    """Tests for update_memory_circuit_breaker."""
+
+    def test_low_memory_increments_counter(self):
+        """When memory is below floor, consecutive poll counter increments."""
+        run_logger = MagicMock()
+        consecutive, tripped = update_memory_circuit_breaker(
+            available_mb=2048,  # Below 3072 MB floor
+            memory_floor_mb=3072,
+            threshold_polls=3,
+            consecutive_low_polls=1,
+            futures={},
+            run_logger=run_logger,
+        )
+        assert consecutive == 2
+        assert tripped is False
+
+    def test_sufficient_memory_resets_counter(self):
+        """When memory is above floor, consecutive poll counter resets to 0."""
+        run_logger = MagicMock()
+        consecutive, tripped = update_memory_circuit_breaker(
+            available_mb=4096,  # Above 3072 MB floor
+            memory_floor_mb=3072,
+            threshold_polls=3,
+            consecutive_low_polls=2,
+            futures={},
+            run_logger=run_logger,
+        )
+        assert consecutive == 0
+        assert tripped is False
+
+    def test_trips_at_threshold(self):
+        """Circuit breaker trips when consecutive polls reach threshold."""
+        run_logger = MagicMock()
+        consecutive, tripped = update_memory_circuit_breaker(
+            available_mb=2048,
+            memory_floor_mb=3072,
+            threshold_polls=3,
+            consecutive_low_polls=2,  # This will become 3, triggering trip
+            futures={},
+            run_logger=run_logger,
+        )
+        assert consecutive == 3
+        assert tripped is True
+        # Verify error was logged
+        run_logger.log_orchestrator.assert_called_once()
+        call_args = run_logger.log_orchestrator.call_args
+        assert "Memory circuit breaker" in call_args[0][0]
+        assert call_args[1]["level"] == "ERROR"
+
+    def test_exact_floor_does_not_trip(self):
+        """Memory exactly at floor (not below) should reset counter."""
+        run_logger = MagicMock()
+        consecutive, tripped = update_memory_circuit_breaker(
+            available_mb=3072,  # Exactly at floor
+            memory_floor_mb=3072,
+            threshold_polls=3,
+            consecutive_low_polls=2,
+            futures={},
+            run_logger=run_logger,
+        )
+        assert consecutive == 0
+        assert tripped is False
+
+    def test_trips_immediately_if_already_at_threshold(self):
+        """If consecutive_low_polls already at threshold, trip immediately."""
+        run_logger = MagicMock()
+        consecutive, tripped = update_memory_circuit_breaker(
+            available_mb=1024,  # Very low memory
+            memory_floor_mb=3072,
+            threshold_polls=3,
+            consecutive_low_polls=3,  # Already at threshold
+            futures={},
+            run_logger=run_logger,
+        )
+        assert consecutive == 4  # Incremented but already tripped
+        assert tripped is True
+
+    def test_logs_futures_count_on_trip(self):
+        """When tripping, log should include count of remaining futures."""
+        import concurrent.futures
+        item = _make_item("mem1")
+        fut = concurrent.futures.Future()
+        futures = {fut: item}
+        run_logger = MagicMock()
+        _consecutive, tripped = update_memory_circuit_breaker(
+            available_mb=1024,
+            memory_floor_mb=3072,
+            threshold_polls=3,
+            consecutive_low_polls=2,
+            futures=futures,
+            run_logger=run_logger,
+        )
+        assert tripped is True
+        call_args = run_logger.log_orchestrator.call_args
+        log_message = call_args[0][0]
+        assert "draining 1 remaining agent" in log_message
+
+    def test_zero_avail_mb_does_not_trip(self):
+        """When avail_mb is 0 (unknown/non-Windows), circuit breaker should not trip."""
+        run_logger = MagicMock()
+        consecutive, tripped = update_memory_circuit_breaker(
+            available_mb=0,  # Unknown memory status
+            memory_floor_mb=3072,
+            threshold_polls=3,
+            consecutive_low_polls=10,  # High count, but should reset
+            futures={},
+            run_logger=run_logger,
+        )
+        assert consecutive == 0  # Reset because memory is unknown
+        assert tripped is False
+
