@@ -13,6 +13,16 @@ You are working on item: {{item_id}}
 **Labels:** {{labels}}
 {{/labels}}
 
+{{#memory_context}}
+
+---
+
+{{{memory_context}}}
+
+---
+
+{{/memory_context}}
+
 {{#retry_feedback}}
 
 ## ⚠️ PREVIOUS ATTEMPT FEEDBACK

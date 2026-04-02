@@ -11,7 +11,7 @@ import logging
 import os
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 _SESSIONS_DIR = Path(".pokepoke") / "sessions"
 
 
-class SessionPhase(str, Enum):
+class SessionPhase(StrEnum):
     """Phase of a WorkItemSession lifecycle.
 
     Phases are recorded in the write-ahead journal so that SessionReconciler
