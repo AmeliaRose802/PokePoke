@@ -138,7 +138,6 @@ def process_work_item(  # noqa: C901
         current_work_agent_id = base_agent_id
         resume_session_id: str | None = None
         resume_output_summary: str | None = None
-        process_crashed_this_session = False
         result = CopilotResult(work_item_id=item.id, success=False,
             error="Session aborted due to application shutdown", attempt_count=0)
 
@@ -228,8 +227,6 @@ def process_work_item(  # noqa: C901
 
             is_process_crash = result.error and (
                 "process died" in result.error.lower() or "exited unexpectedly" in result.error.lower())
-            if is_process_crash:
-                process_crashed_this_session = True
 
             if not result.success:
                 copilot_failure_count += 1
@@ -244,7 +241,7 @@ def process_work_item(  # noqa: C901
                     resume_output_summary = None
 
                 if is_process_crash:
-                    logger.warning(f"\n⚠️  CLI process crashed: {result.error} — gate check will be skipped")
+                    logger.warning(f"\n⚠️  CLI process crashed: {result.error}")
 
                 retry, feedback = _maybe_retry_copilot(
                     result, copilot_failure_count, config.max_copilot_failure_retries, run_logger, item.id)
@@ -290,11 +287,6 @@ def process_work_item(  # noqa: C901
                 return _fail_result(request_count=request_count, stats=accumulated_stats,
                                     cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
                                     failure_reason="Cleanup agent failed to resolve uncommitted changes")
-
-            if process_crashed_this_session:
-                logger.warning("\n⏭️  Skipping Gate Agent — CLI process crashed, work may be incomplete")
-                gate_success = True
-                break
 
             if not config.gate_agent_enabled:
                 logger.warning("\n⏭️  Gate Agent disabled via config — skipping verification")
