@@ -37,14 +37,15 @@ def _is_stopping() -> bool:
 _SINGLETON_AGENTS: set[str] = {
     "Beta Tester",
     "Janitor",
-    "Backlog Cleanup",
     "Worktree Cleanup",
 }
 
-# Agents that can safely run in parallel (beads-only, no conflicts)
+# Agents that can safely run in parallel with work agents (read-only analysis,
+# beads-only mutations, no shared filesystem modifications)
 _PARALLEL_SAFE_AGENTS: set[str] = {
     "Tech Debt",
-    "Code Review"
+    "Code Review",
+    "Backlog Cleanup",
 }
 
 # Agents that have special runner functions instead of the generic one
