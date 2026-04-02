@@ -155,10 +155,61 @@ class MaintenanceScheduler:
         if not due_agents:
             return
 
-        # Check repo cleanliness ONCE for the entire batch.  Previously each
-        # agent called wait_for_main_repo_clean independently, so a dirty repo
-        # caused 4+ agents to each time-out after 3 minutes — wasting 12+ min
-        # per cycle with no useful work.
+        # Split due agents into parallel-safe (can run alongside work agents
+        # without repo cleanliness) and exclusive (need a clean repo).
+        parallel_due = [a for a in due_agents if a.name in _PARALLEL_SAFE_AGENTS]
+        exclusive_due = [a for a in due_agents if a.name not in _PARALLEL_SAFE_AGENTS]
+
+        # Run parallel-safe agents first — they are read-only / beads-only
+        # and don't require the main repo to be clean.
+        self._run_agent_batch(parallel_due, pokepoke_repo, session_stats, run_logger, repo_id, label="parallel-safe")
+
+        # Run exclusive agents (require clean repo and singleton guards).
+        self._run_exclusive_agents(exclusive_due, pokepoke_repo, session_stats, run_logger, repo_id)
+
+        # Record that a maintenance pass was executed for this repo
+        if repo_id is not None:
+            record_maintenance_run(repo_id)
+
+    def _run_agent_batch(
+        self,
+        agents: list[MaintenanceAgentConfig],
+        pokepoke_repo: Path,
+        session_stats: SessionStats,
+        run_logger: RunLogger,
+        repo_id: str | None,
+        label: str = "maintenance",
+    ) -> None:
+        """Run a batch of maintenance agents, stopping early on shutdown."""
+        from pokepoke.utils.shutdown import is_shutting_down, should_stop_after_current
+
+        for agent_cfg in agents:
+            if is_shutting_down() or should_stop_after_current():
+                remaining = len(agents) - agents.index(agent_cfg)
+                run_logger.log_maintenance(
+                    "maintenance",
+                    f"Stopping maintenance early - orchestrator is stopping "
+                    f"({remaining} {label} agent(s) skipped)",
+                )
+                break
+            self._maybe_run_agent(agent_cfg.name, agent_cfg, pokepoke_repo, session_stats, run_logger, repo_id=repo_id)
+
+    def _run_exclusive_agents(
+        self,
+        exclusive_due: list[MaintenanceAgentConfig],
+        pokepoke_repo: Path,
+        session_stats: SessionStats,
+        run_logger: RunLogger,
+        repo_id: str | None,
+    ) -> None:
+        """Run exclusive agents that require a clean main repo."""
+        if not exclusive_due:
+            return
+
+        if _is_stopping():
+            return
+
+        # Check repo cleanliness ONCE for the exclusive batch.
         def _batch_log(msg: str) -> None:
             run_logger.log_maintenance("maintenance", msg)
 
@@ -170,25 +221,11 @@ class MaintenanceScheduler:
         ):
             run_logger.log_maintenance(
                 "maintenance",
-                f"Skipping {len(due_agents)} maintenance agent(s) - main repo still dirty after wait",
+                f"Skipping {len(exclusive_due)} exclusive maintenance agent(s) - main repo still dirty after wait",
             )
             return
 
-        from pokepoke.utils.shutdown import is_shutting_down, should_stop_after_current
-
-        for agent_cfg in due_agents:
-            if is_shutting_down() or should_stop_after_current():
-                run_logger.log_maintenance(
-                    "maintenance",
-                    f"Stopping maintenance early - orchestrator is stopping "
-                    f"({len(due_agents) - due_agents.index(agent_cfg)} agent(s) skipped)",
-                )
-                break
-            self._maybe_run_agent(agent_cfg.name, agent_cfg, pokepoke_repo, session_stats, run_logger, repo_id=repo_id)
-
-        # Record that a maintenance pass was executed for this repo
-        if repo_id is not None:
-            record_maintenance_run(repo_id)
+        self._run_agent_batch(exclusive_due, pokepoke_repo, session_stats, run_logger, repo_id)
 
     def _maybe_run_agent(
         self,

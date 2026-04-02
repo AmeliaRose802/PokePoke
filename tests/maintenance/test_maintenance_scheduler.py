@@ -720,17 +720,13 @@ class TestConcurrentExecution:
         assert len(skipped_messages) == 3  # All should be skipped
 
     @patch("pokepoke.maintenance.maintenance_scheduler.get_active_agent_count")
-    def test_maybe_run_agent_defers_when_repo_stays_dirty(self, mock_active_count):
-        """Entire maintenance batch skips when repo never becomes clean (checked once)."""
-        # active_count=0 so singleton deferral is bypassed
+    def test_dirty_repo_skips_exclusive_agents_but_runs_parallel_safe(self, mock_active_count):
+        """When repo stays dirty, exclusive agents are skipped but parallel-safe agents still run."""
         mock_active_count.return_value = 0
         scheduler = MaintenanceScheduler()
         session_stats = SessionStats(agent_stats=AgentStats())
         run_logger = Mock()
 
-        # Simulate 'wait_for_main_repo_clean' returning False for the batch check.
-        # We call _maybe_run_agent directly, but since the per-agent repo check was
-        # removed, this exercises the path via maybe_run_maintenance instead.
         with patch("pokepoke.maintenance.maintenance_scheduler.get_config") as mock_config, \
                 patch("pokepoke.maintenance.maintenance_scheduler.wait_for_main_repo_clean", return_value=False) as mock_wait, \
                 patch("pokepoke.maintenance.maintenance_scheduler.terminal_ui") as mock_ui:
@@ -744,13 +740,47 @@ class TestConcurrentExecution:
 
             with patch.object(scheduler, '_maybe_run_agent') as mock_run:
                 scheduler.maybe_run_maintenance(2, session_stats, run_logger)
-                mock_run.assert_not_called()
+                # Backlog Cleanup is parallel-safe — runs even with dirty repo
+                assert mock_run.call_count == 1
+                mock_run.assert_called_once_with(
+                    "Backlog Cleanup", mock_run.call_args[0][1], mock_run.call_args[0][2],
+                    session_stats, run_logger, repo_id=None,
+                )
 
-        # wait_for_main_repo_clean must be called exactly once for the whole batch
+        # wait_for_main_repo_clean called once for the exclusive batch
         mock_wait.assert_called_once()
         run_logger.log_maintenance.assert_called_with(
             "maintenance",
-            "Skipping 2 maintenance agent(s) - main repo still dirty after wait",
+            "Skipping 1 exclusive maintenance agent(s) - main repo still dirty after wait",
+        )
+
+    @patch("pokepoke.maintenance.maintenance_scheduler.get_active_agent_count")
+    def test_dirty_repo_skips_all_when_only_exclusive_agents_due(self, mock_active_count):
+        """When repo stays dirty and only exclusive agents are due, all are skipped."""
+        mock_active_count.return_value = 0
+        scheduler = MaintenanceScheduler()
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        with patch("pokepoke.maintenance.maintenance_scheduler.get_config") as mock_config, \
+                patch("pokepoke.maintenance.maintenance_scheduler.wait_for_main_repo_clean", return_value=False) as mock_wait, \
+                patch("pokepoke.maintenance.maintenance_scheduler.terminal_ui") as mock_ui:
+            mock_ui.ui.is_agent_paused.return_value = False
+            config = ProjectConfig()
+            config.maintenance = MaintenanceConfig(agents=[
+                MaintenanceAgentConfig(name="Janitor", prompt_file="janitor.md", frequency=2, enabled=True),
+                MaintenanceAgentConfig(name="Worktree Cleanup", prompt_file="worktree-cleanup.md", frequency=2, enabled=True),
+            ])
+            mock_config.return_value = config
+
+            with patch.object(scheduler, '_maybe_run_agent') as mock_run:
+                scheduler.maybe_run_maintenance(2, session_stats, run_logger)
+                mock_run.assert_not_called()
+
+        mock_wait.assert_called_once()
+        run_logger.log_maintenance.assert_called_with(
+            "maintenance",
+            "Skipping 2 exclusive maintenance agent(s) - main repo still dirty after wait",
         )
 
     @patch("pokepoke.maintenance.maintenance_scheduler.get_active_agent_count")
@@ -798,6 +828,68 @@ class TestConcurrentExecution:
         with patch.object(scheduler, '_run_agent_with_coordination') as mock_run:
             scheduler._maybe_run_agent("Tech Debt", agent_cfg, Path.cwd(), session_stats, run_logger)
             mock_run.assert_called_once()
+
+
+class TestParallelSafeRepoBypass:
+    """Test that parallel-safe agents bypass the repo cleanliness check."""
+
+    @patch("pokepoke.maintenance.maintenance_scheduler.wait_for_main_repo_clean")
+    @patch("pokepoke.maintenance.maintenance_scheduler.terminal_ui")
+    @patch("pokepoke.maintenance.maintenance_scheduler.get_config")
+    def test_no_repo_clean_check_when_only_parallel_safe_due(self, mock_config, mock_terminal_ui, mock_wait):
+        """wait_for_main_repo_clean should NOT be called when only parallel-safe agents are due."""
+        mock_terminal_ui.ui.is_agent_paused.return_value = False
+        config = ProjectConfig()
+        config.maintenance = MaintenanceConfig(agents=[
+            MaintenanceAgentConfig(name="Code Review", prompt_file="code-review.md", frequency=2, enabled=True),
+            MaintenanceAgentConfig(name="Backlog Cleanup", prompt_file="backlog.md", frequency=2, enabled=True),
+        ])
+        mock_config.return_value = config
+        scheduler = MaintenanceScheduler()
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        with patch.object(scheduler, '_maybe_run_agent') as mock_run:
+            scheduler.maybe_run_maintenance(2, session_stats, run_logger)
+            # Both parallel-safe agents should be dispatched
+            assert mock_run.call_count == 2
+
+        # No repo cleanliness check needed
+        mock_wait.assert_not_called()
+
+    @patch("pokepoke.maintenance.maintenance_scheduler.wait_for_main_repo_clean")
+    @patch("pokepoke.maintenance.maintenance_scheduler.terminal_ui")
+    @patch("pokepoke.maintenance.maintenance_scheduler.get_config")
+    def test_parallel_safe_agents_run_before_repo_clean_check(self, mock_config, mock_terminal_ui, mock_wait):
+        """Parallel-safe agents should run before the repo cleanliness check for exclusive agents."""
+        mock_wait.return_value = True
+        mock_terminal_ui.ui.is_agent_paused.return_value = False
+        config = ProjectConfig()
+        config.maintenance = MaintenanceConfig(agents=[
+            MaintenanceAgentConfig(name="Janitor", prompt_file="janitor.md", frequency=2, enabled=True),
+            MaintenanceAgentConfig(name="Code Review", prompt_file="code-review.md", frequency=2, enabled=True),
+        ])
+        mock_config.return_value = config
+        scheduler = MaintenanceScheduler()
+        session_stats = SessionStats(agent_stats=AgentStats())
+        run_logger = Mock()
+
+        call_order: list[str] = []
+
+        def track_agent(*args, **kwargs):
+            call_order.append(args[0])  # agent name is first arg
+
+        def track_wait(*args, **kwargs):
+            call_order.append("wait_for_main_repo_clean")
+            return True
+
+        mock_wait.side_effect = track_wait
+
+        with patch.object(scheduler, '_maybe_run_agent', side_effect=track_agent):
+            scheduler.maybe_run_maintenance(2, session_stats, run_logger)
+
+        # Code Review (parallel-safe) runs before repo clean check
+        assert call_order == ["Code Review", "wait_for_main_repo_clean", "Janitor"]
 
 
 class TestConflictResolution:
