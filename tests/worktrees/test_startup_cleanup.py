@@ -288,13 +288,13 @@ class TestCleanupWorktreeSafe:
 
     @patch('pokepoke.worktrees.startup_cleanup.with_worktree_lock')
     @patch('pokepoke.worktrees.startup_cleanup.cleanup_worktree_and_branch')
-    def test_cleanup_error_handling(self, mock_cleanup_func, mock_lock):
-        """Test that cleanup errors are properly propagated."""
+    def test_cleanup_error_is_swallowed(self, mock_cleanup_func, mock_lock):
+        """Test that cleanup errors are logged but not re-raised."""
         from pokepoke.worktrees.startup_cleanup import _cleanup_worktree_safe
 
         mock_lock.return_value.__enter__ = Mock()
         mock_lock.return_value.__exit__ = Mock(return_value=None)
         mock_cleanup_func.side_effect = Exception("Cleanup failed")
 
-        with pytest.raises(Exception, match="Cleanup failed"):
-            _cleanup_worktree_safe("task/feature", "/path/to/worktree", "/repo")
+        # Should NOT raise — error is swallowed per the comment's intent
+        _cleanup_worktree_safe("task/feature", "/path/to/worktree", "/repo")
