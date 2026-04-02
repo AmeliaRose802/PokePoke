@@ -41,6 +41,7 @@ from .beads_manifest_utils import unassign_with_retry
 from .beads_query import (
     get_beads_stats,
     get_issue_dependencies,
+    get_item_comments,
     get_ready_work_items,
     has_unmet_blocking_dependencies,
     is_beads_item_closed,
@@ -61,6 +62,7 @@ __all__ = [
     # Query operations
     'get_ready_work_items',
     'get_issue_dependencies',
+    'get_item_comments',
     'get_beads_stats',
     'has_unmet_blocking_dependencies',
     'is_beads_item_closed',

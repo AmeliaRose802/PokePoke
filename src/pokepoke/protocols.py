@@ -7,7 +7,7 @@ helpers.
 """
 
 import subprocess
-from typing import Protocol
+from typing import Any, Protocol
 
 from pokepoke.types import BeadsStats, BeadsWorkItem, IssueWithDependencies
 
@@ -77,6 +77,8 @@ class BeadsClient(Protocol):
 
     def add_comment(self, item_id: str, message: str) -> bool: ...
 
+    def get_item_comments(self, item_id: str) -> list[dict[str, Any]]: ...
+
     def unassign_item(self, item_id: str) -> bool: ...
 
     def unassign_with_retry(self, item_id: str) -> bool: ...
@@ -135,6 +137,11 @@ class DefaultBeadsClient:
         from pokepoke.beads.beads_management import add_comment
 
         return add_comment(item_id, comment=message)
+
+    def get_item_comments(self, item_id: str) -> list[dict[str, Any]]:
+        from pokepoke.beads.beads_query import get_item_comments
+
+        return get_item_comments(item_id)
 
     def unassign_item(self, item_id: str) -> bool:
         from pokepoke.beads.beads_management import unassign_item

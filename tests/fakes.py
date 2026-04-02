@@ -203,6 +203,13 @@ class FakeBeadsClient:
         self._comments.setdefault(item_id, []).append(message)
         return True
 
+    def get_item_comments(self, item_id: str) -> list[dict[str, object]]:
+        self.calls.append(_BeadsCall("get_item_comments", (item_id,)))
+        return [
+            {"text": text, "author": "agent", "created_at": "2025-01-01T00:00:00Z"}
+            for text in self._comments.get(item_id, [])
+        ]
+
     def unassign_item(self, item_id: str) -> bool:
         self.calls.append(_BeadsCall("unassign_item", (item_id,)))
         if "unassign_item" in self.fail_methods:

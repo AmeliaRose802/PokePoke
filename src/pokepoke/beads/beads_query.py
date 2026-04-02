@@ -355,6 +355,34 @@ def is_beads_item_closed(item_id: str, *, backend: CLIBackendConfig | None = Non
         return False
 
 
+def get_item_comments(
+    item_id: str,
+    *,
+    backend: CLIBackendConfig | None = None,
+) -> list[dict[str, Any]]:
+    """Fetch all comments on a beads item.
+
+    Args:
+        item_id: The beads item ID to fetch comments for.
+        backend: Optional CLI backend override.
+
+    Returns:
+        List of comment dicts (keys: id, issue_id, author, text, created_at).
+        Returns an empty list on error.
+    """
+    try:
+        result = _run_bd(['comments', item_id, '--json'], backend=backend)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+        logger.warning("⚠️  Failed to fetch comments for %s: %s", item_id, e)
+        return []
+    if not result.stdout:
+        return []
+    data = _parse_beads_json(result.stdout)
+    if isinstance(data, list):
+        return data
+    return []
+
+
 def get_beads_stats(*, backend: CLIBackendConfig | None = None) -> BeadsStats | None:
     """Get current beads database statistics.
 
