@@ -50,6 +50,18 @@ def snapshot_to_dict(snapshot: Any) -> dict[str, Any]:
         "model_completions": [asdict(mc) for mc in snapshot.model_completions],
         "merge_queue_stats": snapshot.merge_queue_stats.to_summary_dict(),
     }
+
+    # Add gate rejection totals from persistent tracker (lightweight read)
+    try:
+        from pokepoke.stats.gate_rejection_tracker import get_gate_rejection_stats as _get_gate
+        gate_summary = _get_gate()
+        total_checks = sum(s.get("total_checks", 0) for s in gate_summary.values())
+        total_rejections = sum(s.get("total_rejected", 0) for s in gate_summary.values())
+        stats["gate_rejections"] = total_rejections
+        stats["gate_checks"] = total_checks
+    except Exception:
+        pass
+
     for agent in iter_agent_types():
         stats[agent.run_attr] = snapshot.agent_run_counts.get(agent.key, 0)
     return stats
@@ -347,3 +359,47 @@ def get_concurrency_timeline(self: DesktopAPI) -> dict[str, Any]:
 
     from pokepoke.desktop.concurrency_log_parser import parse_concurrency_timeline
     return parse_concurrency_timeline(log_path)
+
+
+def get_gate_rejection_stats(self: DesktopAPI) -> dict[str, Any]:
+    """Return gate rejection statistics for the dashboard.
+
+    Returns per-model summary and per-item rejection breakdown.
+    Cached for 5 seconds to avoid repeated disk reads.
+    """
+    now = time.time()
+    with self._lock:
+        cache: dict[str, Any] | None = getattr(self, "_gate_rejection_cache", None)
+        cache_time: float = getattr(self, "_gate_rejection_cache_time", 0.0)
+
+    if cache is not None and now - cache_time <= 5.0:
+        return cache
+
+    from pokepoke.stats.gate_rejection_tracker import (
+        get_gate_rejection_stats as _get_model_stats,
+    )
+    from pokepoke.stats.gate_rejection_tracker import (
+        get_per_item_rejection_stats,
+    )
+
+    per_model = _get_model_stats()
+    per_item = get_per_item_rejection_stats()
+
+    total_checks = sum(s.get("total_checks", 0) for s in per_model.values())
+    total_rejections = sum(s.get("total_rejected", 0) for s in per_model.values())
+
+    result: dict[str, Any] = {
+        "per_model": per_model,
+        "per_item": per_item,
+        "totals": {
+            "total_checks": total_checks,
+            "total_rejections": total_rejections,
+            "rejection_rate": round(total_rejections / total_checks, 4) if total_checks > 0 else 0.0,
+        },
+    }
+
+    with self._lock:
+        self._gate_rejection_cache = result  # type: ignore[attr-defined]
+        self._gate_rejection_cache_time = now  # type: ignore[attr-defined]
+
+    return result

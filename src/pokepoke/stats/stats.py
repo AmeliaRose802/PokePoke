@@ -121,6 +121,10 @@ def print_stats(items_completed: int, total_requests: int, elapsed_seconds: floa
     from pokepoke.models.model_stats_store import print_model_leaderboard
     print_model_leaderboard()
 
+    # Print gate rejection rate leaderboard if any data exists
+    from pokepoke.stats.gate_rejection_tracker import print_gate_rejection_leaderboard
+    print_gate_rejection_leaderboard()
+
     # Print performance monitor summary if any alerts were recorded
     from pokepoke.stats.performance_monitor import get_performance_monitor
     _print_performance_summary(get_performance_monitor())
@@ -357,6 +361,20 @@ def serialize_session_stats(
     mqs = getattr(session_stats, 'merge_queue_stats', None)
     if isinstance(mqs, MergeQueueStats) and mqs.total_merges > 0:
         data["merge_queue"] = mqs.to_summary_dict()
+
+    # Gate rejection statistics from persistent tracker
+    from pokepoke.stats.gate_rejection_tracker import (
+        get_gate_rejection_stats as _get_gate_stats,
+    )
+    from pokepoke.stats.gate_rejection_tracker import (
+        get_per_item_rejection_stats,
+    )
+    gate_summary = _get_gate_stats()
+    if gate_summary:
+        data["gate_rejection_summary"] = gate_summary
+    per_item_gate = get_per_item_rejection_stats()
+    if per_item_gate:
+        data["gate_rejections_per_item"] = per_item_gate
 
     return data
 

@@ -22,7 +22,7 @@ import { SetupWizard } from "./components/SetupWizard";
 import { StatsBar } from "./components/StatsBar";
 import { StatsPage } from "./components/StatsPage";
 import { WorkItemHeader } from "./components/WorkItemHeader";
-import type { ConcurrencyTimeline, ModelHistoryEntry } from "./types";
+import type { ConcurrencyTimeline, GateRejectionStats, ModelHistoryEntry } from "./types";
 import { useBridge } from "./useBridge";
 import { useCollapsibleBanner } from "./useCollapsibleBanner";
 import { useDocumentTitle } from "./useDocumentTitle";
@@ -38,6 +38,7 @@ function App() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [concurrencyTimeline, setConcurrencyTimeline] = useState<ConcurrencyTimeline | null>(null);
+  const [gateRejectionStats, setGateRejectionStats] = useState<GateRejectionStats | null>(null);
   const [spawnAtLimit, setSpawnAtLimit] = useState(false);
   const { isDragging, containerRef, handleProps } = useResizable();
   const { collapsed: bannerCollapsed, toggle: toggleBanner } = useCollapsibleBanner();
@@ -87,7 +88,7 @@ function App() {
     setShowSettings(false);
   }, []);
 
-  const { getModelHistory, getConcurrencyTimeline } = bridge;
+  const { getModelHistory, getConcurrencyTimeline, getGateRejectionStats } = bridge;
 
   const handleSpawnAgent = useCallback(async () => {
     const result = await bridge.spawnAgent();
@@ -124,6 +125,11 @@ function App() {
     if (data) setConcurrencyTimeline(data);
   }, [getConcurrencyTimeline]);
 
+  const loadGateRejectionStats = useCallback(async () => {
+    const data = await getGateRejectionStats();
+    if (data) setGateRejectionStats(data);
+  }, [getGateRejectionStats]);
+
   useEffect(() => {
     if (showStatsPage && !historyLoading && modelHistory.length === 0) {
       loadModelHistory().catch(() => {
@@ -133,7 +139,10 @@ function App() {
     if (showStatsPage && !concurrencyTimeline) {
       loadConcurrencyTimeline().catch(() => {});
     }
-  }, [showStatsPage, historyLoading, modelHistory.length, loadModelHistory, concurrencyTimeline, loadConcurrencyTimeline]);
+    if (showStatsPage && !gateRejectionStats) {
+      loadGateRejectionStats().catch(() => {});
+    }
+  }, [showStatsPage, historyLoading, modelHistory.length, loadModelHistory, concurrencyTimeline, loadConcurrencyTimeline, gateRejectionStats, loadGateRejectionStats]);
 
   return (
     <div className="app">
@@ -346,6 +355,7 @@ function App() {
           onClose={() => setShowStatsPage(false)}
           agents={bridge.agents}
           concurrencyTimeline={concurrencyTimeline}
+          gateRejectionStats={gateRejectionStats}
         />
       )}
     </div>

@@ -122,6 +122,7 @@ def _update_gate_summary_incremental(
 
 def record_gate_check(
     gate_model: str, item_id: str, passed: bool, path: Path | None = None,
+    reason: str = "",
 ) -> None:
     """Record a gate agent check result for per-gate-model rejection rate tracking.
 
@@ -129,11 +130,13 @@ def record_gate_check(
     """
     from pokepoke.stats.metrics_context import get_current_repo_name
 
-    entry = {
+    entry: dict[str, Any] = {
         "gate_model": gate_model, "item_id": item_id, "passed": passed,
         "repo_name": get_current_repo_name(),
         "timestamp": datetime.now(UTC).isoformat(),
     }
+    if reason:
+        entry["reason"] = reason
 
     with _STORE.lock(timeout=60):
         data = load_gate_stats(path)
@@ -183,6 +186,45 @@ def print_gate_rejection_leaderboard(path: Path | None = None) -> None:
         if trend_str:
             logger.info(f"     Trend:     {trend_str}")
     logger.info("\n" + "=" * 70)
+
+
+def get_per_item_rejection_stats(path: Path | None = None) -> dict[str, dict[str, Any]]:
+    """Return per-item gate rejection statistics aggregated from the log.
+
+    Returns a dict keyed by item_id with:
+      - total_checks: int
+      - rejections: int
+      - gate_models_used: list[str]
+      - last_check: str (ISO timestamp of most recent check)
+      - reasons: list[str] (rejection reasons, most recent first, max 5)
+    """
+    data = load_gate_stats(path)
+    items: dict[str, dict[str, Any]] = {}
+    for entry in data.get("log", []):
+        item_id = entry.get("item_id", "unknown")
+        if item_id not in items:
+            items[item_id] = {
+                "total_checks": 0, "rejections": 0,
+                "gate_models_used": set(),
+                "last_check": "", "reasons": [],
+            }
+        s = items[item_id]
+        s["total_checks"] += 1
+        ts = entry.get("timestamp", "")
+        s["last_check"] = max(s["last_check"], ts)
+        s["gate_models_used"].add(entry.get("gate_model", "unknown"))
+        if not entry.get("passed"):
+            s["rejections"] += 1
+            reason = entry.get("reason", "")
+            if reason:
+                s["reasons"].append(reason)
+
+    # Finalize: convert sets to sorted lists, cap reasons at 5 most recent
+    for s in items.values():
+        s["gate_models_used"] = sorted(s["gate_models_used"])
+        s["reasons"] = s["reasons"][-5:]
+
+    return items
 
 
 def _format_trend(trend_data: list[dict[str, Any]], max_markers: int = 20) -> str:

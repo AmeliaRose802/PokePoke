@@ -22,6 +22,7 @@ import type {
   ConcurrencyTimeline,
   ConfigResponse,
   ConnectionStatus,
+  GateRejectionStats,
   LogEntry,
   ModelHistoryEntry,
   ModelPerformanceSummary,
@@ -119,6 +120,7 @@ interface PyWebViewAPI {
   remove_work_item_label(item_id: string, label: string): Promise<{ item_id: string; label: string; labels: string[] }>;
   get_available_models(): Promise<AvailableModelsResponse>;
   get_concurrency_timeline(): Promise<ConcurrencyTimeline>;
+  get_gate_rejection_stats(): Promise<GateRejectionStats>;
 
   // First-time setup wizard API
   check_setup_status(): Promise<SetupStatus>;
@@ -185,6 +187,7 @@ export interface BridgeStateBase {
   getAvailableModels: () => Promise<AvailableModelsResponse | null>;
   getModelHistory: (limit?: number) => Promise<ModelHistoryEntry[]>;
   getConcurrencyTimeline: () => Promise<ConcurrencyTimeline | null>;
+  getGateRejectionStats: () => Promise<GateRejectionStats | null>;
   requestStopAfterCurrent: () => Promise<void>;
   cancelStopAfterCurrent: () => Promise<void>;
   addWorkItemLabel: (label: string) => Promise<void>;
@@ -286,6 +289,15 @@ export function useBridge(): BridgeState {
     if (!window.pywebview?.api) return null;
     try {
       return await window.pywebview.api.get_concurrency_timeline();
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const getGateRejectionStats = useCallback(async (): Promise<GateRejectionStats | null> => {
+    if (!window.pywebview?.api) return null;
+    try {
+      return await window.pywebview.api.get_gate_rejection_stats();
     } catch {
       return null;
     }
@@ -480,6 +492,7 @@ export function useBridge(): BridgeState {
     getAvailableModels,
     getModelHistory,
     getConcurrencyTimeline,
+    getGateRejectionStats,
     requestStopAfterCurrent,
     cancelStopAfterCurrent,
     addWorkItemLabel,

@@ -105,6 +105,8 @@ export const SessionStatsSchema = z.object({
   worktree_cleanup_agent_runs: z.number().optional(),
   agent_type_elapsed_seconds: z.record(z.string(), z.number()).optional(),
   model_completions: z.array(ModelCompletionRecordSchema).optional(),
+  gate_rejections: z.number().optional(),
+  gate_checks: z.number().optional(),
 });
 
 /** Progress indicator state */
