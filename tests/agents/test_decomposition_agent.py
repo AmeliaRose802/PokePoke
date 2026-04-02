@@ -404,6 +404,7 @@ class TestUpdateParentMetadata:
 class TestRunDecomposition:
     """Tests for the main run_decomposition entry point."""
 
+    @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")
     @patch("pokepoke.beads.beads_management.add_comment")
     @patch(f"{_DECOMP}._update_parent_metadata")
     @patch(f"{_DECOMP}._add_blocking_dependency")
@@ -418,6 +419,7 @@ class TestRunDecomposition:
         mock_block: MagicMock,
         mock_update: MagicMock,
         mock_comment: MagicMock,
+        mock_record: MagicMock,
     ) -> None:
         item = _make_item()
         mock_sdk.return_value = [
@@ -437,6 +439,7 @@ class TestRunDecomposition:
         mock_update.assert_called_once_with("task-1", ["child-1", "child-2", "child-3"])
         mock_comment.assert_called_once()
 
+    @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")
     @patch("pokepoke.beads.beads_management.add_comment")
     @patch(f"{_DECOMP}._update_parent_metadata")
     @patch(f"{_DECOMP}._add_blocking_dependency")
@@ -451,6 +454,7 @@ class TestRunDecomposition:
         mock_block: MagicMock,
         mock_update: MagicMock,
         mock_comment: MagicMock,
+        mock_record: MagicMock,
     ) -> None:
         item = _make_item()
         mock_sdk.return_value = [
@@ -468,6 +472,7 @@ class TestRunDecomposition:
         mock_block.assert_any_call("child-1", "child-2")
         mock_block.assert_any_call("child-2", "child-3")
 
+    @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")
     @patch("pokepoke.beads.beads_management.add_comment")
     @patch(f"{_DECOMP}._update_parent_metadata")
     @patch(f"{_DECOMP}._add_blocking_dependency")
@@ -482,6 +487,7 @@ class TestRunDecomposition:
         mock_block: MagicMock,
         mock_update: MagicMock,
         mock_comment: MagicMock,
+        mock_record: MagicMock,
     ) -> None:
         item = _make_item()
         mock_sdk.return_value = [
@@ -526,6 +532,7 @@ class TestRunDecomposition:
         assert result.success is False
         assert "no valid subtasks" in result.reason.lower()
 
+    @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")
     @patch("pokepoke.beads.beads_management.add_comment")
     @patch(f"{_DECOMP}._update_parent_metadata")
     @patch(f"{_DECOMP}._add_blocking_dependency")
@@ -540,6 +547,7 @@ class TestRunDecomposition:
         mock_block: MagicMock,
         mock_update: MagicMock,
         mock_comment: MagicMock,
+        mock_record: MagicMock,
     ) -> None:
         item = _make_item()
         mock_sdk.return_value = [
@@ -571,6 +579,7 @@ class TestRunDecomposition:
         assert result.success is False
         assert "already exist" in result.reason.lower()
 
+    @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")
     @patch("pokepoke.beads.beads_management.add_comment")
     @patch(f"{_DECOMP}._update_parent_metadata")
     @patch(f"{_DECOMP}._add_blocking_dependency")
@@ -585,6 +594,7 @@ class TestRunDecomposition:
         mock_block: MagicMock,
         mock_update: MagicMock,
         mock_comment: MagicMock,
+        mock_record: MagicMock,
     ) -> None:
         item = _make_item(labels=["orchestrator", "config"])
         mock_sdk.return_value = [
@@ -602,6 +612,7 @@ class TestRunDecomposition:
         assert "orchestrator" in extra_labels
         assert "config" in extra_labels
 
+    @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")
     @patch("pokepoke.beads.beads_management.add_comment")
     @patch(f"{_DECOMP}._update_parent_metadata")
     @patch(f"{_DECOMP}._add_blocking_dependency")
@@ -616,6 +627,7 @@ class TestRunDecomposition:
         mock_block: MagicMock,
         mock_update: MagicMock,
         mock_comment: MagicMock,
+        mock_record: MagicMock,
     ) -> None:
         item = _make_item()
         mock_sdk.return_value = [
@@ -631,6 +643,95 @@ class TestRunDecomposition:
         assert "4 consecutive failures" in comment_text
         assert "c-1" in comment_text
         assert "c-2" in comment_text
+
+    @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")
+    @patch("pokepoke.beads.beads_management.add_comment")
+    @patch(f"{_DECOMP}._update_parent_metadata")
+    @patch(f"{_DECOMP}._add_blocking_dependency")
+    @patch(f"{_DECOMP}._create_child_item")
+    @patch(f"{_DECOMP}._get_existing_child_titles", return_value=set())
+    @patch(f"{_DECOMP}._invoke_sdk_for_decomposition")
+    def test_records_created_items_in_session_stats(
+        self,
+        mock_sdk: MagicMock,
+        mock_existing: MagicMock,
+        mock_create: MagicMock,
+        mock_block: MagicMock,
+        mock_update: MagicMock,
+        mock_comment: MagicMock,
+        mock_record: MagicMock,
+    ) -> None:
+        """Decomposed children must be reported so the dashboard ADDED counter updates."""
+        item = _make_item()
+        mock_sdk.return_value = [
+            SubTask(title="Implement user login flow", description="d1", priority=2),
+            SubTask(title="Add password validation logic", description="d2", priority=2),
+        ]
+        mock_create.side_effect = ["child-1", "child-2"]
+        mock_update.return_value = True
+
+        run_decomposition(item, failure_count=3)
+
+        mock_record.assert_called_once_with([
+            ("child-1", "Implement user login flow"),
+            ("child-2", "Add password validation logic"),
+        ])
+
+    @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")
+    @patch(f"{_DECOMP}._create_child_item")
+    @patch(f"{_DECOMP}._get_existing_child_titles", return_value=set())
+    @patch(f"{_DECOMP}._invoke_sdk_for_decomposition")
+    def test_does_not_record_when_no_children_created(
+        self,
+        mock_sdk: MagicMock,
+        mock_existing: MagicMock,
+        mock_create: MagicMock,
+        mock_record: MagicMock,
+    ) -> None:
+        """When all child creation attempts fail, record_items_created is not called."""
+        item = _make_item()
+        mock_sdk.return_value = [
+            SubTask(title="A subtask that will fail creation", description="d1", priority=2),
+        ]
+        mock_create.return_value = None
+
+        run_decomposition(item, failure_count=3)
+
+        mock_record.assert_not_called()
+
+    @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")
+    @patch("pokepoke.beads.beads_management.add_comment")
+    @patch(f"{_DECOMP}._update_parent_metadata")
+    @patch(f"{_DECOMP}._add_blocking_dependency")
+    @patch(f"{_DECOMP}._create_child_item")
+    @patch(f"{_DECOMP}._get_existing_child_titles", return_value=set())
+    @patch(f"{_DECOMP}._invoke_sdk_for_decomposition")
+    def test_records_only_successfully_created_items(
+        self,
+        mock_sdk: MagicMock,
+        mock_existing: MagicMock,
+        mock_create: MagicMock,
+        mock_block: MagicMock,
+        mock_update: MagicMock,
+        mock_comment: MagicMock,
+        mock_record: MagicMock,
+    ) -> None:
+        """Partial creation: only successfully created children are recorded."""
+        item = _make_item()
+        mock_sdk.return_value = [
+            SubTask(title="Subtask that succeeds first", description="d1", priority=2),
+            SubTask(title="Subtask that fails in middle", description="d2", priority=2),
+            SubTask(title="Subtask that succeeds at end", description="d3", priority=2),
+        ]
+        mock_create.side_effect = ["child-1", None, "child-3"]
+        mock_update.return_value = True
+
+        run_decomposition(item, failure_count=3)
+
+        mock_record.assert_called_once_with([
+            ("child-1", "Subtask that succeeds first"),
+            ("child-3", "Subtask that succeeds at end"),
+        ])
 
 
 # ---------------------------------------------------------------------------

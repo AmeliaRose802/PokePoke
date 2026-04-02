@@ -284,6 +284,7 @@ def run_decomposition(item: BeadsWorkItem, failure_count: int) -> DecompositionR
     logger.info("🔀 Creating %d sub-tasks for %s", len(subtasks), item.id)
 
     child_ids: list[str] = []
+    created_items: list[tuple[str, str]] = []
     prev_child_id: str | None = None
     for subtask in subtasks:
         child_id = _create_child_item(
@@ -296,10 +297,16 @@ def run_decomposition(item: BeadsWorkItem, failure_count: int) -> DecompositionR
             if prev_child_id:
                 _add_blocking_dependency(prev_child_id, child_id)
             child_ids.append(child_id)
+            created_items.append((child_id, subtask.title))
             prev_child_id = child_id
             logger.info("   ✅ Created child: %s — %s", child_id, subtask.title)
         else:
             logger.warning("   ❌ Failed to create child: %s", subtask.title)
+
+    # Record created items in session stats so the dashboard ADDED counter updates
+    if created_items:
+        from pokepoke.beads.sdk_beads_tracker import record_items_created
+        record_items_created(created_items)
 
     if not child_ids:
         reason = "Failed to create any child items in beads"

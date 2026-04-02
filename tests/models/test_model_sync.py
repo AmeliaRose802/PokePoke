@@ -261,12 +261,43 @@ def test_sync_creates_and_updates_beads(tmp_path):
             patch("pokepoke.models.model_sync_beads._run_bd", side_effect=fake_run_bd) as mock_bd, \
             patch("pokepoke.models.model_sync._get_main_repo_root", return_value=tmp_path), \
             patch("pokepoke.models.model_sync.REGISTRY_PATH", tmp_path / "model_registry.json"), \
-            patch("pokepoke.models.model_sync.run_bd_sync_with_retry") as mock_sync:
+            patch("pokepoke.models.model_sync.run_bd_sync_with_retry") as mock_sync, \
+            patch("pokepoke.beads.sdk_beads_tracker.record_items_created"):
         result = sync_copilot_models()
         assert result is not None
         assert any(call.args[0][0] == "create" for call in mock_bd.call_args_list)
         assert any(call.args[0][0] == "update" for call in mock_bd.call_args_list)
         mock_sync.assert_called_once()
+
+
+def test_sync_records_created_items_in_stats(tmp_path):
+    """Items created by model sync must be reported to session stats."""
+    config = ProjectConfig()
+    config.model_sync = ModelSyncConfig(beta_only=False, labels=["model"])
+
+    def fake_run_bd(args, check=True, timeout=30, cwd=None):
+        if args[0] == "list":
+            return subprocess.CompletedProcess(args, 0, "[]", "")
+        if args[0] == "create":
+            return subprocess.CompletedProcess(
+                args, 0, json.dumps({"id": "PokePoke-new1", "title": args[1]}), "",
+            )
+        return subprocess.CompletedProcess(args, 0, "{}", "")
+
+    with patch("pokepoke.models.model_sync.get_config", return_value=config), \
+            patch("pokepoke.models.model_sync._run_copilot_models", return_value=[
+                {"name": "gpt-5.2", "status": "beta"},
+            ]), \
+            patch("pokepoke.models.model_sync_beads._run_bd", side_effect=fake_run_bd), \
+            patch("pokepoke.models.model_sync._get_main_repo_root", return_value=tmp_path), \
+            patch("pokepoke.models.model_sync.REGISTRY_PATH", tmp_path / "model_registry.json"), \
+            patch("pokepoke.models.model_sync.run_bd_sync_with_retry"), \
+            patch("pokepoke.beads.sdk_beads_tracker.record_items_created") as mock_record:
+        sync_copilot_models()
+        mock_record.assert_called_once()
+        items = mock_record.call_args[0][0]
+        assert len(items) == 1
+        assert items[0][0] == "PokePoke-new1"
 
 
 def test_sync_prunes_unavailable(tmp_path):
@@ -294,7 +325,8 @@ def test_sync_prunes_unavailable(tmp_path):
             ]), \
             patch("pokepoke.models.model_sync_beads._run_bd", side_effect=fake_run_bd) as mock_bd, \
             patch("pokepoke.models.model_sync._get_main_repo_root", return_value=tmp_path), \
-            patch("pokepoke.models.model_sync.REGISTRY_PATH", registry_path):
+            patch("pokepoke.models.model_sync.REGISTRY_PATH", registry_path), \
+            patch("pokepoke.beads.sdk_beads_tracker.record_items_created"):
         result = sync_copilot_models()
         assert result is not None
         assert any(call.args[0][0] == "close" for call in mock_bd.call_args_list)
