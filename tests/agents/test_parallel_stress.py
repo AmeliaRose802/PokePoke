@@ -203,10 +203,13 @@ class TestSessionStatsConcurrentIntegrity:
         def _reader() -> None:
             while not stop.is_set():
                 snap = stats.snapshot()
-                # Snapshot must have at least as many completed items in list
-                if len(snap.completed_items_list) < snap.items_completed:
+                # completed_items_list is bounded (MAX_LIST_ENTRIES=500) so
+                # it can legitimately be shorter than items_completed once the
+                # cap is reached.  The invariant is: list length must not
+                # exceed the counter.
+                if len(snap.completed_items_list) > snap.items_completed:
                     errors.append(
-                        f"list={len(snap.completed_items_list)} < count={snap.items_completed}")
+                        f"list={len(snap.completed_items_list)} > count={snap.items_completed}")
 
         writers = [threading.Thread(target=_writer) for _ in range(4)]
         readers = [threading.Thread(target=_reader) for _ in range(2)]
@@ -731,7 +734,7 @@ class TestComputeSlotsConcurrency:
         monkeypatch.setattr(
             "pokepoke.agents.parallel.get_effective_max_agents", lambda: 6)
         monkeypatch.setattr(
-            "pokepoke.utils.process_utils.apply_memory_backpressure",
+            "pokepoke.utils.memory_utils.apply_memory_backpressure",
             lambda slots: (slots, 8000))
 
         errors: list[str] = []

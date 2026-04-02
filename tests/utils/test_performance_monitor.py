@@ -294,6 +294,8 @@ class TestSnapshot:
         assert snap["succeeded"] == 0
         assert snap["failed"] == 0
         assert snap["success_rate"] is None
+        assert snap["rss_current_mb"] is None
+        assert snap["rss_samples"] == []
         assert snap["thresholds"]["max_merge_queue_depth"] == 5
         assert snap["thresholds"]["max_lock_wait_seconds"] == 30.0
         assert snap["recent_alerts"] == []
@@ -328,6 +330,8 @@ class TestReset:
         assert snap["total_alerts"] == 0
         assert snap["succeeded"] == 0
         assert snap["failed"] == 0
+        assert snap["recent_alerts"] == []
+        assert snap["rss_samples"] == []
         assert snap["recent_alerts"] == []
 
 
@@ -394,3 +398,101 @@ class TestConfigIntegration:
         assert snap["thresholds"]["max_iteration_seconds"] == 30.0
         assert snap["thresholds"]["min_memory_mb"] == 256.0
         assert snap["thresholds"]["min_success_rate"] == 0.5
+
+
+class TestCheckRss:
+    """Tests for RSS monotonic growth detection."""
+
+    def test_returns_none_when_rss_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        mon = PerformanceMonitor(rss_monotonic_window=3)
+        monkeypatch.setattr(
+            "pokepoke.stats.performance_monitor.get_process_rss_mb", lambda: 0,
+        )
+        assert mon.check_rss() is None
+
+    def test_no_alert_below_window_size(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        rss_values = iter([100, 110])
+        mon = PerformanceMonitor(rss_monotonic_window=3)
+        monkeypatch.setattr(
+            "pokepoke.stats.performance_monitor.get_process_rss_mb",
+            lambda: next(rss_values),
+        )
+        assert mon.check_rss() is None
+        assert mon.check_rss() is None
+
+    def test_alert_on_monotonic_growth(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        rss_values = iter([100, 110, 120])
+        mon = PerformanceMonitor(rss_monotonic_window=3)
+        monkeypatch.setattr(
+            "pokepoke.stats.performance_monitor.get_process_rss_mb",
+            lambda: next(rss_values),
+        )
+        mon.check_rss()
+        mon.check_rss()
+        alert = mon.check_rss()
+        assert alert is not None
+        assert alert.category == "rss_growth"
+        assert "100MB" in alert.message
+        assert "120MB" in alert.message
+
+    def test_no_alert_when_rss_stabilizes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        rss_values = iter([100, 110, 105])
+        mon = PerformanceMonitor(rss_monotonic_window=3)
+        monkeypatch.setattr(
+            "pokepoke.stats.performance_monitor.get_process_rss_mb",
+            lambda: next(rss_values),
+        )
+        mon.check_rss()
+        mon.check_rss()
+        assert mon.check_rss() is None
+
+    def test_disabled_returns_none(self) -> None:
+        mon = PerformanceMonitor(rss_monotonic_window=3, enabled=False)
+        assert mon.check_rss() is None
+
+    def test_rss_samples_in_snapshot(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        rss_values = iter([100, 110])
+        mon = PerformanceMonitor(rss_monotonic_window=5)
+        monkeypatch.setattr(
+            "pokepoke.stats.performance_monitor.get_process_rss_mb",
+            lambda: next(rss_values),
+        )
+        mon.check_rss()
+        mon.check_rss()
+        snap = mon.snapshot()
+        assert snap["rss_current_mb"] == 110
+        assert snap["rss_samples"] == [100, 110]
+
+    def test_rss_samples_bounded(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Verify internal sample list doesn't grow unbounded."""
+        call_count = [0]
+
+        def increasing_rss() -> int:
+            call_count[0] += 1
+            return 100 + call_count[0]
+
+        mon = PerformanceMonitor(rss_monotonic_window=3)
+        monkeypatch.setattr(
+            "pokepoke.stats.performance_monitor.get_process_rss_mb", increasing_rss,
+        )
+        for _ in range(20):
+            mon.check_rss()
+        # Internal list bounded to 2 × window = 6
+        assert len(mon._rss_samples) <= 6
+
+    def test_check_all_includes_rss(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """check_all should include RSS alert when growth is monotonic."""
+        rss_values = iter([100, 110, 120])
+        mon = PerformanceMonitor(rss_monotonic_window=3, min_memory_mb=1.0)
+        monkeypatch.setattr(
+            "pokepoke.stats.performance_monitor.get_process_rss_mb",
+            lambda: next(rss_values),
+        )
+        monkeypatch.setattr(
+            "pokepoke.stats.performance_monitor.get_available_memory_mb", lambda: 4096,
+        )
+        mon.check_all()
+        mon.check_all()
+        alerts = mon.check_all()
+        categories = {a.category for a in alerts}
+        assert "rss_growth" in categories

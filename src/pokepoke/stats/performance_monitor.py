@@ -11,7 +11,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from pokepoke.utils.process_utils import get_available_memory_mb
+from pokepoke.utils.memory_utils import get_available_memory_mb, get_process_rss_mb
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,7 @@ class PerformanceMonitor:
         min_success_rate: float = 0.5,
         max_alerts: int = 500,
         enabled: bool = True,
+        rss_monotonic_window: int = 5,
     ) -> None:
         self._enabled = enabled
         self._max_merge_queue_depth = max_merge_queue_depth
@@ -47,6 +48,7 @@ class PerformanceMonitor:
         self._min_memory_mb = min_memory_mb
         self._min_success_rate = min_success_rate
         self._max_alerts = max_alerts
+        self._rss_monotonic_window = rss_monotonic_window
 
         self._lock = threading.Lock()
         self._alerts: list[PerformanceAlert] = []
@@ -55,6 +57,8 @@ class PerformanceMonitor:
         # Running success/failure counters for success-rate tracking
         self._succeeded: int = 0
         self._failed: int = 0
+        # RSS history for monotonic growth detection
+        self._rss_samples: list[int] = []
 
     # ── Individual threshold checks ──────────────────────────────
 
@@ -134,6 +138,42 @@ class PerformanceMonitor:
             return alert
         return None
 
+    def check_rss(self) -> PerformanceAlert | None:
+        """Check process RSS for monotonic growth indicating a potential memory leak.
+
+        Samples the current RSS and keeps a sliding window. If the last
+        *rss_monotonic_window* samples are strictly monotonically increasing,
+        a performance alert is raised.
+        """
+        if not self._enabled:
+            return None
+        rss_mb = get_process_rss_mb()
+        if rss_mb <= 0:
+            return None
+        with self._lock:
+            self._rss_samples.append(rss_mb)
+            # Keep at most 2× window to bound memory
+            max_keep = self._rss_monotonic_window * 2
+            if len(self._rss_samples) > max_keep:
+                self._rss_samples = self._rss_samples[-max_keep:]
+            window = self._rss_samples[-self._rss_monotonic_window:]
+        if len(window) < self._rss_monotonic_window:
+            return None
+        if all(window[i] < window[i + 1] for i in range(len(window) - 1)):
+            alert = PerformanceAlert(
+                category="rss_growth",
+                message=(
+                    f"Process RSS grew monotonically over {self._rss_monotonic_window} "
+                    f"samples: {window[0]}MB → {window[-1]}MB (potential leak)"
+                ),
+                value=float(rss_mb),
+                threshold=float(window[0]),
+                timestamp=time.time(),
+            )
+            self._record_alert(alert)
+            return alert
+        return None
+
     def check_success_rate(
         self, succeeded: int, total: int,
     ) -> PerformanceAlert | None:
@@ -202,6 +242,11 @@ class PerformanceMonitor:
         if alert:
             alerts.append(alert)
 
+        # Process RSS monotonic growth check
+        alert = self.check_rss()
+        if alert:
+            alerts.append(alert)
+
         # Success rate (uses internally tracked counters)
         with self._lock:
             total = self._succeeded + self._failed
@@ -243,6 +288,7 @@ class PerformanceMonitor:
         """Return a JSON-serialisable snapshot of monitor state."""
         with self._lock:
             total = self._succeeded + self._failed
+            rss_samples = list(self._rss_samples)
             return {
                 "enabled": self._enabled,
                 "total_checks": self._total_checks,
@@ -250,6 +296,8 @@ class PerformanceMonitor:
                 "succeeded": self._succeeded,
                 "failed": self._failed,
                 "success_rate": (self._succeeded / total) if total > 0 else None,
+                "rss_current_mb": rss_samples[-1] if rss_samples else None,
+                "rss_samples": rss_samples[-self._rss_monotonic_window:],
                 "thresholds": {
                     "max_merge_queue_depth": self._max_merge_queue_depth,
                     "max_lock_wait_seconds": self._max_lock_wait_seconds,
@@ -277,6 +325,7 @@ class PerformanceMonitor:
             self._total_alerts = 0
             self._succeeded = 0
             self._failed = 0
+            self._rss_samples.clear()
 
 
 # ── Module-level singleton ───────────────────────────────────────

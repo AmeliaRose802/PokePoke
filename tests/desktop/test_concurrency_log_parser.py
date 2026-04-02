@@ -29,8 +29,8 @@ class TestParseConcurrencyTimeline:
 
     def test_lifecycle_entries(self) -> None:
         lines = [
-            "[2024-01-15 09:30:00] [DEBUG] [poll #1] Lifecycle: active=2 max=4 slots=2 mem=8192MB",
-            "[2024-01-15 09:31:00] [INFO] [poll #50] Lifecycle: active=4 max=4 slots=0 mem=6144MB",
+            "[2024-01-15 09:30:00] [DEBUG] [poll #1] Lifecycle: active=2 max=4 slots=2 mem=8192MB rss=150MB",
+            "[2024-01-15 09:31:00] [INFO] [poll #50] Lifecycle: active=4 max=4 slots=0 mem=6144MB rss=180MB",
             "[2024-01-15 09:32:00] [DEBUG] [poll #51] Lifecycle: active=3 max=8 slots=5 mem=4096MB",
         ]
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -44,9 +44,13 @@ class TestParseConcurrencyTimeline:
             "max": 4,
             "slots": 2,
             "mem": 8192,
+            "rss": 150,
         }
         assert result["lifecycle"][1]["active"] == 4
+        assert result["lifecycle"][1]["rss"] == 180
         assert result["lifecycle"][2]["max"] == 8
+        # Old-format line without rss= should still parse, rss key absent
+        assert "rss" not in result["lifecycle"][2]
 
     def test_completion_events(self) -> None:
         lines = [
@@ -78,11 +82,11 @@ class TestParseConcurrencyTimeline:
 
     def test_mixed_events(self) -> None:
         lines = [
-            "[2024-01-15 09:30:00] [DEBUG] [poll #1] Lifecycle: active=1 max=4 slots=3 mem=8192MB",
+            "[2024-01-15 09:30:00] [DEBUG] [poll #1] Lifecycle: active=1 max=4 slots=3 mem=8192MB rss=120MB",
             "[2024-01-15 09:31:00] [INFO] [PokePoke] Worker completed ITEM-1",
-            "[2024-01-15 09:32:00] [DEBUG] [poll #2] Lifecycle: active=2 max=4 slots=2 mem=7168MB",
+            "[2024-01-15 09:32:00] [DEBUG] [poll #2] Lifecycle: active=2 max=4 slots=2 mem=7168MB rss=125MB",
             "[2024-01-15 09:33:00] [ERROR] [PokePoke] Worker failed ITEM-2: Error",
-            "[2024-01-15 09:34:00] [DEBUG] [poll #3] Lifecycle: active=1 max=4 slots=3 mem=6144MB",
+            "[2024-01-15 09:34:00] [DEBUG] [poll #3] Lifecycle: active=1 max=4 slots=3 mem=6144MB rss=130MB",
         ]
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = _write_log(lines, tmpdir)
@@ -111,7 +115,7 @@ class TestParseConcurrencyTimeline:
             "=" * 80,
             "Run ID: 20240115_093045_a1b2c3d4",
             "[2024-01-15 09:30:00] [INFO] [PokePoke] Started processing work item: ABC-123",
-            "[2024-01-15 09:31:00] [DEBUG] [poll #1] Lifecycle: active=1 max=4 slots=3 mem=8192MB",
+            "[2024-01-15 09:31:00] [DEBUG] [poll #1] Lifecycle: active=1 max=4 slots=3 mem=8192MB rss=100MB",
             "[2024-01-15 09:32:00] [WARNING] [PokePoke] Memory pressure (512MB) - 1 slot(s)",
         ]
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -125,7 +129,7 @@ class TestParseConcurrencyTimeline:
     def test_repo_tag_in_lifecycle(self) -> None:
         """Lifecycle entries may have a repo tag before the poll marker."""
         lines = [
-            "[2024-01-15 09:30:00] [DEBUG] [PokePoke] [poll #1] Lifecycle: active=3 max=8 slots=5 mem=2048MB",
+            "[2024-01-15 09:30:00] [DEBUG] [PokePoke] [poll #1] Lifecycle: active=3 max=8 slots=5 mem=2048MB rss=200MB",
         ]
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = _write_log(lines, tmpdir)

@@ -324,7 +324,7 @@ def compute_slots(
 ) -> tuple[set[str], int, int]:
     """Compute available dispatch slots with memory backpressure."""
     from pokepoke.agents.parallel import get_effective_max_agents
-    from pokepoke.utils.process_utils import apply_memory_backpressure
+    from pokepoke.utils.memory_utils import apply_memory_backpressure, get_process_rss_mb
     if lock:
         with lock:
             current_active = {i.id for i in futures.values()}
@@ -339,5 +339,8 @@ def compute_slots(
         run_logger.log_orchestrator(f"Memory low ({avail_mb}MB) — blocking agents", level="WARNING")
     elif avail_mb > 0 and slots < current_max - futures_len:
         run_logger.log_orchestrator(f"Memory pressure ({avail_mb}MB) — {slots} slot(s)", level="WARNING")
-    run_logger.log_polling(f"Lifecycle: active={futures_len} max={current_max} slots={slots} mem={avail_mb}MB")
+    rss_mb = get_process_rss_mb()
+    run_logger.log_polling(
+        f"Lifecycle: active={futures_len} max={current_max} slots={slots} mem={avail_mb}MB rss={rss_mb}MB"
+    )
     return current_active, slots, avail_mb
