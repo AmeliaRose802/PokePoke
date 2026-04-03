@@ -832,6 +832,71 @@ class TestCleanStaleObservations:
         assert removed == 0
 
 
+class TestSubprocessCleanup:
+    """Tests that subprocess cleanup happens even on exceptions."""
+
+    def test_process_cleaned_up_on_stdin_write_error(self, memory_client, mock_subprocess):
+        """Subprocess is terminated when stdin write raises an exception."""
+        mock_process = Mock()
+        mock_process.stdin = Mock()
+        mock_process.stdout = Mock()
+        mock_process.stderr = Mock()
+
+        # Fail on the first stdin write (init request)
+        mock_process.stdin.write.side_effect = OSError("Broken pipe")
+        mock_process.wait.return_value = None
+        mock_subprocess.return_value = mock_process
+
+        with pytest.raises(RuntimeError, match="MCP memory server call failed"):
+            memory_client._call_mcp_server("tools/call", {"name": "test"})
+
+        # Subprocess must still be cleaned up
+        mock_process.stdin.close.assert_called()
+        mock_process.wait.assert_called()
+
+    def test_process_cleaned_up_on_stdout_readline_error(self, memory_client, mock_subprocess):
+        """Subprocess is terminated when stdout readline raises an exception."""
+        mock_process = Mock()
+        mock_process.stdin = Mock()
+        mock_process.stdout = Mock()
+        mock_process.stderr = Mock()
+
+        # readline fails during init response read
+        mock_process.stdout.readline.side_effect = OSError("Read error")
+        mock_process.wait.return_value = None
+        mock_subprocess.return_value = mock_process
+
+        with pytest.raises(RuntimeError, match="MCP memory server call failed"):
+            memory_client._call_mcp_server("tools/call", {"name": "test"})
+
+        mock_process.wait.assert_called()
+
+    def test_process_killed_on_wait_timeout(self, memory_client, mock_subprocess):
+        """Subprocess is killed when wait() times out during cleanup."""
+        import subprocess as sp
+
+        mock_process = Mock()
+        mock_process.stdin = Mock()
+        mock_process.stdout = Mock()
+        mock_process.stderr = Mock()
+
+        # Simulate successful communication
+        init_response = {"jsonrpc": "2.0", "id": "test-id", "result": {}}
+        call_response = {"jsonrpc": "2.0", "id": "test-id", "result": {"ok": True}}
+        mock_process.stdout.readline.side_effect = [
+            json.dumps(init_response),
+            json.dumps(call_response)
+        ]
+
+        # wait() times out, forcing kill
+        mock_process.wait.side_effect = [sp.TimeoutExpired("npx", 5), None]
+        mock_subprocess.return_value = mock_process
+
+        memory_client._call_mcp_server("tools/call", {"name": "test"})
+
+        mock_process.kill.assert_called_once()
+
+
 class TestMemoryHelpers:
     """Tests for memory_helpers module."""
 
