@@ -24,6 +24,13 @@ import json
 
 import pokepoke.constants as _c
 
+# Preflight health-check named constants (sourced from pokepoke.constants)
+LOCK_TIMEOUT_SECONDS: float = _c.DEFAULT_LOCK_TIMEOUT_SECONDS
+WORKTREE_TEST_TIMEOUT: float = _c.DEFAULT_WORKTREE_TEST_TIMEOUT
+MAX_ORPHAN_WORKTREES: int = _c.DEFAULT_MAX_ORPHAN_WORKTREES
+GIT_OPERATION_TIMEOUT: float = _c.DEFAULT_GIT_OPERATION_TIMEOUT
+MIN_WORKTREE_TIMEOUT: float = _c.MIN_WORKTREE_TEST_TIMEOUT
+
 # Default model identifiers (single source of truth)
 DEFAULT_MODEL = "claude-opus-4.6"
 FALLBACK_MODEL = "claude-sonnet-4.5"
@@ -129,10 +136,10 @@ class PreflightHealthConfig:
     """Pre-flight health check configuration."""
     enabled: bool = True
     min_disk_space_gb: float = _c.DEFAULT_MIN_DISK_SPACE_GB
-    lock_timeout_seconds: float = _c.DEFAULT_LOCK_TIMEOUT_SECONDS
-    worktree_test_timeout: float = _c.DEFAULT_WORKTREE_TEST_TIMEOUT
-    max_orphan_worktrees: int = _c.DEFAULT_MAX_ORPHAN_WORKTREES
-    git_operation_timeout: float = _c.DEFAULT_GIT_OPERATION_TIMEOUT
+    lock_timeout_seconds: float = LOCK_TIMEOUT_SECONDS
+    worktree_test_timeout: float = WORKTREE_TEST_TIMEOUT
+    max_orphan_worktrees: int = MAX_ORPHAN_WORKTREES
+    git_operation_timeout: float = GIT_OPERATION_TIMEOUT
     enable_self_repair: bool = True
     max_repair_attempts: int = _c.DEFAULT_MAX_REPAIR_ATTEMPTS
     fail_on_environmental_errors: bool = True
@@ -143,7 +150,7 @@ class PreflightHealthConfig:
         _cls = "PreflightHealthConfig"
         self.min_disk_space_gb = _clamp(_cls, "min_disk_space_gb", self.min_disk_space_gb, minimum=_c.MIN_DISK_SPACE_GB)
         self.lock_timeout_seconds = _clamp(_cls, "lock_timeout_seconds", self.lock_timeout_seconds, minimum=_c.MIN_LOCK_TIMEOUT_SECONDS)
-        self.worktree_test_timeout = _clamp(_cls, "worktree_test_timeout", self.worktree_test_timeout, minimum=_c.MIN_WORKTREE_TEST_TIMEOUT)
+        self.worktree_test_timeout = _clamp(_cls, "worktree_test_timeout", self.worktree_test_timeout, minimum=MIN_WORKTREE_TIMEOUT)
         self.max_orphan_worktrees = _clamp(_cls, "max_orphan_worktrees", self.max_orphan_worktrees, minimum=_c.MIN_ORPHAN_WORKTREES)
         self.git_operation_timeout = _clamp(_cls, "git_operation_timeout", self.git_operation_timeout, minimum=_c.MIN_GIT_OPERATION_TIMEOUT)
         self.max_repair_attempts = _clamp(_cls, "max_repair_attempts", self.max_repair_attempts, minimum=_c.MIN_REPAIR_ATTEMPTS)
