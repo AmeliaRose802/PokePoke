@@ -176,9 +176,20 @@ INSTRUCTIONS:
     Write-Host "  Running copilot.cmd analysis..." -ForegroundColor Yellow
 
     try {
-        & copilot.cmd -p $prompt --allow-all-tools --no-ask-user --autopilot 2>&1 |
-            ForEach-Object { Write-Host "  [copilot] $_" }
-        Write-Host "  Copilot debug completed" -ForegroundColor Green
+        $debugJob = Start-Job -ScriptBlock {
+            param($p)
+            & copilot.cmd -p $p --allow-all-tools --no-ask-user --autopilot 2>&1
+        } -ArgumentList $prompt
+        $debugTimeoutMin = 10
+        $finished = $debugJob | Wait-Job -Timeout ($debugTimeoutMin * 60)
+        if ($finished) {
+            Receive-Job $debugJob | ForEach-Object { Write-Host "  [copilot] $_" }
+            Write-Host "  Copilot debug completed" -ForegroundColor Green
+        } else {
+            Write-Host "  Copilot debug timed out after ${debugTimeoutMin}m - killing" -ForegroundColor Yellow
+            Stop-Job $debugJob
+        }
+        Remove-Job $debugJob -Force -ErrorAction SilentlyContinue
     } catch {
         Write-Host "  Warning: Copilot debug failed: $_" -ForegroundColor Yellow
     }
@@ -211,6 +222,7 @@ function Wait-ForPokePoke {
     $lastLineCount = 0
     $staleSince = $null
     $staleThresholdMinutes = 15
+    $staleKillMinutes = 30
 
     while (-not $Process.HasExited) {
         Start-Sleep -Seconds 30
@@ -244,8 +256,17 @@ function Wait-ForPokePoke {
             if ($delta -eq 0) {
                 if ($null -eq $staleSince) { $staleSince = Get-Date }
                 $staleMinutes = [math]::Round(((Get-Date) - $staleSince).TotalMinutes, 1)
-                if ($staleMinutes -gt $staleThresholdMinutes) {
-                    Write-Host "  WARNING: Log stale for ${staleMinutes}m" -ForegroundColor Yellow
+                if ($staleMinutes -gt $staleKillMinutes) {
+                    Write-Host "  KILLING: Log stale for ${staleMinutes}m - force killing process tree" -ForegroundColor Red
+                    try {
+                        & taskkill /T /F /PID $($Process.Id) 2>&1 | Out-Null
+                    } catch {
+                        Write-Host "  Warning: taskkill failed: $_" -ForegroundColor Yellow
+                        $Process.Kill()
+                    }
+                    break
+                } elseif ($staleMinutes -gt $staleThresholdMinutes) {
+                    Write-Host "  WARNING: Log stale for ${staleMinutes}m (kill at ${staleKillMinutes}m)" -ForegroundColor Yellow
                 }
             } else {
                 $staleSince = $null
