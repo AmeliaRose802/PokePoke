@@ -9,11 +9,12 @@ import re
 from pathlib import Path
 from typing import Any
 
-# Lifecycle: active=3 max=8 slots=5 mem=2048MB rss=150MB
+# Lifecycle: active=3 max=8 slots=5 mem=2048MB rss=150MB cpu=25.3%
 _LIFECYCLE_RE = re.compile(
     r"\[(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] \[(?:INFO|DEBUG)\].*"
     r"Lifecycle: active=(?P<active>\d+) max=(?P<max>\d+) slots=(?P<slots>\d+) mem=(?P<mem>\d+)MB"
     r"(?: rss=(?P<rss>\d+)MB)?"
+    r"(?: cpu=(?P<cpu>[\d.]+)%)?"
 )
 
 # Worker completed <item_id>  OR  ✅ Agent <name> completed item <item_id>
@@ -35,7 +36,7 @@ def parse_concurrency_timeline(log_path: str | Path) -> dict[str, Any]:
     """Parse an orchestrator.log and return concurrency timeline data.
 
     Returns a dict with:
-        lifecycle: list of {ts, active, max, slots, mem}
+        lifecycle: list of {ts, active, max, slots, mem, rss?, cpu?}
         completions: list of {ts, item_id}
         failures: list of {ts, item_id}
     """
@@ -65,6 +66,9 @@ def parse_concurrency_timeline(log_path: str | Path) -> dict[str, Any]:
                     rss_str = m.group("rss")
                     if rss_str is not None:
                         entry["rss"] = int(rss_str)
+                    cpu_str = m.group("cpu")
+                    if cpu_str is not None:
+                        entry["cpu"] = float(cpu_str)
                     lifecycle.append(entry)
                     continue
 

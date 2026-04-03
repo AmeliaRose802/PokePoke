@@ -20,6 +20,7 @@ _cache_lock = threading.Lock()
 _MEMORY_CACHE_TTL = 10.0
 _memory_cache: tuple[float, int] | None = None
 _rss_cache: tuple[float, int] | None = None
+_cpu_cache: tuple[float, float] | None = None
 
 _MEMORY_PRESSURE_THRESHOLD_MB = 2048
 _MEMORY_CRITICAL_THRESHOLD_MB = 1024
@@ -104,6 +105,33 @@ def is_memory_critical() -> bool:
     if available == 0:
         return False
     return available < _MEMORY_CRITICAL_THRESHOLD_MB
+
+
+def get_cpu_usage_percent() -> float:
+    """Return system-wide CPU usage percentage via psutil.
+
+    Returns a float percentage (0.0-100.0) or 0.0 if psutil is unavailable
+    or the query fails. Cached for _MEMORY_CACHE_TTL seconds to match
+    memory caching behavior.
+    """
+    global _cpu_cache
+    if not _HAS_PSUTIL:
+        return 0.0
+    now = time.time()
+    with _cache_lock:
+        if _cpu_cache is not None:
+            cached_time, cached_percent = _cpu_cache
+            if now - cached_time < _MEMORY_CACHE_TTL:
+                return cached_percent
+    try:
+        # interval=1.0 for a 1-second measurement (non-blocking after first call)
+        cpu_percent = psutil.cpu_percent(interval=1.0)
+        with _cache_lock:
+            _cpu_cache = (now, cpu_percent)
+        return cpu_percent
+    except Exception as e:
+        logger.debug("Failed to query CPU usage: %s", e)
+        return 0.0
 
 
 def apply_memory_backpressure(slots: int) -> tuple[int, int]:

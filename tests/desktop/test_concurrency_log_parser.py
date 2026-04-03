@@ -30,7 +30,7 @@ class TestParseConcurrencyTimeline:
     def test_lifecycle_entries(self) -> None:
         lines = [
             "[2024-01-15 09:30:00] [DEBUG] [poll #1] Lifecycle: active=2 max=4 slots=2 mem=8192MB rss=150MB",
-            "[2024-01-15 09:31:00] [INFO] [poll #50] Lifecycle: active=4 max=4 slots=0 mem=6144MB rss=180MB",
+            "[2024-01-15 09:31:00] [INFO] [poll #50] Lifecycle: active=4 max=4 slots=0 mem=6144MB rss=180MB cpu=32.5%",
             "[2024-01-15 09:32:00] [DEBUG] [poll #51] Lifecycle: active=3 max=8 slots=5 mem=4096MB",
         ]
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -48,9 +48,11 @@ class TestParseConcurrencyTimeline:
         }
         assert result["lifecycle"][1]["active"] == 4
         assert result["lifecycle"][1]["rss"] == 180
+        assert result["lifecycle"][1]["cpu"] == 32.5
         assert result["lifecycle"][2]["max"] == 8
         # Old-format line without rss= should still parse, rss key absent
         assert "rss" not in result["lifecycle"][2]
+        assert "cpu" not in result["lifecycle"][2]
 
     def test_completion_events(self) -> None:
         lines = [
