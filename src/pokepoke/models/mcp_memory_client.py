@@ -1,4 +1,5 @@
 """MCP Memory Server client wrapper for persistent agent knowledge."""
+import contextlib
 import json
 import logging
 import subprocess
@@ -113,62 +114,62 @@ class MCPMemoryClient:
                 env={**os.environ, **env}
             )
 
-            # Send initialize request first (MCP protocol requirement)
-            init_request = {
-                "jsonrpc": "2.0",
-                "id": str(uuid.uuid4()),
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {"tools": {}},
-                    "clientInfo": {"name": "pokepoke-memory-client", "version": "1.0.0"}
-                }
-            }
-
-            if process.stdin:
-                process.stdin.write(json.dumps(init_request) + "\n")
-                process.stdin.flush()
-
-            # Read and discard initialize response
-            if process.stdout:
-                init_response_line = process.stdout.readline()
-                logger.debug(f"Init response: {init_response_line[:100]}")
-
-            # Send actual request
-            if process.stdin:
-                process.stdin.write(json.dumps(request) + "\n")
-                process.stdin.flush()
-
-            # Read response - filter out non-JSON lines (server logs)
-            response_data = None
-            max_attempts = 50
-
-            if process.stdout:
-                for _ in range(max_attempts):
-                    line = process.stdout.readline()
-                    if not line:
-                        break
-
-                    # Try to parse as JSON
-                    try:
-                        parsed = json.loads(line)
-                        if parsed.get("jsonrpc") == "2.0":
-                            response_data = parsed
-                            break
-                    except json.JSONDecodeError:
-                        # Not JSON, skip
-                        continue
-
-            # Close stdin to signal we're done
-            if process.stdin:
-                process.stdin.close()
-
-            # Wait for process to exit
             try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
+                # Send initialize request first (MCP protocol requirement)
+                init_request = {
+                    "jsonrpc": "2.0",
+                    "id": str(uuid.uuid4()),
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {"tools": {}},
+                        "clientInfo": {"name": "pokepoke-memory-client", "version": "1.0.0"}
+                    }
+                }
+
+                if process.stdin:
+                    process.stdin.write(json.dumps(init_request) + "\n")
+                    process.stdin.flush()
+
+                # Read and discard initialize response
+                if process.stdout:
+                    init_response_line = process.stdout.readline()
+                    logger.debug(f"Init response: {init_response_line[:100]}")
+
+                # Send actual request
+                if process.stdin:
+                    process.stdin.write(json.dumps(request) + "\n")
+                    process.stdin.flush()
+
+                # Read response - filter out non-JSON lines (server logs)
+                response_data = None
+                max_attempts = 50
+
+                if process.stdout:
+                    for _ in range(max_attempts):
+                        line = process.stdout.readline()
+                        if not line:
+                            break
+
+                        # Try to parse as JSON
+                        try:
+                            parsed = json.loads(line)
+                            if parsed.get("jsonrpc") == "2.0":
+                                response_data = parsed
+                                break
+                        except json.JSONDecodeError:
+                            # Not JSON, skip
+                            continue
+            finally:
+                # Always clean up the subprocess to prevent resource leaks
+                if process.stdin:
+                    with contextlib.suppress(OSError):
+                        process.stdin.close()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
 
             if response_data is None:
                 stderr = process.stderr.read() if process.stderr else ""
