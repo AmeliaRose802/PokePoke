@@ -208,7 +208,8 @@ class TestPreflightChecker:
 
     def test_repository_integrity_check_clean(self, temp_repo, health_config):
         checker = PreflightChecker(temp_repo, health_config)
-        errors, _warnings = checker._check_repository_integrity()
+        with patch('pokepoke.utils.preflight_checks.list_worktrees', return_value=[]):
+            errors, _warnings = checker._check_repository_integrity()
 
         # Should pass in clean repo
         assert len(errors) == 0
@@ -220,7 +221,8 @@ class TestPreflightChecker:
             (worktrees_dir / f'orphan-{i}').mkdir()
 
         checker = PreflightChecker(temp_repo, health_config)
-        errors, _warnings = checker._check_repository_integrity()
+        with patch('pokepoke.utils.preflight_checks.list_worktrees', return_value=[]):
+            errors, _warnings = checker._check_repository_integrity()
 
         assert len(errors) == 1
         assert errors[0].check_name == 'repository_integrity_check'
@@ -718,7 +720,8 @@ class TestRepairEdgeCases:
         (worktrees_dir / 'orphan-single').mkdir()
 
         checker = PreflightChecker(temp_repo, health_config)
-        errors, warnings = checker._check_repository_integrity()
+        with patch('pokepoke.utils.preflight_checks.list_worktrees', return_value=[]):
+            errors, warnings = checker._check_repository_integrity()
 
         assert len(errors) == 0
         assert any('orphaned' in w.lower() for w in warnings)
