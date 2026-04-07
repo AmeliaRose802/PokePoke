@@ -92,18 +92,30 @@ def get_process_rss_mb() -> int:
 
 
 def is_memory_pressure() -> bool:
-    """Return True if system memory is under pressure (< 2 GB free)."""
+    """Return True if system memory is under pressure (< 2 GB free).
+
+    Fails closed on Windows: if monitoring fails (returns 0) on a Windows system,
+    assumes pressure since the inability to check memory is itself a distress signal.
+    On non-Windows, returns False (monitoring unavailable is expected).
+    """
     available = get_available_memory_mb()
     if available == 0:
-        return False
+        # On Windows, monitoring failure indicates system distress - fail closed
+        return os.name == 'nt'
     return available < _MEMORY_PRESSURE_THRESHOLD_MB
 
 
 def is_memory_critical() -> bool:
-    """Return True if system memory is critically low (< 1 GB free)."""
+    """Return True if system memory is critically low (< 1 GB free).
+
+    Fails closed on Windows: if monitoring fails (returns 0) on a Windows system,
+    assumes critical state since the inability to check memory is itself a distress signal.
+    On non-Windows, returns False (monitoring unavailable is expected).
+    """
     available = get_available_memory_mb()
     if available == 0:
-        return False
+        # On Windows, monitoring failure indicates system distress - fail closed
+        return os.name == 'nt'
     return available < _MEMORY_CRITICAL_THRESHOLD_MB
 
 
@@ -125,7 +137,7 @@ def get_cpu_usage_percent() -> float:
                 return cached_percent
     try:
         # interval=1.0 for a 1-second measurement (non-blocking after first call)
-        cpu_percent = psutil.cpu_percent(interval=1.0)
+        cpu_percent = float(psutil.cpu_percent(interval=1.0))
         with _cache_lock:
             _cpu_cache = (now, cpu_percent)
         return cpu_percent
@@ -140,8 +152,8 @@ def apply_memory_backpressure(slots: int) -> tuple[int, int]:
     Returns (adjusted_slots, available_mb).
     """
     avail_mb = get_available_memory_mb()
-    if avail_mb <= 0:
-        return slots, avail_mb
+    # Don't early-return on avail_mb == 0 -- let is_memory_critical/pressure decide
+    # (they now fail closed on Windows when monitoring fails)
     if is_memory_critical():
         return 0, avail_mb
     if is_memory_pressure() and slots > 0:

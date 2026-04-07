@@ -674,11 +674,19 @@ class TestUpdateMemoryCircuitBreaker:
         assert count == 0
         assert tripped is False
 
-    def test_does_not_trip_when_memory_unavailable(self) -> None:
+    def test_preserves_counter_when_memory_unavailable(self) -> None:
+        """When monitoring fails (returns 0), preserve accumulated counter instead of resetting."""
         run_logger = Mock()
-        count, tripped = update_memory_circuit_breaker(0, 512, 3, 5, {}, run_logger)
-        assert count == 0
+        count, tripped = update_memory_circuit_breaker(0, 512, 3, 2, {}, run_logger)
+        assert count == 2  # Preserved, not reset
         assert tripped is False
+
+    def test_trips_when_memory_unavailable_and_counter_at_threshold(self) -> None:
+        """Circuit breaker can trip based on accumulated counter even when monitoring fails."""
+        run_logger = Mock()
+        count, tripped = update_memory_circuit_breaker(0, 512, 3, 3, {}, run_logger)
+        assert count == 3  # Preserved
+        assert tripped is True  # Trips based on accumulated evidence
 
     def test_trips_at_threshold(self) -> None:
         run_logger = Mock()
