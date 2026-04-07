@@ -276,13 +276,18 @@ class _EventHandler:
         logger.warning("Model changed to: %s", model)
 
     def _on_session_idle(self, _event: Any) -> None:
-        if self._stats['idle_task'] and not self._stats['idle_task'].done():
-            self._stats['idle_task'].cancel()
         with self._pending_tool_calls_lock:
             has_pending = self._stats['pending_tool_calls'] > 0
         if has_pending:
+            # Cancel any running idle task — we have pending work
+            if self._stats['idle_task'] and not self._stats['idle_task'].done():
+                self._stats['idle_task'].cancel()
             self._handle_stale_idle()
-        else:
+        elif not self._stats['idle_task'] or self._stats['idle_task'].done():
+            # Only schedule if no idle completion check is already running.
+            # Repeated session.idle events from the SDK should NOT restart
+            # the timer — otherwise the idle timeout never fires when the
+            # CLI keeps sending idle heartbeats every ~30s.
             self._schedule_idle_completion()
 
     def _handle_stale_idle(self) -> None:

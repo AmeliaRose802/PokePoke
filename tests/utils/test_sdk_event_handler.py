@@ -781,3 +781,88 @@ def test_pending_tool_calls_counter_thread_safety() -> None:
         # The maximum value should not exceed the total number of tools we started
         max_observed = max(observed_values) if observed_values else 0
         assert max_observed <= expected_total, f"Counter exceeded expected maximum: {max_observed} > {expected_total}"
+
+
+def test_repeated_session_idle_does_not_restart_timer() -> None:
+    """Repeated session.idle events must NOT cancel and restart the idle
+    completion timer.  The Copilot CLI may send idle heartbeats every ~30s;
+    if each one restarted the 90-second timer, the session would never
+    complete.  This was the root cause of a 2-hour stuck agent in run
+    20260407_112507_538d4e97."""
+    async def _run() -> None:
+        done = asyncio.Event()
+        output_lines: list[str] = []
+        errors: list[str] = []
+
+        handler, stats = create_event_handler(
+            done, output_lines, errors, idle_timeout=0.1,
+        )
+
+        # First idle — spawns the confirmation task
+        handler(_make_event("session.idle"))
+        assert not done.is_set()
+        first_task = stats['idle_task']
+        assert first_task is not None
+
+        # Second idle shortly after — should NOT replace the task
+        await asyncio.sleep(0.02)
+        handler(_make_event("session.idle"))
+        assert stats['idle_task'] is first_task, (
+            "Repeated session.idle must reuse existing idle task, not restart it"
+        )
+        assert not first_task.cancelled()
+
+        # Third idle — still the same task
+        await asyncio.sleep(0.02)
+        handler(_make_event("session.idle"))
+        assert stats['idle_task'] is first_task
+
+        # Wait for the original timer to fire
+        await asyncio.sleep(0.15)
+        assert done.is_set(), (
+            "Idle completion should fire despite repeated session.idle events"
+        )
+
+    asyncio.run(_run())
+
+
+def test_tool_start_after_idle_cancels_and_new_idle_reschedules() -> None:
+    """Real work (tool_start) should cancel the idle task.  A subsequent
+    session.idle after tools finish should schedule a new completion task."""
+    async def _run() -> None:
+        done = asyncio.Event()
+        output_lines: list[str] = []
+        errors: list[str] = []
+
+        handler, stats = create_event_handler(
+            done, output_lines, errors, idle_timeout=0.1,
+        )
+
+        # Idle → spawns confirmation
+        handler(_make_event("session.idle"))
+        first_task = stats['idle_task']
+        assert first_task is not None
+
+        # Real work starts → cancels idle task
+        handler(_make_event("tool.execution_start", tool_name="powershell",
+                            arguments={"command": "echo hi"}, tool_call_id="t1"))
+        await asyncio.sleep(0)
+        assert first_task.cancelled()
+
+        # Tool completes
+        handler(_make_event("tool.execution_complete", tool_name="powershell",
+                            arguments={"command": "echo hi"},
+                            result=SimpleNamespace(content="hi"), success=True,
+                            tool_call_id="t1"))
+
+        # New idle — should schedule a fresh task (old one is cancelled/done)
+        handler(_make_event("session.idle"))
+        second_task = stats['idle_task']
+        assert second_task is not first_task
+        assert not second_task.cancelled()
+
+        # Wait for new timer to fire
+        await asyncio.sleep(0.15)
+        assert done.is_set()
+
+    asyncio.run(_run())
