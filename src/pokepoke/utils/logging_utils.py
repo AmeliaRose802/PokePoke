@@ -8,7 +8,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pokepoke.utils.logging_filters import JsonFormatter, WorkItemFilter
+from pokepoke.utils.logging_filters import (
+    EventFilter,
+    JsonFormatter,
+    LifecycleFilter,
+    MaintenanceFilter,
+    WorkItemFilter,
+)
 
 if TYPE_CHECKING:
     from pokepoke.otel_config import OtelConfig
@@ -17,8 +23,11 @@ if TYPE_CHECKING:
 
 # Re-export so existing ``from pokepoke.utils.logging_utils import …`` still works.
 __all__ = [
+    "EventFilter",
     "ItemLogger",
     "JsonFormatter",
+    "LifecycleFilter",
+    "MaintenanceFilter",
     "RunLogger",
     "WorkItemFilter",
     "configure_logging",
@@ -117,7 +126,13 @@ class RunLogger:
         self.run_dir = self.base_dir / self.run_id
         self.run_dir.mkdir(parents=True, exist_ok=True)
 
-        self.orchestrator_log_path = self.run_dir / "orchestrator.log"
+        # Create paths for three separate log files
+        self.orchestrator_events_log_path = self.run_dir / "orchestrator-events.log"
+        self.orchestrator_maintenance_log_path = self.run_dir / "orchestrator-maintenance.log"
+        self.orchestrator_lifecycle_log_path = self.run_dir / "orchestrator-lifecycle.log"
+        # Keep legacy path for backwards compatibility
+        self.orchestrator_log_path = self.orchestrator_events_log_path
+        
         self.item_logs_dir = self.run_dir / "items"
         self.item_logs_dir.mkdir(exist_ok=True)
         self.maintenance_logs_dir = self.run_dir / "maintenance"
@@ -133,16 +148,44 @@ class RunLogger:
         )
         self._py_logger.setLevel(logging.DEBUG)
 
-        self._orch_handler = logging.FileHandler(
-            self.orchestrator_log_path, mode="w", encoding="utf-8"
-        )
-        self._orch_handler.setLevel(logging.DEBUG)
-        self._orch_handler.setFormatter(logging.Formatter(
+        # Create three separate handlers with appropriate filters
+        log_formatter = logging.Formatter(
             "[%(asctime)s] [%(levelname)s] %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
-        ))
-        self._orch_handler.addFilter(WorkItemFilter())
-        self._py_logger.addHandler(self._orch_handler)
+        )
+
+        # Events handler: warnings, errors, important events
+        self._events_handler = logging.FileHandler(
+            self.orchestrator_events_log_path, mode="w", encoding="utf-8"
+        )
+        self._events_handler.setLevel(logging.DEBUG)
+        self._events_handler.setFormatter(log_formatter)
+        self._events_handler.addFilter(WorkItemFilter())
+        self._events_handler.addFilter(EventFilter())
+        self._py_logger.addHandler(self._events_handler)
+
+        # Maintenance handler: cleanup locks, dirty repo waits
+        self._maintenance_handler = logging.FileHandler(
+            self.orchestrator_maintenance_log_path, mode="w", encoding="utf-8"
+        )
+        self._maintenance_handler.setLevel(logging.DEBUG)
+        self._maintenance_handler.setFormatter(log_formatter)
+        self._maintenance_handler.addFilter(WorkItemFilter())
+        self._maintenance_handler.addFilter(MaintenanceFilter())
+        self._py_logger.addHandler(self._maintenance_handler)
+
+        # Lifecycle handler: poll iterations, memory tracking
+        self._lifecycle_handler = logging.FileHandler(
+            self.orchestrator_lifecycle_log_path, mode="w", encoding="utf-8"
+        )
+        self._lifecycle_handler.setLevel(logging.DEBUG)
+        self._lifecycle_handler.setFormatter(log_formatter)
+        self._lifecycle_handler.addFilter(WorkItemFilter())
+        self._lifecycle_handler.addFilter(LifecycleFilter())
+        self._py_logger.addHandler(self._lifecycle_handler)
+
+        # Maintain backwards compatibility: keep _orch_handler pointing to events
+        self._orch_handler = self._events_handler
 
         self._init_orchestrator_log()
 
@@ -153,15 +196,38 @@ class RunLogger:
         return f"{timestamp}_{short_uuid}"
 
     def _init_orchestrator_log(self) -> None:
-        """Write decorative header directly to the handler's stream."""
+        """Write decorative header directly to each handler's stream."""
         repo_line = f"Repository: {self.repo_name}\n" if self.repo_name else ""
-        self._orch_handler.stream.write(
-            f"{'=' * 80}\nPokePoke Orchestrator Log\n{'=' * 80}\n"
+        
+        # Events log header
+        self._events_handler.stream.write(
+            f"{'=' * 80}\nPokePoke Orchestrator Events Log\n{'=' * 80}\n"
             f"Run ID: {self.run_id}\n{repo_line}"
             f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"Contains: Submissions, completions, errors, warnings\n"
             f"{'=' * 80}\n\n"
         )
-        self._orch_handler.stream.flush()
+        self._events_handler.stream.flush()
+        
+        # Maintenance log header
+        self._maintenance_handler.stream.write(
+            f"{'=' * 80}\nPokePoke Orchestrator Maintenance Log\n{'=' * 80}\n"
+            f"Run ID: {self.run_id}\n{repo_line}"
+            f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"Contains: Cleanup locks, dirty repo waits, merge locks\n"
+            f"{'=' * 80}\n\n"
+        )
+        self._maintenance_handler.stream.flush()
+        
+        # Lifecycle log header
+        self._lifecycle_handler.stream.write(
+            f"{'=' * 80}\nPokePoke Orchestrator Lifecycle Log\n{'=' * 80}\n"
+            f"Run ID: {self.run_id}\n{repo_line}"
+            f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"Contains: Poll iterations, memory tracking\n"
+            f"{'=' * 80}\n\n"
+        )
+        self._lifecycle_handler.stream.flush()
 
     def log_orchestrator(self, message: str, level: str = "INFO") -> None:
         """Log an orchestrator event through Python's standard logging."""
@@ -312,11 +378,12 @@ class RunLogger:
     # -- resource management ------------------------------------------------
 
     def close(self) -> None:
-        """Remove and close the orchestrator file handler.  Safe to call multiple times."""
-        handler = getattr(self, "_orch_handler", None)
-        if handler is not None and handler in self._py_logger.handlers:
-            self._py_logger.removeHandler(handler)
-            handler.close()
+        """Remove and close all orchestrator file handlers. Safe to call multiple times."""
+        for handler_attr in ('_events_handler', '_maintenance_handler', '_lifecycle_handler'):
+            handler = getattr(self, handler_attr, None)
+            if handler is not None and handler in self._py_logger.handlers:
+                self._py_logger.removeHandler(handler)
+                handler.close()
 
     def __enter__(self) -> 'RunLogger':
         return self

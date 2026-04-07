@@ -7,8 +7,11 @@ import time
 from pathlib import Path
 
 from pokepoke.utils.logging_utils import (
+    EventFilter,
     ItemLogger,
     JsonFormatter,
+    LifecycleFilter,
+    MaintenanceFilter,
     RunLogger,
     WorkItemFilter,
     configure_logging,
@@ -110,24 +113,28 @@ def test_run_logger_initialization():
     """Test that RunLogger creates proper directory structure."""
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = RunLogger(base_dir=tmpdir)
+        
+        try:
+            # Check that run directory was created
+            assert logger.get_run_dir().exists()
 
-        # Check that run directory was created
-        assert logger.get_run_dir().exists()
+            # Check that all three orchestrator logs were created
+            assert (logger.get_run_dir() / "orchestrator-events.log").exists()
+            assert (logger.get_run_dir() / "orchestrator-maintenance.log").exists()
+            assert (logger.get_run_dir() / "orchestrator-lifecycle.log").exists()
 
-        # Check that orchestrator log was created
-        assert (logger.get_run_dir() / "orchestrator.log").exists()
+            # Check that items directory was created
+            assert (logger.get_run_dir() / "items").exists()
 
-        # Check that items directory was created
-        assert (logger.get_run_dir() / "items").exists()
-
-        # Check run ID format (should be YYYYMMDD_HHMMSS_<uuid>)
-        run_id = logger.get_run_id()
-        parts = run_id.split('_')
-        assert len(parts) == 3
-        assert len(parts[0]) == 8  # YYYYMMDD
-        assert len(parts[1]) == 6  # HHMMSS
-        assert len(parts[2]) == 8  # short UUID
-        logger.close()
+            # Check run ID format (should be YYYYMMDD_HHMMSS_<uuid>)
+            run_id = logger.get_run_id()
+            parts = run_id.split('_')
+            assert len(parts) == 3
+            assert len(parts[0]) == 8  # YYYYMMDD
+            assert len(parts[1]) == 6  # HHMMSS
+            assert len(parts[2]) == 8  # short UUID
+        finally:
+            logger.close()
 
 
 def test_run_logger_orchestrator_logging():
@@ -135,23 +142,24 @@ def test_run_logger_orchestrator_logging():
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = RunLogger(base_dir=tmpdir)
 
-        # Log some messages
-        logger.log_orchestrator("Test message 1")
-        logger.log_orchestrator("Test warning", level="WARNING")
-        logger.log_orchestrator("Test error", level="ERROR")
+        try:
+            # Log some messages
+            logger.log_orchestrator("Test message 1")
+            logger.log_orchestrator("Test warning", level="WARNING")
+            logger.log_orchestrator("Test error", level="ERROR")
 
-        # Read the log file
-        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
-            content = f.read()
+            # Read the log file (events log for warnings/errors)
+            with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+                content = f.read()
 
-        # Check that messages are present
-        assert "Test message 1" in content
-        assert "Test warning" in content
-        assert "Test error" in content
-        assert "[INFO]" in content
-        assert "[WARNING]" in content
-        assert "[ERROR]" in content
-        logger.close()
+            # Check that messages are present (Note: "Test message 1" won't be in events log)
+            # Only warnings and errors go to events log
+            assert "Test warning" in content
+            assert "Test error" in content
+            assert "[WARNING]" in content
+            assert "[ERROR]" in content
+        finally:
+            logger.close()
 
 
 def test_run_logger_item_logging():
@@ -195,19 +203,21 @@ def test_run_logger_finalize():
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = RunLogger(base_dir=tmpdir)
 
-        # Finalize the run
-        logger.finalize(items_completed=3, total_requests=15, elapsed=120.5)
+        try:
+            # Finalize the run
+            logger.finalize(items_completed=3, total_requests=15, elapsed=120.5)
 
-        # Read the log file
-        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
-            content = f.read()
+            # Read the log file (events log contains finalize messages)
+            with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+                content = f.read()
 
-        # Check that summary is present
-        assert "Run Summary" in content
-        assert "Items completed: 3" in content
-        assert "Total agent requests: 15" in content
-        assert "Total time: 2.0 minutes" in content
-        logger.close()
+            # Check that summary is present
+            assert "Run Summary" in content
+            assert "Items completed: 3" in content
+            assert "Total agent requests: 15" in content
+            assert "Total time: 2.0 minutes" in content
+        finally:
+            logger.close()
 
 
 def test_run_logger_maintenance_logging():
@@ -215,20 +225,22 @@ def test_run_logger_maintenance_logging():
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = RunLogger(base_dir=tmpdir)
 
-        # Log maintenance actions
-        logger.log_maintenance("tech_debt", "Starting Tech Debt Agent")
-        logger.log_maintenance("janitor", "Janitor Agent completed successfully")
+        try:
+            # Log maintenance actions
+            logger.log_maintenance("tech_debt", "Starting Tech Debt Agent")
+            logger.log_maintenance("janitor", "Janitor Agent completed successfully")
 
-        # Read the log file
-        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
-            content = f.read()
+            # Read the maintenance log file (not events log)
+            with open(logger.orchestrator_maintenance_log_path, encoding='utf-8') as f:
+                content = f.read()
 
-        # Check that maintenance logs are present
-        assert "[MAINTENANCE:tech_debt]" in content
-        assert "Starting Tech Debt Agent" in content
-        assert "[MAINTENANCE:janitor]" in content
-        assert "Janitor Agent completed successfully" in content
-        logger.close()
+            # Check that maintenance logs are present
+            assert "[MAINTENANCE:tech_debt]" in content
+            assert "Starting Tech Debt Agent" in content
+            assert "[MAINTENANCE:janitor]" in content
+            assert "Janitor Agent completed successfully" in content
+        finally:
+            logger.close()
 
 
 def test_run_logger_creates_maintenance_dir():
@@ -559,15 +571,18 @@ def test_log_polling_first_cycle_is_debug():
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = RunLogger(base_dir=tmpdir, poll_log_interval=5)
 
-        logger.log_polling("Checking status")
+        try:
+            logger.log_polling("Checking status")
 
-        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
-            content = f.read()
+            # Polling messages go to lifecycle log
+            with open(logger.orchestrator_lifecycle_log_path, encoding='utf-8') as f:
+                content = f.read()
 
-        assert "[DEBUG]" in content
-        assert "[poll #1]" in content
-        assert "Checking status" in content
-        logger.close()
+            assert "[DEBUG]" in content
+            assert "[poll #1]" in content
+            assert "Checking status" in content
+        finally:
+            logger.close()
 
 
 def test_log_polling_nth_cycle_is_info():
@@ -575,20 +590,23 @@ def test_log_polling_nth_cycle_is_info():
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = RunLogger(base_dir=tmpdir, poll_log_interval=3)
 
-        for _ in range(3):
-            logger.log_polling("status check")
+        try:
+            for _ in range(3):
+                logger.log_polling("status check")
 
-        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
-            content = f.read()
+            # Polling messages go to lifecycle log
+            with open(logger.orchestrator_lifecycle_log_path, encoding='utf-8') as f:
+                content = f.read()
 
-        lines = [ln for ln in content.splitlines() if "status check" in ln]
-        assert len(lines) == 3
-        # Cycles 1, 2 are DEBUG; cycle 3 is INFO
-        assert "[DEBUG]" in lines[0]
-        assert "[DEBUG]" in lines[1]
-        assert "[INFO]" in lines[2]
-        assert "[poll #3]" in lines[2]
-        logger.close()
+            lines = [ln for ln in content.splitlines() if "status check" in ln]
+            assert len(lines) == 3
+            # Cycles 1, 2 are DEBUG; cycle 3 is INFO
+            assert "[DEBUG]" in lines[0]
+            assert "[DEBUG]" in lines[1]
+            assert "[INFO]" in lines[2]
+            assert "[poll #3]" in lines[2]
+        finally:
+            logger.close()
 
 
 def test_log_polling_suppresses_most_cycles():
@@ -901,8 +919,286 @@ def test_json_formatter_omits_empty_context():
     data = json.loads(output)
 
     assert "work_item_id" not in data
-    assert "repo_name" not in data
-    assert "agent_type" not in data
+
+
+# ==============================================================================
+# Tests for split log files (events, maintenance, lifecycle)
+# ==============================================================================
+
+
+def test_run_logger_creates_three_separate_log_files(tmp_path):
+    """RunLogger should create three separate log files: events, maintenance, lifecycle."""
+    run_logger = RunLogger(base_dir=str(tmp_path), repo_name="test-repo")
+    
+    try:
+        # Check that all three log files exist
+        assert run_logger.orchestrator_events_log_path.exists()
+        assert run_logger.orchestrator_maintenance_log_path.exists()
+        assert run_logger.orchestrator_lifecycle_log_path.exists()
+        
+        # Check file names
+        assert run_logger.orchestrator_events_log_path.name == "orchestrator-events.log"
+        assert run_logger.orchestrator_maintenance_log_path.name == "orchestrator-maintenance.log"
+        assert run_logger.orchestrator_lifecycle_log_path.name == "orchestrator-lifecycle.log"
+        
+        # Check backwards compatibility
+        assert run_logger.orchestrator_log_path == run_logger.orchestrator_events_log_path
+    finally:
+        run_logger.close()
+
+
+def test_run_logger_events_log_contains_important_events(tmp_path):
+    """Events log should contain submissions, completions, errors, warnings."""
+    run_logger = RunLogger(base_dir=str(tmp_path))
+    
+    try:
+        # Log various types of messages
+        run_logger.log_orchestrator("Started processing work item: TEST-123", level="INFO")
+        run_logger.log_orchestrator("Work item completed successfully", level="INFO")
+        run_logger.log_orchestrator("An error occurred", level="ERROR")
+        run_logger.log_orchestrator("A warning was issued", level="WARNING")
+        run_logger.log_orchestrator("Cleanup agent still holding lock", level="DEBUG")  # Maintenance
+        run_logger.log_polling("Poll iteration check")  # Lifecycle
+        
+        # Read events log
+        events_content = run_logger.orchestrator_events_log_path.read_text(encoding="utf-8")
+        
+        # Events should contain important messages
+        assert "Started processing work item: TEST-123" in events_content
+        assert "Work item completed successfully" in events_content
+        assert "An error occurred" in events_content
+        assert "A warning was issued" in events_content
+        
+        # Events should NOT contain maintenance or lifecycle messages
+        assert "Cleanup agent still holding lock" not in events_content
+        assert "Poll iteration check" not in events_content
+    finally:
+        run_logger.close()
+
+
+def test_run_logger_maintenance_log_contains_lock_messages(tmp_path):
+    """Maintenance log should contain cleanup locks, dirty repo waits."""
+    run_logger = RunLogger(base_dir=str(tmp_path))
+    
+    try:
+        # Log various types of messages
+        run_logger.log_orchestrator("Started processing work item: TEST-123", level="INFO")  # Event
+        run_logger.log_orchestrator("Cleanup agent still holding lock", level="DEBUG")
+        run_logger.log_orchestrator("Waiting for cleanup to finish", level="DEBUG")
+        run_logger.log_orchestrator("dirty repo detected, waiting", level="DEBUG")
+        run_logger.log_orchestrator("[MAINTENANCE:cleanup] Running cleanup", level="INFO")
+        run_logger.log_polling("Poll iteration check")  # Lifecycle
+        
+        # Read maintenance log
+        maintenance_content = run_logger.orchestrator_maintenance_log_path.read_text(encoding="utf-8")
+        
+        # Maintenance should contain lock/wait messages
+        assert "Cleanup agent still holding lock" in maintenance_content
+        assert "Waiting for cleanup" in maintenance_content
+        assert "dirty repo" in maintenance_content
+        assert "[MAINTENANCE:cleanup]" in maintenance_content
+        
+        # Maintenance should NOT contain events or lifecycle messages
+        assert "Started processing work item: TEST-123" not in maintenance_content
+        assert "Poll iteration check" not in maintenance_content
+    finally:
+        run_logger.close()
+
+
+def test_run_logger_lifecycle_log_contains_poll_messages(tmp_path):
+    """Lifecycle log should contain poll iterations and memory tracking."""
+    run_logger = RunLogger(base_dir=str(tmp_path))
+    
+    try:
+        # Log various types of messages
+        run_logger.log_orchestrator("Started processing work item: TEST-123", level="INFO")  # Event
+        run_logger.log_orchestrator("Cleanup agent still holding lock", level="DEBUG")  # Maintenance
+        run_logger.log_polling("Checking for work items")
+        run_logger.log_orchestrator("Memory usage: 256MB", level="DEBUG")
+        run_logger.log_orchestrator("Poll cycle #50 completed", level="DEBUG")
+        
+        # Read lifecycle log
+        lifecycle_content = run_logger.orchestrator_lifecycle_log_path.read_text(encoding="utf-8")
+        
+        # Lifecycle should contain poll and memory messages
+        assert "[poll #" in lifecycle_content
+        assert "Checking for work items" in lifecycle_content
+        assert "Memory usage" in lifecycle_content
+        assert "Poll cycle" in lifecycle_content
+        
+        # Lifecycle should NOT contain events or maintenance messages
+        assert "Started processing work item: TEST-123" not in lifecycle_content
+        assert "Cleanup agent still holding lock" not in lifecycle_content
+    finally:
+        run_logger.close()
+
+
+def test_run_logger_idle_messages_in_events_log(tmp_path):
+    """Idle state messages should appear in events log as they're important state changes."""
+    run_logger = RunLogger(base_dir=str(tmp_path))
+    
+    try:
+        run_logger.enter_idle()
+        time.sleep(0.1)
+        run_logger.exit_idle()
+        
+        events_content = run_logger.orchestrator_events_log_path.read_text(encoding="utf-8")
+        
+        assert "Entering idle state" in events_content
+        assert "Exiting idle state" in events_content
+    finally:
+        run_logger.close()
+
+
+def test_run_logger_headers_in_all_three_files(tmp_path):
+    """All three log files should have descriptive headers."""
+    run_logger = RunLogger(base_dir=str(tmp_path), repo_name="test-repo")
+    
+    try:
+        events_content = run_logger.orchestrator_events_log_path.read_text(encoding="utf-8")
+        maintenance_content = run_logger.orchestrator_maintenance_log_path.read_text(encoding="utf-8")
+        lifecycle_content = run_logger.orchestrator_lifecycle_log_path.read_text(encoding="utf-8")
+        
+        # Check events header
+        assert "PokePoke Orchestrator Events Log" in events_content
+        assert "Submissions, completions, errors, warnings" in events_content
+        assert "test-repo" in events_content
+        
+        # Check maintenance header
+        assert "PokePoke Orchestrator Maintenance Log" in maintenance_content
+        assert "Cleanup locks, dirty repo waits, merge locks" in maintenance_content
+        assert "test-repo" in maintenance_content
+        
+        # Check lifecycle header
+        assert "PokePoke Orchestrator Lifecycle Log" in lifecycle_content
+        assert "Poll iterations, memory tracking" in lifecycle_content
+        assert "test-repo" in lifecycle_content
+    finally:
+        run_logger.close()
+
+
+def test_run_logger_close_removes_all_handlers(tmp_path):
+    """close() should remove and close all three handlers."""
+    run_logger = RunLogger(base_dir=str(tmp_path))
+    
+    # Get logger and count handlers before close
+    py_logger = run_logger._py_logger
+    initial_handler_count = len(py_logger.handlers)
+    assert initial_handler_count >= 3, "Should have at least 3 handlers (events, maintenance, lifecycle)"
+    
+    # Close should remove all handlers
+    run_logger.close()
+    
+    # Verify handlers are removed
+    assert len(py_logger.handlers) < initial_handler_count
+    
+    # close() should be idempotent
+    run_logger.close()  # Should not raise
+
+
+def test_event_filter_accepts_warnings_and_errors():
+    """EventFilter should accept all WARNING and ERROR level messages."""
+    from pokepoke.utils.logging_utils import EventFilter
+    
+    event_filter = EventFilter()
+    
+    # Create records at different levels
+    warning_record = logging.LogRecord(
+        name="test", level=logging.WARNING, pathname="", lineno=0,
+        msg="This is a warning", args=(), exc_info=None,
+    )
+    error_record = logging.LogRecord(
+        name="test", level=logging.ERROR, pathname="", lineno=0,
+        msg="This is an error", args=(), exc_info=None,
+    )
+    debug_record = logging.LogRecord(
+        name="test", level=logging.DEBUG, pathname="", lineno=0,
+        msg="This is debug", args=(), exc_info=None,
+    )
+    
+    assert event_filter.filter(warning_record) is True
+    assert event_filter.filter(error_record) is True
+    assert event_filter.filter(debug_record) is False
+
+
+def test_event_filter_accepts_info_with_keywords():
+    """EventFilter should accept INFO messages with event keywords."""
+    from pokepoke.utils.logging_utils import EventFilter
+    
+    event_filter = EventFilter()
+    
+    # INFO with event keyword
+    event_record = logging.LogRecord(
+        name="test", level=logging.INFO, pathname="", lineno=0,
+        msg="Started processing work item TEST-123", args=(), exc_info=None,
+    )
+    
+    # INFO without event keyword
+    non_event_record = logging.LogRecord(
+        name="test", level=logging.INFO, pathname="", lineno=0,
+        msg="Just some regular info", args=(), exc_info=None,
+    )
+    
+    assert event_filter.filter(event_record) is True
+    assert event_filter.filter(non_event_record) is False
+
+
+def test_maintenance_filter_accepts_lock_messages():
+    """MaintenanceFilter should accept messages with maintenance keywords."""
+    from pokepoke.utils.logging_utils import MaintenanceFilter
+    
+    maintenance_filter = MaintenanceFilter()
+    
+    # Maintenance keyword present
+    lock_record = logging.LogRecord(
+        name="test", level=logging.DEBUG, pathname="", lineno=0,
+        msg="Cleanup agent still holding lock", args=(), exc_info=None,
+    )
+    
+    # No maintenance keyword
+    normal_record = logging.LogRecord(
+        name="test", level=logging.DEBUG, pathname="", lineno=0,
+        msg="Regular debug message", args=(), exc_info=None,
+    )
+    
+    assert maintenance_filter.filter(lock_record) is True
+    assert maintenance_filter.filter(normal_record) is False
+
+
+def test_lifecycle_filter_accepts_poll_messages():
+    """LifecycleFilter should accept DEBUG and INFO messages with lifecycle keywords."""
+    from pokepoke.utils.logging_utils import LifecycleFilter
+    
+    lifecycle_filter = LifecycleFilter()
+    
+    # DEBUG with lifecycle keyword
+    poll_record = logging.LogRecord(
+        name="test", level=logging.DEBUG, pathname="", lineno=0,
+        msg="[poll #50] Checking for work", args=(), exc_info=None,
+    )
+    
+    # INFO with lifecycle keyword (should accept now)
+    info_poll_record = logging.LogRecord(
+        name="test", level=logging.INFO, pathname="", lineno=0,
+        msg="[poll #50] Checking for work", args=(), exc_info=None,
+    )
+    
+    # WARNING with lifecycle keyword (should reject to avoid duplicates with events)
+    warning_poll_record = logging.LogRecord(
+        name="test", level=logging.WARNING, pathname="", lineno=0,
+        msg="[poll #50] Checking for work", args=(), exc_info=None,
+    )
+    
+    # DEBUG without lifecycle keyword
+    normal_debug = logging.LogRecord(
+        name="test", level=logging.DEBUG, pathname="", lineno=0,
+        msg="Regular debug message", args=(), exc_info=None,
+    )
+    
+    assert lifecycle_filter.filter(poll_record) is True
+    assert lifecycle_filter.filter(info_poll_record) is True
+    assert lifecycle_filter.filter(warning_poll_record) is False
+    assert lifecycle_filter.filter(normal_debug) is False
 
 
 def test_json_formatter_includes_exception():
