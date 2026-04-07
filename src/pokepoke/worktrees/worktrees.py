@@ -26,6 +26,7 @@ from pokepoke.worktrees.worktree_cleanup import (
     force_remove_directory,
 )
 from pokepoke.worktrees.worktree_helpers import (
+    repair_worktree_branch as _repair_worktree_branch,
     sync_and_ensure_clean_main_repo as _sync_and_ensure_clean_main_repo,
     validate_worktree_integrity as _validate_worktree_integrity,
 )
@@ -75,6 +76,18 @@ def _check_existing_directory(worktree_path: Path, repo_path: str | None = None)
     """
     logger.warning(f"Worktree directory {worktree_path} already exists but wasn't in list_worktrees")
 
+    # A proper worktree has a .git *file* linking to .git/worktrees/<name>.
+    # Without it, git resolves against the parent repo (appears as 'master').
+    git_link = worktree_path / ".git"
+    if not git_link.exists() or git_link.is_dir():
+        logger.warning(f"Directory {worktree_path} missing .git link — zombie worktree")
+        if not force_remove_directory(worktree_path):
+            logger.warning(f"Cannot remove locked zombie directory {worktree_path}, skipping")
+            return None
+        with contextlib.suppress(Exception):
+            _run_git(["git", "worktree", "prune"], cwd=repo_path)
+        return None
+
     is_valid_worktree = False
     try:
         result = _run_git(
@@ -107,22 +120,16 @@ def _check_existing_directory(worktree_path: Path, repo_path: str | None = None)
                 )
                 if branch_result.returncode == 0:
                     current_branch = branch_result.stdout.strip()
-                    # Only enforce branch check if we got a valid-looking branch name
-                    # (contains slash or starts with expected prefix, and isn't a git status like "true")
-                    if (current_branch and (
-                        "/" in current_branch or
-                        current_branch.startswith(BRANCH_PREFIX) or
-                        current_branch.startswith("refs/")
-                    ) and current_branch != expected_branch):
+                    if current_branch and current_branch != expected_branch:
                         logger.warning(
-                            f"Directory {worktree_path} is on wrong branch '{current_branch}' "
-                            f"(expected '{expected_branch}'). Removing it."
+                            f"Directory {worktree_path} on wrong branch '{current_branch}' "
+                            f"(expected '{expected_branch}'). Repairing."
                         )
-                        logger.info(f"   🧹  Removing worktree with wrong branch at {worktree_path}")
-                        if not force_remove_directory(worktree_path):
-                            raise RuntimeError(f"Failed to remove worktree with wrong branch {worktree_path}")
-                        with contextlib.suppress(Exception):
-                            _run_git(["git", "worktree", "prune"], cwd=repo_path)
+                        repaired = _repair_worktree_branch(
+                            worktree_path, expected_branch, current_branch, repo_path,
+                        )
+                        if repaired:
+                            return worktree_path
                         return None
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                 logger.warning(f"Failed to verify branch for worktree at {worktree_path}: {e}")
