@@ -109,7 +109,13 @@ def _check_existing_directory(worktree_path: Path, repo_path: str | None = None)
                 )
                 if branch_result.returncode == 0:
                     current_branch = branch_result.stdout.strip()
-                    if current_branch and current_branch != expected_branch:
+                    # Only enforce branch check if we got a valid-looking branch name
+                    # (contains slash or starts with expected prefix, and isn't a git status like "true")
+                    if (current_branch and (
+                        "/" in current_branch or
+                        current_branch.startswith(BRANCH_PREFIX) or
+                        current_branch.startswith("refs/")
+                    ) and current_branch != expected_branch):
                         logger.warning(
                             f"Directory {worktree_path} is on wrong branch '{current_branch}' "
                             f"(expected '{expected_branch}'). Removing it."
@@ -173,18 +179,7 @@ def _handle_branch_already_exists(
 
 
 def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: float = 300.0, repo_path: str | None = None) -> Path:
-    """Create a git worktree for a work item. Returns existing path if already exists.
-
-    Uses file-based locking to prevent race conditions when multiple agents
-    attempt to create worktrees simultaneously.
-
-    Args:
-        item_id: Work item identifier.
-        base_branch: Branch to base worktree on (defaults to repo default branch).
-        lock_timeout: Seconds to wait for worktree lock.
-        repo_path: Target repo root. Worktree is created under this repo's
-            directory tree. Defaults to CWD when None.
-    """
+    """Create a git worktree for a work item. Returns existing path if already exists."""
     sanitized_id = sanitize_branch_name(item_id)
     # Resolve worktree base directory relative to the target repo
     repo_root = Path(repo_path) if repo_path else Path.cwd()

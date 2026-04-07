@@ -92,6 +92,9 @@ def is_assigned_to_current_user(item: BeadsWorkItem) -> bool:
         True if item is unassigned or assigned to THIS agent, False otherwise.
     """
     assignee = getattr(item, 'assignee', None) or ''
+    # Normalize empty-like values from bd CLI (PowerShell quoting artifacts)
+    if assignee.strip('"').strip("'").lower() in ('', 'none'):
+        assignee = ''
     agent_name = _get_agent_name(default='')
 
     if assignee:
