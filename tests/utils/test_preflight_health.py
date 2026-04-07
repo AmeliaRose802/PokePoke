@@ -19,34 +19,22 @@ from pokepoke.utils.preflight_health import (
 
 
 @pytest.fixture
-def temp_repo(monkeypatch):
-    """Create a temporary git repository for testing."""
-    # Strip GIT_* env vars so git commands target the temp repo, not the
-    # host repo (pre-commit hooks set GIT_DIR / GIT_INDEX_FILE which
-    # cause 'git init' to fail with exit 128 inside xdist workers and
-    # make git status report the host repo's changes instead of the temp repo's).
-    for key in [k for k in os.environ if k.startswith('GIT_')]:
-        monkeypatch.delenv(key, raising=False)
+def temp_repo(tmp_path):
+    """Create a fake repository directory for testing (no real git).
 
-    with tempfile.TemporaryDirectory() as temp_dir:
-        repo_path = Path(temp_dir).resolve()
+    Sets up the directory structure that PreflightChecker expects:
+    - .git/ directory (so it passes the "is a git repo" check)
+    - worktrees/ directory
+    - .pokepoke/ directory
 
-        # Initialize git repo with explicit environment to avoid inheriting
-        # GIT_DIR or other vars that interfere with temp repo creation.
-        git_env = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
-        subprocess.run(['git', 'init'], cwd=str(repo_path), check=True, capture_output=True, env=git_env)
-        subprocess.run(['git', 'config', 'user.name', 'Test User'], cwd=str(repo_path), check=True, capture_output=True, env=git_env)
-        subprocess.run(['git', 'config', 'user.email', 'test@example.com'], cwd=str(repo_path), check=True, capture_output=True, env=git_env)
-
-        # Create initial commit
-        (repo_path / 'README.md').write_text('# Test Repo')
-        subprocess.run(['git', 'add', 'README.md'], cwd=str(repo_path), check=True, capture_output=True, env=git_env)
-        subprocess.run(['git', 'commit', '-m', 'Initial commit'], cwd=str(repo_path), check=True, capture_output=True, env=git_env)
-
-        # Create worktrees directory
-        (repo_path / 'worktrees').mkdir(exist_ok=True)
-
-        yield repo_path
+    All git subprocess calls must be mocked in individual tests.
+    """
+    repo_path = tmp_path / "fake_repo"
+    repo_path.mkdir()
+    (repo_path / '.git').mkdir()
+    (repo_path / 'worktrees').mkdir()
+    (repo_path / '.pokepoke').mkdir()
+    return repo_path
 
 
 @pytest.fixture
