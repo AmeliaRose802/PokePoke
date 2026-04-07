@@ -382,7 +382,8 @@ class TestConvenienceFunctions:
 
     @patch('pokepoke.utils.preflight_health.PreflightChecker._check_worktree_creation', return_value=([], []))
     def test_run_preflight_checks(self, mock_wt_check, temp_repo, health_config):
-        result = run_preflight_checks(temp_repo, health_config)
+        with patch('pokepoke.utils.preflight_checks.has_uncommitted_changes', return_value=False):
+            result = run_preflight_checks(temp_repo, health_config)
 
         assert isinstance(result, HealthCheckResult)
         assert len(result.checks_run) > 0
@@ -453,12 +454,9 @@ class TestIntegrationScenarios:
         """Test that health checks can be disabled."""
         config = {'enable_self_repair': False}
 
-        # Make repo dirty
-        (temp_repo / 'dirty_file.txt').write_text('uncommitted content')
-
         checker = PreflightChecker(temp_repo, config)
-        # Mock worktree creation to avoid flaky git operations under parallel xdist
-        with patch.object(checker, '_check_worktree_creation', return_value=([], [])):
+        with patch.object(checker, '_check_worktree_creation', return_value=([], [])), \
+             patch('pokepoke.utils.preflight_checks.has_uncommitted_changes', return_value=False):
             result = checker.run_all_checks()
 
         # Should not attempt self-repair when disabled
@@ -481,14 +479,13 @@ class TestIntegrationScenarios:
     @patch('shutil.disk_usage')
     def test_health_check_disk_space_error(self, mock_disk_usage, temp_repo, health_config):
         """Test disk space error detection."""
-        # Mock very low disk space using namedtuple to match shutil.disk_usage return type
         from collections import namedtuple
         DiskUsage = namedtuple('usage', ['total', 'used', 'free'])
         mock_disk_usage.return_value = DiskUsage(total=1000000, used=999000, free=1000)  # 1KB free
 
         checker = PreflightChecker(temp_repo, health_config)
-        # Mock worktree creation to avoid flaky git operations under parallel xdist
-        with patch.object(checker, '_check_worktree_creation', return_value=([], [])):
+        with patch.object(checker, '_check_worktree_creation', return_value=([], [])), \
+             patch('pokepoke.utils.preflight_checks.has_uncommitted_changes', return_value=False):
             result = checker.run_all_checks()
 
         assert not result.passed
@@ -696,7 +693,8 @@ class TestRepairEdgeCases:
         checker = PreflightChecker(temp_repo, health_config)
         original_result = HealthCheckResult()
 
-        with patch.object(checker, '_check_worktree_creation', return_value=([], [])):
+        with patch.object(checker, '_check_worktree_creation', return_value=([], [])), \
+             patch('pokepoke.utils.preflight_checks.has_uncommitted_changes', return_value=False):
             rerun_result = checker._rerun_failed_checks(original_result)
 
         assert isinstance(rerun_result, HealthCheckResult)
