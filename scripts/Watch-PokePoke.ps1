@@ -195,6 +195,24 @@ INSTRUCTIONS:
     }
 }
 
+function Ensure-PokePokInstalled {
+    Write-Host "`n--- Ensuring pokepoke is installed ---" -ForegroundColor Cyan
+    $pythonExe = Join-Path $repoRoot ".venv\Scripts\python.exe"
+    $checkResult = & $pythonExe -c "import pokepoke" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  pokepoke not importable - reinstalling..." -ForegroundColor Yellow
+        & $pythonExe -m pip install -e $repoRoot 2>&1 | Out-Null
+        $checkResult2 = & $pythonExe -c "import pokepoke" 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  Reinstalled successfully" -ForegroundColor Green
+        } else {
+            Write-Host "  WARNING: Reinstall failed: $checkResult2" -ForegroundColor Red
+        }
+    } else {
+        Write-Host "  pokepoke OK" -ForegroundColor Gray
+    }
+}
+
 function Start-PokePoke {
     Write-Host "`n=== Starting PokePoke (agents=$MaxAgents) ===" -ForegroundColor Green
     Write-Host "  Time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
@@ -320,6 +338,9 @@ while ($true) {
             & git checkout -- . 2>&1 | Out-Null
         }
     }
+
+    # Ensure pokepoke is importable (editable installs can break after code changes)
+    Ensure-PokePokInstalled
 
     # Start PokePoke
     $proc = Start-PokePoke
