@@ -10,7 +10,7 @@ from collections.abc import Generator
 from typing import Any
 
 try:
-    import psutil  # type: ignore[import-untyped]
+    import psutil
     _HAS_PSUTIL = True
 except ImportError:
     _HAS_PSUTIL = False

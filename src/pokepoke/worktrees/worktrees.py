@@ -109,13 +109,7 @@ def _check_existing_directory(worktree_path: Path, repo_path: str | None = None)
                 )
                 if branch_result.returncode == 0:
                     current_branch = branch_result.stdout.strip()
-                    # Only enforce branch check if we got a valid-looking branch name
-                    # (contains slash or starts with expected prefix, and isn't a git status like "true")
-                    if (current_branch and (
-                        "/" in current_branch or
-                        current_branch.startswith(BRANCH_PREFIX) or
-                        current_branch.startswith("refs/")
-                    ) and current_branch != expected_branch):
+                    if current_branch and current_branch != expected_branch:
                         logger.warning(
                             f"Directory {worktree_path} is on wrong branch '{current_branch}' "
                             f"(expected '{expected_branch}'). Removing it."

@@ -296,10 +296,19 @@ class TestIsMemoryPressure:
         mock_mem.return_value = 1500  # 1.5 GB free
         assert is_memory_pressure() is True
 
+    @patch('pokepoke.utils.memory_utils.os')
     @patch('pokepoke.utils.memory_utils.get_available_memory_mb')
-    def test_no_pressure_when_unknown(self, mock_mem: MagicMock) -> None:
+    def test_no_pressure_when_unknown_non_windows(self, mock_mem: MagicMock, mock_os: MagicMock) -> None:
+        mock_os.name = 'posix'
         mock_mem.return_value = 0  # Can't determine
         assert is_memory_pressure() is False
+
+    @patch('pokepoke.utils.memory_utils.os')
+    @patch('pokepoke.utils.memory_utils.get_available_memory_mb')
+    def test_pressure_when_unknown_on_windows(self, mock_mem: MagicMock, mock_os: MagicMock) -> None:
+        mock_os.name = 'nt'
+        mock_mem.return_value = 0
+        assert is_memory_pressure() is True
 
 
 class TestIsMemoryCritical:
@@ -315,10 +324,19 @@ class TestIsMemoryCritical:
         mock_mem.return_value = 500  # 500 MB free
         assert is_memory_critical() is True
 
+    @patch('pokepoke.utils.memory_utils.os')
     @patch('pokepoke.utils.memory_utils.get_available_memory_mb')
-    def test_not_critical_when_unknown(self, mock_mem: MagicMock) -> None:
+    def test_not_critical_when_unknown_non_windows(self, mock_mem: MagicMock, mock_os: MagicMock) -> None:
+        mock_os.name = 'posix'
         mock_mem.return_value = 0
         assert is_memory_critical() is False
+
+    @patch('pokepoke.utils.memory_utils.os')
+    @patch('pokepoke.utils.memory_utils.get_available_memory_mb')
+    def test_critical_when_unknown_on_windows(self, mock_mem: MagicMock, mock_os: MagicMock) -> None:
+        mock_os.name = 'nt'
+        mock_mem.return_value = 0
+        assert is_memory_critical() is True
 
 
 class TestKillOrphanedCopilotProcesses:
@@ -471,11 +489,22 @@ class TestApplyMemoryBackpressure:
         assert slots == 1
         assert avail == 1500
 
+    @patch('pokepoke.utils.memory_utils.os')
     @patch('pokepoke.utils.memory_utils.get_available_memory_mb')
-    def test_passthrough_when_unknown(self, mock_mem: MagicMock) -> None:
+    def test_passthrough_when_unknown_non_windows(self, mock_mem: MagicMock, mock_os: MagicMock) -> None:
+        mock_os.name = 'posix'
         mock_mem.return_value = 0  # Can't determine
         slots, avail = apply_memory_backpressure(4)
         assert slots == 4
+        assert avail == 0
+
+    @patch('pokepoke.utils.memory_utils.os')
+    @patch('pokepoke.utils.memory_utils.get_available_memory_mb')
+    def test_backpressure_when_unknown_on_windows(self, mock_mem: MagicMock, mock_os: MagicMock) -> None:
+        mock_os.name = 'nt'
+        mock_mem.return_value = 0
+        slots, avail = apply_memory_backpressure(4)
+        assert slots == 0  # Fails closed: critical on Windows
         assert avail == 0
 
 

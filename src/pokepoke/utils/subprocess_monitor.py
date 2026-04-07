@@ -23,7 +23,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 try:
-    import psutil  # type: ignore[import-untyped]
+    import psutil
     _HAS_PSUTIL = True
 except ImportError:
     _HAS_PSUTIL = False
