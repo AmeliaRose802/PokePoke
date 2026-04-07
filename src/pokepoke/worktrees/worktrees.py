@@ -27,8 +27,6 @@ from pokepoke.worktrees.worktree_cleanup import (
 )
 from pokepoke.worktrees.worktree_helpers import (
     sync_and_ensure_clean_main_repo as _sync_and_ensure_clean_main_repo,
-)
-from pokepoke.worktrees.worktree_helpers import (
     validate_worktree_integrity as _validate_worktree_integrity,
 )
 

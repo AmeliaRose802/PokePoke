@@ -1,5 +1,6 @@
 """Extracted helpers for worktree management (file-length compliance)."""
 
+import contextlib
 import logging
 import subprocess
 from pathlib import Path
@@ -137,3 +138,47 @@ def sync_and_ensure_clean_main_repo(branch_name: str, cwd: str | None = None) ->
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         logger.error(f"❌ Failed to check/clean main repo: {e}")
         return False
+
+
+def repair_worktree_branch(
+    worktree_path: Path, expected_branch: str, current_branch: str,
+    repo_path: str | None = None,
+) -> bool:
+    """Attempt to repair a worktree that's on the wrong branch.
+
+    Strategy:
+    1. Try to remove directory and let caller recreate it.
+    2. If directory is locked, create the expected branch and checkout in-place.
+
+    Returns True if the worktree is now on the correct branch, False otherwise.
+    """
+    from pokepoke.worktrees.worktree_cleanup import force_remove_directory
+
+    logger.info(f"   🧹  Removing worktree with wrong branch at {worktree_path}")
+    if force_remove_directory(worktree_path):
+        with contextlib.suppress(Exception):
+            run_git(["git", "worktree", "prune"], cwd=repo_path)
+        return False  # Removed — caller returns None to trigger fresh creation
+
+    # Directory locked — switch branch in-place
+    logger.warning(
+        f"Cannot remove {worktree_path} (locked). "
+        f"Switching from '{current_branch}' to '{expected_branch}' in-place."
+    )
+    try:
+        run_git(
+            ["git", "branch", expected_branch],
+            cwd=str(worktree_path), timeout=10, check=False,
+        )
+        result = run_git(
+            ["git", "checkout", expected_branch],
+            cwd=str(worktree_path), timeout=15, check=False,
+        )
+        if result.returncode == 0:
+            logger.info(f"   ♻️  Repaired worktree branch to '{expected_branch}' at {worktree_path}")
+            return True
+        logger.error(f"Failed to checkout '{expected_branch}': {result.stderr}")
+    except Exception as e:
+        logger.error(f"Failed to repair worktree branch at {worktree_path}: {e}")
+
+    raise RuntimeError(f"Failed to remove worktree with wrong branch {worktree_path}")
