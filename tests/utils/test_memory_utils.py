@@ -78,10 +78,19 @@ class TestGetCpuUsagePercent:
 class TestIsMemoryPressure:
     """Tests for is_memory_pressure function."""
 
-    def test_returns_false_when_memory_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Should return False when get_available_memory_mb returns 0."""
+    def test_returns_true_on_windows_when_monitoring_fails(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should return True on Windows when get_available_memory_mb returns 0 (fail closed)."""
         import pokepoke.utils.memory_utils as mem_utils
         monkeypatch.setattr(mem_utils, "get_available_memory_mb", lambda: 0)
+        monkeypatch.setattr(mem_utils.os, "name", "nt")
+        result = is_memory_pressure()
+        assert result is True
+
+    def test_returns_false_on_non_windows_when_monitoring_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should return False on non-Windows when monitoring is unavailable (expected behavior)."""
+        import pokepoke.utils.memory_utils as mem_utils
+        monkeypatch.setattr(mem_utils, "get_available_memory_mb", lambda: 0)
+        monkeypatch.setattr(mem_utils.os, "name", "posix")
         result = is_memory_pressure()
         assert result is False
 
@@ -103,10 +112,19 @@ class TestIsMemoryPressure:
 class TestIsMemoryCritical:
     """Tests for is_memory_critical function."""
 
-    def test_returns_false_when_memory_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Should return False when get_available_memory_mb returns 0."""
+    def test_returns_true_on_windows_when_monitoring_fails(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should return True on Windows when get_available_memory_mb returns 0 (fail closed)."""
         import pokepoke.utils.memory_utils as mem_utils
         monkeypatch.setattr(mem_utils, "get_available_memory_mb", lambda: 0)
+        monkeypatch.setattr(mem_utils.os, "name", "nt")
+        result = is_memory_critical()
+        assert result is True
+
+    def test_returns_false_on_non_windows_when_monitoring_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should return False on non-Windows when monitoring is unavailable (expected behavior)."""
+        import pokepoke.utils.memory_utils as mem_utils
+        monkeypatch.setattr(mem_utils, "get_available_memory_mb", lambda: 0)
+        monkeypatch.setattr(mem_utils.os, "name", "posix")
         result = is_memory_critical()
         assert result is False
 
@@ -128,12 +146,22 @@ class TestIsMemoryCritical:
 class TestApplyMemoryBackpressure:
     """Tests for apply_memory_backpressure function."""
 
-    def test_returns_slots_when_memory_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Should return original slots when get_available_memory_mb returns 0."""
+    def test_returns_zero_on_windows_when_monitoring_fails(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should return 0 slots on Windows when monitoring fails (fail closed via is_memory_critical)."""
         import pokepoke.utils.memory_utils as mem_utils
         monkeypatch.setattr(mem_utils, "get_available_memory_mb", lambda: 0)
+        monkeypatch.setattr(mem_utils.os, "name", "nt")
         adjusted, avail = apply_memory_backpressure(5)
-        assert adjusted == 5
+        assert adjusted == 0  # Critical backpressure applied
+        assert avail == 0
+
+    def test_returns_slots_on_non_windows_when_monitoring_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should return original slots on non-Windows when monitoring unavailable (expected behavior)."""
+        import pokepoke.utils.memory_utils as mem_utils
+        monkeypatch.setattr(mem_utils, "get_available_memory_mb", lambda: 0)
+        monkeypatch.setattr(mem_utils.os, "name", "posix")
+        adjusted, avail = apply_memory_backpressure(5)
+        assert adjusted == 5  # No backpressure on non-Windows
         assert avail == 0
 
     def test_returns_zero_when_critical(self, monkeypatch: pytest.MonkeyPatch) -> None:
