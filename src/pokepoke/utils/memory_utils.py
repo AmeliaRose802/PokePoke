@@ -7,7 +7,7 @@ import threading
 import time
 
 try:
-    import psutil
+    import psutil  # type: ignore[import-untyped]
     _HAS_PSUTIL = True
 except ImportError:
     _HAS_PSUTIL = False
@@ -125,7 +125,7 @@ def get_cpu_usage_percent() -> float:
                 return cached_percent
     try:
         # interval=1.0 for a 1-second measurement (non-blocking after first call)
-        cpu_percent = psutil.cpu_percent(interval=1.0)
+        cpu_percent = float(psutil.cpu_percent(interval=1.0))
         with _cache_lock:
             _cpu_cache = (now, cpu_percent)
         return cpu_percent

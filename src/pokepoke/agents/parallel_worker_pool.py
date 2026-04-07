@@ -303,11 +303,13 @@ def update_memory_circuit_breaker(
 ) -> tuple[int, bool]:
     """Track consecutive memory-floor violations. Returns (consecutive_low_polls, tripped)."""
     # avail_mb == 0 means memory monitoring is unavailable (non-Windows or error)
-    # Don't trip the circuit breaker in this case
+    # Preserve counter when monitoring fails - don't reset accumulated pressure evidence
     if available_mb > 0 and available_mb < memory_floor_mb:
         consecutive_low_polls += 1
-    else:
+    elif available_mb > 0:
+        # Confirmed above floor -- safe to reset
         consecutive_low_polls = 0
+    # else: available_mb == 0 -- unknown state, preserve counter as-is
 
     tripped = consecutive_low_polls >= threshold_polls
     if tripped:
