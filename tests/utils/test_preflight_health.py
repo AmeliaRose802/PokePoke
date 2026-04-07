@@ -127,19 +127,21 @@ class TestPreflightChecker:
 
     def test_git_status_check_clean_repo(self, temp_repo, health_config):
         checker = PreflightChecker(temp_repo, health_config)
-        errors, warnings = checker._check_git_status()
+        with patch('pokepoke.utils.preflight_checks.has_uncommitted_changes', return_value=False):
+            errors, warnings = checker._check_git_status()
 
         assert len(errors) == 0
         assert isinstance(warnings, list)
 
     def test_git_status_check_dirty_repo(self, temp_repo, health_config):
-        # Make repo dirty with a tracked (staged) change
-        dirty_file = temp_repo / 'dirty_file.txt'
-        dirty_file.write_text('dirty content')
-        subprocess.run(['git', 'add', 'dirty_file.txt'], cwd=str(temp_repo), check=True, capture_output=True)
-
         checker = PreflightChecker(temp_repo, health_config)
-        errors, _warnings = checker._check_git_status()
+        mock_result = MagicMock(returncode=0, stdout='A  dirty_file.txt\n')
+        with patch('pokepoke.utils.preflight_checks.has_uncommitted_changes', return_value=True), \
+             patch('pokepoke.utils.preflight_checks.run_git', return_value=mock_result), \
+             patch('pokepoke.utils.preflight_checks.categorize_git_changes', return_value={
+                 'other': ['dirty_file.txt'], 'beads': [], 'worktree': [], 'untracked': []
+             }):
+            errors, _warnings = checker._check_git_status()
 
         # Should detect uncommitted changes
         assert len(errors) == 1
@@ -406,14 +408,13 @@ class TestIntegrationScenarios:
         from pokepoke.types import BeadsStats
 
         checker = PreflightChecker(temp_repo, health_config)
-        # Mock worktree creation to avoid flaky git operations under parallel xdist
-        # Mock beads health check since beads is not available in test environment
         mock_stats = BeadsStats(
             total_issues=10, open_issues=5, in_progress_issues=2,
             closed_issues=3, ready_issues=4
         )
         with patch.object(checker, '_check_worktree_creation', return_value=([], [])), \
-             patch('pokepoke.beads.beads_query.get_beads_stats', return_value=mock_stats):
+             patch('pokepoke.beads.beads_query.get_beads_stats', return_value=mock_stats), \
+             patch('pokepoke.utils.preflight_checks.has_uncommitted_changes', return_value=False):
             result = checker.run_all_checks()
 
         assert result.passed
@@ -423,22 +424,19 @@ class TestIntegrationScenarios:
 
     def test_full_health_check_with_issues_and_repair(self, temp_repo, health_config):
         """Test health checks with issues that can be auto-repaired."""
-        # Create a staged (tracked) change so git_status_check detects it as 'other'
-        dirty_file = temp_repo / 'dirty_file.txt'
-        dirty_file.write_text('uncommitted content')
-        subprocess.run(['git', 'add', 'dirty_file.txt'], cwd=str(temp_repo), check=True, capture_output=True)
-
         # Create orphaned worktree directories (more than threshold)
         worktrees_dir = temp_repo / 'worktrees'
         for i in range(3):  # More than max_orphan_worktrees=2
             (worktrees_dir / f'orphan-{i}').mkdir()
 
-        # Mock list_worktrees to return empty list so orphan detection works
-        # (list_worktrees() runs without cwd so it checks the wrong repo otherwise)
-        # Mock worktree creation to avoid flaky git operations under parallel xdist
-        # Mock repair_git_status to prevent real git add -A / git commit against
-        # the host repo (was causing auto-commits of unrelated staged files)
+        # Mock git status to report dirty repo, mock repair to succeed
+        mock_result = MagicMock(returncode=0, stdout='A  dirty_file.txt\n')
         with patch('pokepoke.utils.preflight_checks.list_worktrees', return_value=[]), \
+             patch('pokepoke.utils.preflight_checks.has_uncommitted_changes', return_value=True), \
+             patch('pokepoke.utils.preflight_checks.run_git', return_value=mock_result), \
+             patch('pokepoke.utils.preflight_checks.categorize_git_changes', return_value={
+                 'other': ['dirty_file.txt'], 'beads': [], 'worktree': [], 'untracked': []
+             }), \
              patch('pokepoke.utils.preflight_repair.repair_git_status', return_value=True):
             checker = PreflightChecker(temp_repo, health_config)
             with patch.object(checker, '_check_worktree_creation', return_value=([], [])):
