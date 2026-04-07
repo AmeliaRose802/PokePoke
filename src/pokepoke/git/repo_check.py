@@ -366,13 +366,17 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
         # Auto-resolve worktree cleanup deletions
         if changes['worktree']:
             logger.info("🧹 Committing worktree cleanup changes...")
-            with main_repo_git_lock():
-                run_git(["git", "add", f"{WORKTREE_DIR}/"], cwd=str(repo_path))
-                run_git(
-                    ["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
-                    cwd=str(repo_path),
-                    timeout=60,
-                )
-            logger.info("✅ Worktree cleanup committed")
+            try:
+                with main_repo_git_lock():
+                    run_git(["git", "add", f"{WORKTREE_DIR}/"], cwd=str(repo_path))
+                    run_git(
+                        ["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
+                        cwd=str(repo_path),
+                        timeout=60,
+                    )
+                logger.info("✅ Worktree cleanup committed")
+            except subprocess.CalledProcessError as e:
+                logger.warning(f"⚠️  Could not commit worktree cleanup: {e}")
+                logger.warning("   Continuing anyway — workers use isolated worktrees")
 
     return True

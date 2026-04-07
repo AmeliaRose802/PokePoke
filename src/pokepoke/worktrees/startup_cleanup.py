@@ -79,21 +79,22 @@ def cleanup_stale_worktrees_at_startup(
                 logger.debug(f"Skipping main repo worktree at {wt.get('path', 'unknown')}")
                 continue
 
-            stats['checked'] += 1
             branch = wt['branch']
             worktree_path = wt['path']
+
+            # Skip non-task worktrees (beads-sync, pokepoke-state, etc.)
+            if "task/" not in branch:
+                logger.debug(f"Skipping non-task worktree: {branch}")
+                continue
+
+            stats['checked'] += 1
 
             logger.debug(f"Checking worktree: {branch} at {worktree_path}")
 
             try:
-                # Check if the branch is already merged
-                # Extract item_id from branch name since is_worktree_merged expects item_id
-                if branch.startswith("task/"):
-                    item_id = branch[5:]  # Remove "task/" prefix to get the item_id
-                    is_merged = is_worktree_merged(item_id, default_branch, repo_path)
-                else:
-                    # For non-standard branch names, use the full branch name as item_id
-                    is_merged = is_worktree_merged(branch, default_branch, repo_path)
+                # Extract item_id from branch name (refs/heads/task/X or task/X)
+                item_id = branch.split("task/", 1)[1]
+                is_merged = is_worktree_merged(item_id, default_branch, repo_path)
 
                 if is_merged:
                     logger.info(f"🔗 Removing merged worktree: {branch}")

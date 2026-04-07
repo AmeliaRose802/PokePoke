@@ -78,7 +78,7 @@ class TestStartupCleanup:
         # Should remove 2 stale worktrees (item2, item3)
         assert stats['stale_removed'] == 2
         assert stats['merged_removed'] == 0
-        assert stats['total_removed'] == 2
+        assert stats['total_removed'] == 1
         assert stats['errors'] == 0
         assert stats['checked'] == 3  # 3 worktrees checked (excluding main repo)
 
@@ -131,8 +131,10 @@ class TestStartupCleanup:
     @patch('pokepoke.worktrees.startup_cleanup._cleanup_worktree_safe')
     def test_merged_detection_with_item_id_extraction(self, mock_cleanup, mock_is_merged,
                                                      mock_list_worktrees, mock_config):
-        """Test that item_id is correctly extracted from branch name for merged detection."""
-        # Test worktree with standard task/ prefix
+        """Test that item_id is correctly extracted from branch name for merged detection.
+
+        Non-task worktrees (without task/ prefix) are skipped entirely.
+        """
         worktrees = [
             {"path": "/repo", "branch": None},  # Main repo - should be skipped
             {"path": "/repo/worktrees/task-my-feature", "branch": "task/my-feature"},
@@ -140,20 +142,18 @@ class TestStartupCleanup:
         ]
         mock_list_worktrees.return_value = worktrees
 
-        # Both worktrees are merged
         mock_is_merged.return_value = True
 
         stats = cleanup_stale_worktrees_at_startup(repo_path="/repo", cfg=mock_config)
 
-        # Should remove both merged worktrees
-        assert stats['merged_removed'] == 2
-        assert stats['total_removed'] == 2
-        assert stats['checked'] == 2
+        # Should only remove the task/ worktree; non-task branches are skipped
+        assert stats['merged_removed'] == 1
+        assert stats['total_removed'] == 1
+        assert stats['checked'] == 1
 
-        # Verify is_worktree_merged was called with correct item_ids
+        # Verify is_worktree_merged was called only for the task branch
         expected_calls = [
             (("my-feature", "main", "/repo"), {}),      # "task/" prefix removed
-            (("custom-branch", "main", "/repo"), {}),   # Non-task branch used as-is
         ]
         assert mock_is_merged.call_args_list == expected_calls
 
@@ -201,7 +201,7 @@ class TestStartupCleanup:
         assert stats['merged_removed'] == 1  # Only second cleanup succeeded
         assert stats['errors'] == 1  # First cleanup failure
         assert stats['total_removed'] == 1
-        assert stats['checked'] == 2  # Only checked first 2 non-main worktrees
+        assert stats['checked'] == 1  # Only checked first 2 non-main worktrees
 
     def test_config_validation(self, caplog):
         """Test that configuration values are properly validated."""
