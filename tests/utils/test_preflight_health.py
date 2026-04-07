@@ -831,7 +831,7 @@ class TestRepairEdgeCases:
 
         # All repair attempts fail
         with patch('pokepoke.utils.preflight_repair.repair_git_status', return_value=False), \
-             patch('pokepoke.utils.preflight_repair.time.sleep'):
+             patch('pokepoke.utils.preflight_repair.sleep_with_backoff'):
             success = checker.attempt_self_repair(result)
 
         assert not success
