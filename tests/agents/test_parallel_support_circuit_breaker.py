@@ -285,17 +285,31 @@ class TestUpdateMemoryCircuitBreaker:
         log_message = call_args[0][0]
         assert "draining 1 remaining agent" in log_message
 
-    def test_zero_avail_mb_does_not_trip(self):
-        """When avail_mb is 0 (unknown/non-Windows), circuit breaker should not trip."""
+    def test_zero_avail_mb_preserves_counter(self):
+        """When avail_mb is 0 (monitoring failure), counter is preserved -- not reset."""
         run_logger = MagicMock()
         consecutive, tripped = update_memory_circuit_breaker(
-            available_mb=0,  # Unknown memory status
+            available_mb=0,  # Unknown memory status (monitoring failed)
             memory_floor_mb=3072,
             threshold_polls=3,
-            consecutive_low_polls=10,  # High count, but should reset
+            consecutive_low_polls=2,  # Below threshold
             futures={},
             run_logger=run_logger,
         )
-        assert consecutive == 0  # Reset because memory is unknown
+        assert consecutive == 2  # Preserved, not reset
         assert tripped is False
+
+    def test_zero_avail_mb_preserves_counter_above_threshold(self):
+        """When avail_mb is 0 and counter already at/above threshold, trip is maintained."""
+        run_logger = MagicMock()
+        consecutive, tripped = update_memory_circuit_breaker(
+            available_mb=0,  # Unknown memory status (monitoring failed)
+            memory_floor_mb=3072,
+            threshold_polls=3,
+            consecutive_low_polls=10,  # Already above threshold
+            futures={},
+            run_logger=run_logger,
+        )
+        assert consecutive == 10  # Preserved
+        assert tripped is True
 
