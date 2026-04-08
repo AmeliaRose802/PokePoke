@@ -538,9 +538,9 @@ class TestWorktreeMetrics:
 
         metrics = _load_worktree_metrics()
 
-        assert metrics["total_attempts"] == 0
-        assert metrics["total_successes"] == 0
-        assert metrics["total_failures"] == 0
+        assert metrics.total_attempts == 0
+        assert metrics.total_successes == 0
+        assert metrics.total_failures == 0
 
     def test_load_metrics_handles_invalid_json(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         import pokepoke.worktrees.coordination as coord_module
@@ -552,23 +552,24 @@ class TestWorktreeMetrics:
 
         metrics = _load_worktree_metrics()
 
-        assert metrics["total_attempts"] == 0
-        assert metrics["total_wait_time"] == 0.0
+        assert metrics.total_attempts == 0
+        assert metrics.total_wait_time == 0.0
 
     def test_save_and_load_metrics_round_trip(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         import pokepoke.worktrees.coordination as coord_module
+        from pokepoke.worktrees.coordination import WorktreeMetrics
 
         metrics_path = tmp_path / "worktree_metrics.json"
         monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_PATH", metrics_path)
         monkeypatch.setattr(coord_module, "_WORKTREE_METRICS_DIR", tmp_path)
 
-        metrics_in = {
-            "total_attempts": 3,
-            "total_successes": 2,
-            "total_failures": 1,
-            "total_wait_time": 4.0,
-            "max_wait_time": 2.5,
-        }
+        metrics_in = WorktreeMetrics(
+            total_attempts=3,
+            total_successes=2,
+            total_failures=1,
+            total_wait_time=4.0,
+            max_wait_time=2.5,
+        )
 
         _save_worktree_metrics(metrics_in)
         metrics_out = _load_worktree_metrics()
@@ -586,11 +587,11 @@ class TestWorktreeMetrics:
         _record_worktree_attempt(success=False, wait_time=2.0)
 
         metrics = _load_worktree_metrics()
-        assert metrics["total_attempts"] == 2
-        assert metrics["total_successes"] == 1
-        assert metrics["total_failures"] == 1
-        assert metrics["total_wait_time"] == pytest.approx(3.5)
-        assert metrics["max_wait_time"] == pytest.approx(2.0)
+        assert metrics.total_attempts == 2
+        assert metrics.total_successes == 1
+        assert metrics.total_failures == 1
+        assert metrics.total_wait_time == pytest.approx(3.5)
+        assert metrics.max_wait_time == pytest.approx(2.0)
 
 
 class TestWithWorktreeLock:
@@ -607,8 +608,8 @@ class TestWithWorktreeLock:
             pass
 
         metrics = _load_worktree_metrics()
-        assert metrics["total_attempts"] == 1
-        assert metrics["total_successes"] == 1
+        assert metrics.total_attempts == 1
+        assert metrics.total_successes == 1
 
     def test_records_failed_lock(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         import pokepoke.worktrees.coordination as coord_module
@@ -631,8 +632,8 @@ class TestWithWorktreeLock:
         assert called["value"] is True
 
         metrics = _load_worktree_metrics()
-        assert metrics["total_attempts"] == 1
-        assert metrics["total_failures"] == 1
+        assert metrics.total_attempts == 1
+        assert metrics.total_failures == 1
 
 
 class TestCheckLockStatus:

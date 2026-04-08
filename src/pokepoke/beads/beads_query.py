@@ -135,9 +135,16 @@ from pokepoke.beads.cli_retry import _is_transient_cli_error, _run_bd_with_retry
 __all__ = ['_is_transient_cli_error', '_run_bd_with_retry']
 
 
-def _filter_to_dataclass(cls: type, data: dict[str, Any]) -> Any:
-    """Construct a dataclass instance, keeping only fields defined on *cls*."""
-    valid = {f.name for f in dataclasses.fields(cls)}
+def _filter_to_dataclass[T](cls: type[T], data: dict[str, Any]) -> T:
+    """Construct a dataclass instance, keeping only fields defined on *cls*.
+
+    Validates that *data* is a dict before unpacking, raising ``TypeError``
+    for non-dict inputs so callers get a clear error instead of a silent
+    wrong result.
+    """
+    if not isinstance(data, dict):
+        raise TypeError(f"Expected dict for {cls.__name__}, got {type(data).__name__}")
+    valid = {f.name for f in dataclasses.fields(cls)}  # type: ignore[arg-type]
     return cls(**{k: v for k, v in data.items() if k in valid})
 
 
