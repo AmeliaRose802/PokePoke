@@ -148,7 +148,7 @@ class TestSignalHandlers:
 
     def test_integration_with_real_logger(self):
         """Test integration with actual RunLogger."""
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
             # Create a real RunLogger
             run_logger = RunLogger(base_dir=temp_dir)
 
@@ -206,9 +206,11 @@ class TestOrchestratorSignalIntegration:
              patch('pokepoke.orchestration.orchestrator.get_beads_stats', return_value={}), \
              patch('pokepoke.orchestration.orchestrator.check_and_commit_main_repo', return_value=True), \
              patch('pokepoke.orchestration.orchestrator.terminal_ui'), \
+             patch('pokepoke.orchestration.orchestrator._run_startup_plugins'), \
+             patch('pokepoke.orchestration.orchestrator._init_beads_state'), \
              patch('pokepoke.orchestration.orchestrator.load_config') as mock_config:
 
-            mock_config.return_value = Mock(max_parallel_agents=1)
+            mock_config.return_value = Mock(max_parallel_agents=1, otel=Mock(enabled=False), preflight_health=Mock(enabled=False), startup_cleanup_enabled=False)
 
             with contextlib.suppress(SystemExit):
                 # Expected when no work items available

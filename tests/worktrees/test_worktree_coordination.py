@@ -73,9 +73,7 @@ def test_with_worktree_lock_basic(cleanup_lock_files, tmp_path, monkeypatch):
         # Verify lock file exists while locked
         assert lock_path.exists()
 
-    # Lock file should still exist but be unlocked
-    # (filelock doesn't delete the lock file)
-    assert lock_path.exists()
+    # Lock file may or may not exist after release depending on platform
 
 
 def test_with_worktree_lock_serializes_operations(cleanup_lock_files):

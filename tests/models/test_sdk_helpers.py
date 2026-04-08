@@ -387,37 +387,38 @@ class TestCheckToolWatchdog:
 
 
 class TestLogProcessTreeSnapshot:
-    @patch("pokepoke.utils.process_utils.os")
+    @patch("pokepoke.utils.process_snapshot.os")
     def test_skips_on_non_windows(self, mock_os):
         """On non-Windows, the function returns immediately."""
         mock_os.name = "posix"
         _log_process_tree_snapshot("powershell", "test", 900.0)
         # No subprocess calls should be made
 
-    @patch("pokepoke.utils.process_utils.subprocess.run")
-    @patch("pokepoke.utils.process_utils.os")
+    @patch("pokepoke.utils.process_snapshot.subprocess.run")
+    @patch("pokepoke.utils.process_snapshot.os")
     def test_logs_child_processes_on_windows(self, mock_os, mock_run):
-        """On Windows, captures tasklist and wmic output."""
+        """On Windows, captures wmic process output for copilot.exe and children."""
         mock_os.name = "nt"
-        # tasklist returns copilot.exe with PID 1234
+        mock_os.cpu_count.return_value = 4
+        # wmic returns copilot.exe with PID 1234
         mock_run.side_effect = [
-            type("Result", (), {"stdout": '"Image Name","PID"\n"copilot.exe","1234"', "returncode": 0})(),
+            type("Result", (), {"stdout": "Node,KernelModeTime,ProcessId,UserModeTime,WorkingSetSize\nPC,100,1234,200,50000000", "returncode": 0})(),
             type("Result", (), {"stdout": "Name=pwsh.exe\nProcessId=5678\nCommandLine=git commit", "returncode": 0})(),
         ]
         _log_process_tree_snapshot("powershell", "git commit", 900.0)
         assert mock_run.call_count == 2
 
-    @patch("pokepoke.utils.process_utils.subprocess.run")
-    @patch("pokepoke.utils.process_utils.os")
+    @patch("pokepoke.utils.process_snapshot.subprocess.run")
+    @patch("pokepoke.utils.process_snapshot.os")
     def test_handles_no_copilot_processes(self, mock_os, mock_run):
         """Handles case when no copilot.exe processes are found."""
         mock_os.name = "nt"
-        mock_run.return_value = type("Result", (), {"stdout": '"Image Name","PID"', "returncode": 0})()
+        mock_run.return_value = type("Result", (), {"stdout": "Node,KernelModeTime,ProcessId,UserModeTime,WorkingSetSize", "returncode": 0})()
         _log_process_tree_snapshot("edit", "test.py", 900.0)
         assert mock_run.call_count == 1  # Only tasklist, no wmic
 
-    @patch("pokepoke.utils.process_utils.subprocess.run")
-    @patch("pokepoke.utils.process_utils.os")
+    @patch("pokepoke.utils.process_snapshot.subprocess.run")
+    @patch("pokepoke.utils.process_snapshot.os")
     def test_handles_subprocess_exception(self, mock_os, mock_run):
         """Gracefully handles subprocess failures."""
         mock_os.name = "nt"
@@ -425,15 +426,16 @@ class TestLogProcessTreeSnapshot:
         _log_process_tree_snapshot("powershell", "test", 900.0)
         # Should not raise
 
-    @patch("pokepoke.utils.process_utils.subprocess.run")
-    @patch("pokepoke.utils.process_utils.os")
+    @patch("pokepoke.utils.process_snapshot.subprocess.run")
+    @patch("pokepoke.utils.process_snapshot.os")
     def test_logs_to_item_logger(self, mock_os, mock_run):
         """Writes diagnostic info to item logger when available."""
         mock_os.name = "nt"
-        mock_run.return_value = type("Result", (), {"stdout": '"Image Name","PID"\n"copilot.exe","1234"', "returncode": 0})()
+        mock_os.cpu_count.return_value = 4
+        mock_run.return_value = type("Result", (), {"stdout": "Node,KernelModeTime,ProcessId,UserModeTime,WorkingSetSize\nPC,100,1234,200,50000000", "returncode": 0})()
         # Second call for wmic
         mock_run.side_effect = [
-            type("Result", (), {"stdout": '"Image Name","PID"\n"copilot.exe","1234"', "returncode": 0})(),
+            type("Result", (), {"stdout": "Node,KernelModeTime,ProcessId,UserModeTime,WorkingSetSize\nPC,100,1234,200,50000000", "returncode": 0})(),
             type("Result", (), {"stdout": "", "returncode": 0})(),
         ]
         mock_handler = AsyncMock()
