@@ -91,16 +91,7 @@ def process_work_item(  # noqa: C901
 
         item_logger = run_logger.start_item_log(item.id, item.title) if run_logger else None
 
-        from pokepoke.beads.beads_management import get_gate_rejection_count
-        existing_rejection_count = get_gate_rejection_count(item.id)
         max_gate_rejections = config.max_gate_rejections_per_item
-        if existing_rejection_count >= max_gate_rejections:
-            reason = f"Exceeded gate rejection cap ({existing_rejection_count}/{max_gate_rejections})"
-            logger.error(f"\n\u274c Item {item.id} has {existing_rejection_count} gate rejections (cap: {max_gate_rejections}). Auto-deferring to backlog.")
-            _defer(item.id, f"{reason}. Item likely too complex for a single agent session — needs decomposition.")
-            _maybe_decompose(item, 0, existing_rejection_count, config)
-            _log_failure(run_logger, item_logger)
-            return _fail_result(failure_reason=reason)
 
         if interactive:
             terminal_ui.ui.stop()
@@ -137,7 +128,7 @@ def process_work_item(  # noqa: C901
         timeout_restart_count = copilot_failure_count = 0
         backoff_delay = _BACKOFF_BASE_SECONDS
         work_agent_iteration = 1
-        gate_rejection_count = existing_rejection_count
+        gate_rejection_count = int((item.metadata or {}).get('gate_rejection_count', 0))
         last_retry_was_gate_feedback = False
         current_work_agent_id = base_agent_id
         resume_session_id: str | None = None

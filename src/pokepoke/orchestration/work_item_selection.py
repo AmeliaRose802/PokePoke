@@ -4,6 +4,7 @@ import logging
 
 from pokepoke.beads.beads import select_next_hierarchical_item
 from pokepoke.beads.beads_hierarchy import HUMAN_REQUIRED_LABEL, is_assigned_to_current_user
+from pokepoke.config import get_config
 from pokepoke.protocols import BeadsClient
 from pokepoke.types import BeadsWorkItem
 from pokepoke.utils.shutdown import is_shutting_down
@@ -52,6 +53,25 @@ def _is_blocked(item: BeadsWorkItem) -> bool:
     return item.status.lower() == 'blocked' if item.status else False
 
 
+def _exceeds_gate_rejection_cap(item: BeadsWorkItem, max_rejections: int) -> bool:
+    """Check if an item has reached the gate rejection cap via its metadata.
+
+    Args:
+        item: Work item to check.
+        max_rejections: Maximum allowed gate rejections.
+
+    Returns:
+        True if the item's gate_rejection_count >= max_rejections.
+    """
+    if not item.metadata or not isinstance(item.metadata, dict):
+        return False
+    try:
+        count = int(item.metadata.get('gate_rejection_count', 0))
+    except (TypeError, ValueError):
+        return False
+    return count >= max_rejections
+
+
 def _filter_skip_ids(ready_items: list[BeadsWorkItem], skip_ids: set[str] | None) -> list[BeadsWorkItem]:
     """Remove items that previously failed claiming this session."""
     if not skip_ids:
@@ -89,6 +109,16 @@ def _filter_available(ready_items: list[BeadsWorkItem]) -> list[BeadsWorkItem]:
         for item in blocked_items:
             logger.info("Skipping %s - blocked in beads (requires manual review)", item.id)
         available = [item for item in available if not _is_blocked(item)]
+
+    # Filter out items that have reached the gate rejection cap (metadata check).
+    # This prevents claiming items that would immediately be deferred in process_work_item.
+    max_rejections = get_config().max_gate_rejections_per_item
+    over_cap = [item for item in available if _exceeds_gate_rejection_cap(item, max_rejections)]
+    if over_cap:
+        for item in over_cap:
+            count = int((item.metadata or {}).get('gate_rejection_count', 0))
+            logger.info("Skipping %s - gate rejection cap reached (%d/%d)", item.id, count, max_rejections)
+        available = [item for item in available if not _exceeds_gate_rejection_cap(item, max_rejections)]
 
     # Note: has_unmet_blocking_dependencies is NOT called here because
     # bd ready already performs blocker-aware filtering ("open issues with
@@ -212,6 +242,9 @@ def select_multiple_items(
     filtered = [item for item in filtered if not _is_human_required(item)]
     filtered = [item for item in filtered if not _is_closed(item)]
     filtered = [item for item in filtered if not _is_blocked(item)]
+    # Filter out items at the gate rejection cap
+    max_rejections = get_config().max_gate_rejections_per_item
+    filtered = [item for item in filtered if not _exceeds_gate_rejection_cap(item, max_rejections)]
     # Note: has_unmet_blocking_dependencies check removed — bd ready already
     # applies blocker-aware filtering.  The per-item bd show calls were
     # adding ~5-10s each, causing multi-minute dispatch delays.

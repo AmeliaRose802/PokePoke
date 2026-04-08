@@ -232,38 +232,43 @@ def _run(item=None, interactive=False, beads_client=None, timeout_hours=0,
 
 
 class TestGateRejectionCapExceeded:
-    """When item already has too many gate rejections, auto-defer."""
+    """Gate rejection cap pre-check moved to selection phase.
 
-    def test_exceeds_cap_returns_failure(self):
+    process_work_item no longer checks the cap on entry — items at/above the
+    cap are filtered out in _filter_available / select_multiple_items before
+    being submitted to process_work_item.  See
+    test_work_item_selection_coverage.py for selection-level cap tests.
+    """
+
+    def test_item_at_cap_proceeds_in_workflow(self):
+        """Items reaching the cap are filtered at selection, not in workflow."""
         item = _make_item()
-        client = FakeBeadsClient()
-        client.add_item(item)
-
-        result, ctx = _run(
-            item=item,
-            beads_client=client,
-            config=_make_config(max_gate_rejections=3),
-            gate_rejection_count=3,
+        # Even with metadata showing cap reached, workflow proceeds to assign
+        item = BeadsWorkItem(
+            id=item.id, title=item.title, description=item.description,
+            status=item.status, priority=item.priority, issue_type=item.issue_type,
+            metadata={"gate_rejection_count": 5},
         )
+        _result, ctx = _run(
+            item=item,
+            config=_make_config(max_gate_rejections=3, gate_enabled=False),
+            is_shutting_down_seq=[False, False],
+        )
+        # Item was processed (assign was called), not rejected at cap
+        ctx.mocks["assign_and_sync"].assert_called_once()
 
+    def test_gate_rejection_count_read_from_metadata(self):
+        """Workflow reads initial gate_rejection_count from item.metadata."""
+        item = BeadsWorkItem(
+            id="test-ext-1", title="Item test-ext-1", description="test",
+            status="open", priority=1, issue_type="task",
+            metadata={"gate_rejection_count": 2},
+        )
+        # With assign failing, we can verify the item was processed
+        result, ctx = _run(item=item, assign_rv=False)
         assert result.success is False
-        assert "rejection" in (result.failure_reason or "").lower()
-        # Should not attempt setup
+        # Failure is from assign, not cap check
         ctx.mocks["setup_worktree"].assert_not_called()
-
-    def test_defers_item_via_beads_client(self):
-        item = _make_item()
-        client = FakeBeadsClient()
-        client.add_item(item)
-
-        _run(
-            item=item,
-            beads_client=client,
-            config=_make_config(max_gate_rejections=2),
-            gate_rejection_count=5,
-        )
-
-        assert client.call_count("defer_item") == 1
 
 
 class TestAssignmentFailure:

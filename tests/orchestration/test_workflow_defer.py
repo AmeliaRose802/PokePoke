@@ -19,7 +19,7 @@ from pokepoke.types import (
 def _item(**kwargs) -> BeadsWorkItem:
     defaults = dict(
         id="defer-1", title="Complex task", status="open",
-        priority=1, issue_type="task",
+        priority=1, issue_type="task", metadata=None,
     )
     defaults.update(kwargs)
     return BeadsWorkItem(**defaults)
@@ -30,7 +30,13 @@ def _branch_ok():
 
 
 class TestPreLoopGateRejectionDefer:
-    """Test that items with existing gate rejections >= cap are auto-deferred."""
+    """Test that gate rejection cap pre-check is handled at the selection level.
+
+    The pre-loop cap check was moved from process_work_item to the selection
+    phase (_filter_available / select_multiple_items). process_work_item now
+    reads gate_rejection_count from item.metadata instead of calling bd show.
+    Selection-level filtering tests are in test_work_item_selection_coverage.py.
+    """
 
     @patch("pokepoke.orchestration.workflow.unregister_agent")
     @patch("pokepoke.orchestration.workflow.register_agent")
@@ -41,12 +47,12 @@ class TestPreLoopGateRejectionDefer:
     @patch("pokepoke.orchestration.workflow.terminal_ui.set_terminal_banner")
     @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
-    def test_defers_item_when_rejection_count_at_cap(
+    def test_reads_gate_rejection_count_from_metadata(
         self, mock_agent, mock_banner_fmt, mock_set_banner, mock_ui,
         mock_assignment, mock_model, mock_config,
         mock_register, mock_unregister,
     ):
-        """Item with gate_rejection_count >= cap should be deferred, not blocked."""
+        """process_work_item should use item.metadata for gate_rejection_count."""
         mock_config.return_value = MagicMock(
             command_timeout=300, max_parallel_agents=1,
             gate_agent_enabled=True, max_copilot_failure_retries=0,
@@ -54,63 +60,50 @@ class TestPreLoopGateRejectionDefer:
             ai_backend=MagicMock(provider="copilot"),
         )
 
+        # Item below cap proceeds to assign (which fails) - no bd show needed
+        item = _item(metadata={"gate_rejection_count": 1})
         with patch(
-            "pokepoke.beads.beads_management.get_gate_rejection_count",
-            return_value=3,
-        ), patch(
-            "pokepoke.orchestration.workflow.defer_item"
-        ) as mock_defer, patch(
-            "pokepoke.orchestration.workflow._maybe_decompose"
-        ) as mock_decompose:
-            result = process_work_item(_item(), interactive=False)
-
-            assert result.success is False
-            assert "gate rejection cap" in (result.failure_reason or "").lower()
-            # defer_item should be called
-            mock_defer.assert_called_once()
-            # Verify the defer reason mentions decomposition
-            defer_reason = mock_defer.call_args[0][1]
-            assert "decomposition" in defer_reason.lower()
-            # _maybe_decompose must be called before the early return
-            mock_decompose.assert_called_once()
-
-    @patch("pokepoke.orchestration.workflow.unregister_agent")
-    @patch("pokepoke.orchestration.workflow.register_agent")
-    @patch("pokepoke.orchestration.workflow.get_config")
-    @patch("pokepoke.orchestration.workflow.select_model_for_item", return_value="gpt-4")
-    @patch("pokepoke.orchestration.workflow.get_assignment_for_item", return_value=("a", "beads-item"))
-    @patch("pokepoke.orchestration.workflow.terminal_ui")
-    @patch("pokepoke.orchestration.workflow.terminal_ui.set_terminal_banner")
-    @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
-    def test_does_not_defer_below_cap(
-        self, mock_agent, mock_banner_fmt, mock_set_banner, mock_ui,
-        mock_assignment, mock_model, mock_config,
-        mock_register, mock_unregister,
-    ):
-        """Item with gate_rejection_count below cap should proceed normally."""
-        mock_config.return_value = MagicMock(
-            command_timeout=300, max_parallel_agents=1,
-            gate_agent_enabled=True, max_copilot_failure_retries=0,
-            max_gate_rejections_per_item=3,
-            ai_backend=MagicMock(provider="copilot"),
-        )
-
-        with patch(
-            "pokepoke.beads.beads_management.get_gate_rejection_count",
-            return_value=2,
-        ), patch(
-            "pokepoke.orchestration.workflow.defer_item"
-        ) as mock_defer, patch(
             "pokepoke.orchestration.workflow.assign_and_sync_item",
             return_value=False,
         ):
-            # assign_and_sync_item returns False so it fails for a different reason
+            result = process_work_item(item, interactive=False)
+
+            assert result.success is False
+            # Failure is from assign, not from cap check
+            assert "assign" in (result.failure_reason or "").lower()
+
+    @patch("pokepoke.orchestration.workflow.unregister_agent")
+    @patch("pokepoke.orchestration.workflow.register_agent")
+    @patch("pokepoke.orchestration.workflow.get_config")
+    @patch("pokepoke.orchestration.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.orchestration.workflow.get_assignment_for_item", return_value=("a", "beads-item"))
+    @patch("pokepoke.orchestration.workflow.terminal_ui")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
+    def test_no_metadata_defaults_to_zero(
+        self, mock_agent, mock_banner_fmt, mock_set_banner, mock_ui,
+        mock_assignment, mock_model, mock_config,
+        mock_register, mock_unregister,
+    ):
+        """Item without metadata should default gate_rejection_count to 0."""
+        mock_config.return_value = MagicMock(
+            command_timeout=300, max_parallel_agents=1,
+            gate_agent_enabled=True, max_copilot_failure_retries=0,
+            max_gate_rejections_per_item=3,
+            ai_backend=MagicMock(provider="copilot"),
+        )
+
+        # Item with no metadata proceeds to assign (which fails)
+        with patch(
+            "pokepoke.orchestration.workflow.assign_and_sync_item",
+            return_value=False,
+        ):
             result = process_work_item(_item(), interactive=False)
 
             assert result.success is False
-            # defer was NOT called (rejection count was below cap)
-            mock_defer.assert_not_called()
+            # Failure is from assign - item was not rejected at cap
+            assert "assign" in (result.failure_reason or "").lower()
 
 
 class TestInLoopGateRejectionDefer:

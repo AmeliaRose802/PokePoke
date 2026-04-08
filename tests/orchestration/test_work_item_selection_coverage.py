@@ -7,6 +7,7 @@ external I/O boundaries (beads CLI calls, user input, shutdown flag).
 from unittest.mock import patch
 
 from pokepoke.orchestration.work_item_selection import (
+    _exceeds_gate_rejection_cap,
     _is_blocked,
     _is_closed,
     _is_human_required,
@@ -19,10 +20,10 @@ from pokepoke.types import BeadsWorkItem
 
 
 def _item(id: str, priority: int = 1, labels: list[str] | None = None,
-          assignee: str | None = None) -> BeadsWorkItem:
+          assignee: str | None = None, metadata: dict | None = None) -> BeadsWorkItem:
     return BeadsWorkItem(
         id=id, title=f"Item {id}", status="ready", priority=priority,
-        issue_type="task", labels=labels, assignee=assignee,
+        issue_type="task", labels=labels, assignee=assignee, metadata=metadata,
     )
 
 
@@ -89,6 +90,39 @@ class TestIsBlocked:
     def test_empty_status(self):
         item = BeadsWorkItem(id="a", title="A", status="", priority=1, issue_type="task")
         assert _is_blocked(item) is False
+
+
+# ── _exceeds_gate_rejection_cap ─────────────────────────────────────
+
+class TestExceedsGateRejectionCap:
+    def test_no_metadata(self):
+        assert _exceeds_gate_rejection_cap(_item("a"), 3) is False
+
+    def test_empty_metadata(self):
+        assert _exceeds_gate_rejection_cap(_item("a", metadata={}), 3) is False
+
+    def test_below_cap(self):
+        assert _exceeds_gate_rejection_cap(_item("a", metadata={"gate_rejection_count": 2}), 3) is False
+
+    def test_at_cap(self):
+        assert _exceeds_gate_rejection_cap(_item("a", metadata={"gate_rejection_count": 3}), 3) is True
+
+    def test_above_cap(self):
+        assert _exceeds_gate_rejection_cap(_item("a", metadata={"gate_rejection_count": 5}), 3) is True
+
+    def test_zero_count(self):
+        assert _exceeds_gate_rejection_cap(_item("a", metadata={"gate_rejection_count": 0}), 3) is False
+
+    def test_string_count(self):
+        """String values should be converted to int."""
+        assert _exceeds_gate_rejection_cap(_item("a", metadata={"gate_rejection_count": "3"}), 3) is True
+
+    def test_invalid_count(self):
+        """Non-numeric values should return False."""
+        assert _exceeds_gate_rejection_cap(_item("a", metadata={"gate_rejection_count": "bad"}), 3) is False
+
+    def test_none_metadata_field(self):
+        assert _exceeds_gate_rejection_cap(_item("a", metadata=None), 3) is False
 
 
 # ── select_work_item ────────────────────────────────────────────────
@@ -201,6 +235,28 @@ class TestSelectWorkItem:
             issue_type="task",
         )
         result = select_work_item([blocked], interactive=False)
+        assert result is None
+
+    @patch("pokepoke.orchestration.work_item_selection.get_config")
+    @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
+    @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
+    def test_filters_items_at_gate_rejection_cap(self, mock_hier, mock_assigned, mock_config):
+        from unittest.mock import MagicMock
+        mock_config.return_value = MagicMock(max_gate_rejections_per_item=3)
+        over_cap = _item("a", metadata={"gate_rejection_count": 3})
+        ok_item = _item("b", metadata={"gate_rejection_count": 1})
+        mock_hier.return_value = ok_item
+        result = select_work_item([over_cap, ok_item], interactive=False)
+        assert result is not None
+        assert result.id == "b"
+
+    @patch("pokepoke.orchestration.work_item_selection.get_config")
+    @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
+    def test_all_at_cap_returns_none(self, mock_assigned, mock_config):
+        from unittest.mock import MagicMock
+        mock_config.return_value = MagicMock(max_gate_rejections_per_item=3)
+        over_cap = _item("a", metadata={"gate_rejection_count": 5})
+        result = select_work_item([over_cap], interactive=False)
         assert result is None
 
 
@@ -343,3 +399,16 @@ class TestSelectMultipleItems:
         result = select_multiple_items([blocked, open_item], count=2)
         assert len(result) == 1
         assert result[0].id == "a"
+
+    @patch("pokepoke.orchestration.work_item_selection.get_config")
+    @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
+    @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
+    def test_filters_over_cap_items(self, mock_hier, mock_assigned, mock_config):
+        from unittest.mock import MagicMock
+        mock_config.return_value = MagicMock(max_gate_rejections_per_item=3)
+        over_cap = _item("a", metadata={"gate_rejection_count": 3})
+        ok_item = _item("b", metadata={"gate_rejection_count": 1})
+        mock_hier.return_value = ok_item
+        result = select_multiple_items([over_cap, ok_item], count=2)
+        assert len(result) == 1
+        assert result[0].id == "b"

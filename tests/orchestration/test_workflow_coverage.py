@@ -449,15 +449,15 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.orchestration.workflow.create_worktree")
+    @patch("pokepoke.orchestration.workflow.setup_worktree")
     @patch("pokepoke.orchestration.workflow.is_shutting_down", return_value=True)
     def test_shutdown_before_copilot(
-        self, mock_shutdown, mock_create, mock_assign, mock_agent_name,
+        self, mock_shutdown, mock_setup, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
         mock_model, mock_config, mock_cleanup,
         mock_register, mock_unregister, tmp_path,
     ):
-        mock_create.return_value = tmp_path / "worktree"
+        mock_setup.return_value = tmp_path / "worktree"
         (tmp_path / "worktree").mkdir()
         mock_config.return_value = MagicMock(
             command_timeout=300, max_parallel_agents=1,
