@@ -23,11 +23,13 @@ bd sync                     # Sync with git
 
 ## 🚨 CRITICAL: Test Safety Requirements
 
-**NEVER create tests with real subprocess, git, or filesystem operations without proper mocks.**
+**ALL tests run in parallel (`pytest-xdist`). NEVER create tests with real subprocess, git, or filesystem operations without proper mocks.**
+
+Every test must be **fully isolated** and **safe for concurrent execution**. No test may depend on execution order, shared mutable state, or real system resources (git, beads, network, filesystem outside `tmp_path`).
 
 ### Mandatory Test Safety Rules
 
-All tests MUST follow these rules to prevent hangs in worktrees and CI:
+All tests MUST follow these rules to prevent hangs, flakes, and state corruption in parallel execution, worktrees, and CI:
 
 1. **USE MOCKS for subprocess calls:**
    - ✅ Use `FakeGitClient` or `FakeBeadsClient` from `tests/fakes.py`
@@ -47,6 +49,13 @@ All tests MUST follow these rules to prevent hangs in worktrees and CI:
 4. **ALWAYS include timeouts:**
    - All tests automatically have a 10-second timeout (pyproject.toml)
    - pytest-timeout plugin is required and enforced in conftest.py
+
+5. **ALWAYS support parallel execution (pytest-xdist):**
+   - ❌ NEVER use shared mutable global state between tests
+   - ❌ NEVER rely on test execution order
+   - ❌ NEVER share temp directories — use `tmp_path` (unique per test)
+   - ❌ NEVER bind to fixed ports or acquire file locks that could collide
+   - ✅ Each test must be fully independent and self-contained
 
 ### Exemption Markers
 

@@ -211,10 +211,27 @@ npm test | Select-Object -First 1                # WILL HANG on slow output
 - ❌ **NEVER** run `pytest tests/` (full suite) — the commit hook does this
 - ❌ **NEVER** run `pytest --cov` manually — the commit hook does this
 
+### 🚨 CRITICAL: Parallel & Isolated Tests
+
+**ALL tests run in parallel via `pytest-xdist`.** Every test must be safe for concurrent execution:
+
+- ❌ **NO shared mutable state** between tests (global variables, class-level state, singletons)
+- ❌ **NO real system resources** — git, beads (`bd`/`br`), subprocess, network, filesystem (outside `tmp_path`)
+- ❌ **NO reliance on test execution order** — each test must be independent
+- ❌ **NO shared temp directories** — use the `tmp_path` fixture (unique per test)
+- ❌ **NO file locks or ports** that could collide across parallel workers
+- ✅ **USE mocks/fakes** for ALL external dependencies (see `tests/fakes.py`)
+- ✅ **USE `tmp_path`** for any file I/O
+- ✅ **USE `FakeGitClient` / `FakeBeadsClient`** — never real git or beads CLI
+- ✅ **USE `@patch`** for subprocess, network, and OS-level calls
+
+Tests that touch real git, beads, subprocess, or the network **will hang, flake, or corrupt state** when run in parallel across worktrees and CI.
+
 ### Test Strategy
 
 **Unit Tests:**
-- Fast, isolated tests that don't require external services
+- Fast, isolated, fully mocked — no external services or system resources
+- Must be safe for parallel execution (pytest-xdist)
 - Run automatically on every commit via pre-commit hooks
 - Must have 80%+ coverage for modified files
 - Use `pytest` for quick iteration during development
@@ -225,6 +242,7 @@ npm test | Select-Object -First 1                # WILL HANG on slow output
 - Test worktree creation and cleanup
 - Test beads database integration
 - Run with `pytest tests/integration/`
+- Must use exemption markers (`@pytest.mark.allow_real_bd`, `@pytest.mark.allow_git_repair`)
 
 ### Testing Usage Examples
 
