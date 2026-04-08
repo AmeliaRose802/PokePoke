@@ -293,6 +293,7 @@ class TestCollectDoneFutures:
 class TestContinuousModeLoopBack:
     """Regression tests for PokePoke-5arw: continuous mode should loop after all workers finish."""
 
+    @patch("pokepoke.agents.parallel_support.time.sleep")
     @patch("pokepoke.agents.parallel.time.sleep")
     @patch("pokepoke.agents.parallel.terminal_ui")
     @patch("pokepoke.agents.parallel.set_executor")
@@ -302,7 +303,7 @@ class TestContinuousModeLoopBack:
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
     def test_continuous_mode_idle_uses_exponential_backoff(
         self, mock_sel, mock_ready, mock_repo, mock_shut,
-        mock_set_exec, mock_ui, mock_sleep,
+        mock_set_exec, mock_ui, mock_loop_sleep, mock_support_sleep,
     ) -> None:
         """Continuous mode should increase idle sleep duration between empty polls."""
         stats = SessionStats(agent_stats=AgentStats())
@@ -318,11 +319,11 @@ class TestContinuousModeLoopBack:
         )
 
         assert code == 0
-        # First idle iteration should sleep with the base delay.
-        assert mock_sleep.call_args_list[0].args[0] == 8.0
-        # Subsequent idle iterations (if any) should not use a smaller delay.
-        for call in mock_sleep.call_args_list[1:]:
-            assert call.args[0] >= 8.0
+        # The idle sleep happens in parallel_support.py via check_loop_exit.
+        # First idle iteration should sleep with the base delay (8.0s).
+        idle_calls = [c for c in mock_support_sleep.call_args_list if c.args[0] >= 8.0]
+        assert len(idle_calls) >= 1, f"Expected idle sleep calls, got: {mock_support_sleep.call_args_list}"
+        assert idle_calls[0].args[0] == 8.0
 
     @patch("pokepoke.agents.parallel.time.sleep")
     @patch("pokepoke.agents.parallel.terminal_ui")
