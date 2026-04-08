@@ -67,6 +67,13 @@ MIN_MAX_PING_FAILURES = 1  # Must allow at least one ping failure
 MIN_CIRCUIT_BREAKER_DRAIN_TIMEOUT = 0  # Minimum drain timeout (0 = wait forever)
 
 # ---------------------------------------------------------------------------
+# Git state branch constants
+# ---------------------------------------------------------------------------
+
+# Default name for the state branch (where runtime state is auto-committed)
+STATE_BRANCH_NAME = "pokepoke-state"
+
+# ---------------------------------------------------------------------------
 # Item quality scoring constants
 # ---------------------------------------------------------------------------
 

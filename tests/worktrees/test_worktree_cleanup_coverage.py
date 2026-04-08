@@ -6,25 +6,22 @@ get_uncleaned_worktree_count, and has_unmerged_worktrees.
 """
 
 import subprocess
-from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from pokepoke.worktrees.worktree_cleanup import (
-    _delete_branch,
-    _handle_worktree_removal_error,
     PathBoundaryError,
     SymlinkFoundError,
+    _delete_branch,
+    _handle_worktree_removal_error,
     add_uncleaned_worktree,
     cleanup_after_merge,
     cleanup_worktree_and_branch,
+    force_remove_directory,
     get_uncleaned_worktree_count,
     has_unmerged_worktrees,
-    load_worktree_manifest,
     remove_from_manifest,
-    save_worktree_manifest,
-    force_remove_directory,
 )
 
 MODULE = "pokepoke.worktrees.worktree_cleanup"

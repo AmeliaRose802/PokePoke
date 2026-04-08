@@ -28,6 +28,7 @@ from pokepoke.desktop import terminal_ui
 from pokepoke.desktop.terminal_ui import clear_terminal_banner, format_work_item_banner, set_terminal_banner
 from pokepoke.git.merge_queue import get_merge_queue
 from pokepoke.git.repo_check import check_and_commit_main_repo
+from pokepoke.git.state_branch import commit_state_branch
 from pokepoke.maintenance.maintenance_scheduler import run_periodic_maintenance
 from pokepoke.maintenance.maintenance_state import increment_items_completed
 from pokepoke.models.model_history import append_model_history_entry
@@ -70,6 +71,14 @@ def _finalize_session(session_stats: SessionStats, start_time: float, items_comp
         session_stats.record_merge_queue_stats(mq.stats)
         mq.reset_stats()
     elapsed = end_time - start_time
+
+    # Commit state branch with final session state
+    try:
+        cfg = load_config()
+        commit_state_branch(config=cfg.state_branch, cwd=Path.cwd(), force=True)
+    except Exception as e:
+        logger.warning(f"Failed to commit state branch on finalize: {e}")
+
     print_stats(items_completed, total_requests, elapsed, session_stats)
     run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
     set_current_session_stats(None)
@@ -154,6 +163,15 @@ def _record_item_result(selected_item: BeadsWorkItem, result: WorkItemResult,
         logger.info(f"\n📈 Items completed this session: {items_completed}\n📈 Total (lifetime): {total_count}\n📈 Beads created (lifetime): {session_stats.lifetime_items_created}")
         run_logger.log_orchestrator(f"Items completed this session: {items_completed}")
         run_periodic_maintenance(total_count, session_stats, run_logger, repo_id=str(Path.cwd()))
+
+        # Commit state branch periodically based on config
+        cfg = load_config()
+        if cfg.state_branch.enabled and total_count % cfg.state_branch.auto_commit_interval_items == 0:
+            try:
+                if commit_state_branch(config=cfg.state_branch, cwd=Path.cwd()):
+                    logger.info(f"✅ State branch committed (every {cfg.state_branch.auto_commit_interval_items} items)")
+            except Exception as e:
+                logger.warning(f"Failed to commit state branch: {e}")
     return result.success, session_stats.items_completed
 
 

@@ -131,6 +131,22 @@ class GitConfig:
     def get_preferred_branch(self) -> str:
         """Get the preferred branch, falling back to fallback_branch if not set."""
         return self.default_branch if self.default_branch else self.fallback_branch
+
+
+@dataclass
+class StateBranchConfig:
+    """Configuration for auto-committing runtime state to a dedicated branch.
+
+    Similar to beads' sync-branch pattern, PokePoke auto-commits runtime state
+    files (model_registry.json, maintenance_state.json, failed_unassigns.json)
+    to a dedicated branch to preserve git-backed versioning without interfering
+    with code merges.
+    """
+    enabled: bool = True
+    branch_name: str = _c.STATE_BRANCH_NAME
+    auto_commit_interval_items: int = 5  # Commit state every N completed items
+
+
 @dataclass
 class PreflightHealthConfig:
     """Pre-flight health check configuration."""
@@ -285,6 +301,7 @@ class ProjectConfig:
     model_sync: ModelSyncConfig = field(default_factory=ModelSyncConfig)
     mcp_server: MCPServerConfig = field(default_factory=MCPServerConfig)
     git: GitConfig = field(default_factory=GitConfig)
+    state_branch: StateBranchConfig = field(default_factory=StateBranchConfig)
     preflight_health: PreflightHealthConfig = field(default_factory=PreflightHealthConfig)
     warm_sessions: WarmSessionConfig = field(default_factory=WarmSessionConfig)
     test_data: dict[str, str] = field(default_factory=dict)

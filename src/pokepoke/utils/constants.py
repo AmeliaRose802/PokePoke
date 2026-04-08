@@ -14,6 +14,13 @@ BEADS_DIR: str = ".beads"
 BRANCH_PREFIX: str = "task/"
 WORKTREE_TASK_PREFIX: str = "task-"
 
+# ── State branch files (runtime state auto-committed to dedicated branch) ───
+STATE_BRANCH_FILES: tuple[str, ...] = (
+    ".pokepoke/maintenance_state.json",
+    ".pokepoke/model_registry.json",
+    ".pokepoke/failed_unassigns.json",
+)
+
 # ── Beads status literals ───────────────────────────────────────────────────
 STATUS_IN_PROGRESS: str = "in_progress"
 COMPLETED_STATUSES: tuple[str, ...] = ("done", "closed", "resolved")
