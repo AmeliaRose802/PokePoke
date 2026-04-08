@@ -47,6 +47,8 @@ logger = logging.getLogger(__name__)
 _FAIL_FAST_STATUSES = frozenset({"blocked", "needs_clarification", "too_large"})
 _MAX_GATE_CRASH_RETRIES = _MAX_GATE_TIMEOUT_RETRIES = 3
 _LOCK_TIMEOUT_PER_AGENT = 120.0
+_BACKOFF_BASE_SECONDS = 30
+_BACKOFF_MAX_SECONDS = 240
 
 def process_work_item(  # noqa: C901
     item: BeadsWorkItem,
@@ -132,6 +134,7 @@ def process_work_item(  # noqa: C901
         accumulated_stats = AgentStats()
         gate_success = False
         timeout_restart_count = copilot_failure_count = 0
+        backoff_delay = _BACKOFF_BASE_SECONDS
         work_agent_iteration = 1
         gate_rejection_count = existing_rejection_count
         last_retry_was_gate_feedback = False
@@ -158,7 +161,9 @@ def process_work_item(  # noqa: C901
                     return _fail_result(request_count=request_count, stats=accumulated_stats,
                                         cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
                                         failure_reason=f"Exceeded max timeout restarts ({max_timeout_restarts})")
-                logger.info(f"\n\u23f1\ufe0f  TIMEOUT: Restarting {item.id} (attempt {timeout_restart_count}/{max_timeout_restarts})")
+                logger.info(f"\n\u23f1\ufe0f  TIMEOUT: Restarting {item.id} (attempt {timeout_restart_count}/{max_timeout_restarts}), backing off {backoff_delay}s")
+                time.sleep(backoff_delay)
+                backoff_delay = min(backoff_delay * 2, _BACKOFF_MAX_SECONDS)
                 start_time = time.time()
                 elapsed = 0
 
@@ -376,6 +381,7 @@ def process_work_item(  # noqa: C901
 
             if gate_success:
                 logger.info("\n✅ Gate Agent signed off!")
+                backoff_delay = _BACKOFF_BASE_SECONDS
                 break
             elif not gate_crashed and not gate_timed_out:
                 # Genuine code rejection — increment persistent counter and check cap

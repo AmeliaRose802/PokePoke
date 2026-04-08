@@ -384,7 +384,8 @@ class TestProcessWorkItem:
             mocks['gate'].return_value = GateAgentResult(success=False, reason="Rejected")
 
             with patch(PATCH_WF_SELECT_MODEL, return_value="test-model"), \
-                 patch(PATCH_WF_ADD_COMMENT):
+                 patch(PATCH_WF_ADD_COMMENT), \
+                 patch('time.sleep'):
                 result = process_work_item(
                     item, interactive=True, timeout_hours=0.001, max_timeout_restarts=2,
                 )
@@ -419,6 +420,101 @@ class TestProcessWorkItem:
 
             assert result.success is True
             mocks['invoke'].assert_called_once()
+
+    def test_timeout_backoff_escalates(self) -> None:
+        """Test that backoff delay doubles on consecutive timeouts (30→60→120)."""
+        item = make_work_item()
+
+        with make_process_item_mocks(
+            commits_ahead=0,
+            include_handoff=True, include_session_cleanup=True,
+            include_cleanup_worktree=True,
+        ) as mocks:
+            call_count = [0]
+            def time_side_effect():
+                call_count[0] += 1
+                return call_count[0] * 5.0
+            mocks['time'].side_effect = time_side_effect
+            mocks['gate'].return_value = GateAgentResult(success=False, reason="Rejected")
+
+            with patch(PATCH_WF_SELECT_MODEL, return_value="test-model"), \
+                 patch(PATCH_WF_ADD_COMMENT), \
+                 patch('time.sleep') as mock_sleep:
+                result = process_work_item(
+                    item, interactive=True, timeout_hours=0.001, max_timeout_restarts=3,
+                )
+
+            assert result.success is False
+            # Should have slept with escalating backoff: 30, 60, 120
+            sleep_calls = [c.args[0] for c in mock_sleep.call_args_list]
+            assert sleep_calls[:3] == [30, 60, 120]
+
+    def test_timeout_backoff_caps_at_max(self) -> None:
+        """Test that backoff delay caps at 240 seconds."""
+        from pokepoke.orchestration.workflow import _BACKOFF_MAX_SECONDS
+
+        item = make_work_item()
+
+        with make_process_item_mocks(
+            commits_ahead=0,
+            include_handoff=True, include_session_cleanup=True,
+            include_cleanup_worktree=True,
+            include_config=True,
+        ) as mocks:
+            mocks['config'].return_value.max_gate_rejections_per_item = 10
+            call_count = [0]
+            def time_side_effect():
+                call_count[0] += 1
+                return call_count[0] * 5.0
+            mocks['time'].side_effect = time_side_effect
+            mocks['gate'].return_value = GateAgentResult(success=False, reason="Rejected")
+
+            with patch(PATCH_WF_SELECT_MODEL, return_value="test-model"), \
+                 patch(PATCH_WF_ADD_COMMENT), \
+                 patch('time.sleep') as mock_sleep:
+                # Allow enough restarts to hit the cap: 30→60→120→240→240
+                result = process_work_item(
+                    item, interactive=True, timeout_hours=0.001, max_timeout_restarts=5,
+                )
+
+            assert result.success is False
+            sleep_calls = [c.args[0] for c in mock_sleep.call_args_list]
+            # 30, 60, 120, 240, 240 — capped at max
+            assert sleep_calls == [30, 60, 120, 240, 240]
+            assert all(d <= _BACKOFF_MAX_SECONDS for d in sleep_calls)
+
+    def test_timeout_backoff_resets_on_success(self) -> None:
+        """Test that backoff resets to base after gate success."""
+        from pokepoke.orchestration.workflow import _BACKOFF_BASE_SECONDS
+
+        item = make_work_item()
+
+        with make_process_item_mocks(
+            commits_ahead=0, include_handoff=True,
+        ) as mocks:
+            restarted = [False]
+            counter = [0]
+
+            def sleep_side_effect(seconds):
+                restarted[0] = True
+                counter[0] = 0
+
+            def time_side_effect():
+                counter[0] += 1
+                if restarted[0]:
+                    return 500000.0  # constant after restart → elapsed = 0
+                return counter[0] * 100.0  # increasing → elapsed grows
+
+            mocks['time'].side_effect = time_side_effect
+
+            with patch('time.sleep') as mock_sleep:
+                mock_sleep.side_effect = sleep_side_effect
+                result = process_work_item(
+                    item, interactive=True, timeout_hours=0.001, max_timeout_restarts=3,
+                )
+
+            assert result.success is True
+            mock_sleep.assert_called_once_with(_BACKOFF_BASE_SECONDS)
 
 
 class TestProcessWorkItemCoordination:
