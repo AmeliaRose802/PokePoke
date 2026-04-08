@@ -99,9 +99,9 @@ preflight_health:
   worktree_test_timeout: 60.0
   max_orphan_worktrees: 50
   git_operation_timeout: 30.0
-  enable_self_repair: true
+  enable_self_repair: false
   max_repair_attempts: 3
-  fail_on_environmental_errors: true
+  fail_on_environmental_errors: false
   fail_on_critical_errors: true
   graceful_shutdown_on_failure: true
 warm_sessions:
