@@ -8,15 +8,17 @@ beads_management and beads_recovery modules.
 import json
 import logging
 import time
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import cast
 
 from pokepoke.worktrees.coordination import manifest_lock
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    'FailedUnassignEntry',
+    'FailedUnassignManifest',
     'add_failed_unassign',
     'remove_failed_unassign',
     'unassign_with_retry',
@@ -27,12 +29,23 @@ _UNASSIGN_MAX_RETRIES = 3
 _UNASSIGN_BASE_DELAY = 1.0  # seconds
 
 
+@dataclass(frozen=True)
+class FailedUnassignEntry:
+    """A single entry in the failed-unassign manifest."""
+
+    reason: str
+    timestamp: str
+
+
+FailedUnassignManifest = dict[str, FailedUnassignEntry]
+
+
 def _get_failed_unassign_manifest_path() -> Path:
     """Get the path to the failed unassigns manifest file."""
     return Path(".pokepoke") / "failed_unassigns.json"
 
 
-def _load_failed_unassign_manifest() -> dict[str, dict[str, str]]:
+def _load_failed_unassign_manifest() -> FailedUnassignManifest:
     """Load the failed unassigns manifest."""
     manifest_path = _get_failed_unassign_manifest_path()
     if not manifest_path.exists():
@@ -41,20 +54,28 @@ def _load_failed_unassign_manifest() -> dict[str, dict[str, str]]:
         with open(manifest_path, encoding='utf-8') as f:
             raw = json.load(f)
             if isinstance(raw, dict):
-                return cast(dict[str, dict[str, str]], raw)
+                return {
+                    k: FailedUnassignEntry(
+                        reason=str(v.get("reason", "")),
+                        timestamp=str(v.get("timestamp", "")),
+                    )
+                    for k, v in raw.items()
+                    if isinstance(v, dict)
+                }
             return {}
     except (json.JSONDecodeError, OSError):
         return {}
 
 
-def _save_failed_unassign_manifest(manifest: dict[str, dict[str, str]]) -> None:
+def _save_failed_unassign_manifest(manifest: FailedUnassignManifest) -> None:
     """Save the failed unassigns manifest."""
     manifest_path = _get_failed_unassign_manifest_path()
     try:
         manifest_path.parent.mkdir(exist_ok=True)
+        serializable = {k: asdict(v) for k, v in manifest.items()}
         # Write atomically via a temp file, then rename.
         tmp = manifest_path.with_suffix('.tmp')
-        tmp.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding='utf-8')
+        tmp.write_text(json.dumps(serializable, indent=2, ensure_ascii=False), encoding='utf-8')
         tmp.replace(manifest_path)
     except OSError as e:
         logger.warning('Failed to save unassign manifest: %s', e)
@@ -64,10 +85,10 @@ def add_failed_unassign(item_id: str, reason: str) -> None:
     """Track an item whose unassign failed for later recovery."""
     with manifest_lock():
         manifest = _load_failed_unassign_manifest()
-        manifest[item_id] = {
-            "reason": reason,
-            "timestamp": datetime.now().isoformat(),
-        }
+        manifest[item_id] = FailedUnassignEntry(
+            reason=reason,
+            timestamp=datetime.now().isoformat(),
+        )
         _save_failed_unassign_manifest(manifest)
 
 

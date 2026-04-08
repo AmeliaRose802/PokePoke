@@ -4,6 +4,7 @@ Provides OS-kernel-enforced file locks stored in .pokepoke/locks/.
 Locks auto-release on process crash since they are backed by filelock.FileLock.
 """
 
+import dataclasses
 import json
 import logging
 import os
@@ -11,6 +12,7 @@ import threading
 import time
 from collections.abc import Generator
 from contextlib import contextmanager, suppress
+from dataclasses import dataclass
 from pathlib import Path
 
 from filelock import FileLock, Timeout
@@ -283,32 +285,47 @@ _WORKTREE_METRICS_PATH = _WORKTREE_METRICS_DIR / "worktree_metrics.json"
 
 _WORKTREE_LOCK_DEFAULT_TIMEOUT = 300.0  # 5 minutes
 
-_DEFAULT_WORKTREE_METRICS: dict[str, float] = {
-    "total_attempts": 0, "total_successes": 0, "total_failures": 0,
-    "total_wait_time": 0.0, "max_wait_time": 0.0,
-}
+
+@dataclass
+class WorktreeMetrics:
+    """Metrics tracking worktree creation attempts and wait times."""
+
+    total_attempts: float = 0
+    total_successes: float = 0
+    total_failures: float = 0
+    total_wait_time: float = 0.0
+    max_wait_time: float = 0.0
 
 
-def _load_worktree_metrics() -> dict[str, float]:
+_DEFAULT_WORKTREE_METRICS = WorktreeMetrics()
+
+
+def _load_worktree_metrics() -> WorktreeMetrics:
     """Load worktree creation metrics from disk."""
     if not _WORKTREE_METRICS_PATH.exists():
-        return dict(_DEFAULT_WORKTREE_METRICS)
+        return WorktreeMetrics()
     try:
         with open(_WORKTREE_METRICS_PATH) as f:
             data = json.load(f)
             if isinstance(data, dict):
-                return data
+                return WorktreeMetrics(
+                    total_attempts=data.get("total_attempts", 0),
+                    total_successes=data.get("total_successes", 0),
+                    total_failures=data.get("total_failures", 0),
+                    total_wait_time=data.get("total_wait_time", 0.0),
+                    max_wait_time=data.get("max_wait_time", 0.0),
+                )
     except (json.JSONDecodeError, OSError):
         logger.debug("Failed to load worktree metrics", exc_info=True)
-    return dict(_DEFAULT_WORKTREE_METRICS)
+    return WorktreeMetrics()
 
 
-def _save_worktree_metrics(metrics: dict[str, float]) -> None:
+def _save_worktree_metrics(metrics: WorktreeMetrics) -> None:
     """Save worktree creation metrics to disk."""
     try:
         os.makedirs(_WORKTREE_METRICS_DIR, exist_ok=True)
         with open(_WORKTREE_METRICS_PATH, 'w') as f:
-            json.dump(metrics, f, indent=2)
+            json.dump(dataclasses.asdict(metrics), f, indent=2)
     except OSError as e:
         logger.warning("Failed to save worktree metrics: %s", e)
 
@@ -316,13 +333,13 @@ def _save_worktree_metrics(metrics: dict[str, float]) -> None:
 def _record_worktree_attempt(success: bool, wait_time: float) -> None:
     """Record a worktree creation attempt in metrics."""
     metrics = _load_worktree_metrics()
-    metrics["total_attempts"] += 1
+    metrics.total_attempts += 1
     if success:
-        metrics["total_successes"] += 1
+        metrics.total_successes += 1
     else:
-        metrics["total_failures"] += 1
-    metrics["total_wait_time"] += wait_time
-    metrics["max_wait_time"] = max(metrics["max_wait_time"], wait_time)
+        metrics.total_failures += 1
+    metrics.total_wait_time += wait_time
+    metrics.max_wait_time = max(metrics.max_wait_time, wait_time)
     _save_worktree_metrics(metrics)
 
 

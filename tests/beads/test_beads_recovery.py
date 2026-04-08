@@ -34,7 +34,7 @@ class TestAddRemoveFailedUnassign:
             add_failed_unassign("item-42", "connection refused")
             loaded = _load_failed_unassign_manifest()
             assert "item-42" in loaded
-            assert loaded["item-42"]["reason"] == "connection refused"
+            assert loaded["item-42"].reason == "connection refused"
 
     def test_remove_deletes_item(self, tmp_path: Path) -> None:
         import json

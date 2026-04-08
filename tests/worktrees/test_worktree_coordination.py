@@ -155,11 +155,11 @@ def test_metrics_recording(isolated_metrics):
 
     # Load and verify metrics
     metrics = _load_metrics()
-    assert metrics["total_attempts"] == 3
-    assert metrics["total_successes"] == 2
-    assert metrics["total_failures"] == 1
-    assert metrics["total_wait_time"] == 6.7  # 0.5 + 1.2 + 5.0
-    assert metrics["max_wait_time"] == 5.0
+    assert metrics.total_attempts == 3
+    assert metrics.total_successes == 2
+    assert metrics.total_failures == 1
+    assert metrics.total_wait_time == 6.7  # 0.5 + 1.2 + 5.0
+    assert metrics.max_wait_time == 5.0
 
 
 def test_metrics_persistence(isolated_metrics):
@@ -172,10 +172,10 @@ def test_metrics_persistence(isolated_metrics):
 
     # Load metrics
     metrics = _load_metrics()
-    assert metrics["total_attempts"] == 2
-    assert metrics["total_successes"] == 2
-    assert metrics["total_wait_time"] == 3.0
-    assert metrics["max_wait_time"] == 2.0
+    assert metrics.total_attempts == 2
+    assert metrics.total_successes == 2
+    assert metrics.total_wait_time == 3.0
+    assert metrics.max_wait_time == 2.0
 
 
 def test_lock_creates_directories(cleanup_lock_files, tmp_path, monkeypatch):

@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from pokepoke.beads.beads_manifest_utils import (
+    FailedUnassignEntry,
     _get_failed_unassign_manifest_path,
     _load_failed_unassign_manifest,
     _save_failed_unassign_manifest,
@@ -43,7 +44,8 @@ class TestLoadFailedUnassignManifest:
         ):
             result = _load_failed_unassign_manifest()
             assert "item-1" in result
-            assert result["item-1"]["reason"] == "test"
+            assert isinstance(result["item-1"], FailedUnassignEntry)
+            assert result["item-1"].reason == "test"
 
     def test_returns_empty_on_invalid_json(self, tmp_path: Path) -> None:
         manifest_path = tmp_path / "bad.json"
@@ -62,7 +64,7 @@ class TestSaveFailedUnassignManifest:
             "pokepoke.beads.beads_manifest_utils._get_failed_unassign_manifest_path",
             return_value=manifest_path,
         ):
-            _save_failed_unassign_manifest({"item-1": {"reason": "test", "timestamp": "t"}})
+            _save_failed_unassign_manifest({"item-1": FailedUnassignEntry(reason="test", timestamp="t")})
             assert manifest_path.exists()
             assert manifest_path.parent.exists()
 
@@ -72,7 +74,7 @@ class TestSaveFailedUnassignManifest:
             "pokepoke.beads.beads_manifest_utils._get_failed_unassign_manifest_path",
             return_value=manifest_path,
         ):
-            _save_failed_unassign_manifest({"item-1": {"reason": "test", "timestamp": "t"}})
+            _save_failed_unassign_manifest({"item-1": FailedUnassignEntry(reason="test", timestamp="t")})
             # Verify temp file was used (no .tmp should remain)
             assert not (manifest_path.with_suffix('.tmp')).exists()
             assert manifest_path.exists()
@@ -93,8 +95,8 @@ class TestAddFailedUnassign:
             add_failed_unassign("item-42", "connection refused")
             loaded = _load_failed_unassign_manifest()
             assert "item-42" in loaded
-            assert loaded["item-42"]["reason"] == "connection refused"
-            assert "timestamp" in loaded["item-42"]
+            assert loaded["item-42"].reason == "connection refused"
+            assert loaded["item-42"].timestamp
 
 
 class TestRemoveFailedUnassign:

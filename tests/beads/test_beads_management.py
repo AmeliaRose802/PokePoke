@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from pokepoke.beads.beads_manifest_utils import (
+    FailedUnassignEntry,
     _load_failed_unassign_manifest,
     _save_failed_unassign_manifest,
     add_failed_unassign,
@@ -56,7 +57,7 @@ class TestFailedUnassignManifest:
             "pokepoke.beads.beads_manifest_utils._get_failed_unassign_manifest_path",
             return_value=manifest_path,
         ):
-            data = {"item-1": {"reason": "bd failed", "timestamp": "2026-01-01T00:00:00"}}
+            data = {"item-1": FailedUnassignEntry(reason="bd failed", timestamp="2026-01-01T00:00:00")}
             _save_failed_unassign_manifest(data)
             loaded = _load_failed_unassign_manifest()
             assert loaded == data
@@ -74,7 +75,7 @@ class TestAddRemoveFailedUnassign:
             add_failed_unassign("item-abc", "network error")
             manifest = _load_failed_unassign_manifest()
             assert "item-abc" in manifest
-            assert manifest["item-abc"]["reason"] == "network error"
+            assert manifest["item-abc"].reason == "network error"
 
     def test_remove_deletes_entry(self, tmp_path: Path) -> None:
         manifest_path = tmp_path / "failed_unassigns.json"
