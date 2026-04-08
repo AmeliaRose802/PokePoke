@@ -354,7 +354,17 @@ def _safe_cleanup(
         try:
             if terminal_ui.ui._is_running:
                 terminal_ui.ui.stop_and_capture()
-            finalize_fn(session_stats, start_time, state.items_completed, state.total_requests, run_logger)
+            # Check if we should run post-mortem based on state
+            from pokepoke.orchestration.orchestrator import _should_run_post_mortem
+            run_pm = False
+            if state.circuit_breaker_tripped:
+                run_pm = _should_run_post_mortem(session_stats, "circuit breaker tripped")
+            elif state.memory_circuit_breaker_tripped:
+                run_pm = _should_run_post_mortem(session_stats, "memory circuit breaker")
+            elif state.exit_code != 0:
+                run_pm = _should_run_post_mortem(session_stats, "abnormal exit")
+
+            finalize_fn(session_stats, start_time, state.items_completed, state.total_requests, run_logger, run_pm)
         except Exception as e:
             logger.error(f"Failed to finalize session: {e}", exc_info=True)
             run_logger.log_orchestrator(f"Session finalization error: {e}", level="ERROR")

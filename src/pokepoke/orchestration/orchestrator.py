@@ -53,8 +53,11 @@ from pokepoke.utils.signal_handlers import register_shutdown_handlers, unregiste
 logger = logging.getLogger(__name__)
 
 def _finalize_session(session_stats: SessionStats, start_time: float, items_completed: int,
-                      total_requests: int, run_logger: RunLogger) -> None:
+                      total_requests: int, run_logger: RunLogger, run_post_mortem: bool = False) -> None:
     """Collect ending stats, print summary, and clean up UI."""
+    if run_post_mortem:
+        _run_post_mortem_if_enabled(run_logger, session_stats)
+
     end_time = time.time()
     terminal_ui.ui.set_session_end_time(end_time)
     try:
@@ -71,6 +74,45 @@ def _finalize_session(session_stats: SessionStats, start_time: float, items_comp
     run_logger.finalize(items_completed, total_requests, elapsed, session_stats)
     set_current_session_stats(None)
     clear_terminal_banner()
+
+
+def _run_post_mortem_if_enabled(run_logger: RunLogger, session_stats: SessionStats) -> None:
+    """Run post-mortem agent if enabled in configuration."""
+    try:
+        from pokepoke.agents.post_mortem_agent import run_post_mortem_agent
+        logger.info("\n🔍 Running post-mortem agent...")
+        pm_result = run_post_mortem_agent(
+            run_logs_dir=run_logger.get_run_dir(),
+            run_logger=run_logger,
+            session_stats=session_stats,
+        )
+        if pm_result.get("items_created", 0) > 0:
+            logger.info(f"Post-mortem created {pm_result['items_created']} issue(s), fixed {pm_result.get('items_fixed', 0)}")
+    except Exception as e:
+        logger.error(f"Post-mortem agent failed: {e}", exc_info=True)
+        run_logger.log_orchestrator(f"Post-mortem error: {e}", level="ERROR")
+
+
+def _should_run_post_mortem(session_stats: SessionStats, reason: str = "") -> bool:
+    """Determine if post-mortem should run based on session state and reason."""
+    cfg = load_config()
+    if not cfg.post_mortem.enabled:
+        return False
+
+    if "circuit" in reason.lower() or "consecutive" in reason.lower():
+        logger.debug(f"Post-mortem triggered: {reason}")
+        return True
+
+    # Check success rate - run post-mortem if < 50% success in non-trivial runs
+    total_work_runs = session_stats.agent_run_counts.get("work", 0)
+    items_failed = total_work_runs - session_stats.items_completed
+    if total_work_runs > 3:
+        success_rate = session_stats.items_completed / max(1, total_work_runs)
+        if success_rate < 0.5:
+            logger.debug(f"Post-mortem triggered: low success rate ({success_rate:.1%}, {items_failed} failures)")
+            return True
+
+    return False
 
 
 def _record_item_result(selected_item: BeadsWorkItem, result: WorkItemResult,
@@ -133,10 +175,10 @@ class _OrchestratorContext:
     items_completed: int = 0
     total_requests: int = 0
 
-    def finalize(self) -> None:
+    def finalize(self, run_post_mortem: bool = False) -> None:
         """Shorthand to finalize session with current context state."""
         _finalize_session(self.session_stats, self.start_time, self.items_completed,
-                          self.total_requests, self.run_logger)
+                          self.total_requests, self.run_logger, run_post_mortem=run_post_mortem)
 
 
 def _init_beads_state(session_stats: SessionStats, run_logger: RunLogger) -> None:
@@ -302,7 +344,9 @@ def _run_main_loop(ctx: _OrchestratorContext) -> int:  # noqa: C901
             terminal_ui.ui.stop_and_capture()
             logger.info("\n👋 Exiting PokePoke - no work items available.")
             ctx.run_logger.log_orchestrator("No work items available - exiting")
-            ctx.finalize()
+            # Check if we should run post-mortem before exiting
+            run_pm = _should_run_post_mortem(ctx.session_stats, "empty ready queue")
+            ctx.finalize(run_post_mortem=run_pm)
             return 0
         ctx.run_logger.log_orchestrator(f"Selected item: {selected_item.id} - {selected_item.title}")
         set_terminal_banner(format_work_item_banner(selected_item.id, selected_item.title))

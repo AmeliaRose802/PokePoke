@@ -249,6 +249,14 @@ class PerformanceThresholdsConfig:
         self.min_success_rate = _clamp(_cls, "min_success_rate", self.min_success_rate, minimum=0.0, maximum=1.0)
 
 @dataclass
+class PostMortemConfig:
+    """Configuration for the post-mortem analysis agent."""
+    enabled: bool = False
+    timeout_minutes: int = 10
+    min_pattern_frequency: int = 2
+    max_items: int = 5
+
+@dataclass
 class EconomyModeConfig:
     """Economy mode: route tasks to models based on complexity tags in labels."""
     enabled: bool = False
@@ -298,6 +306,7 @@ class ProjectConfig:
     assignment: AssignmentConfig = field(default_factory=AssignmentConfig)
     otel: OtelConfig = field(default_factory=OtelConfig)
     economy_mode: EconomyModeConfig = field(default_factory=EconomyModeConfig)
+    post_mortem: PostMortemConfig = field(default_factory=PostMortemConfig)
     performance_thresholds: PerformanceThresholdsConfig = field(
         default_factory=PerformanceThresholdsConfig,
     )

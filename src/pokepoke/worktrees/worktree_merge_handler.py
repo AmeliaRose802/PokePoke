@@ -15,7 +15,7 @@ from pokepoke.types import AgentStats, BeadsWorkItem
 from pokepoke.utils.constants import WORKTREE_DIR, WORKTREE_TASK_PREFIX
 from pokepoke.worktrees.coordination import merge_lock
 from pokepoke.worktrees.worktree_cleanup import add_uncleaned_worktree
-from pokepoke.worktrees.worktrees import MergeResult, merge_worktree
+from pokepoke.worktrees.worktrees import merge_worktree
 
 logger = logging.getLogger(__name__)
 

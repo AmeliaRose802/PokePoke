@@ -13,8 +13,10 @@ from pokepoke.orchestration.orchestrator import (
     _OrchestratorContext,
     _record_item_result,
     _run_main_loop,
+    _run_post_mortem_if_enabled,
     _run_preflight,
     _setup_orchestrator,
+    _should_run_post_mortem,
     run_orchestrator,
 )
 from pokepoke.otel_config import OtelConfig
@@ -608,3 +610,88 @@ class TestRunMainLoop:
     def test_repo_check_failure(self, mock_preflight, mock_repo, mock_shutdown, mock_ui):
         ctx = self._make_ctx()
         assert _run_main_loop(ctx) == 1
+
+
+# ── _should_run_post_mortem ────────────────────────────────────────
+
+class TestShouldRunPostMortem:
+    @patch("pokepoke.orchestration.orchestrator.load_config")
+    def test_disabled_returns_false(self, mock_load):
+        from pokepoke.config import PostMortemConfig, ProjectConfig
+        mock_load.return_value = ProjectConfig(post_mortem=PostMortemConfig(enabled=False))
+        stats = SessionStats(agent_stats=AgentStats())
+        assert _should_run_post_mortem(stats, "circuit breaker") is False
+
+    @patch("pokepoke.orchestration.orchestrator.load_config")
+    def test_circuit_breaker_triggers(self, mock_load):
+        from pokepoke.config import PostMortemConfig, ProjectConfig
+        mock_load.return_value = ProjectConfig(post_mortem=PostMortemConfig(enabled=True))
+        stats = SessionStats(agent_stats=AgentStats())
+        assert _should_run_post_mortem(stats, "circuit breaker tripped") is True
+
+    @patch("pokepoke.orchestration.orchestrator.load_config")
+    def test_consecutive_triggers(self, mock_load):
+        from pokepoke.config import PostMortemConfig, ProjectConfig
+        mock_load.return_value = ProjectConfig(post_mortem=PostMortemConfig(enabled=True))
+        stats = SessionStats(agent_stats=AgentStats())
+        assert _should_run_post_mortem(stats, "consecutive failures") is True
+
+    @patch("pokepoke.orchestration.orchestrator.load_config")
+    def test_low_success_rate_triggers(self, mock_load):
+        from pokepoke.config import PostMortemConfig, ProjectConfig
+        mock_load.return_value = ProjectConfig(post_mortem=PostMortemConfig(enabled=True))
+        stats = SessionStats(agent_stats=AgentStats())
+        stats.items_completed = 1
+        stats.agent_run_counts["work"] = 5  # 1 success out of 5 = 20%
+        assert _should_run_post_mortem(stats, "empty ready queue") is True
+
+    @patch("pokepoke.orchestration.orchestrator.load_config")
+    def test_high_success_rate_no_trigger(self, mock_load):
+        from pokepoke.config import PostMortemConfig, ProjectConfig
+        mock_load.return_value = ProjectConfig(post_mortem=PostMortemConfig(enabled=True))
+        stats = SessionStats(agent_stats=AgentStats())
+        stats.items_completed = 4
+        stats.agent_run_counts["work"] = 5  # 4 success out of 5 = 80%
+        assert _should_run_post_mortem(stats, "empty ready queue") is False
+
+    @patch("pokepoke.orchestration.orchestrator.load_config")
+    def test_too_few_items_no_trigger(self, mock_load):
+        from pokepoke.config import PostMortemConfig, ProjectConfig
+        mock_load.return_value = ProjectConfig(post_mortem=PostMortemConfig(enabled=True))
+        stats = SessionStats(agent_stats=AgentStats())
+        stats.items_completed = 0
+        stats.agent_run_counts["work"] = 2  # Only 2 runs, below threshold of 3
+        assert _should_run_post_mortem(stats, "something") is False
+
+
+# ── _run_post_mortem_if_enabled ────────────────────────────────────
+
+class TestRunPostMortemIfEnabled:
+    @patch("pokepoke.agents.post_mortem_agent.run_post_mortem_agent")
+    def test_successful_run_with_items(self, mock_run):
+        mock_run.return_value = {"items_created": 2, "items_fixed": 1}
+        run_logger = MagicMock()
+        run_logger.get_run_dir.return_value = MagicMock()
+        stats = SessionStats(agent_stats=AgentStats())
+        _run_post_mortem_if_enabled(run_logger, stats)
+        mock_run.assert_called_once()
+
+    @patch("pokepoke.agents.post_mortem_agent.run_post_mortem_agent")
+    def test_run_with_no_items_created(self, mock_run):
+        mock_run.return_value = {"items_created": 0}
+        run_logger = MagicMock()
+        run_logger.get_run_dir.return_value = MagicMock()
+        stats = SessionStats(agent_stats=AgentStats())
+        _run_post_mortem_if_enabled(run_logger, stats)
+        mock_run.assert_called_once()
+
+    def test_handles_exception(self):
+        run_logger = MagicMock()
+        run_logger.get_run_dir.return_value = MagicMock()
+        stats = SessionStats(agent_stats=AgentStats())
+        with patch(
+            "pokepoke.agents.post_mortem_agent.run_post_mortem_agent",
+            side_effect=RuntimeError("boom"),
+        ):
+            _run_post_mortem_if_enabled(run_logger, stats)
+        run_logger.log_orchestrator.assert_called()
