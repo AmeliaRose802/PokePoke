@@ -198,12 +198,19 @@ class TestGateRejectionCapExceeded:
                     return_value=5,
                 ),
                 patch(f"{_WF}.defer_item"),
+                patch(f"{_WF}._maybe_decompose") as mock_decompose,
             ):
                 result = process_work_item(item, interactive=False)
 
             assert result.success is False
             # Should not have tried to invoke copilot
             mocks['invoke'].assert_not_called()
+            # Should still attempt decomposition before failing
+            mock_decompose.assert_called_once()
+            call_args = mock_decompose.call_args
+            assert call_args[0][0].id == "task-capped"
+            assert call_args[0][1] == 0  # copilot_failure_count
+            assert call_args[0][2] == 5  # existing_rejection_count
 
     def test_defers_item_when_cap_exceeded(self) -> None:
         """The item should be deferred with a reason when cap is exceeded."""
@@ -215,6 +222,7 @@ class TestGateRejectionCapExceeded:
                     return_value=3,
                 ),
                 patch(f"{_WF}.defer_item") as mock_defer,
+                patch(f"{_WF}._maybe_decompose"),
             ):
                 result = process_work_item(item, interactive=False)
 

@@ -59,7 +59,9 @@ class TestPreLoopGateRejectionDefer:
             return_value=3,
         ), patch(
             "pokepoke.orchestration.workflow.defer_item"
-        ) as mock_defer:
+        ) as mock_defer, patch(
+            "pokepoke.orchestration.workflow._maybe_decompose"
+        ) as mock_decompose:
             result = process_work_item(_item(), interactive=False)
 
             assert result.success is False
@@ -69,6 +71,8 @@ class TestPreLoopGateRejectionDefer:
             # Verify the defer reason mentions decomposition
             defer_reason = mock_defer.call_args[0][1]
             assert "decomposition" in defer_reason.lower()
+            # _maybe_decompose must be called before the early return
+            mock_decompose.assert_called_once()
 
     @patch("pokepoke.orchestration.workflow.unregister_agent")
     @patch("pokepoke.orchestration.workflow.register_agent")

@@ -98,6 +98,7 @@ def process_work_item(  # noqa: C901
             reason = f"Exceeded gate rejection cap ({existing_rejection_count}/{max_gate_rejections})"
             logger.error(f"\n\u274c Item {item.id} has {existing_rejection_count} gate rejections (cap: {max_gate_rejections}). Auto-deferring to backlog.")
             _defer(item.id, f"{reason}. Item likely too complex for a single agent session — needs decomposition.")
+            _maybe_decompose(item, 0, existing_rejection_count, config)
             _log_failure(run_logger, item_logger)
             return _fail_result(failure_reason=reason)
 
