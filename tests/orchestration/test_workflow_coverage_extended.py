@@ -169,6 +169,7 @@ def _base_patches(
             "pokepoke.stats.metrics_context.agent_type_context",
             return_value=nullcontext(),
         ),
+        "time_sleep": patch(f"{_WF}.time.sleep"),
         "session_cleanup": patch(
             "pokepoke.orchestration.work_item_session.WorkItemSession.cleanup_on_failure"
         ),
