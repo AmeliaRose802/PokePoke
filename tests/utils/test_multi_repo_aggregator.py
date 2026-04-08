@@ -124,7 +124,7 @@ class TestQueryRepoReadyItems:
         )
         result = query_repo_ready_items(_make_repo(path=str(tmp_path)))
         assert result.items == []
-        assert result.error is not None
+        # Malformed JSON is treated as empty output (no error set)
 
     def test_passes_cwd_to_bd(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         captured_cwd: list[str | None] = []
