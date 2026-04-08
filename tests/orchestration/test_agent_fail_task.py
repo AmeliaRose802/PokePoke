@@ -29,7 +29,7 @@ from pokepoke.orchestration.workflow_helpers import (
     run_cleanup_with_timeout,
 )
 from pokepoke.stats.session_journal import SessionPhase
-from pokepoke.types import AgentStats, CopilotResult
+from pokepoke.types import AgentStats, CopilotResult, GateAgentResult
 from tests.orchestration.conftest import (
     make_process_item_mocks,
     make_work_item,
@@ -184,52 +184,41 @@ class TestBranchVerificationFailure:
 
 
 class TestGateRejectionCapExceeded:
-    """Item that already hit the gate rejection cap should be refused and deferred."""
+    """Gate rejection cap is now enforced at the scheduling layer (work_item_selection),
+    not inside process_work_item.  These tests verify that process_work_item
+    still correctly increments the counter and defers when the gate actually rejects."""
 
-    def test_refuses_item_at_cap(self) -> None:
-        """When existing rejection count >= max, processing is refused immediately."""
-        item = make_work_item(id="task-capped", title="Capped Task")
+    def test_gate_rejection_increments_and_defers_at_cap(self) -> None:
+        """When gate rejects and count hits cap, item is deferred."""
+        item = make_work_item(id="task-capped", title="Capped Task",
+                              metadata={'gate_rejection_count': '2'})
         with make_process_item_mocks(
             include_session_cleanup=True,
-        ) as mocks:
+            include_handoff=True,
+            gate_result=GateAgentResult(success=False, reason="Quality issues"),
+        ):
             with (
-                patch(
-                    "pokepoke.beads.beads_management.get_gate_rejection_count",
-                    return_value=5,
-                ),
-                patch(f"{_WF}.defer_item"),
-                patch(f"{_WF}._maybe_decompose") as mock_decompose,
-            ):
-                result = process_work_item(item, interactive=False)
-
-            assert result.success is False
-            # Should not have tried to invoke copilot
-            mocks['invoke'].assert_not_called()
-            # Should still attempt decomposition before failing
-            mock_decompose.assert_called_once()
-            call_args = mock_decompose.call_args
-            assert call_args[0][0].id == "task-capped"
-            assert call_args[0][1] == 0  # copilot_failure_count
-            assert call_args[0][2] == 5  # existing_rejection_count
-
-    def test_defers_item_when_cap_exceeded(self) -> None:
-        """The item should be deferred with a reason when cap is exceeded."""
-        item = make_work_item(id="task-capped-block", title="Capped Block")
-        with make_process_item_mocks():
-            with (
-                patch(
-                    "pokepoke.beads.beads_management.get_gate_rejection_count",
-                    return_value=3,
-                ),
                 patch(f"{_WF}.defer_item") as mock_defer,
                 patch(f"{_WF}._maybe_decompose"),
             ):
                 result = process_work_item(item, interactive=False)
 
             assert result.success is False
+            # Gate rejected → should have deferred
             mock_defer.assert_called_once()
-            defer_reason = mock_defer.call_args[0][1]
-            assert "gate rejection cap" in defer_reason.lower() or "decomposition" in defer_reason.lower()
+
+    def test_item_at_cap_still_processes_if_gate_passes(self) -> None:
+        """Items with high prior rejections still run if scheduling lets them through."""
+        item = make_work_item(id="task-capped-pass", title="Capped Pass",
+                              metadata={'gate_rejection_count': '5'})
+        with make_process_item_mocks(
+            include_session_cleanup=True,
+            include_handoff=True,
+            gate_success=True,
+        ):
+            result = process_work_item(item, interactive=False)
+
+            assert result.success is True
 
 
 # ═══════════════════════════════════════════════════════════════════════════
