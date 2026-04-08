@@ -1,7 +1,7 @@
 """Type definitions for PokePoke orchestrator."""
 import threading
 from dataclasses import dataclass, field, is_dataclass, replace
-from typing import Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Protocol
 
 from pokepoke.agents.agent_types import (
     AGENT_TYPES,
@@ -19,6 +19,9 @@ from pokepoke.work_agent_outcome import (
 from pokepoke.work_agent_outcome import (
     parse_work_agent_outcome as parse_work_agent_outcome,
 )
+
+if TYPE_CHECKING:
+    from pokepoke.utils.logging_utils import RunLogger
 
 
 @dataclass
@@ -158,6 +161,41 @@ class WorkItemResult:
     gate_agent_runs: int = 0
     model_completion: ModelCompletionRecord | None = None
     failure_reason: str | None = None
+
+
+class RecordFn(Protocol):
+    """Protocol for work item result recording callbacks.
+
+    Used in parallel worker finalization to record completed work item results.
+    The return value is ignored by callers.
+    """
+    def __call__(
+        self,
+        item: BeadsWorkItem,
+        result: WorkItemResult,
+        session_stats: "SessionStats",
+        run_logger: "RunLogger",
+    ) -> Any:
+        """Record the result of processing a work item.
+
+        Parameters
+        ----------
+        item : BeadsWorkItem
+            The work item that was processed.
+        result : WorkItemResult
+            The result of processing the work item.
+        session_stats : SessionStats
+            Session statistics to update.
+        run_logger : RunLogger
+            Logger for orchestrator messages.
+
+        Returns
+        -------
+        Any
+            Return value is ignored by callers (may return None or tuple).
+        """
+        ...
+
 
 class _AgentRunCountsMixin:
     """Shared agent-run-count accessors for frozen and mutable stats."""
