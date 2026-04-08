@@ -12,7 +12,7 @@ truth.  Each constant is documented with its unit and purpose.
 DEFAULT_MIN_DISK_SPACE_GB = 1.0  # Default disk space requirement (GB)
 DEFAULT_LOCK_TIMEOUT_SECONDS = 30.0  # Default lock acquisition timeout (seconds)
 DEFAULT_WORKTREE_TEST_TIMEOUT = 60.0  # Default worktree operation test timeout (seconds)
-DEFAULT_MAX_ORPHAN_WORKTREES = 10  # Default max orphan worktrees before cleanup
+DEFAULT_MAX_ORPHAN_WORKTREES = 50  # Default max orphan worktrees before cleanup
 DEFAULT_GIT_OPERATION_TIMEOUT = 30.0  # Default git operation timeout (seconds)
 DEFAULT_MAX_REPAIR_ATTEMPTS = 3  # Default repair attempts before giving up
 
