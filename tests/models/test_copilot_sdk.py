@@ -663,6 +663,10 @@ class TestInvokeCopilotSDKAsync:
         assert "excluded_tools" in captured_config
         assert "write" in captured_config["excluded_tools"]
         assert "edit" in captured_config["excluded_tools"]
+        # Verify command execution tools are also excluded
+        assert "create" in captured_config["excluded_tools"]
+        assert "powershell" in captured_config["excluded_tools"]
+        assert "bash" in captured_config["excluded_tools"]
 
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     @patch('pokepoke.models.copilot_sdk.build_prompt_from_work_item')
