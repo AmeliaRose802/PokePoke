@@ -376,6 +376,11 @@ def _block_real_bd_subprocess(request, monkeypatch):
 
     monkeypatch.setattr("pokepoke.beads.beads_query._run_bd", _blocked, raising=False)
     monkeypatch.setattr("pokepoke.beads.beads_management._run_bd", _blocked, raising=False)
+    monkeypatch.setattr("pokepoke.beads.beads_metadata._run_bd", _blocked, raising=False)
+    monkeypatch.setattr("pokepoke.beads.beads_hierarchy._run_bd", _blocked, raising=False)
+    monkeypatch.setattr("pokepoke.agents.decomposition_agent._run_bd", _blocked, raising=False)
+    monkeypatch.setattr("pokepoke.agents.post_mortem_issue_creator._run_bd", _blocked, raising=False)
+    monkeypatch.setattr("pokepoke.models.model_sync_beads._run_bd", _blocked, raising=False)
     yield
 
 
