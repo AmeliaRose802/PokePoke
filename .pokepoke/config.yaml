@@ -150,7 +150,7 @@ performance_thresholds:
   min_memory_mb: 256.0
   min_success_rate: 0.5
 repos: []
-startup_cleanup_enabled: true
+startup_cleanup_enabled: false
 stale_worktree_commit_threshold: 20
 prompt_templates:
   orchestrator: orchestrator-work
