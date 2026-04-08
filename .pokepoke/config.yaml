@@ -97,7 +97,7 @@ preflight_health:
   min_disk_space_gb: 1.0
   lock_timeout_seconds: 30.0
   worktree_test_timeout: 60.0
-  max_orphan_worktrees: 10
+  max_orphan_worktrees: 50
   git_operation_timeout: 30.0
   enable_self_repair: true
   max_repair_attempts: 3
