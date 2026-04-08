@@ -403,3 +403,48 @@ def get_gate_rejection_stats(self: DesktopAPI) -> dict[str, Any]:
         self._gate_rejection_cache_time = now  # type: ignore[attr-defined]
 
     return result
+
+
+def get_process_diagnostics(self: DesktopAPI, limit: int = 100) -> list[dict[str, Any]]:
+    """Return recent process resource usage snapshots for visualization.
+
+    Reads from tool_diagnostics.log in the current run directory.
+    Returns up to *limit* most recent snapshots with timestamp, memory,
+    and process counts.
+
+    Returns empty list if:
+    - No active session
+    - Log file doesn't exist yet
+    - No snapshots have been captured
+    """
+    from pokepoke.stats.process_diagnostics import get_latest_diagnostics
+    from pokepoke.utils.constants import POKEPOKE_DIR
+
+    with self._lock:
+        live = self._live_session_stats
+
+    if live is None:
+        return []
+
+    try:
+        logs_dir = POKEPOKE_DIR / "logs"
+
+        if not logs_dir.exists():
+            return []
+
+        run_dirs = sorted(
+            [d for d in logs_dir.iterdir() if d.is_dir() and d.name.startswith("run_")],
+            key=lambda d: d.stat().st_mtime,
+            reverse=True,
+        )
+
+        if not run_dirs:
+            return []
+
+        run_dir = run_dirs[0]
+        snapshots = get_latest_diagnostics(run_dir, limit=limit)
+        return [s.to_dict() for s in snapshots]
+
+    except Exception as e:
+        logger.debug("Failed to load process diagnostics: %s", e)
+        return []

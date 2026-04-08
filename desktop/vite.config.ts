@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   build: {
     // Desktop app bundled with pywebview — large chunks are fine
-    chunkSizeWarningLimit: 600,
+    chunkSizeWarningLimit: 1000,
   },
   server: {
     // Allow pywebview to connect from any origin

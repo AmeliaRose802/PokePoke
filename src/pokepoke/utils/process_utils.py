@@ -160,45 +160,9 @@ def kill_orphaned_copilot_processes(
         return 0
 
 
-def log_process_tree_snapshot(
-    tool_name: str, args_str: str, elapsed: float, handler: Any = None,
-) -> None:
-    """Capture child process tree when a tool timeout fires."""
-    if os.name != 'nt':
-        return
-    try:
-        result = subprocess.run(
-            ['tasklist', '/FI', 'IMAGENAME eq copilot.exe', '/FO', 'CSV'],
-            capture_output=True, text=True, timeout=5,
-            encoding='utf-8', errors='replace',
-        )
-        lines = result.stdout.strip().split('\n')
-        if len(lines) <= 1:
-            logger.info("TOOL_TIMEOUT_DIAG: No copilot.exe processes found")
-            return
-        copilot_pids: list[int] = []
-        for line in lines[1:]:
-            parts = line.strip().strip('"').split('","')
-            if len(parts) >= 2:
-                with contextlib.suppress(ValueError):
-                    copilot_pids.append(int(parts[1]))
-        for cpid in copilot_pids:
-            child_result = subprocess.run(
-                ['wmic', 'process', 'where', f'ParentProcessId={cpid}',
-                 'get', 'ProcessId,Name,CommandLine', '/format:list'],
-                capture_output=True, text=True, timeout=5,
-                encoding='utf-8', errors='replace',
-            )
-            children = child_result.stdout.strip()
-            suffix = f"children:\n{children}" if children else "— no child processes"
-            logger.info("TOOL_TIMEOUT_DIAG: copilot_pid=%d tool=%s elapsed=%.0fs %s", cpid, tool_name, elapsed, suffix)
-        if handler and hasattr(handler, '_item_logger') and handler._item_logger:
-            handler._item_logger.log_error(
-                f"TOOL_TIMEOUT_DIAG: {len(copilot_pids)} copilot process(es), "
-                f"tool={tool_name}, elapsed={elapsed:.0f}s"
-            )
-    except Exception as e:
-        logger.debug("Failed to capture process tree snapshot: %s", e)
+# Re-export from process_snapshot (enhanced version with CPU/memory metrics)
+from pokepoke.utils.process_snapshot import log_process_tree_snapshot as log_process_tree_snapshot
+
 
 def kill_process_tree(pid: int) -> bool:
     """Kill a process and its entire child tree.

@@ -22,7 +22,7 @@ import { SetupWizard } from "./components/SetupWizard";
 import { StatsBar } from "./components/StatsBar";
 import { StatsPage } from "./components/StatsPage";
 import { WorkItemHeader } from "./components/WorkItemHeader";
-import type { ConcurrencyTimeline, GateRejectionStats, ModelHistoryEntry } from "./types";
+import type { ConcurrencyTimeline, GateRejectionStats, ModelHistoryEntry, ProcessSnapshot } from "./types";
 import { useBridge } from "./useBridge";
 import { useCollapsibleBanner } from "./useCollapsibleBanner";
 import { useDocumentTitle } from "./useDocumentTitle";
@@ -35,6 +35,7 @@ function App() {
   const [showStatsPage, setShowStatsPage] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [modelHistory, setModelHistory] = useState<ModelHistoryEntry[]>([]);
+  const [processDiagnostics, setProcessDiagnostics] = useState<ProcessSnapshot[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [concurrencyTimeline, setConcurrencyTimeline] = useState<ConcurrencyTimeline | null>(null);
@@ -88,7 +89,7 @@ function App() {
     setShowSettings(false);
   }, []);
 
-  const { getModelHistory, getConcurrencyTimeline, getGateRejectionStats } = bridge;
+  const { getModelHistory, getProcessDiagnostics, getConcurrencyTimeline, getGateRejectionStats } = bridge;
 
   const handleSpawnAgent = useCallback(async () => {
     const result = await bridge.spawnAgent();
@@ -111,14 +112,18 @@ function App() {
     setHistoryLoading(true);
     setHistoryError(null);
     try {
-      const history = await getModelHistory(200);
+      const [history, diagnostics] = await Promise.all([
+        getModelHistory(200),
+        getProcessDiagnostics(100),
+      ]);
       setModelHistory(history);
+      setProcessDiagnostics(diagnostics);
     } catch (error) {
       setHistoryError(error instanceof Error ? error.message : String(error));
     } finally {
       setHistoryLoading(false);
     }
-  }, [getModelHistory]);
+  }, [getModelHistory, getProcessDiagnostics]);
 
   const loadConcurrencyTimeline = useCallback(async () => {
     const data = await getConcurrencyTimeline();
@@ -349,6 +354,7 @@ function App() {
           stats={bridge.stats}
           modelLeaderboard={bridge.modelLeaderboard}
           modelHistory={modelHistory}
+          processDiagnostics={processDiagnostics}
           historyLoading={historyLoading}
           historyError={historyError}
           onRefreshHistory={loadModelHistory}

@@ -74,6 +74,15 @@ export interface ModelHistoryEntry extends ModelCompletionRecord {
   item_type?: string; // Alias for issue_type (backward compatibility)
 }
 
+/** Process resource usage snapshot from tool_diagnostics.log */
+export interface ProcessSnapshot {
+  timestamp: string; // ISO format timestamp
+  copilot_count: number; // Number of copilot.exe processes
+  child_count: number; // Total child processes across all copilot instances
+  total_memory_mb: number; // Total memory usage in MB
+  cpu_percent: number; // Total CPU usage percentage across copilot processes
+}
+
 /** Session-level statistics from the orchestrator */
 export interface SessionStats {
   elapsed_time: number;

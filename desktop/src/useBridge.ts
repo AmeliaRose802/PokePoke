@@ -35,6 +35,7 @@ import type {
   SetupStatus,
   WorkItem,
 } from "./types";
+import type { ProcessSnapshot } from "./types";
 import { useAgentBridge } from "./useAgentBridge";
 import type { SetupBridgeMethods } from "./useSetupBridge";
 import { useSetupBridge } from "./useSetupBridge";
@@ -104,6 +105,7 @@ interface PyWebViewAPI {
   get_repository_name(): Promise<string>;
   get_stats(): Promise<SessionStats | null>;
   get_model_history(limit?: number): Promise<ModelHistoryEntry[]>;
+  get_process_diagnostics(limit?: number): Promise<ProcessSnapshot[]>;
   list_prompts(): Promise<PromptInfo[]>;
   get_prompt(name: string): Promise<PromptDetail>;
   save_prompt(name: string, content: string): Promise<{ path: string; saved: boolean }>;
@@ -186,6 +188,7 @@ export interface BridgeStateBase {
   saveConfig: (config: ProjectConfig) => Promise<boolean>;
   getAvailableModels: () => Promise<AvailableModelsResponse | null>;
   getModelHistory: (limit?: number) => Promise<ModelHistoryEntry[]>;
+  getProcessDiagnostics: (limit?: number) => Promise<ProcessSnapshot[]>;
   getConcurrencyTimeline: () => Promise<ConcurrencyTimeline | null>;
   getGateRejectionStats: () => Promise<GateRejectionStats | null>;
   requestStopAfterCurrent: () => Promise<void>;
@@ -280,6 +283,16 @@ export function useBridge(): BridgeState {
     try {
       const raw = await window.pywebview.api.get_model_history(limit);
       return raw.map((e, i) => validatePayload(ModelHistoryEntrySchema, e, `getModelHistory[${i}]`));
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const getProcessDiagnostics = useCallback(async (limit = 100): Promise<ProcessSnapshot[]> => {
+    if (!window.pywebview?.api) return [];
+    try {
+      const raw = await window.pywebview.api.get_process_diagnostics(limit);
+      return Array.isArray(raw) ? raw : [];
     } catch {
       return [];
     }
@@ -491,6 +504,7 @@ export function useBridge(): BridgeState {
     saveConfig,
     getAvailableModels,
     getModelHistory,
+    getProcessDiagnostics,
     getConcurrencyTimeline,
     getGateRejectionStats,
     requestStopAfterCurrent,

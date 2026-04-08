@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { useCopyCompletedItems } from "../hooks/useCopyCompletedItems";
-import type { AgentInfo, ConcurrencyTimeline, GateRejectionStats, ModelHistoryEntry, ModelPerformanceSummary, SessionStats } from "../types";
+import type { AgentInfo, ConcurrencyTimeline, GateRejectionStats, ModelHistoryEntry, ModelPerformanceSummary, ProcessSnapshot, SessionStats } from "../types";
 import { buildAgentActivity, normalizeAgentSegments, type NormalizedAgentSegment } from "../utils/agentActivity";
 import { getAgentType } from "../utils/agentHelpers";
 import { getInProgressItems } from "../utils/inProgressItems";
@@ -23,12 +23,14 @@ import { ConcurrencyChart } from "./ConcurrencyChart";
 import { GateRejectionsSection } from "./GateRejectionsSection";
 import { InProgressItemsSection } from "./InProgressItemsSection";
 import { ModelTable } from "./ModelTable";
+import { ProcessUsageChart } from "./ProcessUsageChart";
 import { TrendChart } from "./TrendChart";
 
 interface StatsPageProps {
   stats: SessionStats | null;
   modelLeaderboard: Record<string, ModelPerformanceSummary>;
   modelHistory: ModelHistoryEntry[];
+  processDiagnostics: ProcessSnapshot[];
   historyLoading: boolean;
   historyError: string | null;
   onRefreshHistory: () => void;
@@ -50,6 +52,7 @@ export function StatsPage({
   stats,
   modelLeaderboard,
   modelHistory,
+  processDiagnostics,
   historyLoading,
   historyError,
   onRefreshHistory,
@@ -57,7 +60,7 @@ export function StatsPage({
   agents = [],
   concurrencyTimeline,
   gateRejectionStats,
-}: StatsPageProps) {
+}: StatsPageProps){
   const agent = stats?.agent_stats;
   const [completedItems, doneCount] = [getCompletedItems(stats), getDoneCount(stats)];
   const inProgressItems = useMemo(() => getInProgressItems(agents), [agents]);
@@ -304,6 +307,20 @@ export function StatsPage({
 
           {gateRejectionStats && gateRejectionStats.totals.total_checks > 0 && (
             <GateRejectionsSection gateStats={gateRejectionStats} />
+          )}
+
+          {processDiagnostics.length > 0 && (
+            <section>
+              <div className="stats-panel-card">
+                <div className="stats-panel-card-header">
+                  <h3>Resource usage over time</h3>
+                  <span className="stats-panel-subtitle">
+                    Process count and memory during PokePoke run (snapshots every 60s)
+                  </span>
+                </div>
+                <ProcessUsageChart data={processDiagnostics} />
+              </div>
+            </section>
           )}
 
           {agentTokenSegments.length > 0 && (

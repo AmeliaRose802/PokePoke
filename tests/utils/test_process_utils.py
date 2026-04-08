@@ -712,63 +712,70 @@ class TestCacheLockThreadSafety:
 
 
 class TestLogProcessTreeSnapshot:
-    """Tests for log_process_tree_snapshot."""
+    """Tests for log_process_tree_snapshot (now in process_snapshot module)."""
 
-    @patch('pokepoke.utils.process_utils.os')
+    SNAP = 'pokepoke.utils.process_snapshot'
+
+    @patch(f'{SNAP}.os')
     def test_returns_immediately_on_non_windows(self, mock_os: MagicMock) -> None:
         mock_os.name = 'posix'
         log_process_tree_snapshot('test_tool', 'args', 60.0)
-        # Should return immediately without any subprocess calls
 
-    @patch('pokepoke.utils.process_utils.os')
-    @patch('pokepoke.utils.process_utils.subprocess.run')
+    @patch(f'{SNAP}.os')
+    @patch(f'{SNAP}.subprocess.run')
     def test_logs_no_processes_found(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
         mock_os.name = 'nt'
-        mock_run.return_value = MagicMock(stdout='INFO: No tasks')
+        mock_run.return_value = MagicMock(stdout='Node,KernelModeTime,ProcessId,UserModeTime,WorkingSetSize')
         log_process_tree_snapshot('test_tool', 'args', 60.0)
-        # Should log "No copilot.exe processes found"
 
-    @patch('pokepoke.utils.process_utils.os')
-    @patch('pokepoke.utils.process_utils.subprocess.run')
-    def test_logs_process_tree_with_children(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+    @patch(f'{SNAP}.time')
+    @patch(f'{SNAP}.os')
+    @patch(f'{SNAP}.subprocess.run')
+    def test_logs_process_tree_with_children(self, mock_run: MagicMock, mock_os: MagicMock, mock_time: MagicMock) -> None:
         mock_os.name = 'nt'
-        # First call returns copilot PIDs, second returns children
-        tasklist_output = '"Image Name","PID"\n"copilot.exe","1234"'
-        wmic_output = 'Name=git.exe\nProcessId=5678\nCommandLine=git status'
+        mock_os.cpu_count.return_value = 4
+        mock_time.strftime.return_value = '2026-01-01 00:00:00'
+        wmic_csv = 'Node,KernelModeTime,ProcessId,UserModeTime,WorkingSetSize\nPC,1000000,1234,2000000,104857600'
+        child_output = 'Name=git.exe\nProcessId=5678\nCommandLine=git status'
         mock_run.side_effect = [
-            MagicMock(stdout=tasklist_output),
-            MagicMock(stdout=wmic_output),
+            MagicMock(stdout=wmic_csv),
+            MagicMock(stdout=child_output),
         ]
         log_process_tree_snapshot('test_tool', 'args', 60.0)
         assert mock_run.call_count == 2
 
-    @patch('pokepoke.utils.process_utils.os')
-    @patch('pokepoke.utils.process_utils.subprocess.run')
-    def test_logs_process_tree_without_children(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+    @patch(f'{SNAP}.time')
+    @patch(f'{SNAP}.os')
+    @patch(f'{SNAP}.subprocess.run')
+    def test_logs_process_tree_without_children(self, mock_run: MagicMock, mock_os: MagicMock, mock_time: MagicMock) -> None:
         mock_os.name = 'nt'
-        tasklist_output = '"Image Name","PID"\n"copilot.exe","1234"'
+        mock_os.cpu_count.return_value = 4
+        mock_time.strftime.return_value = '2026-01-01 00:00:00'
+        wmic_csv = 'Node,KernelModeTime,ProcessId,UserModeTime,WorkingSetSize\nPC,1000000,1234,2000000,104857600'
         mock_run.side_effect = [
-            MagicMock(stdout=tasklist_output),
-            MagicMock(stdout=''),  # No children
+            MagicMock(stdout=wmic_csv),
+            MagicMock(stdout=''),
         ]
         log_process_tree_snapshot('test_tool', 'args', 60.0)
         assert mock_run.call_count == 2
 
-    @patch('pokepoke.utils.process_utils.os')
-    @patch('pokepoke.utils.process_utils.subprocess.run')
+    @patch(f'{SNAP}.os')
+    @patch(f'{SNAP}.subprocess.run')
     def test_handles_exception(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
         mock_os.name = 'nt'
-        mock_run.side_effect = subprocess.TimeoutExpired(cmd='tasklist', timeout=5)
-        # Should not raise
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd='wmic', timeout=5)
         log_process_tree_snapshot('test_tool', 'args', 60.0)
 
-    @patch('pokepoke.utils.process_utils.os')
-    @patch('pokepoke.utils.process_utils.subprocess.run')
-    def test_logs_to_handler_item_logger(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+    @patch(f'{SNAP}.time')
+    @patch(f'{SNAP}.os')
+    @patch(f'{SNAP}.subprocess.run')
+    def test_logs_to_handler_item_logger(self, mock_run: MagicMock, mock_os: MagicMock, mock_time: MagicMock) -> None:
         mock_os.name = 'nt'
-        tasklist_output = '"Image Name","PID"\n"copilot.exe","1234"'
+        mock_os.cpu_count.return_value = 4
+        mock_time.strftime.return_value = '2026-01-01 00:00:00'
+        wmic_csv = 'Node,KernelModeTime,ProcessId,UserModeTime,WorkingSetSize\nPC,1000000,1234,2000000,104857600'
         mock_run.side_effect = [
-            MagicMock(stdout=tasklist_output),
+            MagicMock(stdout=wmic_csv),
             MagicMock(stdout=''),
         ]
         handler = MagicMock()
@@ -776,26 +783,27 @@ class TestLogProcessTreeSnapshot:
         log_process_tree_snapshot('test_tool', 'args', 60.0, handler=handler)
         handler._item_logger.log_error.assert_called_once()
 
-    @patch('pokepoke.utils.process_utils.os')
-    @patch('pokepoke.utils.process_utils.subprocess.run')
-    def test_skips_handler_without_item_logger(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
+    @patch(f'{SNAP}.time')
+    @patch(f'{SNAP}.os')
+    @patch(f'{SNAP}.subprocess.run')
+    def test_skips_handler_without_item_logger(self, mock_run: MagicMock, mock_os: MagicMock, mock_time: MagicMock) -> None:
         mock_os.name = 'nt'
-        tasklist_output = '"Image Name","PID"\n"copilot.exe","1234"'
+        mock_os.cpu_count.return_value = 4
+        mock_time.strftime.return_value = '2026-01-01 00:00:00'
+        wmic_csv = 'Node,KernelModeTime,ProcessId,UserModeTime,WorkingSetSize\nPC,1000000,1234,2000000,104857600'
         mock_run.side_effect = [
-            MagicMock(stdout=tasklist_output),
+            MagicMock(stdout=wmic_csv),
             MagicMock(stdout=''),
         ]
-        handler = MagicMock(spec=[])  # No _item_logger attribute
+        handler = MagicMock(spec=[])
         log_process_tree_snapshot('test_tool', 'args', 60.0, handler=handler)
 
-    @patch('pokepoke.utils.process_utils.os')
-    @patch('pokepoke.utils.process_utils.subprocess.run')
+    @patch(f'{SNAP}.os')
+    @patch(f'{SNAP}.subprocess.run')
     def test_handles_invalid_pid_parsing(self, mock_run: MagicMock, mock_os: MagicMock) -> None:
         mock_os.name = 'nt'
-        # Invalid PID should be suppressed via contextlib.suppress
-        tasklist_output = '"Image Name","PID"\n"copilot.exe","not_a_number"'
-        mock_run.return_value = MagicMock(stdout=tasklist_output)
-        # Should not raise and should handle gracefully
+        wmic_csv = 'Node,KernelModeTime,ProcessId,UserModeTime,WorkingSetSize\nPC,bad,not_a_number,bad,bad'
+        mock_run.return_value = MagicMock(stdout=wmic_csv)
         log_process_tree_snapshot('test_tool', 'args', 60.0)
 
 
