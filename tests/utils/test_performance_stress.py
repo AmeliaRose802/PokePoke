@@ -421,48 +421,48 @@ class TestModelStatsScaling:
 class TestMemoryBackpressure:
     """Verify memory-based slot adjustment thresholds."""
 
-    @patch("pokepoke.utils.process_utils.get_available_memory_mb", return_value=4096)
-    @patch("pokepoke.utils.process_utils.is_memory_pressure", return_value=False)
-    @patch("pokepoke.utils.process_utils.is_memory_critical", return_value=False)
+    @patch("pokepoke.utils.memory_utils.get_available_memory_mb", return_value=4096)
+    @patch("pokepoke.utils.memory_utils.is_memory_pressure", return_value=False)
+    @patch("pokepoke.utils.memory_utils.is_memory_critical", return_value=False)
     def test_no_pressure_preserves_slots(self, *mocks) -> None:
         adjusted, avail = apply_memory_backpressure(8)
         assert adjusted == 8
         assert avail == 4096
 
-    @patch("pokepoke.utils.process_utils.get_available_memory_mb", return_value=1500)
-    @patch("pokepoke.utils.process_utils.is_memory_pressure", return_value=True)
-    @patch("pokepoke.utils.process_utils.is_memory_critical", return_value=False)
+    @patch("pokepoke.utils.memory_utils.get_available_memory_mb", return_value=1500)
+    @patch("pokepoke.utils.memory_utils.is_memory_pressure", return_value=True)
+    @patch("pokepoke.utils.memory_utils.is_memory_critical", return_value=False)
     def test_pressure_throttles_to_1(self, *mocks) -> None:
         adjusted, avail = apply_memory_backpressure(8)
         assert adjusted == 1
         assert avail == 1500
 
-    @patch("pokepoke.utils.process_utils.get_available_memory_mb", return_value=800)
-    @patch("pokepoke.utils.process_utils.is_memory_pressure", return_value=True)
-    @patch("pokepoke.utils.process_utils.is_memory_critical", return_value=True)
+    @patch("pokepoke.utils.memory_utils.get_available_memory_mb", return_value=800)
+    @patch("pokepoke.utils.memory_utils.is_memory_pressure", return_value=True)
+    @patch("pokepoke.utils.memory_utils.is_memory_critical", return_value=True)
     def test_critical_blocks_all(self, *mocks) -> None:
         adjusted, avail = apply_memory_backpressure(8)
         assert adjusted == 0
         assert avail == 800
 
-    @patch("pokepoke.utils.process_utils.get_available_memory_mb", return_value=0)
-    @patch("pokepoke.utils.process_utils.is_memory_pressure", return_value=False)
-    @patch("pokepoke.utils.process_utils.is_memory_critical", return_value=False)
+    @patch("pokepoke.utils.memory_utils.get_available_memory_mb", return_value=0)
+    @patch("pokepoke.utils.memory_utils.is_memory_pressure", return_value=False)
+    @patch("pokepoke.utils.memory_utils.is_memory_critical", return_value=False)
     def test_unknown_memory_passes_through(self, *mocks) -> None:
         adjusted, avail = apply_memory_backpressure(4)
         assert adjusted == 4
         assert avail == 0
 
     def test_zero_slots_unchanged(self) -> None:
-        with patch("pokepoke.utils.process_utils.get_available_memory_mb", return_value=1500), \
-             patch("pokepoke.utils.process_utils.is_memory_pressure", return_value=True), \
-             patch("pokepoke.utils.process_utils.is_memory_critical", return_value=False):
+        with patch("pokepoke.utils.memory_utils.get_available_memory_mb", return_value=1500), \
+             patch("pokepoke.utils.memory_utils.is_memory_pressure", return_value=True), \
+             patch("pokepoke.utils.memory_utils.is_memory_critical", return_value=False):
             adjusted, _ = apply_memory_backpressure(0)
             assert adjusted == 0
 
-    @patch("pokepoke.utils.process_utils.get_available_memory_mb", return_value=1500)
-    @patch("pokepoke.utils.process_utils.is_memory_pressure", return_value=True)
-    @patch("pokepoke.utils.process_utils.is_memory_critical", return_value=False)
+    @patch("pokepoke.utils.memory_utils.get_available_memory_mb", return_value=1500)
+    @patch("pokepoke.utils.memory_utils.is_memory_pressure", return_value=True)
+    @patch("pokepoke.utils.memory_utils.is_memory_critical", return_value=False)
     def test_pressure_caps_high_slot_count(self, *mocks) -> None:
         adjusted, _ = apply_memory_backpressure(16)
         assert adjusted == 1

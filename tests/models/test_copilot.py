@@ -37,7 +37,8 @@ class TestInvokeCopilot:
             cwd=None,
             template_name=None,
             session_id=None,
-            is_resume=False
+            is_resume=False,
+            add_parent_dir=False
         )
 
     @patch('pokepoke.models.ai_backends.get_backend')
@@ -74,6 +75,7 @@ class TestInvokeCopilot:
             cwd=None,
             template_name=None,
             session_id=None,
-            is_resume=False
+            is_resume=False,
+            add_parent_dir=False
         )
 

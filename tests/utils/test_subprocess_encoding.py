@@ -36,10 +36,10 @@ class TestSubprocessEncodingConfig:
         assert kwargs['encoding'] == 'utf-8'
         assert kwargs['errors'] == 'replace'
 
-    @patch('pokepoke.beads.beads_query.subprocess.run')
-    def test_run_bd_uses_utf8_with_replace(self, mock_run):
+    def test_run_bd_uses_utf8_with_replace(self, monkeypatch):
         """beads_query._run_bd uses encoding='utf-8' and errors='replace'."""
-        mock_run.return_value = MagicMock(stdout='[]')
+        mock_run = MagicMock(return_value=MagicMock(stdout='[]'))
+        monkeypatch.setattr('pokepoke.beads.beads_query.subprocess.run', mock_run)
 
         from pokepoke.beads.beads_query import _run_bd
         _run_bd(['ready', '--json'])
@@ -329,48 +329,48 @@ class TestNoneAndEmptyOutputHandling:
 
     @patch('pokepoke.beads.beads_query.subprocess.run')
     def test_get_ready_work_items_handles_subprocess_crash(self, mock_run):
-        """get_ready_work_items returns [] when subprocess raises CalledProcessError."""
+        """get_ready_work_items returns None when subprocess raises CalledProcessError."""
         mock_run.side_effect = subprocess.CalledProcessError(1, 'bd ready', stderr='error \ufffd')
 
         from pokepoke.beads.beads_query import get_ready_work_items
         result = get_ready_work_items()
-        assert result == []
+        assert result is None
 
     @patch('pokepoke.beads.beads_query.subprocess.run')
     def test_get_ready_work_items_handles_timeout(self, mock_run):
-        """get_ready_work_items returns [] on subprocess timeout."""
+        """get_ready_work_items returns None on subprocess timeout."""
         mock_run.side_effect = subprocess.TimeoutExpired('bd ready', 30)
 
         from pokepoke.beads.beads_query import get_ready_work_items
         result = get_ready_work_items()
-        assert result == []
+        assert result is None
 
     @patch('pokepoke.beads.beads_query.subprocess.run')
     def test_get_ready_work_items_handles_unexpected_error(self, mock_run):
-        """get_ready_work_items returns [] on unexpected exceptions."""
+        """get_ready_work_items returns None on unexpected exceptions."""
         mock_run.side_effect = OSError("unexpected")
 
         from pokepoke.beads.beads_query import get_ready_work_items
         result = get_ready_work_items()
-        assert result == []
+        assert result is None
 
     @patch('pokepoke.beads.beads_query.subprocess.run')
-    def test_get_ready_work_items_returns_empty_on_unparseable_json(self, mock_run):
-        """get_ready_work_items returns [] when beads output is not valid JSON."""
+    def test_get_ready_work_items_returns_none_on_unparseable_json(self, mock_run):
+        """get_ready_work_items returns None when beads output is not valid JSON."""
         mock_run.return_value = MagicMock(stdout='Note: not json \ufffd')
 
         from pokepoke.beads.beads_query import get_ready_work_items
         result = get_ready_work_items()
-        assert result == []
+        assert result is None
 
     @patch('pokepoke.beads.beads_query.subprocess.run')
-    def test_get_ready_work_items_returns_empty_when_parse_returns_none(self, mock_run):
-        """get_ready_work_items returns [] when _parse_beads_json returns None."""
+    def test_get_ready_work_items_returns_none_when_parse_returns_none(self, mock_run):
+        """get_ready_work_items returns None when _parse_beads_json returns None."""
         mock_run.return_value = MagicMock(stdout='Warning: no data')
 
         from pokepoke.beads.beads_query import get_ready_work_items
         result = get_ready_work_items()
-        assert result == []
+        assert result is None
 
     @patch('pokepoke.beads.beads_query.subprocess.run')
     def test_get_issue_dependencies_returns_none_on_failure(self, mock_run):

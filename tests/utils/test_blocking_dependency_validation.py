@@ -209,7 +209,7 @@ class TestBlockingDependencyValidation:
             ]
         )
 
-        def mock_get_deps(issue_id):
+        def mock_get_deps(issue_id, **kwargs):
             return {"child-1": child_issue, "parent-1": parent_issue}.get(issue_id)
 
         with patch('pokepoke.beads.beads_query.get_issue_dependencies', side_effect=mock_get_deps):
@@ -243,7 +243,7 @@ class TestBlockingDependencyValidation:
             dependencies=[]
         )
 
-        def mock_get_deps(issue_id):
+        def mock_get_deps(issue_id, **kwargs):
             return {"child-1": child_issue, "parent-1": parent_issue}.get(issue_id)
 
         with patch('pokepoke.beads.beads_query.get_issue_dependencies', side_effect=mock_get_deps):
@@ -301,7 +301,7 @@ class TestBlockingDependencyValidation:
             ]
         )
 
-        def mock_get_deps(issue_id):
+        def mock_get_deps(issue_id, **kwargs):
             return {
                 "grandchild-1": grandchild_issue,
                 "parent-1": parent_issue,
@@ -347,7 +347,7 @@ class TestBlockingDependencyValidation:
             ]
         )
 
-        def mock_get_deps(issue_id):
+        def mock_get_deps(issue_id, **kwargs):
             return {"a": issue_a, "b": issue_b}.get(issue_id)
 
         with patch('pokepoke.beads.beads_query.get_issue_dependencies', side_effect=mock_get_deps):
@@ -389,7 +389,7 @@ class TestBlockingDependencyValidation:
             ]
         )
 
-        def mock_get_deps(issue_id):
+        def mock_get_deps(issue_id, **kwargs):
             return {"child-1": child_issue, "parent-1": parent_issue}.get(issue_id)
 
         with patch('pokepoke.beads.beads_query.get_issue_dependencies', side_effect=mock_get_deps):
