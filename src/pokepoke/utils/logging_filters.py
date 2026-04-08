@@ -33,13 +33,13 @@ class WorkItemFilter(logging.Filter):
 
 class EventFilter(logging.Filter):
     """Filter for important events: submissions, completions, errors, warnings.
-    
+
     Routes messages to orchestrator-events.log. Accepts:
     - WARNING and ERROR level messages
     - INFO messages containing keywords: 'Started processing', 'completed',
       'Submitted', 'SUCCESS', 'FAILURE', 'Error', 'Failed'
     """
-    
+
     EVENT_KEYWORDS = (
         'Started processing',
         'completed',
@@ -50,29 +50,34 @@ class EventFilter(logging.Filter):
         'Failed',
         'Entering idle',
         'Exiting idle',
+        'Run Summary',
+        'Items completed',
+        'Total agent requests',
+        'Total time',
+        'Session stats',
     )
-    
+
     def filter(self, record: logging.LogRecord) -> bool:
         # Accept all warnings and errors
         if record.levelno >= logging.WARNING:
             return True
-        
+
         # Accept INFO messages with event keywords
         if record.levelno == logging.INFO:
             msg = record.getMessage()
             return any(keyword in msg for keyword in self.EVENT_KEYWORDS)
-        
+
         # Reject DEBUG and other levels
         return False
 
 
 class MaintenanceFilter(logging.Filter):
     """Filter for maintenance messages: cleanup locks, dirty repo waits, merge locks.
-    
+
     Routes messages to orchestrator-maintenance.log. Accepts DEBUG/INFO messages
     containing maintenance keywords.
     """
-    
+
     MAINTENANCE_KEYWORDS = (
         'Cleanup agent still holding lock',
         'still holding lock',
@@ -82,7 +87,7 @@ class MaintenanceFilter(logging.Filter):
         'merge lock',
         '[MAINTENANCE:',
     )
-    
+
     def filter(self, record: logging.LogRecord) -> bool:
         msg = record.getMessage()
         return any(keyword in msg for keyword in self.MAINTENANCE_KEYWORDS)
@@ -90,11 +95,11 @@ class MaintenanceFilter(logging.Filter):
 
 class LifecycleFilter(logging.Filter):
     """Filter for lifecycle messages: poll iterations, memory tracking.
-    
+
     Routes messages to orchestrator-lifecycle.log. Accepts DEBUG and INFO messages
     with lifecycle keywords (poll, memory, iteration).
     """
-    
+
     LIFECYCLE_KEYWORDS = (
         '[poll #',
         'poll cycle',
@@ -103,13 +108,13 @@ class LifecycleFilter(logging.Filter):
         'Memory',
         'iteration',
     )
-    
+
     def filter(self, record: logging.LogRecord) -> bool:
         # Accept DEBUG and INFO level with lifecycle keywords
         # Skip WARNING/ERROR to avoid duplicates with events log
         if record.levelno >= logging.WARNING:
             return False
-        
+
         msg = record.getMessage()
         return any(keyword in msg for keyword in self.LIFECYCLE_KEYWORDS)
 

@@ -113,7 +113,7 @@ def test_run_logger_initialization():
     """Test that RunLogger creates proper directory structure."""
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = RunLogger(base_dir=tmpdir)
-        
+
         try:
             # Check that run directory was created
             assert logger.get_run_dir().exists()
@@ -614,19 +614,22 @@ def test_log_polling_suppresses_most_cycles():
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = RunLogger(base_dir=tmpdir)
 
-        for _ in range(50):
-            logger.log_polling("polling message")
+        try:
+            for _ in range(50):
+                logger.log_polling("polling message")
 
-        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
-            content = f.read()
+            # Polling messages go to lifecycle log
+            with open(logger.orchestrator_lifecycle_log_path, encoding='utf-8') as f:
+                content = f.read()
 
-        poll_lines = [ln for ln in content.splitlines() if "polling message" in ln]
-        info_lines = [ln for ln in poll_lines if "[INFO]" in ln]
-        debug_lines = [ln for ln in poll_lines if "[DEBUG]" in ln]
-        assert len(poll_lines) == 50
-        assert len(info_lines) == 1
-        assert len(debug_lines) == 49
-        logger.close()
+            poll_lines = [ln for ln in content.splitlines() if "polling message" in ln]
+            info_lines = [ln for ln in poll_lines if "[INFO]" in ln]
+            debug_lines = [ln for ln in poll_lines if "[DEBUG]" in ln]
+            assert len(poll_lines) == 50
+            assert len(info_lines) == 1
+            assert len(debug_lines) == 49
+        finally:
+            logger.close()
 
 
 def test_enter_idle_logs_once():
@@ -634,15 +637,17 @@ def test_enter_idle_logs_once():
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = RunLogger(base_dir=tmpdir)
 
-        logger.enter_idle()
-        logger.enter_idle()  # should be no-op
+        try:
+            logger.enter_idle()
+            logger.enter_idle()  # should be no-op
 
-        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
-            content = f.read()
+            with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+                content = f.read()
 
-        idle_lines = [ln for ln in content.splitlines() if "Entering idle state" in ln]
-        assert len(idle_lines) == 1
-        logger.close()
+            idle_lines = [ln for ln in content.splitlines() if "Entering idle state" in ln]
+            assert len(idle_lines) == 1
+        finally:
+            logger.close()
 
 
 def test_exit_idle_logs_duration():
@@ -650,20 +655,22 @@ def test_exit_idle_logs_duration():
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = RunLogger(base_dir=tmpdir)
 
-        logger._idle_since = time.time() - 65  # 1m 5s ago
-        logger._poll_cycle = 42
+        try:
+            logger._idle_since = time.time() - 65  # 1m 5s ago
+            logger._poll_cycle = 42
 
-        logger.exit_idle()
+            logger.exit_idle()
 
-        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
-            content = f.read()
+            with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+                content = f.read()
 
-        assert "Exiting idle state" in content
-        assert "1m" in content
-        assert "42 poll cycles" in content
-        assert logger._idle_since is None
-        assert logger._poll_cycle == 0
-        logger.close()
+            assert "Exiting idle state" in content
+            assert "1m" in content
+            assert "42 poll cycles" in content
+            assert logger._idle_since is None
+            assert logger._poll_cycle == 0
+        finally:
+            logger.close()
 
 
 def test_exit_idle_noop_when_not_idle():
@@ -671,13 +678,15 @@ def test_exit_idle_noop_when_not_idle():
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = RunLogger(base_dir=tmpdir)
 
-        logger.exit_idle()  # not idle — should not log anything
+        try:
+            logger.exit_idle()  # not idle — should not log anything
 
-        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
-            content = f.read()
+            with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+                content = f.read()
 
-        assert "Exiting idle state" not in content
-        logger.close()
+            assert "Exiting idle state" not in content
+        finally:
+            logger.close()
 
 
 def test_exit_idle_resets_poll_cycle():
@@ -685,28 +694,31 @@ def test_exit_idle_resets_poll_cycle():
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = RunLogger(base_dir=tmpdir, poll_log_interval=3)
 
-        # Simulate idle period with some polls
-        logger.enter_idle()
-        for _ in range(5):
-            logger.log_polling("idle poll")
+        try:
+            # Simulate idle period with some polls
+            logger.enter_idle()
+            for _ in range(5):
+                logger.log_polling("idle poll")
 
-        logger._idle_since = time.time() - 10
-        logger.exit_idle()
+            logger._idle_since = time.time() - 10
+            logger.exit_idle()
 
-        # After exit, poll cycle should restart from 0
-        assert logger._poll_cycle == 0
+            # After exit, poll cycle should restart from 0
+            assert logger._poll_cycle == 0
 
-        # Next cycle 3 should be INFO again
-        for _ in range(3):
-            logger.log_polling("active poll")
+            # Next cycle 3 should be INFO again
+            for _ in range(3):
+                logger.log_polling("active poll")
 
-        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
-            content = f.read()
+            # Polling messages go to lifecycle log
+            with open(logger.orchestrator_lifecycle_log_path, encoding='utf-8') as f:
+                content = f.read()
 
-        active_lines = [ln for ln in content.splitlines() if "active poll" in ln]
-        assert "[INFO]" in active_lines[2]
-        assert "[poll #3]" in active_lines[2]
-        logger.close()
+            active_lines = [ln for ln in content.splitlines() if "active poll" in ln]
+            assert "[INFO]" in active_lines[2]
+            assert "[poll #3]" in active_lines[2]
+        finally:
+            logger.close()
 
 
 def test_idle_duration_hours_format():
@@ -714,16 +726,18 @@ def test_idle_duration_hours_format():
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = RunLogger(base_dir=tmpdir)
 
-        logger._idle_since = time.time() - 3661  # 1h 1m 1s
-        logger._poll_cycle = 100
+        try:
+            logger._idle_since = time.time() - 3661  # 1h 1m 1s
+            logger._poll_cycle = 100
 
-        logger.exit_idle()
+            logger.exit_idle()
 
-        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
-            content = f.read()
+            with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+                content = f.read()
 
-        assert "1h 1m 1s" in content
-        logger.close()
+            assert "1h 1m 1s" in content
+        finally:
+            logger.close()
 
 
 # ── Repo-context logging tests───────────────────────────────────────
@@ -734,25 +748,31 @@ def test_run_logger_repo_name_in_header():
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = RunLogger(base_dir=tmpdir, repo_name="PokePoke")
 
-        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
-            content = f.read()
+        try:
+            with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+                content = f.read()
 
-        assert "Repository: PokePoke" in content
-        logger.close()
+            assert "Repository: PokePoke" in content
+        finally:
+            logger.close()
 
 
 def test_run_logger_repo_name_in_log_lines():
     """Log lines should include repo name tag when set."""
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = RunLogger(base_dir=tmpdir, repo_name="MyRepo")
-        logger.log_orchestrator("something happened")
 
-        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
-            content = f.read()
+        try:
+            # Use WARNING level so message passes EventFilter
+            logger.log_orchestrator("something happened", level="WARNING")
 
-        assert "[MyRepo]" in content
-        assert "something happened" in content
-        logger.close()
+            with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+                content = f.read()
+
+            assert "[MyRepo]" in content
+            assert "something happened" in content
+        finally:
+            logger.close()
 
 
 def test_run_logger_no_repo_name_omits_tag():
@@ -762,15 +782,19 @@ def test_run_logger_no_repo_name_omits_tag():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = RunLogger(base_dir=tmpdir)
-        logger.log_orchestrator("plain message")
 
-        with open(logger.orchestrator_log_path, encoding='utf-8') as f:
-            content = f.read()
+        try:
+            # Use WARNING level so message passes EventFilter
+            logger.log_orchestrator("plain message", level="WARNING")
 
-        lines = [ln for ln in content.splitlines() if "plain message" in ln]
-        assert len(lines) == 1
-        assert "[]" not in lines[0]
-        logger.close()
+            with open(logger.orchestrator_log_path, encoding='utf-8') as f:
+                content = f.read()
+
+            lines = [ln for ln in content.splitlines() if "plain message" in ln]
+            assert len(lines) == 1
+            assert "[]" not in lines[0]
+        finally:
+            logger.close()
 
 
 def test_run_logger_picks_up_thread_local_repo():
@@ -779,16 +803,17 @@ def test_run_logger_picks_up_thread_local_repo():
     set_current_repo_name("ThreadRepo")
 
     with tempfile.TemporaryDirectory() as tmpdir:
+        logger = RunLogger(base_dir=tmpdir)
         try:
-            logger = RunLogger(base_dir=tmpdir)
-            logger.log_orchestrator("from context")
+            # Use WARNING level so message passes EventFilter
+            logger.log_orchestrator("from context", level="WARNING")
 
             with open(logger.orchestrator_log_path, encoding='utf-8') as f:
                 content = f.read()
 
             assert "[ThreadRepo]" in content
-            logger.close()
         finally:
+            logger.close()
             set_current_repo_name(None)
 
 
@@ -929,18 +954,18 @@ def test_json_formatter_omits_empty_context():
 def test_run_logger_creates_three_separate_log_files(tmp_path):
     """RunLogger should create three separate log files: events, maintenance, lifecycle."""
     run_logger = RunLogger(base_dir=str(tmp_path), repo_name="test-repo")
-    
+
     try:
         # Check that all three log files exist
         assert run_logger.orchestrator_events_log_path.exists()
         assert run_logger.orchestrator_maintenance_log_path.exists()
         assert run_logger.orchestrator_lifecycle_log_path.exists()
-        
+
         # Check file names
         assert run_logger.orchestrator_events_log_path.name == "orchestrator-events.log"
         assert run_logger.orchestrator_maintenance_log_path.name == "orchestrator-maintenance.log"
         assert run_logger.orchestrator_lifecycle_log_path.name == "orchestrator-lifecycle.log"
-        
+
         # Check backwards compatibility
         assert run_logger.orchestrator_log_path == run_logger.orchestrator_events_log_path
     finally:
@@ -950,7 +975,7 @@ def test_run_logger_creates_three_separate_log_files(tmp_path):
 def test_run_logger_events_log_contains_important_events(tmp_path):
     """Events log should contain submissions, completions, errors, warnings."""
     run_logger = RunLogger(base_dir=str(tmp_path))
-    
+
     try:
         # Log various types of messages
         run_logger.log_orchestrator("Started processing work item: TEST-123", level="INFO")
@@ -959,16 +984,16 @@ def test_run_logger_events_log_contains_important_events(tmp_path):
         run_logger.log_orchestrator("A warning was issued", level="WARNING")
         run_logger.log_orchestrator("Cleanup agent still holding lock", level="DEBUG")  # Maintenance
         run_logger.log_polling("Poll iteration check")  # Lifecycle
-        
+
         # Read events log
         events_content = run_logger.orchestrator_events_log_path.read_text(encoding="utf-8")
-        
+
         # Events should contain important messages
         assert "Started processing work item: TEST-123" in events_content
         assert "Work item completed successfully" in events_content
         assert "An error occurred" in events_content
         assert "A warning was issued" in events_content
-        
+
         # Events should NOT contain maintenance or lifecycle messages
         assert "Cleanup agent still holding lock" not in events_content
         assert "Poll iteration check" not in events_content
@@ -979,7 +1004,7 @@ def test_run_logger_events_log_contains_important_events(tmp_path):
 def test_run_logger_maintenance_log_contains_lock_messages(tmp_path):
     """Maintenance log should contain cleanup locks, dirty repo waits."""
     run_logger = RunLogger(base_dir=str(tmp_path))
-    
+
     try:
         # Log various types of messages
         run_logger.log_orchestrator("Started processing work item: TEST-123", level="INFO")  # Event
@@ -988,16 +1013,16 @@ def test_run_logger_maintenance_log_contains_lock_messages(tmp_path):
         run_logger.log_orchestrator("dirty repo detected, waiting", level="DEBUG")
         run_logger.log_orchestrator("[MAINTENANCE:cleanup] Running cleanup", level="INFO")
         run_logger.log_polling("Poll iteration check")  # Lifecycle
-        
+
         # Read maintenance log
         maintenance_content = run_logger.orchestrator_maintenance_log_path.read_text(encoding="utf-8")
-        
+
         # Maintenance should contain lock/wait messages
         assert "Cleanup agent still holding lock" in maintenance_content
         assert "Waiting for cleanup" in maintenance_content
         assert "dirty repo" in maintenance_content
         assert "[MAINTENANCE:cleanup]" in maintenance_content
-        
+
         # Maintenance should NOT contain events or lifecycle messages
         assert "Started processing work item: TEST-123" not in maintenance_content
         assert "Poll iteration check" not in maintenance_content
@@ -1008,7 +1033,7 @@ def test_run_logger_maintenance_log_contains_lock_messages(tmp_path):
 def test_run_logger_lifecycle_log_contains_poll_messages(tmp_path):
     """Lifecycle log should contain poll iterations and memory tracking."""
     run_logger = RunLogger(base_dir=str(tmp_path))
-    
+
     try:
         # Log various types of messages
         run_logger.log_orchestrator("Started processing work item: TEST-123", level="INFO")  # Event
@@ -1016,16 +1041,16 @@ def test_run_logger_lifecycle_log_contains_poll_messages(tmp_path):
         run_logger.log_polling("Checking for work items")
         run_logger.log_orchestrator("Memory usage: 256MB", level="DEBUG")
         run_logger.log_orchestrator("Poll cycle #50 completed", level="DEBUG")
-        
+
         # Read lifecycle log
         lifecycle_content = run_logger.orchestrator_lifecycle_log_path.read_text(encoding="utf-8")
-        
+
         # Lifecycle should contain poll and memory messages
         assert "[poll #" in lifecycle_content
         assert "Checking for work items" in lifecycle_content
         assert "Memory usage" in lifecycle_content
         assert "Poll cycle" in lifecycle_content
-        
+
         # Lifecycle should NOT contain events or maintenance messages
         assert "Started processing work item: TEST-123" not in lifecycle_content
         assert "Cleanup agent still holding lock" not in lifecycle_content
@@ -1036,14 +1061,14 @@ def test_run_logger_lifecycle_log_contains_poll_messages(tmp_path):
 def test_run_logger_idle_messages_in_events_log(tmp_path):
     """Idle state messages should appear in events log as they're important state changes."""
     run_logger = RunLogger(base_dir=str(tmp_path))
-    
+
     try:
         run_logger.enter_idle()
         time.sleep(0.1)
         run_logger.exit_idle()
-        
+
         events_content = run_logger.orchestrator_events_log_path.read_text(encoding="utf-8")
-        
+
         assert "Entering idle state" in events_content
         assert "Exiting idle state" in events_content
     finally:
@@ -1053,22 +1078,22 @@ def test_run_logger_idle_messages_in_events_log(tmp_path):
 def test_run_logger_headers_in_all_three_files(tmp_path):
     """All three log files should have descriptive headers."""
     run_logger = RunLogger(base_dir=str(tmp_path), repo_name="test-repo")
-    
+
     try:
         events_content = run_logger.orchestrator_events_log_path.read_text(encoding="utf-8")
         maintenance_content = run_logger.orchestrator_maintenance_log_path.read_text(encoding="utf-8")
         lifecycle_content = run_logger.orchestrator_lifecycle_log_path.read_text(encoding="utf-8")
-        
+
         # Check events header
         assert "PokePoke Orchestrator Events Log" in events_content
         assert "Submissions, completions, errors, warnings" in events_content
         assert "test-repo" in events_content
-        
+
         # Check maintenance header
         assert "PokePoke Orchestrator Maintenance Log" in maintenance_content
         assert "Cleanup locks, dirty repo waits, merge locks" in maintenance_content
         assert "test-repo" in maintenance_content
-        
+
         # Check lifecycle header
         assert "PokePoke Orchestrator Lifecycle Log" in lifecycle_content
         assert "Poll iterations, memory tracking" in lifecycle_content
@@ -1080,28 +1105,27 @@ def test_run_logger_headers_in_all_three_files(tmp_path):
 def test_run_logger_close_removes_all_handlers(tmp_path):
     """close() should remove and close all three handlers."""
     run_logger = RunLogger(base_dir=str(tmp_path))
-    
+
     # Get logger and count handlers before close
     py_logger = run_logger._py_logger
     initial_handler_count = len(py_logger.handlers)
     assert initial_handler_count >= 3, "Should have at least 3 handlers (events, maintenance, lifecycle)"
-    
+
     # Close should remove all handlers
     run_logger.close()
-    
+
     # Verify handlers are removed
     assert len(py_logger.handlers) < initial_handler_count
-    
+
     # close() should be idempotent
     run_logger.close()  # Should not raise
 
 
 def test_event_filter_accepts_warnings_and_errors():
     """EventFilter should accept all WARNING and ERROR level messages."""
-    from pokepoke.utils.logging_utils import EventFilter
-    
+
     event_filter = EventFilter()
-    
+
     # Create records at different levels
     warning_record = logging.LogRecord(
         name="test", level=logging.WARNING, pathname="", lineno=0,
@@ -1115,7 +1139,7 @@ def test_event_filter_accepts_warnings_and_errors():
         name="test", level=logging.DEBUG, pathname="", lineno=0,
         msg="This is debug", args=(), exc_info=None,
     )
-    
+
     assert event_filter.filter(warning_record) is True
     assert event_filter.filter(error_record) is True
     assert event_filter.filter(debug_record) is False
@@ -1123,78 +1147,75 @@ def test_event_filter_accepts_warnings_and_errors():
 
 def test_event_filter_accepts_info_with_keywords():
     """EventFilter should accept INFO messages with event keywords."""
-    from pokepoke.utils.logging_utils import EventFilter
-    
+
     event_filter = EventFilter()
-    
+
     # INFO with event keyword
     event_record = logging.LogRecord(
         name="test", level=logging.INFO, pathname="", lineno=0,
         msg="Started processing work item TEST-123", args=(), exc_info=None,
     )
-    
+
     # INFO without event keyword
     non_event_record = logging.LogRecord(
         name="test", level=logging.INFO, pathname="", lineno=0,
         msg="Just some regular info", args=(), exc_info=None,
     )
-    
+
     assert event_filter.filter(event_record) is True
     assert event_filter.filter(non_event_record) is False
 
 
 def test_maintenance_filter_accepts_lock_messages():
     """MaintenanceFilter should accept messages with maintenance keywords."""
-    from pokepoke.utils.logging_utils import MaintenanceFilter
-    
+
     maintenance_filter = MaintenanceFilter()
-    
+
     # Maintenance keyword present
     lock_record = logging.LogRecord(
         name="test", level=logging.DEBUG, pathname="", lineno=0,
         msg="Cleanup agent still holding lock", args=(), exc_info=None,
     )
-    
+
     # No maintenance keyword
     normal_record = logging.LogRecord(
         name="test", level=logging.DEBUG, pathname="", lineno=0,
         msg="Regular debug message", args=(), exc_info=None,
     )
-    
+
     assert maintenance_filter.filter(lock_record) is True
     assert maintenance_filter.filter(normal_record) is False
 
 
 def test_lifecycle_filter_accepts_poll_messages():
     """LifecycleFilter should accept DEBUG and INFO messages with lifecycle keywords."""
-    from pokepoke.utils.logging_utils import LifecycleFilter
-    
+
     lifecycle_filter = LifecycleFilter()
-    
+
     # DEBUG with lifecycle keyword
     poll_record = logging.LogRecord(
         name="test", level=logging.DEBUG, pathname="", lineno=0,
         msg="[poll #50] Checking for work", args=(), exc_info=None,
     )
-    
+
     # INFO with lifecycle keyword (should accept now)
     info_poll_record = logging.LogRecord(
         name="test", level=logging.INFO, pathname="", lineno=0,
         msg="[poll #50] Checking for work", args=(), exc_info=None,
     )
-    
+
     # WARNING with lifecycle keyword (should reject to avoid duplicates with events)
     warning_poll_record = logging.LogRecord(
         name="test", level=logging.WARNING, pathname="", lineno=0,
         msg="[poll #50] Checking for work", args=(), exc_info=None,
     )
-    
+
     # DEBUG without lifecycle keyword
     normal_debug = logging.LogRecord(
         name="test", level=logging.DEBUG, pathname="", lineno=0,
         msg="Regular debug message", args=(), exc_info=None,
     )
-    
+
     assert lifecycle_filter.filter(poll_record) is True
     assert lifecycle_filter.filter(info_poll_record) is True
     assert lifecycle_filter.filter(warning_poll_record) is False

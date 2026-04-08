@@ -132,7 +132,7 @@ class RunLogger:
         self.orchestrator_lifecycle_log_path = self.run_dir / "orchestrator-lifecycle.log"
         # Keep legacy path for backwards compatibility
         self.orchestrator_log_path = self.orchestrator_events_log_path
-        
+
         self.item_logs_dir = self.run_dir / "items"
         self.item_logs_dir.mkdir(exist_ok=True)
         self.maintenance_logs_dir = self.run_dir / "maintenance"
@@ -154,40 +154,27 @@ class RunLogger:
             datefmt="%Y-%m-%d %H:%M:%S",
         )
 
-        # Events handler: warnings, errors, important events
-        self._events_handler = logging.FileHandler(
-            self.orchestrator_events_log_path, mode="w", encoding="utf-8"
-        )
-        self._events_handler.setLevel(logging.DEBUG)
-        self._events_handler.setFormatter(log_formatter)
-        self._events_handler.addFilter(WorkItemFilter())
-        self._events_handler.addFilter(EventFilter())
-        self._py_logger.addHandler(self._events_handler)
-
-        # Maintenance handler: cleanup locks, dirty repo waits
-        self._maintenance_handler = logging.FileHandler(
-            self.orchestrator_maintenance_log_path, mode="w", encoding="utf-8"
-        )
-        self._maintenance_handler.setLevel(logging.DEBUG)
-        self._maintenance_handler.setFormatter(log_formatter)
-        self._maintenance_handler.addFilter(WorkItemFilter())
-        self._maintenance_handler.addFilter(MaintenanceFilter())
-        self._py_logger.addHandler(self._maintenance_handler)
-
-        # Lifecycle handler: poll iterations, memory tracking
-        self._lifecycle_handler = logging.FileHandler(
-            self.orchestrator_lifecycle_log_path, mode="w", encoding="utf-8"
-        )
-        self._lifecycle_handler.setLevel(logging.DEBUG)
-        self._lifecycle_handler.setFormatter(log_formatter)
-        self._lifecycle_handler.addFilter(WorkItemFilter())
-        self._lifecycle_handler.addFilter(LifecycleFilter())
-        self._py_logger.addHandler(self._lifecycle_handler)
-
-        # Maintain backwards compatibility: keep _orch_handler pointing to events
+        self._events_handler = self._make_handler(
+            self.orchestrator_events_log_path, EventFilter(), log_formatter)
+        self._maintenance_handler = self._make_handler(
+            self.orchestrator_maintenance_log_path, MaintenanceFilter(), log_formatter)
+        self._lifecycle_handler = self._make_handler(
+            self.orchestrator_lifecycle_log_path, LifecycleFilter(), log_formatter)
         self._orch_handler = self._events_handler
 
         self._init_orchestrator_log()
+
+    def _make_handler(
+        self, path: Path, log_filter: logging.Filter, formatter: logging.Formatter,
+    ) -> logging.FileHandler:
+        """Create a file handler with WorkItemFilter and the given category filter."""
+        handler = logging.FileHandler(path, mode="w", encoding="utf-8")
+        handler.setLevel(logging.DEBUG)
+        handler.setFormatter(formatter)
+        handler.addFilter(WorkItemFilter())
+        handler.addFilter(log_filter)
+        self._py_logger.addHandler(handler)
+        return handler
 
     def _generate_run_id(self) -> str:
         """Generate a unique run ID in format: YYYYMMDD_HHMMSS_<short-uuid>."""
@@ -198,36 +185,20 @@ class RunLogger:
     def _init_orchestrator_log(self) -> None:
         """Write decorative header directly to each handler's stream."""
         repo_line = f"Repository: {self.repo_name}\n" if self.repo_name else ""
-        
-        # Events log header
-        self._events_handler.stream.write(
-            f"{'=' * 80}\nPokePoke Orchestrator Events Log\n{'=' * 80}\n"
-            f"Run ID: {self.run_id}\n{repo_line}"
-            f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            f"Contains: Submissions, completions, errors, warnings\n"
-            f"{'=' * 80}\n\n"
-        )
-        self._events_handler.stream.flush()
-        
-        # Maintenance log header
-        self._maintenance_handler.stream.write(
-            f"{'=' * 80}\nPokePoke Orchestrator Maintenance Log\n{'=' * 80}\n"
-            f"Run ID: {self.run_id}\n{repo_line}"
-            f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            f"Contains: Cleanup locks, dirty repo waits, merge locks\n"
-            f"{'=' * 80}\n\n"
-        )
-        self._maintenance_handler.stream.flush()
-        
-        # Lifecycle log header
-        self._lifecycle_handler.stream.write(
-            f"{'=' * 80}\nPokePoke Orchestrator Lifecycle Log\n{'=' * 80}\n"
-            f"Run ID: {self.run_id}\n{repo_line}"
-            f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            f"Contains: Poll iterations, memory tracking\n"
-            f"{'=' * 80}\n\n"
-        )
-        self._lifecycle_handler.stream.flush()
+        started = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        sep = '=' * 80
+        headers = [
+            (self._events_handler, "Events", "Submissions, completions, errors, warnings"),
+            (self._maintenance_handler, "Maintenance", "Cleanup locks, dirty repo waits, merge locks"),
+            (self._lifecycle_handler, "Lifecycle", "Poll iterations, memory tracking"),
+        ]
+        for handler, label, contents in headers:
+            handler.stream.write(
+                f"{sep}\nPokePoke Orchestrator {label} Log\n{sep}\n"
+                f"Run ID: {self.run_id}\n{repo_line}"
+                f"Started: {started}\nContains: {contents}\n{sep}\n\n"
+            )
+            handler.stream.flush()
 
     def log_orchestrator(self, message: str, level: str = "INFO") -> None:
         """Log an orchestrator event through Python's standard logging."""
@@ -349,12 +320,12 @@ class RunLogger:
     def finalize(self, items_completed: int, total_requests: int, elapsed: float,
                  session_stats: 'SessionStats | None' = None) -> None:
         """Write final summary to orchestrator log and persist stats to disk."""
-        sep = "=" * 60
-        for line in (sep, "Run Summary", sep,
-                     f"Completed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                     f"Items completed: {items_completed}",
-                     f"Total agent requests: {total_requests}",
-                     f"Total time: {elapsed / 60:.1f} minutes", sep):
+        for line in (
+            "Run Summary",
+            f"Items completed: {items_completed}",
+            f"Total agent requests: {total_requests}",
+            f"Total time: {elapsed / 60:.1f} minutes",
+        ):
             self.log_orchestrator(line)
 
         if session_stats is not None:
