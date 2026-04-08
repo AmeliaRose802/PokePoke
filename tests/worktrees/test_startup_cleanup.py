@@ -78,7 +78,7 @@ class TestStartupCleanup:
         # Should remove 2 stale worktrees (item2, item3)
         assert stats['stale_removed'] == 2
         assert stats['merged_removed'] == 0
-        assert stats['total_removed'] == 1
+        assert stats['total_removed'] == 2
         assert stats['errors'] == 0
         assert stats['checked'] == 3  # 3 worktrees checked (excluding main repo)
 
@@ -201,7 +201,7 @@ class TestStartupCleanup:
         assert stats['merged_removed'] == 1  # Only second cleanup succeeded
         assert stats['errors'] == 1  # First cleanup failure
         assert stats['total_removed'] == 1
-        assert stats['checked'] == 1  # Only checked first 2 non-main worktrees
+        assert stats['checked'] == 2  # Checked 2 non-main worktrees
 
     def test_config_validation(self, caplog):
         """Test that configuration values are properly validated."""

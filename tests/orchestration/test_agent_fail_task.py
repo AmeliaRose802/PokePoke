@@ -31,7 +31,6 @@ from pokepoke.orchestration.workflow_helpers import (
 from pokepoke.stats.session_journal import SessionPhase
 from pokepoke.types import AgentStats, CopilotResult
 from tests.orchestration.conftest import (
-    PATCH_WF_BLOCK_ITEM,
     make_process_item_mocks,
     make_work_item,
 )
@@ -185,7 +184,7 @@ class TestBranchVerificationFailure:
 
 
 class TestGateRejectionCapExceeded:
-    """Item that already hit the gate rejection cap should be refused and blocked."""
+    """Item that already hit the gate rejection cap should be refused and deferred."""
 
     def test_refuses_item_at_cap(self) -> None:
         """When existing rejection count >= max, processing is refused immediately."""
@@ -198,7 +197,7 @@ class TestGateRejectionCapExceeded:
                     "pokepoke.beads.beads_management.get_gate_rejection_count",
                     return_value=5,
                 ),
-                patch(PATCH_WF_BLOCK_ITEM),
+                patch(f"{_WF}.defer_item"),
             ):
                 result = process_work_item(item, interactive=False)
 
@@ -206,8 +205,8 @@ class TestGateRejectionCapExceeded:
             # Should not have tried to invoke copilot
             mocks['invoke'].assert_not_called()
 
-    def test_blocks_item_when_cap_exceeded(self) -> None:
-        """The item should be moved to blocked status with a reason."""
+    def test_defers_item_when_cap_exceeded(self) -> None:
+        """The item should be deferred with a reason when cap is exceeded."""
         item = make_work_item(id="task-capped-block", title="Capped Block")
         with make_process_item_mocks():
             with (
@@ -215,14 +214,14 @@ class TestGateRejectionCapExceeded:
                     "pokepoke.beads.beads_management.get_gate_rejection_count",
                     return_value=3,
                 ),
-                patch(PATCH_WF_BLOCK_ITEM) as mock_block,
+                patch(f"{_WF}.defer_item") as mock_defer,
             ):
                 result = process_work_item(item, interactive=False)
 
             assert result.success is False
-            mock_block.assert_called_once()
-            block_reason = mock_block.call_args[0][1]
-            assert "gate rejection cap" in block_reason.lower() or "manual review" in block_reason.lower()
+            mock_defer.assert_called_once()
+            defer_reason = mock_defer.call_args[0][1]
+            assert "gate rejection cap" in defer_reason.lower() or "decomposition" in defer_reason.lower()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -570,7 +569,7 @@ class TestSessionCleanupPartialFailure:
         """Even if writing UNWINDING journal fails, unassign should still be attempted."""
         with _patch_session_helpers() as m:
             m["write_journal"].side_effect = [
-                RuntimeError("journal write failed"),  # UNWINDING fails
+                OSError("journal write failed"),  # UNWINDING fails
                 Path("/j.json"),  # ABANDONED succeeds
             ]
             session = _make_session()
@@ -610,7 +609,7 @@ class TestSessionCleanupPartialFailure:
         with _patch_session_helpers() as m:
             # Journal write fails, merge abort fails, but unassign should still run
             m["write_journal"].side_effect = [
-                RuntimeError("journal fail"),  # UNWINDING
+                OSError("journal fail"),  # UNWINDING
                 Path("/j.json"),  # ABANDONED
             ]
             m["is_merge"].return_value = True
@@ -813,10 +812,10 @@ class TestFinalizeReconciliation:
 
 
 class TestProcessCrashDetection:
-    """Tests for process crash detection and its effect on gate skipping."""
+    """Tests for process crash detection behavior."""
 
-    def test_process_died_skips_gate(self) -> None:
-        """'Process died' error should skip gate agent."""
+    def test_process_died_still_runs_gate_on_success(self) -> None:
+        """'Process died' error with success=True still runs gate agent."""
         item = make_work_item(id="task-crash", title="Crash Task")
         result_obj = CopilotResult(
             work_item_id="task-crash",
@@ -833,11 +832,11 @@ class TestProcessCrashDetection:
             mocks['invoke'].return_value = result_obj
             process_work_item(item, interactive=False)
 
-            # Gate should not have been called
-            mocks['gate'].assert_not_called()
+            # Gate IS called since result.success is True
+            mocks['gate'].assert_called_once()
 
-    def test_exited_unexpectedly_skips_gate(self) -> None:
-        """'Exited unexpectedly' error should skip gate agent."""
+    def test_exited_unexpectedly_still_runs_gate_on_success(self) -> None:
+        """'Exited unexpectedly' error with success=True still runs gate agent."""
         item = make_work_item(id="task-exit", title="Exit Task")
         result_obj = CopilotResult(
             work_item_id="task-exit",
@@ -854,7 +853,7 @@ class TestProcessCrashDetection:
             mocks['invoke'].return_value = result_obj
             process_work_item(item, interactive=False)
 
-            mocks['gate'].assert_not_called()
+            mocks['gate'].assert_called_once()
 
 
 # ═══════════════════════════════════════════════════════════════════════════

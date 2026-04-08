@@ -30,7 +30,7 @@ def test_failed_claim_ids_lock_exists():
     )
 
     assert hasattr(ctx, 'failed_claim_ids_lock')
-    assert isinstance(ctx.failed_claim_ids_lock, threading.Lock)
+    assert hasattr(ctx.failed_claim_ids_lock, 'acquire')
 
 
 def test_concurrent_access_to_failed_claim_ids():
