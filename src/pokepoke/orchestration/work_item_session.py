@@ -9,6 +9,7 @@ can clean up after crashes.
 from __future__ import annotations
 
 import logging
+import subprocess
 from pathlib import Path
 from types import TracebackType
 from typing import Literal
@@ -111,27 +112,27 @@ class WorkItemSession:
         if self._worktree_created:
             try:
                 self._remove_worktree()
-            except Exception as exc:
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as exc:
                 logger.error("Rollback: failed to remove worktree for %s: %s", self.item_id, exc)
             self._worktree_created = False
 
         if self._branch_created:
             try:
                 self._delete_branch()
-            except Exception as exc:
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as exc:
                 logger.error("Rollback: failed to delete branch for %s: %s", self.item_id, exc)
             self._branch_created = False
 
         if self._assigned:
             try:
                 self._unassign_beads_item()
-            except Exception as exc:
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as exc:
                 logger.error("Rollback: failed to unassign item %s: %s", self.item_id, exc)
             self._assigned = False
 
         try:
             delete_journal(self.item_id, sessions_dir=self._sessions_dir)
-        except Exception as exc:
+        except OSError as exc:
             logger.error("Rollback: failed to delete journal for %s: %s", self.item_id, exc)
 
     # ------------------------------------------------------------------
@@ -189,7 +190,7 @@ class WorkItemSession:
         # Step 1 — Record that we are unwinding.
         try:
             self._write_journal(SessionPhase.UNWINDING)
-        except Exception as exc:
+        except OSError as exc:
             logger.error("Failed to write UNWINDING journal for %s: %s", self.item_id, exc)
             all_ok = False
 
@@ -199,7 +200,7 @@ class WorkItemSession:
         if self.worktree_path:
             try:
                 self._abort_any_in_progress_merge()
-            except Exception as exc:
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as exc:
                 logger.error("Failed to abort in-progress merge for %s: %s", self.item_id, exc)
                 all_ok = False
 
@@ -213,7 +214,7 @@ class WorkItemSession:
         if self._assigned:
             try:
                 self._unassign_beads_item()
-            except Exception as exc:
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as exc:
                 logger.error("Failed to unassign beads item %s: %s", self.item_id, exc)
                 all_ok = False
 
@@ -221,12 +222,12 @@ class WorkItemSession:
         if all_ok:
             try:
                 delete_journal(self.item_id, sessions_dir=self._sessions_dir)
-            except Exception as exc:
+            except OSError as exc:
                 logger.error("Failed to delete journal for %s: %s", self.item_id, exc)
         else:
             try:
                 self._write_journal(SessionPhase.ABANDONED)
-            except Exception as exc:
+            except OSError as exc:
                 logger.error("Failed to write ABANDONED journal for %s: %s", self.item_id, exc)
 
     # ------------------------------------------------------------------

@@ -679,7 +679,7 @@ class TestEnterFailureAndRollback:
         """Covers lines 134-135: journal deletion fails during rollback."""
         with _patch_enter_helpers() as m:
             m["assign"].return_value = False  # Fails at step 1
-            m["delete_journal"].side_effect = RuntimeError("journal delete failed")
+            m["delete_journal"].side_effect = OSError("journal delete failed")
 
             session = WorkItemSession(item_id="test-1", agent_name="agent")
             with caplog.at_level(logging.ERROR, logger="pokepoke.orchestration.work_item_session"), \
@@ -697,7 +697,7 @@ class TestCleanupDeleteJournalFailure:
         """Covers lines 220-221: delete_journal raises during successful cleanup."""
         with _patch_all_helpers() as m:
             m["unassign_item"].return_value = True
-            m["delete_journal"].side_effect = RuntimeError("journal delete failed")
+            m["delete_journal"].side_effect = OSError("journal delete failed")
 
             session = _make_session()
             with caplog.at_level(logging.ERROR, logger="pokepoke.orchestration.work_item_session"):
@@ -935,7 +935,7 @@ class TestRollbackEnterAllFail:
             m["cleanup_worktree"].side_effect = RuntimeError("worktree cleanup failed")
             m["branch_exists"].return_value = True
             m["unassign_item"].side_effect = RuntimeError("unassign failed")
-            m["delete_journal"].side_effect = RuntimeError("journal delete failed")
+            m["delete_journal"].side_effect = OSError("journal delete failed")
 
             with patch("pokepoke.orchestration.work_item_session.run_git",
                        side_effect=RuntimeError("branch delete failed")):

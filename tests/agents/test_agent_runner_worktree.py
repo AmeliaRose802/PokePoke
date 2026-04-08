@@ -1,5 +1,6 @@
 """Unit tests for agent_runner module."""
 
+import subprocess
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -92,7 +93,7 @@ class TestRunWorktreeAgent:
             labels=["maintenance"]
         )
 
-        mock_create.side_effect = Exception("Failed to create worktree")
+        mock_create.side_effect = RuntimeError("Failed to create worktree")
 
         stats = _run_worktree_agent(
             "Test",
@@ -118,7 +119,7 @@ class TestRunWorktreeAgent:
     ) -> None:
         """Test exception handling when invoke_copilot raises."""
         mock_create.return_value = Path("/tmp/wt")
-        mock_invoke.side_effect = Exception("Boom")
+        mock_invoke.side_effect = RuntimeError("Boom")
         mock_cleanup_loop.return_value = (False, 0)
         mock_branch_has_commits.return_value = False
 
@@ -576,7 +577,7 @@ class TestWorktreeAgentFinallyCleanupException:
         )
         mock_cleanup_loop.return_value = (True, 0)
         mock_parse.return_value = None
-        mock_cleanup.side_effect = Exception("Cannot remove worktree")
+        mock_cleanup.side_effect = RuntimeError("Cannot remove worktree")
         stats = _run_worktree_agent(
             "Test", "maint-test", agent_item, "Prompt",
             Path("/fake/repo"), merge_changes=False
@@ -723,7 +724,7 @@ class TestReconcileWorktreeBranch:
         self, mock_has_commits: Mock, mock_merge: Mock,
     ) -> None:
         """Exception in worktree_branch_has_commits → returns None safely."""
-        mock_has_commits.side_effect = Exception("git error")
+        mock_has_commits.side_effect = subprocess.CalledProcessError(1, "git")
 
         result = _reconcile_worktree_branch(
             "agent-1", self._make_item(), "Janitor",
