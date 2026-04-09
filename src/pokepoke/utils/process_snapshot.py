@@ -112,8 +112,7 @@ def log_process_tree_snapshot(
             except Exception:
                 pass
 
-            handler._item_logger.log_error(
-                f"TOOL_TIMEOUT_DIAG: {len(copilot_pids)} copilot process(es), "
+            handler._item_logger.log_debug(f"TOOL_TIMEOUT_DIAG: {len(copilot_pids)} copilot process(es), "
                 f"{total_children} children, {total_memory_mb:.0f}MB, "
                 f"tool={tool_name}, elapsed={elapsed:.0f}s"
             )
