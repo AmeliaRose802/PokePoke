@@ -105,10 +105,10 @@ class TestRunOrchestratorModelCompletion:
 class TestRecordItemResult:
     """Tests for _record_item_result function."""
 
-    @patch('pokepoke.orchestration.orchestrator.run_periodic_maintenance')
-    @patch('pokepoke.orchestration.orchestrator.increment_items_completed', return_value=1)
-    @patch('pokepoke.orchestration.orchestrator.append_model_history_entry')
-    @patch('pokepoke.orchestration.orchestrator.record_completion')
+    @patch('pokepoke.orchestration.session_lifecycle.run_periodic_maintenance')
+    @patch('pokepoke.orchestration.session_lifecycle.increment_items_completed', return_value=1)
+    @patch('pokepoke.orchestration.session_lifecycle.append_model_history_entry')
+    @patch('pokepoke.orchestration.session_lifecycle.record_completion')
     def test_records_success(self, mock_record, mock_hist, mock_inc, mock_maint):
         from pokepoke.orchestration.orchestrator import _record_item_result
         from pokepoke.types import SessionStats
@@ -131,10 +131,10 @@ class TestRecordItemResult:
         mock_record.assert_called_once_with(mc)
         mock_maint.assert_called_once()
 
-    @patch('pokepoke.orchestration.orchestrator.run_periodic_maintenance')
-    @patch('pokepoke.orchestration.orchestrator.increment_items_completed')
-    @patch('pokepoke.orchestration.orchestrator.append_model_history_entry')
-    @patch('pokepoke.orchestration.orchestrator.record_completion')
+    @patch('pokepoke.orchestration.session_lifecycle.run_periodic_maintenance')
+    @patch('pokepoke.orchestration.session_lifecycle.increment_items_completed')
+    @patch('pokepoke.orchestration.session_lifecycle.append_model_history_entry')
+    @patch('pokepoke.orchestration.session_lifecycle.record_completion')
     def test_records_failure(self, mock_record, mock_hist, mock_inc, mock_maint):
         from pokepoke.orchestration.orchestrator import _record_item_result
         from pokepoke.types import SessionStats
@@ -151,10 +151,10 @@ class TestRecordItemResult:
         assert completed == 0
         mock_maint.assert_not_called()
 
-    @patch('pokepoke.orchestration.orchestrator.run_periodic_maintenance')
-    @patch('pokepoke.orchestration.orchestrator.increment_items_completed', return_value=1)
-    @patch('pokepoke.orchestration.orchestrator.append_model_history_entry')
-    @patch('pokepoke.orchestration.orchestrator.record_completion')
+    @patch('pokepoke.orchestration.session_lifecycle.run_periodic_maintenance')
+    @patch('pokepoke.orchestration.session_lifecycle.increment_items_completed', return_value=1)
+    @patch('pokepoke.orchestration.session_lifecycle.append_model_history_entry')
+    @patch('pokepoke.orchestration.session_lifecycle.record_completion')
     def test_records_retries(self, mock_record, mock_hist, mock_inc, mock_maint):
         from pokepoke.orchestration.orchestrator import _record_item_result
         from pokepoke.types import SessionStats

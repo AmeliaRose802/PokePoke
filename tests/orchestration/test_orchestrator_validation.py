@@ -97,6 +97,7 @@ class TestCheckAndCommitMainRepo:
             Mock(stdout=" M src/file.py\n M tests/test.py\n", returncode=0),  # git status
             Mock(returncode=0),  # git add --all (auto-commit)
             Mock(returncode=1, stdout="", stderr="pre-commit hook failed"),  # git commit fails
+            Mock(stdout="", returncode=0),  # git status --porcelain (conflict detection)
         ]
         # Mock cleanup agent to return success
         mock_cleanup.return_value = (True, AgentStats(

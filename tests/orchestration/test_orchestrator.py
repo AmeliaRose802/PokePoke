@@ -428,10 +428,10 @@ class TestRunOrchestratorContinuousMode:
 class TestFinalizeSession:
     """Test _finalize_session function."""
 
-    @patch('pokepoke.orchestration.orchestrator.clear_terminal_banner')
-    @patch('pokepoke.orchestration.orchestrator.print_stats')
-    @patch('pokepoke.orchestration.orchestrator.get_beads_stats')
-    @patch('pokepoke.orchestration.orchestrator.time')
+    @patch('pokepoke.orchestration.session_lifecycle.clear_terminal_banner')
+    @patch('pokepoke.orchestration.session_lifecycle.print_stats')
+    @patch('pokepoke.orchestration.session_lifecycle.get_beads_stats')
+    @patch('pokepoke.orchestration.session_lifecycle.time')
     def test_finalize_session_success(
         self, mock_time: Mock, mock_stats: Mock,
         mock_print: Mock, mock_clear: Mock
@@ -458,10 +458,10 @@ class TestFinalizeSession:
         assert mock_print.called
         mock_clear.assert_called_once()
 
-    @patch('pokepoke.orchestration.orchestrator.clear_terminal_banner')
-    @patch('pokepoke.orchestration.orchestrator.print_stats')
-    @patch('pokepoke.orchestration.orchestrator.get_beads_stats')
-    @patch('pokepoke.orchestration.orchestrator.time')
+    @patch('pokepoke.orchestration.session_lifecycle.clear_terminal_banner')
+    @patch('pokepoke.orchestration.session_lifecycle.print_stats')
+    @patch('pokepoke.orchestration.session_lifecycle.get_beads_stats')
+    @patch('pokepoke.orchestration.session_lifecycle.time')
     def test_finalize_session_keyboard_interrupt(
         self, mock_time: Mock, mock_stats: Mock,
         mock_print: Mock, mock_clear: Mock
@@ -488,11 +488,11 @@ class TestFinalizeSession:
         assert mock_print.called
         mock_clear.assert_called_once()
 
-    @patch('pokepoke.orchestration.orchestrator.is_shutting_down', return_value=True)
-    @patch('pokepoke.orchestration.orchestrator.clear_terminal_banner')
-    @patch('pokepoke.orchestration.orchestrator.print_stats')
-    @patch('pokepoke.orchestration.orchestrator.get_beads_stats')
-    @patch('pokepoke.orchestration.orchestrator.time')
+    @patch('pokepoke.orchestration.session_lifecycle.is_shutting_down', return_value=True)
+    @patch('pokepoke.orchestration.session_lifecycle.clear_terminal_banner')
+    @patch('pokepoke.orchestration.session_lifecycle.print_stats')
+    @patch('pokepoke.orchestration.session_lifecycle.get_beads_stats')
+    @patch('pokepoke.orchestration.session_lifecycle.time')
     def test_finalize_session_skips_stats_collection_during_shutdown(
         self, mock_time: Mock, mock_stats: Mock,
         mock_print: Mock, mock_clear: Mock,
@@ -802,7 +802,7 @@ class TestRunOrchestratorWorktreeCoverage:
     @patch('subprocess.run')
     @patch('pokepoke.agents.agent_runner.run_worktree_cleanup')
     @patch('pokepoke.orchestration.orchestrator.run_beta_tester')
-    @patch('pokepoke.orchestration.orchestrator.run_periodic_maintenance')
+    @patch('pokepoke.orchestration.session_lifecycle.run_periodic_maintenance')
     @patch('builtins.input')
     @patch('pokepoke.orchestration.orchestrator.get_beads_stats')
     @patch('pokepoke.orchestration.orchestrator.process_work_item')

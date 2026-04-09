@@ -48,11 +48,11 @@ def _fail_result(count: int = 0) -> WorkItemResult:
 # ── _finalize_session ──────────────────────────────────────────────
 
 class TestFinalizeSession:
-    @patch("pokepoke.orchestration.orchestrator.clear_terminal_banner")
-    @patch("pokepoke.orchestration.orchestrator.print_stats")
-    @patch("pokepoke.orchestration.orchestrator.terminal_ui")
-    @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=False)
-    @patch("pokepoke.orchestration.orchestrator.get_beads_stats")
+    @patch("pokepoke.orchestration.session_lifecycle.clear_terminal_banner")
+    @patch("pokepoke.orchestration.session_lifecycle.print_stats")
+    @patch("pokepoke.orchestration.session_lifecycle.terminal_ui")
+    @patch("pokepoke.orchestration.session_lifecycle.is_shutting_down", return_value=False)
+    @patch("pokepoke.orchestration.session_lifecycle.get_beads_stats")
     def test_collects_stats(self, mock_beads_stats, mock_shutdown,
                             mock_ui, mock_print_stats, mock_clear_banner):
         mock_beads_stats.return_value = BeadsStats(total_issues=10)
@@ -66,10 +66,10 @@ class TestFinalizeSession:
         mock_clear_banner.assert_called_once()
         assert stats.ending_beads_stats is not None
 
-    @patch("pokepoke.orchestration.orchestrator.clear_terminal_banner")
-    @patch("pokepoke.orchestration.orchestrator.print_stats")
-    @patch("pokepoke.orchestration.orchestrator.terminal_ui")
-    @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=True)
+    @patch("pokepoke.orchestration.session_lifecycle.clear_terminal_banner")
+    @patch("pokepoke.orchestration.session_lifecycle.print_stats")
+    @patch("pokepoke.orchestration.session_lifecycle.terminal_ui")
+    @patch("pokepoke.orchestration.session_lifecycle.is_shutting_down", return_value=True)
     def test_skips_stats_on_shutdown(self, mock_shutdown, mock_ui,
                                     mock_print_stats, mock_clear_banner):
         stats = SessionStats(agent_stats=AgentStats())
@@ -80,11 +80,11 @@ class TestFinalizeSession:
         mock_print_stats.assert_called_once()
         assert stats.ending_beads_stats is None  # Skipped due to shutdown
 
-    @patch("pokepoke.orchestration.orchestrator.clear_terminal_banner")
-    @patch("pokepoke.orchestration.orchestrator.print_stats")
-    @patch("pokepoke.orchestration.orchestrator.terminal_ui")
-    @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=False)
-    @patch("pokepoke.orchestration.orchestrator.get_beads_stats", side_effect=KeyboardInterrupt)
+    @patch("pokepoke.orchestration.session_lifecycle.clear_terminal_banner")
+    @patch("pokepoke.orchestration.session_lifecycle.print_stats")
+    @patch("pokepoke.orchestration.session_lifecycle.terminal_ui")
+    @patch("pokepoke.orchestration.session_lifecycle.is_shutting_down", return_value=False)
+    @patch("pokepoke.orchestration.session_lifecycle.get_beads_stats", side_effect=KeyboardInterrupt)
     def test_handles_keyboard_interrupt(self, mock_beads_stats, mock_shutdown,
                                         mock_ui, mock_print_stats, mock_clear_banner):
         stats = SessionStats(agent_stats=AgentStats())
@@ -97,17 +97,17 @@ class TestFinalizeSession:
 # ── _record_item_result ────────────────────────────────────────────
 
 class TestRecordItemResult:
-    @patch("pokepoke.orchestration.orchestrator.run_periodic_maintenance")
-    @patch("pokepoke.orchestration.orchestrator.increment_items_completed", return_value=5)
-    @patch("pokepoke.orchestration.orchestrator.append_model_history_entry")
-    @patch("pokepoke.orchestration.orchestrator.record_completion")
+    @patch("pokepoke.orchestration.session_lifecycle.run_periodic_maintenance")
+    @patch("pokepoke.orchestration.session_lifecycle.increment_items_completed", return_value=5)
+    @patch("pokepoke.orchestration.session_lifecycle.append_model_history_entry")
+    @patch("pokepoke.orchestration.session_lifecycle.record_completion")
     def test_successful_result(self, mock_record, mock_append,
                                mock_increment, mock_maintenance):
         stats = SessionStats(agent_stats=AgentStats())
         run_logger = MagicMock()
         item = _item()
 
-        with patch("pokepoke.orchestration.orchestrator.record_item_completed",
+        with patch("pokepoke.orchestration.session_lifecycle.record_item_completed",
                     return_value={"total_created": 10, "total_completed": 5}):
             success, completed = _record_item_result(
                 item, _success_result(), stats, run_logger,
@@ -117,10 +117,10 @@ class TestRecordItemResult:
         assert completed == 1  # items_completed incremented
         assert stats.work_agent_runs == 1
 
-    @patch("pokepoke.orchestration.orchestrator.run_periodic_maintenance")
-    @patch("pokepoke.orchestration.orchestrator.increment_items_completed", return_value=3)
-    @patch("pokepoke.orchestration.orchestrator.append_model_history_entry")
-    @patch("pokepoke.orchestration.orchestrator.record_completion")
+    @patch("pokepoke.orchestration.session_lifecycle.run_periodic_maintenance")
+    @patch("pokepoke.orchestration.session_lifecycle.increment_items_completed", return_value=3)
+    @patch("pokepoke.orchestration.session_lifecycle.append_model_history_entry")
+    @patch("pokepoke.orchestration.session_lifecycle.record_completion")
     def test_result_with_model_completion(self, mock_record, mock_append,
                                           mock_increment, mock_maintenance):
         stats = SessionStats(agent_stats=AgentStats())
@@ -130,7 +130,7 @@ class TestRecordItemResult:
                                     duration_seconds=60.0)
         result = _success_result(model_completion=mc)
 
-        with patch("pokepoke.orchestration.orchestrator.record_item_completed",
+        with patch("pokepoke.orchestration.session_lifecycle.record_item_completed",
                     return_value={"total_created": 0, "total_completed": 0}):
             _record_item_result(item, result, stats, run_logger)
 
@@ -166,10 +166,10 @@ class TestRecordItemResult:
         agent_stats = AgentStats(input_tokens=500, output_tokens=200)
 
         with (
-            patch("pokepoke.orchestration.orchestrator.record_item_completed",
+            patch("pokepoke.orchestration.session_lifecycle.record_item_completed",
                   return_value={"total_created": 0, "total_completed": 0}),
-            patch("pokepoke.orchestration.orchestrator.increment_items_completed", return_value=1),
-            patch("pokepoke.orchestration.orchestrator.run_periodic_maintenance"),
+            patch("pokepoke.orchestration.session_lifecycle.increment_items_completed", return_value=1),
+            patch("pokepoke.orchestration.session_lifecycle.run_periodic_maintenance"),
         ):
             _record_item_result(
                 item, _success_result(stats=agent_stats), stats, run_logger,
@@ -199,7 +199,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.register_shutdown_handlers")
     @patch("pokepoke.orchestration.orchestrator.terminal_ui")
     @patch("pokepoke.orchestration.orchestrator.set_terminal_banner")
-    @patch("pokepoke.orchestration.orchestrator.clear_terminal_banner")
+    @patch("pokepoke.orchestration.session_lifecycle.clear_terminal_banner")
     @patch("pokepoke.orchestration.orchestrator.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.orchestrator.initialize_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestration.orchestrator.get_agent_name", return_value="test-agent")
@@ -210,7 +210,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.get_ready_work_items", return_value=[])
     @patch("pokepoke.orchestration.orchestrator.select_work_item", return_value=None)
     @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=False)
-    @patch("pokepoke.orchestration.orchestrator.print_stats")
+    @patch("pokepoke.orchestration.session_lifecycle.print_stats")
     @patch("subprocess.run")
     def test_no_work_items_exits_zero(
         self, mock_subprocess, mock_print, mock_shutdown, mock_select, mock_ready,
@@ -230,7 +230,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.register_shutdown_handlers")
     @patch("pokepoke.orchestration.orchestrator.terminal_ui")
     @patch("pokepoke.orchestration.orchestrator.set_terminal_banner")
-    @patch("pokepoke.orchestration.orchestrator.clear_terminal_banner")
+    @patch("pokepoke.orchestration.session_lifecycle.clear_terminal_banner")
     @patch("pokepoke.orchestration.orchestrator.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.orchestrator.initialize_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestration.orchestrator.get_agent_name", return_value="test-agent")
@@ -239,7 +239,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.get_failed_unassign_count", return_value=0)
     @patch("pokepoke.orchestration.orchestrator.check_and_commit_main_repo", return_value=False)
     @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=False)
-    @patch("pokepoke.orchestration.orchestrator.print_stats")
+    @patch("pokepoke.orchestration.session_lifecycle.print_stats")
     @patch("subprocess.run")
     def test_repo_check_failure_returns_one(
         self, mock_subprocess, mock_print, mock_shutdown, mock_repo,
@@ -259,7 +259,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.register_shutdown_handlers")
     @patch("pokepoke.orchestration.orchestrator.terminal_ui")
     @patch("pokepoke.orchestration.orchestrator.set_terminal_banner")
-    @patch("pokepoke.orchestration.orchestrator.clear_terminal_banner")
+    @patch("pokepoke.orchestration.session_lifecycle.clear_terminal_banner")
     @patch("pokepoke.orchestration.orchestrator.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.orchestrator.initialize_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestration.orchestrator.get_agent_name", return_value="test-agent")
@@ -272,9 +272,9 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.process_work_item")
     @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=False)
     @patch("pokepoke.orchestration.orchestrator.should_stop_after_current", return_value=False)
-    @patch("pokepoke.orchestration.orchestrator.print_stats")
-    @patch("pokepoke.orchestration.orchestrator.run_periodic_maintenance")
-    @patch("pokepoke.orchestration.orchestrator.increment_items_completed", return_value=1)
+    @patch("pokepoke.orchestration.session_lifecycle.print_stats")
+    @patch("pokepoke.orchestration.session_lifecycle.run_periodic_maintenance")
+    @patch("pokepoke.orchestration.session_lifecycle.increment_items_completed", return_value=1)
     @patch("subprocess.run")
     def test_single_item_success(
         self, mock_subprocess, mock_increment, mock_maintenance, mock_print,
@@ -295,7 +295,7 @@ class TestRunOrchestrator:
                   return_value={"backfilled": 0}),
             patch("pokepoke.orchestration.orchestrator._get_beads_summary",
                   return_value={"total_created": 0, "total_completed": 0}),
-            patch("pokepoke.orchestration.orchestrator.record_item_completed",
+            patch("pokepoke.orchestration.session_lifecycle.record_item_completed",
                   return_value={"total_created": 0, "total_completed": 1}),
         ):
             exit_code = run_orchestrator(interactive=False, continuous=False)
@@ -305,7 +305,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.register_shutdown_handlers")
     @patch("pokepoke.orchestration.orchestrator.terminal_ui")
     @patch("pokepoke.orchestration.orchestrator.set_terminal_banner")
-    @patch("pokepoke.orchestration.orchestrator.clear_terminal_banner")
+    @patch("pokepoke.orchestration.session_lifecycle.clear_terminal_banner")
     @patch("pokepoke.orchestration.orchestrator.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.orchestrator.initialize_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestration.orchestrator.get_agent_name", return_value="test-agent")
@@ -318,7 +318,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.process_work_item")
     @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=False)
     @patch("pokepoke.orchestration.orchestrator.should_stop_after_current", return_value=False)
-    @patch("pokepoke.orchestration.orchestrator.print_stats")
+    @patch("pokepoke.orchestration.session_lifecycle.print_stats")
     @patch("subprocess.run")
     def test_single_item_failure(
         self, mock_subprocess, mock_print, mock_stop, mock_shutdown, mock_process,
@@ -344,7 +344,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.register_shutdown_handlers")
     @patch("pokepoke.orchestration.orchestrator.terminal_ui")
     @patch("pokepoke.orchestration.orchestrator.set_terminal_banner")
-    @patch("pokepoke.orchestration.orchestrator.clear_terminal_banner")
+    @patch("pokepoke.orchestration.session_lifecycle.clear_terminal_banner")
     @patch("pokepoke.orchestration.orchestrator.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.orchestrator.initialize_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestration.orchestrator.get_agent_name", return_value="test-agent")
@@ -357,7 +357,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.process_work_item")
     @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=False)
     @patch("pokepoke.orchestration.orchestrator.should_stop_after_current", return_value=False)
-    @patch("pokepoke.orchestration.orchestrator.print_stats")
+    @patch("pokepoke.orchestration.session_lifecycle.print_stats")
     @patch("subprocess.run")
     def test_claim_failure_adds_to_skip(
         self, mock_subprocess, mock_print, mock_stop, mock_shutdown, mock_process,
@@ -385,7 +385,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.register_shutdown_handlers")
     @patch("pokepoke.orchestration.orchestrator.terminal_ui")
     @patch("pokepoke.orchestration.orchestrator.set_terminal_banner")
-    @patch("pokepoke.orchestration.orchestrator.clear_terminal_banner")
+    @patch("pokepoke.orchestration.session_lifecycle.clear_terminal_banner")
     @patch("pokepoke.orchestration.orchestrator.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.orchestrator.initialize_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestration.orchestrator.get_agent_name", return_value="test-agent")
@@ -397,7 +397,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.get_ready_work_items", return_value=[])
     @patch("pokepoke.orchestration.orchestrator.select_work_item", return_value=None)
     @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=False)
-    @patch("pokepoke.orchestration.orchestrator.print_stats")
+    @patch("pokepoke.orchestration.session_lifecycle.print_stats")
     @patch("subprocess.run")
     def test_recovery_of_stuck_items(
         self, mock_subprocess, mock_print, mock_shutdown, mock_select, mock_ready,
@@ -558,8 +558,8 @@ class TestRunPreflight:
         assert result is None
 
     @patch("pokepoke.orchestration.orchestrator.terminal_ui")
-    @patch("pokepoke.orchestration.orchestrator.print_stats")
-    @patch("pokepoke.orchestration.orchestrator.clear_terminal_banner")
+    @patch("pokepoke.orchestration.session_lifecycle.print_stats")
+    @patch("pokepoke.orchestration.session_lifecycle.clear_terminal_banner")
     @patch("pokepoke.orchestration.orchestrator.get_beads_stats", return_value=BeadsStats())
     @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=False)
     @patch("pokepoke.orchestration.orchestrator.handle_preflight_checks", return_value=(False, True))
@@ -588,8 +588,8 @@ class TestRunMainLoop:
         return _OrchestratorContext(**defaults)
 
     @patch("pokepoke.orchestration.orchestrator.terminal_ui")
-    @patch("pokepoke.orchestration.orchestrator.print_stats")
-    @patch("pokepoke.orchestration.orchestrator.clear_terminal_banner")
+    @patch("pokepoke.orchestration.session_lifecycle.print_stats")
+    @patch("pokepoke.orchestration.session_lifecycle.clear_terminal_banner")
     @patch("pokepoke.orchestration.orchestrator.get_beads_stats", return_value=BeadsStats())
     @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=False)
     @patch("pokepoke.orchestration.orchestrator.select_work_item", return_value=None)
@@ -615,28 +615,28 @@ class TestRunMainLoop:
 # ── _should_run_post_mortem ────────────────────────────────────────
 
 class TestShouldRunPostMortem:
-    @patch("pokepoke.orchestration.orchestrator.load_config")
+    @patch("pokepoke.orchestration.session_lifecycle.load_config")
     def test_disabled_returns_false(self, mock_load):
         from pokepoke.config import PostMortemConfig, ProjectConfig
         mock_load.return_value = ProjectConfig(post_mortem=PostMortemConfig(enabled=False))
         stats = SessionStats(agent_stats=AgentStats())
         assert _should_run_post_mortem(stats, "circuit breaker") is False
 
-    @patch("pokepoke.orchestration.orchestrator.load_config")
+    @patch("pokepoke.orchestration.session_lifecycle.load_config")
     def test_circuit_breaker_triggers(self, mock_load):
         from pokepoke.config import PostMortemConfig, ProjectConfig
         mock_load.return_value = ProjectConfig(post_mortem=PostMortemConfig(enabled=True))
         stats = SessionStats(agent_stats=AgentStats())
         assert _should_run_post_mortem(stats, "circuit breaker tripped") is True
 
-    @patch("pokepoke.orchestration.orchestrator.load_config")
+    @patch("pokepoke.orchestration.session_lifecycle.load_config")
     def test_consecutive_triggers(self, mock_load):
         from pokepoke.config import PostMortemConfig, ProjectConfig
         mock_load.return_value = ProjectConfig(post_mortem=PostMortemConfig(enabled=True))
         stats = SessionStats(agent_stats=AgentStats())
         assert _should_run_post_mortem(stats, "consecutive failures") is True
 
-    @patch("pokepoke.orchestration.orchestrator.load_config")
+    @patch("pokepoke.orchestration.session_lifecycle.load_config")
     def test_low_success_rate_triggers(self, mock_load):
         from pokepoke.config import PostMortemConfig, ProjectConfig
         mock_load.return_value = ProjectConfig(post_mortem=PostMortemConfig(enabled=True))
@@ -645,7 +645,7 @@ class TestShouldRunPostMortem:
         stats.agent_run_counts["work"] = 5  # 1 success out of 5 = 20%
         assert _should_run_post_mortem(stats, "empty ready queue") is True
 
-    @patch("pokepoke.orchestration.orchestrator.load_config")
+    @patch("pokepoke.orchestration.session_lifecycle.load_config")
     def test_high_success_rate_no_trigger(self, mock_load):
         from pokepoke.config import PostMortemConfig, ProjectConfig
         mock_load.return_value = ProjectConfig(post_mortem=PostMortemConfig(enabled=True))
@@ -654,7 +654,7 @@ class TestShouldRunPostMortem:
         stats.agent_run_counts["work"] = 5  # 4 success out of 5 = 80%
         assert _should_run_post_mortem(stats, "empty ready queue") is False
 
-    @patch("pokepoke.orchestration.orchestrator.load_config")
+    @patch("pokepoke.orchestration.session_lifecycle.load_config")
     def test_too_few_items_no_trigger(self, mock_load):
         from pokepoke.config import PostMortemConfig, ProjectConfig
         mock_load.return_value = ProjectConfig(post_mortem=PostMortemConfig(enabled=True))
