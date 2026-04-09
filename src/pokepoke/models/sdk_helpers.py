@@ -188,7 +188,9 @@ def _build_session_config(
     if permission_handler is not None:
         config["on_permission_request"] = permission_handler
     if deny_write:
-        config["excluded_tools"] = ["write", "edit"]
+        # Exclude file modification tools AND command execution tools
+        # This prevents gate agents from re-running tests/pre-commit hooks
+        config["excluded_tools"] = ["write", "edit", "create", "powershell", "bash"]
     if session_id:
         config["session_id"] = session_id
     return config
