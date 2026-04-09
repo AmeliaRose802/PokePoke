@@ -268,6 +268,7 @@ class TestProcessWorkItemTimeoutRestart:
         # third is reset start_time, fourth is within budget
         times = iter([0.0, 100000.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0])
         monkeypatch.setattr("pokepoke.orchestration.workflow.time.time", lambda: next(times, 1.0))
+        monkeypatch.setattr("pokepoke.orchestration.workflow.time.sleep", lambda _: None)
 
         monkeypatch.setattr("pokepoke.orchestration.workflow.invoke_copilot", lambda *a, **kw: _ok_copilot())
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
@@ -438,6 +439,7 @@ class TestProcessWorkItemGateAgentEnabled:
         monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow.run_cleanup_with_timeout", lambda *a, **kw: (True, 0))
+        monkeypatch.setattr("pokepoke.beads.reconciliation.worktree_branch_has_commits", lambda *a, **kw: False)
         gate_crash = GateAgentResult(
             success=False, reason="segfault", crashed=True, is_timeout=False,
         )
@@ -448,6 +450,32 @@ class TestProcessWorkItemGateAgentEnabled:
         )
         result = process_work_item(_item(), interactive=False)
         assert result.success is False
+
+    def test_gate_crashed_fallback_with_valid_commits(self, monkeypatch, _mock_workflow_deps):
+        """Gate crashes but worktree has valid commits → fallback accepts work."""
+        _mock_workflow_deps.gate_agent_enabled = True
+        monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
+        monkeypatch.setattr("pokepoke.orchestration.workflow.invoke_copilot", lambda *a, **kw: _ok_copilot())
+        monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
+        monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
+        monkeypatch.setattr("pokepoke.orchestration.workflow.run_cleanup_with_timeout", lambda *a, **kw: (True, 0))
+        monkeypatch.setattr("pokepoke.beads.reconciliation.worktree_branch_has_commits", lambda *a, **kw: True)
+        gate_crash = GateAgentResult(
+            success=False, reason="output corrupted", crashed=True, is_timeout=False,
+        )
+        monkeypatch.setattr("pokepoke.orchestration.workflow.run_gate_agent", lambda *a, **kw: gate_crash)
+        finalize_called = {}
+
+        def mock_finalize(ctx):
+            finalize_called["gate_success"] = ctx.gate_success
+            return WorkItemResult(success=True, request_count=1), True
+        monkeypatch.setattr(
+            "pokepoke.orchestration.workflow._finalize_item_result",
+            mock_finalize,
+        )
+        result = process_work_item(_item(), interactive=False)
+        assert result.success is True
+        assert finalize_called.get("gate_success") is True
 
 
 class TestProcessWorkItemFinalizationNotComplete:

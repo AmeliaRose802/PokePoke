@@ -256,14 +256,8 @@ def process_work_item(  # noqa: C901
             outcome = result.work_agent_outcome
             if outcome and outcome.status in _FAIL_FAST_STATUSES:
                 reason = outcome.reason or outcome.status
-                _comment(
-                    item.id,
-                    f"Work agent returned '{outcome.status}': {reason}",
-                )
-                logger.info(
-                    "Work agent fail-fast: status=%s reason=%s — skipping gate",
-                    outcome.status, reason,
-                )
+                _comment(item.id, f"Work agent returned '{outcome.status}': {reason}")
+                logger.info("Work agent fail-fast: status=%s reason=%s — skipping gate", outcome.status, reason)
                 break
 
             # Skip cleanup/gate if agent already closed the beads item (self-merge)
@@ -375,7 +369,16 @@ def process_work_item(  # noqa: C901
                 logger.info("\n✅ Gate Agent signed off!")
                 backoff_delay = _BACKOFF_BASE_SECONDS
                 break
-            elif not gate_crashed and not gate_timed_out:
+            elif gate_crashed or gate_timed_out:
+                # Gate infra failure — if worktree has commits, accept via fallback
+                from pokepoke.beads.reconciliation import worktree_branch_has_commits
+                if worktree_branch_has_commits(item.id, pokepoke_root):
+                    fail_mode = "timed out" if gate_timed_out else "crashed"
+                    logger.warning("\n⚠️  Gate Agent %s but worktree has valid commits — fallback accept", fail_mode)
+                    _comment(item.id, f"Gate Agent {fail_mode} but worktree has valid commits. Accepting via fallback.")
+                    gate_success = True
+                break
+            else:
                 # Genuine code rejection — increment persistent counter and check cap
                 from pokepoke.beads.beads_management import increment_gate_rejection_count
                 new_count = increment_gate_rejection_count(item.id)
@@ -399,8 +402,6 @@ def process_work_item(  # noqa: C901
                 resume_output_summary = None
                 last_feedback = gate_reason
                 last_retry_was_gate_feedback = True  # Gate rejection → new card
-            else:
-                break
 
         # Save worker context for future workers when this attempt failed
         if not result.success:

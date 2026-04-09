@@ -1,6 +1,9 @@
 """Tests for output_sanitizer — ProcessMonitor line stripping."""
 
-from pokepoke.utils.output_sanitizer import strip_process_monitor_lines
+from pokepoke.utils.output_sanitizer import (
+    contains_process_monitor_noise,
+    strip_process_monitor_lines,
+)
 
 
 class TestStripProcessMonitorLines:
@@ -58,3 +61,22 @@ class TestStripProcessMonitorLines:
         result = strip_process_monitor_lines(text)
         assert "[ProcessMonitor]" not in result
         assert "data" in result
+
+
+class TestContainsProcessMonitorNoise:
+    """Tests for contains_process_monitor_noise."""
+
+    def test_detects_full_line_noise(self):
+        text = "some text\n[ProcessMonitor] PID 1234 active\nmore text"
+        assert contains_process_monitor_noise(text) is True
+
+    def test_detects_inline_noise(self):
+        text = 'value[ProcessMonitor] PID 1 completed'
+        assert contains_process_monitor_noise(text) is True
+
+    def test_clean_text_returns_false(self):
+        text = "no monitor noise here"
+        assert contains_process_monitor_noise(text) is False
+
+    def test_empty_string_returns_false(self):
+        assert contains_process_monitor_noise("") is False
