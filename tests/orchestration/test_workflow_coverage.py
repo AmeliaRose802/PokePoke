@@ -9,12 +9,11 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from pokepoke.orchestration.finalization import ResultContext, _build_completion_record, _finalize_item_result
 from pokepoke.orchestration.work_item_session import WorkItemSession
 from pokepoke.orchestration.workflow import process_work_item
 from pokepoke.orchestration.workflow_helpers import (
-    _build_completion_record,
     _fail_result,
-    _finalize_item_result,
     _log_failure,
     _maybe_retry_copilot,
     _pre_loop_validate,
@@ -691,17 +690,17 @@ class TestRunCleanupTimeout:
 class TestFinalizeItemResult:
     """Direct unit tests for _finalize_item_result."""
 
-    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
-    @patch("pokepoke.orchestration.workflow_helpers.run_beta_tester")
-    @patch("pokepoke.orchestration.workflow_helpers.finalize_work_item", return_value=True)
-    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.finalization.terminal_ui")
+    @patch("pokepoke.orchestration.finalization.run_beta_tester")
+    @patch("pokepoke.orchestration.finalization.finalize_work_item", return_value=True)
+    @patch("pokepoke.orchestration.finalization.set_terminal_banner")
+    @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
     def test_beta_test_enabled(self, mock_banner, mock_set, mock_finalize,
                                mock_beta, mock_tui, tmp_path):
         beta_stats = AgentStats(input_tokens=50)
         mock_beta.return_value = beta_stats
         result = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1)
-        wir, success = _finalize_item_result(
+        wir, success = _finalize_item_result(ResultContext(
             result=result,
             item=_item(),
             worktree_path=tmp_path,
@@ -716,23 +715,23 @@ class TestFinalizeItemResult:
             item_logger=None,
             base_agent_id="agent-1",
             run_beta_test=True,
-        )
+        ))
         assert success is True
         assert wir.success is True
         mock_beta.assert_called_once()
         # Beta stats should be accumulated
         assert wir.stats.input_tokens == 150
 
-    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
-    @patch("pokepoke.orchestration.workflow_helpers.finalize_work_item", return_value=True)
-    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.finalization.terminal_ui")
+    @patch("pokepoke.orchestration.finalization.finalize_work_item", return_value=True)
+    @patch("pokepoke.orchestration.finalization.set_terminal_banner")
+    @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
     def test_with_loggers(self, mock_banner, mock_set, mock_finalize,
                           mock_tui, tmp_path):
         run_logger = MagicMock()
         item_logger = MagicMock()
         result = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1)
-        _wir, success = _finalize_item_result(
+        _wir, success = _finalize_item_result(ResultContext(
             result=result,
             item=_item(),
             worktree_path=tmp_path,
@@ -747,17 +746,17 @@ class TestFinalizeItemResult:
             item_logger=item_logger,
             base_agent_id="agent-1",
             run_beta_test=False,
-        )
+        ))
         assert success is True
         item_logger.log_summary.assert_called_once_with(True, 2)
         run_logger.log_orchestrator.assert_called_once()
 
     # ── Failure path: reconciliation upgrades to SUCCESS ──────────
 
-    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
-    @patch("pokepoke.orchestration.workflow_helpers.reconcile_completed_item")
-    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.finalization.terminal_ui")
+    @patch("pokepoke.orchestration.finalization.reconcile_completed_item")
+    @patch("pokepoke.orchestration.finalization.set_terminal_banner")
+    @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
     def test_failure_reconciled_to_success(self, mock_banner, mock_set,
                                            mock_reconcile, mock_tui, tmp_path):
         """When session fails but reconciliation shows all evidence passed,
@@ -771,7 +770,7 @@ class TestFinalizeItemResult:
                                error="session failed")
         run_logger = MagicMock()
         item_logger = MagicMock()
-        wir, success = _finalize_item_result(
+        wir, success = _finalize_item_result(ResultContext(
             result=result,
             item=_item(),
             worktree_path=tmp_path,
@@ -786,7 +785,7 @@ class TestFinalizeItemResult:
             item_logger=item_logger,
             base_agent_id="agent-1",
             run_beta_test=False,
-        )
+        ))
         assert success is True
         assert wir.success is True
         item_logger.log_summary.assert_called_once_with(True, 1)
@@ -794,10 +793,10 @@ class TestFinalizeItemResult:
 
     # ── Failure path: reconciliation says NOT reconciled ──────────
 
-    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
-    @patch("pokepoke.orchestration.workflow_helpers.reconcile_completed_item")
-    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.finalization.terminal_ui")
+    @patch("pokepoke.orchestration.finalization.reconcile_completed_item")
+    @patch("pokepoke.orchestration.finalization.set_terminal_banner")
+    @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
     def test_failure_not_reconciled(self, mock_banner, mock_set,
                                     mock_reconcile,
                                     mock_tui, tmp_path):
@@ -810,7 +809,7 @@ class TestFinalizeItemResult:
         })
         result = CopilotResult(work_item_id="wf-1", success=False, attempt_count=1,
                                error="session failed")
-        wir, success = _finalize_item_result(
+        wir, success = _finalize_item_result(ResultContext(
             result=result,
             item=_item(),
             worktree_path=tmp_path,
@@ -825,16 +824,16 @@ class TestFinalizeItemResult:
             item_logger=None,
             base_agent_id="agent-1",
             run_beta_test=False,
-        )
+        ))
         assert success is False
         assert wir.success is False
 
     # ── False-positive guard: partial evidence ≠ reconciled ──────
 
-    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
-    @patch("pokepoke.orchestration.workflow_helpers.reconcile_completed_item")
-    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.finalization.terminal_ui")
+    @patch("pokepoke.orchestration.finalization.reconcile_completed_item")
+    @patch("pokepoke.orchestration.finalization.set_terminal_banner")
+    @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
     def test_failure_partial_evidence_not_reconciled(self, mock_banner, mock_set,
                                                      mock_reconcile,
                                                      mock_tui, tmp_path):
@@ -847,7 +846,7 @@ class TestFinalizeItemResult:
         })
         result = CopilotResult(work_item_id="wf-1", success=False, attempt_count=1,
                                error="session failed")
-        wir, success = _finalize_item_result(
+        wir, success = _finalize_item_result(ResultContext(
             result=result,
             item=_item(),
             worktree_path=tmp_path,
@@ -862,6 +861,6 @@ class TestFinalizeItemResult:
             item_logger=None,
             base_agent_id="agent-1",
             run_beta_test=False,
-        )
+        ))
         assert success is False
         assert wir.success is False

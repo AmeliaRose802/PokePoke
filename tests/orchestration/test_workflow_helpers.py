@@ -8,12 +8,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from pokepoke.orchestration.finalization import ResultContext, _build_completion_record, _finalize_item_result
 from pokepoke.orchestration.workflow_helpers import (
     _apply_gate_feedback,
-    _build_completion_record,
     _extract_agent_stats,
     _fail_result,
-    _finalize_item_result,
     _log_commit_status,
     _log_failure,
     _maybe_retry_copilot,
@@ -511,12 +510,12 @@ class TestRunGateCheck:
 
 
 class TestFinalizeItemResult:
-    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
-    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.orchestration.workflow_helpers.finalize_work_item", return_value=True)
+    @patch("pokepoke.orchestration.finalization.terminal_ui")
+    @patch("pokepoke.orchestration.finalization.set_terminal_banner")
+    @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.finalization.finalize_work_item", return_value=True)
     def test_success_path(self, mock_fin, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats):
-        wr, ok = _finalize_item_result(
+        wr, ok = _finalize_item_result(ResultContext(
             result=CopilotResult(work_item_id="item-42", success=True),
             item=sample_item,
             worktree_path=Path("/wt"),
@@ -531,17 +530,17 @@ class TestFinalizeItemResult:
             item_logger=None,
             base_agent_id="agent-1",
             run_beta_test=False,
-        )
+        ))
         assert wr.success is True
         assert ok is True
         assert wr.model_completion is not None
 
-    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
-    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.orchestration.workflow_helpers.finalize_work_item", return_value=False)
+    @patch("pokepoke.orchestration.finalization.terminal_ui")
+    @patch("pokepoke.orchestration.finalization.set_terminal_banner")
+    @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.finalization.finalize_work_item", return_value=False)
     def test_success_but_finalize_fails(self, mock_fin, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats):
-        wr, ok = _finalize_item_result(
+        wr, ok = _finalize_item_result(ResultContext(
             result=CopilotResult(work_item_id="item-42", success=True),
             item=sample_item,
             worktree_path=Path("/wt"),
@@ -556,17 +555,17 @@ class TestFinalizeItemResult:
             item_logger=None,
             base_agent_id="agent-1",
             run_beta_test=False,
-        )
+        ))
         assert wr.success is False
         assert ok is False
 
-    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
-    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.orchestration.workflow_helpers.reconcile_completed_item", return_value=(False, {}))
+    @patch("pokepoke.orchestration.finalization.terminal_ui")
+    @patch("pokepoke.orchestration.finalization.set_terminal_banner")
+    @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.finalization.reconcile_completed_item", return_value=(False, {}))
     def test_failure_path_cleanup(self, mock_recon, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats, capsys):
         """On failure, worktree is preserved (not cleaned up)."""
-        wr, ok = _finalize_item_result(
+        wr, ok = _finalize_item_result(ResultContext(
             result=CopilotResult(work_item_id="item-42", success=False, error="something broke"),
             item=sample_item,
             worktree_path=Path("/wt"),
@@ -581,17 +580,17 @@ class TestFinalizeItemResult:
             item_logger=None,
             base_agent_id="agent-1",
             run_beta_test=False,
-        )
+        ))
         assert wr.success is False
         assert ok is False
 
-    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
-    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.orchestration.workflow_helpers.reconcile_completed_item")
+    @patch("pokepoke.orchestration.finalization.terminal_ui")
+    @patch("pokepoke.orchestration.finalization.set_terminal_banner")
+    @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.finalization.reconcile_completed_item")
     def test_failure_reconciled_as_success(self, mock_recon, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats):
         mock_recon.return_value = (True, {"beads_closed": True, "commits_on_default": True, "worktree_cleaned": True})
-        wr, ok = _finalize_item_result(
+        wr, ok = _finalize_item_result(ResultContext(
             result=CopilotResult(work_item_id="item-42", success=False, error="oops"),
             item=sample_item,
             worktree_path=Path("/wt"),
@@ -606,19 +605,19 @@ class TestFinalizeItemResult:
             item_logger=None,
             base_agent_id="agent-1",
             run_beta_test=False,
-        )
+        ))
         assert wr.success is True
         assert ok is True
 
-    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
-    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.orchestration.workflow_helpers.run_beta_tester")
-    @patch("pokepoke.orchestration.workflow_helpers.finalize_work_item", return_value=True)
+    @patch("pokepoke.orchestration.finalization.terminal_ui")
+    @patch("pokepoke.orchestration.finalization.set_terminal_banner")
+    @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.finalization.run_beta_tester")
+    @patch("pokepoke.orchestration.finalization.finalize_work_item", return_value=True)
     def test_success_with_beta_test(self, mock_fin, mock_beta, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats):
         beta_stats = AgentStats(input_tokens=10, output_tokens=5)
         mock_beta.return_value = beta_stats
-        wr, ok = _finalize_item_result(
+        wr, ok = _finalize_item_result(ResultContext(
             result=CopilotResult(work_item_id="item-42", success=True),
             item=sample_item,
             worktree_path=Path("/wt"),
@@ -633,17 +632,17 @@ class TestFinalizeItemResult:
             item_logger=None,
             base_agent_id="agent-1",
             run_beta_test=True,
-        )
+        ))
         assert wr.success is True
         assert ok is True
         mock_beta.assert_called_once()
 
-    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
-    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.orchestration.workflow_helpers.finalize_work_item", return_value=True)
+    @patch("pokepoke.orchestration.finalization.terminal_ui")
+    @patch("pokepoke.orchestration.finalization.set_terminal_banner")
+    @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.finalization.finalize_work_item", return_value=True)
     def test_success_with_loggers(self, mock_fin, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats, mock_run_logger, mock_item_logger):
-        wr, _ok = _finalize_item_result(
+        wr, _ok = _finalize_item_result(ResultContext(
             result=CopilotResult(work_item_id="item-42", success=True),
             item=sample_item,
             worktree_path=Path("/wt"),
@@ -658,21 +657,21 @@ class TestFinalizeItemResult:
             item_logger=mock_item_logger,
             base_agent_id="agent-1",
             run_beta_test=False,
-        )
+        ))
         assert wr.success is True
         mock_item_logger.log_summary.assert_called_once_with(True, 3)
         mock_run_logger.log_orchestrator.assert_called_once()
         assert wr.model_completion.gate_passed is True
 
-    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
-    @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
-    @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
-    @patch("pokepoke.orchestration.workflow_helpers.reconcile_completed_item", return_value=(False, {}))
+    @patch("pokepoke.orchestration.finalization.terminal_ui")
+    @patch("pokepoke.orchestration.finalization.set_terminal_banner")
+    @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.finalization.reconcile_completed_item", return_value=(False, {}))
     def test_failure_path_skips_cleanup_during_shutdown(
         self, mock_recon, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats,
     ):
         """Worktree should be preserved on failure (always, not just shutdown)."""
-        wr, ok = _finalize_item_result(
+        wr, ok = _finalize_item_result(ResultContext(
             result=CopilotResult(work_item_id="item-42", success=False, error="shutdown abort"),
             item=sample_item,
             worktree_path=Path("/wt"),
@@ -687,6 +686,6 @@ class TestFinalizeItemResult:
             item_logger=None,
             base_agent_id="agent-1",
             run_beta_test=False,
-        )
+        ))
         assert wr.success is False
         assert ok is False
