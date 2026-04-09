@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import asdict
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from pokepoke.desktop.desktop_api import DesktopAPI
@@ -159,7 +159,7 @@ def get_model_history(self: DesktopAPI, limit: int = 200, repo_name: str = "") -
     # Fall back to model_stats.json if history file doesn't exist
     if not raw_history:
         from pokepoke.models.model_stats_store import get_model_history as _get_model_history
-        raw_history = list(_get_model_history(limit=limit, repo_name=repo_name))
+        raw_history = cast(list[dict[str, Any]], _get_model_history(limit=limit, repo_name=repo_name))
 
     # Normalize keys to match frontend schema
     history = []
@@ -327,7 +327,7 @@ def get_repo_summary(self: DesktopAPI) -> dict[str, dict[str, Any]]:
     all_repos = set(model_metrics) | set(beads_metrics)
     result: dict[str, dict[str, Any]] = {}
     for repo in sorted(all_repos):
-        mm = model_metrics.get(repo, {})
+        mm = dict(model_metrics.get(repo, {}))
         bm = beads_metrics.get(repo, {})
         result[repo] = {
             "total_items_processed": mm.get("total_items_processed", 0),
