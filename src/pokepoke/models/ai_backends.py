@@ -6,7 +6,7 @@ import shutil
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol
 
 from pokepoke.config import get_config
 from pokepoke.models.copilot_sdk import (
@@ -16,6 +16,7 @@ from pokepoke.models.copilot_sdk import (
 )
 from pokepoke.types import BeadsWorkItem, CopilotResult, RetryConfig
 from pokepoke.utils.constants import DEFAULT_AGENT_TIMEOUT
+from pokepoke.utils.logging_utils import ItemLogger
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ class AIBackend(Protocol):
         retry_config: RetryConfig | None = None,
         timeout: float | None = None,
         deny_write: bool = False,
-        item_logger: Any = None,
+        item_logger: ItemLogger | None = None,
         model: str | None = None,
         cwd: str | None = None,
         template_name: str | None = None,
@@ -56,7 +57,7 @@ class CopilotBackend:
         retry_config: RetryConfig | None = None,
         timeout: float | None = None,
         deny_write: bool = False,
-        item_logger: Any = None,
+        item_logger: ItemLogger | None = None,
         model: str | None = None,
         cwd: str | None = None,
         template_name: str | None = None,
@@ -101,7 +102,7 @@ class ClaudeCodeBackend:
         retry_config: RetryConfig | None = None,
         timeout: float | None = None,
         deny_write: bool = False,
-        item_logger: Any = None,
+        item_logger: ItemLogger | None = None,
         model: str | None = None,
         cwd: str | None = None,
         template_name: str | None = None,
@@ -215,7 +216,7 @@ def invoke_copilot(
     retry_config: RetryConfig | None = None,
     timeout: float | None = None,
     deny_write: bool = False,
-    item_logger: Any = None,
+    item_logger: ItemLogger | None = None,
     model: str | None = None,
     cwd: str | None = None,
     provider: str | None = None,
