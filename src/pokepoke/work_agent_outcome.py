@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from pokepoke.utils.output_sanitizer import strip_process_monitor_lines
+
 WORK_AGENT_OUTCOME_STATUSES = frozenset({
     "completed", "blocked", "needs_clarification", "too_large",
 })
@@ -48,7 +50,7 @@ def parse_work_agent_outcome(output: str | None) -> WorkAgentOutcome | None:
     ))
     for match in reversed(json_blocks):
         try:
-            data = json.loads(match.group(1))
+            data = json.loads(strip_process_monitor_lines(match.group(1)))
         except json.JSONDecodeError:
             continue
         status = data.get("status")
