@@ -135,13 +135,12 @@ def retry_failed_cleanups() -> int:
         if failure_count >= _NUCLEAR_FAILURE_THRESHOLD:
             # Escalate: nuclear removal
             removed = _nuclear_remove(worktree_path)
-            if not removed:
-                # Last resort: quarantine
-                if _quarantine_directory(worktree_path, worktree_id):
-                    logger.info(f"   📦 Quarantined worktree {worktree_id}")
-                    _wc.remove_from_manifest(worktree_id)
-                    cleaned_count += 1
-                    continue
+            # Last resort: quarantine if nuclear removal failed
+            if not removed and _quarantine_directory(worktree_path, worktree_id):
+                logger.info(f"   📦 Quarantined worktree {worktree_id}")
+                _wc.remove_from_manifest(worktree_id)
+                cleaned_count += 1
+                continue
         else:
             # Normal retry with force removal
             removed = _wc.force_remove_directory(worktree_path)

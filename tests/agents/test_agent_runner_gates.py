@@ -555,9 +555,10 @@ class TestGateAgentJsonDecodeError:
             attempt_count=1
         )
         mock_parse.return_value = None
-        success, reason, _stats, _crashed = run_gate_agent(work_item)
+        success, reason, _stats, crashed = run_gate_agent(work_item)
         assert success is False
-        assert "did not explicitly approve" in reason
+        assert "could not be parsed" in reason
+        assert crashed is True
 
 
 class TestGateAgentWithAgentId:
