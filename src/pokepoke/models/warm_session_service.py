@@ -83,7 +83,7 @@ async def warm_session_for_label(
         )
 
         # Import here to avoid circular imports
-        from pokepoke.models.copilot_sdk import invoke_copilot_sdk
+        from pokepoke.models.copilot_sdk import CopilotInvocationConfig, invoke_copilot_sdk
         from pokepoke.types import BeadsWorkItem
 
         # Create a synthetic work item for the exploration
@@ -99,13 +99,16 @@ async def warm_session_for_label(
         )
 
         # Run the exploration with deny_write to prevent modifications
-        result = await invoke_copilot_sdk(
-            work_item=exploration_item,
-            prompt=prompt,
+        invocation_config = CopilotInvocationConfig(
             timeout=timeout,
             deny_write=True,
             cwd=cwd,
             session_id=session_id,
+        )
+        result = await invoke_copilot_sdk(
+            work_item=exploration_item,
+            prompt=prompt,
+            config=invocation_config,
         )
 
         if result.success:

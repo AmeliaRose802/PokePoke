@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 
 from pokepoke.models.copilot_sdk import (
+    CopilotInvocationConfig,
     _fail_result,
     build_prompt_from_work_item,
     invoke_copilot_sdk_sync,
@@ -166,7 +167,7 @@ class TestInvokeCopilotSDKSyncIntegration:
         result = invoke_copilot_sdk_sync(
             work_item=work_item,
             prompt="Test prompt",
-            timeout=60.0
+            config=CopilotInvocationConfig(timeout=60.0),
         )
 
         assert result == expected_result
@@ -197,11 +198,13 @@ class TestInvokeCopilotSDKSyncIntegration:
         invoke_copilot_sdk_sync(
             work_item=work_item,
             prompt="Custom prompt",
-            timeout=120.0,
-            deny_write=True,
-            model="claude-sonnet",
-            cwd="/custom/path",
-            template_name="custom-template"
+            config=CopilotInvocationConfig(
+                timeout=120.0,
+                deny_write=True,
+                model="claude-sonnet",
+                cwd="/custom/path",
+                template_name="custom-template",
+            ),
         )
 
         # Get the coroutine that was passed to asyncio.run
@@ -591,8 +594,7 @@ class TestInvokeCopilotSDKInactivity:
 
             result = await invoke_copilot_sdk(
                 work_item=work_item,
-                timeout=10.0,
-                idle_timeout=1.0,
+                config=CopilotInvocationConfig(timeout=10.0, idle_timeout=1.0),
             )
 
         assert not result.success

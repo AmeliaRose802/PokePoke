@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from pokepoke.models.copilot_sdk import (
+    CopilotInvocationConfig,
     _build_copilot_result,
     _build_token_usage_callback,
     _fail_result,
@@ -240,7 +241,7 @@ class TestInvokeCopilotSDKAsync:
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
             prompt="Test prompt",
-            idle_timeout=0.01,
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert result.work_item_id == sample_work_item.id
@@ -300,7 +301,7 @@ class TestInvokeCopilotSDKAsync:
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
             prompt="Test prompt",
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert result.success
@@ -354,7 +355,7 @@ class TestInvokeCopilotSDKAsync:
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
             prompt="Test prompt",
-            idle_timeout=0.1,
+            config=CopilotInvocationConfig(idle_timeout=0.1),
         )
 
         assert result.success
@@ -404,7 +405,7 @@ class TestInvokeCopilotSDKAsync:
 
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert result.success
@@ -461,7 +462,7 @@ class TestInvokeCopilotSDKAsync:
 
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert result.success
@@ -505,7 +506,7 @@ class TestInvokeCopilotSDKAsync:
 
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert not result.success
@@ -534,8 +535,7 @@ class TestInvokeCopilotSDKAsync:
 
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            timeout=0.1,  # Very short timeout
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(timeout=0.1, idle_timeout=0.01),
         )
 
         assert not result.success
@@ -568,8 +568,7 @@ class TestInvokeCopilotSDKAsync:
 
             result = await invoke_copilot_sdk(
                 work_item=sample_work_item,
-                timeout=10.0,
-                idle_timeout=0.01
+                config=CopilotInvocationConfig(timeout=10.0, idle_timeout=0.01),
             )
 
         assert not result.success
@@ -589,7 +588,7 @@ class TestInvokeCopilotSDKAsync:
 
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert not result.success
@@ -610,7 +609,7 @@ class TestInvokeCopilotSDKAsync:
         # Should not raise - exception in stop should be caught
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert not result.success
@@ -654,8 +653,7 @@ class TestInvokeCopilotSDKAsync:
 
         await invoke_copilot_sdk(
             work_item=sample_work_item,
-            deny_write=True,
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(deny_write=True, idle_timeout=0.01),
         )
 
         # Verify deny_write added excluded_tools
@@ -702,7 +700,7 @@ class TestInvokeCopilotSDKAsync:
         # Don't provide prompt - should generate one with default template
         await invoke_copilot_sdk(
             work_item=sample_work_item,
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         mock_build_prompt.assert_called_once_with(sample_work_item, "beads-item")
@@ -745,8 +743,7 @@ class TestInvokeCopilotSDKAsync:
         # Provide custom template_name
         await invoke_copilot_sdk(
             work_item=sample_work_item,
-            template_name="bug-item",
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(template_name="bug-item", idle_timeout=0.01),
         )
 
         # Verify build_prompt_from_work_item was called with custom template
@@ -811,7 +808,7 @@ class TestInvokeCopilotSDKAsync:
 
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert result.success
@@ -873,7 +870,7 @@ class TestInvokeCopilotSDKAsync:
 
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert result.success
@@ -912,7 +909,7 @@ class TestInvokeCopilotSDKAsync:
 
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert not result.success
@@ -960,7 +957,7 @@ class TestInvokeCopilotSDKAsync:
 
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert result.success
@@ -1021,7 +1018,7 @@ class TestInvokeCopilotSDKAsync:
 
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert result.success
@@ -1040,7 +1037,7 @@ class TestInvokeCopilotSDKAsync:
 
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert not result.success
@@ -1080,8 +1077,7 @@ class TestInvokeCopilotSDKAsync:
 
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            cwd="/tmp/test-worktree",
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(cwd="/tmp/test-worktree", idle_timeout=0.01),
         )
 
         assert result.success
@@ -1122,7 +1118,7 @@ class TestInvokeCopilotSDKAsync:
 
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert result.success
@@ -1139,7 +1135,7 @@ class TestInvokeCopilotSDKAsync:
 
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert not result.success
@@ -1158,7 +1154,7 @@ class TestInvokeCopilotSDKAsync:
 
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert not result.success
@@ -1205,7 +1201,7 @@ class TestInvokeCopilotSDKAsync:
 
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert result.success
@@ -1239,7 +1235,7 @@ class TestInvokeCopilotSDKAsync:
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
             prompt="Test prompt",
-            idle_timeout=0.01,
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert not result.success
@@ -1288,7 +1284,7 @@ class TestInvokeCopilotSDKAsync:
 
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
-            idle_timeout=0.01
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert result.success
@@ -1319,8 +1315,7 @@ class TestInvokeCopilotSDKAsync:
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
             prompt="Test prompt",
-            timeout=5.0,  # Give enough time for get_state check
-            idle_timeout=0.01,
+            config=CopilotInvocationConfig(timeout=5.0, idle_timeout=0.01),
         )
 
         # Should detect disconnection and force-complete (success with no errors)
@@ -1352,8 +1347,7 @@ class TestInvokeCopilotSDKAsync:
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
             prompt="Test prompt",
-            timeout=5.0,
-            idle_timeout=0.01,
+            config=CopilotInvocationConfig(timeout=5.0, idle_timeout=0.01),
         )
 
         assert result.success
@@ -1396,8 +1390,7 @@ class TestInvokeCopilotSDKAsync:
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
             prompt="Test prompt",
-            timeout=5.0,
-            idle_timeout=0.01,
+            config=CopilotInvocationConfig(timeout=5.0, idle_timeout=0.01),
         )
 
         # Should still complete normally despite get_state errors
@@ -1634,7 +1627,7 @@ class TestRateLimitFallback:
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
             prompt="Test prompt",
-            idle_timeout=0.01,
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert result.success
@@ -1699,7 +1692,7 @@ class TestRateLimitFallback:
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
             prompt="Test prompt",
-            idle_timeout=0.01,
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert result.success
@@ -1771,7 +1764,7 @@ class TestRateLimitFallback:
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
             prompt="Test prompt",
-            idle_timeout=0.01,
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert result.success
@@ -1828,8 +1821,7 @@ class TestRateLimitFallback:
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
             prompt="Test prompt",
-            model=FALLBACK_MODEL,
-            idle_timeout=0.01,
+            config=CopilotInvocationConfig(model=FALLBACK_MODEL, idle_timeout=0.01),
         )
 
         assert not result.success
@@ -1898,7 +1890,7 @@ class TestRateLimitFallback:
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
             prompt="Test prompt",
-            idle_timeout=0.01,
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         # Fallback succeeds despite destroy() failure on first session
@@ -1954,7 +1946,7 @@ class TestRateLimitFallback:
         result = await invoke_copilot_sdk(
             work_item=sample_work_item,
             prompt="Test prompt",
-            idle_timeout=0.01,
+            config=CopilotInvocationConfig(idle_timeout=0.01),
         )
 
         assert not result.success

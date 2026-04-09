@@ -9,7 +9,11 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from pokepoke.config import get_config
-from pokepoke.models.copilot_sdk import build_prompt_from_work_item, invoke_copilot_sdk_sync
+from pokepoke.models.copilot_sdk import (
+    CopilotInvocationConfig,
+    build_prompt_from_work_item,
+    invoke_copilot_sdk_sync,
+)
 from pokepoke.types import BeadsWorkItem, CopilotResult, RetryConfig
 from pokepoke.utils.constants import DEFAULT_AGENT_TIMEOUT
 
@@ -60,19 +64,22 @@ class CopilotBackend:
         is_resume: bool = False,
         add_parent_dir: bool = False,
     ) -> CopilotResult:
-        return invoke_copilot_sdk_sync(
-            work_item=work_item,
-            prompt=prompt,
+        config = CopilotInvocationConfig(
             retry_config=retry_config,
             timeout=timeout,
             deny_write=deny_write,
-            item_logger=item_logger,
             model=model,
             cwd=cwd,
             template_name=template_name,
             session_id=session_id,
             is_resume=is_resume,
             add_parent_dir=add_parent_dir,
+        )
+        return invoke_copilot_sdk_sync(
+            work_item=work_item,
+            prompt=prompt,
+            config=config,
+            item_logger=item_logger,
         )
 
 
