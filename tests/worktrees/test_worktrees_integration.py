@@ -154,7 +154,7 @@ class TestCreateWorktreeIntegration:
 class TestIsWorktreeMergedIntegration:
     """Integration tests for is_worktree_merged."""
 
-    @patch('pokepoke.worktrees.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.merge_helpers.get_default_branch')
     @patch('subprocess.run')
     def test_is_merged_returns_true_when_branch_in_list(
         self, mock_run, mock_get_branch
@@ -173,7 +173,7 @@ class TestIsWorktreeMergedIntegration:
         args = mock_run.call_args[0][0]
         assert args == ['git', 'branch', '--merged', 'dev']
 
-    @patch('pokepoke.worktrees.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.merge_helpers.get_default_branch')
     @patch('subprocess.run')
     def test_is_merged_returns_false_when_branch_not_in_list(
         self, mock_run, mock_get_branch
@@ -205,7 +205,7 @@ class TestMergeWorktreeIntegration:
     @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
     @patch('pokepoke.worktrees.worktrees.is_worktree_merged')
     @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
-    @patch('pokepoke.worktrees.worktrees.validate_post_merge')
+    @patch('pokepoke.worktrees.merge_helpers.validate_post_merge')
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
     @patch('pokepoke.worktrees.worktrees.get_default_branch')
     @patch('pokepoke.worktrees.worktrees.cleanup_after_merge')
@@ -294,7 +294,7 @@ class TestMergeWorktreeIntegration:
     @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
     @patch('pokepoke.worktrees.worktrees.is_worktree_merged')
     @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
-    @patch('pokepoke.worktrees.worktrees.validate_post_merge')
+    @patch('pokepoke.worktrees.merge_helpers.validate_post_merge')
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
     @patch('pokepoke.worktrees.worktrees.get_default_branch')
     @patch('subprocess.run')
@@ -326,7 +326,7 @@ class TestMergeWorktreeIntegration:
     @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
     @patch('pokepoke.worktrees.worktrees.is_worktree_merged')
     @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
-    @patch('pokepoke.worktrees.worktrees.validate_post_merge')
+    @patch('pokepoke.worktrees.merge_helpers.validate_post_merge')
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
     @patch('pokepoke.worktrees.worktrees.get_default_branch')
     @patch('subprocess.run')
@@ -358,7 +358,7 @@ class TestMergeWorktreeIntegration:
     @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
     @patch('pokepoke.worktrees.worktrees.is_worktree_merged')
     @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
-    @patch('pokepoke.worktrees.worktrees.validate_post_merge')
+    @patch('pokepoke.worktrees.merge_helpers.validate_post_merge')
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
     @patch('pokepoke.worktrees.worktrees.get_default_branch')
     @patch('pokepoke.worktrees.worktrees.cleanup_after_merge')

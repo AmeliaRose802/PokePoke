@@ -302,8 +302,8 @@ class TestCreateWorktree:
 class TestIsWorktreeMerged:
     """Tests for is_worktree_merged function."""
 
-    @patch('pokepoke.worktrees.worktrees.get_default_branch')
-    @patch('pokepoke.worktrees.worktrees._run_git')
+    @patch('pokepoke.worktrees.merge_helpers.get_default_branch')
+    @patch('pokepoke.worktrees.merge_helpers._run_git')
     def test_is_worktree_merged_true(self, mock_run_git, mock_default_branch) -> None:
         """Return True when branch is merged."""
         mock_default_branch.return_value = 'main'
@@ -316,8 +316,8 @@ class TestIsWorktreeMerged:
 
         assert result is True
 
-    @patch('pokepoke.worktrees.worktrees.get_default_branch')
-    @patch('pokepoke.worktrees.worktrees._run_git')
+    @patch('pokepoke.worktrees.merge_helpers.get_default_branch')
+    @patch('pokepoke.worktrees.merge_helpers._run_git')
     def test_is_worktree_merged_false(self, mock_run_git, mock_default_branch) -> None:
         """Return False when branch is not merged."""
         mock_default_branch.return_value = 'main'
@@ -330,8 +330,8 @@ class TestIsWorktreeMerged:
 
         assert result is False
 
-    @patch('pokepoke.worktrees.worktrees.get_default_branch')
-    @patch('pokepoke.worktrees.worktrees._run_git')
+    @patch('pokepoke.worktrees.merge_helpers.get_default_branch')
+    @patch('pokepoke.worktrees.merge_helpers._run_git')
     def test_is_worktree_merged_git_error(self, mock_run_git, mock_default_branch) -> None:
         """Return False on git error."""
         mock_default_branch.return_value = 'main'
@@ -341,7 +341,7 @@ class TestIsWorktreeMerged:
 
         assert result is False
 
-    @patch('pokepoke.worktrees.worktrees._run_git')
+    @patch('pokepoke.worktrees.merge_helpers._run_git')
     def test_is_worktree_merged_custom_target_branch(self, mock_run_git) -> None:
         """Use custom target branch if provided."""
         mock_run_git.return_value = Mock(stdout='', returncode=0)
@@ -357,8 +357,8 @@ class TestMergeWorktree:
 
     @patch('pokepoke.worktrees.worktrees.cleanup_after_merge')
     @patch('pokepoke.worktrees.worktrees.is_worktree_merged')
-    @patch('pokepoke.worktrees.worktrees._run_git')
-    @patch('pokepoke.worktrees.worktrees.validate_post_merge')
+    @patch('pokepoke.worktrees.merge_helpers._run_git')
+    @patch('pokepoke.worktrees.merge_helpers.validate_post_merge')
     @patch('pokepoke.worktrees.worktrees.get_default_branch')
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
     @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
@@ -385,7 +385,7 @@ class TestMergeWorktree:
         mock_is_merged.return_value = True
         mock_cleanup.return_value = None
         monkeypatch.setattr(
-            'pokepoke.worktrees.worktrees._run_git_with_retry',
+            'pokepoke.worktrees.merge_helpers._run_git_with_retry',
             lambda *a, **kw: Mock(returncode=0, stdout=''),
         )
 
@@ -450,8 +450,8 @@ class TestMergeWorktree:
 
     @patch('pokepoke.worktrees.worktrees.cleanup_after_merge')
     @patch('pokepoke.worktrees.worktrees.is_worktree_merged')
-    @patch('pokepoke.worktrees.worktrees._run_git')
-    @patch('pokepoke.worktrees.worktrees.validate_post_merge')
+    @patch('pokepoke.worktrees.merge_helpers._run_git')
+    @patch('pokepoke.worktrees.merge_helpers.validate_post_merge')
     @patch('pokepoke.worktrees.worktrees.get_default_branch')
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
     @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
@@ -478,7 +478,7 @@ class TestMergeWorktree:
         mock_is_merged.return_value = True
         mock_cleanup.return_value = None
         monkeypatch.setattr(
-            'pokepoke.worktrees.worktrees._run_git_with_retry',
+            'pokepoke.worktrees.merge_helpers._run_git_with_retry',
             lambda *a, **kw: Mock(returncode=0, stdout=''),
         )
 

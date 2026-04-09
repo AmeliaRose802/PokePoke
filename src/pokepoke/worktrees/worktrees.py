@@ -7,18 +7,22 @@ import time
 from pathlib import Path
 
 from pokepoke.git.git_helpers import run_git as _run_git
-from pokepoke.git.git_helpers import run_git_with_retry as _run_git_with_retry
 from pokepoke.git.git_operations import (
     execute_merge_sequence,
     get_default_branch,
     is_worktree_clean,
     list_worktrees,
     sanitize_branch_name,
-    validate_post_merge,
 )
 from pokepoke.stats.perf_timing import timed_block
 from pokepoke.utils.constants import BRANCH_PREFIX, WORKTREE_DIR, WORKTREE_TASK_PREFIX
 from pokepoke.worktrees.coordination import with_worktree_lock
+from pokepoke.worktrees.merge_helpers import (
+    is_worktree_merged as is_worktree_merged,  # re-export
+    log_merge_failure,
+    push_or_rollback,
+    validate_post_merge_or_rollback,
+)
 from pokepoke.worktrees.merge_result import MergeResult as MergeResult  # re-export
 from pokepoke.worktrees.worktree_cleanup import (
     cleanup_after_merge,
@@ -277,38 +281,6 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
     return worktree_path
 
 
-def is_worktree_merged(item_id: str, target_branch: str | None = None, repo_path: str | None = None) -> bool:
-    """Check if a worktree's branch has been merged into the target branch."""
-    sanitized_id = sanitize_branch_name(item_id)
-    branch_name = f"{BRANCH_PREFIX}{sanitized_id}"
-    if target_branch is None:
-        target_branch = get_default_branch(cwd=repo_path)
-    try:
-        result = _run_git(["git", "branch", "--merged", target_branch], cwd=repo_path)
-        return any(branch_name in branch for branch in result.stdout.splitlines())
-    except subprocess.CalledProcessError:
-        return False
-
-
-def _rollback_merge_commit(reason: str, cwd: str | None = None) -> bool:
-    """Attempt to rollback the last merge commit and log the outcome.
-
-    Returns True if rollback succeeded, False otherwise.
-    """
-    try:
-        _run_git(["git", "reset", "--hard", "HEAD~1"], cwd=cwd)
-        logger.info("Rolled back merge commit: %s", reason)
-        logger.info(f"🔄 Rolled back merge commit due to {reason}")
-        return True
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as reset_err:
-        logger.critical(
-            "FAILED to rollback merge commit after %s: %s — "
-            "local repo may have a merged commit that was never pushed. "
-            "Manual intervention required.",
-            reason, reset_err,
-        )
-        return False
-
 
 def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool = True, repo_path: str | None = None) -> MergeResult:
     """Merge a worktree's branch into the target branch and optionally clean up.
@@ -346,60 +318,20 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
     merge_success, merge_error, unmerged_files = execute_merge_sequence(branch_name, target_branch, cwd=repo_cwd)
 
     if not merge_success:
-        if unmerged_files:
-            logger.error(f"❌ Merge conflicts detected in {len(unmerged_files)} file(s):")
-            for f in unmerged_files[:10]:
-                logger.info(f"   - {f}")
-            if len(unmerged_files) > 10:
-                logger.info(f"   ... and {len(unmerged_files) - 10} more")
-        else:
-            logger.error(f"❌ Merge failed: {merge_error}")
+        log_merge_failure(merge_error, unmerged_files)
         return MergeResult(success=False, unmerged_files=unmerged_files)
 
     logger.info(f"✅ Merged {branch_name} into {target_branch}")
 
-    try:
-        if not validate_post_merge(target_branch, cwd=repo_cwd):
-            logger.warning("Post-merge validation failed, rolling back merge commit")
-            rolled_back = _rollback_merge_commit("post-merge validation failure", cwd=repo_cwd)
-            if not rolled_back:
-                logger.critical(
-                    "ROLLBACK FAILED after post-merge validation failure — "
-                    "repo has an unpushed merge commit. Manual intervention required."
-                )
-            return MergeResult(success=False, rollback_failed=not rolled_back)
-    except Exception as e:
-        logger.error("Post-merge validation raised exception: %s", e)
-        rolled_back = _rollback_merge_commit("post-merge validation exception", cwd=repo_cwd)
-        if not rolled_back:
-            logger.critical(
-                "ROLLBACK FAILED after post-merge validation exception — "
-                "repo has an unpushed merge commit. Manual intervention required."
-            )
-        return MergeResult(success=False, rollback_failed=not rolled_back)
+    validation_failure = validate_post_merge_or_rollback(target_branch, cwd=repo_cwd)
+    if validation_failure is not None:
+        return validation_failure
 
     logger.info(f"✅ Post-merge validation passed: {target_branch} is clean")
 
-    try:
-        _run_git_with_retry(
-            ["git", "push"], timeout=120, cwd=repo_cwd,
-            max_retries=3, initial_delay=2.0,
-            context="git push",
-        )
-        logger.info(f"✅ Pushed {target_branch} to remote")
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-        if isinstance(e, subprocess.CalledProcessError):
-            err_detail = e.stderr or str(e)
-        else:
-            err_detail = str(e)
-        logger.error(f"❌ Push failed after retries: {err_detail}")
-        rolled_back = _rollback_merge_commit("push failure", cwd=repo_cwd)
-        if not rolled_back:
-            logger.critical(
-                "ROLLBACK FAILED after push failure — "
-                "repo has an unpushed merge commit. Manual intervention required."
-            )
-        return MergeResult(success=False, rollback_failed=not rolled_back)
+    push_failure = push_or_rollback(target_branch, cwd=repo_cwd)
+    if push_failure is not None:
+        return push_failure
 
     # Verify branch is actually merged (warnings only - push already succeeded)
     if not is_worktree_merged(item_id, target_branch, repo_path=repo_cwd):
