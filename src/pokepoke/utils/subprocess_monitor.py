@@ -136,7 +136,8 @@ class SubprocessMonitor:
             for pid, command in children:
                 if pid not in self._monitored_pids:
                     self._monitored_pids.add(pid)
-                    logger.info(
+                    # Use DEBUG to avoid stdout contamination (PokePoke-urg3h fix)
+                    logger.debug(
                         "[ProcessMonitor] Detected child process: PID %d (%s)",
                         pid,
                         command,
@@ -359,6 +360,10 @@ class SubprocessMonitor:
     def _emit_output(self, source: str, text: str) -> None:
         """Emit captured output to all configured destinations.
 
+        CRITICAL (PokePoke-urg3h): ProcessMonitor output MUST NOT contaminate
+        the copilot CLI stdout stream that gate agents parse for JSON verdicts.
+        All monitor messages go to stderr or the callback, never to stdout.
+
         Args:
             source: 'monitor' for ProcessMonitor status, 'stderr' for error output
             text: Output text to emit
@@ -366,15 +371,19 @@ class SubprocessMonitor:
         if not text:
             return
 
-        # Log to Python logger
-        prefix = "[stderr] " if source == "stderr" else ""
-        logger.info(f"[ProcessOutput] {prefix}{text}")
+        # Write to stderr to avoid corrupting copilot stdout (PokePoke-urg3h fix)
+        import sys
+        sys.stderr.write(f"[ProcessMonitor] {text}")
+        sys.stderr.flush()
+
+        # Also log via Python logger at DEBUG level (not INFO) to avoid stdout
+        logger.debug(f"[ProcessOutput] {text.rstrip()}")
 
         # Log to item logger if available
         if self._item_logger:
             self._item_logger.log_copilot_output(text)
 
-        # Call custom callback if provided
+        # Call custom callback if provided (does NOT write to output_lines)
         if self._on_output:
             try:
                 self._on_output(source, text)
