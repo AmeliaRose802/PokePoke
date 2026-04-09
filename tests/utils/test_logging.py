@@ -426,6 +426,22 @@ def test_item_logger_log_error():
         assert "Something went wrong" in content
 
 
+def test_item_logger_log_debug():
+    """Test that log_debug writes debug messages to file only."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        logs_dir = Path(tmpdir)
+        item_logger = ItemLogger(logs_dir, "test-debug", "Debug Test")
+
+        item_logger.log_debug("TOOL_TIMEOUT_DIAG: copilot_pid=1234 tool=test elapsed=5s")
+
+        with open(item_logger.log_path, encoding='utf-8') as f:
+            content = f.read()
+
+        assert "[DEBUG]" in content
+        assert "TOOL_TIMEOUT_DIAG" in content
+        assert "copilot_pid=1234" in content
+
+
 def test_get_item_dir_creates_subdirectory():
     """Test that _get_item_dir creates a per-item subdirectory."""
     with tempfile.TemporaryDirectory() as tmpdir:

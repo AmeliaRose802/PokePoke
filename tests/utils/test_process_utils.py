@@ -781,7 +781,7 @@ class TestLogProcessTreeSnapshot:
         handler = MagicMock()
         handler._item_logger = MagicMock()
         log_process_tree_snapshot('test_tool', 'args', 60.0, handler=handler)
-        handler._item_logger.log_error.assert_called_once()
+        handler._item_logger.log_debug.assert_called_once()
 
     @patch(f'{SNAP}.time')
     @patch(f'{SNAP}.os')
