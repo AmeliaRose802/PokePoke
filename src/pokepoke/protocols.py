@@ -6,11 +6,13 @@ functions.  Default implementations delegate to the existing module-level
 helpers.
 """
 
+import concurrent.futures
 import subprocess
 import threading
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
-from pokepoke.types import BeadsStats, BeadsWorkItem, IssueWithDependencies, RecordFn, SessionStats
+from pokepoke.types import BeadsStats, BeadsWorkItem, IssueWithDependencies, RecordFn, SessionStats, WorkItemResult
 
 if TYPE_CHECKING:
     from pokepoke.utils.logging_utils import RunLogger
@@ -302,4 +304,81 @@ class ParallelLoop(Protocol):
         int
             Exit code: 0 for success, 1 for failure.
         """
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Parallel Support Callbacks
+# ---------------------------------------------------------------------------
+
+_Future = concurrent.futures.Future[WorkItemResult]
+
+
+class CollectFn(Protocol):
+    """Protocol for collecting completed futures and recording results."""
+    def __call__(
+        self,
+        futures: dict[_Future, BeadsWorkItem],
+        failed_claim_ids: set[str],
+        total_requests: int,
+        session_stats: SessionStats,
+        run_logger: 'RunLogger',
+        record_fn: RecordFn,
+        lock: threading.Lock | None = None,
+    ) -> tuple[int, bool, int, int]:
+        """Collect completed futures.
+
+        Returns (total_requests, any_success, success_count, failure_count).
+        """
+        ...
+
+
+class BuildWorkerNameFn(Protocol):
+    """Protocol for building worker names."""
+    def __call__(self, base_agent_name: str, item_id: str, counter: int) -> str:
+        """Build a worker name from base agent name, item ID, and counter."""
+        ...
+
+
+class ProcessItemFn(Protocol):
+    """Protocol for processing work items in parallel workers."""
+    def __call__(
+        self,
+        item: BeadsWorkItem,
+        run_logger: 'RunLogger',
+        semaphore: threading.Semaphore,
+        worker_agent_name: str | None = None,
+    ) -> WorkItemResult:
+        """Process a work item and return the result."""
+        ...
+
+
+class CheckAndCommitMainRepoFn(Protocol):
+    """Protocol for checking and committing main repository."""
+    def __call__(self, repo_path: Path, run_logger: 'RunLogger', /) -> bool:
+        """Check main repository status and commit if needed.
+
+        Returns True if successful, False otherwise.
+        """
+        ...
+
+
+class GetReadyWorkItemsFn(Protocol):
+    """Protocol for fetching ready work items from beads."""
+    def __call__(self) -> list[BeadsWorkItem] | None:
+        """Fetch and return list of ready work items."""
+        ...
+
+
+class FinalizeFn(Protocol):
+    """Protocol for finalizing session and collecting stats."""
+    def __call__(
+        self,
+        session_stats: SessionStats,
+        start_time: float,
+        items_completed: int,
+        total_requests: int,
+        run_logger: 'RunLogger',
+    ) -> None:
+        """Finalize session, print summary, and clean up."""
         ...
