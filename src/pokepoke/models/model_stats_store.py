@@ -26,13 +26,70 @@ File layout (.pokepoke/model_stats.json):
 import logging
 import statistics
 import threading
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict, cast
 
 from pokepoke.stats.perf_timing import timed_block
-from pokepoke.stats.persistent_json_store import PersistentJsonStore
+from pokepoke.stats.persistent_json_store import JsonDict, PersistentJsonStore
 from pokepoke.types import ModelCompletionRecord
+
+# ── TypedDict shapes ─────────────────────────────────────────────────
+
+
+class ModelStatsLogEntry(TypedDict, total=False):
+    """Shape of a single serialized completion record in the log."""
+
+    item_id: str
+    model: str
+    duration_seconds: float
+    gate_passed: bool | None
+    input_tokens: int
+    output_tokens: int
+    agent_turns: int
+    cost: float
+    gate_model: str | None
+    repo_name: str
+    timestamp: str
+
+
+class ModelSummaryStats(TypedDict):
+    """Public per-model summary statistics (no internal fields)."""
+
+    total_items_attempted: int
+    total_items_succeeded: int
+    total_items_failed: int
+    total_duration_seconds: float
+    total_retries: int
+    average_duration: float
+    median_duration: float
+    stddev_duration: float
+    success_rate: float
+    last_used: str
+
+
+class _InternalModelSummary(ModelSummaryStats):
+    """Internal per-model summary with private bookkeeping fields."""
+
+    _durations: list[float]
+
+
+class ModelStatsData(TypedDict):
+    """Top-level shape of the model stats store on disk."""
+
+    log: list[ModelStatsLogEntry]
+    summary: dict[str, _InternalModelSummary]
+
+
+class RepoSummaryMetrics(TypedDict):
+    """Per-repo aggregate metrics."""
+
+    total_items_processed: int
+    total_succeeded: int
+    total_failed: int
+    total_cost: float
+    success_rate: float
 
 logger = logging.getLogger(__name__)
 
@@ -46,27 +103,27 @@ _STATS_FILE_LOCK = "model-stats-file"
 
 # ── Data helpers ─────────────────────────────────────────────────────
 
-def _empty_store() -> dict[str, Any]:
+def _empty_store() -> ModelStatsData:
     """Return an empty store structure."""
     return {"log": [], "summary": {}}
 
 
-def _normalize_store(data: Any) -> dict[str, Any]:
+def _normalize_store(data: Any) -> ModelStatsData:
     if not isinstance(data, dict) or "log" not in data:
         return _empty_store()
-    return data
+    return cast(ModelStatsData, data)
 
 
 _STORE = PersistentJsonStore(
     default_path=STATS_FILE,
-    empty=_empty_store,
+    empty=cast("Callable[[], JsonDict]", _empty_store),
     thread_lock=_thread_lock,
     lock_name=_STATS_FILE_LOCK,
-    normalize=_normalize_store,
+    normalize=cast("Callable[[Any], JsonDict]", _normalize_store),
 )
 
 
-def _record_to_dict(record: ModelCompletionRecord) -> dict[str, Any]:
+def _record_to_dict(record: ModelCompletionRecord) -> ModelStatsLogEntry:
     """Serialise a ModelCompletionRecord to a plain dict."""
     from pokepoke.stats.metrics_context import get_current_repo_name
 
@@ -85,10 +142,10 @@ def _record_to_dict(record: ModelCompletionRecord) -> dict[str, Any]:
     }
 
 
-def _rebuild_summary(log: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def _rebuild_summary(log: list[ModelStatsLogEntry]) -> dict[str, _InternalModelSummary]:
     """Recompute per-model summary from the raw log entries."""
     # First pass: collect per-model data
-    buckets: dict[str, dict[str, Any]] = {}
+    buckets: dict[str, _InternalModelSummary] = {}
     for entry in log:
         model = entry.get("model", "unknown")
         if model not in buckets:
@@ -120,7 +177,7 @@ def _rebuild_summary(log: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             s["last_used"] = ts
 
     # Second pass: compute derived fields
-    summary: dict[str, dict[str, Any]] = {}
+    summary: dict[str, _InternalModelSummary] = {}
     for model, s in buckets.items():
         attempted = s["total_items_attempted"]
         durations = s["_durations"]
@@ -135,8 +192,8 @@ def _rebuild_summary(log: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 
 
 def _update_summary_incremental(
-    summary: dict[str, dict[str, Any]],
-    entry: dict[str, Any],
+    summary: dict[str, _InternalModelSummary],
+    entry: ModelStatsLogEntry,
 ) -> None:
     """Fold a single log entry into the existing summary.
 
@@ -195,23 +252,23 @@ def _update_summary_incremental(
 
 # ── Public API ───────────────────────────────────────────────────────
 
-def load_model_stats(path: Path | None = None) -> dict[str, Any]:
+def load_model_stats(path: Path | None = None) -> ModelStatsData:
     """Load the persistent model stats from disk.
 
     Returns an empty store if the file does not exist or is corrupt.
     """
     with timed_block("model_stats.load"):
-        return _STORE.load(path)
+        return cast(ModelStatsData, _STORE.load(path))
 
 
-def save_model_stats(data: dict[str, Any], path: Path | None = None) -> None:
+def save_model_stats(data: ModelStatsData, path: Path | None = None) -> None:
     """Atomically persist model stats to disk.
 
     Writes to a temporary file first then renames, to avoid corruption
     on crashes.
     """
     with timed_block("model_stats.save"):
-        _STORE.save(data, path)
+        _STORE.save(cast("JsonDict", data), path)
 
 
 def record_completion(record: ModelCompletionRecord, path: Path | None = None) -> None:
@@ -242,15 +299,15 @@ def record_completion(record: ModelCompletionRecord, path: Path | None = None) -
         save_model_stats(data, path)
 
 
-def get_model_summary(path: Path | None = None) -> dict[str, dict[str, Any]]:
+def get_model_summary(path: Path | None = None) -> dict[str, ModelSummaryStats]:
     """Return the per-model summary dict (read-only).
 
     Internal fields (prefixed with ``_``) are stripped from the output.
     """
     data = load_model_stats(path)
-    raw: dict[str, dict[str, Any]] = data.get("summary", {})
+    raw = data.get("summary", {})
     return {
-        model: {k: v for k, v in stats.items() if not k.startswith("_")}
+        model: cast(ModelSummaryStats, {k: v for k, v in stats.items() if not k.startswith("_")})
         for model, stats in raw.items()
     }
 
@@ -259,7 +316,7 @@ def get_model_history(
     path: Path | None = None,
     limit: int = 200,
     repo_name: str = "",
-) -> list[dict[str, Any]]:
+) -> list[ModelStatsLogEntry]:
     """Return the most recent completion log entries up to ``limit``.
 
     If *repo_name* is given, only entries for that repo are returned.
@@ -340,7 +397,7 @@ def print_model_leaderboard(path: Path | None = None) -> None:
 def get_model_summary_by_repo(
     path: Path | None = None,
     repo_name: str = "",
-) -> dict[str, dict[str, Any]]:
+) -> dict[str, ModelSummaryStats]:
     """Return per-model summary filtered to *repo_name* (empty → global)."""
     if not repo_name:
         return get_model_summary(path)
@@ -349,17 +406,17 @@ def get_model_summary_by_repo(
     filtered = [e for e in log if e.get("repo_name", "") == repo_name]
     raw = _rebuild_summary(filtered)
     return {
-        model: {k: v for k, v in stats.items() if not k.startswith("_")}
+        model: cast(ModelSummaryStats, {k: v for k, v in stats.items() if not k.startswith("_")})
         for model, stats in raw.items()
     }
 
 
-def get_repo_summary_metrics(path: Path | None = None) -> dict[str, dict[str, Any]]:
+def get_repo_summary_metrics(path: Path | None = None) -> dict[str, RepoSummaryMetrics]:
     """Return per-repo metrics: total_items_processed, success_rate, total_cost."""
     data = load_model_stats(path)
     log = data.get("log", [])
 
-    buckets: dict[str, dict[str, Any]] = {}
+    buckets: dict[str, RepoSummaryMetrics] = {}
     for entry in log:
         repo = entry.get("repo_name", "") or ""
         if repo not in buckets:
@@ -368,6 +425,7 @@ def get_repo_summary_metrics(path: Path | None = None) -> dict[str, dict[str, An
                 "total_succeeded": 0,
                 "total_failed": 0,
                 "total_cost": 0.0,
+                "success_rate": 0.0,
             }
         b = buckets[repo]
         b["total_items_processed"] += 1
