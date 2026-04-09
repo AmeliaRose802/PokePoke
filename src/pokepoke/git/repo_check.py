@@ -125,125 +125,95 @@ def initialize_beads_repo(repo_path: Path) -> bool:
 
 
 def _try_auto_commit(repo_path: Path, run_logger: 'RunLogger') -> bool:
-    """Attempt to auto-commit uncommitted changes with git add + git commit.
+    """Attempt to auto-commit uncommitted changes with git add -u + git commit.
 
-    This is tried before launching the cleanup agent so that trivial changes
-    (e.g., modified tracking files) can be committed quickly without wasting
-    tokens on an AI agent.
-
-    Args:
-        repo_path: Path to the repository
-        run_logger: Run logger instance
-
-    Returns:
-        True if auto-commit succeeded, False otherwise (e.g., pre-commit hooks reject)
+    Tried before the cleanup agent so trivial changes can be committed quickly.
+    Returns True on success, False otherwise (e.g. pre-commit hooks reject).
     """
     with main_repo_git_lock():
         try:
-            # Use -u (tracked only) to avoid staging untracked files like
-            # .pokepoke/ runtime state which could cause merge conflicts
             subprocess.run(
-                ["git", "add", "-u"],
-                check=True,
-                capture_output=True,
-                encoding='utf-8',
-                errors='replace',
-                cwd=str(repo_path),
-                timeout=30
+                ["git", "add", "-u"], check=True, capture_output=True,
+                encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=30,
             )
-
             result = subprocess.run(
                 ["git", "commit", "-m", "chore: auto-commit uncommitted changes"],
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                errors='replace',
-                cwd=str(repo_path),
-                timeout=120
+                capture_output=True, text=True, encoding='utf-8', errors='replace',
+                cwd=str(repo_path), timeout=120,
             )
-
             if result.returncode == 0:
                 run_logger.log_orchestrator("Auto-committed uncommitted changes")
                 return True
-
-            # Commit failed (e.g., pre-commit hooks rejected)
-            error_msg = result.stderr.strip() if result.stderr else "unknown error"
             run_logger.log_orchestrator(
-                f"Auto-commit failed (will try cleanup agent): {error_msg}",
-                level="WARNING"
+                f"Auto-commit failed (will try cleanup agent): {result.stderr.strip() or 'unknown error'}",
+                level="WARNING",
             )
-            return False
-
         except subprocess.TimeoutExpired:
             run_logger.log_orchestrator("Auto-commit timed out", level="WARNING")
-            return False
         except subprocess.CalledProcessError as e:
-            error_msg = e.stderr.strip() if e.stderr else f"exit code {e.returncode}"
             run_logger.log_orchestrator(
-                f"Auto-commit git add failed: {error_msg}", level="WARNING"
+                f"Auto-commit git add failed: {e.stderr.strip() if e.stderr else f'exit code {e.returncode}'}",
+                level="WARNING",
             )
-            return False
         except Exception as e:
             run_logger.log_orchestrator(f"Auto-commit failed: {e}", level="WARNING")
-            return False
+    return False
 
 
 def _stash_uncommitted_changes(repo_path: Path, run_logger: 'RunLogger') -> bool:
     """Attempt to stash uncommitted changes as a fallback."""
     with main_repo_git_lock():
         try:
-            # Use -u (tracked only) to avoid staging untracked files like
-            # .pokepoke/ runtime state which could cause merge conflicts
             subprocess.run(
                 ["git", "add", "-u"], check=True, capture_output=True,
-                encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=30
+                encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=30,
             )
             import datetime
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             stash_msg = f"pokepoke-auto-stash-{timestamp}: cleanup agent failed"
             result = subprocess.run(
                 ["git", "stash", "push", "-m", stash_msg], capture_output=True,
-                text=True, encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=60
+                text=True, encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=60,
             )
             if result.returncode == 0:
                 run_logger.log_orchestrator(f"Stashed changes: {stash_msg}")
                 return True
-            error_msg = result.stderr.strip() if result.stderr else "unknown error"
-            logger.error(f"⚠️  git stash failed: {error_msg}")
-            run_logger.log_orchestrator(f"git stash failed: {error_msg}", level="WARNING")
-            return False
+            run_logger.log_orchestrator(
+                f"git stash failed: {result.stderr.strip() or 'unknown error'}", level="WARNING",
+            )
         except subprocess.TimeoutExpired:
-            logger.warning("⚠️  git stash timed out")
             run_logger.log_orchestrator("git stash timed out", level="WARNING")
-            return False
         except subprocess.CalledProcessError as e:
-            error_msg = e.stderr.strip() if e.stderr else f"exit code {e.returncode}"
-            logger.error(f"⚠️  git add failed: {error_msg}")
-            run_logger.log_orchestrator(f"git add for stash failed: {error_msg}", level="WARNING")
-            return False
+            run_logger.log_orchestrator(
+                f"git add for stash failed: {e.stderr.strip() if e.stderr else f'exit code {e.returncode}'}",
+                level="WARNING",
+            )
         except Exception as e:
-            logger.error(f"⚠️  Stash failed with unexpected error: {e}")
             run_logger.log_orchestrator(f"Stash failed: {e}", level="WARNING")
-            return False
+    return False
 
 
-def _run_cleanup_retries(
-    repo_path: Path,
-    run_logger: 'RunLogger',
-) -> bool:
+def _run_cleanup_retries(repo_path: Path, run_logger: 'RunLogger') -> bool:
     """Run cleanup agent retries with aggregate timeout.
 
-    Returns True if cleanup succeeded, False if all retries exhausted or timed out.
+    Uses the merge-conflict-aware agent when conflict markers are detected.
     """
-    from pokepoke.agents.cleanup_agents import invoke_cleanup_agent
+    from pokepoke.agents.cleanup_agents import invoke_cleanup_agent, invoke_merge_conflict_cleanup_agent
     from pokepoke.types import BeadsWorkItem
 
     cleanup_loop_start = time.monotonic()
+    conflict_files = _detect_conflict_marker_files(repo_path)
+    use_merge_agent = bool(conflict_files)
+
+    if use_merge_agent:
+        run_logger.log_orchestrator(
+            f"Conflict markers detected in {len(conflict_files)} file(s) without MERGE_HEAD",
+            level="WARNING",
+        )
+
     for attempt in range(1, MAX_CLEANUP_RETRIES + 1):
-        # Enforce aggregate timeout across all cleanup retries
         elapsed = time.monotonic() - cleanup_loop_start
         if elapsed >= CLEANUP_AGGREGATE_TIMEOUT:
-            logger.info(f"\n⏰ Cleanup aggregate timeout reached ({elapsed:.0f}s) - stopping retries")
             run_logger.log_orchestrator(
                 f"Cleanup aggregate timeout ({CLEANUP_AGGREGATE_TIMEOUT:.0f}s) exceeded",
                 level="WARNING",
@@ -254,29 +224,106 @@ def _run_cleanup_retries(
             id=f"cleanup-main-repo-{attempt}",
             title="Clean up uncommitted changes in main repository",
             description="Auto-generated cleanup task for uncommitted changes",
-            issue_type="task",
-            priority=0,
-            status=STATUS_IN_PROGRESS,
-            labels=["cleanup", "auto-generated"]
+            issue_type="task", priority=0, status=STATUS_IN_PROGRESS,
+            labels=["cleanup", "auto-generated"],
         )
 
         with cleanup_lock():
-            cleanup_success, _cleanup_stats = invoke_cleanup_agent(
-                cleanup_item, wait_for_merge=False
-            )
+            if use_merge_agent:
+                cleanup_success, _ = invoke_merge_conflict_cleanup_agent(
+                    cleanup_item,
+                    error_msg="Residual conflict markers found in working tree (MERGE_HEAD absent)",
+                    unmerged_files=conflict_files, cwd=str(repo_path), wait_for_merge=False,
+                )
+            else:
+                cleanup_success, _ = invoke_cleanup_agent(
+                    cleanup_item, cwd=str(repo_path), wait_for_merge=False,
+                )
 
         if cleanup_success:
-            logger.info("✅ Cleanup agent successfully resolved uncommitted changes")
             run_logger.log_orchestrator("Cleanup agent successfully resolved uncommitted changes")
             return True
 
         if attempt < MAX_CLEANUP_RETRIES:
-            wait_time = 2 ** attempt  # Exponential backoff: 2, 4, 8 seconds
-            logger.error(f"⚠️  Cleanup attempt {attempt}/{MAX_CLEANUP_RETRIES} failed, retrying in {wait_time}s...")
+            conflict_files = _detect_conflict_marker_files(repo_path)
+            use_merge_agent = bool(conflict_files)
+            wait_time = 2 ** attempt
             run_logger.log_orchestrator(f"Cleanup attempt {attempt} failed, retrying", level="WARNING")
             time.sleep(wait_time)
 
     return False
+
+
+def _detect_conflict_marker_files(repo_path: Path) -> list[str]:
+    """Return file paths under *repo_path* that have conflict markers."""
+    from pokepoke.git.merge_conflict import detect_dirty_conflict_files
+    return detect_dirty_conflict_files(repo_path)
+
+
+def _restore_conflicted_files(repo_path: Path, run_logger: 'RunLogger') -> bool:
+    """``git checkout -- <file>`` for files with residual conflict markers."""
+    conflict_files = _detect_conflict_marker_files(repo_path)
+    if not conflict_files:
+        return False
+
+    logger.warning(f"🔄 Restoring {len(conflict_files)} file(s) with conflict markers")
+    run_logger.log_orchestrator(
+        f"Restoring {len(conflict_files)} conflicted file(s) via git checkout", level="WARNING",
+    )
+
+    restored_any = False
+    with main_repo_git_lock():
+        for fpath in conflict_files:
+            try:
+                subprocess.run(
+                    ["git", "checkout", "--", fpath], capture_output=True, text=True,
+                    encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=30,
+                )
+                logger.info(f"   Restored: {fpath}")
+                restored_any = True
+            except Exception as e:
+                logger.warning(f"   Failed to restore {fpath}: {e}")
+    if restored_any:
+        run_logger.log_orchestrator("Conflicted files restored to last committed version")
+    return restored_any
+
+
+def _handle_other_changes(repo_path: Path, changes: dict[str, list[str]], run_logger: 'RunLogger') -> bool:
+    """Handle non-beads, non-worktree uncommitted changes.
+
+    Tries auto-commit → cleanup agent → restore conflicted files → stash.
+    Always returns True (workers use isolated worktrees, so we continue).
+    """
+    run_logger.log_orchestrator("Main repository has uncommitted changes", level="WARNING")
+    for line in changes['other'][:10]:
+        logger.info(f"   {line}")
+
+    logger.info("\n🔄 Attempting to auto-commit changes...")
+    if _try_auto_commit(repo_path, run_logger):
+        return True
+
+    run_logger.log_orchestrator("Auto-commit failed, launching cleanup agent")
+    if merge_lock_active():
+        run_logger.log_orchestrator("Deferring cleanup due to active merge operation")
+        return True
+
+    if _run_cleanup_retries(repo_path, run_logger):
+        return True
+
+    if _restore_conflicted_files(repo_path, run_logger):
+        logger.info("✅ Conflicted files restored — retrying auto-commit")
+        if _try_auto_commit(repo_path, run_logger):
+            return True
+
+    run_logger.log_orchestrator("Cleanup retries exhausted, attempting git stash", level="WARNING")
+    if _stash_uncommitted_changes(repo_path, run_logger):
+        run_logger.log_orchestrator("Uncommitted changes stashed successfully")
+        return True
+
+    run_logger.log_orchestrator(
+        "Cleanup and stash both failed, but continuing (workers use worktrees)", level="WARNING",
+    )
+    return True
 
 
 def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool:
@@ -310,52 +357,7 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
 
         # Handle problematic changes that need agent intervention
         if changes['other']:
-            logger.warning("\n⚠️  Main repository has uncommitted changes:")
-            run_logger.log_orchestrator("Main repository has uncommitted changes", level="WARNING")
-            for line in changes['other'][:10]:
-                logger.info(f"   {line}")
-            if len(changes['other']) > 10:
-                logger.info(f"   ... and {len(changes['other']) - 10} more")
-
-            # Try auto-commit first before launching the heavyweight cleanup agent
-            logger.info("\n🔄 Attempting to auto-commit changes...")
-            if _try_auto_commit(repo_path, run_logger):
-                logger.info("✅ Auto-committed uncommitted changes")
-                return True
-
-            # Auto-commit failed - fall back to cleanup agent
-            logger.error("\n🤖 Auto-commit failed, launching cleanup agent...")
-            run_logger.log_orchestrator("Auto-commit failed, launching cleanup agent")
-
-            # Check if merge operation is active - defer cleanup if so
-            if merge_lock_active():
-                logger.info("   ⏳ Merge operation in progress - deferring maintenance cleanup")
-                logger.info("   Workers use isolated worktrees, continuing with orchestration for now")
-                run_logger.log_orchestrator("Deferring cleanup due to active merge operation")
-                return True  # Continue processing - merge has priority
-
-            if _run_cleanup_retries(repo_path, run_logger):
-                return True
-
-            # All cleanup retries failed - try stashing as last resort
-            logger.error(f"\n⚠️  All {MAX_CLEANUP_RETRIES} cleanup attempts failed")
-            logger.info("🔄 Attempting to stash uncommitted changes as fallback...")
-            run_logger.log_orchestrator("Cleanup retries exhausted, attempting git stash", level="WARNING")
-
-            stash_success = _stash_uncommitted_changes(repo_path, run_logger)
-            if stash_success:
-                logger.info("✅ Changes stashed successfully - continuing with orchestration")
-                run_logger.log_orchestrator("Uncommitted changes stashed successfully")
-                return True
-
-            # Stash failed - but workers use isolated worktrees, so continue anyway
-            logger.warning("\n⚠️  Could not resolve uncommitted changes in main repo")
-            logger.info("   Workers use isolated worktrees - continuing anyway")
-            run_logger.log_orchestrator(
-                "Cleanup and stash both failed, but continuing (workers use worktrees)",
-                level="WARNING"
-            )
-            return True  # Continue processing - workers are isolated
+            return _handle_other_changes(repo_path, changes, run_logger)
 
         # Beads changes are handled by beads' own sync mechanism (bd sync)
         # Do NOT manually commit them - beads daemon handles this automatically

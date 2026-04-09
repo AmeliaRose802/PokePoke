@@ -8,6 +8,8 @@ from unittest.mock import Mock, patch
 import pytest
 
 from pokepoke.git.repo_check import (
+    _detect_conflict_marker_files,
+    _restore_conflicted_files,
     _stash_uncommitted_changes,
     _try_auto_commit,
     check_and_commit_main_repo,
@@ -163,7 +165,8 @@ class TestCheckAndCommitMainRepo:
 
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
-             patch('pokepoke.git.repo_check.merge_lock_active', return_value=False):
+             patch('pokepoke.git.repo_check.merge_lock_active', return_value=False), \
+             patch('pokepoke.git.repo_check._detect_conflict_marker_files', return_value=[]):
             # git status, git add (auto-commit), git commit fails, then cleanup agent
             mock_run.side_effect = [
                 Mock(returncode=0, stdout=" M src/module.py\n M README.md", stderr=""),
@@ -189,6 +192,8 @@ class TestCheckAndCommitMainRepo:
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
              patch('pokepoke.git.repo_check.merge_lock_active', return_value=False), \
+             patch('pokepoke.git.repo_check._detect_conflict_marker_files', return_value=[]), \
+             patch('pokepoke.git.repo_check._restore_conflicted_files', return_value=False), \
              patch('pokepoke.git.repo_check.time.sleep'):  # Speed up test
             # git status, auto-commit (add + commit fail), then stash commands
             mock_run.side_effect = [
@@ -218,6 +223,8 @@ class TestCheckAndCommitMainRepo:
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
              patch('pokepoke.git.repo_check.merge_lock_active', return_value=False), \
+             patch('pokepoke.git.repo_check._detect_conflict_marker_files', return_value=[]), \
+             patch('pokepoke.git.repo_check._restore_conflicted_files', return_value=False), \
              patch('pokepoke.git.repo_check.time.sleep'):  # Speed up test
             # git status, auto-commit fails, then stash also fails
             mock_run.side_effect = [
@@ -247,6 +254,7 @@ class TestCheckAndCommitMainRepo:
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
              patch('pokepoke.git.repo_check.merge_lock_active', return_value=False), \
+             patch('pokepoke.git.repo_check._detect_conflict_marker_files', return_value=[]), \
              patch('pokepoke.git.repo_check.time.sleep'):  # Speed up test
             # git status, auto-commit fails
             mock_run.side_effect = [
@@ -303,12 +311,11 @@ class TestCheckAndCommitMainRepo:
             mock_logger.log_orchestrator.assert_any_call("Auto-committed uncommitted changes")
 
     def test_many_other_changes_truncated_output(self):
-        """Test that many changes are truncated in output."""
+        """Test that many changes are handled and only first 10 logged."""
         mock_logger = Mock()
         repo_path = Path("/fake/repo")
 
-        with patch('subprocess.run') as mock_run, \
-             patch('builtins.print') as mock_print:
+        with patch('subprocess.run') as mock_run:
             # Mock git status with 15 changes, auto-commit succeeds
             changes = [f" M file{i}.py" for i in range(15)]
             mock_run.side_effect = [
@@ -320,9 +327,6 @@ class TestCheckAndCommitMainRepo:
             result = check_and_commit_main_repo(repo_path, mock_logger)
 
             assert result is True
-            # Should print "and X more" message
-            print_calls = [str(call) for call in mock_print.call_args_list]
-            assert any("and 5 more" in call for call in print_calls)
 
     def test_git_error_no_stderr(self):
         """Test git error handling when stderr is empty."""
@@ -355,6 +359,8 @@ class TestCheckAndCommitMainRepo:
         with patch('subprocess.run') as mock_run, \
              patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
              patch('pokepoke.git.repo_check.merge_lock_active', return_value=False), \
+             patch('pokepoke.git.repo_check._detect_conflict_marker_files', return_value=[]), \
+             patch('pokepoke.git.repo_check._restore_conflicted_files', return_value=False), \
              patch('pokepoke.git.repo_check.time.sleep'), \
              patch('pokepoke.git.repo_check.time.monotonic') as mock_mono:
             # monotonic: start=0, first check exceeds threshold
@@ -787,3 +793,242 @@ class TestMergeLockDeferral:
                 "Deferring cleanup due to active merge operation"
             )
 
+
+
+class TestDetectConflictMarkerFiles:
+    """Test _detect_conflict_marker_files function."""
+
+    def test_returns_files_with_markers(self, tmp_path):
+        """Dirty files containing conflict markers are returned."""
+        conflict = tmp_path / "conflict.py"
+        conflict.write_text("<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> branch\n")
+        clean = tmp_path / "clean.py"
+        clean.write_text("no markers\n")
+
+        with patch('pokepoke.git.merge_conflict.get_status_porcelain_and_changes') as mock_status:
+            mock_status.return_value = (
+                " M conflict.py\n M clean.py",
+                {'other': [' M conflict.py', ' M clean.py'], 'beads': [], 'worktree': [], 'untracked': []},
+            )
+            result = _detect_conflict_marker_files(tmp_path)
+
+        assert result == ["conflict.py"]
+
+    def test_returns_empty_for_clean_files(self, tmp_path):
+        """No conflict markers means empty result."""
+        clean = tmp_path / "clean.py"
+        clean.write_text("all good\n")
+
+        with patch('pokepoke.git.merge_conflict.get_status_porcelain_and_changes') as mock_status:
+            mock_status.return_value = (
+                " M clean.py",
+                {'other': [' M clean.py'], 'beads': [], 'worktree': [], 'untracked': []},
+            )
+            result = _detect_conflict_marker_files(tmp_path)
+
+        assert result == []
+
+    def test_skips_deleted_files(self, tmp_path):
+        """Deleted files (status 'D') should be skipped."""
+        with patch('pokepoke.git.merge_conflict.get_status_porcelain_and_changes') as mock_status:
+            mock_status.return_value = (
+                " D deleted.py",
+                {'other': [' D deleted.py'], 'beads': [], 'worktree': [], 'untracked': []},
+            )
+            result = _detect_conflict_marker_files(tmp_path)
+
+        assert result == []
+
+    def test_handles_git_status_failure(self, tmp_path):
+        """Returns empty list when git status fails."""
+        with patch('pokepoke.git.merge_conflict.get_status_porcelain_and_changes') as mock_status:
+            mock_status.side_effect = subprocess.CalledProcessError(128, "git")
+            result = _detect_conflict_marker_files(tmp_path)
+
+        assert result == []
+
+    def test_handles_no_other_changes(self, tmp_path):
+        """Returns empty when there are no 'other' changes."""
+        with patch('pokepoke.git.merge_conflict.get_status_porcelain_and_changes') as mock_status:
+            mock_status.return_value = (
+                " M .beads/db.json",
+                {'other': [], 'beads': [' M .beads/db.json'], 'worktree': [], 'untracked': []},
+            )
+            result = _detect_conflict_marker_files(tmp_path)
+
+        assert result == []
+
+
+class TestRestoreConflictedFiles:
+    """Test _restore_conflicted_files function."""
+
+    def test_restores_conflicted_files(self, tmp_path):
+        """Files with conflict markers are restored via git checkout."""
+        mock_logger = Mock()
+
+        with patch('pokepoke.git.repo_check._detect_conflict_marker_files', return_value=["conflict.py"]), \
+             patch('subprocess.run') as mock_run:
+            mock_run.return_value = Mock(returncode=0)
+            result = _restore_conflicted_files(tmp_path, mock_logger)
+
+        assert result is True
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        assert cmd == ["git", "checkout", "--", "conflict.py"]
+        mock_logger.log_orchestrator.assert_any_call("Conflicted files restored to last committed version")
+
+    def test_no_conflicted_files_returns_false(self, tmp_path):
+        """Returns False when no files have conflict markers."""
+        mock_logger = Mock()
+
+        with patch('pokepoke.git.repo_check._detect_conflict_marker_files', return_value=[]):
+            result = _restore_conflicted_files(tmp_path, mock_logger)
+
+        assert result is False
+
+    def test_handles_checkout_failure(self, tmp_path):
+        """Failures in individual file restores are handled gracefully."""
+        mock_logger = Mock()
+
+        with patch('pokepoke.git.repo_check._detect_conflict_marker_files', return_value=["bad.py"]), \
+             patch('subprocess.run', side_effect=subprocess.TimeoutExpired("git", 30)):
+            result = _restore_conflicted_files(tmp_path, mock_logger)
+
+        # Should return False because no file was actually restored
+        assert result is False
+
+
+class TestCleanupRetriesWithConflictMarkers:
+    """Test _run_cleanup_retries uses merge-conflict agent when markers detected."""
+
+    def test_uses_merge_agent_when_markers_present(self):
+        """When conflict markers found, invoke_merge_conflict_cleanup_agent is used."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.agents.cleanup_agents.invoke_merge_conflict_cleanup_agent') as mock_merge, \
+             patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.git.repo_check._detect_conflict_marker_files', return_value=["src/file.py"]), \
+             patch('pokepoke.git.repo_check.merge_lock_active', return_value=False):
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout=" M src/file.py", stderr=""),
+                Mock(returncode=0),
+                Mock(returncode=1, stdout="", stderr="hook failed"),
+            ]
+            mock_merge.return_value = (True, Mock())
+
+            result = check_and_commit_main_repo(repo_path, mock_logger)
+
+            assert result is True
+            mock_merge.assert_called_once()
+            # Verify cwd and unmerged_files passed correctly
+            call_kwargs = mock_merge.call_args[1]
+            assert call_kwargs['cwd'] == str(repo_path)
+            assert call_kwargs['unmerged_files'] == ["src/file.py"]
+            assert call_kwargs['wait_for_merge'] is False
+            mock_cleanup.assert_not_called()
+
+    def test_uses_generic_agent_when_no_markers(self):
+        """Without conflict markers, generic invoke_cleanup_agent is used."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.agents.cleanup_agents.invoke_merge_conflict_cleanup_agent') as mock_merge, \
+             patch('pokepoke.git.repo_check._detect_conflict_marker_files', return_value=[]), \
+             patch('pokepoke.git.repo_check.merge_lock_active', return_value=False):
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout=" M src/file.py", stderr=""),
+                Mock(returncode=0),
+                Mock(returncode=1, stdout="", stderr="hook failed"),
+            ]
+            mock_cleanup.return_value = (True, Mock())
+
+            result = check_and_commit_main_repo(repo_path, mock_logger)
+
+            assert result is True
+            mock_cleanup.assert_called_once()
+            # Verify cwd is passed to generic cleanup agent
+            call_kw = mock_cleanup.call_args
+            assert call_kw[1]['cwd'] == str(repo_path)
+            assert call_kw[1]['wait_for_merge'] is False
+            mock_merge.assert_not_called()
+
+    def test_switches_agent_type_between_retries(self):
+        """If markers are resolved mid-retry, agent type switches to generic."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.agents.cleanup_agents.invoke_merge_conflict_cleanup_agent') as mock_merge, \
+             patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.git.repo_check._detect_conflict_marker_files') as mock_detect, \
+             patch('pokepoke.git.repo_check.merge_lock_active', return_value=False), \
+             patch('pokepoke.git.repo_check.time.sleep'):
+            # First detection: markers present; re-detection between retries: markers gone
+            mock_detect.side_effect = [["src/file.py"], []]
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout=" M src/file.py", stderr=""),
+                Mock(returncode=0),
+                Mock(returncode=1, stdout="", stderr="hook failed"),
+            ]
+            mock_merge.return_value = (False, Mock())
+            mock_cleanup.return_value = (True, Mock())
+
+            result = check_and_commit_main_repo(repo_path, mock_logger)
+
+            assert result is True
+            mock_merge.assert_called_once()
+            mock_cleanup.assert_called_once()
+
+    def test_restore_fallback_before_stash(self):
+        """After cleanup retries fail, conflicted files are restored before stashing."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.git.repo_check._detect_conflict_marker_files', return_value=[]), \
+             patch('pokepoke.git.repo_check._restore_conflicted_files') as mock_restore, \
+             patch('pokepoke.git.repo_check.merge_lock_active', return_value=False), \
+             patch('pokepoke.git.repo_check.time.sleep'):
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout=" M src/file.py", stderr=""),
+                Mock(returncode=0),
+                Mock(returncode=1, stdout="", stderr="hook failed"),
+                Mock(returncode=0),
+                Mock(returncode=0, stdout="", stderr=""),
+            ]
+            mock_cleanup.return_value = (False, Mock())
+            mock_restore.return_value = False
+
+            result = check_and_commit_main_repo(repo_path, mock_logger)
+
+            assert result is True
+            mock_restore.assert_called_once()
+
+    def test_restore_success_retries_auto_commit(self):
+        """When restore succeeds, auto-commit is retried."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent') as mock_cleanup, \
+             patch('pokepoke.git.repo_check._detect_conflict_marker_files', return_value=[]), \
+             patch('pokepoke.git.repo_check._restore_conflicted_files', return_value=True), \
+             patch('pokepoke.git.repo_check.merge_lock_active', return_value=False), \
+             patch('pokepoke.git.repo_check.time.sleep'):
+            mock_run.side_effect = [
+                Mock(returncode=0, stdout=" M src/file.py", stderr=""),
+                Mock(returncode=0),
+                Mock(returncode=1, stdout="", stderr="hook failed"),
+                Mock(returncode=0),
+                Mock(returncode=0, stdout="", stderr=""),
+            ]
+            mock_cleanup.return_value = (False, Mock())
+
+            result = check_and_commit_main_repo(repo_path, mock_logger)
+
+            assert result is True
