@@ -19,7 +19,7 @@ from pokepoke.utils.shutdown import is_shutting_down, request_shutdown
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from pokepoke.types import SessionStats
+    from pokepoke.types_stats import SessionStats
 
 def _shutdown_threading_excepthook(args: threading.ExceptHookArgs) -> None:
     """Suppress noisy UnicodeDecodeError tracebacks from background threads during shutdown."""

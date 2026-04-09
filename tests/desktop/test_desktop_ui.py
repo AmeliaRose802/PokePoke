@@ -277,7 +277,7 @@ class TestDesktopUIStateUpdates:
         ui._api.push_agent_name.assert_called_once_with("pokepoke_agent_42")
 
     def test_update_stats(self) -> None:
-        from pokepoke.types import AgentStats, SessionStats
+        from pokepoke.types_stats import AgentStats, SessionStats
 
         ui = DesktopUI()
         ui._api = MagicMock()

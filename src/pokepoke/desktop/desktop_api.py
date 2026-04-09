@@ -31,7 +31,7 @@ from . import desktop_api_setup as _setup
 from . import desktop_api_stats as _stats
 
 if TYPE_CHECKING:
-    from pokepoke.types import SessionStats
+    from pokepoke.types_stats import SessionStats
 
 class DesktopAPI:
     """API surface exposed to the pywebview frontend.

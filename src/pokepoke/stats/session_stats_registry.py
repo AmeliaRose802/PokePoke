@@ -10,7 +10,7 @@ update the live stats object (which is already internally locked).
 
 import threading
 
-from pokepoke.types import SessionStats
+from pokepoke.types_stats import SessionStats
 
 _lock = threading.Lock()
 _current: SessionStats | None = None

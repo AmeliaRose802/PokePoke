@@ -4,7 +4,7 @@ import io
 from unittest.mock import patch
 
 from pokepoke.stats.stats import print_stats
-from pokepoke.types import AgentStats, SessionStats
+from pokepoke.types_stats import AgentStats, SessionStats
 
 
 def _capture_output(fn, *args, **kwargs):
@@ -177,7 +177,7 @@ def test_print_stats_with_large_numbers():
 
 def test_print_stats_with_beads_statistics():
     """Test beads statistics display."""
-    from pokepoke.types import BeadsStats
+    from pokepoke.types_stats import BeadsStats
 
     stats = SessionStats(
         agent_stats=AgentStats(wall_duration=10.0),
