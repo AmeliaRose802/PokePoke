@@ -29,7 +29,7 @@ from pokepoke.utils.command_validator import validate_and_rewrite_powershell_too
 from pokepoke.utils.prompt_sanitizer import sanitize_prompt_input, sanitize_short
 from pokepoke.utils.shutdown import is_shutting_down
 
-from .sdk_event_handler import SessionStats
+from .sdk_event_handler import SdkSessionStats
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ def _build_copilot_result(
     work_item: BeadsWorkItem,
     output_lines: list[str],
     errors: list[str],
-    stats: SessionStats,
+    stats: SdkSessionStats,
     current_model: str,
     total_api_duration: float,
     total_wall_duration: float,

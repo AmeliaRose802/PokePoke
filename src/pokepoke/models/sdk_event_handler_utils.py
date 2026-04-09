@@ -6,7 +6,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .sdk_event_handler import SessionStats
+    from .sdk_event_handler import SdkSessionStats
 
 _STREAMING_ATTRS = (
     "stdout",
@@ -34,7 +34,7 @@ def iter_streaming_chunks(event_obj: Any) -> list[tuple[str, str]]:
     return chunks
 
 
-def record_tool_output(stats: SessionStats | dict[str, Any], text: str) -> None:
+def record_tool_output(stats: SdkSessionStats | dict[str, Any], text: str) -> None:
     """Record the latest tool output in session stats."""
     if not text or not text.strip():
         return

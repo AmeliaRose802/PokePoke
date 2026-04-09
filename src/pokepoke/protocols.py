@@ -7,9 +7,13 @@ helpers.
 """
 
 import subprocess
-from typing import Any, Protocol
+import threading
+from typing import TYPE_CHECKING, Any, Protocol
 
-from pokepoke.types import BeadsStats, BeadsWorkItem, IssueWithDependencies
+from pokepoke.types import BeadsStats, BeadsWorkItem, IssueWithDependencies, RecordFn, SessionStats
+
+if TYPE_CHECKING:
+    from pokepoke.utils.logging_utils import RunLogger
 
 # ---------------------------------------------------------------------------
 # Git
@@ -226,3 +230,76 @@ class DefaultBeadsClient:
             base_delay=base_delay,
             timeout=timeout,
         )
+
+
+# ---------------------------------------------------------------------------
+# Parallel Loop
+# ---------------------------------------------------------------------------
+
+
+class ParallelLoop(Protocol):
+    """Structural interface for parallel orchestrator loop operations.
+
+    Defines the contract between parallel.py and orchestrator.py for running
+    multiple work items concurrently with a ThreadPoolExecutor.
+    """
+
+    def __call__(
+        self,
+        effective_parallel: int,
+        mode_name: str,
+        main_repo_path: Any,
+        failed_claim_ids: set[str],
+        session_stats: SessionStats,
+        start_time: float,
+        run_logger: "RunLogger",
+        continuous: bool,
+        record_fn: RecordFn,
+        finalize_fn: Any,
+        *,
+        cli_override: bool = False,
+        external_lock: threading.Lock | None = None,
+    ) -> int:
+        """Run the parallel orchestrator loop with a ThreadPoolExecutor.
+
+        Parameters
+        ----------
+        effective_parallel : int
+            Number of parallel agents to run concurrently.
+        mode_name : str
+            Display name for the orchestration mode (e.g., "Parallel", "Hybrid").
+        main_repo_path : Any
+            Path to the main repository for preflight checks.
+        failed_claim_ids : set[str]
+            Set of work item IDs that failed to be claimed. Thread-safe access
+            is coordinated via external_lock if provided.
+        session_stats : SessionStats
+            Session statistics dataclass for tracking throughput and agent runs.
+        start_time : float
+            Unix timestamp when the orchestration session started.
+        run_logger : RunLogger
+            Logger instance for orchestrator messages and events.
+        continuous : bool
+            If True, continue processing items until no more work is available.
+            If False, exit after processing initial batch.
+        record_fn : RecordFn
+            Callback function to record completed work item results.
+            Signature: (item, result, session_stats, run_logger) -> Any
+        finalize_fn : Any
+            Callback function to finalize the session on exit.
+            Expected signature: (session_stats, start_time, items_completed,
+            total_requests, run_logger, run_post_mortem: bool) -> None
+        cli_override : bool, optional
+            If True, indicates parallel limits were set via CLI argument.
+            Default is False.
+        external_lock : threading.Lock | None, optional
+            Optional external lock for coordinating failed_claim_ids access
+            with other threads (e.g., main orchestrator in hybrid mode).
+            If None, parallel loop uses its internal pool lock.
+
+        Returns
+        -------
+        int
+            Exit code: 0 for success, 1 for failure.
+        """
+        ...
