@@ -429,7 +429,7 @@ class TestIsWorktreeMerged:
     def test_is_worktree_merged_true(self):
         """Test when branch is merged."""
         with patch('subprocess.run') as mock_run, \
-             patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='ameliapayne/dev'):
+             patch('pokepoke.worktrees.merge_helpers.get_default_branch', return_value='ameliapayne/dev'):
             mock_run.return_value = Mock(
                 stdout='  main\n* task/incredible_icm-42\n  develop\n',
                 returncode=0
@@ -762,11 +762,11 @@ class TestMergeWorktree:
              patch('pokepoke.worktrees.worktree_helpers.commit_all_changes', return_value=(True, '')), \
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
-             patch('pokepoke.worktrees.worktrees.validate_post_merge', return_value=True), \
+             patch('pokepoke.worktrees.merge_helpers.validate_post_merge', return_value=True), \
              patch('pokepoke.worktrees.worktrees.cleanup_after_merge'), \
              patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='ameliapayne/dev'), \
              patch('pokepoke.worktrees.worktrees.is_worktree_merged', return_value=True), \
-             patch('pokepoke.worktrees.worktrees._run_git_with_retry') as mock_retry, \
+             patch('pokepoke.worktrees.merge_helpers._run_git_with_retry') as mock_retry, \
              patch('builtins.print'):
 
             mock_sync.return_value = Mock(returncode=0)
@@ -1862,10 +1862,10 @@ class TestMergeWorktreeRollback:
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
-             patch('pokepoke.worktrees.worktrees.validate_post_merge', return_value=True), \
+             patch('pokepoke.worktrees.merge_helpers.validate_post_merge', return_value=True), \
              patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main'), \
-             patch('pokepoke.worktrees.worktrees._run_git') as mock_run_git, \
-             patch('pokepoke.worktrees.worktrees._run_git_with_retry') as mock_retry, \
+             patch('pokepoke.worktrees.merge_helpers._run_git') as mock_run_git, \
+             patch('pokepoke.worktrees.merge_helpers._run_git_with_retry') as mock_retry, \
              patch('builtins.print'):
 
             mock_retry.side_effect = subprocess.CalledProcessError(1, 'git', stderr='push failed')
@@ -1889,10 +1889,10 @@ class TestMergeWorktreeRollback:
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
-             patch('pokepoke.worktrees.worktrees.validate_post_merge', return_value=True), \
+             patch('pokepoke.worktrees.merge_helpers.validate_post_merge', return_value=True), \
              patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main'), \
-             patch('pokepoke.worktrees.worktrees._run_git') as mock_run_git, \
-             patch('pokepoke.worktrees.worktrees._run_git_with_retry') as mock_retry, \
+             patch('pokepoke.worktrees.merge_helpers._run_git') as mock_run_git, \
+             patch('pokepoke.worktrees.merge_helpers._run_git_with_retry') as mock_retry, \
              patch('builtins.print'):
 
             mock_retry.side_effect = subprocess.CalledProcessError(1, 'git', stderr='push failed')
@@ -1916,9 +1916,9 @@ class TestMergeWorktreeRollback:
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
-             patch('pokepoke.worktrees.worktrees.validate_post_merge', return_value=False), \
+             patch('pokepoke.worktrees.merge_helpers.validate_post_merge', return_value=False), \
              patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main'), \
-             patch('pokepoke.worktrees.worktrees._run_git') as mock_run_git, \
+             patch('pokepoke.worktrees.merge_helpers._run_git') as mock_run_git, \
              patch('builtins.print'):
 
             def run_git_side_effect(cmd, **kwargs):
@@ -1942,9 +1942,9 @@ class TestMergeWorktreeRollback:
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
-             patch('pokepoke.worktrees.worktrees.validate_post_merge', side_effect=subprocess.CalledProcessError(1, 'git', stderr='error')), \
+             patch('pokepoke.worktrees.merge_helpers.validate_post_merge', side_effect=subprocess.CalledProcessError(1, 'git', stderr='error')), \
              patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main'), \
-             patch('pokepoke.worktrees.worktrees._run_git') as mock_run_git, \
+             patch('pokepoke.worktrees.merge_helpers._run_git') as mock_run_git, \
              patch('builtins.print'):
 
             def run_git_side_effect(cmd, **kwargs):
@@ -1973,10 +1973,10 @@ class TestPushTimeoutAndRetry:
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
-             patch('pokepoke.worktrees.worktrees.validate_post_merge', return_value=True), \
+             patch('pokepoke.worktrees.merge_helpers.validate_post_merge', return_value=True), \
              patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main'), \
-             patch('pokepoke.worktrees.worktrees._run_git') as mock_run_git, \
-             patch('pokepoke.worktrees.worktrees._run_git_with_retry') as mock_retry, \
+             patch('pokepoke.worktrees.merge_helpers._run_git') as mock_run_git, \
+             patch('pokepoke.worktrees.merge_helpers._run_git_with_retry') as mock_retry, \
              patch('builtins.print'):
 
             mock_retry.side_effect = subprocess.TimeoutExpired("git push", 120)
@@ -2000,11 +2000,11 @@ class TestPushTimeoutAndRetry:
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
-             patch('pokepoke.worktrees.worktrees.validate_post_merge', return_value=True), \
+             patch('pokepoke.worktrees.merge_helpers.validate_post_merge', return_value=True), \
              patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main'), \
-             patch('pokepoke.worktrees.worktrees._run_git') as mock_run_git, \
-             patch('pokepoke.worktrees.worktrees._run_git_with_retry') as mock_retry, \
-             patch('pokepoke.worktrees.worktrees.logger') as mock_logger, \
+             patch('pokepoke.worktrees.merge_helpers._run_git') as mock_run_git, \
+             patch('pokepoke.worktrees.merge_helpers._run_git_with_retry') as mock_retry, \
+             patch('pokepoke.worktrees.merge_helpers.logger') as mock_logger, \
              patch('builtins.print'):
 
             mock_retry.side_effect = subprocess.TimeoutExpired("git push", 120)
@@ -2026,11 +2026,11 @@ class TestPushTimeoutAndRetry:
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
-             patch('pokepoke.worktrees.worktrees.validate_post_merge', return_value=True), \
+             patch('pokepoke.worktrees.merge_helpers.validate_post_merge', return_value=True), \
              patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main'), \
              patch('pokepoke.worktrees.worktrees.is_worktree_merged', return_value=True), \
              patch('pokepoke.worktrees.worktrees.cleanup_after_merge'), \
-             patch('pokepoke.worktrees.worktrees._run_git_with_retry') as mock_retry, \
+             patch('pokepoke.worktrees.merge_helpers._run_git_with_retry') as mock_retry, \
              patch('builtins.print'):
 
             mock_retry.return_value = Mock(stdout='', returncode=0)
@@ -2053,10 +2053,10 @@ class TestPushTimeoutAndRetry:
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
-             patch('pokepoke.worktrees.worktrees.validate_post_merge', return_value=True), \
+             patch('pokepoke.worktrees.merge_helpers.validate_post_merge', return_value=True), \
              patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main'), \
-             patch('pokepoke.worktrees.worktrees._run_git') as mock_run_git, \
-             patch('pokepoke.worktrees.worktrees._run_git_with_retry') as mock_retry, \
+             patch('pokepoke.worktrees.merge_helpers._run_git') as mock_run_git, \
+             patch('pokepoke.worktrees.merge_helpers._run_git_with_retry') as mock_retry, \
              patch('builtins.print'):
 
             mock_retry.side_effect = subprocess.CalledProcessError(
@@ -2077,24 +2077,24 @@ class TestPushTimeoutAndRetry:
             assert reset_called, "git reset --hard HEAD~1 should be called after push retries exhausted"
 
     def test_rollback_returns_true_on_success(self):
-        """_rollback_merge_commit returns True when reset succeeds."""
-        from pokepoke.worktrees.worktrees import _rollback_merge_commit
+        """rollback_merge_commit returns True when reset succeeds."""
+        from pokepoke.worktrees.merge_helpers import rollback_merge_commit
 
-        with patch('pokepoke.worktrees.worktrees._run_git') as mock_run_git:
+        with patch('pokepoke.worktrees.merge_helpers._run_git') as mock_run_git:
             mock_run_git.return_value = Mock(returncode=0)
-            result = _rollback_merge_commit("test reason")
+            result = rollback_merge_commit("test reason")
             assert result is True
 
     def test_rollback_returns_false_on_failure(self):
-        """_rollback_merge_commit returns False and logs CRITICAL on failure."""
-        from pokepoke.worktrees.worktrees import _rollback_merge_commit
+        """rollback_merge_commit returns False and logs CRITICAL on failure."""
+        from pokepoke.worktrees.merge_helpers import rollback_merge_commit
 
-        with patch('pokepoke.worktrees.worktrees._run_git') as mock_run_git, \
-             patch('pokepoke.worktrees.worktrees.logger') as mock_logger:
+        with patch('pokepoke.worktrees.merge_helpers._run_git') as mock_run_git, \
+             patch('pokepoke.worktrees.merge_helpers.logger') as mock_logger:
             mock_run_git.side_effect = subprocess.CalledProcessError(
                 1, "git", stderr="reset failed"
             )
-            result = _rollback_merge_commit("test reason")
+            result = rollback_merge_commit("test reason")
             assert result is False
             mock_logger.critical.assert_called_once()
 
@@ -2104,10 +2104,10 @@ class TestPushTimeoutAndRetry:
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
-             patch('pokepoke.worktrees.worktrees.validate_post_merge', return_value=True), \
+             patch('pokepoke.worktrees.merge_helpers.validate_post_merge', return_value=True), \
              patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main'), \
-             patch('pokepoke.worktrees.worktrees._run_git') as mock_run_git, \
-             patch('pokepoke.worktrees.worktrees._run_git_with_retry') as mock_retry, \
+             patch('pokepoke.worktrees.merge_helpers._run_git') as mock_run_git, \
+             patch('pokepoke.worktrees.merge_helpers._run_git_with_retry') as mock_retry, \
              patch('builtins.print'):
 
             mock_retry.side_effect = subprocess.CalledProcessError(1, 'git', stderr='push failed')
@@ -2129,10 +2129,10 @@ class TestPushTimeoutAndRetry:
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
-             patch('pokepoke.worktrees.worktrees.validate_post_merge', return_value=True), \
+             patch('pokepoke.worktrees.merge_helpers.validate_post_merge', return_value=True), \
              patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main'), \
-             patch('pokepoke.worktrees.worktrees._run_git') as mock_run_git, \
-             patch('pokepoke.worktrees.worktrees._run_git_with_retry') as mock_retry, \
+             patch('pokepoke.worktrees.merge_helpers._run_git') as mock_run_git, \
+             patch('pokepoke.worktrees.merge_helpers._run_git_with_retry') as mock_retry, \
              patch('builtins.print'):
 
             mock_retry.side_effect = subprocess.CalledProcessError(1, 'git', stderr='push failed')
@@ -2148,9 +2148,9 @@ class TestPushTimeoutAndRetry:
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
-             patch('pokepoke.worktrees.worktrees.validate_post_merge', return_value=False), \
+             patch('pokepoke.worktrees.merge_helpers.validate_post_merge', return_value=False), \
              patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main'), \
-             patch('pokepoke.worktrees.worktrees._run_git') as mock_run_git, \
+             patch('pokepoke.worktrees.merge_helpers._run_git') as mock_run_git, \
              patch('builtins.print'):
 
             def run_git_side_effect(cmd, **kwargs):
@@ -2170,9 +2170,9 @@ class TestPushTimeoutAndRetry:
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
-             patch('pokepoke.worktrees.worktrees.validate_post_merge', side_effect=RuntimeError('boom')), \
+             patch('pokepoke.worktrees.merge_helpers.validate_post_merge', side_effect=RuntimeError('boom')), \
              patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main'), \
-             patch('pokepoke.worktrees.worktrees._run_git') as mock_run_git, \
+             patch('pokepoke.worktrees.merge_helpers._run_git') as mock_run_git, \
              patch('builtins.print'):
 
             def run_git_side_effect(cmd, **kwargs):
