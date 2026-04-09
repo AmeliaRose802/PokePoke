@@ -7,9 +7,11 @@ from unittest.mock import Mock, patch
 from pokepoke.agents.agent_runner import (
     AgentRunnerConfig,
     _reconcile_worktree_branch,
-    _run_worktree_agent,
 )
 from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
+
+# Import compat wrapper and alias it to _run_worktree_agent for backwards compatibility
+from .conftest_agent_runner import run_worktree_agent_compat as _run_worktree_agent
 
 
 class TestRunWorktreeAgent:

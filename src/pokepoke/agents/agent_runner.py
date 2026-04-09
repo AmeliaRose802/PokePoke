@@ -107,47 +107,56 @@ def run_maintenance_agent(
         labels=["maintenance", agent_name.lower()],
         is_ephemeral=True,
     )
-    if not needs_worktree:
-        return _run_beads_only_agent(agent_name, agent_item, agent_prompt, model=model, item_logger=item_logger)
 
     if repo_root is None:
         repo_root = Path.cwd()
 
+    # Create config object
+    config = AgentRunnerConfig(
+        agent_name=agent_name,
+        agent_id=agent_id,
+        agent_item=agent_item,
+        repo_root=repo_root,
+        worktree_path=repo_root,  # Updated in _run_worktree_agent if needed
+        model=model,
+        item_logger=item_logger,
+    )
+
+    if not needs_worktree:
+        return _run_beads_only_agent(config, agent_prompt)
+
     return _run_worktree_agent(
-        agent_name, agent_id, agent_item, agent_prompt, repo_root,
-        merge_changes=merge_changes, model=model, item_logger=item_logger,
+        config, agent_prompt,
+        merge_changes=merge_changes,
         parent_agent_id=parent_agent_id
     )
 
 def _run_simple_agent(
-    agent_name: str,
-    agent_item: BeadsWorkItem,
+    config: AgentRunnerConfig,
     agent_prompt: str,
     *,
     deny_write: bool = True,
-    model: str | None = None,
     cwd: str | None = None,
-    item_logger: 'ItemLogger | None' = None,
     add_parent_dir: bool = False,
 ) -> AgentStats | None:
     """Run a simple agent in the main repo with configurable write access."""
-    logger.info("Running %s (%s)%s", agent_name, "no write" if deny_write else "write enabled", f", model={model}" if model else "")
-    normalized = agent_name.lower().replace(" ", "_")
+    logger.info("Running %s (%s)%s", config.agent_name, "no write" if deny_write else "write enabled", f", model={config.model}" if config.model else "")
+    normalized = config.agent_name.lower().replace(" ", "_")
     with agent_type_context(normalized):
-        result = invoke_copilot(agent_item, prompt=agent_prompt, deny_write=deny_write, model=model, cwd=cwd, item_logger=item_logger, add_parent_dir=add_parent_dir)
+        result = invoke_copilot(config.agent_item, prompt=agent_prompt, deny_write=deny_write, model=config.model, cwd=cwd, item_logger=config.item_logger, add_parent_dir=add_parent_dir)
     if result.success:
-        logger.info("%s completed", agent_name)
+        logger.info("%s completed", config.agent_name)
         return (parse_agent_stats(result.output) if result.output else None) or AgentStats()
-    logger.error("%s failed: %s", agent_name, result.error)
+    logger.error("%s failed: %s", config.agent_name, result.error)
     return None
 
-def _run_beads_only_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: str | None = None, cwd: str | None = None, item_logger: 'ItemLogger | None' = None) -> AgentStats | None:
+def _run_beads_only_agent(config: AgentRunnerConfig, agent_prompt: str, cwd: str | None = None) -> AgentStats | None:
     """Run a beads-only maintenance agent in the main repo."""
-    return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=True, model=model, cwd=cwd, item_logger=item_logger)
+    return _run_simple_agent(config, agent_prompt, deny_write=True, cwd=cwd)
 
-def _run_main_repo_agent(agent_name: str, agent_item: BeadsWorkItem, agent_prompt: str, model: str | None = None, cwd: str | None = None, item_logger: 'ItemLogger | None' = None, add_parent_dir: bool = False) -> AgentStats | None:
+def _run_main_repo_agent(config: AgentRunnerConfig, agent_prompt: str, cwd: str | None = None, add_parent_dir: bool = False) -> AgentStats | None:
     """Run a maintenance agent in the main repo WITH write access."""
-    return _run_simple_agent(agent_name, agent_item, agent_prompt, deny_write=False, model=model, cwd=cwd, item_logger=item_logger, add_parent_dir=add_parent_dir)
+    return _run_simple_agent(config, agent_prompt, deny_write=False, cwd=cwd, add_parent_dir=add_parent_dir)
 
 def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger | None' = None, parent_agent_id: str | None = None) -> AgentStats | None:
     """Run worktree cleanup agent to merge/delete stale worktrees."""
@@ -198,8 +207,20 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
             labels=["maintenance", "worktree-cleanup"],
             is_ephemeral=True,
         )
+
+        # Create config object for cleanup agent
+        config = AgentRunnerConfig(
+            agent_name="Worktree Cleanup",
+            agent_id=agent_id,
+            agent_item=cleanup_item,
+            repo_root=repo_root or Path.cwd(),
+            worktree_path=repo_root or Path.cwd(),  # Uses main repo
+            model=None,
+            item_logger=item_logger,
+        )
+
         cwd = str(repo_root) if repo_root is not None else None
-        agent_result = _run_main_repo_agent("Worktree Cleanup", cleanup_item, cleanup_prompt, cwd=cwd, item_logger=item_logger, add_parent_dir=True)
+        agent_result = _run_main_repo_agent(config, cleanup_prompt, cwd=cwd, add_parent_dir=True)
         status = "success" if agent_result is not None else "failed"
         terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status=status, parent_agent_id=parent_agent_id, agent_type="worktree_cleanup")
         return agent_result
@@ -286,65 +307,52 @@ def _handle_successful_agent(
 
 
 def _run_worktree_agent(
-    agent_name: str,
-    agent_id: str,
-    agent_item: BeadsWorkItem,
+    config: AgentRunnerConfig,
     agent_prompt: str,
-    repo_root: Path,
     *,
     merge_changes: bool = True,
-    model: str | None = None,
-    item_logger: 'ItemLogger | None' = None,
     parent_agent_id: str | None = None
 ) -> AgentStats | None:
     """Run a code-modifying maintenance agent in a worktree."""
-    logger.info("Creating worktree for %s...", agent_id)
+    logger.info("Creating worktree for %s...", config.agent_id)
     try:
-        worktree_path = create_worktree(agent_id)
+        worktree_path = create_worktree(config.agent_id)
         logger.info("Worktree created at: %s", worktree_path)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as e:
-        msg = f"Failed to create worktree for {agent_name}: {e}"
+        msg = f"Failed to create worktree for {config.agent_name}: {e}"
         logger.error("%s", msg)
-        if item_logger:
-            item_logger.log_error(msg)
+        if config.item_logger:
+            config.item_logger.log_error(msg)
         return None
 
-    # Create config object for all helper functions
-    config = AgentRunnerConfig(
-        agent_name=agent_name,
-        agent_id=agent_id,
-        agent_item=agent_item,
-        repo_root=repo_root,
-        worktree_path=worktree_path,
-        model=model,
-        item_logger=item_logger,
-    )
+    # Update config with actual worktree path
+    config.worktree_path = worktree_path
 
     worktree_cwd = str(worktree_path)
     logger.debug("Working directory: %s", worktree_cwd)
-    if model:
-        logger.debug("Model: %s", model)
+    if config.model:
+        logger.debug("Model: %s", config.model)
     worktree_cleaned = False
     preserve_for_debugging = True
-    cleanup_parent_id = parent_agent_id if parent_agent_id else agent_id
+    cleanup_parent_id = parent_agent_id if parent_agent_id else config.agent_id
     try:
         try:
-            normalized = agent_name.lower().replace(" ", "_")
+            normalized = config.agent_name.lower().replace(" ", "_")
             with agent_type_context(normalized):
                 terminal_ui.ui.push_agent_status(
-                    agent_id, f"{agent_name} Agent", iteration=1, status="running",
+                    config.agent_id, f"{config.agent_name} Agent", iteration=1, status="running",
                     parent_agent_id=parent_agent_id,
                     agent_type=normalized,
                     agent_prompt=agent_prompt,
                 )
-                result = invoke_copilot(agent_item, prompt=agent_prompt, model=model, cwd=worktree_cwd, item_logger=item_logger)
+                result = invoke_copilot(config.agent_item, prompt=agent_prompt, model=config.model, cwd=worktree_cwd, item_logger=config.item_logger)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as e:
             logger.error("Error invoking Copilot: %s", e)
             result = CopilotResult(
-                work_item_id=agent_item.id, success=False, output="", error=str(e), attempt_count=1
+                work_item_id=config.agent_item.id, success=False, output="", error=str(e), attempt_count=1
             )
         cleanup_success, _ = run_cleanup_loop(
-            agent_item,
+            config.agent_item,
             result,
             cwd=worktree_cwd,
             parent_agent_id=cleanup_parent_id,
@@ -357,7 +365,7 @@ def _run_worktree_agent(
             )
             return agent_stats
         else:
-            logger.error("%s agent failed: %s", agent_name, result.error)
+            logger.error("%s agent failed: %s", config.agent_name, result.error)
             # Reconciliation: merge partial work when the branch has valid
             # commits despite the session reporting failure (e.g. budget
             # exhaustion).
@@ -370,21 +378,21 @@ def _run_worktree_agent(
                     preserve_for_debugging = False
                     worktree_cleaned = True
                     return agent_stats
-            _print_preserved_worktree_debug(agent_id, worktree_path, repo_root)
+            _print_preserved_worktree_debug(config.agent_id, worktree_path, config.repo_root)
             return None
 
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError, ValueError) as e:
         logger.warning(
-            f"Unhandled error while running {agent_name} in worktree {agent_id}: {e}",
+            f"Unhandled error while running {config.agent_name} in worktree {config.agent_id}: {e}",
             exc_info=True,
         )
-        logger.error("Unexpected error in %s agent: %s", agent_name, e)
+        logger.error("Unexpected error in %s agent: %s", config.agent_name, e)
         # Reconciliation: attempt to salvage commits even after an
         # unexpected exception.  Use a fallback CopilotResult when
         # ``result`` was never assigned (exception before inner try).
         if merge_changes:
             fallback = CopilotResult(
-                work_item_id=agent_item.id, success=False,
+                work_item_id=config.agent_item.id, success=False,
                 output="", error=str(e), attempt_count=0,
             )
             reconciled_stats = _reconcile_worktree_branch(
@@ -394,20 +402,20 @@ def _run_worktree_agent(
                 preserve_for_debugging = False
                 worktree_cleaned = True
                 return reconciled_stats
-        _print_preserved_worktree_debug(agent_id, worktree_path, repo_root)
+        _print_preserved_worktree_debug(config.agent_id, worktree_path, config.repo_root)
         return None
 
     finally:
         if preserve_for_debugging:
             logger.info("Worktree preserved at %s — manual cleanup required", worktree_path)
         elif not worktree_cleaned:
-            logger.info("Final cleanup: removing worktree %s...", agent_id)
+            logger.info("Final cleanup: removing worktree %s...", config.agent_id)
             try:
-                cleanup_worktree(agent_id, force=True)
-                remove_from_manifest(agent_id)
+                cleanup_worktree(config.agent_id, force=True)
+                remove_from_manifest(config.agent_id)
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as cleanup_error:
                 logger.warning("Final cleanup failed: %s", cleanup_error)
-                add_uncleaned_worktree(agent_id, str(worktree_path), f"Failed final cleanup: {cleanup_error}")
+                add_uncleaned_worktree(config.agent_id, str(worktree_path), f"Failed final cleanup: {cleanup_error}")
 
 # Re-export beta tester for backward compatibility
 from pokepoke.agents.beta_tester import run_beta_tester

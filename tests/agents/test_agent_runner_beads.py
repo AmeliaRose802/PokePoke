@@ -1,8 +1,10 @@
 """Unit tests for agent_runner module."""
 
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from pokepoke.agents.agent_runner import (
+    AgentRunnerConfig,
     _run_beads_only_agent,
 )
 from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
@@ -29,6 +31,16 @@ class TestRunBeadsOnlyAgent:
             labels=["maintenance"]
         )
 
+        config = AgentRunnerConfig(
+            agent_name="Test",
+            agent_id="maintenance-test",
+            agent_item=agent_item,
+            repo_root=Path.cwd(),
+            worktree_path=Path.cwd(),
+            model=None,
+            item_logger=None,
+        )
+
         mock_invoke.return_value = CopilotResult(
             work_item_id="maintenance-test",
             success=True,
@@ -45,7 +57,7 @@ class TestRunBeadsOnlyAgent:
             premium_requests=1
         )
 
-        stats = _run_beads_only_agent("Test", agent_item, "Test prompt")
+        stats = _run_beads_only_agent(config, "Test prompt")
 
         assert stats is not None
         mock_invoke.assert_called_once_with(
@@ -71,6 +83,16 @@ class TestRunBeadsOnlyAgent:
             labels=["maintenance"]
         )
 
+        config = AgentRunnerConfig(
+            agent_name="Test",
+            agent_id="maintenance-test",
+            agent_item=agent_item,
+            repo_root=Path.cwd(),
+            worktree_path=Path.cwd(),
+            model=None,
+            item_logger=None,
+        )
+
         mock_invoke.return_value = CopilotResult(
             work_item_id="maintenance-test",
             success=False,
@@ -79,7 +101,7 @@ class TestRunBeadsOnlyAgent:
             attempt_count=1
         )
 
-        stats = _run_beads_only_agent("Test", agent_item, "Test prompt")
+        stats = _run_beads_only_agent(config, "Test prompt")
 
         assert stats is None
 
@@ -100,6 +122,16 @@ class TestRunBeadsOnlyAgent:
             labels=["maintenance"]
         )
 
+        config = AgentRunnerConfig(
+            agent_name="Test",
+            agent_id="maintenance-test",
+            agent_item=agent_item,
+            repo_root=Path.cwd(),
+            worktree_path=Path.cwd(),
+            model=None,
+            item_logger=None,
+        )
+
         mock_invoke.return_value = CopilotResult(
             work_item_id="maintenance-test",
             success=True,
@@ -107,7 +139,7 @@ class TestRunBeadsOnlyAgent:
             attempt_count=1
         )
 
-        stats = _run_beads_only_agent("Test", agent_item, "Test prompt")
+        stats = _run_beads_only_agent(config, "Test prompt")
 
         # Should return a default AgentStats (not None) so the scheduler
         # correctly identifies this as a success.

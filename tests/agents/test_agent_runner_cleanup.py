@@ -46,7 +46,8 @@ class TestRunWorktreeCleanup:
         mock_main_repo_agent.assert_called_once()
         # Verify it uses _run_main_repo_agent (not worktree or beads-only)
         args, _ = mock_main_repo_agent.call_args
-        assert args[0] == "Worktree Cleanup"
+        # First arg is now AgentRunnerConfig
+        assert args[0].agent_name == "Worktree Cleanup"
 
     @patch('pokepoke.agents.agent_runner.get_uncleaned_worktree_count', return_value=0)
     @patch('pokepoke.agents.agent_runner.has_unmerged_worktrees', return_value=True)
