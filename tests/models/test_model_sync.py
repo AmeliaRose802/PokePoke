@@ -284,7 +284,7 @@ def test_sync_creates_and_updates_beads(tmp_path):
             ]), \
             patch("pokepoke.models.model_sync_beads._run_bd", side_effect=fake_run_bd) as mock_bd, \
             patch("pokepoke.models.model_sync._get_main_repo_root", return_value=tmp_path), \
-            patch("pokepoke.models.model_sync.REGISTRY_PATH", tmp_path / "model_registry.json"), \
+            patch("pokepoke.models.model_sync._get_registry_path", return_value=tmp_path / "model_registry.json"), \
             patch("pokepoke.models.model_sync.run_bd_sync_with_retry") as mock_sync, \
             patch("pokepoke.beads.sdk_beads_tracker.record_items_created"):
         result = sync_copilot_models()
@@ -314,7 +314,7 @@ def test_sync_records_created_items_in_stats(tmp_path):
             ]), \
             patch("pokepoke.models.model_sync_beads._run_bd", side_effect=fake_run_bd), \
             patch("pokepoke.models.model_sync._get_main_repo_root", return_value=tmp_path), \
-            patch("pokepoke.models.model_sync.REGISTRY_PATH", tmp_path / "model_registry.json"), \
+            patch("pokepoke.models.model_sync._get_registry_path", return_value=tmp_path / "model_registry.json"), \
             patch("pokepoke.models.model_sync.run_bd_sync_with_retry"), \
             patch("pokepoke.beads.sdk_beads_tracker.record_items_created") as mock_record:
         sync_copilot_models()
@@ -349,7 +349,7 @@ def test_sync_prunes_unavailable(tmp_path):
             ]), \
             patch("pokepoke.models.model_sync_beads._run_bd", side_effect=fake_run_bd) as mock_bd, \
             patch("pokepoke.models.model_sync._get_main_repo_root", return_value=tmp_path), \
-            patch("pokepoke.models.model_sync.REGISTRY_PATH", registry_path), \
+            patch("pokepoke.models.model_sync._get_registry_path", return_value=registry_path), \
             patch("pokepoke.beads.sdk_beads_tracker.record_items_created"):
         result = sync_copilot_models()
         assert result is not None
@@ -416,7 +416,7 @@ def test_prune_unavailable_from_config(tmp_path):
     }
     config_path.write_text(yaml.safe_dump(config_data))
 
-    with patch("pokepoke.models.model_sync.REGISTRY_PATH", registry_path), \
+    with patch("pokepoke.models.model_sync._get_registry_path", return_value=registry_path), \
             patch("pokepoke.config._find_repo_root", return_value=tmp_path):
         removed = prune_unavailable_from_config(registry_path=registry_path)
 
@@ -451,7 +451,7 @@ def test_prune_unavailable_from_config_no_stale(tmp_path):
     }
     config_path.write_text(yaml.safe_dump(config_data))
 
-    with patch("pokepoke.models.model_sync.REGISTRY_PATH", registry_path), \
+    with patch("pokepoke.models.model_sync._get_registry_path", return_value=registry_path), \
             patch("pokepoke.config._find_repo_root", return_value=tmp_path):
         removed = prune_unavailable_from_config(registry_path=registry_path)
 
@@ -473,8 +473,55 @@ def test_prune_unavailable_from_config_no_candidates(tmp_path):
     config_data = {"models": {"default": "claude-opus-4.6"}}
     config_path.write_text(yaml.safe_dump(config_data))
 
-    with patch("pokepoke.models.model_sync.REGISTRY_PATH", registry_path), \
+    with patch("pokepoke.models.model_sync._get_registry_path", return_value=registry_path), \
             patch("pokepoke.config._find_repo_root", return_value=tmp_path):
         removed = prune_unavailable_from_config(registry_path=registry_path)
 
     assert removed == []
+
+
+def test_parse_markdown_table_rejects_invalid_entries():
+    """Markdown table parser should reject table separators and formatting."""
+    output = """Here are the available models:
+| Model | ID | Tier |
+|---|---|---|
+| Claude Opus 4.6 | `claude-opus-4.6` | Premium |
+| GPT-5.2 | `gpt-5.2` | Standard |
+
+**Current session:** Claude Opus 4.6
+Use `copilot -m <model>` to switch models.
+"""
+    models = parse_copilot_models_output(output)
+
+    # Should only get the 2 valid models, not table separators or text
+    assert len(models) == 2
+    names = [m["name"] for m in models]
+    assert "claude-opus-4.6" in names
+    assert "gpt-5.2" in names
+
+    # These should NOT appear in the results
+    invalid_names = ["|", "|---|---|---|", "**Current", "Use", "Model"]
+    for invalid in invalid_names:
+        assert invalid not in names, f"Invalid entry '{invalid}' should not be in parsed models"
+
+
+def test_is_valid_model_name():
+    """Test model name validation helper."""
+    from pokepoke.models.model_sync_parsing import _is_valid_model_name
+
+    # Valid names
+    assert _is_valid_model_name("claude-opus-4.6")
+    assert _is_valid_model_name("gpt-5.2-codex")
+    assert _is_valid_model_name("gpt-5.4-mini")
+    assert _is_valid_model_name("goldeneye")
+
+    # Invalid names (table separators, markdown, etc.)
+    assert not _is_valid_model_name("|")
+    assert not _is_valid_model_name("|---|---|")
+    assert not _is_valid_model_name("**Current")
+    assert not _is_valid_model_name("Use")
+    assert not _is_valid_model_name("Model")
+    assert not _is_valid_model_name("")
+    assert not _is_valid_model_name("   ")
+    assert not _is_valid_model_name("---")
+

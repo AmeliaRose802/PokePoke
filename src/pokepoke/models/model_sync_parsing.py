@@ -36,6 +36,47 @@ def _extract_json_payload(output: str) -> Any | None:
         return None
 
 
+def _is_valid_model_name(name: str) -> bool:
+    """Check if a string looks like a valid model name.
+
+    Rejects:
+    - Empty/whitespace strings
+    - Pure markdown table separators (lines like "|---|---|")
+    - Markdown formatting markers
+    - Common table headers/noise words
+    """
+    if not name or not name.strip():
+        return False
+
+    name = name.strip()
+
+    # Reject pure separator lines (only pipes, dashes, equals, spaces, tabs)
+    if all(c in "|-=- \t" for c in name):
+        return False
+
+    # Reject markdown formatting markers as the entire name
+    if name in ("**", "__", "`", "~~"):
+        return False
+
+    # Reject common table artifacts/headers
+    invalid_full_matches = [
+        "|", "Use", "Current", "Model", "Tier", "Status", "ID", "Name"
+    ]
+    if name in invalid_full_matches:
+        return False
+
+    # Reject names starting with markdown formatting
+    if name.startswith("**") or name.startswith("__") or name.startswith("~~"):
+        return False
+
+    # Valid model names should have at least one alphanumeric character
+    # e.g., "claude-opus-4.6", "gpt-5.1-codex", "goldeneye"
+    if not any(c.isalnum() for c in name):
+        return False
+
+    return True
+
+
 def _parse_markdown_table(output: str) -> list[dict[str, Any]]:
     """Parse a markdown table into a list of dicts."""
     lines = output.splitlines()
@@ -63,6 +104,11 @@ def _parse_markdown_table(output: str) -> list[dict[str, Any]]:
             continue
         # Stop at non-table content
         stripped = line.strip()
+
+        # Skip separator rows (lines with only | - = characters)
+        if all(c in "|-=- \t" for c in stripped):
+            continue
+
         is_table_row = stripped.startswith("|") or stripped.endswith("|") or any(c == "|" for c in stripped)
         if not is_table_row:
             break
@@ -81,7 +127,8 @@ def _parse_markdown_table(output: str) -> list[dict[str, Any]]:
                         entry["status"] = cells[j]
                     else:
                         entry[key] = cells[j]
-            if "name" in entry:
+            # Validate the model name before adding
+            if "name" in entry and _is_valid_model_name(entry["name"]):
                 models.append(entry)
     return models
 
@@ -104,7 +151,10 @@ def _parse_models_from_text(output: str) -> list[dict[str, Any]]:
         parts = line.split()
         if not parts:
             continue
-        result.append({"name": parts[0], "raw": line})
+        model_name = parts[0]
+        # Validate model names in fallback parser too
+        if _is_valid_model_name(model_name):
+            result.append({"name": model_name, "raw": line})
     return result
 
 

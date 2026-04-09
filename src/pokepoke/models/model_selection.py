@@ -53,12 +53,54 @@ def get_assignment_for_item(item: BeadsWorkItem) -> tuple[str | None, str | None
     return None, None
 
 
+def _filter_available_models(candidates: list[str]) -> list[str]:
+    """Filter candidate models to only those currently available in the registry.
+
+    Args:
+        candidates: List of model names to filter.
+
+    Returns:
+        Filtered list containing only models marked as available in the registry.
+        If no models are available, returns the original list to avoid breaking
+        the selection logic (better to try an unavailable model than to crash).
+    """
+    from pokepoke.models.model_sync import get_available_model_names
+
+    available = set(get_available_model_names())
+    if not available:
+        # No registry data available, pass through candidates
+        logger.debug("   [Selection] No model registry data; using all candidates")
+        return candidates
+
+    filtered = [m for m in candidates if m in available]
+
+    if not filtered:
+        # None of the candidates are available - log warning but return originals
+        # to avoid breaking the system
+        logger.warning(
+            f"   ⚠️  [Selection] No candidates are available in registry. "
+            f"Candidates: {candidates}, Available: {sorted(available)[:5]}..."
+        )
+        return candidates
+
+    if len(filtered) < len(candidates):
+        removed = set(candidates) - set(filtered)
+        logger.info(
+            f"   [Selection] Filtered out {len(removed)} unavailable model(s): {sorted(removed)}"
+        )
+
+    return filtered
+
+
 def select_model_for_item(item: BeadsWorkItem) -> str:
     """Select a model for a work item.
 
     Evaluates assignment rules first; if a rule matches and specifies a
     model, that model is returned.  Otherwise falls back to
     performance-weighted random selection from the candidate pool.
+
+    Only selects from models that are currently marked as available in the
+    model registry to avoid invocation failures on deprecated/removed models.
 
     Args:
         item: The work item to select a model for.
@@ -106,6 +148,9 @@ def select_model_for_item(item: BeadsWorkItem) -> str:
             [config.models.default, config.models.fallback]
         ))
 
+    # Filter to only available models
+    candidates = _filter_available_models(candidates)
+
     # Build weights for each candidate model
     historical = get_model_weights()
     weights = [historical.get(m, 1.0) for m in candidates]
@@ -127,6 +172,9 @@ def select_gate_model(work_model: str, item_id: str) -> str:
     model to improve code review objectivity by preventing the same AI model
     from both implementing and validating its own work.
 
+    Only selects from models that are currently marked as available in the
+    model registry to avoid invocation failures on deprecated/removed models.
+
     Args:
         work_model: The model used for work completion.
         item_id: The work item ID (used for logging context).
@@ -142,6 +190,9 @@ def select_gate_model(work_model: str, item_id: str) -> str:
         candidates = list(dict.fromkeys(
             [config.models.default, config.models.fallback]
         ))
+
+    # Filter to only available models
+    candidates = _filter_available_models(candidates)
 
     # Filter out the work model from candidates
     available = [m for m in candidates if m != work_model]
