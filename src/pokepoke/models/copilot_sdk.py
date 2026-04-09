@@ -1,4 +1,6 @@
 """GitHub Copilot SDK integration."""
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
@@ -44,6 +46,9 @@ from .sdk_helpers import (
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from copilot import CopilotClient, CopilotSession
+
+    from pokepoke.models.sdk_event_handler import _EventHandler
     from pokepoke.utils.logging_utils import ItemLogger
 
 def _build_worker_env(cwd: str | None) -> dict[str, str]:
@@ -60,7 +65,7 @@ def _build_add_dir_args(cwd: str) -> list[str]:
         return ["--add-dir", str(cwd_path.parent.parent)]
     return []
 
-def _create_sdk_client(cwd: str | None, add_parent_dir: bool = False) -> Any:
+def _create_sdk_client(cwd: str | None, add_parent_dir: bool = False) -> CopilotClient:
     """Create a CopilotClient; *add_parent_dir* passes ``--add-dir`` for parent repo visibility."""
     proj_config = get_config()
     cli_path = proj_config.ai_backend.copilot_cli_path
@@ -95,9 +100,9 @@ class _AttemptResult:
     elapsed: float = 0.0
 
 async def _send_and_wait(
-    session: Any, client: Any, handler: Any,
+    session: CopilotSession, client: CopilotClient, handler: _EventHandler,
     final_prompt: str, done: asyncio.Event,
-    max_timeout: float, stats: Any, inactivity_timeout: float, **kw: Any,
+    max_timeout: float, stats: _SDKSessionStats | None, inactivity_timeout: float, **kw: Any,
 ) -> str | None:
     """Send the prompt and wait for completion. Returns abort reason or None."""
     logger.info("[SDK] Sending message...\n")
@@ -113,9 +118,9 @@ async def _send_and_wait(
         return abort_reason
 
 async def _run_attempt(
-    session: Any, client: Any, handler: Any,
+    session: CopilotSession, client: CopilotClient, handler: _EventHandler,
     final_prompt: str, done: asyncio.Event,
-    max_timeout: float, stats: Any, inactivity_timeout: float, **kw: Any,
+    max_timeout: float, stats: _SDKSessionStats | None, inactivity_timeout: float, **kw: Any,
 ) -> _AttemptResult:
     """Execute one send-and-wait attempt, handling interrupts and timing."""
     result = _AttemptResult()
@@ -230,8 +235,7 @@ async def invoke_copilot_sdk(  # noqa: C901
     retry_config: RetryConfig | None = None,
     timeout: float | None = None,
     deny_write: bool = False,
-    item_logger: 'ItemLogger | None' = None,
-    idle_timeout: float | None = None,
+    item_logger: ItemLogger | None = None,    idle_timeout: float | None = None,
     model: str | None = None,
     cwd: str | None = None,
     template_name: str | None = None,
@@ -320,7 +324,7 @@ async def invoke_copilot_sdk(  # noqa: C901
             if is_resume:
                 logger.info(f"[SDK] Resuming session: {session_id}")
 
-            session = await client.create_session(session_config)
+            session = await client.create_session(session_config)  # type: ignore[arg-type]
             logger.info(f"[SDK] Session created: {session.session_id}\n")
 
             done = asyncio.Event()
@@ -432,7 +436,7 @@ async def invoke_copilot_sdk(  # noqa: C901
 def invoke_copilot_sdk_sync(
     work_item: BeadsWorkItem, prompt: str | None = None,
     retry_config: RetryConfig | None = None, timeout: float | None = None,
-    deny_write: bool = False, item_logger: 'ItemLogger | None' = None,
+    deny_write: bool = False, item_logger: ItemLogger | None = None,
     model: str | None = None, cwd: str | None = None,
     template_name: str | None = None, session_id: str | None = None,
     is_resume: bool = False, use_warm_session: bool = True,
