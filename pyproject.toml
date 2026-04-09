@@ -171,6 +171,13 @@ ignore_missing_imports = true
 module = "pokepoke.models.copilot_sdk"
 warn_unused_ignores = false
 
+# native_icon imports .NET types (System, System.Drawing) that are only
+# available when pythonnet is loaded — the type: ignore[import-not-found]
+# comments are unused in environments with pythonnet installed
+[[tool.mypy.overrides]]
+module = "pokepoke.desktop.native_icon"
+warn_unused_ignores = false
+
 # manifest_utils is installed without py.typed marker
 [[tool.mypy.overrides]]
 module = "pokepoke.utils.manifest_utils"
