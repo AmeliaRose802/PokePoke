@@ -25,3 +25,8 @@ def strip_process_monitor_lines(text: str) -> str:
     false parse failures.
     """
     return _PROCESS_MONITOR_LINE_RE.sub('', text)
+
+
+def contains_process_monitor_noise(text: str) -> bool:
+    """Return ``True`` if *text* contains any ``[ProcessMonitor]`` output."""
+    return '[ProcessMonitor]' in text

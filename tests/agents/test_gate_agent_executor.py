@@ -252,6 +252,70 @@ class TestGateAgentProcessMonitorCorruption:
         assert result.success is True
         assert "Verified" in result.reason
 
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_process_monitor_breaks_code_fence_uses_unfenced_fallback(
+        self, mock_ui, mock_branch, mock_model, mock_invoke,
+    ):
+        """When ProcessMonitor breaks the code fence, unfenced JSON extraction recovers the verdict."""
+        output = (
+            "Analysis complete.\n"
+            "``[ProcessMonitor] PID 1234 (python.exe) active`json\n"
+            '{"status": "success", "message": "All tests pass"}\n'
+            "```\n"
+            "Done."
+        )
+        mock_invoke.return_value = _mock_invoke_result(success=True, output=output)
+
+        result = run_gate_agent(_make_item())
+
+        assert result.success is True
+        assert "All tests pass" in result.reason
+
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_process_monitor_noise_no_json_treated_as_crash(
+        self, mock_ui, mock_branch, mock_model, mock_invoke,
+    ):
+        """When output has ProcessMonitor noise but no parseable verdict, treat as crash not rejection."""
+        output = (
+            "[ProcessMonitor] Started monitoring PID 5678 (node.exe)\n"
+            "I analyzed the code and it looks good.\n"
+            "[ProcessMonitor] PID 5678 (node.exe) completed\n"
+        )
+        mock_invoke.return_value = _mock_invoke_result(success=True, output=output)
+
+        result = run_gate_agent(_make_item())
+
+        assert result.success is False
+        assert result.crashed is True
+        assert "processmonitor" in result.reason.lower()
+
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_unfenced_failure_verdict_extracted(
+        self, mock_ui, mock_branch, mock_model, mock_invoke,
+    ):
+        """Unfenced JSON failure verdict is extracted when no fenced blocks exist."""
+        output = (
+            'Here is my verdict:\n'
+            '{"status": "failure", "reason": "Missing tests", "details": "No coverage"}\n'
+            "That's my analysis."
+        )
+        mock_invoke.return_value = _mock_invoke_result(success=True, output=output)
+
+        result = run_gate_agent(_make_item())
+
+        assert result.success is False
+        assert result.crashed is False
+        assert "Missing tests" in result.reason
+
 
 # ---------------------------------------------------------------------------
 # Execution failures and timeouts
