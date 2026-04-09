@@ -12,7 +12,7 @@ import threading
 from typing import Any
 
 from pokepoke.beads.beads_hierarchy import is_high_conflict_risk
-from pokepoke.types import BeadsWorkItem, SessionStats, WorkItemResult
+from pokepoke.types import BeadsWorkItem, RecordFn, SessionStats, WorkItemResult
 from pokepoke.utils.logging_utils import RunLogger
 
 logger = logging.getLogger(__name__)
@@ -141,7 +141,7 @@ def _update_failed_ids(
 def collect_done_futures(
     futures: dict[_Future, BeadsWorkItem], failed_claim_ids: set[str],
     total_requests: int, session_stats: SessionStats, run_logger: RunLogger,
-    record_fn: Any, lock: threading.Lock | None = None,
+    record_fn: RecordFn, lock: threading.Lock | None = None,
 ) -> tuple[int, bool, int, int]:
     """Collect completed futures and record results.
     Returns (total_requests, any_success, success_count, failure_count).
@@ -257,7 +257,7 @@ class ParallelWorkerPool:
 
     def collect_done(self, failed_claim_ids: set[str], total_requests: int,
                      session_stats: SessionStats, run_logger: RunLogger,
-                     record_fn: Any) -> tuple[int, bool, int, int]:
+                     record_fn: RecordFn) -> tuple[int, bool, int, int]:
         """Collect completed futures and record results."""
         return collect_done_futures(
             self._futures, failed_claim_ids, total_requests,

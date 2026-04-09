@@ -8,7 +8,7 @@ import time
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pokepoke.agents.agent_context import get_agent_name, set_agent_name
 from pokepoke.agents.agent_names import initialize_agent_name
@@ -39,7 +39,7 @@ from pokepoke.protocols import BeadsClient as _BeadsClientProtocol
 from pokepoke.stats.performance_monitor import run_iteration_checks
 from pokepoke.stats.session_stats_registry import set_current_session_stats
 from pokepoke.stats.stats import print_stats
-from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats, WorkItemResult
+from pokepoke.types import AgentStats, BeadsWorkItem, RecordFn, SessionStats, WorkItemResult
 from pokepoke.utils.logging_utils import RunLogger, configure_logging
 from pokepoke.utils.otel_logging import shutdown_otel_logging
 from pokepoke.utils.preflight_log_utils import handle_preflight_checks
@@ -461,7 +461,7 @@ def run_orchestrator(
                 start_time=ctx.start_time,
                 run_logger=ctx.run_logger,
                 continuous=ctx.continuous,
-                record_fn=_record_item_result,
+                record_fn=cast(RecordFn, _record_item_result),
                 finalize_fn=_finalize_session,
                 cli_override=(max_parallel_agents > 1),
                 external_lock=ctx.failed_claim_ids_lock,
