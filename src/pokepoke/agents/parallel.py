@@ -30,7 +30,7 @@ from pokepoke.desktop import terminal_ui
 from pokepoke.git.repo_check import check_and_commit_main_repo
 from pokepoke.orchestration.work_item_selection import select_multiple_items
 from pokepoke.orchestration.workflow import process_work_item
-from pokepoke.types import BeadsWorkItem, SessionStats, WorkItemResult
+from pokepoke.types import BeadsWorkItem, RecordFn, SessionStats, WorkItemResult
 from pokepoke.utils.logging_utils import RunLogger
 from pokepoke.utils.shutdown import (
     cancel_stop_after_current,
@@ -186,7 +186,7 @@ def _handle_circuit_breaker_drain(
     failed_claim_ids: set[str],
     session_stats: SessionStats,
     run_logger: RunLogger,
-    record_fn: Any,
+    record_fn: RecordFn,
     mode_name: str,
     lock: threading.Lock | None = None,
 ) -> bool:
@@ -219,7 +219,7 @@ def _run_loop_iteration(
     failed_claim_ids: set[str],
     session_stats: SessionStats,
     run_logger: RunLogger,
-    record_fn: Any,
+    record_fn: RecordFn,
     finalize_fn: Any,
     semaphore: threading.Semaphore,
     executor: concurrent.futures.ThreadPoolExecutor,
@@ -328,7 +328,7 @@ def _safe_cleanup(
     session_stats: SessionStats,
     start_time: float,
     run_logger: RunLogger,
-    record_fn: Any,
+    record_fn: RecordFn,
     finalize_fn: Any,
     active_lock: threading.Lock | None,
 ) -> None:
@@ -379,7 +379,7 @@ def run_parallel_loop(
     start_time: float,
     run_logger: RunLogger,
     continuous: bool,
-    record_fn: Any,
+    record_fn: RecordFn,
     finalize_fn: Any,
     *, cli_override: bool = False,
     external_lock: threading.Lock | None = None,

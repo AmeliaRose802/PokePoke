@@ -25,7 +25,7 @@ from pokepoke.agents.parallel_worker_pool import (
 )
 from pokepoke.beads.beads_hierarchy import is_high_conflict_risk
 from pokepoke.desktop import terminal_ui
-from pokepoke.types import BeadsWorkItem, SessionStats, WorkItemResult
+from pokepoke.types import BeadsWorkItem, RecordFn, SessionStats, WorkItemResult
 from pokepoke.utils.logging_utils import RunLogger
 from pokepoke.utils.preflight_log_utils import handle_preflight_checks
 from pokepoke.utils.shutdown import is_shutting_down
@@ -37,7 +37,7 @@ _Future = concurrent.futures.Future[WorkItemResult]
 def finalize_workers(
     futures: dict[_Future, BeadsWorkItem], session_stats: SessionStats,
     start_time: float, total_requests: int, run_logger: RunLogger,
-    record_fn: Any, lock: threading.Lock | None = None,
+    record_fn: RecordFn, lock: threading.Lock | None = None,
 ) -> tuple[int, bool]:
     """Wait for remaining workers and collect results."""
     timeout_occurred = False
@@ -88,7 +88,7 @@ def finalize_workers(
 
 def _drain_orphaned_futures(
     futures: dict[_Future, BeadsWorkItem], session_stats: SessionStats,
-    start_time: float, run_logger: RunLogger, record_fn: Any, lock: threading.Lock | None = None,
+    start_time: float, run_logger: RunLogger, record_fn: RecordFn, lock: threading.Lock | None = None,
 ) -> None:
     """Drain futures remaining after a timeout."""
     if lock:
@@ -125,7 +125,7 @@ def drain_circuit_breaker(
     total_requests: int,
     session_stats: SessionStats,
     run_logger: RunLogger,
-    record_fn: Any,
+    record_fn: RecordFn,
     collect_fn: Any,
     mode_name: str,
     lock: threading.Lock | None = None,
